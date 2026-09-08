@@ -1,6 +1,49 @@
 package com.relayium.protocol
 
 /**
+ * What a message lane looks like to its OWNER, on either wire.
+ *
+ * The controller and the UI speak one vocabulary — [TextLaneSession.State] and
+ * [TextLaneSession.Action] — and the two implementations differ only in which
+ * bytes activate a conversation and whether one can be reopened. Modelling that
+ * as an interface rather than as a second set of states is what keeps the whole
+ * message surface from needing a legacy branch at every read.
+ *
+ * The link/1 implementation is [TextLaneSession]; the shipped single-generation
+ * one is `com.relayium.protocol.legacy.LegacyTextLane`.
+ */
+interface TextLane {
+    val state: TextLaneSession.State
+    /** Whether a local request may start RIGHT NOW. Legacy answers false
+     *  always: its conversation is the connection, and there is no reopen. */
+    val canRequest: Boolean
+    /** The composer's live limit for THIS connection. */
+    val plainLimit: Int
+    /**
+     * Whether ending a conversation on this wire has an ordered barrier the
+     * peer answers.
+     *
+     * `link/1` does, and its owner arms a bounded lease over it. The shipped
+     * wire has no END byte at all, so there is nothing to wait for and a lease
+     * there would be a timer with no event that could ever settle it.
+     */
+    val hasEndBarrier: Boolean
+    /** Attach BEFORE answering: a frame dispatched with no listener is lost. */
+    fun attachReceiver()
+    fun onFrame(frame: ByteArray): List<TextLaneSession.Action>
+    fun send(body: String): List<TextLaneSession.Action>
+    fun request(): List<TextLaneSession.Action>
+    fun accept(): List<TextLaneSession.Action>
+    fun reject(): List<TextLaneSession.Action>
+    fun end(): List<TextLaneSession.Action>
+    /** The transport refused a frame whose nonce was already consumed. */
+    fun transportSendFailed(): List<TextLaneSession.Action>
+    /** The bounded wait for the peer's END barrier expired. Legacy has no
+     *  barrier, so its answer is always empty. */
+    fun endBarrierTimedOut(): List<TextLaneSession.Action>
+}
+
+/**
  * The text lane's state machine: activation, content, an ordered end barrier
  * with a drain, reopen, and bounds.
  *
@@ -28,7 +71,7 @@ class TextLaneSession(
     private val sender: TextWire.Sender = TextWire.Sender(),
     private val receiver: TextWire.Receiver = TextWire.Receiver(),
     private val now: () -> Long = System::currentTimeMillis,
-) {
+) : TextLane {
 
     companion object {
         /** How long the adapter waits for the peer's END barrier before
@@ -89,7 +132,7 @@ class TextLaneSession(
         FAILED,
     }
 
-    var state: State = State.IDLE
+    override var state: State = State.IDLE
         private set
 
     /** This side sent END and has not yet seen the peer's ordered barrier. */
@@ -145,10 +188,12 @@ class TextLaneSession(
      * The product cap is 64 KiB of plaintext, but 64 KiB seals into a 65 557-byte
      * frame, which does not fit a connection that negotiated RFC 8841's 65 536.
      */
-    val plainLimit: Int get() = TextWire.plainLimit(maxFrameBytes)
+    override val plainLimit: Int get() = TextWire.plainLimit(maxFrameBytes)
+
+    override val hasEndBarrier: Boolean get() = true
 
     /** Attach BEFORE answering: a frame dispatched with no listener is lost. */
-    fun attachReceiver() {
+    override fun attachReceiver() {
         receiverAttached = true
     }
 
@@ -165,7 +210,7 @@ class TextLaneSession(
      * `active()` check for exactly this window; the UI reads this to show a
      * truthful "closing" state instead of a dead button.
      */
-    val canRequest: Boolean
+    override val canRequest: Boolean
         get() = (state == State.IDLE || state == State.ENDED) &&
             !awaitingEndAck && !draining && !lateAccept
 
@@ -177,7 +222,7 @@ class TextLaneSession(
      * end barrier is still outstanding. Callers gate on [canRequest]; the check
      * here is the structural backstop.
      */
-    fun request(): List<Action> {
+    override fun request(): List<Action> {
         check(canRequest) {
             if (state == State.IDLE || state == State.ENDED) {
                 "the previous conversation's end barrier has not settled yet"
@@ -205,7 +250,7 @@ class TextLaneSession(
      * recovery path. A late END arriving after this cannot unpoison it (the
      * FAILED gate at the top of [onFrame] drops it).
      */
-    fun endBarrierTimedOut(): List<Action> {
+    override fun endBarrierTimedOut(): List<Action> {
         if (!awaitingEndAck && !draining && !lateAccept) return emptyList()
         awaitingEndAck = false
         draining = false
@@ -214,7 +259,7 @@ class TextLaneSession(
         return listOf(Action.Fail(Action.Reason.BARRIER_TIMEOUT))
     }
 
-    fun accept(): List<Action> {
+    override fun accept(): List<Action> {
         check(state == State.INCOMING_REQUEST) { "no conversation is waiting for an answer" }
         check(receiverAttached) {
             "attach the receive handler BEFORE sending ACCEPT: a frame dispatched with no listener is lost"
@@ -225,7 +270,7 @@ class TextLaneSession(
         return listOf(Action.Send(TextWire.ACCEPT), Action.Opened)
     }
 
-    fun reject(): List<Action> {
+    override fun reject(): List<Action> {
         check(state == State.INCOMING_REQUEST) { "no conversation is waiting for an answer" }
         state = State.ENDED
         draining = false
@@ -248,7 +293,7 @@ class TextLaneSession(
      * send state, and REJECT is the complete barrier without the acknowledgement
      * round trip that could cancel an immediately reopened request.
      */
-    fun end(): List<Action> = when (state) {
+    override fun end(): List<Action> = when (state) {
         State.OPEN -> {
             draining = true
             drained = 0
@@ -284,7 +329,7 @@ class TextLaneSession(
      * protocol has no delivery receipt and deliberately never will, so no caller
      * may render this as "delivered" or "read".
      */
-    fun send(body: String): List<Action> {
+    override fun send(body: String): List<Action> {
         check(state == State.OPEN) { "the conversation is not open" }
         val size = TextWire.byteLength(body)
         if (size > plainLimit) return listOf(Action.Fail(Action.Reason.MALFORMED))
@@ -315,7 +360,7 @@ class TextLaneSession(
      * unknown frame could strand, so the file lane's total partition is not
      * required here — but nothing unrecognised ever reaches the AEAD.
      */
-    fun onFrame(frame: ByteArray): List<Action> {
+    override fun onFrame(frame: ByteArray): List<Action> {
         if (state == State.FAILED) return emptyList()
         // Flooding fails the lane before anything is decrypted or dispatched:
         // lifecycle bytes are free to forge, so they are rate-bounded too.
@@ -466,7 +511,7 @@ class TextLaneSession(
      * lane is stranded: fail it truthfully on the same codecs. Never a fresh
      * codec, never a rewind, never a "sent" that was not.
      */
-    fun transportSendFailed(): List<Action> = failLane(Action.Reason.TRANSPORT)
+    override fun transportSendFailed(): List<Action> = failLane(Action.Reason.TRANSPORT)
 
     private fun bound(): List<Action> {
         state = State.ENDED

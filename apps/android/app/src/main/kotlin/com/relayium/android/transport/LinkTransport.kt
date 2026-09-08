@@ -7,6 +7,7 @@ import com.relayium.protocol.LinkProtocol
 import com.relayium.protocol.LinkSession
 import com.relayium.protocol.RealtimeFrame
 import com.relayium.protocol.Signal
+import com.relayium.protocol.legacy.WireProfile
 import java.nio.ByteBuffer
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
@@ -41,8 +42,16 @@ import org.webrtc.SessionDescription
  */
 class LinkTransport(
     context: Context,
-    private val selfId: String,
-    private val peerId: String,
+    /**
+     * Which wire this connection speaks: its role, its channel labels and the
+     * shape of its four signals.
+     *
+     * The role is HANDED IN rather than computed here. `link/1` derives it from
+     * the two room ids and the legacy wire derives it from the user's intent,
+     * and a transport that recomputed one of those would be a second, quietly
+     * different answer to a question its owner has already settled.
+     */
+    private val profile: WireProfile,
     private val iceServers: List<IceConfig.Server>,
     private val executor: ScheduledExecutorService,
     private val send: (Signal) -> Unit,
@@ -59,7 +68,7 @@ class LinkTransport(
         fun onClosed(reason: String)
     }
 
-    val role: LinkProtocol.Role = LinkProtocol.linkRole(selfId, peerId)
+    val role: LinkProtocol.Role = profile.role
 
     private val handshake = LinkSession.Handshake(role)
     private var factory: PeerConnectionFactory? = null
@@ -129,26 +138,29 @@ class LinkTransport(
         armNoProgress(LinkProtocol.NO_PROGRESS_TIMEOUT_MS)
 
         if (role == LinkProtocol.Role.INITIATOR) {
-            // BOTH channels, in tuple order, before the offer: a link whose text
-            // lane never opened cannot honour `link/1`.
+            // EVERY channel this wire has, in tuple order, before the offer: a
+            // link whose text lane never opened cannot honour `link/1`, and a
+            // legacy connection with no `data` channel carries nothing at all.
             // Adopt FIRST (the identity checks read these fields), register
             // second; start() already runs on the executor thread.
-            fileChannel = connection?.createDataChannel(
-                LinkProtocol.FILE_CHANNEL, DataChannel.Init().apply { ordered = true },
-            )
-            textChannel = connection?.createDataChannel(
-                LinkProtocol.TEXT_CHANNEL, DataChannel.Init().apply { ordered = true },
-            )
-            fileChannel?.let { register(it) }
-            textChannel?.let { register(it) }
-            if (fileChannel == null || textChannel == null) {
+            val opened = LinkedHashMap<String, DataChannel>()
+            for (label in profile.channels) {
+                val channel = connection?.createDataChannel(
+                    label, DataChannel.Init().apply { ordered = true },
+                ) ?: break
+                opened[label] = channel
+            }
+            fileChannel = profile.fileChannel?.let { opened[it] }
+            textChannel = profile.textChannel?.let { opened[it] }
+            for (channel in opened.values) register(channel)
+            if (opened.size != profile.channels.size) {
                 fail("no-data-channel")
                 return
             }
             connection?.createOffer(
                 sdpCreate("offer-failed") { description ->
                     setLocalAndSend(description) {
-                        send(Signal.offer(description.description, handshake.commit, LinkProtocol.ADVERTISED_CAPS))
+                        send(profile.offer(description.description, handshake.commit))
                     }
                 },
                 MediaConstraints(),
@@ -161,6 +173,13 @@ class LinkTransport(
     override fun onSignal(raw: Json) {
         if (closed) return
         val signal = Signal.fromJson(raw) ?: return
+        // BEFORE the busy check and before any commitment is recorded. The
+        // generations share one socket, so a frame tagged for a different
+        // connection must be inert here rather than merely unrouted: a `busy`
+        // would close this one and a `commit` would fail it as a replacement,
+        // and both are effects a relay could otherwise choose. Mirrors
+        // `RealtimeConnection`'s own `signalGeneration(data) == generation`.
+        if (!profile.accepts(signal)) return
 
         if (signal.busy) {
             fail("peer-busy")
@@ -183,7 +202,7 @@ class LinkTransport(
         if (signal.revealKey != null && signal.revealNonce != null) {
             when (val result = handshake.acceptReveal(signal.revealKey!!, signal.revealNonce!!)) {
                 is LinkSession.Handshake.RevealResult.Accepted -> {
-                    result.reveal?.let { send(Signal.reveal(it.key, it.nonce)) }
+                    result.reveal?.let { send(profile.reveal(it.key, it.nonce)) }
                     maybeReady()
                 }
                 is LinkSession.Handshake.RevealResult.Duplicate -> Unit
@@ -217,6 +236,11 @@ class LinkTransport(
             "answer" -> SessionDescription.Type.ANSWER
             else -> return
         }
+        // A wire without a sorted-id tiebreak prevents glare only by the two
+        // intents differing, so an initiator never answers an offer and a
+        // responder never applies an answer. `link/1` accepts both, exactly as
+        // it did before this guard existed.
+        if (!profile.acceptsSdp(signal.sdpType!!)) return
         // Commit-before-reveal, enforced at ADMISSION as well as in the
         // handshake: every conforming offer and answer carries a commitment, so
         // one without (stripped, or a peer that never sent it) is failed here
@@ -247,7 +271,7 @@ class LinkTransport(
                     heldCandidates.clear()
                     for (candidate in held) addCandidate(candidate)
                     if (type == SessionDescription.Type.OFFER) createAnswer()
-                    else handshake.revealOnAnswer()?.let { send(Signal.reveal(it.key, it.nonce)) }
+                    else handshake.revealOnAnswer()?.let { send(profile.reveal(it.key, it.nonce)) }
                 },
                 onFailure = { fail("sdp-failed") },
             ),
@@ -259,7 +283,7 @@ class LinkTransport(
         connection?.createAnswer(
             sdpCreate("answer-failed") { description ->
                 setLocalAndSend(description) {
-                    send(Signal.answer(description.description, handshake.commit, LinkProtocol.ADVERTISED_CAPS))
+                    send(profile.answer(description.description, handshake.commit))
                 }
             },
             MediaConstraints(),
@@ -287,9 +311,19 @@ class LinkTransport(
 
     private fun maybeReady() {
         if (ready || closed) return
-        val file = fileChannel ?: return
-        val text = textChannel ?: return
-        if (file.state() != DataChannel.State.OPEN || text.state() != DataChannel.State.OPEN) return
+        // Every lane this wire declares must be adopted AND open. A wire with
+        // no text lane must not be held back waiting for one, and a wire that
+        // has one must never be called ready without it.
+        if (profile.fileChannel != null &&
+            fileChannel?.state() != DataChannel.State.OPEN
+        ) {
+            return
+        }
+        if (profile.textChannel != null &&
+            textChannel?.state() != DataChannel.State.OPEN
+        ) {
+            return
+        }
         val keys = handshake.keys ?: run {
             // Channels open, reveal still owed: the short key window starts
             // HERE, so an instant open is not left waiting out the whole setup
@@ -495,7 +529,7 @@ class LinkTransport(
         override fun onIceCandidate(candidate: IceCandidate) {
             executor.execute {
                 if (closed) return@execute
-                send(Signal.candidate(candidate.sdp, candidate.sdpMid, candidate.sdpMLineIndex))
+                send(profile.candidate(candidate.sdp, candidate.sdpMid, candidate.sdpMLineIndex))
             }
         }
 
@@ -510,7 +544,7 @@ class LinkTransport(
             // an executor is allowed to — can no longer dispose the channel
             // while this stack still has a registerObserver ahead of it.
             val label = channel.label()
-            val recognised = label == LinkProtocol.FILE_CHANNEL || label == LinkProtocol.TEXT_CHANNEL
+            val recognised = label in profile.channels
             if (recognised) register(channel)
             executor.execute {
                 if (closed) {
@@ -518,11 +552,11 @@ class LinkTransport(
                     return@execute
                 }
                 when {
-                    label == LinkProtocol.FILE_CHANNEL && fileChannel == null -> {
+                    label == profile.fileChannel && fileChannel == null -> {
                         fileChannel = channel
                         maybeReady()
                     }
-                    label == LinkProtocol.TEXT_CHANNEL && textChannel == null -> {
+                    label == profile.textChannel && textChannel == null -> {
                         textChannel = channel
                         maybeReady()
                     }

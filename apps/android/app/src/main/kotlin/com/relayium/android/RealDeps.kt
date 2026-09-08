@@ -25,8 +25,8 @@ object RealDeps {
         val deps = TransferController.Deps(
             fetchIce = { code: PairCode -> IceConfig.fetch(http, origin, code) },
             signals = { code, events -> SignalingClient(http, origin, code, deviceName, events) },
-            transports = { selfId, peerId, servers, executor, send, events ->
-                LinkTransport(app, selfId, peerId, servers, executor, send, events)
+            transports = { profile, servers, executor, send, events ->
+                LinkTransport(app, profile, servers, executor, send, events)
             },
             store = ReceiveStore(File(app.cacheDir, "incoming")),
             providerOps = saf,

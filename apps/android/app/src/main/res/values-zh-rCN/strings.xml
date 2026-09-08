@@ -21,6 +21,8 @@
     <string name="status_verification_code">验证码 %1$s</string>
     <string name="status_verification_hint">两台设备应显示相同的六位数字。它不是配对码。</string>
     <string name="status_disconnect">断开连接</string>
+    <string name="status_legacy_files">文件会话</string>
+    <string name="status_legacy_text">消息会话</string>
     <string name="status_reconnect">重新建立会话</string>
 
     <string name="error_code_not_found">这个码已失效。配对码几分钟后过期，请让另一台设备重新生成一个。</string>
@@ -30,6 +32,8 @@
     <string name="error_handshake">连接未能通过验证，已停止。请重新建立会话。</string>
     <string name="error_connection_lost">连接已结束，不会再收到任何内容。请重新建立会话以继续。</string>
     <string name="error_transfer_failed">传输已中断，未能完成。</string>
+    <string name="error_text_refused">对方拒绝了这次会话。</string>
+    <string name="error_legacy_no_offer">对方设备始终没有发起连接。如果它也是加入这个配对码，就需要有一台设备改为创建配对码。</string>
     <string name="error_integrity">收到的文件与发送的内容不一致，已丢弃。没有保存任何文件。</string>
     <!-- 不承诺"没有写入任何内容"：此键同样用于写入中途和清理受限的失败，
          部分文件或已创建的文件夹可能合理残留——由独立的清理提示如实告知。 -->
@@ -60,10 +64,15 @@
     <string name="text_from_me">来自本机</string>
     <string name="text_requested">正在等待另一台设备接受对话…</string>
     <string name="text_failed">这条连接上的消息功能已停止。文件可能仍然可用；重新建立会话可恢复消息。</string>
+    <string name="text_legacy_unavailable">此连接是文件会话。若要发送消息，请断开连接，待对方设备发起消息会话后重新配对。</string>
+    <string name="text_end_legacy">结束会话并断开</string>
+    <string name="text_decline_legacy">拒绝并断开</string>
 
     <string name="files_title">文件</string>
     <string name="files_pick">选择要发送的文件</string>
     <string name="files_cancel">取消</string>
+    <string name="files_cancel_legacy">取消并断开</string>
+    <string name="files_legacy_unavailable">此连接是消息会话。若要发送文件，请断开连接，待对方设备发起文件会话后重新配对。</string>
     <string name="files_sending">正在发送 %1$s</string>
     <string name="files_incoming_title">收到的文件</string>
     <plurals name="files_incoming_summary">

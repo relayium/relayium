@@ -19,8 +19,13 @@ import com.relayium.protocol.LinkSession
 import com.relayium.protocol.PairCode
 import com.relayium.protocol.RealtimeFrame
 import com.relayium.protocol.Signal
+import com.relayium.protocol.TextLane
 import com.relayium.protocol.TextLaneSession
 import com.relayium.protocol.TextSessionLimits
+import com.relayium.protocol.legacy.LegacyLane
+import com.relayium.protocol.legacy.LegacyProtocol
+import com.relayium.protocol.legacy.LegacyTextLane
+import com.relayium.protocol.legacy.WireProfile
 import java.io.IOException
 import java.io.InputStream
 import java.util.concurrent.ScheduledFuture
@@ -89,12 +94,45 @@ class TransferController(
 
     enum class Phase { IDLE, CONNECTING, WAITING_PEER, CONNECTED, ENDED }
 
+    /**
+     * Why this device is in the room, and therefore who offers on a wire that
+     * has no other tiebreak.
+     *
+     * `link/1` derives its role from the two hub ids, identically on both
+     * sides. The shipped legacy wire does not: `RealtimeSessionModel.join`
+     * takes the role from the verb the user pressed — creating a code offers,
+     * joining one answers — so the intent has to be carried here rather than
+     * re-derived. Two devices that both computed a sorted role would disagree
+     * with every already-deployed peer about who offers.
+     */
+    enum class Intent { MINTER, JOINER }
+
+    /** Which wire the established connection actually speaks. */
+    enum class Wire {
+        /** Two lanes, one connection: files and messages together. */
+        LINK,
+        /** The shipped file generation. Carries files only. */
+        LEGACY_FILES,
+        /** The shipped message generation. Carries messages only. */
+        LEGACY_TEXT,
+    }
+
     data class Progress(val name: String, val done: Long, val total: Long)
 
     data class Message(val body: String, val fromPeer: Boolean)
 
     data class State(
         val phase: Phase = Phase.IDLE,
+        /**
+         * The wire this session speaks, once it is established; null before.
+         *
+         * Published so the UI can be TRUTHFUL rather than generic: a legacy
+         * file connection has no message lane and a legacy message connection
+         * has no file lane, and offering the missing one would be a control
+         * over nothing. Derived nowhere else — [canSendFiles] and
+         * [canSendMessages] read this so there is one answer.
+         */
+        val wire: Wire? = null,
         /** The controller-owned identity of THIS link session: monotonically
          *  unique, published with the state that describes the session, never
          *  reused. A picker result captured under one value must be handed
@@ -140,7 +178,18 @@ class TransferController(
          *  be removed. Session-level and sticky across links until the user
          *  acknowledges it — never silently erased by a generation fence. */
         val cleanupIncomplete: Boolean = false,
-    )
+    ) {
+        /** Whether THIS connection can carry files at all. */
+        val canSendFiles: Boolean get() = wire == Wire.LINK || wire == Wire.LEGACY_FILES
+
+        /** Whether THIS connection can carry messages at all. */
+        val canSendMessages: Boolean get() = wire == Wire.LINK || wire == Wire.LEGACY_TEXT
+
+        /** Whether retiring one operation on this connection ends the whole
+         *  connection. True on the older wire, which has no in-band way to stop
+         *  a transfer or close a conversation — see [Wire]. */
+        val cancelDisconnects: Boolean get() = wire == Wire.LEGACY_FILES || wire == Wire.LEGACY_TEXT
+    }
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
@@ -249,7 +298,22 @@ class TransferController(
     private var transport: TransportHandle? = null
     private var linkSession: LinkSession? = null
     private var fileLane: FileLaneSession? = null
-    private var textLane: TextLaneSession? = null
+    private var textLane: TextLane? = null
+    /** The wire the current transport was built for, and the role it was built
+     *  with. Read when the lanes are constructed, so a lane can never be built
+     *  for a different wire than the connection carrying it. */
+    private var wireProfile: WireProfile? = null
+    private var intent: Intent = Intent.JOINER
+
+    /**
+     * Whether the CURRENT connection is one of the shipped older generations.
+     *
+     * Read wherever `link/1` has an in-band way to retire one operation and the
+     * older wire does not. It is deliberately a property of the live profile
+     * rather than of the state snapshot: a teardown decision must not be made
+     * from a value the UI thread may have observed one edge ago.
+     */
+    private val isLegacy: Boolean get() = wireProfile is WireProfile.Legacy
     private var keys: Crypto.SessionKeys? = null
     private var selfId: String = ""
     private var peerId: String = ""
@@ -269,12 +333,24 @@ class TransferController(
     private var textEndTimer: ScheduledFuture<*>? = null
     private var abortBarrierTimer: ScheduledFuture<*>? = null
     private var textIdleTimer: ScheduledFuture<*>? = null
+    /** The bounded wait for a legacy peer's offer, for a JOINER — which never
+     *  offers, on any wire. */
+    private var legacyOfferTimer: ScheduledFuture<*>? = null
 
     // ── joining ─────────────────────────────────────────────────────────────
 
-    fun join(code: PairCode) = post {
+    /**
+     * Join [code] as [intent].
+     *
+     * The intent is REQUIRED rather than inferred, and it is the whole reason
+     * this parameter exists: on the shipped legacy wire it decides who offers,
+     * and a device that minted a code and one that typed it in look identical
+     * from inside a room. Nothing downstream re-derives it.
+     */
+    fun join(code: PairCode, intent: Intent) = post {
         closeOnSession()
         epoch++
+        this.intent = intent
         val mine = epoch
         // A fresh link, but not a fresh disk: an unacknowledged leftover
         // warning survives the reset because the leftover itself does.
@@ -360,8 +436,18 @@ class TransferController(
         )
     }
 
-    /** A peer present past the settle window that never announced `link/1` and
-     *  never proved it with an offer is unreachable — say so. */
+    /**
+     * The capability window closing.
+     *
+     * A peer past it that never announced `link/1` and never proved it with an
+     * offer is not unreachable — it is a peer on the SHIPPED older wire, and
+     * that is where this hands over. The fixture's `capability.promotion` is
+     * the rule: `link/1` and `text/1` each resolve immediately (they are
+     * positive statements), and everything else — an empty announcement,
+     * `link/2`, `LINK/1`, `text/2`, or silence — resolves only HERE, because
+     * until the window closes "nothing yet" and "nothing at all" are the same
+     * observation.
+     */
     private fun armSettle(mine: Int, peer: String) {
         if (settleTimer != null) return
         settleTimer = session.schedule(
@@ -369,20 +455,83 @@ class TransferController(
                 if (epoch != mine) return@schedule
                 val registry = linkSession ?: return@schedule
                 if (transport == null && !registry.peerSupportsLink(peer)) {
-                    endSession("error_peer_incompatible")
+                    establishLegacy(mine, peer)
                 }
             },
             deps.timeouts.settleMs, TimeUnit.MILLISECONDS,
         )
     }
 
+    /**
+     * Hand this peer over to the shipped older wire.
+     *
+     * The two intents take genuinely different paths, and that asymmetry is
+     * the protocol rather than a shortcut:
+     *
+     *  - a MINTER is the initiator, so it picks the generation from what the
+     *    peer announced ([LegacyLane.mode]) and offers. There is no negotiation
+     *    round for this: the offer's own tag IS the choice, and a wrong one
+     *    reaches a truthful terminal state rather than a hang, because the peer
+     *    filters every inbound signal by generation and simply never answers.
+     *  - a JOINER is the responder and must NOT offer. It waits, and the
+     *    generation of the offer that arrives is authoritative — including when
+     *    that differs from what this side would have guessed.
+     *
+     * Nothing here arms a batch, so [LegacyLane.mode] is always asked with
+     * `hasArmedBatch = false`: this client's cross-network create stages
+     * nothing before connecting, and claiming otherwise would silently force
+     * every connection onto the file generation.
+     */
+    private fun establishLegacy(mine: Int, peer: String) {
+        if (transport != null || selfId.isEmpty()) return
+        val registry = linkSession ?: return
+        peerId = peer
+        if (intent == Intent.JOINER) {
+            armLegacyOffer(mine)
+            return
+        }
+        val lane = LegacyLane.mode(
+            peerAnnouncesText = registry.peerSupportsText(peer),
+            hasArmedBatch = false,
+        )
+        startTransport(mine, peer, WireProfile.Legacy(LinkProtocol.Role.INITIATOR, lane))
+    }
+
+    /**
+     * A joiner's bounded wait for the offer only the minter can send.
+     *
+     * There is no `linkRequest` on this wire to prod the peer with, so the
+     * only honest thing to do is wait and then say so. Silence here means the
+     * two devices disagree about who created the code — the one case the
+     * intent cannot resolve alone — and a truthful message beats a session
+     * that stays "connecting" forever.
+     */
+    private fun armLegacyOffer(mine: Int) {
+        if (legacyOfferTimer != null) return
+        _state.value = _state.value.copy(phase = Phase.CONNECTING)
+        legacyOfferTimer = session.schedule(
+            {
+                legacyOfferTimer = null
+                if (epoch != mine || transport != null) return@schedule
+                endSession("error_legacy_no_offer")
+            },
+            deps.timeouts.requestDeadlineMs, TimeUnit.MILLISECONDS,
+        )
+    }
+
     private fun maybeEstablish(mine: Int, peer: String) {
         if (transport != null || selfId.isEmpty()) return
         val registry = linkSession ?: return
-        if (!registry.peerSupportsLink(peer)) return
+        if (!registry.peerSupportsLink(peer)) {
+            // An announcement that positively names the older message wire is
+            // an answer, not an absence: it resolves now rather than at the
+            // settle edge. Anything else waits — see [armSettle].
+            if (registry.peerSupportsText(peer)) establishLegacy(mine, peer)
+            return
+        }
         peerId = peer
         if (LinkProtocol.linkRole(selfId, peer) == LinkProtocol.Role.INITIATOR) {
-            startTransport(mine, peer)
+            startTransport(mine, peer, WireProfile.Link(LinkProtocol.Role.INITIATOR))
         } else {
             signaling?.sendSignal(peer, Signal.linkRequest().toJson())
             _state.value = _state.value.copy(phase = Phase.CONNECTING)
@@ -431,7 +580,13 @@ class TransferController(
             // A rebuild offer for a link this stage does not rebuild: refused in
             // silence — answering would tell a relay which peer holds a link.
             Signal.Generation.RESUME -> return
-            Signal.Generation.TEXT, Signal.Generation.FILE -> return
+            // The two shipped generations. Never mixed into the link path: they
+            // are a different connection with a different channel and a
+            // different control set.
+            Signal.Generation.TEXT, Signal.Generation.FILE -> {
+                onLegacySignal(mine, from, data, signal)
+                return
+            }
         }
 
         // The leave budget belongs to the CURRENT peer's authenticated link. An
@@ -456,13 +611,13 @@ class TransferController(
                     registry.recordProvenLink(from)
                     if (!registry.peerSupportsLink(from)) return
                     peerId = from
-                    startTransport(mine, from)
+                    startTransport(mine, from, WireProfile.Link(LinkProtocol.linkRole(selfId, from)))
                 }
                 signal.isLinkRequest &&
                     LinkProtocol.linkRole(selfId, from) == LinkProtocol.Role.INITIATOR &&
                     registry.peerSupportsLink(from) -> {
                     peerId = from
-                    startTransport(mine, from)
+                    startTransport(mine, from, WireProfile.Link(LinkProtocol.Role.INITIATOR))
                 }
                 else -> return
             }
@@ -471,14 +626,63 @@ class TransferController(
             signaling?.sendSignal(from, Signal.busy().toJson())
             return
         }
+        // The established connection may not be a link at all. A `link`
+        // generation frame reaching a legacy handshake could close it (`busy`),
+        // fail it (`commit`) or feed it a reveal for a commitment it never
+        // made, so routing stops here as well as at the transport boundary —
+        // the two checks answer to different callers and neither is the other's
+        // backstop.
+        if (wireProfile !is WireProfile.Link) return
         transport?.onSignal(data)
     }
 
-    private fun startTransport(mine: Int, peer: String) {
+    /**
+     * One signal on a shipped legacy generation.
+     *
+     * Three rules, in this order, and each of them is a way this could go
+     * wrong:
+     *
+     *  - an ESTABLISHED session takes only its own peer's signals, and only on
+     *    the generation it was built for. That is exactly what
+     *    `RealtimeConnection`'s own handler filter does, and without it a stray
+     *    untagged `busy` could tear down a live message connection.
+     *  - a peer that announced `link/1` is being established as one. A legacy
+     *    offer must never silently replace a running or proven link with an
+     *    older wire.
+     *  - only a JOINER adopts an offer. A minter is the initiator; answering an
+     *    inbound offer as well would be two offers into one connection, which
+     *    is precisely what the explicit intent exists to prevent.
+     */
+    private fun onLegacySignal(mine: Int, from: String, data: Json, signal: Signal) {
+        val registry = linkSession ?: return
+        val profile = wireProfile
+        if (transport != null) {
+            if (from != peerId) return
+            val legacy = profile as? WireProfile.Legacy ?: return
+            val expected = if (legacy.lane == LegacyProtocol.Lane.TEXT) {
+                Signal.Generation.TEXT
+            } else {
+                Signal.Generation.FILE
+            }
+            if (signal.generation != expected) return
+            transport?.onSignal(data)
+            return
+        }
+        if (registry.peerSupportsLink(from)) return
+        if (intent != Intent.JOINER) return
+        val lane = LegacyProtocol.inboundOfferLane(signal) ?: return
+        peerId = from
+        startTransport(mine, from, WireProfile.Legacy(LinkProtocol.Role.RESPONDER, lane))
+        transport?.onSignal(data)
+    }
+
+    private fun startTransport(mine: Int, peer: String, profile: WireProfile) {
         requestRetryTimer?.cancel(false); requestRetryTimer = null
         requestDeadlineTimer?.cancel(false); requestDeadlineTimer = null
+        legacyOfferTimer?.cancel(false); legacyOfferTimer = null
+        wireProfile = profile
         val link = deps.transports.create(
-            selfId, peer, ice.servers, session,
+            profile, ice.servers, session,
             { signal -> signaling?.sendSignal(peer, signal.toJson()) },
             object : LinkTransport.Events {
                 override fun onReady(keys: Crypto.SessionKeys, sas: String, maxFrameBytes: Int) {
@@ -503,23 +707,53 @@ class TransferController(
         link.start()
     }
 
+    /**
+     * Build EXACTLY the lanes this wire has.
+     *
+     * A legacy connection carries one generation, so the other lane is not a
+     * degraded lane — it does not exist, and constructing one would give the UI
+     * a state machine describing a channel no frame can ever reach. Every lane
+     * that IS built attaches its receiver before anything can answer, which is
+     * the ordering both lane machines refuse to send consent without.
+     */
     private fun onLinkReady(sessionKeys: Crypto.SessionKeys, sas: String, frameBytes: Int) {
         keys = sessionKeys
-        val files = FileLaneSession(sessionKeys, frameBytes)
-        val text = TextLaneSession(sessionKeys, frameBytes)
-        files.attachReceiver()
-        text.attachReceiver()
+        val profile = wireProfile
+        val legacy = profile as? WireProfile.Legacy
+        val wire = when {
+            legacy == null -> Wire.LINK
+            legacy.lane == LegacyProtocol.Lane.TEXT -> Wire.LEGACY_TEXT
+            else -> Wire.LEGACY_FILES
+        }
+        val files = if (wire == Wire.LEGACY_TEXT) {
+            null
+        } else {
+            // The ordered abort barrier and the BUSY byte are `link/1`
+            // additions; on the older wire the control set is the three bytes
+            // the fixture pins, and emitting a fourth would be a dialect.
+            FileLaneSession(sessionKeys, frameBytes, barrier = wire == Wire.LINK)
+        }
+        val text: TextLane? = when (wire) {
+            Wire.LINK -> TextLaneSession(sessionKeys, frameBytes)
+            Wire.LEGACY_TEXT -> LegacyTextLane(sessionKeys, frameBytes, role = legacy!!.role)
+            Wire.LEGACY_FILES -> null
+        }
+        files?.attachReceiver()
+        text?.attachReceiver()
         fileLane = files
         textLane = text
         settleTimer?.cancel(false); settleTimer = null
+        legacyOfferTimer?.cancel(false); legacyOfferTimer = null
         lastTextActivity = System.currentTimeMillis()
         armTextIdle(epoch)
         _state.value = _state.value.copy(
             phase = Phase.CONNECTED,
+            wire = wire,
             sas = sas,
             errorKey = null,
-            textLimit = text.plainLimit,
-            textCanRequest = text.canRequest,
+            textState = text?.state ?: TextLaneSession.State.IDLE,
+            textLimit = text?.plainLimit ?: com.relayium.protocol.TextWire.MAX_BYTES,
+            textCanRequest = text?.canRequest ?: false,
         )
     }
 
@@ -539,6 +773,11 @@ class TransferController(
     private fun apply(mine: Int, actions: List<FileLaneSession.Action>) {
         val lane = fileLane ?: return
         for (action in actions) {
+            // A failure in this same list may have RETIRED the session — on the
+            // older wire a terminal lane closes the connection, and `epoch` is
+            // bumped before any of that unwinds. Everything after it belongs to
+            // a session that no longer exists, including the drain lease below.
+            if (epoch != mine) return
             when (action) {
                 is FileLaneSession.Action.Send -> {
                     if (transport?.sendFile(action.frame) != true) {
@@ -606,6 +845,7 @@ class TransferController(
                 is FileLaneSession.Action.Fail -> onLaneFailure(mine, action.failure)
             }
         }
+        if (epoch != mine) return
         // The drain's ABSOLUTE lease: armed once on entering DRAINING, never
         // re-armed by traffic — an eternally-trickling sender must not hold the
         // lane forever — and retired the moment the barrier lands.
@@ -801,6 +1041,31 @@ class TransferController(
                 )
             }
         }
+        // AFTER the scope's own effects and its publication, and for EVERY
+        // failure rather than only the two the user presses.
+        //
+        // The failures that actually strand a peer mostly do not come from a
+        // cancel button at all: a storage queue overflow, a failed write, a
+        // failed export, a source that could not be opened or read, a file
+        // that changed size under the pick, and every protocol failure each
+        // retire a batch through this one path. On `link/1` that is correct and
+        // complete — the ordered barrier tells the peer, and the other lane
+        // survives. On the older wire there is no barrier and no other lane, so
+        // the peer would go on streaming into a receiver that stopped, or go on
+        // waiting for a sender that did.
+        //
+        // The two exceptions are the failures the PEER signalled in band and
+        // completed: it declined the batch, or it said it was busy. Both sides
+        // then agree the batch is over with nothing in flight, and the
+        // connection is still usable — which is why an ordinary decline must
+        // not read as a fault. (A decline at this side's own prompt does not
+        // reach here at all: `rejectIncoming` emits the byte and no failure.)
+        if (isLegacy &&
+            failure.reason != FileLaneSession.Failure.Reason.PEER_REJECTED &&
+            failure.reason != FileLaneSession.Failure.Reason.PEER_BUSY
+        ) {
+            endSession(null)
+        }
     }
 
     // ── UI entry points (post to the session thread) ────────────────────────
@@ -867,8 +1132,26 @@ class TransferController(
 
     /** Cancel the INCOMING batch. Direction-specific: the outgoing stream, the
      *  text lane and the link all survive. */
+    /**
+     * Cancel the INCOMING batch.
+     *
+     * On `link/1` this is direction-specific: the outgoing stream, the text
+     * lane and the link all survive, because the sender answers the REJECT
+     * with an ordered barrier.
+     *
+     * On the older wire it is a DISCONNECT, and truthfully so. The shipped
+     * sender reads `rejected` only before it starts streaming
+     * (`RealtimeConnection.waitForAccept`); once it is streaming, a REJECT
+     * changes nothing it does. Leaving the connection open would leave the user
+     * looking at a cancelled transfer that keeps arriving.
+     */
     fun cancelReceive() = post {
         val lane = fileLane ?: return@post
+        // The disconnect on the older wire is NOT performed here: the lane's
+        // own LOCAL_CANCEL failure carries it, through the one retirement point
+        // in [onLaneFailure], so a cancel and a failed write end the connection
+        // by the same route. A decline at the prompt emits the byte without a
+        // failure and stays non-terminal.
         apply(epoch, lane.cancelIncoming())
     }
 
@@ -919,6 +1202,9 @@ class TransferController(
         val lane = fileLane ?: return@post
         retirePump()
         batchGen++
+        // On the older wire this also ends the connection — nothing else could
+        // tell the receiver the chunks stopped on purpose — and it does so
+        // through [onLaneFailure], not from here.
         apply(epoch, lane.cancelOutgoing())
         _state.value = _state.value.copy(
             outgoing = emptyList(),
@@ -1096,9 +1382,14 @@ class TransferController(
                 )
                 is TextLaneSession.Action.Fail -> {
                     // A visible failure, not a silently changed enum: the UI
-                    // maps the key; REFUSED reads from textState instead.
+                    // maps the key.
                     val key = when (action.reason) {
-                        TextLaneSession.Action.Reason.REFUSED -> null
+                        // On `link/1` a refusal leaves the lane reopenable and
+                        // the UI reads it from textState. On the older wire the
+                        // refusal ends the whole connection, so the ended
+                        // session has to say why by itself.
+                        TextLaneSession.Action.Reason.REFUSED ->
+                            if (isLegacy) "error_text_refused" else null
                         else -> "error_text_failed"
                     }
                     if (key != null) _state.value = _state.value.copy(errorKey = key)
@@ -1118,13 +1409,35 @@ class TransferController(
         }
         syncTextTimers(mine, lane)
         _state.value = _state.value.copy(textState = lane.state, textCanRequest = lane.canRequest)
+        // On the older wire the conversation IS the connection: once it is
+        // ENDED or FAILED nothing can carry a frame on it in either direction,
+        // and leaving the socket open would leave the user in front of a dead
+        // composer. Every terminal path funnels through here — the peer's
+        // REJECT, a receiver-enforced bound, a malformed or unauthenticated
+        // frame, a refused enqueue and the local end alike — because the local
+        // ones alone were only the paths a user takes deliberately.
+        //
+        // AFTER the publication above, never before: the final textState the
+        // user is left looking at must be the real one, and a teardown that ran
+        // first would leave the previous state standing over a closed session.
+        // `link/1` is untouched: its lanes are independent and an ended
+        // conversation there is reopenable on a live link.
+        if (isLegacy &&
+            (lane.state == TextLaneSession.State.ENDED || lane.state == TextLaneSession.State.FAILED)
+        ) {
+            endSession(null)
+        }
         return !enqueueFailed
     }
 
     /** The end-barrier lease: armed exactly while a barrier is outstanding,
      *  RETIRED the moment it settles, and fenced by barrier generation so a
      *  stale timer cannot poison a later conversation. */
-    private fun syncTextTimers(mine: Int, lane: TextLaneSession) {
+    private fun syncTextTimers(mine: Int, lane: TextLane) {
+        // A wire with no END barrier has no lease over one. Without this guard
+        // a legacy lane — permanently `canRequest == false` — would look like a
+        // barrier that never settles and arm a timer with nothing to answer it.
+        if (!lane.hasEndBarrier) return
         val outstanding = !lane.canRequest && lane.state == TextLaneSession.State.ENDED
         if (outstanding) {
             if (textEndTimer == null) {
@@ -1158,6 +1471,8 @@ class TransferController(
                 if (lane.state == TextLaneSession.State.OPEN &&
                     System.currentTimeMillis() - lastTextActivity >= deps.timeouts.textIdleMs
                 ) {
+                    // On the older wire this also closes the connection; see
+                    // the terminal handling in [applyText].
                     applyText(mine, lane.end())
                 }
             },
@@ -1179,7 +1494,11 @@ class TransferController(
 
     fun rejectText() = post {
         val lane = textLane ?: return@post
-        if (lane.state == TextLaneSession.State.INCOMING_REQUEST) applyText(epoch, lane.reject())
+        if (lane.state != TextLaneSession.State.INCOMING_REQUEST) return@post
+        // `RealtimeConnection.rejectText` sends the byte and closes; the
+        // terminal handling in [applyText] is what closes it here, so every
+        // path that retires a legacy conversation does the same thing.
+        applyText(epoch, lane.reject())
     }
 
     fun endText() = post {
@@ -1244,7 +1563,11 @@ class TransferController(
         val link = transport
         val registry = linkSession
         val k = keys
-        if (link != null && registry != null && k != null && peerId.isNotEmpty()) {
+        // The authenticated leave is a `link/1` signal — it rides the `link`
+        // generation and carries an HMAC over a link payload. Sending one to a
+        // legacy peer would be a frame it filters out by generation and could
+        // not verify anyway, so that wire simply closes.
+        if (!isLegacy && link != null && registry != null && k != null && peerId.isNotEmpty()) {
             link.leaveAndClose(registry.leaveSignal(peerId, k))
         }
         endSession(null)
@@ -1271,13 +1594,13 @@ class TransferController(
         retirePump()
         for (timer in listOf(
             helloTimer, settleTimer, requestRetryTimer, requestDeadlineTimer,
-            textEndTimer, abortBarrierTimer, textIdleTimer,
+            textEndTimer, abortBarrierTimer, textIdleTimer, legacyOfferTimer,
         )) {
             timer?.cancel(false)
         }
         helloTimer = null; settleTimer = null; requestRetryTimer = null
         requestDeadlineTimer = null; textEndTimer = null; abortBarrierTimer = null
-        textIdleTimer = null
+        textIdleTimer = null; legacyOfferTimer = null
         // The final disk cleanup is QUEUED, never awaited, and its outcome is
         // still surfaced: leftovers a teardown could not remove are as real as
         // any other batch's. shutdown() stops the storage executor only AFTER
@@ -1291,6 +1614,7 @@ class TransferController(
         keys = null
         fileLane = null
         textLane = null
+        wireProfile = null
         linkSession = null
         selfId = ""
         peerId = ""

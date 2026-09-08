@@ -20,19 +20,34 @@ object LinkProtocol {
     /** Matched with byte equality. `link/2` and `LINK/1` are not this protocol. */
     const val CAPABILITY = "link/1"
 
+    /** The shipped single-generation message wire. Named here because it is
+     *  part of what this client ANNOUNCES; its vocabulary lives in
+     *  `com.relayium.protocol.legacy.LegacyProtocol`. */
+    const val TEXT_CAPABILITY = "text/1"
+
     /**
-     * What this client announces, and the whole of it.
+     * What this client announces, and the whole of it: the fixture's
+     * `capability.hello.native`, which is what both Apple clients say.
      *
-     * Not `text/1`: that names the retired single-lane conversation transport,
-     * which this client does not implement — announcing it would invite a peer
-     * onto a lane that cannot open. Not `preupload/1`: frame kind 12 rides the
-     * file lane with its own derived key, and an unannounced kind is a hard
-     * error, so claiming it without implementing it kills whole transfers.
+     * `text/1` is here because this client now IMPLEMENTS the shipped
+     * single-generation message connection — see
+     * `com.relayium.protocol.legacy.LegacyTextLane` — in both roles. It was
+     * absent while that handler did not exist, and the two must move together:
+     * announcing it without the handler invites a peer onto a connection that
+     * cannot open, and implementing it without announcing it is worse than
+     * useless, because `RealtimeConnectionFactory.connectInRoom` REFUSES to
+     * send a text offer until it has heard this exact string back. A message
+     * connection with an Apple peer is unreachable in either direction without
+     * it.
+     *
+     * Still not `preupload/1`: frame kind 12 rides the file lane with its own
+     * derived key, and an unannounced kind is a hard error, so claiming it
+     * without implementing it kills whole transfers.
      *
      * An untruthful capability is worse than a missing one; it is the one input
      * a peer is entitled to act on.
      */
-    val ADVERTISED_CAPS: List<String> = listOf(CAPABILITY)
+    val ADVERTISED_CAPS: List<String> = listOf(TEXT_CAPABILITY, CAPABILITY)
 
     /** The file lane's SCTP label. */
     const val FILE_CHANNEL = "relayium"
@@ -181,14 +196,21 @@ object LinkProtocol {
      * get a batch accepted without a user ever answering. The length check is
      * the whole control, not a formality.
      */
-    fun fileLifecycleKind(frame: ByteArray): FileControl? {
+    fun fileLifecycleKind(frame: ByteArray, barrier: Boolean = true): FileControl? {
         if (frame.size != 1) return null
         return when (frame[0].toInt() and 0xff) {
             RealtimeFrame.CTRL_ACCEPT -> FileControl.ACCEPT
             RealtimeFrame.CTRL_REJECT -> FileControl.REJECT
             RealtimeFrame.CTRL_COMPLETE -> FileControl.COMPLETE
-            RealtimeFrame.CTRL_BUSY -> FileControl.BUSY
-            RealtimeFrame.CTRL_BATCH_ABORT -> FileControl.BATCH_ABORT
+            // `link/1` additions. On the shipped legacy wire the control set is
+            // exactly the three above (fixture `controlHex`), so recognising
+            // these there would be inventing a dialect: an Apple peer's
+            // `RealtimeControl(rawValue:)` has three cases and would feed the
+            // byte to its AEAD receiver. Unrecognised, a one-byte frame is
+            // shorter than a header and lands in `Unroutable`, which fails the
+            // lane — the same answer the peer would reach.
+            RealtimeFrame.CTRL_BUSY -> if (barrier) FileControl.BUSY else null
+            RealtimeFrame.CTRL_BATCH_ABORT -> if (barrier) FileControl.BATCH_ABORT else null
             else -> null
         }
     }
@@ -224,8 +246,8 @@ object LinkProtocol {
      * or a peer speaking a protocol this build does not have, and skipping one
      * frame the peer counted strands the receiver's sequence permanently.
      */
-    fun fileFrameClass(frame: ByteArray): FileFrameClass {
-        fileLifecycleKind(frame)?.let { return FileFrameClass.Lifecycle(it) }
+    fun fileFrameClass(frame: ByteArray, barrier: Boolean = true): FileFrameClass {
+        fileLifecycleKind(frame, barrier)?.let { return FileFrameClass.Lifecycle(it) }
         // Below the header there is no kind to dispatch on at all.
         if (frame.size < RealtimeFrame.HEADER_BYTES) return FileFrameClass.Unroutable
         return when (frame[0].toInt() and 0xff) {

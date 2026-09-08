@@ -19,6 +19,8 @@ import com.relayium.protocol.Signal
 import com.relayium.protocol.TextLaneSession
 import com.relayium.protocol.TextSessionLimits
 import com.relayium.protocol.TextWire
+import com.relayium.protocol.legacy.LegacyProtocol
+import com.relayium.protocol.legacy.WireProfile
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
@@ -72,8 +74,7 @@ class TransferControllerTest {
     }
 
     private class FakeTransport(
-        val selfId: String,
-        val peerId: String,
+        val profile: WireProfile,
         val events: LinkTransport.Events,
     ) : TransportHandle {
         val fileFrames = ConcurrentLinkedQueue<ByteArray>()
@@ -124,6 +125,7 @@ class TransferControllerTest {
         selfId: String = "aaaaaaaa",
         timeouts: TransferController.Timeouts = quietTimeouts(),
         store: ReceiveStore? = null,
+        intent: TransferController.Intent = TransferController.Intent.JOINER,
     ): Rig {
         val signaling = FakeSignaling()
         val transports = ConcurrentLinkedQueue<FakeTransport>()
@@ -132,8 +134,8 @@ class TransferControllerTest {
         val deps = TransferController.Deps(
             fetchIce = { IceConfig.Result(emptyList(), "") },
             signals = { _, events -> signaling.also { it.events = events } },
-            transports = { self, peer, _, _, _, events ->
-                FakeTransport(self, peer, events).also(transports::add)
+            transports = { profile, _, _, _, events ->
+                FakeTransport(profile, events).also(transports::add)
             },
             store = store ?: ReceiveStore(temp.newFolder("staging-${System.nanoTime()}")),
             providerOps = ops,
@@ -141,7 +143,7 @@ class TransferControllerTest {
         )
         val controller = TransferController(scope, "test-device", deps)
         controllers.add(controller)
-        controller.join(PairCode("123456"))
+        controller.join(PairCode("123456"), intent)
         awaitTrue("signaling wired") { runCatching { signaling.events }.isSuccess }
         signaling.events.onSelfId(selfId, "")
         return Rig(controller, signaling, transports, ops, treeDir)
@@ -648,7 +650,7 @@ class TransferControllerTest {
         // join's own teardown discard fails again in this store, and the
         // warning it latches must land in the NEW session's state.
         store.armed.set(true)
-        rig.controller.join(PairCode("654321"))
+        rig.controller.join(PairCode("654321"), TransferController.Intent.JOINER)
         awaitTrue("the leftover warning survives into the new session") {
             rig.controller.state.value.cleanupIncomplete &&
                 rig.controller.state.value.phase == TransferController.Phase.CONNECTING
@@ -1315,7 +1317,7 @@ class TransferControllerTest {
             rig.controller.state.value.phase == TransferController.Phase.ENDED
         }
         val oldEvents = rig.signaling.events
-        rig.controller.join(PairCode("222222"))
+        rig.controller.join(PairCode("222222"), TransferController.Intent.JOINER)
         awaitTrue("the new join wired fresh signalling") { rig.signaling.events !== oldEvents }
         rig.signaling.events.onSelfId("aaaaaaaa", "")
         rig.signaling.events.onPeers(listOf(Envelope.Peer("cccccccc", "peer")))
@@ -1390,7 +1392,7 @@ class TransferControllerTest {
             rig.controller.state.value.phase == TransferController.Phase.ENDED
         }
         val oldEvents = rig.signaling.events
-        rig.controller.join(PairCode("222222"))
+        rig.controller.join(PairCode("222222"), TransferController.Intent.JOINER)
         awaitTrue("the new join wired fresh signalling") { rig.signaling.events !== oldEvents }
         rig.signaling.events.onSelfId("aaaaaaaa", "")
         rig.signaling.events.onPeers(listOf(Envelope.Peer("cccccccc", "peer")))
@@ -1494,6 +1496,431 @@ class TransferControllerTest {
             listOf("second.bin"),
             rig.controller.state.value.outgoing.map { it.name },
         )
+    }
+
+    // ── the shipped legacy wire ─────────────────────────────────────────────
+
+    /** Short settle, so the "waits for the window" rows resolve in a test. */
+    private fun settlingTimeouts(settleMs: Long = 60, deadlineMs: Long = 60_000) =
+        quietTimeouts().copy(settleMs = settleMs, requestDeadlineMs = deadlineMs)
+
+    private fun hello(vararg caps: String): Json =
+        Json.obj("caps" to Json.arr(caps.map(Json::of)))
+
+    private fun legacyProfile(rig: Rig): WireProfile.Legacy =
+        rig.transport.profile as WireProfile.Legacy
+
+    /** Drive a legacy connection to CONNECTED and return the PEER's keys. */
+    private fun readyLegacy(rig: Rig): Crypto.SessionKeys {
+        val (local, remote) = mirroredKeys()
+        rig.transport.events.onReady(local, "705955", RealtimeFrame.CONSERVATIVE_MAX_FRAME_BYTES)
+        awaitTrue("connected") { rig.controller.state.value.phase == TransferController.Phase.CONNECTED }
+        return remote
+    }
+
+    @Test
+    fun `a minter offers the message generation the instant the peer names it`() {
+        val rig = rig(timeouts = settlingTimeouts(settleMs = 60_000), intent = TransferController.Intent.MINTER)
+        rig.signaling.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
+        rig.signaling.events.onSignal("bbbbbbbb", hello("text/1"))
+        // No settle wait: `text/1` is a positive statement about the peer.
+        awaitTrue("transport created") { rig.transports.isNotEmpty() }
+        val profile = legacyProfile(rig)
+        assertEquals(LegacyProtocol.Lane.TEXT, profile.lane)
+        assertEquals("the minter offers", LinkProtocol.Role.INITIATOR, profile.role)
+    }
+
+    @Test
+    fun `a minter waits out the window before answering silence with files`() {
+        val rig = rig(timeouts = settlingTimeouts(), intent = TransferController.Intent.MINTER)
+        rig.signaling.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
+        // A peer that has said nothing is indistinguishable from one that has
+        // not said it YET, so nothing may be decided here.
+        Thread.sleep(20)
+        assertTrue("no transport before the window closes", rig.transports.isEmpty())
+        awaitTrue("transport after the window") { rig.transports.isNotEmpty() }
+        val profile = legacyProfile(rig)
+        assertEquals(LegacyProtocol.Lane.FILES, profile.lane)
+        assertEquals(LinkProtocol.Role.INITIATOR, profile.role)
+    }
+
+    @Test
+    fun `a capability that is not this wire resolves to files, not to a hang`() {
+        // The fixture's `link/2` / `LINK/1` / `text/2` rows: announced, but not
+        // anything this client can act on.
+        for (cap in listOf("link/2", "LINK/1", "text/2")) {
+            val rig = rig(timeouts = settlingTimeouts(), intent = TransferController.Intent.MINTER)
+            rig.signaling.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
+            rig.signaling.events.onSignal("bbbbbbbb", hello(cap))
+            awaitTrue("transport for $cap") { rig.transports.isNotEmpty() }
+            assertEquals(cap, LegacyProtocol.Lane.FILES, legacyProfile(rig).lane)
+        }
+    }
+
+    @Test
+    fun `a joiner never offers and adopts the generation of the offer it receives`() {
+        val rig = rig(timeouts = settlingTimeouts(), intent = TransferController.Intent.JOINER)
+        rig.signaling.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
+        val offer = LegacyProtocol.offer("v=0\r\n", "Y29tbWl0", LegacyProtocol.Lane.FILES).toJson()
+        rig.signaling.events.onSignal("bbbbbbbb", offer)
+        awaitTrue("transport created") { rig.transports.isNotEmpty() }
+        val profile = legacyProfile(rig)
+        assertEquals(LegacyProtocol.Lane.FILES, profile.lane)
+        assertEquals("the joiner answers", LinkProtocol.Role.RESPONDER, profile.role)
+        // And the offer that created it is handed on, not dropped: rebuilding
+        // the session without it would strand a peer that already offered.
+        awaitTrue("offer forwarded") { rig.transport.signals.isNotEmpty() }
+        assertEquals(Json.stringify(offer), Json.stringify(rig.transport.signals.peek()))
+    }
+
+    @Test
+    fun `a joiner adopts a message offer only when it carries exact text slash 1`() {
+        val rig = rig(timeouts = settlingTimeouts(settleMs = 60_000, deadlineMs = 60), intent = TransferController.Intent.JOINER)
+        rig.signaling.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
+        // `text:true` with no capability: the peer cannot decode kind 9, so
+        // answering would build a connection that can never carry a message.
+        rig.signaling.events.onSignal(
+            "bbbbbbbb",
+            Signal(sdpType = "offer", sdp = "v=0", commit = "Y29tbWl0", text = true).toJson(),
+        )
+        Thread.sleep(20)
+        assertTrue("no session for a dialect this side cannot speak", rig.transports.isEmpty())
+
+        val ok = rig(timeouts = settlingTimeouts(), intent = TransferController.Intent.JOINER)
+        ok.signaling.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
+        ok.signaling.events.onSignal(
+            "bbbbbbbb",
+            LegacyProtocol.offer("v=0", "Y29tbWl0", LegacyProtocol.Lane.TEXT).toJson(),
+        )
+        awaitTrue("transport created") { ok.transports.isNotEmpty() }
+        assertEquals(LegacyProtocol.Lane.TEXT, legacyProfile(ok).lane)
+    }
+
+    @Test
+    fun `a joiner that is never offered to says so instead of connecting forever`() {
+        val rig = rig(timeouts = settlingTimeouts(settleMs = 30, deadlineMs = 60), intent = TransferController.Intent.JOINER)
+        rig.signaling.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
+        awaitTrue("truthful end") {
+            rig.controller.state.value.errorKey == "error_legacy_no_offer"
+        }
+        assertEquals(TransferController.Phase.ENDED, rig.controller.state.value.phase)
+    }
+
+    @Test
+    fun `a minter does not answer an inbound legacy offer as well as making one`() {
+        val rig = rig(timeouts = settlingTimeouts(settleMs = 60_000), intent = TransferController.Intent.MINTER)
+        rig.signaling.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
+        rig.signaling.events.onSignal(
+            "bbbbbbbb",
+            LegacyProtocol.offer("v=0", "Y29tbWl0", LegacyProtocol.Lane.FILES).toJson(),
+        )
+        Thread.sleep(30)
+        // Two offers into one connection is exactly what the explicit intent
+        // exists to prevent.
+        assertTrue(rig.transports.isEmpty())
+    }
+
+    @Test
+    fun `a legacy offer cannot replace a peer that announced the link`() {
+        val rig = rig(timeouts = settlingTimeouts(settleMs = 60_000), intent = TransferController.Intent.JOINER)
+        rig.signaling.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
+        rig.signaling.events.onSignal("bbbbbbbb", capsHello())
+        awaitTrue("link transport") { rig.transports.isNotEmpty() }
+        assertTrue(rig.transport.profile is WireProfile.Link)
+        val before = rig.transports.size
+        rig.signaling.events.onSignal(
+            "bbbbbbbb",
+            LegacyProtocol.offer("v=0", "Y29tbWl0", LegacyProtocol.Lane.FILES).toJson(),
+        )
+        Thread.sleep(30)
+        assertEquals("no second, older connection", before, rig.transports.size)
+        assertNull(rig.transport.closedReason)
+    }
+
+    // ── generation fencing on ONE live controller ───────────────────────────
+
+    @Test
+    fun `link signals cannot reach or close a live legacy connection`() {
+        val rig = rig(timeouts = settlingTimeouts(settleMs = 60_000), intent = TransferController.Intent.JOINER)
+        rig.signaling.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
+        rig.signaling.events.onSignal(
+            "bbbbbbbb",
+            LegacyProtocol.offer("v=0", "Y29tbWl0", LegacyProtocol.Lane.FILES).toJson(),
+        )
+        awaitTrue("transport created") { rig.transports.isNotEmpty() }
+        awaitTrue("offer forwarded") { rig.transport.signals.size == 1 }
+        readyLegacy(rig)
+
+        // Every `link/1` frame the relay could choose, from the SAME peer this
+        // session is established with. On the older wire a `busy` would close
+        // it, a `commit` would fail it as a replacement and a reveal would be
+        // checked against a commitment it never made.
+        for (signal in listOf(
+            Signal.busy(),
+            Signal.offer("v=0", "b3RoZXI=", LinkProtocol.ADVERTISED_CAPS),
+            Signal.answer("v=0", "b3RoZXI=", LinkProtocol.ADVERTISED_CAPS),
+            Signal.reveal("a", "b"),
+            Signal.candidate("cand", "0", 0),
+        )) {
+            rig.signaling.events.onSignal("bbbbbbbb", signal.toJson())
+        }
+        Thread.sleep(40)
+        assertEquals("only the legacy offer ever reached the transport", 1, rig.transport.signals.size)
+        assertNull("and nothing closed it", rig.transport.closedReason)
+        assertEquals(TransferController.Phase.CONNECTED, rig.controller.state.value.phase)
+    }
+
+    // ── terminal message states close a connection that carries nothing else ─
+
+    /** A connected legacy MESSAGE session, in the initiator role. */
+    private fun legacyTextRig(): Pair<Rig, Crypto.SessionKeys> {
+        val rig = rig(timeouts = settlingTimeouts(settleMs = 60_000), intent = TransferController.Intent.MINTER)
+        rig.signaling.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
+        rig.signaling.events.onSignal("bbbbbbbb", hello("text/1"))
+        awaitTrue("transport created") { rig.transports.isNotEmpty() }
+        val remote = readyLegacy(rig)
+        assertEquals(TransferController.Wire.LEGACY_TEXT, rig.controller.state.value.wire)
+        assertEquals(TextLaneSession.State.REQUESTED, rig.controller.state.value.textState)
+        return rig to remote
+    }
+
+    @Test
+    fun `a peer refusal ends a message-only connection and says why`() {
+        val (rig, _) = legacyTextRig()
+        rig.transport.events.onTextFrame(TextWire.REJECT)
+        awaitTrue("ended") { rig.controller.state.value.phase == TransferController.Phase.ENDED }
+        val state = rig.controller.state.value
+        assertEquals("error_text_refused", state.errorKey)
+        // The final conversation state the user is left looking at is the real
+        // one, not the state before the refusal.
+        assertEquals(TextLaneSession.State.ENDED, state.textState)
+        awaitTrue("closed") { rig.transport.closedReason != null }
+    }
+
+    @Test
+    fun `an unauthenticated message frame ends a message-only connection`() {
+        val (rig, remote) = legacyTextRig()
+        rig.transport.events.onTextFrame(TextWire.ACCEPT)
+        awaitTrue("open") { rig.controller.state.value.textState == TextLaneSession.State.OPEN }
+        val frame = TextWire.Sender().frame("hello", remote)
+        frame[frame.size - 1] = (frame[frame.size - 1].toInt() xor 0x01).toByte()
+        rig.transport.events.onTextFrame(frame)
+        awaitTrue("ended") { rig.controller.state.value.phase == TransferController.Phase.ENDED }
+        assertEquals("error_text_failed", rig.controller.state.value.errorKey)
+        assertEquals(TextLaneSession.State.FAILED, rig.controller.state.value.textState)
+        awaitTrue("closed") { rig.transport.closedReason != null }
+    }
+
+    @Test
+    fun `a refused enqueue ends a message-only connection instead of leaving a dead composer`() {
+        val (rig, _) = legacyTextRig()
+        rig.transport.events.onTextFrame(TextWire.ACCEPT)
+        awaitTrue("open") { rig.controller.state.value.textState == TextLaneSession.State.OPEN }
+        rig.transport.acceptText = false
+        rig.controller.sendText("hi", expectedLink = rig.controller.state.value.linkId)
+        awaitTrue("ended") { rig.controller.state.value.phase == TransferController.Phase.ENDED }
+        assertEquals(TextLaneSession.State.FAILED, rig.controller.state.value.textState)
+        assertTrue("no false sent message", rig.controller.state.value.messages.isEmpty())
+    }
+
+    @Test
+    fun `ending a legacy conversation ends the connection carrying it`() {
+        val (rig, _) = legacyTextRig()
+        rig.transport.events.onTextFrame(TextWire.ACCEPT)
+        awaitTrue("open") { rig.controller.state.value.textState == TextLaneSession.State.OPEN }
+        rig.controller.endText()
+        awaitTrue("ended") { rig.controller.state.value.phase == TransferController.Phase.ENDED }
+        awaitTrue("closed") { rig.transport.closedReason != null }
+        // No `link/1` leave is sent to a peer that could neither read nor
+        // verify one.
+        assertFalse(
+            rig.signaling.sent.any { (_, data) -> (data as Json.Obj)["leave"] != null },
+        )
+    }
+
+    // ── files on the older wire ─────────────────────────────────────────────
+
+    private fun legacyFilesRig(): Pair<Rig, Crypto.SessionKeys> {
+        val rig = rig(timeouts = settlingTimeouts(), intent = TransferController.Intent.MINTER)
+        rig.signaling.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
+        awaitTrue("transport created") { rig.transports.isNotEmpty() }
+        val remote = readyLegacy(rig)
+        assertEquals(TransferController.Wire.LEGACY_FILES, rig.controller.state.value.wire)
+        return rig to remote
+    }
+
+    @Test
+    fun `cancelling a legacy receive disconnects, because the sender would not stop`() {
+        val (rig, remote) = legacyFilesRig()
+        promptIncoming(rig, remote, listOf(FileMeta("a.bin", 4)))
+        rig.controller.acceptIncoming(rig.controller.state.value.promptId, rig.ops.node(rig.treeDir))
+        awaitTrue("accepted") { controlFrames(rig, RealtimeFrame.CTRL_ACCEPT) == 1 }
+        rig.controller.cancelReceive()
+        awaitTrue("ended") { rig.controller.state.value.phase == TransferController.Phase.ENDED }
+        // The REJECT still goes out — a sender still waiting for consent does
+        // stop on it — but no `0xf8` barrier, which this wire has no byte for.
+        assertEquals(1, controlFrames(rig, RealtimeFrame.CTRL_REJECT))
+        assertEquals(0, controlFrames(rig, RealtimeFrame.CTRL_BATCH_ABORT))
+        awaitTrue("closed") { rig.transport.closedReason != null }
+    }
+
+    @Test
+    fun `a legacy connection tells the UI exactly which lane it has`() {
+        val (files, _) = legacyFilesRig()
+        files.controller.state.value.let {
+            assertTrue(it.canSendFiles)
+            assertFalse("no message lane exists on this connection", it.canSendMessages)
+            assertTrue(it.cancelDisconnects)
+        }
+        val (text, _) = legacyTextRig()
+        text.controller.state.value.let {
+            assertFalse(it.canSendFiles)
+            assertTrue(it.canSendMessages)
+            assertTrue(it.cancelDisconnects)
+        }
+    }
+
+    @Test
+    fun `a link session still carries both lanes and cancels without disconnecting`() {
+        val rig = rig()
+        connect(rig)
+        rig.controller.state.value.let {
+            assertEquals(TransferController.Wire.LINK, it.wire)
+            assertTrue(it.canSendFiles)
+            assertTrue(it.canSendMessages)
+            assertFalse(it.cancelDisconnects)
+        }
+    }
+
+    // ── failures that are not a button, on a wire with no barrier ───────────
+
+    /** A store whose WRITE fails, which is how a full or revoked destination
+     *  actually surfaces. */
+    private class FailingWriteStore(root: File) : ReceiveStore(root) {
+        override fun write(index: Int, bytes: ByteArray): Outcome =
+            Outcome.Failed(Outcome.Reason.WRITE_FAILED, cleanupComplete = true)
+    }
+
+    /** A store whose EXPORT fails — the batch verified, and committing it into
+     *  the user's folder did not. */
+    private class FailingExportStore(root: File) : ReceiveStore(root) {
+        override fun export(index: Int): Outcome =
+            Outcome.Failed(Outcome.Reason.EXPORT_FAILED, cleanupComplete = true)
+    }
+
+    private fun legacyFilesRigWith(store: ReceiveStore): Pair<Rig, Crypto.SessionKeys> {
+        val rig = rig(timeouts = settlingTimeouts(), store = store, intent = TransferController.Intent.MINTER)
+        rig.signaling.events.onPeers(listOf(Envelope.Peer("bbbbbbbb", "peer")))
+        awaitTrue("transport created") { rig.transports.isNotEmpty() }
+        val remote = readyLegacy(rig)
+        assertEquals(TransferController.Wire.LEGACY_FILES, rig.controller.state.value.wire)
+        return rig to remote
+    }
+
+    @Test
+    fun `a failed write ends a legacy connection the sender would otherwise keep filling`() {
+        // NOT a cancel button: a failed write reaches the lane through
+        // `onWrite`, which calls `cancelIncoming` directly. On the older wire
+        // the peer has no barrier to learn from, so it would go on streaming.
+        val (rig, remote) = legacyFilesRigWith(FailingWriteStore(temp.newFolder("failwrite-${System.nanoTime()}")))
+        val sender = promptIncoming(rig, remote, listOf(FileMeta("a.bin", 4)))
+        rig.controller.acceptIncoming(rig.controller.state.value.promptId, rig.ops.node(rig.treeDir))
+        awaitTrue("accepted") { controlFrames(rig, RealtimeFrame.CTRL_ACCEPT) == 1 }
+        rig.transport.events.onFileFrame(
+            sender.chunkFrames(ByteArray(4), remote, RealtimeFrame.CONSERVATIVE_MAX_FRAME_BYTES).single(),
+        )
+        awaitTrue("ended") { rig.controller.state.value.phase == TransferController.Phase.ENDED }
+        assertEquals("error_save_failed", rig.controller.state.value.errorKey)
+        awaitTrue("closed") { rig.transport.closedReason != null }
+        assertEquals("and no byte this wire lacks", 0, controlFrames(rig, RealtimeFrame.CTRL_BATCH_ABORT))
+    }
+
+    @Test
+    fun `a failed export ends a legacy connection instead of claiming completion`() {
+        val (rig, remote) = legacyFilesRigWith(FailingExportStore(temp.newFolder("failexport-${System.nanoTime()}")))
+        val sender = promptIncoming(rig, remote, listOf(FileMeta("a.bin", 4)))
+        rig.controller.acceptIncoming(rig.controller.state.value.promptId, rig.ops.node(rig.treeDir))
+        awaitTrue("accepted") { controlFrames(rig, RealtimeFrame.CTRL_ACCEPT) == 1 }
+        val body = ByteArray(4) { it.toByte() }
+        rig.transport.events.onFileFrame(
+            sender.chunkFrames(body, remote, RealtimeFrame.CONSERVATIVE_MAX_FRAME_BYTES).single(),
+        )
+        rig.transport.events.onFileFrame(
+            sender.doneFrame(Crypto.chainAdvance(Crypto.chainStart(), body), remote),
+        )
+        awaitTrue("ended") { rig.controller.state.value.phase == TransferController.Phase.ENDED }
+        awaitTrue("closed") { rig.transport.closedReason != null }
+        assertEquals("no false COMPLETE", 0, controlFrames(rig, RealtimeFrame.CTRL_COMPLETE))
+        assertFalse(rig.controller.state.value.savedBatch)
+    }
+
+    @Test
+    fun `a source that cannot be read ends a legacy connection mid-batch`() {
+        val (rig, _) = legacyFilesRig()
+        rig.controller.sendFiles(
+            listOf(
+                TransferController.OutgoingSource(FileMeta("broken.bin", 8)) {
+                    object : InputStream() {
+                        override fun read(): Int = throw java.io.IOException("gone")
+                        override fun read(b: ByteArray, off: Int, len: Int): Int =
+                            throw java.io.IOException("gone")
+                    }
+                },
+            ),
+            expectedLink = rig.controller.state.value.linkId,
+        )
+        // The receiver has to accept before the pump reads anything.
+        awaitTrue("manifest out") { rig.transport.fileFrames.isNotEmpty() }
+        rig.transport.events.onFileFrame(RealtimeFrame.ACCEPT)
+        awaitTrue("ended") { rig.controller.state.value.phase == TransferController.Phase.ENDED }
+        assertEquals("error_transfer_failed", rig.controller.state.value.errorKey)
+        awaitTrue("closed") { rig.transport.closedReason != null }
+    }
+
+    @Test
+    fun `a peer that declines a legacy batch leaves the connection usable`() {
+        // The distinguishing case: the peer said so IN BAND and completed the
+        // exchange, so nothing is in flight and neither side is stranded. A
+        // decline must not read as a fault that ends the session.
+        val (rig, _) = legacyFilesRig()
+        rig.controller.sendFiles(
+            listOf(
+                TransferController.OutgoingSource(FileMeta("a.bin", 4)) { ByteArrayInputStream(ByteArray(4)) },
+            ),
+            expectedLink = rig.controller.state.value.linkId,
+        )
+        awaitTrue("manifest out") { rig.transport.fileFrames.isNotEmpty() }
+        rig.transport.events.onFileFrame(RealtimeFrame.REJECT)
+        awaitTrue("batch retired") { rig.controller.state.value.outgoing.isEmpty() }
+        Thread.sleep(40)
+        assertEquals(TransferController.Phase.CONNECTED, rig.controller.state.value.phase)
+        assertNull(rig.transport.closedReason)
+        assertEquals("and no barrier byte", 0, controlFrames(rig, RealtimeFrame.CTRL_BATCH_ABORT))
+    }
+
+    @Test
+    fun `declining an incoming legacy batch at the prompt keeps the connection`() {
+        val (rig, remote) = legacyFilesRig()
+        promptIncoming(rig, remote, listOf(FileMeta("a.bin", 4)))
+        rig.controller.rejectIncoming()
+        awaitTrue("declined") { controlFrames(rig, RealtimeFrame.CTRL_REJECT) == 1 }
+        Thread.sleep(40)
+        // A sender still waiting for consent DOES stop on this byte, so the
+        // exchange is complete and the connection is still good.
+        assertEquals(TransferController.Phase.CONNECTED, rig.controller.state.value.phase)
+        assertNull(rig.transport.closedReason)
+    }
+
+    @Test
+    fun `a link file-lane failure still leaves the link and its text lane alive`() {
+        // The same failure class on `link/1`, unchanged: the lane is terminal,
+        // the connection is not.
+        val rig = rig()
+        connect(rig)
+        rig.transport.events.onFileFrame(byteArrayOf(0x7f, 0, 0, 0, 0))
+        awaitTrue("file lane down") { rig.controller.state.value.fileLaneDown }
+        assertEquals(TransferController.Phase.CONNECTED, rig.controller.state.value.phase)
+        assertNull(rig.transport.closedReason)
     }
 
     private fun blockedReadSource(reading: CountDownLatch, closed: CountDownLatch) =

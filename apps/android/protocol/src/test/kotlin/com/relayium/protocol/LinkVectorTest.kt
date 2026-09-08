@@ -48,11 +48,16 @@ class LinkVectorTest {
     }
 
     @Test
-    fun `this client announces exactly link slash 1`() {
-        // Not `text/1`: this client does not implement the retired single-lane
-        // transport. Not `preupload/1`: kind 12 has its own derived key and an
-        // unannounced kind is a hard error, so claiming it would kill transfers.
-        assertEquals(listOf("link/1"), LinkProtocol.ADVERTISED_CAPS)
+    fun `this client announces exactly the native hello`() {
+        // Against the FIXTURE, not a literal: `capability.hello.native` is what
+        // both Apple clients say, and an Apple message connection refuses to
+        // offer until it has heard `text/1` back — so a client that announced
+        // less could never open one in either direction. Not `preupload/1`:
+        // kind 12 has its own derived key and an unannounced kind is a hard
+        // error, so claiming it would kill transfers.
+        val expected = Fixtures.arr(Fixtures.wire, "capability", "hello", "native", "caps")
+            .map { Fixtures.string(it) }
+        assertEquals(expected, LinkProtocol.ADVERTISED_CAPS)
     }
 
     @Test

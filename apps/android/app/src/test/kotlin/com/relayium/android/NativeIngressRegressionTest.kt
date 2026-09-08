@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.ContextWrapper
 import com.relayium.android.transport.LinkTransport
 import com.relayium.protocol.Crypto
+import com.relayium.protocol.LinkProtocol
+import com.relayium.protocol.legacy.LegacyProtocol
+import com.relayium.protocol.legacy.WireProfile
 import java.nio.ByteBuffer
 import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.atomic.AtomicInteger
@@ -49,17 +52,22 @@ class NativeIngressRegressionTest {
         override fun state() = State.OPEN
     }
 
-    private fun link(executor: ControlledExecutor): LinkTransport {
+    private fun link(
+        executor: ControlledExecutor,
+        profile: WireProfile = WireProfile.Link(LinkProtocol.Role.INITIATOR),
+        onClose: (String) -> Unit = {},
+        sent: MutableList<com.relayium.protocol.Signal> = ArrayList(),
+    ): LinkTransport {
         val context = object : ContextWrapper(null) {
             override fun getApplicationContext(): Context = this
         }
         return LinkTransport(
-            context, "0000000000000001", "0000000000000002", emptyList(), executor, {},
+            context, profile, emptyList(), executor, { sent.add(it) },
             object : LinkTransport.Events {
                 override fun onReady(keys: Crypto.SessionKeys, sas: String, maxFrameBytes: Int) = Unit
                 override fun onFileFrame(frame: ByteArray) = Unit
                 override fun onTextFrame(frame: ByteArray) = Unit
-                override fun onClosed(reason: String) = Unit
+                override fun onClosed(reason: String) { onClose(reason) }
             },
         )
     }

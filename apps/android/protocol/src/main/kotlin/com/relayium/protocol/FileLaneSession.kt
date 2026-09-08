@@ -28,6 +28,24 @@ class FileLaneSession(
     private val maxFrameBytes: Int,
     private val sender: RealtimeSender = RealtimeSender(),
     private val receiver: RealtimeReceiver = RealtimeReceiver(),
+    /**
+     * Whether this wire has the ordered `0xf8` BATCH_ABORT barrier — and with
+     * it `0xf9` BUSY — at all.
+     *
+     * True for `link/1`, false for the shipped legacy generations, whose
+     * control set is exactly ACCEPT/REJECT/COMPLETE. Everything else about this
+     * machine is identical on both wires: the same manifest, the same kinds,
+     * the same 13-byte ACK, the same consent gate and the same chained digest.
+     *
+     * What the barrier buys is the ability to retire ONE batch and keep the
+     * connection: the sender answers a REJECT with an ordered byte, and the
+     * receiver drains what was already sealed behind it. Without it, a
+     * receiver's mid-transfer cancel is not even observed by the shipped
+     * sender — `RealtimeConnection.transmit` never re-reads `rejected` once it
+     * is streaming — so on legacy a cancel is a TEARDOWN, performed by the
+     * owner, and this machine emits no barrier it would have to invent.
+     */
+    private val barrier: Boolean = true,
 ) {
 
     companion object {
@@ -225,10 +243,8 @@ class FileLaneSession(
         }
         sender.batchAborted()
         sendState = SendState.IDLE
-        return listOf(
-            Action.Send(RealtimeFrame.BATCH_ABORT),
-            Action.Fail(Failure(Failure.Reason.LOCAL_CANCEL, Failure.Scope.SEND)),
-        )
+        val fail = Action.Fail(Failure(Failure.Reason.LOCAL_CANCEL, Failure.Scope.SEND))
+        return if (barrier) listOf(Action.Send(RealtimeFrame.BATCH_ABORT), fail) else listOf(fail)
     }
 
     // ── inbound ─────────────────────────────────────────────────────────────
@@ -310,6 +326,11 @@ class FileLaneSession(
     /** The lane is occupied by another batch. Requeue, not a refusal. */
     fun busyIncoming(): List<Action> {
         check(receiveState == ReceiveState.PROMPT) { "no batch is waiting for an answer" }
+        // `0xf9` is a `link/1` addition. A peer on the shipped wire reads three
+        // control bytes and feeds anything else to its AEAD receiver, so
+        // emitting one would fail the whole connection at the far end. The API
+        // refuses rather than letting a caller reach that byte at all.
+        check(barrier) { "the shipped wire has no BUSY byte; refuse or cancel instead" }
         receiveState = ReceiveState.IDLE
         incoming = emptyList()
         return listOf(Action.Send(RealtimeFrame.BUSY), Action.DiscardIncoming)
@@ -333,8 +354,17 @@ class FileLaneSession(
     fun cancelIncoming(): List<Action> = when (receiveState) {
         ReceiveState.PROMPT -> rejectIncoming()
         ReceiveState.RECEIVING, ReceiveState.VERIFYING -> {
-            receiveState = ReceiveState.DRAINING
+            // On a wire with the barrier this DRAINS: the sender answers the
+            // REJECT with `0xf8`, and everything it sealed before seeing the
+            // REJECT is authenticated on its way to the bin so the receive
+            // sequence stays continuous. Without the barrier there is nothing
+            // to drain TOWARDS — the shipped sender neither stops nor answers
+            // — so the batch is retired here and the owner tears the
+            // connection down. The REJECT still goes out: the sender records
+            // it, and a sender still waiting for consent does stop on it.
+            receiveState = if (barrier) ReceiveState.DRAINING else ReceiveState.IDLE
             drainedBytes = 0
+            if (!barrier) incoming = emptyList()
             listOf(
                 Action.Send(RealtimeFrame.REJECT),
                 Action.DiscardIncoming,
@@ -402,7 +432,7 @@ class FileLaneSession(
      * receiver's sequence for the rest of the link.
      */
     fun onFrame(frame: ByteArray): List<Action> {
-        return when (val cls = LinkProtocol.fileFrameClass(frame)) {
+        return when (val cls = LinkProtocol.fileFrameClass(frame, barrier)) {
             is LinkProtocol.FileFrameClass.Lifecycle -> onLifecycle(cls.control)
             is LinkProtocol.FileFrameClass.Ack -> onAck(frame)
             is LinkProtocol.FileFrameClass.ResumeRequest,
@@ -434,10 +464,8 @@ class FileLaneSession(
             ) {
                 sendState = SendState.IDLE
                 sender.batchAborted()
-                listOf(
-                    Action.Send(RealtimeFrame.BATCH_ABORT),
-                    Action.Fail(Failure(Failure.Reason.PEER_REJECTED, Failure.Scope.SEND)),
-                )
+                val fail = Action.Fail(Failure(Failure.Reason.PEER_REJECTED, Failure.Scope.SEND))
+                if (barrier) listOf(Action.Send(RealtimeFrame.BATCH_ABORT), fail) else listOf(fail)
             } else {
                 emptyList()
             }

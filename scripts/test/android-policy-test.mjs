@@ -82,6 +82,10 @@ const REQUIRED = [
   "app/src/main/kotlin/com/relayium/android/ui/CloudScreen.kt",
   "app/src/main/kotlin/com/relayium/android/cloud/CloudClient.kt",
   "app/src/main/kotlin/com/relayium/android/cloud/CloudLinkDraft.kt",
+  "protocol/src/main/kotlin/com/relayium/protocol/legacy/LegacyProtocol.kt",
+  "protocol/src/main/kotlin/com/relayium/protocol/legacy/LegacyTextLane.kt",
+  "protocol/src/main/kotlin/com/relayium/protocol/legacy/WireProfile.kt",
+  "app/src/androidTest/kotlin/com/relayium/android/LegacyInteropAcceptanceTest.kt",
 ];
 for (const relative of REQUIRED) {
   check(read(relative) !== null, `apps/android/${relative} is missing. This file asserts rules `
@@ -232,6 +236,98 @@ for (const method of declared) {
     scriptPhases.includes(method),
     `CloudRecoveryAcceptanceTest declares ${method}, which the recovery acceptance never runs. `
     + "An unrun phase is evidence nobody collects.",
+  );
+}
+
+// ── the shipped legacy wire: the bytes it does NOT have ─────────────────────
+//
+// The claim these rules protect is narrow and load-bearing: this client speaks
+// the older wire EXACTLY as the shipped Apple and Web clients do. The two ways
+// to break that are invisible in a green unit run — announce a capability the
+// implementation cannot honour, or emit a control byte the peer's three-case
+// `RealtimeControl(rawValue:)` will feed to its AEAD receiver — and both are
+// properties of which source declares what, which is what this file is for.
+
+const legacyProtocol = codeOf(read("protocol/src/main/kotlin/com/relayium/protocol/legacy/LegacyProtocol.kt") ?? "");
+const legacyText = codeOf(read("protocol/src/main/kotlin/com/relayium/protocol/legacy/LegacyTextLane.kt") ?? "");
+const linkProtocol = codeOf(read("protocol/src/main/kotlin/com/relayium/protocol/LinkProtocol.kt") ?? "");
+
+// The `link/1` additions, by the names the shared vocabulary gives them. A
+// legacy source that reached either would be inventing a dialect.
+for (const [name, source] of [["LegacyProtocol.kt", legacyProtocol], ["LegacyTextLane.kt", legacyText]]) {
+  check(
+    !/CTRL_BUSY|CTRL_BATCH_ABORT/.test(source),
+    `${name} names a link/1-only control byte. The shipped wire's control set is exactly `
+    + `ACCEPT/REJECT/COMPLETE; a peer receiving 0xf9 or 0xf8 feeds it to its AEAD receiver `
+    + `and fails the whole connection.`,
+  );
+  check(
+    !/CTRL_REQUEST|TextWire\.REQUEST|TextWire\.END/.test(source),
+    `${name} names the link/1 conversation lifecycle bytes. There is no 0xfa and no 0xfb on `
+    + `the shipped wire: the offer is the request, and ending means closing the connection.`,
+  );
+}
+
+// `text/1` may be announced only while a handler for it exists. Announcing it
+// without one invites a peer onto a connection that cannot open; implementing
+// it without announcing it is worse than useless, because the Apple factory
+// refuses to offer a message connection before hearing the exact string back.
+const announcesText = /ADVERTISED_CAPS[^\n]*TEXT_CAPABILITY/.test(linkProtocol);
+const hasTextHandler = /class LegacyTextLane/.test(legacyText);
+check(
+  announcesText === hasTextHandler,
+  "the announced capability set and the shipped-wire message handler must move together: "
+  + `announces text/1 = ${announcesText}, has a handler = ${hasTextHandler}.`,
+);
+
+// The role on this wire is the user's INTENT. A controller that derived it from
+// the hub ids instead would disagree with every already-deployed peer about who
+// offers, and the disagreement looks exactly like a network failure.
+const legacyController = codeOf(read("app/src/main/kotlin/com/relayium/android/TransferController.kt") ?? "");
+check(
+  /enum class Intent \{ MINTER, JOINER \}/.test(legacyController),
+  "TransferController no longer carries the minter/joiner intent. On the shipped wire the "
+  + "creator of the code offers and the joiner answers; a sorted-id role there would make two "
+  + "clients disagree about who offers.",
+);
+check(
+  /WireProfile\.Legacy\(\s*LinkProtocol\.Role\.INITIATOR/.test(legacyController)
+    && /WireProfile\.Legacy\(LinkProtocol\.Role\.RESPONDER/.test(legacyController),
+  "the controller must build BOTH legacy roles. A build that only ever answered would leave "
+  + "every session an Android user starts untested and unreachable.",
+);
+
+// The owning acceptance must name what its Apple half actually is. A harness
+// that let a host-compiled Swift process be read as an iOS binary would be
+// making the one claim this lane cannot support.
+const legacyAcceptance = resolve(repoRoot, "scripts/android-apple-legacy-acceptance.sh");
+check(existsSync(legacyAcceptance), "scripts/android-apple-legacy-acceptance.sh is missing.");
+if (existsSync(legacyAcceptance)) {
+  const acceptanceText = readFileSync(legacyAcceptance, "utf8");
+  // Comments stripped for the PROHIBITION below, and only for it: this
+  // script's own header explains that cleanup is PID-exact and no `pkill` is
+  // used, and a check that matched that sentence would fail on the prose that
+  // explains why it passes. The two POSITIVE claims are asserted against the
+  // full text, because one of them IS a sentence.
+  const acceptance = acceptanceText.replace(/^\s*#.*$/gm, "");
+  check(
+    /NOT an iOS binary/.test(acceptanceText) && /shasum -a 256/.test(acceptance),
+    "the legacy acceptance must say plainly that its Apple half is the shipped transport "
+    + "compiled on the host rather than an iOS binary, and must CHECK that the modules it "
+    + "mirrors are byte-identical to the shipped ones.",
+  );
+  check(
+    !/pkill/.test(acceptance),
+    "the legacy acceptance uses pkill. Cleanup is PID-exact everywhere else in this suite.",
+  );
+  // The shared library treats a zero exit that never reached the PASS marker as
+  // a failure, so a script without it can pass every one of its own checks and
+  // still report exit 1 — which is exactly what ten green rounds did once.
+  check(
+    /\ncompleted=1\n?$/.test(acceptanceText.replace(/\s+$/, "\n")),
+    "the legacy acceptance does not end with `completed=1`. scripts/lib/local-acceptance.sh "
+    + "refuses a zero exit that never reached that marker, so without it a fully passing run "
+    + "still reports failure.",
   );
 }
 
@@ -622,6 +718,6 @@ if (failures.length) {
 }
 console.error(
   "android-policy-test: OK (release fence, debug-only surfaces, exported surface, "
-  + "account credential, stored-transfer key, recoverable-upload storage and process-death "
-  + "acceptance)",
+  + "account credential, stored-transfer key, recoverable-upload storage, process-death "
+  + "acceptance and the shipped legacy wire's control set, capability and roles)",
 );

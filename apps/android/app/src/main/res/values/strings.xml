@@ -28,6 +28,8 @@
     <string name="status_verification_code">Verification code %1$s</string>
     <string name="status_verification_hint">Both devices should show the same six digits. They are not the pairing code.</string>
     <string name="status_disconnect">Disconnect</string>
+    <string name="status_legacy_files">File session</string>
+    <string name="status_legacy_text">Message session</string>
     <string name="status_reconnect">Start a new session</string>
 
     <!-- Errors -->
@@ -38,6 +40,8 @@
     <string name="error_handshake">The connection could not be verified and was stopped. Start a new session.</string>
     <string name="error_connection_lost">The connection ended. Nothing more can arrive on it — start a new session to continue.</string>
     <string name="error_transfer_failed">The transfer stopped and was not completed.</string>
+    <string name="error_text_refused">The other device declined the conversation.</string>
+    <string name="error_legacy_no_offer">The other device never started the connection. If it also joined this code, one device has to create a code instead.</string>
     <string name="error_integrity">The received file did not match what was sent, so it was discarded. Nothing was saved.</string>
     <!-- No "nothing was written" claim: this key also covers mid-write and
          cleanup-limited failures, where partial files or created folders can
@@ -72,11 +76,16 @@
     <string name="text_from_me">From this device</string>
     <string name="text_requested">Waiting for the other device to accept the conversation…</string>
     <string name="text_failed">Messages stopped working on this connection. Files may still work; a new session restores messages.</string>
+    <string name="text_legacy_unavailable">This connection is a file session. To send messages, disconnect and pair again once the other device has started a message session.</string>
+    <string name="text_end_legacy">End and disconnect</string>
+    <string name="text_decline_legacy">Decline and disconnect</string>
 
     <!-- Files -->
     <string name="files_title">Files</string>
     <string name="files_pick">Choose files to send</string>
     <string name="files_cancel">Cancel</string>
+    <string name="files_cancel_legacy">Cancel and disconnect</string>
+    <string name="files_legacy_unavailable">This connection is a message session. To send files, disconnect and pair again once the other device has started a file session.</string>
     <string name="files_sending">Sending %1$s</string>
     <string name="files_incoming_title">Incoming files</string>
     <plurals name="files_incoming_summary">

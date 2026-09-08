@@ -1,10 +1,12 @@
 package com.relayium.android.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -19,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -44,8 +47,35 @@ internal fun SessionScreen(
     pickers: Pickers,
 ) {
     VerificationCard(state, viewModel)
-    FilesCard(state, pickError, viewModel, pickers)
-    MessagesCard(state, viewModel)
+    // What this CONNECTION can carry, not what the app can do. A legacy peer
+    // opens one generation per connection, so exactly one of these two cards is
+    // a working surface and the other has to say why it is not — an enabled
+    // control over a lane no frame can reach is the dead end this replaces.
+    if (state.canSendFiles) {
+        FilesCard(state, pickError, viewModel, pickers)
+    } else {
+        UnavailableLaneCard(R.string.files_title, R.string.files_legacy_unavailable)
+    }
+    if (state.canSendMessages) {
+        MessagesCard(state, viewModel)
+    } else {
+        UnavailableLaneCard(R.string.text_title, R.string.text_legacy_unavailable)
+    }
+}
+
+/** One capability this connection does not have, named and explained. */
+@Composable
+private fun UnavailableLaneCard(titleRes: Int, bodyRes: Int) {
+    Card {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(text = stringResource(titleRes), style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = stringResource(bodyRes),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
 
 // ── verification ────────────────────────────────────────────────────────────
@@ -62,6 +92,17 @@ private fun VerificationCard(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.secondary,
             )
+            when (state.wire) {
+                TransferController.Wire.LEGACY_FILES -> R.string.status_legacy_files
+                TransferController.Wire.LEGACY_TEXT -> R.string.status_legacy_text
+                else -> null
+            }?.let { note ->
+                Text(
+                    text = stringResource(note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             state.sas?.let { sas ->
                 Text(
                     text = stringResource(R.string.status_verification_code, ""),
@@ -79,7 +120,7 @@ private fun VerificationCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = viewModel::disconnect, modifier = Modifier.height(48.dp)) {
+                TextButton(onClick = viewModel::disconnect, modifier = Modifier.heightIn(min = 48.dp)) {
                     Text(stringResource(R.string.status_disconnect))
                 }
             }
@@ -145,25 +186,24 @@ private fun FilesCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (state.awaitingFolder) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Button(
-                            onClick = { pickers.chooseFolder(state.linkId, state.promptId) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp),
-                        ) {
-                            Text(stringResource(R.string.files_choose_folder))
-                        }
-                        OutlinedButton(
-                            onClick = viewModel::rejectIncoming,
-                            modifier = Modifier.height(48.dp),
-                        ) {
-                            Text(stringResource(R.string.files_decline))
-                        }
-                    }
+                    ActionRow(
+                        primary = { m ->
+                            Button(
+                                onClick = { pickers.chooseFolder(state.linkId, state.promptId) },
+                                modifier = m.heightIn(min = 48.dp),
+                            ) {
+                                Text(stringResource(R.string.files_choose_folder))
+                            }
+                        },
+                        secondary = { m ->
+                            OutlinedButton(
+                                onClick = viewModel::rejectIncoming,
+                                modifier = m.heightIn(min = 48.dp),
+                            ) {
+                                Text(stringResource(R.string.files_decline))
+                            }
+                        },
+                    )
                 } else {
                     val progress = state.receiveProgress
                     if (progress != null) {
@@ -181,9 +221,14 @@ private fun FilesCard(
                     }
                     OutlinedButton(
                         onClick = viewModel::cancelReceive,
-                        modifier = Modifier.height(48.dp),
+                        // A MINIMUM, not a fixed height: these labels grew ("Cancel and
+                        // disconnect", "结束会话并断开连接") and a forced 48.dp clips them at
+                        // 320 dp with fontScale 2 — the accessible size is the one that
+                        // most needs the room. The 48 dp touch target is preserved as the
+                        // floor it always was.
+                        modifier = Modifier.heightIn(min = 48.dp),
                     ) {
-                        Text(stringResource(R.string.files_cancel))
+                        Text(stringResource(cancelLabel(state)))
                     }
                 }
                 HorizontalDivider()
@@ -199,7 +244,7 @@ private fun FilesCard(
                     onClick = { pickers.chooseFiles(state.linkId) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp),
+                        .heightIn(min = 48.dp),
                 ) {
                     Text(stringResource(R.string.files_pick))
                 }
@@ -226,9 +271,9 @@ private fun FilesCard(
                 }
                 OutlinedButton(
                     onClick = viewModel::cancelSend,
-                    modifier = Modifier.height(48.dp),
+                    modifier = Modifier.heightIn(min = 48.dp),
                 ) {
-                    Text(stringResource(R.string.files_cancel))
+                    Text(stringResource(cancelLabel(state)))
                 }
             }
 
@@ -254,7 +299,7 @@ private fun FilesCard(
                 )
                 TextButton(
                     onClick = viewModel::clearPickError,
-                    modifier = Modifier.height(48.dp),
+                    modifier = Modifier.heightIn(min = 48.dp),
                 ) {
                     Text(stringResource(R.string.cleanup_dismiss))
                 }
@@ -354,26 +399,33 @@ private fun MessagesCard(
                             null
                         },
                     )
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Button(
-                            onClick = { viewModel.sendDraft(renderedLink) },
-                            enabled = draft.isNotBlank() && !tooLong,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp),
-                        ) {
-                            Text(stringResource(R.string.text_send))
-                        }
-                        TextButton(
-                            onClick = viewModel::endText,
-                            modifier = Modifier.height(48.dp),
-                        ) {
-                            Text(stringResource(R.string.text_end))
-                        }
-                    }
+                    ActionRow(
+                        primary = { m ->
+                            Button(
+                                onClick = { viewModel.sendDraft(renderedLink) },
+                                enabled = draft.isNotBlank() && !tooLong,
+                                modifier = m.heightIn(min = 48.dp),
+                            ) {
+                                Text(stringResource(R.string.text_send))
+                            }
+                        },
+                        secondary = { m ->
+                            TextButton(
+                                onClick = viewModel::endText,
+                                modifier = m.heightIn(min = 48.dp),
+                            ) {
+                                Text(
+                                    stringResource(
+                                        if (state.cancelDisconnects) {
+                                            R.string.text_end_legacy
+                                        } else {
+                                            R.string.text_end
+                                        },
+                                    ),
+                                )
+                            }
+                        },
+                    )
                 }
 
                 TextLaneSession.State.INCOMING_REQUEST -> {
@@ -381,25 +433,32 @@ private fun MessagesCard(
                         text = stringResource(R.string.text_incoming_request),
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Button(
-                            onClick = viewModel::acceptText,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp),
-                        ) {
-                            Text(stringResource(R.string.text_accept))
-                        }
-                        OutlinedButton(
-                            onClick = viewModel::rejectText,
-                            modifier = Modifier.height(48.dp),
-                        ) {
-                            Text(stringResource(R.string.text_decline))
-                        }
-                    }
+                    ActionRow(
+                        primary = { m ->
+                            Button(
+                                onClick = viewModel::acceptText,
+                                modifier = m.heightIn(min = 48.dp),
+                            ) {
+                                Text(stringResource(R.string.text_accept))
+                            }
+                        },
+                        secondary = { m ->
+                            OutlinedButton(
+                                onClick = viewModel::rejectText,
+                                modifier = m.heightIn(min = 48.dp),
+                            ) {
+                                Text(
+                                    stringResource(
+                                        if (state.cancelDisconnects) {
+                                            R.string.text_decline_legacy
+                                        } else {
+                                            R.string.text_decline
+                                        },
+                                    ),
+                                )
+                            }
+                        },
+                    )
                 }
 
                 TextLaneSession.State.REQUESTED -> {
@@ -420,10 +479,14 @@ private fun MessagesCard(
                     }
                     Button(
                         onClick = viewModel::requestText,
+                        // False for the whole life of a legacy conversation:
+                        // there is nothing to reopen, so the control is drawn
+                        // disabled rather than removed, and the ENDED note
+                        // above it says what happened.
                         enabled = state.textCanRequest,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp),
+                            .heightIn(min = 48.dp),
                     ) {
                         Text(stringResource(R.string.text_start))
                     }
@@ -436,6 +499,58 @@ private fun MessagesCard(
         }
     }
 }
+
+/**
+ * Two actions, side by side when there is room and stacked when there is not.
+ *
+ * ## Why a Row alone cannot do this
+ *
+ * A `Row` measures its UNWEIGHTED children at their intrinsic width first and
+ * distributes only what is left to the weighted ones. So a long secondary label
+ * beside a `weight(1f)` primary does not make the row wrap — it makes the
+ * PRIMARY collapse. At 320 dp with fontScale 2 that is exactly what happened:
+ * "End conversation and disconnect" fitted and "Send" was not displayed at all,
+ * which a check for text overflow alone would have called a pass, because a
+ * control squeezed to nothing has nothing to overflow.
+ *
+ * Both children are weighted here so neither can starve the other, and below a
+ * threshold the group stacks instead, because two halves of a narrow screen are
+ * not enough for a real label at an accessible text size — a single unbreakable
+ * word can exceed them however the text wraps.
+ *
+ * The threshold scales with the user's text size rather than being a fixed
+ * width, so an ordinary phone at ordinary font size keeps exactly the row it
+ * had, and only the configurations that actually need the room get the column.
+ */
+@Composable
+private fun ActionRow(
+    primary: @Composable (Modifier) -> Unit,
+    secondary: @Composable (Modifier) -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val stack = maxWidth < ACTION_ROW_MIN_WIDTH * LocalDensity.current.fontScale
+        if (stack) {
+            Column(
+                Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                primary(Modifier.fillMaxWidth())
+                secondary(Modifier.fillMaxWidth())
+            }
+        } else {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                primary(Modifier.weight(1f))
+                secondary(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+/** Below this — scaled by the text size — two actions do not fit side by side. */
+private val ACTION_ROW_MIN_WIDTH = 280.dp
 
 @Composable
 private fun MessageRow(message: TransferController.Message) {
@@ -472,3 +587,14 @@ internal fun formatBytes(bytes: Long): String {
     }
     return String.format(java.util.Locale.getDefault(), "%.1f %s", value, units[unit])
 }
+
+/**
+ * What Cancel actually does on THIS connection.
+ *
+ * `link/1` retires one batch and keeps the connection; the older wire has no
+ * ordered barrier and its sender does not re-read a mid-stream REJECT, so the
+ * only cancel that means anything there also ends the connection. Saying
+ * "Cancel" for both would make one of them a lie.
+ */
+private fun cancelLabel(state: TransferController.State): Int =
+    if (state.cancelDisconnects) R.string.files_cancel_legacy else R.string.files_cancel

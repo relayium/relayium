@@ -3,6 +3,7 @@ package com.relayium.android.transport
 import com.relayium.protocol.Json
 import com.relayium.protocol.PairCode
 import com.relayium.protocol.Signal
+import com.relayium.protocol.legacy.WireProfile
 import java.util.concurrent.ScheduledExecutorService
 
 /**
@@ -27,9 +28,10 @@ interface TransportHandle {
 }
 
 fun interface TransportFactory {
+    /** [profile] carries the role AND the wire. Nothing below this seam
+     *  recomputes either: see [com.relayium.protocol.legacy.WireProfile]. */
     fun create(
-        selfId: String,
-        peerId: String,
+        profile: WireProfile,
         servers: List<IceConfig.Server>,
         executor: ScheduledExecutorService,
         send: (Signal) -> Unit,

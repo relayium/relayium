@@ -71,6 +71,22 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
     val backendOrigin: String
 
     /**
+     * The name this device announces on the signalling roster, resolved once.
+     *
+     * Exposed for the same reason [backendOrigin] is: the legacy acceptance
+     * needs its Apple half to find THIS app among the room's peers by exact
+     * name, and a harness that re-derived the name instead of reading the
+     * resolved one is a harness that can be wrong about the app under test.
+     * That is not hypothetical — the first run of that lane matched on an
+     * invented constant, found no peer, and reported it as the app never being
+     * offered a connection.
+     *
+     * Read-only, and nothing in the product reads it: it announces nothing new
+     * and changes no behaviour.
+     */
+    val signalingDeviceName: String
+
+    /**
      * The manual update check.
      *
      * Completely independent of [controller]: it shares no state, no scope
@@ -168,9 +184,15 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
     init {
         val origin = Backend.resolve(Backend.readDebugOverride())
         backendOrigin = origin
-        val (deps, safOps) = RealDeps.create(app, origin, android.os.Build.MODEL ?: "Android")
+        // ONE resolution, read by everything that announces this device. It was
+        // written out four times, and four copies of an expression are four
+        // places for the name a peer actually sees to drift from the name
+        // anything else believes it sends.
+        val model = android.os.Build.MODEL ?: "Android"
+        signalingDeviceName = model
+        val (deps, safOps) = RealDeps.create(app, origin, model)
         saf = safOps
-        controller = TransferController(viewModelScope, android.os.Build.MODEL ?: "Android", deps)
+        controller = TransferController(viewModelScope, model, deps)
 
         val feedUrl = UpdateEndpoint.resolve(UpdateEndpoint.readDebugOverride())
         updateFeedUrl = feedUrl
@@ -209,14 +231,14 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
             io = Dispatchers.IO,
             client = client,
             tokenStore = KeystoreTokenStore(app),
-            deviceName = android.os.Build.MODEL ?: "Android",
+            deviceName = signalingDeviceName,
         )
         browserLogin = BrowserLoginModel(
             scope = viewModelScope,
             owner = owner,
             client = client,
             session = account,
-            deviceName = android.os.Build.MODEL ?: "Android",
+            deviceName = signalingDeviceName,
             // The app's OWN resolved origin — the server's verification page
             // must be on it, or the approval URL is refused rather than opened.
             trustedOrigin = origin,
@@ -517,7 +539,11 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
             is JoinInput.Result.Code -> {
                 _joinError.value = null
                 createLink.cancel()
-                controller.join(parsed.code)
+                // JOINER, and the distinction is on the wire rather than
+                // cosmetic: a peer on the shipped older generation decides who
+                // offers from exactly this, so a device that typed a code must
+                // never behave like the one that minted it.
+                controller.join(parsed.code, TransferController.Intent.JOINER)
             }
             is JoinInput.Result.Rejected -> _joinError.value = parsed.reason
         }
@@ -543,7 +569,9 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
             return@create false
         }
         _joinError.value = null
-        controller.join(minted.pairCode())
+        // MINTER: this device created the code, so on the older wire it is the
+        // side that offers. See [TransferController.Intent].
+        controller.join(minted.pairCode(), TransferController.Intent.MINTER)
         true
     }
 

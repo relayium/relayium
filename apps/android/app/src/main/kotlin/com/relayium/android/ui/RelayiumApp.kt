@@ -807,6 +807,8 @@ internal fun errorText(key: String): Int = when (key) {
     "error_unsafe_path" -> R.string.error_unsafe_path
     "error_text_failed" -> R.string.error_text_failed
     "error_text_buffer_full" -> R.string.error_text_buffer_full
+    "error_text_refused" -> R.string.error_text_refused
+    "error_legacy_no_offer" -> R.string.error_legacy_no_offer
     else -> R.string.error_transfer_failed
 }
 

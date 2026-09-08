@@ -64,6 +64,20 @@ class LinkSession(private val selfId: String) {
     fun peerSupportsLink(peerId: String): Boolean =
         announced[peerId]?.contains(LinkProtocol.CAPABILITY) == true
 
+    /**
+     * Whether this peer positively named the shipped message wire.
+     *
+     * Read ONLY once `peerSupportsLink` has already answered false: a peer that
+     * speaks `link/1` carries messages on it and must never be routed onto the
+     * older single-generation connection instead. Exact match, for the reason
+     * the link predicate gives — `text/2` is a different wire.
+     *
+     * Not itself an admission decision: which generation a legacy peer gets is
+     * `LegacyLane.mode`, and this is one of its two inputs.
+     */
+    fun peerSupportsText(peerId: String): Boolean =
+        announced[peerId]?.contains(LinkProtocol.TEXT_CAPABILITY) == true
+
     /** Drop announcements for peers no longer in the roster. A reconnecting peer
      *  gets a fresh id from the hub, so nothing stale is inherited. */
     fun retainPeers(ids: Collection<String>) {

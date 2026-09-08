@@ -31,8 +31,11 @@ well as join one:
   the creating account's monthly allowance (`account.PairMintRefusal`); a mint
   itself costs nothing.
 
-Once connected, both sides send and receive files and messages on the one
-verified `link/1` session, exactly as before.
+Once connected, both sides send and receive files and messages. With a Web peer
+or another Android device that is one verified `link/1` session carrying both.
+With an Apple peer it is the shipped older wire, which carries files **or**
+messages per connection — see "Two wires, and which peer gets which" below for
+which one a session gets and what the UI says about it.
 
 **An account.** Email/password sign-in, registration with email verification and
 resend, password-reset request, browser-approved sign-in for accounts that have
@@ -113,22 +116,75 @@ all.
 **Three destinations**, Transfer, Cloud and Account, and nothing else: this build
 has no tab that opens onto a placeholder.
 
-### The iOS cross-network mismatch, stated plainly
+### Two wires, and which peer gets which
 
-**An Android-created code cannot currently be joined by iOS, and vice versa.**
-Android speaks `link/1` and only `link/1`: `Signal.kt` classifies the legacy
-FILE/TEXT generations but never constructs them, while iOS's own `RelayiumApp`
-states that unified `link/1` is its **LAN** path and its cross-network rooms are
-the legacy ones. So the Android↔Web interop this repository proves — which is
-real, and which the interop lane runs on every change — does **not** establish
-Android↔iOS cross-network parity, and no surface here claims it does.
+Android speaks **both** cross-network wires now, and which one a session uses is
+decided by what the peer announced rather than by a preference:
 
-Closing it means implementing the compatible legacy mode on Android (or another
-explicitly reviewed full-interoperability answer). It is a later slice: the
-frozen iOS side is deliberately not being changed to meet Android, and this
-build must not advertise a capability it does not have. Until then, the honest
-statement is "Android creates and joins cross-network links with the Web client
-and with other Android devices".
+* **`link/1`** — one connection carrying an ordered file lane and an ordered
+  text lane, five control bytes, an abort barrier that retires one batch without
+  ending the connection, and an authenticated leave. This is what the Web client
+  and another Android device speak. Its role comes from the two hub ids, sorted,
+  computed identically by both peers.
+* **the shipped older wire** — one `data` channel carrying **either** files
+  **or** messages and never both, a control set of exactly `0xfe`/`0xff`/`0xfd`,
+  no barrier, no resume and no leave. This is what the Apple clients speak in a
+  pairing-code room: `PeerCapabilityRegistry.LINK_PAIRING_ROOM_SUPPORT` is false
+  on iOS, so an iPhone announces only `text/1` there and answers nothing else.
+  Its role is the user's **intent** — whoever created the code offers, whoever
+  joined answers — which is why `TransferController.join` takes a
+  `MINTER`/`JOINER` and never derives one.
+
+The choice is the frozen `capability.promotion` table in
+`apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json`, and
+`LegacyVectorTest` reads it rather than restating it: a peer announcing `link/1`
+resolves to a link immediately; a peer announcing exactly `text/1` resolves to a
+legacy message connection immediately; anything else — an empty announcement,
+`link/2`, `LINK/1`, `text/2`, or silence — resolves to a legacy file connection
+at the five-second settle edge, because until then "nothing yet" and "nothing at
+all" are the same observation. A joiner never offers at all: the generation of
+the offer it receives is authoritative, and a `text` offer without exact
+`text/1` in its `caps` is ignored, exactly as `inboundOfferGeneration` ignores
+one.
+
+This client therefore announces `["text/1", "link/1"]` — the fixture's
+`capability.hello.native`, which is what both Apple clients say. The two halves
+move together on purpose and `android-policy-test.mjs` enforces it: announcing
+`text/1` without `LegacyTextLane` would invite a peer onto a connection that
+cannot open, and implementing it without announcing it would be worse than
+useless, because `RealtimeConnectionFactory.connectInRoom` refuses to offer a
+message connection until it hears the exact string back.
+
+**What differs for the user, and is said in the UI rather than discovered.** A
+legacy connection carries one capability, so the other card names itself and
+explains what to do instead of offering a control over a lane no frame can
+reach. And a cancel on that wire is a disconnect: the shipped sender re-reads
+`rejected` only *before* it streams (`RealtimeConnection.waitForAccept`), so a
+mid-transfer cancel that left the socket open would leave the user watching a
+cancelled transfer keep arriving. The buttons say "Cancel and disconnect" and
+"End conversation and disconnect" for that reason. A decline at the prompt is
+different and stays non-terminal: it is a complete in-band exchange with nothing
+in flight.
+
+Every failure that is *not* a button — a storage queue overflow, a failed write,
+a failed export, a source that could not be opened or read, any protocol failure
+— retires the connection the same way, through one point in
+`TransferController.onLaneFailure`. On `link/1` those stay lane-scoped and the
+connection survives; on the older wire there is no barrier to tell the peer and
+no second lane to preserve.
+
+**What is proved, and by what.** `scripts/android-apple-legacy-acceptance.sh`
+runs the real APK on an emulator against the **unchanged shipped
+`RealtimeConnection`** compiled from `apps/RelayiumKit` — both roles, both
+generations, both byte directions on separate connections, per-file SHA-256
+compared on each side independently, the SAS compared across the two
+implementations, and three adversarial paths. Read its claim precisely: that
+Apple half is the shipped Swift **transport** running as a host process. It is
+not an iOS binary and not a device, so it establishes that the two
+implementations agree on the wire and nothing about iOS packaging, lifecycle or
+UI. A real iPhone can join the same code against the same server without any
+source change, and that run — not this one — would license a claim about the
+App.
 
 ### What is still absent, and is not claimed anywhere
 
@@ -464,6 +520,25 @@ append whose response is dropped as well as the process-death path.
 
 `InteropAcceptanceTest` stubs only the picker UI (the grant a same-uid provider
 gives is the grant the picker returns). Two more entry points cover the rest:
+
+`scripts/android-apple-legacy-acceptance.sh` is the Android↔Apple evidence, on
+the shipped pre-`link/1` wire that every cross-network session with an iPhone
+actually uses. It builds the server, the debug APK and its instrumentation, and
+an Apple-side caller compiled from the unchanged shipped `RelayiumKit` and
+`RelayiumPeerKit` — mirrored into a scratch package because `RelayiumPeerKit` is
+a target rather than a product, with every mirrored file SHA-256 checked against
+the repository's own copy so "unchanged" is verified rather than asserted. Ten
+rounds cover both roles, both generations, both byte directions, a decline, a
+mid-transfer cancel, a refused conversation and a fresh session afterwards. Each
+round gets its OWN server, database, account and log in its own child directory:
+the per-IP join budget is production and must not be relaxed for a test, and
+sharing one backend would mean sleeping out that window between rounds while a
+refusal read exactly like a protocol disagreement. The comparison is made by
+`scripts/test/android-apple-legacy-oracle.py`, which neither half runs, and
+whose `--self-test` proves it still rejects a moved digest, a missing file, a
+disagreeing SAS, a record with no observations and a cancel that left the
+connection open — that runs before the rounds, so an oracle reduced to a no-op
+is caught rather than passing ten rounds against nothing.
 
 * `scripts/android-ui-acceptance.sh` runs `UiAcceptanceTest` OFFLINE across two
   configuration corners (en/light/default and zh/dark/320 dp/font 2), asserting
