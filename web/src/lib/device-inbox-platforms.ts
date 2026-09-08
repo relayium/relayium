@@ -18,7 +18,10 @@
 //
 // The second rule, added 2026-08-28: **an absent native receiver is stated as an
 // absence, never as a plan.** Relayium publishes a native app for macOS only.
-// iOS development is paused, and there is no Android or Windows app commitment,
+// iOS development is paused. Android now HAS a published app (2026-09-08) but
+// it is a join-only live-transfer client with no account features, so it is
+// still not a Device Inbox receiver — the status below is unchanged and only
+// the REASON the copy gives has changed. There is no Windows app commitment,
 // so nothing here — badge, prose or comment — may describe a future one.
 
 import type { IconName } from "./icon-name.js";

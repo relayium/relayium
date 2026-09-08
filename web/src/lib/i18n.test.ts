@@ -701,7 +701,9 @@ describe("原生 macOS 卡片如实描述已实现的能力", () => {
   it("chooser 的“其他平台”一句把浏览器说成正解，而不是某个 App 的替代品", () => {
     for (const { code } of LANGS) {
       const note = messages[code].appsPage.chooser.elsewhereNote;
-      expect(note, `${code} 的说明漏掉了 Android`).toMatch(/Android/);
+      // Android 于 2026-09-08 从这句话里移出：它现在有自己的卡片，
+      // 再把它列进"没有原生应用的平台"就是错的。
+      expect(note, `${code} 的说明不应再把 Android 列为无应用平台`).not.toMatch(/Android/);
       expect(note, `${code} 的说明漏掉了 Windows`).toMatch(/Windows/);
       expect(note, `${code} 的说明没有指向浏览器/网页版`).toMatch(/browser|浏览器|网页版/i);
     }
@@ -717,8 +719,9 @@ describe("原生 macOS 卡片如实描述已实现的能力", () => {
     expect(a.metaDesc).not.toMatch(/text in the web app and the CLI/i);
     expect(a.subhead).not.toMatch(/text in the web app and the CLI/i);
     // 标题与描述曾经把 iOS / Android / Windows 列成"可获取的平台"。
-    expect(a.metaTitle).not.toMatch(/\biOS\b|\bAndroid\b/i);
-    expect(a.metaDesc).not.toMatch(/\biOS\b|\bAndroid\b/i);
+    // Android returned on 2026-09-08 with the published APK; iOS did not.
+    expect(a.metaTitle).not.toMatch(/\biOS\b/i);
+    expect(a.metaDesc).not.toMatch(/\biOS\b/i);
   });
 });
 

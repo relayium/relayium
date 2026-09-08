@@ -854,6 +854,22 @@ export interface Messages {
       web: { name: string; desc: string; cta: string };
       cli: { name: string; desc: string; cta: string };
       mac: { name: string; desc: string; cta: string };
+      // Added 2026-09-08 with the first public Android APK. Unlike every other
+      // card this one carries its LIMITS next to its download button: a direct
+      // APK has no store listing, so there is no review page where a reader
+      // could otherwise learn what the preview does and does not do. `cta`
+      // takes the version because the button names the exact build being
+      // offered, and the version comes from the release manifest rather than
+      // from this table — a translated string must never be able to disagree
+      // with the artifact.
+      android: {
+        name: string;
+        desc: string;
+        cta: (version: string) => string;
+        requirements: string;
+        limitations: string[];
+        installNote: string;
+      };
     };
     // "Web or a native app?" — the section that answers the question the card
     // grid raises. Every macOS bullet must name a capability that is actually

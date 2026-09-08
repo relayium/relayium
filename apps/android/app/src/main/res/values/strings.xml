@@ -93,7 +93,36 @@
     <string name="files_waiting_accept">Waiting for the other device to accept…</string>
     <string name="files_sent_batch">Delivered. The other device confirmed every file arrived intact.</string>
 
+    <!-- Updates.
+
+         Three things this copy must never say, because none of them is true:
+         that the app downloaded or checked the file (it does not — the browser
+         downloads it and the system installer asks the user to confirm), that
+         a check which FAILED means the app is current, and that the app can
+         install anything by itself. What actually protects the update is
+         Android refusing an APK signed by a different certificate, and
+         update_download_hint says exactly that instead of implying a
+         Relayium-side verification that does not happen. -->
+    <string name="update_installed_version">Version %1$s · Preview</string>
+    <string name="update_check">Check for updates</string>
+    <string name="update_checking">Checking…</string>
+    <string name="update_cancel">Cancel</string>
+    <string name="update_up_to_date">Version %1$s is the newest published version.</string>
+    <string name="update_none">No download is published right now.</string>
+    <string name="update_available">Version %1$s is available.</string>
+    <string name="update_notes_title">What\'s new</string>
+    <string name="update_download">Open the download page</string>
+    <string name="update_download_hint">This opens github.com in your browser. Relayium does not download or install anything itself — you choose to open the file, and Android installs it only if it was signed with the same certificate as this app.</string>
+    <string name="update_no_browser">No app on this device could open that link. Copy this address into a browser:</string>
+    <string name="update_error_network">Could not reach the update server. Check this device\'s connection and try again.</string>
+    <string name="update_error_timeout">The update server did not answer in time. Try again later.</string>
+    <string name="update_error_server">The update server returned an unexpected response, so nothing could be checked.</string>
+    <string name="update_error_too_large">The update information was larger than expected and was refused.</string>
+    <string name="update_error_malformed">The update information could not be read, so nothing could be checked.</string>
+    <string name="update_error_untrusted">The update information did not come from an official Relayium release and was refused.</string>
+
     <!-- Accessibility -->
     <string name="cd_progress">Transfer progress</string>
     <string name="cd_message_list">Conversation</string>
+    <string name="cd_update_status">Update status</string>
 </resources>

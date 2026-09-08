@@ -1,10 +1,17 @@
 # Android development
 
-**Status: in development, not public.** `apps/android/` is the native Android
-client at 0.1.0 (versionCode 1), applicationId `com.relayium.android`,
-distributed as a direct APK only — no Google Play listing, no Play Billing, and
-no Play Services or GMS dependency of any kind. Nothing under `web/` advertises
-it; do not read this document as a release claim.
+**Status: public preview.** `apps/android/` is the native Android client at
+0.1.1 (versionCode 2), applicationId `com.relayium.android`, distributed as a
+direct APK only — no Google Play listing, no Play Billing, and no Play Services
+or GMS dependency of any kind.
+
+Since 2026-09-08 the website offers it: `/apps` renders a download card whenever
+`web/android-release.json` says a release is published, and the same document is
+copied to `web/public/apps/android/update.json`, which is the feed an installed
+build reads when the user presses **Check for updates**. Until the APK is published
+the manifest says `available: false`, and every surface — the card, the
+static twins and the app itself — reports "no download is published" rather than
+inventing one.
 
 ## What the first stage is, honestly
 
@@ -21,6 +28,89 @@ claiming a session that is gone). The link intent filter is deliberately
 link into the join form, or — for a link — by the user enabling "open
 supported links" manually. There is no `ACTION_SEND` handler, so sharing a link
 INTO the app is not a supported entry point.
+
+## Update checking
+
+Manual only. There is no polling, no worker and no lifecycle observer: the only
+thing that starts a check is a button on the join screen, which is also the only
+screen that draws it — in `CONNECTING`, `WAITING_PEER` and `CONNECTED` the row is
+not in the composition at all, so "a check cannot interrupt a transfer" is
+structural rather than a runtime guard someone can forget.
+
+Four files, split so each half is testable without the others:
+
+```
+update/UpdateFeed.kt      pure JVM: the document's schema, its validation rules,
+                          and the version comparison. No Android type, no socket.
+update/UpdateSource.kt    the bounded OkHttp fetch.
+update/UpdateChecker.kt   the state machine the UI renders, driven through
+                          injected seams so every state is a unit test.
+update/UpdateEndpoint.kt  WHICH document is read, with the release fence.
+```
+
+What the client refuses, and why each one matters:
+
+* **Anything that is not `200 OK`**, including 3xx — the feed lives at one fixed
+  URL, and redirects are not followed. Production's nginx answers a missing file
+  with a 404 and an HTML body, so that HTML never reaches the parser.
+* **A body over 64 KiB**, rejected rather than truncated. A prefix of a JSON
+  document is either invalid or a *shorter valid document* saying something the
+  publisher never wrote.
+* **A `versionCode` that is not an exact positive int32.** It is the only
+  ordering the check uses; `versionName` is a display string, and `"0.1.10"`
+  sorts before `"0.1.9"` as text.
+* **A `downloadUrl` that is not the exact official asset for the advertised
+  version.** Parsed, never prefix-matched — `https://github.com@evil.example/…`
+  passes a prefix check — and the path is *derived* from the version, so a feed
+  cannot advertise `0.1.2` while pointing at the `0.1.1` artifact.
+* **A newer build is never assumed.** Every transport and parse failure renders
+  as an error; a check that could not reach the publisher has learned nothing.
+  `available: false` is its own answer, distinct from both.
+* **A downgrade is never offered.** A feed that has gone backwards reads as up
+  to date.
+
+The app never downloads or installs anything. It hands the URL to the system
+browser, the user chooses to open the file, and Android installs it only if the
+signature matches — which is also why the manifest carries `sha256` and `size`
+as *published facts a person can check*, never as something the app verified. It
+holds no `REQUEST_INSTALL_PACKAGES`; `scripts/test/android-policy-test.mjs`
+asserts that, along with the release feed fence.
+
+`UpdateEndpoint` accepts a debug-only loopback feed override
+(`adb shell setprop debug.relayium.updatefeed http://10.0.2.2:8181/update.json`),
+fenced exactly as `Backend` is: false in release as a *mandatory* conjunct, a
+debug-only cleartext policy, and read from a system property rather than
+anything exported. It exists because 0.1.1 is the first build with an updater —
+without it, the "an update is available" branch could not be exercised on a
+device until something newer was already public.
+
+## Publishing a release
+
+Metadata is derived from the artifact, never written by hand:
+
+```sh
+# 1. root builds and signs the APK (outside this repository)
+# 2. observe those exact bytes and write the metadata.
+#    --web-root is REQUIRED from the repository root: the tool defaults its web
+#    root to the working directory, so without it this writes
+#    <repo>/android-release.json instead of web/android-release.json.
+node web/scripts/stage-android-release.mjs --web-root web \
+     --apk Relayium-0.1.1-2.apk \
+     --version 0.1.1 --code 2 --notes-en "…" --notes-zh "…"
+# 3. commit the metadata-only diff
+# 4. publish the SAME file
+scripts/publish-android-release.sh --apk Relayium-0.1.1-2.apk
+```
+
+The staging tool reads the package, versionCode, versionName and signing
+certificate out of the APK with `apksigner` and `apkanalyzer` — they are not
+arguments, and there is no way to skip the check. The publisher re-observes them
+before creating anything, requires the manifest to be committed and canonical,
+pins the tag to an explicit commit, and passes `--latest=false`: GitHub's
+`latest` alias is repository-wide and `web/public/install.sh` resolves it, so an
+Android release taking it would break the CLI installer for everyone. The alias
+is read before *and* after, and a failed read is a hard error rather than an
+assumed absence.
 
 ## Layout
 
@@ -69,7 +159,25 @@ Three lanes, wired the day the platform root appeared (see
   `:app` at settings evaluation and the job greps the exclusion line).
 
 Release signing is not in any of them: `assembleRelease` produces an UNSIGNED
-APK on purpose, and the signing identity is held outside this repository.
+APK on purpose, and the signing identity is held outside this repository — so
+there is no signing secret in CI and no automated job that could publish.
+
+Three further gates run outside the Android lanes, in `repo-hygiene.yml`:
+
+* `scripts/test/android-policy-test.mjs` — the build-configuration facts no
+  Kotlin test can assert about itself, now including the release update-feed
+  fence and the absence of `REQUEST_INSTALL_PACKAGES`.
+* `scripts/test/android-publish-order-test.mjs` — the publish helper's ordering
+  and flags, read as text.
+* `scripts/test/android-publish-behavior-test.mjs` — the publish helper actually
+  RUN, against a disposable Git repository, a fake `gh`, and **mocked** SDK
+  tools reached through the same `RELAYIUM_APKSIGNER`/`RELAYIUM_APKANALYZER`
+  overrides an operator with a relocated SDK would use. That proves the control
+  flow and that the observer is really invoked and compared; it does **not**
+  prove signature authenticity, which is established separately against the
+  genuine signed artifact and a real SDK. It skips nothing on a checkout with no
+  SDK, because a gate that silently stops checking is the failure it exists to
+  catch.
 
 ## Local acceptance
 

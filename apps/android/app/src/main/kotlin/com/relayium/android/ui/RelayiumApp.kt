@@ -6,19 +6,23 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -34,13 +38,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.relayium.android.BuildConfig
 import com.relayium.android.R
 import com.relayium.android.TransferController
 import com.relayium.android.TransferViewModel
+import com.relayium.android.update.UpdateChecker
 import com.relayium.protocol.JoinInput
 
 /**
@@ -169,6 +179,174 @@ private fun JoinScreen(
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+
+    // The update row lives HERE and only here. Being drawn by JoinScreen — the
+    // IDLE and ENDED phases — is what makes "a check can never interrupt a
+    // transfer" structural rather than a runtime guard someone can forget: in
+    // CONNECTING, WAITING_PEER and CONNECTED this composable is not in the tree
+    // at all, so there is no button to press and no state to race the session.
+    UpdateRow(viewModel)
+}
+
+// ── updates ─────────────────────────────────────────────────────────────────
+
+/**
+ * The installed version, a manual check, and whatever the last check said.
+ *
+ * No automatic check runs here. `LaunchedEffect` is deliberately absent: the
+ * only thing that starts a check is the button, which is what "manual" means
+ * and what keeps this app free of any background network behaviour it would
+ * then have to describe.
+ */
+@Composable
+private fun UpdateRow(viewModel: TransferViewModel) {
+    val updates = viewModel.updates
+    val state by updates.state.collectAsStateWithLifecycle()
+    val browserMissing by updates.browserMissingUrl.collectAsStateWithLifecycle()
+
+    HorizontalDivider(Modifier.padding(top = 4.dp))
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.update_installed_version, BuildConfig.VERSION_NAME),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (state is UpdateChecker.UpdateUi.Checking) {
+                // Cancel replaces Check while a request is in flight, so the
+                // control is never a dead disabled button.
+                TextButton(
+                    onClick = updates::cancel,
+                    modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                ) {
+                    Text(stringResource(R.string.update_cancel))
+                }
+            } else {
+                TextButton(
+                    onClick = updates::check,
+                    modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                ) {
+                    Text(stringResource(R.string.update_check))
+                }
+            }
+        }
+
+        // One live region for every outcome: a screen reader announces the
+        // result of a check the user asked for, rather than leaving it to be
+        // discovered by exploration.
+        val updateStatusLabel = stringResource(R.string.cd_update_status)
+        val status = Modifier
+            .fillMaxWidth()
+            .semantics {
+                contentDescription = updateStatusLabel
+                liveRegion = LiveRegionMode.Polite
+            }
+
+        when (val s = state) {
+            is UpdateChecker.UpdateUi.Idle -> Unit
+
+            is UpdateChecker.UpdateUi.Checking -> Row(
+                modifier = status,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(Modifier.height(20.dp).width(20.dp), strokeWidth = 2.dp)
+                Text(
+                    text = stringResource(R.string.update_checking),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+
+            is UpdateChecker.UpdateUi.UpToDate -> Box(status) {
+                StatusCard(
+                    text = stringResource(R.string.update_up_to_date, s.installedVersionName),
+                    isError = false,
+                )
+            }
+
+            is UpdateChecker.UpdateUi.NoneDistributed -> Box(status) {
+                StatusCard(text = stringResource(R.string.update_none), isError = false)
+            }
+
+            is UpdateChecker.UpdateUi.Failed -> Box(status) {
+                StatusCard(text = stringResource(updateErrorText(s.error)), isError = true)
+            }
+
+            is UpdateChecker.UpdateUi.Available -> Card(modifier = status) {
+                Column(
+                    Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.update_available, s.versionName),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    if (s.note.isNotBlank()) {
+                        Text(
+                            text = stringResource(R.string.update_notes_title),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        // PLAIN TEXT. The note comes off the network, so it is
+                        // rendered as prose and nothing in it is made tappable
+                        // — a link in a release note would be a tap target a
+                        // feed author chose, which is the one thing this
+                        // screen must not hand out.
+                        Text(text = s.note, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Text(
+                        text = stringResource(R.string.update_download_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    // defaultMinSize, NOT height: 52dp is the touch target, not
+                    // a ceiling. "Open the download page" is a long label, and at
+                    // font scale 2 on a 320dp screen a fixed height clips it —
+                    // the Chinese string is short enough to hide that entirely,
+                    // which is why the acceptance covers English at that size too.
+                    Button(
+                        onClick = updates::download,
+                        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
+                    ) {
+                        Text(stringResource(R.string.update_download))
+                    }
+                    // Only after a launch actually failed: the address as
+                    // selectable text, so a device with no browser leaves the
+                    // user with something they can act on instead of a button
+                    // that silently does nothing.
+                    browserMissing?.let { url ->
+                        Text(
+                            text = stringResource(R.string.update_no_browser),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        SelectionContainer {
+                            Text(
+                                text = url,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Update failures → localised copy. */
+private fun updateErrorText(error: UpdateChecker.UpdateError): Int = when (error) {
+    UpdateChecker.UpdateError.NETWORK -> R.string.update_error_network
+    UpdateChecker.UpdateError.TIMEOUT -> R.string.update_error_timeout
+    UpdateChecker.UpdateError.SERVER -> R.string.update_error_server
+    UpdateChecker.UpdateError.TOO_LARGE -> R.string.update_error_too_large
+    UpdateChecker.UpdateError.MALFORMED -> R.string.update_error_malformed
+    UpdateChecker.UpdateError.UNTRUSTED -> R.string.update_error_untrusted
 }
 
 // ── connecting ──────────────────────────────────────────────────────────────

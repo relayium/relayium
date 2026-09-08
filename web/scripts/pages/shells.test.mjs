@@ -261,9 +261,20 @@ describe("buildShells", () => {
       /\bnative (client|receiver)s? are (planned|coming)\b/i,
     ])
       expect(body, `${promise}`).not.toMatch(promise);
-    // And each platform without a published app says so as an absence.
-    for (const id of ["windows", "iphone", "android"])
+    // And each platform without a published Device Inbox receiver says so as an
+    // absence. Android moved from "no app" to "no RECEIVER" on 2026-09-08: the
+    // app exists now, and the thing that does not exist is narrower — it is a
+    // join-only live-transfer client with no account, so it is not an inbox
+    // endpoint. The page must keep saying the true absence rather than the
+    // stale one, and must not quietly stop saying anything.
+    for (const id of ["windows", "iphone"])
       expect(body, id).toMatch(new RegExp(`publishes no [^.]*${id === "iphone" ? "iPhone" : id}`, "i"));
+    // The crawler shell renders each platform's `setup`, so that is where the
+    // absence has to be legible without JavaScript.
+    expect(body, "android").toMatch(/publishes no Android Device Inbox receiver/i);
+    // The narrower denial must not become an app denial again, because that
+    // would now be false.
+    expect(body, "android").not.toMatch(/publishes no Android app/i);
   });
 
   it("emits FAQPage structured data where the doc has an FAQ", () => {

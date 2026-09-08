@@ -82,9 +82,18 @@ function body(slug, lang, doc, articleLinks, notice) {
         .map((a) => `<li><a href="${urlPath(a.slug, lang)}">${esc(a.title)}</a></li>`)
         .join("")}</ul>`
     : "";
-  const nativeDownload = doc.nativeDownload
-    ? `\n      <a class="cta" href="${esc(doc.nativeDownload.href)}">${esc(doc.nativeDownload.label)}</a>`
+  // Operational pointers, rendered as real anchors. A page whose prose says a
+  // build is downloadable but carries no href is a page a reader cannot act on,
+  // which is the shape the Android card would otherwise have had on the static
+  // twin while the SPA offered a working button.
+  const androidDownload = doc.androidDownload
+    ? `\n      <a class="cta" href="${esc(doc.androidDownload.href)}">${esc(doc.androidDownload.label)}</a>`
     : "";
+  const nativeDownload = doc.nativeDownload
+    ? `\n      <a class="cta" href="${esc(doc.nativeDownload.href)}">${esc(doc.nativeDownload.label)}</a>${androidDownload}`
+    // No macOS download does NOT mean no download: the two manifests move on
+    // their own schedules, so the Android anchor still has to render.
+    : androidDownload;
 
   // The archived notice sits between the pitch and the CTA, not below the fold:
   // the button opens the app, and on an archived page the app will not be in

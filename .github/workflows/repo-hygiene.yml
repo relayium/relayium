@@ -261,6 +261,38 @@ jobs:
       # push rather than only when the lane happens to run.
       - name: Android interop comparison, mutation-tested
         run: node scripts/test/android-interop-oracle-test.mjs
+      # The Android publish helper, from two directions.
+      #
+      # The first reads the script as text — which flags are passed, what runs
+      # before `gh release create`. That catches a deleted flag and nothing
+      # else: it cannot tell whether a FAILED API read is reported as success,
+      # which is a defect this helper actually had.
+      #
+      # The second RUNS it, against a disposable Git repository, a fake `gh`
+      # and mocked SDK tools reached through the documented tool-path
+      # overrides. It touches no remote and writes only inside a temp
+      # directory, and it skips nothing when no Android SDK is installed —
+      # these are the alias and provenance guards, and a gate that quietly
+      # stops checking them is the failure they exist to catch.
+      #
+      # Unfiltered, like the policy job above: the helper protects the CLI
+      # installer's `releases/latest` alias, so an edit to it must not be able
+      # to land behind a path filter that does not name it.
+      - name: Android publish helper, ordering and flags
+        run: node scripts/test/android-publish-order-test.mjs
+      - name: Android publish helper, executed against mocks
+        run: node scripts/test/android-publish-behavior-test.mjs
+      # The emulator matrix's pass/fail rule, judged against the logs a broken
+      # device actually produces.
+      #
+      # `am instrument` exits 0 for a crashed process, a missing instrumentation
+      # and an empty run alike, so a driver that trusted it would report every
+      # one of those as green — turning the update acceptance into a very slow
+      # `true`. This executes the real classifier against recorded log shapes
+      # rather than re-implementing the rule, and needs no SDK and no device, so
+      # the guard on the expensive lane is itself checked on every push.
+      - name: Android instrumentation pass/fail rule
+        run: node scripts/test/android-instrumentation-result-test.mjs
 
   contract-ci-policy:
     runs-on: ubuntu-latest

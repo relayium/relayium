@@ -313,12 +313,19 @@ describe("English keeps the availability boundaries it is the master of", () => 
       // and there is no Android commitment, so the same sentences became a
       // roadmap promise for apps nobody is building. What the section owes a
       // reader now is the absence, said plainly.
-      expect(p.setup, id).toMatch(/Relayium publishes no (iPhone or iPad|Android) app/i);
+      // Android's absence became NARROWER on 2026-09-08: the app exists, and
+      // what does not exist is a Device Inbox receiver. iPhone still has no app
+      // at all, so its denial is unchanged.
+      expect(p.setup, id).toMatch(
+        id === "android"
+          ? /not a Device Inbox receiver/i
+          : /Relayium publishes no (iPhone or iPad) app/i,
+      );
       expect(p.setup, id).toMatch(/nothing to install here/i);
       expect(p.residency, id).toMatch(/receives nothing here/i);
     }
     expect(d.platforms.iphone.residency).toMatch(/no always-on iPhone receiver/i);
-    expect(d.platforms.android.residency).toMatch(/publishes no Android app/i);
+    expect(d.platforms.android.residency).toMatch(/publishes no Android Device Inbox receiver/i);
   });
 
   it("describes Windows as foreground-only with no service or startup entry", () => {
@@ -463,7 +470,7 @@ describe("maintained copy never promises a native app that is not coming", () =>
   it("english states the absence itself, so the ban cannot pass by saying nothing", () => {
     const d = locales.en.deviceInboxPage;
     expect(d.platforms.iphone.setup).toMatch(/publishes no iPhone or iPad app/i);
-    expect(d.platforms.android.setup).toMatch(/publishes no Android app/i);
+    expect(d.platforms.android.setup).toMatch(/not a Device Inbox receiver/i);
     expect(d.platforms.windows.setup).toMatch(/publishes no Windows app/i);
     // iPhone and Android are senders, not Inbox receivers, and both say so.
     for (const id of ["iphone", "android"] as const) {
@@ -476,7 +483,7 @@ describe("maintained copy never promises a native app that is not coming", () =>
   it("chinese states the same absence in its own words", () => {
     const d = locales.zh.deviceInboxPage;
     expect(d.platforms.iphone.setup).toMatch(/不提供 iPhone \/ iPad 应用/);
-    expect(d.platforms.android.setup).toMatch(/不提供 Android 应用/);
+    expect(d.platforms.android.setup).toMatch(/不是设备收件箱的接收端/);
     expect(d.platforms.windows.setup).toMatch(/不提供 Windows 原生应用/);
     for (const id of ["iphone", "android"] as const) {
       expect(d.platforms[id].files, id).toMatch(/不是设备收件箱的接收端/);

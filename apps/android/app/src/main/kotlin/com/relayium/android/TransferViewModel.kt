@@ -3,9 +3,12 @@ package com.relayium.android
 import android.app.Application
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.relayium.android.storage.ProviderOps
+import com.relayium.android.update.UpdateChecker
+import com.relayium.android.update.UpdateEndpoint
 import com.relayium.protocol.FileMeta
 import com.relayium.protocol.JoinInput
 import kotlinx.coroutines.Dispatchers
@@ -45,12 +48,74 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
      */
     val backendOrigin: String
 
+    /**
+     * The manual update check.
+     *
+     * Completely independent of [controller]: it shares no state, no scope
+     * cancellation, and no error channel with a transfer. A check cannot
+     * interrupt a session or discard a draft because it never touches either,
+     * and the UI only draws its row on the join screen — see
+     * [com.relayium.android.ui.RelayiumApp].
+     */
+    val updates: UpdateChecker
+
+    /** The feed this instance ACTUALLY reads, resolved once. Exposed for the
+     *  same fail-closed reason as [backendOrigin]: the acceptance asserts the
+     *  app under test is pointed at its throwaway feed BEFORE it believes any
+     *  update answer it sees, so a reflective override that quietly fell back
+     *  to production cannot be mistaken for a working test seam. */
+    val updateFeedUrl: String
+
     init {
         val origin = Backend.resolve(Backend.readDebugOverride())
         backendOrigin = origin
         val (deps, safOps) = RealDeps.create(app, origin, android.os.Build.MODEL ?: "Android")
         saf = safOps
         controller = TransferController(viewModelScope, android.os.Build.MODEL ?: "Android", deps)
+
+        val feedUrl = UpdateEndpoint.resolve(UpdateEndpoint.readDebugOverride())
+        updateFeedUrl = feedUrl
+        updates = UpdateChecker(
+            scope = viewModelScope,
+            source = RealDeps.updateSource(),
+            feedUrl = feedUrl,
+            installedVersionCode = BuildConfig.VERSION_CODE,
+            installedVersionName = BuildConfig.VERSION_NAME,
+            localeTag = {
+                androidx.core.os.ConfigurationCompat
+                    .getLocales(app.resources.configuration)
+                    .get(0)
+                    ?.toLanguageTag()
+                    ?: "en"
+            },
+            openUrl = { url -> openInBrowser(app, url) },
+        )
+    }
+
+    /**
+     * Hand a URL to whatever the user's system opens links with.
+     *
+     * `false` means nothing could handle it, which is a real state on a
+     * stripped device or an emulator image with no browser: the UI then shows
+     * the URL as selectable text instead of leaving a button that does nothing.
+     *
+     * `NEW_TASK` because the Application context is what this ViewModel holds;
+     * without it the launch throws on every Android version.
+     */
+    private fun openInBrowser(app: Application, url: String): Boolean {
+        // DEBUG ONLY in effect: lets the on-device acceptance observe the exact
+        // URL the product would open — and answer "no browser" — without
+        // navigating out of the app under test. The RELEASE variant of
+        // TestHooks declares the same method but returns a constant `null` and
+        // has no field to assign, so a release build always falls through to
+        // the real launch below.
+        TestHooks.updateLauncher()?.let { return it(url) }
+        return runCatching {
+            app.startActivity(
+                android.content.Intent(android.content.Intent.ACTION_VIEW, url.toUri())
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }.isSuccess
     }
 
     val state: StateFlow<TransferController.State> get() = controller.state

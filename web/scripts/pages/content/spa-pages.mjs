@@ -265,8 +265,8 @@ export const deviceInbox = {
         desc: "Relayium publishes no iPhone or iPad app, so there is nothing to install here. What works today: an iPhone signs in to relayium.com in Safari and sends from this page to a Mac, PC or server of yours that has Device Inbox switched on. iPhone is a sender here and not a receiver, so nothing is delivered onto the phone.",
       },
       {
-        title: "Android — no native app",
-        desc: "Relayium publishes no Android app, so there is nothing to install here. Today an Android phone signs in in its mobile browser and sends from this page to any device of yours that has Device Inbox switched on. Android is a sender here and not a receiver, so nothing is delivered onto the phone.",
+        title: "Android — no inbox receiver",
+        desc: "Relayium publishes no Android Device Inbox receiver. There IS an Android app now — a direct-APK preview — but it is a join-only live-transfer client with no account features and no resident session, so it is not a Device Inbox receiver and there is nothing to install here. Today an Android phone signs in in its mobile browser and sends from this page to any device of yours that has Device Inbox switched on. Android is a sender here and not a receiver, so nothing is delivered onto the phone.",
       },
     ],
   },

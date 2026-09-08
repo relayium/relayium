@@ -30,10 +30,19 @@ const RELEASES = JSON.parse(
 const MAC_AVAILABLE = RELEASES.macos.available === true;
 const MAC_DOWNLOAD_URL = MAC_AVAILABLE ? RELEASES.macos.downloadUrl : null;
 
+// The Android half reads its own canonical manifest — the same document
+// `gen-pages` publishes as the update feed and `AppsPage.svelte` imports — so
+// the static twin and the SPA cannot disagree about whether a download exists.
+const ANDROID = JSON.parse(
+  readFileSync(resolve(process.cwd(), "android-release.json"), "utf8"),
+).android;
+const ANDROID_AVAILABLE =
+  ANDROID.available === true && Boolean(ANDROID.downloadUrl) && Boolean(ANDROID.versionName);
+
 const en = {
-  title: "Get Relayium — Web, CLI and the macOS app",
+  title: "Get Relayium — Web, CLI, macOS and Android",
   description:
-    "Use Relayium in any modern browser, install the command-line client on macOS, Linux or Windows, or download the native macOS app. End-to-end encrypted file and ephemeral text transfer.",
+    "Use Relayium in any modern browser, install the command-line client on macOS, Linux or Windows, or download the native macOS app or the Android preview APK. End-to-end encrypted file and ephemeral text transfer.",
   hero: {
     h1: "Get Relayium",
     pitch:
@@ -48,7 +57,10 @@ const en = {
       MAC_AVAILABLE
         ? "macOS app — download the signed and notarized native menu-bar app."
         : "macOS app — the native menu-bar app is an engineering build and is not publicly available yet.",
-      "Everywhere else — iPhone, iPad, Android, Windows and Linux run the web app in the browser with nothing to install; Windows and Linux can also install the command line.",
+      ANDROID_AVAILABLE
+        ? `Android app — download the ${ANDROID.versionName} preview APK directly. It joins a live transfer another device started; there is no Google Play listing.`
+        : "Android app — a direct-APK preview that joins a live transfer another device started. It is not publicly downloadable yet.",
+      "Everywhere else — iPhone, iPad, Windows and Linux run the web app in the browser with nothing to install; Windows and Linux can also install the command line.",
     ],
   },
   why: {
@@ -69,8 +81,17 @@ const en = {
           : "A true native menu-bar app (com.relayium.mac): files and text with nearby devices or by pairing code, encrypted links to send and open, and account management. It is an engineering build and is not publicly available yet.",
       },
       {
+        title: "Android app",
+        // The limits travel WITH the download, because a direct APK has no
+        // store listing where a reader could otherwise find them. Same set the
+        // runtime card carries, kept in step with it deliberately.
+        desc: ANDROID_AVAILABLE
+          ? `A direct-APK public preview (${ANDROID.versionName}). Android 8.0 or newer, arm64 or x86_64. It joins a live transfer another device started — it cannot create a pairing code or a link yet — and then sends and receives files and messages on that connection. Transfers run while the app is open: there is no background transfer and no resident session. No account features, no Device Inbox, no nearby discovery and no share-sheet entry point. Not on Google Play, and it contains no Play Services. Check for updates from the app's own join screen; Relayium does not download or install anything itself.`
+          : "A direct-APK public preview: Android 8.0 or newer, arm64 or x86_64. It joins a live transfer another device started — it cannot create one — and runs only while the app is open, with no account features, no Device Inbox, no nearby discovery and no share-sheet entry point. Not on Google Play. It is not publicly downloadable yet.",
+      },
+      {
         title: "Every other platform",
-        desc: "iPhone, iPad, Android, Windows and Linux use Relayium through the browser — the same end-to-end encrypted transfer, with nothing to install. On Windows and Linux the command line adds scripting, folder sync and scheduled backups. Relayium publishes no app for those platforms.",
+        desc: "iPhone, iPad, Windows and Linux use Relayium through the browser — the same end-to-end encrypted transfer, with nothing to install. On Windows and Linux the command line adds scripting, folder sync and scheduled backups. Relayium publishes no app for those platforms.",
       },
     ],
   },
@@ -101,7 +122,7 @@ const en = {
       },
       {
         title: "On every other platform, the browser is the app",
-        body: "iPhone, iPad, Android, Windows and Linux all open relayium.com and get the same end-to-end encrypted transfer, with nothing to install and nothing to update. On Windows and Linux the command line adds scripting, folder sync and scheduled backups. Relayium publishes no client for those platforms, so the web app is not a fallback there — it is the product.",
+        body: "iPhone, iPad, Windows and Linux all open relayium.com and get the same end-to-end encrypted transfer, with nothing to install and nothing to update. On Windows and Linux the command line adds scripting, folder sync and scheduled backups. Relayium publishes no client for those platforms, so the web app is not a fallback there — it is the product. On Android the browser works the same way, and there is additionally a direct-APK preview that joins a transfer another device started.",
       },
     ],
   },
@@ -110,9 +131,9 @@ const en = {
 };
 
 const zh = {
-  title: "获取 Relayium——网页版、命令行与 macOS 应用",
+  title: "获取 Relayium——网页版、命令行、macOS 与 Android",
   description:
-    "在任意现代浏览器里使用 Relayium，在 macOS、Linux 或 Windows 上安装命令行工具，或下载原生 macOS 应用。端到端加密传输文件与临时文本。",
+    "在任意现代浏览器里使用 Relayium，在 macOS、Linux 或 Windows 上安装命令行工具，或下载原生 macOS 应用与 Android 预览版 APK。端到端加密传输文件与临时文本。",
   hero: {
     h1: "获取 Relayium",
     pitch: "同一套端到端加密的传输，既传文件也发临时文本，随处可用。选择你的平台。",
@@ -126,7 +147,10 @@ const zh = {
       MAC_AVAILABLE
         ? "macOS 应用——下载已经签名并通过公证的原生菜单栏应用。"
         : "macOS 应用——原生菜单栏应用目前是工程版本，尚未开放公开下载。",
-      "其他平台——iPhone、iPad、Android、Windows 与 Linux 都用浏览器打开网页版，无需安装；Windows 与 Linux 还可以另外装命令行工具。",
+      ANDROID_AVAILABLE
+        ? `Android 应用——直接下载 ${ANDROID.versionName} 预览版 APK，加入另一台设备发起的实时传输；没有 Google Play 上架。`
+        : "Android 应用——以 APK 直接分发的预览版，加入另一台设备发起的实时传输，目前尚未开放公开下载。",
+      "其他平台——iPhone、iPad、Windows 与 Linux 都用浏览器打开网页版，无需安装；Windows 与 Linux 还可以另外装命令行工具。",
     ],
   },
   why: {
@@ -147,8 +171,14 @@ const zh = {
           : "真正的原生菜单栏应用（com.relayium.mac）：与附近设备或用配对码互传文件和文本、收发加密链接、管理账号与设备。目前是工程版本，尚未开放公开下载。",
       },
       {
+        title: "Android 应用",
+        desc: ANDROID_AVAILABLE
+          ? `以 APK 直接分发的预览版（${ANDROID.versionName}）。需要 Android 8.0 及以上，arm64 或 x86_64。它加入另一台设备发起的实时传输——目前还不能自己生成配对码或链接——连接后双向收发文件与消息。传输只在应用打开时进行：没有后台传输，也没有常驻会话。没有账户功能、设备收件箱、附近设备发现，也没有分享菜单入口。不在 Google Play 上架，不含 Play 服务。可在应用的连接页面手动检查更新；Relayium 自身不会下载或安装任何内容。`
+          : "以 APK 直接分发的预览版：需要 Android 8.0 及以上，arm64 或 x86_64。它只能加入另一台设备发起的实时传输，且只在应用打开时进行，没有账户功能、设备收件箱、附近设备发现与分享菜单入口。不在 Google Play 上架。目前尚未开放公开下载。",
+      },
+      {
         title: "其他所有平台",
-        desc: "iPhone、iPad、Android、Windows 与 Linux 都通过浏览器使用 Relayium——同一套端到端加密传输，无需安装。在 Windows 与 Linux 上，命令行工具还能做脚本化传输、文件夹同步与定时备份。Relayium 没有为这些平台发布任何客户端程序。",
+        desc: "iPhone、iPad、Windows 与 Linux 都通过浏览器使用 Relayium——同一套端到端加密传输，无需安装。在 Windows 与 Linux 上，命令行工具还能做脚本化传输、文件夹同步与定时备份。Relayium 没有为这些平台发布任何客户端程序。",
       },
     ],
   },
@@ -168,7 +198,7 @@ const zh = {
       },
       {
         title: "在其他平台上，浏览器就是那个应用",
-        body: "iPhone、iPad、Android、Windows 与 Linux 打开 relayium.com，得到的就是同一套端到端加密传输，不用安装，也不用更新。在 Windows 与 Linux 上，命令行工具还能做脚本化传输、文件夹同步与定时备份。Relayium 没有为这些平台发布客户端，所以在那里网页版不是退而求其次的方案——它就是产品本身。",
+        body: "iPhone、iPad、Windows 与 Linux 打开 relayium.com，得到的就是同一套端到端加密传输，不用安装，也不用更新。在 Windows 与 Linux 上，命令行工具还能做脚本化传输、文件夹同步与定时备份。Relayium 没有为这些平台发布客户端，所以在那里网页版不是退而求其次的方案——它就是产品本身。在 Android 上浏览器同样如此，另外还有一个以 APK 直接分发的预览版，用来加入另一台设备发起的传输。",
       },
     ],
   },
@@ -613,10 +643,32 @@ const downloadLabels = {
   pt: "Baixar para macOS",
 };
 
+const androidDownloadLabels = {
+  en: (version) => `Download Android ${version} (APK)`,
+  zh: (version) => `下载 Android ${version}（APK）`,
+};
+
 const langs = { en, zh, ja, ko, de, fr, ar, es, pt };
 if (MAC_DOWNLOAD_URL) {
   for (const [code, doc] of Object.entries(langs)) {
     doc.nativeDownload = { href: MAC_DOWNLOAD_URL, label: downloadLabels[code] };
+  }
+}
+
+// The Android APK anchor, MAINTAINED LOCALES ONLY.
+//
+// The macOS pointer above goes into all nine because it replaces one that was
+// already there in each — an archived page carrying a superseded tag is wrong
+// today, so its operational href is the documented exception to the freeze.
+// Android has no such prior pointer, and adding one would be new maintained
+// copy inside a frozen archive. So en and zh get it and the seven archives are
+// left exactly as published.
+if (ANDROID_AVAILABLE) {
+  for (const code of ["en", "zh"]) {
+    langs[code].androidDownload = {
+      href: ANDROID.downloadUrl,
+      label: androidDownloadLabels[code](ANDROID.versionName),
+    };
   }
 }
 

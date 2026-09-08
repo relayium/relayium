@@ -18,8 +18,14 @@ android {
         applicationId = "com.relayium.android"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0"
+        // 0.1.1 (2). The FIRST build that can check for an update, and the first
+        // one the website offers. `versionCode` is the only ordering the update
+        // check ever uses — `versionName` is a display string and "0.1.10" sorts
+        // before "0.1.9" as text — so it must increase monotonically for every
+        // published APK, forever. `scripts/test/android-policy-test.mjs` asserts
+        // the two move together.
+        versionCode = 2
+        versionName = "0.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -46,9 +52,19 @@ android {
             // reach a plain-HTTP loopback is a debug-only manifest overlay, and
             // nothing exported accepts a backend override (see MainActivity).
             buildConfigField("boolean", "ALLOW_BACKEND_OVERRIDE", "true")
+            // The update-feed twin of the flag above, and fenced identically:
+            // false in release, a debug-only cleartext policy, and read from a
+            // developer-set system property rather than from anything exported.
+            // It exists so the acceptance can point the REAL updater at a
+            // throwaway local feed and see the genuine available/error/stale
+            // answers on a device — which is otherwise unreachable, because
+            // 0.1.1 is the first build with an updater at all and no newer
+            // public release exists to check against.
+            buildConfigField("boolean", "ALLOW_UPDATE_FEED_OVERRIDE", "true")
         }
         release {
             buildConfigField("boolean", "ALLOW_BACKEND_OVERRIDE", "false")
+            buildConfigField("boolean", "ALLOW_UPDATE_FEED_OVERRIDE", "false")
             isMinifyEnabled = false
             isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

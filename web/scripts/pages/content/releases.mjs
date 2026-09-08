@@ -80,6 +80,7 @@
 // `bumpReleaseDocs` requires this module to keep deriving it, and
 // releases.test.mjs pins all nine rendered sentences to the record.
 
+import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -90,6 +91,30 @@ import { readMacAppStoreRelease } from "../../macos-release-candidate.mjs";
 const APP_STORE = readMacAppStoreRelease({
   repoRoot: resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", ".."),
 });
+
+/**
+ * The Android preview, from its own canonical manifest.
+ *
+ * Read here for exactly the reason the macOS tag is: a version literal written
+ * into translated prose goes stale silently, and this page is the one a reader
+ * opens to find out what they can actually download. `available: false` means
+ * the channel publishes nothing right now, and every sentence below that names
+ * Android is conditional on it — a page that named a preview release before it
+ * existed would be the same defect as one naming a superseded tag, pointing the
+ * other way.
+ */
+const ANDROID = JSON.parse(
+  // From the WEB ROOT, which is the working directory every build and test runs
+  // from — the same resolution `content/apps.mjs` uses for this file and for
+  // `native-releases.json`. Module-relative would be equally correct at build
+  // time and is deliberately not used: it makes the manifest unreachable from a
+  // disposable fixture root, which is what forced the generated-page tests to
+  // mutate the real checked-in file and race each other under concurrent Vitest.
+  readFileSync(resolve(process.cwd(), "android-release.json"), "utf8"),
+).android;
+const ANDROID_AVAILABLE =
+  ANDROID.available === true && Boolean(ANDROID.versionName) && Boolean(ANDROID.downloadUrl);
+const ANDROID_TAG = ANDROID_AVAILABLE ? `android-v${ANDROID.versionName}` : null;
 
 /**
  * Every published version, newest first: the tag and the date it was created.
@@ -146,7 +171,9 @@ const en = {
   updatedLabel: "Last updated",
   otherDocLabel: "Privacy Policy",
   lead: [
-    "Relayium ships in three rhythms, and this page is honest about all three: the web app is deployed continuously, the command-line tools are numbered and tagged, and the macOS app is released on its own — macOS 1.3.10 is a signed download from GitHub, and the Mac App Store carries it on a version line of its own.",
+    ANDROID_AVAILABLE
+      ? `Relayium ships in four rhythms, and this page is honest about all four: the web app is deployed continuously, the command-line tools are numbered and tagged, the macOS app is released on its own — macOS 1.3.10 is a signed download from GitHub, and the Mac App Store carries it on a version line of its own — and the Android app is a direct-APK preview released under ${ANDROID_TAG}.`
+      : "Relayium ships in three rhythms, and this page is honest about all three: the web app is deployed continuously, the command-line tools are numbered and tagged, and the macOS app is released on its own — macOS 1.3.10 is a signed download from GitHub, and the Mac App Store carries it on a version line of its own.",
     "Every version below was tagged automatically from the main branch, and only after the checks on that exact commit passed. A version's complete notes — every commit it contains — are one click away on GitHub.",
   ],
   sections: [
@@ -156,9 +183,12 @@ const en = {
         "A version tag publishes two programs: the relayium command-line tool, and relayium-node, the relay and storage node that self-hosters run. Both are built from the same source tree, so a version exists only when that tree changed.",
       ],
       bullets: [
-        "The web app has no version number. It is deployed from the main branch as soon as its checks pass, so what you use in a browser is usually newer than the newest version listed here.",
+        "The web app has no version number. Verified commits are selected for production independently of the version tags below, so what you use in a browser does not correspond to any row here and is usually ahead of the newest one.",
         `The macOS app is released under its own tag, macos-v1.3.10: a Developer ID-signed, Apple-notarized direct download from GitHub. The separately versioned Mac App Store release is currently ${APP_STORE.version}. No version below ships that app.`,
         "A node does not follow this list by itself: it asks the server it belongs to which version to run, so a new version changes nothing until someone starts a rollout. The command-line tool updates with relayium update.",
+        ...(ANDROID_AVAILABLE
+          ? [`The Android app is released under its own tag, ${ANDROID_TAG}: a direct APK, distributed from GitHub with no Google Play listing. It is a public preview, it is versioned independently of everything else on this page, and no version below ships it.`]
+          : []),
       ],
     },
     {
@@ -174,10 +204,13 @@ const en = {
     {
       heading: "Checking what you downloaded",
       body: [
-        "Every release publishes a checksum file next to the archives, and a signature over that file. The updater verifies both before it installs anything, against a public key compiled into the program — so a tampered archive fails on your machine, rather than depending on whether we noticed on ours.",
+        "Every command-line release publishes a checksum file next to the archives, and a signature over that file. relayium update verifies both before it installs anything, against a public key compiled into the program — so a tampered archive fails on your machine, rather than depending on whether we noticed on ours.",
       ],
       bullets: [
         "For networks that cannot reach GitHub, Relayium also mirrors its own release files. Where the bytes come from is a question of reachability, not of trust: the verification is identical either way.",
+        ...(ANDROID_AVAILABLE
+          ? ["Android works differently, and this page will not pretend otherwise. The app checks for a newer version only when you ask it to, and then opens the download page in your browser — it never downloads or installs anything itself, so it cannot verify the file it points you at. What protects the install is Android's own rule that an update must carry the same signing certificate as the app it replaces. The SHA-256 is published beside the APK so you can check it by hand if you want to."]
+          : []),
         "The source is public. The server, the node and the web app are AGPL-3.0, the native apps Apache-2.0, and the documentation CC BY 4.0.",
       ],
     },
@@ -193,7 +226,9 @@ const zh = {
   updatedLabel: "最后更新",
   otherDocLabel: "隐私政策",
   lead: [
-    "Relayium 有三种发布节奏，这一页对三种都如实说明：网页版持续部署，命令行工具带版本号打标签发布，macOS 应用单独发布——macOS 1.3.10 已可从 GitHub 下载，同时也在 Mac App Store 上架，版本号自成一条线。",
+    ANDROID_AVAILABLE
+      ? `Relayium 有四种发布节奏，这一页对四种都如实说明：网页版持续部署，命令行工具带版本号打标签发布，macOS 应用单独发布——macOS 1.3.10 已可从 GitHub 下载，同时也在 Mac App Store 上架，版本号自成一条线——Android 应用则以 APK 直接分发的预览版形式，用 ${ANDROID_TAG} 标签发布。`
+      : "Relayium 有三种发布节奏，这一页对三种都如实说明：网页版持续部署，命令行工具带版本号打标签发布，macOS 应用单独发布——macOS 1.3.10 已可从 GitHub 下载，同时也在 Mac App Store 上架，版本号自成一条线。",
     "下面每一个版本都是从 main 分支自动打标签的，而且只在该提交的检查全部通过之后才发布。某个版本的完整说明——它包含的每一条提交——在 GitHub 上一点即达。",
   ],
   sections: [
@@ -203,9 +238,12 @@ const zh = {
         "一个版本标签发布两个程序：relayium 命令行工具，以及自托管者运行的中继与存储节点 relayium-node。两者由同一份源码构建，所以只有这份源码有改动时才会切出新版本。",
       ],
       bullets: [
-        "网页版没有版本号。它在检查通过后就从 main 分支部署，所以你在浏览器里用到的，通常比这里最新的版本还要新。",
+        "网页版没有版本号。上线的是经过验证后被选定投产的提交，与下面的版本标签相互独立，所以你在浏览器里用到的并不对应这里的任何一行，通常也比最新的一行更新。",
         `macOS 应用用自己的标签 macos-v1.3.10 单独发布：这是一份经过 Developer ID 签名、通过 Apple 公证、直接从 GitHub 下载的安装包。独立维护版本号的 Mac App Store 版本当前为 ${APP_STORE.version}。下面任何一个版本都不包含这个应用。`,
         "节点不会自己跟着这个列表走：它会向所属的服务器询问该运行哪个版本，所以在有人发起灰度更新之前，新版本什么也不会改变。命令行工具用 relayium update 更新。",
+        ...(ANDROID_AVAILABLE
+          ? [`Android 应用用自己的标签 ${ANDROID_TAG} 单独发布：以 APK 直接分发，不在 Google Play 上架。它是公开预览版，版本号与本页其他内容互相独立，下面任何一个版本都不包含它。`]
+          : []),
       ],
     },
     {
@@ -221,10 +259,13 @@ const zh = {
     {
       heading: "怎么校验你下载到的文件",
       body: [
-        "每次发布都会在压缩包旁边附上校验和文件，以及对该文件的签名。更新程序在安装任何东西之前会用编译进程序里的公钥同时校验这两者——所以被篡改的压缩包会在你的机器上校验失败，而不是取决于我们这边有没有注意到。",
+        "每次命令行发布都会在压缩包旁边附上校验和文件，以及对该文件的签名。relayium update 在安装任何东西之前会用编译进程序里的公钥同时校验这两者——所以被篡改的压缩包会在你的机器上校验失败，而不是取决于我们这边有没有注意到。",
       ],
       bullets: [
         "为了访问不到 GitHub 的网络，Relayium 也镜像了自己的发布文件。字节从哪里来是可达性问题，不是信任问题：两条路径上的校验完全一样。",
+        ...(ANDROID_AVAILABLE
+          ? ["Android 的机制不一样，本页不会含糊其辞：应用只在你主动点击时才检查新版本，然后把下载页面交给浏览器打开——它自己既不下载也不安装，因此无法校验它指向的那个文件。真正保护安装的是 Android 自身的规则：更新必须与被替换的应用带有相同的签名证书。APK 旁边会公布 SHA-256，你想手动核对时可以用。"]
+          : []),
         "源码是公开的。服务器、节点与网页版采用 AGPL-3.0，原生应用采用 Apache-2.0，文档采用 CC BY 4.0。",
       ],
     },

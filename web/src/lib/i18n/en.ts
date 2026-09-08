@@ -526,9 +526,9 @@ const en: Messages = {
     cta: "Explore the CLI →",
   },
   appsPage: {
-    metaTitle: "Get Relayium — Web, CLI and the macOS app",
+    metaTitle: "Get Relayium — Web, CLI, macOS and Android",
     metaDesc:
-      "Use Relayium in any modern browser, install the command-line client on macOS, Linux or Windows, or download the native macOS app. End-to-end encrypted file and ephemeral text transfer.",
+      "Use Relayium in any modern browser, install the command-line client on macOS, Linux or Windows, or download the native macOS app or the Android preview APK. End-to-end encrypted file and ephemeral text transfer.",
     heading: "Get Relayium",
     subhead:
       "One end-to-end encrypted transfer for files and ephemeral text, everywhere you work. Pick your platform.",
@@ -551,6 +551,19 @@ const en: Messages = {
         name: "macOS app",
         desc: "A true native menu-bar app (com.relayium.mac): files and text with nearby devices or by pairing code, encrypted links to send and open, and account and device management.",
         cta: "Download for macOS",
+      },
+      android: {
+        name: "Android app",
+        desc: "A public preview, distributed as a direct APK. It joins a live transfer that another device started, then sends and receives files and messages on that connection.",
+        cta: (version) => `Download ${version} for Android`,
+        requirements: "Android 8.0 or newer · arm64 or x86_64 · about 40 MB",
+        limitations: [
+          "It joins transfers; it cannot create a pairing code or a link yet — start one on your other device.",
+          "Transfers run while the app is open. There is no background transfer and no resident session.",
+          "No account features, no Device Inbox, no nearby discovery and no share-sheet entry point.",
+          "Not on Google Play. It contains no Play Services and no Play Billing.",
+        ],
+        installNote: "Direct APK. Android asks you to confirm the install. Later versions are found with Check for updates on the app's own join screen.",
       },
     },
     chooser: {
@@ -576,7 +589,7 @@ const en: Messages = {
         ],
       },
       elsewhereNote:
-        "Everywhere else, the browser is the Relayium client. iPhone, iPad, Android, Windows and Linux all run the web app with nothing to install, and Windows and Linux additionally run the command-line client. Relayium publishes no app for those platforms.",
+        "Everywhere else, the browser is the Relayium client. iPhone, iPad, Windows and Linux all run the web app with nothing to install, and Windows and Linux additionally run the command-line client. Relayium publishes no app for those platforms.",
     },
   },
   deviceInboxPage: {
@@ -733,10 +746,10 @@ const en: Messages = {
         name: "Android",
         use: "The same idea as iPhone: get something off the phone and onto a machine you own, in one step.",
         setup:
-          "Relayium publishes no Android app, so there is nothing to install here. Today: open Relayium in your mobile browser, sign in, and send from this page to any device of yours that has Device Inbox switched on.",
+          "The Android app is a join-only live-transfer client with no account features, so it is not a Device Inbox receiver and there is nothing to install here. Today: open Relayium in your mobile browser, sign in, and send from this page to any device of yours that has Device Inbox switched on.",
         files: "Not applicable: Android is a sender here and not a Device Inbox receiver, so nothing is delivered onto the phone.",
         residency:
-          "None, because Android receives nothing here. Relayium publishes no Android app, so there is no Android receiver to keep alive and no always-on behaviour is claimed for the phone.",
+          "None, because Android receives nothing here. Relayium publishes no Android Device Inbox receiver — the Android app joins a live transfer while it is open and has no resident session — so there is nothing to keep alive and no always-on behaviour is claimed for the phone.",
         send: "Open this page in your mobile browser and send to any device that has Device Inbox switched on.",
         recovery: "Not applicable: Android is a sender here, so there is no receive folder or device credential on the phone to repair.",
         stop: "Not applicable: nothing is enrolled on the phone, so there is nothing here to pause, stop or revoke.",

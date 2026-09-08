@@ -79,6 +79,29 @@
     <string name="files_waiting_accept">正在等待另一台设备接收…</string>
     <string name="files_sent_batch">已送达。另一台设备确认所有文件完整无误。</string>
 
+    <!-- 更新。三件绝不能说的事：应用自己下载或校验了文件（并没有——由浏览器下载、
+         由系统安装器请用户确认）、检查失败等于已是最新、应用能自行安装。真正保证
+         更新身份的是 Android 拒绝异证书覆盖安装，update_download_hint 如实这么写，
+         而不是暗示 Relayium 做过任何校验。 -->
+    <string name="update_installed_version">版本 %1$s · 预览版</string>
+    <string name="update_check">检查更新</string>
+    <string name="update_checking">正在检查…</string>
+    <string name="update_cancel">取消</string>
+    <string name="update_up_to_date">版本 %1$s 已是已发布的最新版本。</string>
+    <string name="update_none">当前没有发布可下载的版本。</string>
+    <string name="update_available">有新版本 %1$s 可用。</string>
+    <string name="update_notes_title">更新内容</string>
+    <string name="update_download">打开下载页面</string>
+    <string name="update_download_hint">这会在浏览器中打开 github.com。Relayium 自己不下载也不安装任何东西——由你决定是否打开该文件，并且只有签名证书与本应用一致时 Android 才会安装。</string>
+    <string name="update_no_browser">本机没有应用可以打开该链接。请把下面的地址复制到浏览器：</string>
+    <string name="update_error_network">无法连接更新服务器。请检查本机网络后重试。</string>
+    <string name="update_error_timeout">更新服务器未在规定时间内响应。请稍后重试。</string>
+    <string name="update_error_server">更新服务器返回了意外的响应，因此未能完成检查。</string>
+    <string name="update_error_too_large">更新信息超出预期大小，已被拒绝。</string>
+    <string name="update_error_malformed">无法读取更新信息，因此未能完成检查。</string>
+    <string name="update_error_untrusted">更新信息并非来自 Relayium 官方发布，已被拒绝。</string>
+
     <string name="cd_progress">传输进度</string>
     <string name="cd_message_list">对话</string>
+    <string name="cd_update_status">更新状态</string>
 </resources>

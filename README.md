@@ -305,7 +305,8 @@ pairing code requires sign-in; joining with that code does not.
 | **Web** | [Live at relayium.com](https://relayium.com/) | LAN and cross-network file/text transfer, encrypted stored links, accounts, and usage controls. |
 | **CLI and nodes** | [Published on GitHub](https://github.com/relayium/relayium/releases) | Pairing-code transfer, encrypted links, direct transfer, folder sync, self-hosting, and relay/storage nodes. |
 | **macOS** | [1.3.10 direct download](https://github.com/relayium/relayium/releases/tag/macos-v1.3.10) and [1.3.8 on the Mac App Store](https://apps.apple.com/app/id6801142976) | The independently versioned channels share product behavior but use Developer ID/Sparkle and Mac App Store/StoreKit delivery respectively. |
-| **iPhone, iPad, Android, Windows, Linux** | The web app, plus the CLI on Windows and Linux | Relayium publishes no app for these platforms. The browser is the client and is not a fallback there — it carries the same end-to-end encrypted transfer, with nothing to install. |
+| **Android** | Direct-APK public preview, from its own `android-v*` GitHub Release | Joins a live transfer another device started, then sends and receives on it. Foreground only, no account features, no Device Inbox, no nearby discovery. No Google Play listing and no Play Services. |
+| **iPhone, iPad, Windows, Linux** | The web app, plus the CLI on Windows and Linux | Relayium publishes no app for these platforms. The browser is the client and is not a fallback there — it carries the same end-to-end encrypted transfer, with nothing to install. |
 
 Relayium currently maintains English and Simplified Chinese; the seven earlier
 locales are archived translations, not product languages. Detailed native
@@ -319,13 +320,23 @@ should be read as a commitment to ship it. The material under `apps/ios/` and
 the iOS sections of [`apps/README.md`](apps/README.md) describe a build in
 development, not something a reader can install.
 
-**On Android:** `apps/android/` is a native Kotlin/Compose client in early
-development, at version `0.1.0`. It joins an existing transfer (a code or a
-`cross-network` link) and sends and receives files and text in both directions;
-it is intended for direct-APK internal testing only — no Google Play listing, no
-Google Play Services dependency, and this site offers no Android download. Like
-the iOS material, it is a build in development, not something a reader can
-install.
+**On Android:** `apps/android/` is a native Kotlin/Compose client, at version
+`0.1.1` (versionCode 2), offered as a **public preview** distributed as a direct
+APK — no Google Play listing and no Google Play Services dependency of any kind.
+It joins an existing transfer (a six-digit code or a `cross-network` link) and
+then sends and receives files and text in both directions on that connection. It
+cannot mint a code or a link, it has no account features, no Device Inbox, no
+nearby discovery and no share-sheet entry point, and transfers run only while
+the app is open — there is no background transfer and no resident session.
+
+It checks for updates when the user asks it to, from a button on its own join
+screen: it reads a small metadata document from relayium.com over HTTPS, and if
+a newer build is published it opens the download page in the system browser. Relayium never
+downloads or installs anything itself, and the app holds no installer
+permission; Android asks the user to confirm, and will only replace an installed
+Relayium with an APK carrying the same signing certificate. `available: false`
+in [`web/android-release.json`](web/android-release.json) means no download is
+currently published, which the app reports as such rather than as "up to date".
 
 **Self-hosting:** a root [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) build a
 single self-contained image (`docker compose up -d --build`). See [`docs/self-hosting.md`](docs/self-hosting.md).

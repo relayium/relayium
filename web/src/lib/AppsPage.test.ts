@@ -6,20 +6,43 @@ import { currentRoute, syncRouteFromLocation } from "./router.svelte";
 import type { Platform } from "./platform";
 
 type MacRelease = { available: boolean; downloadUrl: string | null };
+type AndroidRelease = {
+  available: boolean;
+  versionName?: string;
+  versionCode?: number;
+  downloadUrl?: string;
+};
+
+/** A published Android release, used as the DEFAULT here so the macOS
+ *  transitions below stay about macOS: with Android also unavailable, every
+ *  "what is in the future group" assertion would be measuring two cards at
+ *  once. The unavailable Android state has its own tests. */
+const ANDROID_PUBLISHED: AndroidRelease = {
+  available: true,
+  versionName: "0.1.1",
+  versionCode: 2,
+  downloadUrl:
+    "https://github.com/relayium/relayium/releases/download/android-v0.1.1/Relayium-0.1.1-2.apk",
+};
 
 let target: HTMLDivElement;
 let app: unknown;
 
 async function mountPage({
   macRelease = { available: false, downloadUrl: null },
+  androidRel = ANDROID_PUBLISHED,
   platformOverride = "unknown",
-}: { macRelease?: MacRelease; platformOverride?: Platform } = {}) {
+}: {
+  macRelease?: MacRelease;
+  androidRel?: AndroidRelease;
+  platformOverride?: Platform;
+} = {}) {
   await setLang("en");
   history.pushState({}, "", "/apps");
   syncRouteFromLocation();
   target = document.createElement("div");
   document.body.appendChild(target);
-  app = mount(AppsPage, { target, props: { macRelease, platformOverride } });
+  app = mount(AppsPage, { target, props: { macRelease, androidRel, platformOverride } });
   flushSync();
 }
 
@@ -50,20 +73,20 @@ describe("AppsPage executable hierarchy", () => {
     expect(target.querySelector("header.ui-page-head h1")?.textContent).toBe(m.heading);
     expect(target.querySelector("#available-apps-heading")?.textContent).toBe(m.availableBadge);
     expect(target.querySelector("#future-apps-heading")?.textContent).toBe(m.inDevelopmentBadge);
-    expect(idsIn("available-apps-heading")).toEqual(["app-web", "app-cli"]);
+    expect(idsIn("available-apps-heading")).toEqual(["app-web", "app-cli", "app-android"]);
     expect(idsIn("future-apps-heading")).toEqual(["app-mac"]);
 
     const cards = target.querySelectorAll("article.app-card");
-    expect(cards.length).toBe(3);
+    expect(cards.length).toBe(4);
     for (const card of cards) {
       expect(card.classList.contains("ui-card")).toBe(true);
       expect(card.classList.contains("ui-stack")).toBe(true);
     }
-    expect(target.querySelectorAll(".available-grid a.btn.btn-primary").length).toBe(2);
+    expect(target.querySelectorAll(".available-grid a.btn.btn-primary").length).toBe(3);
     expect(target.querySelectorAll(".future-grid a, .future-grid button").length).toBe(0);
     expect(target.querySelectorAll("button[disabled]").length).toBe(0);
-    // Three platform cards plus the two decision columns below them.
-    expect(target.querySelectorAll("article h3").length).toBe(5);
+    // Four platform cards plus the two decision columns below them.
+    expect(target.querySelectorAll("article h3").length).toBe(6);
 
     // UA matching stays truthful but neutral: it marks the actual macOS card,
     // associates the localized note, and cannot manufacture an action.
@@ -77,7 +100,7 @@ describe("AppsPage executable hierarchy", () => {
     const url = "https://relayium.test/apps/macos/Relayium.dmg";
     await mountPage({ macRelease: { available: true, downloadUrl: url }, platformOverride: "mac" });
 
-    expect(idsIn("available-apps-heading")).toEqual(["app-web", "app-cli", "app-mac"]);
+    expect(idsIn("available-apps-heading")).toEqual(["app-web", "app-cli", "app-mac", "app-android"]);
     const link = target.querySelector<HTMLAnchorElement>("#app-mac a.btn.btn-primary")!;
     expect(link.href).toBe(url);
     expect(link.textContent?.trim()).toBe(messages.en.appsPage.cards.mac.cta);
@@ -91,7 +114,7 @@ describe("AppsPage executable hierarchy", () => {
   it("fails a half-filled macOS manifest closed", async () => {
     await mountPage({ macRelease: { available: true, downloadUrl: null }, platformOverride: "mac" });
 
-    expect(idsIn("available-apps-heading")).toEqual(["app-web", "app-cli"]);
+    expect(idsIn("available-apps-heading")).toEqual(["app-web", "app-cli", "app-android"]);
     expect(idsIn("future-apps-heading")).toEqual(["app-mac"]);
     expect(target.querySelector("#app-mac a, #app-mac button")).toBeNull();
   });
@@ -112,7 +135,7 @@ describe("AppsPage executable hierarchy", () => {
 
   it("renders no card for a platform this repository does not ship", async () => {
     await mountPage({ platformOverride: "ios" });
-    for (const id of ["#app-ios", "#app-android", "#app-windows"]) {
+    for (const id of ["#app-ios", "#app-windows"]) {
       expect(target.querySelector(id), `${id} is back on the page`).toBeNull();
     }
     // …and the iOS visitor is still pointed somewhere real.
@@ -120,6 +143,68 @@ describe("AppsPage executable hierarchy", () => {
     expect(web.classList.contains("is-platform")).toBe(true);
     expect(web.getAttribute("aria-describedby")).toBe("platform-note");
     expect(web.querySelector("a.btn")).toBeTruthy();
+  });
+
+  // ── the Android download's reachability ──────────────────────────────────
+  //
+  // Measured on a real render before this was fixed: at 320px with an Android
+  // user agent the Android card began 1293px down and its download button
+  // 1928px, behind three cards about other machines. A highlight the reader has
+  // to scroll past three cards to reach is not doing anything.
+  it("puts the Android card first for an Android visitor", async () => {
+    await mountPage({ platformOverride: "android" });
+    expect(idsIn("available-apps-heading")[0]).toBe("app-android");
+    // Highlighted, and carrying a real action rather than a marker.
+    const card = target.querySelector("#app-android")!;
+    expect(card.classList.contains("is-platform")).toBe(true);
+    expect(card.querySelector("a.btn.btn-primary")).toBeTruthy();
+  });
+
+  it("leaves every other platform's order alone", async () => {
+    // Scoped deliberately: this is not a recommendation engine, and reordering
+    // for everyone would change what the grid means for readers it was already
+    // serving correctly.
+    for (const platform of ["mac", "linux", "windows", "ios", "unknown"] as const) {
+      await mountPage({ platformOverride: platform });
+      expect(idsIn("available-apps-heading")[0], platform).toBe("app-web");
+      // Tear down between iterations. `afterEach` only unmounts the LAST mount,
+      // so a loop that remounts without this leaves live components subscribed
+      // to the shared language and route state — which then throws inside the
+      // NEXT test's mount and leaves its target empty, failing a test that has
+      // nothing to do with this one.
+      unmount(app as never);
+      app = undefined;
+      target.remove();
+    }
+  });
+
+  it("keeps the browser first for an Android visitor with nothing to download", async () => {
+    // With no published APK the Android card is not in the available group at
+    // all, and the honest answer for that reader is still the web app.
+    await mountPage({ platformOverride: "android", androidRel: { available: false } });
+    expect(idsIn("available-apps-heading")[0]).toBe("app-web");
+    expect(target.querySelector("#app-web")?.classList.contains("is-platform")).toBe(true);
+    expect(target.querySelector("#app-android a, #app-android button")).toBeNull();
+  });
+
+  it("reaches the Android action before its limitations, and keeps them in the card", async () => {
+    await mountPage({ platformOverride: "android" });
+    const card = target.querySelector("#app-android")!;
+    const nodes = [...card.children];
+    const ctaAt = nodes.findIndex((n) => n.matches("a.btn"));
+    const limitsAt = nodes.findIndex((n) => n.matches("ul.limits"));
+    const reqAt = nodes.findIndex((n) => n.matches("p.req"));
+    expect(ctaAt, "the card has no action").toBeGreaterThan(-1);
+    expect(limitsAt, "the limitations left the card").toBeGreaterThan(-1);
+    // Requirements before the button, limitations after it — the reader knows
+    // what it needs before acting, and the boundaries are still right there.
+    expect(reqAt).toBeLessThan(ctaAt);
+    expect(ctaAt).toBeLessThan(limitsAt);
+    // All four limits survive the move; this is the honesty half of the card.
+    expect(card.querySelectorAll("ul.limits li").length).toBe(
+      messages.en.appsPage.cards.android.limitations.length,
+    );
+    expect(card.textContent ?? "").toMatch(/Google Play/);
   });
 
   it("makes the long install command a named, keyboard-scrollable LTR region", async () => {

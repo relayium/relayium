@@ -126,7 +126,17 @@ const SHARE_SHEET = {
 
 const MAC_CARD = 2;
 /** Card 3. The iOS card in the archived seven; "every other platform" in en/zh. */
+// The archived locales still carry the four-card shape they were published
+// with, so index 3 is their "every other platform" card and stays where it is.
 const FOURTH_CARD = 3;
+
+// The MAINTAINED pair gained an Android card on 2026-09-08, inserted before the
+// no-client card — the Android app is published now, so it needs its own entry
+// rather than a line in the sentence about platforms that have none. That
+// pushes the maintained "every other platform" card to index 4, and the two
+// indices must stay separate: sharing one is how a frozen archive would be
+// asserted against maintained copy it never received.
+const ELSEWHERE_CARD = 4;
 
 describe("/apps native copy matches what the native apps actually do", () => {
   it("gives the macOS card its shipped file and text capability, in every locale", () => {
@@ -196,8 +206,8 @@ describe("/apps native copy matches what the native apps actually do", () => {
     // The fourth card is no longer about iOS. It is the answer for every
     // platform with no client, and its job is to name them and point at the
     // browser rather than to describe an app.
-    const fourth = doc.why.items[FOURTH_CARD].desc;
-    expect(fourth).toMatch(/iPhone, iPad, Android, Windows and Linux/);
+    const fourth = doc.why.items[ELSEWHERE_CARD].desc;
+    expect(fourth).toMatch(/iPhone, iPad, Windows and Linux/);
     expect(fourth).toMatch(/publishes no app for those platforms/i);
     expect(fourth).not.toMatch(/background|notification|push\b/i);
     // The page-level positioning scoped ephemeral text to web + CLI; the macOS
@@ -205,9 +215,17 @@ describe("/apps native copy matches what the native apps actually do", () => {
     expect(doc.description).not.toMatch(/text in the web app and the CLI/i);
     expect(doc.hero.pitch).not.toMatch(/text in the web app and the CLI/i);
     // …and neither the title nor the description may list a platform whose app
-    // does not exist. Both did until 2026-08-28.
-    expect(doc.title).not.toMatch(/\biOS\b|\bAndroid\b/i);
-    expect(doc.description).not.toMatch(/\biOS\b|\bAndroid\b/i);
+    // does not exist. Both listed iOS and Android until 2026-08-28. Android came
+    // BACK on 2026-09-08 because the app came back: `apps/android/` publishes a
+    // signed APK the manifest points at. iOS is still absent, and that is the
+    // half this now guards.
+    expect(doc.title).not.toMatch(/\biOS\b/i);
+    expect(doc.description).not.toMatch(/\biOS\b/i);
+    // Naming Android is only legitimate while it is genuinely published, so
+    // this is tied to the manifest rather than left as a free-text allowance.
+    if (/\bAndroid\b/i.test(doc.title)) {
+      expect(apps.langs.en.why.items.some((item) => /Android/.test(item.title))).toBe(true);
+    }
   });
 });
 

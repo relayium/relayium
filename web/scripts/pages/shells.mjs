@@ -124,10 +124,25 @@ function noindexHead(doc) {
     <meta name="robots" content="noindex, nofollow" />`;
 }
 
-function proseBody(doc, { links = [], langSlug = null } = {}) {
+// Exported so the generated-page tests can assert BOTH renderers. The English
+// /apps route has no localized twin, so this function is the only thing a
+// non-rendering client sees there — and a test that only covered
+// `mode-template.mjs` would report the English page as fine while it carried no
+// download anchor at all.
+export function proseBody(doc, { links = [], langSlug = null } = {}) {
   const p = [];
   p.push(`<h1>${esc(doc.hero.h1)}</h1>`);
   p.push(`<p>${esc(doc.hero.pitch)}</p>`);
+  // The operational download pointer, for the ENGLISH /apps route.
+  //
+  // English has no generated twin — it is an SPA route whose crawler shell is
+  // built here — so an anchor added only to `mode-template.mjs` reaches the
+  // eight localized pages and misses the one most readers land on. A page whose
+  // prose says a build is downloadable while carrying no href is a page nobody
+  // without JavaScript can act on.
+  if (doc.androidDownload) {
+    p.push(`<p><a href="${esc(doc.androidDownload.href)}">${esc(doc.androidDownload.label)}</a></p>`);
+  }
   if (doc.how) {
     p.push(`<h2>${esc(doc.how.heading)}</h2>`);
     p.push(`<ol>${doc.how.steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>`);

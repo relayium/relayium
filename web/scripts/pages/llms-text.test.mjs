@@ -208,7 +208,13 @@ describe("llms.txt file and ephemeral text product facts", () => {
     // iOS development is paused with no public listing, and there is no Android
     // or Windows target at all. An answer engine that invented one of these
     // would send a reader looking for a download that has never existed.
-    expect(llms).toContain("There is no Relayium app for iOS, Android or Windows");
+    // Android left this denial on 2026-09-08: the APK is published, so naming
+    // it among the platforms with no app would be the untrue half.
+    expect(llms).toContain("There is no Relayium app for iOS or Windows");
+    // …and the answer engines must be told what Android actually gets, with its
+    // limits, or the omission reads as a full-featured client.
+    expect(llms).toMatch(/Android app distributed as a direct APK/i);
+    expect(llms).toMatch(/not on Google Play/i);
     expect(llms).not.toMatch(/\b(?:iOS|Android|Windows)\s+(?:native\s+|desktop\s+)*app\s+(?:is|will be)\b/i);
   });
 

@@ -10,6 +10,8 @@ name: android-interop
 #   scripts/android-interop-acceptance.sh    the acceptance run itself
 #   scripts/android-ui-acceptance.sh         the offline UI matrix (join form, lifecycle)
 #   scripts/android-ui-session-acceptance.sh the real-DocumentsUI session round
+#   scripts/android-update-acceptance.sh     the update check against a real feed
+#   scripts/lib/instrumentation-result.sh    the rule that decides a run passed
 #   scripts/lib/local-acceptance.sh          the isolation library it sources
 #   scripts/test/android-interop-oracle.py   the comparison the run's one bit comes from
 #   web/e2e/android-interop.mjs              the browser half it drives
@@ -45,6 +47,18 @@ on:
       - 'scripts/test/android-interop-oracle.py'
       - 'scripts/android-ui-acceptance.sh'
       - 'scripts/android-ui-session-acceptance.sh'
+      # The update acceptance and, separately, the manifest it must agree with.
+      # `web/android-release.json` is a RUNTIME input in the same sense the
+      # oracle is: the client's official feed URL and the document that URL
+      # serves are two halves of one contract, and an edit to either can only be
+      # judged by running the check against a real feed.
+      - 'scripts/android-update-acceptance.sh'
+      # The pass/fail rule the update acceptance is judged by. `am instrument`
+      # exits 0 for a crashed process and a missing instrumentation alike, so
+      # this file is what separates "one test passed" from "nothing ran" — a
+      # runtime input in the same sense the interop oracle is.
+      - 'scripts/lib/instrumentation-result.sh'
+      - 'web/android-release.json'
       - 'web/**'
       - 'server/**'
       - '.github/workflows/android-interop.yml'
@@ -110,6 +124,15 @@ jobs:
       # lifecycle, across the en/light and zh/dark/320dp/font2 corners). The UI
       # matrix needs no server or browser, so it is cheap to append here and
       # keeps the emulator this workflow already pays for doing both.
+      #
+      # The update acceptance rides the same emulator for the same reason. It
+      # serves its own throwaway feed on the runner's loopback and points the
+      # app at it through the debug feed override, so it needs neither the Go
+      # server nor the browser — but it DOES need a device, and the "an update
+      # is available" branch cannot be reached any other way: 0.1.1 is the first
+      # build with an updater and there is no newer public release to check
+      # against. Nothing it does downloads or installs anything; the download
+      # test intercepts the real ACTION_VIEW Intent and blocks the launch.
       - name: Run the Android ↔ Web interop and UI acceptances
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
@@ -122,3 +145,4 @@ jobs:
             ./scripts/android-interop-acceptance.sh
             ./scripts/android-ui-acceptance.sh
             ./scripts/android-ui-session-acceptance.sh
+            ./scripts/android-update-acceptance.sh

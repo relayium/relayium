@@ -13,9 +13,10 @@ import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import releases from "./content/releases.mjs";
+import { generateWithAndroidManifest, WEB_ROOT } from "./android-manifest-fixture.mjs";
 import { buildReleasesPages, buildSitemap } from "./build-pages.mjs";
 import { FROZEN_LANGS, LANGS, MAINTAINED_LANGS, RELEASES_LABELS, urlPath } from "./shared.mjs";
 import en from "../../src/lib/i18n/en.ts";
@@ -103,15 +104,66 @@ function gitTags() {
     ).trim();
     if (!out) return null;
     return Object.fromEntries(out.split("\n").map((line) => line.trim().split(/\s+/)));
-  } catch {
+  } catch (err) {
+    // ONLY an environment answer may become `null`.
+    //
+    // This catch used to be bare, and it swallowed a ReferenceError: an import
+    // removed during an unrelated refactor left `execFileSync` undefined, and
+    // both tag audits below then reported themselves as "git unavailable" and
+    // skipped — in a full clone, with tags present, silently, forever. A guard
+    // that turns a programming error into "nothing to check here" is worse than
+    // no guard, because it looks green.
+    //
+    // A missing binary or a non-repository makes `execFileSync` throw an Error
+    // carrying a spawn/exit signature. Anything else is a bug in this file.
+    if (err instanceof ReferenceError || err instanceof TypeError || err instanceof SyntaxError) {
+      throw err;
+    }
     return null;
+  }
+}
+
+/**
+ * Is this checkout one where the tag audits MUST run?
+ *
+ * A full clone with tags is exactly the environment those audits exist for, and
+ * it is the one where a silent skip does the damage. This is deliberately
+ * derived from git independently of `gitTags`, so a defect in that function
+ * cannot also disable the check that it worked.
+ */
+function isFullCloneWithTags() {
+  try {
+    const out = execFileSync("git", ["tag", "--list"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return out.length > 0;
+  } catch {
+    return false;
   }
 }
 
 /** `v1.2.3` — the command-line release namespace this page lists. */
 const CLI_TAG = /^v\d+\.\d+\.\d+$/;
-/** `macos-v1.0` — a native release, deliberately NOT in the list. */
-const NATIVE_TAG = /^macos-v\d+(?:\.\d+){1,2}$/;
+/** `macos-v1.0` — a macOS release, deliberately NOT in the list. */
+const MAC_TAG = /^macos-v\d+(?:\.\d+){1,2}$/;
+
+/**
+ * `android-v0.1.1` — the Android APK's own namespace, owned SEPARATELY.
+ *
+ * Not folded into the macOS pattern, for the same reason `unknown` exists at
+ * all: two families with two release processes, two artifacts and two
+ * verification stories should not share one bucket, or the day one of them
+ * starts publishing something different nothing notices.
+ *
+ * Exactly three numeric parts, unlike macOS's two-or-three. That is not
+ * cosmetic: the Android client DERIVES its download path from the version name
+ * (`UpdateFeed.assetPath`) and refuses anything that is not `X.Y.Z`, so a
+ * two-part `android-v0.1` tag is a shape this channel cannot produce and must
+ * not be quietly accepted here.
+ */
+const ANDROID_TAG = /^android-v\d+\.\d+\.\d+$/;
 
 /**
  * Tags that are not a namespace at all — they are one incident's debris.
@@ -125,7 +177,7 @@ const NATIVE_TAG = /^macos-v\d+(?:\.\d+){1,2}$/;
  *
  * So this tag publishes NOTHING: not the CLI and node a `v*` row promises, not
  * a DMG a `macos-v*` tag delivers. Listing it would be the page's one real lie;
- * widening NATIVE_TAG to absorb it would be a quieter one, since it would also
+ * widening MAC_TAG to absorb it would be a quieter one, since it would also
  * green-light the next mistyped tag. It is enumerated by exact name instead —
  * a published tag cannot be un-pushed, and pretending it is gone is what the
  * `unknown` bucket below exists to prevent.
@@ -149,17 +201,22 @@ const BROKEN_TAGS = new Set(["vmacos-v1.2.0"]);
  */
 function partitionTags(tags) {
   const listed = {};
-  const native = [];
+  const mac = [];
+  const android = [];
   const broken = [];
   const unknown = [];
   for (const [tag, date] of Object.entries(tags)) {
     // Checked first: a known-bad tag must not be able to match anything else.
     if (BROKEN_TAGS.has(tag)) broken.push(tag);
     else if (CLI_TAG.test(tag)) listed[tag] = date;
-    else if (NATIVE_TAG.test(tag)) native.push(tag);
+    else if (MAC_TAG.test(tag)) mac.push(tag);
+    else if (ANDROID_TAG.test(tag)) android.push(tag);
     else unknown.push(tag);
   }
-  return { listed, native, broken, unknown };
+  // `native` stays as the union, because every assertion about "a tag that is
+  // not a row" is true of both families; the split above is what lets a test
+  // say which family a tag belongs to.
+  return { listed, mac, android, native: [...mac, ...android], broken, unknown };
 }
 
 describe("the release list is internally consistent", () => {
@@ -202,6 +259,63 @@ describe("the release list is internally consistent", () => {
 describe("git tags are the source of truth", () => {
   const tags = gitTags();
 
+  // The audits below are the only thing tying this page to reality, and they
+  // are `skipIf`. A skip is therefore indistinguishable from a pass in the
+  // summary — which is how a removed import silently disabled both of them in a
+  // full clone. This test is not skippable: in a checkout that HAS tags, the
+  // audits must have been able to read them.
+  it("reads the real tag inventory wherever this checkout has one", () => {
+    if (!isFullCloneWithTags()) {
+      // A shallow CI clone or an exported archive. Nothing to audit, and the
+      // audits correctly skip — but say so out loud rather than silently.
+      expect(tags).toBeNull();
+      return;
+    }
+    expect(
+      tags,
+      "this clone has tags, but gitTags() returned null — the audits below skipped " +
+        "without checking anything",
+    ).not.toBeNull();
+    expect(Object.keys(tags).length).toBeGreaterThan(0);
+    // Every tag must be a shape this page has a rule for. `partitionTags` is
+    // what classifies them; `unknown` being non-empty is the signal that a new
+    // namespace appeared and nobody decided what /releases says about it.
+    const { listed, mac, android, broken, unknown } = partitionTags(tags);
+    expect(unknown, `unclassified tags in this clone: ${unknown.join(", ")}`).toEqual([]);
+    expect(
+      Object.keys(listed).length + mac.length + android.length + broken.length,
+    ).toBe(Object.keys(tags).length);
+  });
+
+  // The Android family, against the ACTUAL inventory rather than a synthetic
+  // one. Before the first release this asserts the channel is genuinely empty;
+  // after it, that every published tag is well formed and none has leaked into
+  // the version rows. Either way it runs on real tags.
+  it("agrees with the real Android tag inventory", () => {
+    if (!isFullCloneWithTags()) return;
+    const { android } = partitionTags(tags);
+    for (const tag of android) {
+      expect(tag, `${tag} is not android-vX.Y.Z`).toMatch(/^android-v\d+\.\d+\.\d+$/);
+      // An APK tag publishes neither of the two binaries a `v*` row promises.
+      expect(releases.releases.map((r) => r.version)).not.toContain(tag);
+    }
+    // Deliberately NOT asserted here: that an advertised release already has a
+    // tag.
+    //
+    // The accepted publication order is source commit → build and sign →
+    // metadata commit and its gates → immutable GitHub release → website
+    // promotion. The staged metadata is therefore gated BEFORE the tag exists,
+    // by design: the tag is cut from the commit that already carries the
+    // metadata. A test demanding the tag first would deadlock the release it
+    // exists to protect, failing the exact commit that has to pass before the
+    // tag can be made.
+    //
+    // The pairing is real and is checked where it can be: the publish helper
+    // refuses unless the committed manifest describes the APK in hand, and the
+    // post-publication acceptance verifies the remote tag, its commit and its
+    // bytes before the site is promoted. Neither is this suite's job.
+  });
+
   it.skipIf(tags === null)("lists every command-line release tag, with its date", () => {
     // The failure this exists for: a release is cut (auto-release.yml tags from
     // main on a schedule, so it happens without anyone typing `git tag`) and the
@@ -237,6 +351,52 @@ describe("git tags are the source of truth", () => {
 // without ever classifying anything. These drive it directly, so the rule is
 // tested wherever this suite runs rather than only where the tags happen to be.
 describe("which tags this page is responsible for", () => {
+  // Android's namespace, asserted synthetically because the tag does not exist
+  // yet. That is the point: `android-v0.1.1` becomes real the moment root
+  // publishes, and an unrecognised tag would fail this gate in every full clone
+  // AFTER the tag is permanent and cannot be withdrawn. The rule has to be in
+  // place before the tag is, not after.
+  it("recognises the Android namespace as its own family", () => {
+    const { listed, mac, android, unknown } = partitionTags({
+      "v0.24.0": "2026-09-01",
+      "macos-v1.3.10": "2026-09-05",
+      "android-v0.1.1": "2026-09-08",
+    });
+    expect(Object.keys(listed)).toEqual(["v0.24.0"]);
+    expect(mac).toEqual(["macos-v1.3.10"]);
+    expect(android).toEqual(["android-v0.1.1"]);
+    expect(unknown).toEqual([]);
+  });
+
+  it("still refuses a namespace nobody has decided about", () => {
+    // iOS is the live example: `apps/ios` exists and has never been released,
+    // so the FIRST `ios-v…` tag must stop this gate and make someone say what
+    // the page does about it — exactly as `android-v…` did before this change.
+    const { unknown } = partitionTags({
+      "ios-v1.0": "2026-09-08",
+      // Malformed for the Android channel: the client derives its download path
+      // from an X.Y.Z version and cannot produce any of these.
+      "android-v1": "2026-09-08",
+      "android-v0.1": "2026-09-08",
+      "android-v0.1.1-rc1": "2026-09-08",
+      "android-vnext": "2026-09-08",
+      "androidv0.1.1": "2026-09-08",
+    });
+    expect(unknown.sort()).toEqual(
+      ["android-v0.1", "android-v0.1.1-rc1", "android-v1", "android-vnext", "androidv0.1.1", "ios-v1.0"],
+    );
+  });
+
+  it("keeps an Android tag out of the version rows", () => {
+    // A `v*` row means "this version publishes the CLI and the node". An
+    // Android tag publishes an APK and neither of those, so it must never
+    // become a row — the same rule that holds for macOS.
+    const { listed, native } = partitionTags({ "android-v0.1.1": "2026-09-08" });
+    expect(listed).toEqual({});
+    expect(native).toEqual(["android-v0.1.1"]);
+    expect(releases.releases.map((r) => r.version)).not.toContain("android-v0.1.1");
+  });
+
   it("lists command-line releases and holds back native ones", () => {
     const { listed, native, unknown } = partitionTags({
       "v0.18.0": "2026-08-09",
@@ -408,11 +568,15 @@ describe("what /releases says about the native apps", () => {
   it("names no unobtainable product in the maintained locales", () => {
     // The positive-by-absence half of the 2026-08-28 change, checked over the
     // whole maintained document rather than one bullet: a claim moved from the
-    // bullet into the lead is the same claim. `apps/` has no Android or Windows
-    // target at all and iOS development is paused with no public listing, so
-    // /releases — the page a reader opens to find out what they can download —
-    // must not list any of the three.
-    const NATIVE_APP = /\b(?:iOS|iPhone|iPad|Android|Windows)\s+(?:native\s+|desktop\s+)*app\b|(?:iOS|iPhone|iPad|Android|Windows)\s*(?:桌面)?(?:原生)?应用/i;
+    // bullet into the lead is the same claim. iOS development is paused with no
+    // public listing and there is no Windows target at all, so /releases — the
+    // page a reader opens to find out what they can download — must not list
+    // either.
+    //
+    // Android left this ban on 2026-09-08. It is obtainable now, and this page
+    // exists to say what a reader can get; the guard that replaced it is the
+    // one below, which ties naming Android to the manifest actually offering it.
+    const NATIVE_APP = /\b(?:iOS|iPhone|iPad|Windows)\s+(?:native\s+|desktop\s+)*app\b|(?:iOS|iPhone|iPad|Windows)\s*(?:桌面)?(?:原生)?应用/i;
     for (const lang of MAINTAINED_LANGS) {
       const doc = releases.langs[lang];
       const copy = [
@@ -561,5 +725,121 @@ describe("the sitemap", () => {
     const xml = buildSitemap([], { home: false, releases });
     expect(xml).not.toContain("<changefreq>yearly</changefreq>");
     expect(xml.match(/<changefreq>weekly<\/changefreq>/g)).toHaveLength(LANGS.length);
+  });
+});
+
+// ── the Android release family, in both manifest states ────────────────────
+//
+// /releases is the page a reader opens to find out what exists. Naming a
+// preview release before it is published and staying silent after it is
+// published are the same defect pointing in opposite directions, so both
+// directions are pinned — against the real generator, not a copy of its output.
+describe("what /releases says about the Android preview", () => {
+
+  // ── the canonical manifest must be byte-identical afterwards ──────────────
+  //
+  // Not a formality. The first version of the fixture helper WROTE this file
+  // and restored it, and under concurrent Vitest the restore lost: the
+  // checked-in manifest was left holding a different value than it started
+  // with. A generator fixture that can change the thing it is measuring is a
+  // producer defect, not a flaky assertion, so the property is asserted
+  // directly and it holds whatever state the checkout starts in.
+  let canonicalBefore;
+  beforeAll(async () => {
+    canonicalBefore = await readFile(resolve(WEB_ROOT, "android-release.json"));
+  });
+  afterAll(async () => {
+    const after = await readFile(resolve(WEB_ROOT, "android-release.json"));
+    expect(
+      after.equals(canonicalBefore),
+      "web/android-release.json was modified by a test fixture",
+    ).toBe(true);
+  });
+  const PUBLISHED = {
+    schema: 1,
+    android: {
+      available: true,
+      applicationId: "com.relayium.android",
+      versionCode: 2,
+      versionName: "0.1.1",
+      downloadUrl:
+        "https://github.com/relayium/relayium/releases/download/android-v0.1.1/Relayium-0.1.1-2.apk",
+      sha256: "a".repeat(64),
+      size: 41184124,
+      notes: { en: "Preview.", zh: "预览版。" },
+    },
+  };
+
+  /**
+   * Isolated, never against the checkout.
+   *
+   * The first version of this wrote the real `web/android-release.json` and
+   * restored it. Vitest runs test FILES concurrently and every content module
+   * reads that path at import time, so another file could observe the fixture —
+   * which it did, and this suite failed with `android-v0.1.0` on a run that had
+   * asked for "nothing published". See `android-manifest-fixture.mjs`.
+   */
+  const generateWith = (doc) =>
+    generateWithAndroidManifest(doc, `
+      const releases = (await import(IMPORTS.releases)).default;
+      const out = {};
+      for (const lang of ["en", "zh"]) {
+        const doc = releases.langs[lang];
+        out[lang] = [
+          ...doc.lead,
+          ...doc.sections.flatMap((s) => [...(s.body ?? []), ...(s.bullets ?? [])]),
+        ];
+      }
+      process.stdout.write(JSON.stringify(out));
+    `);
+
+  it("says nothing about an Android release while none is published", () => {
+    const copy = generateWith({ schema: 1, android: { available: false } });
+    for (const lang of MAINTAINED_LANGS) {
+      const text = copy[lang].join("\n");
+      expect(text, `${lang} names an Android tag that does not exist`).not.toMatch(/android-v/);
+      // …and the rhythm count stays honest at three.
+      expect(text).toMatch(lang === "en" ? /three rhythms/ : /三种发布节奏/);
+      expect(text).not.toMatch(lang === "en" ? /four rhythms/ : /四种发布节奏/);
+    }
+  });
+
+  it("names the tag and corrects the rhythm count once one is published", () => {
+    const copy = generateWith(PUBLISHED);
+    for (const lang of MAINTAINED_LANGS) {
+      const text = copy[lang].join("\n");
+      expect(text, `${lang} does not name the published tag`).toContain("android-v0.1.1");
+      expect(text).toMatch(lang === "en" ? /four rhythms/ : /四种发布节奏/);
+      expect(text, `${lang} still claims three`).not.toMatch(
+        lang === "en" ? /three rhythms/ : /三种发布节奏/,
+      );
+      // The tag must not become a version ROW: rows mean "publishes the CLI and
+      // the node", which an APK tag does not.
+      expect(releases.releases.map((r) => r.version)).not.toContain("android-v0.1.1");
+    }
+  });
+
+  // The claim this section exists to stop. "Every release publishes a checksum
+  // and a signature, and the updater verifies both" is true of the CLI and
+  // FALSE of a browser-mediated APK: the app never sees the bytes.
+  it("never claims the Android app verifies what it points you at", () => {
+    const copy = generateWith(PUBLISHED);
+    for (const lang of MAINTAINED_LANGS) {
+      const text = copy[lang].join("\n");
+      // The blanket claim must have been scoped to the command line.
+      expect(text, `${lang} still makes a blanket verification claim`).not.toMatch(
+        lang === "en" ? /Every release publishes a checksum/i : /每次发布都会在压缩包旁边附上校验和/,
+      );
+      expect(text).toMatch(
+        lang === "en" ? /Every command-line release publishes a checksum/i : /每次命令行发布都会在压缩包旁边附上校验和/,
+      );
+      // …and Android's real mechanism is stated: manual check, browser
+      // download, system signature rule, published hash for hand-checking.
+      const android = copy[lang].find((line) => /Android/.test(line) && /SHA-256|signing certificate|签名证书/.test(line));
+      expect(android, `${lang} does not explain the Android mechanism`).toBeTruthy();
+      expect(android).toMatch(lang === "en" ? /only when you ask/i : /只在你主动点击时/);
+      expect(android).toMatch(lang === "en" ? /never downloads or installs anything itself/i : /既不下载也不安装/);
+      expect(android).toMatch(lang === "en" ? /same signing certificate/i : /相同的签名证书/);
+    }
   });
 });

@@ -526,9 +526,9 @@ const zh: Messages = {
     cta: "了解 CLI →",
   },
   appsPage: {
-    metaTitle: "获取 Relayium——网页版、命令行与 macOS 应用",
+    metaTitle: "获取 Relayium——网页版、命令行、macOS 与 Android",
     metaDesc:
-      "在任意现代浏览器里使用 Relayium，在 macOS、Linux 或 Windows 上安装命令行工具，或下载原生 macOS 应用。端到端加密传输文件与临时文本。",
+      "在任意现代浏览器里使用 Relayium，在 macOS、Linux 或 Windows 上安装命令行工具，或下载原生 macOS 应用与 Android 预览版 APK。端到端加密传输文件与临时文本。",
     heading: "获取 Relayium",
     subhead: "同一套端到端加密的传输，既传文件也发临时文本，随处可用。选择你的平台。",
     availableBadge: "现已可用",
@@ -539,6 +539,19 @@ const zh: Messages = {
       web: { name: "网页版", desc: "无需安装。在任意系统的现代浏览器中打开，即可传文件，也能发临时文本。", cta: "打开网页版" },
       cli: { name: "命令行", desc: "可脚本化的文件传输、文件夹同步、服务器间备份与临时文本，支持 macOS、Linux 与 Windows。", cta: "命令行文档与安装" },
       mac: { name: "macOS 应用", desc: "真正的原生菜单栏应用（com.relayium.mac）：与附近设备或用配对码互传文件和文本、收发加密链接、管理账号与设备。", cta: "下载 macOS 版" },
+      android: {
+        name: "Android 应用",
+        desc: "公开预览版，以 APK 直接分发。它加入另一台设备发起的实时传输，连接后即可双向收发文件与消息。",
+        cta: (version) => `下载 Android 版 ${version}`,
+        requirements: "Android 8.0 及以上 · arm64 或 x86_64 · 约 40 MB",
+        limitations: [
+          "它只能加入传输，目前还不能自己生成配对码或链接——请在另一台设备上发起。",
+          "传输在应用打开时进行。没有后台传输，也没有常驻会话。",
+          "没有账户功能、设备收件箱、附近设备发现，也没有分享菜单入口。",
+          "不在 Google Play 上架，不含 Play 服务与 Play 结算。",
+        ],
+        installNote: "APK 直接安装，由 Android 请你确认。之后可在应用的连接页面用「检查更新」找到新版本。",
+      },
     },
     chooser: {
       heading: "该用网页版还是原生应用？",
@@ -563,7 +576,7 @@ const zh: Messages = {
         ],
       },
       elsewhereNote:
-        "在其他平台上，浏览器就是 Relayium 的客户端。iPhone、iPad、Android、Windows 与 Linux 都能直接打开网页版，无需安装；Windows 与 Linux 还可以另外装命令行工具。Relayium 没有为这些平台发布任何客户端程序。",
+        "在其他平台上，浏览器就是 Relayium 的客户端。iPhone、iPad、Windows 与 Linux 都能直接打开网页版，无需安装；Windows 与 Linux 还可以另外装命令行工具。Relayium 没有为这些平台发布任何客户端程序。",
     },
   },
   deviceInboxPage: {
@@ -715,10 +728,10 @@ const zh: Messages = {
         name: "Android",
         use: "和 iPhone 是同一个思路：一步就把手机上的东西送到你自己的机器上。",
         setup:
-          "Relayium 不提供 Android 应用，所以这里没有可安装的东西。今天：在手机浏览器里打开 Relayium，登录，从本页发给你任何一台打开了设备收件箱的设备。",
+          "Android 应用是只能加入实时传输的客户端，没有账户功能，因此不是设备收件箱的接收端，这里没有可安装的东西。今天：在手机浏览器里打开 Relayium，登录，从本页发给你任何一台打开了设备收件箱的设备。",
         files: "不适用：Android 在这里是发送端，不是设备收件箱的接收端，不会有任何文件被投递到手机上。",
         residency:
-          "没有常驻，因为 Android 在这里不接收任何东西。Relayium 没有发布 Android 应用，所以不存在需要保活的 Android 接收端，本页也不对手机作任何常开承诺。",
+          "没有常驻，因为 Android 在这里不接收任何东西。Relayium 没有发布 Android 设备收件箱接收端——Android 应用只在打开时加入实时传输，没有常驻会话——所以不存在需要保活的接收端，本页也不对手机作任何常开承诺。",
         send: "在手机浏览器里打开本页，发给任何打开了设备收件箱的设备。",
         recovery: "不适用：Android 在这里是发送端，手机上没有需要修复的接收目录或设备凭据。",
         stop: "不适用：手机上没有注册任何东西，这里也就没有可暂停、停止或吊销的对象。",

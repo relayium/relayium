@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CLIENT_POLICY_FILE } from "./stage-macos-release.mjs";
+import { ANDROID_RELEASE_FILE, PUBLISHED_ANDROID_FEED_PATH } from "./stage-android-release.mjs";
 import privacy from "./pages/content/legal/privacy.mjs";
 import terms from "./pages/content/legal/terms.mjs";
 import security from "./pages/content/legal/security.mjs";
@@ -182,7 +183,27 @@ async function main() {
   const policy = join(publicDir, "apps", "macos", "client-policy.json");
   await mkdir(dirname(policy), { recursive: true });
   await writeFile(policy, await readFile(resolve(here, "..", CLIENT_POLICY_FILE), "utf8"), "utf8");
-  console.log(`gen-pages: wrote ${pages.length} pages + sitemap.xml + client-policy.json to public/`);
+
+  // The Android update feed, published verbatim from the same canonical
+  // document the website itself imports.
+  //
+  // Copied rather than re-serialized, for exactly the reason the macOS client
+  // policy above is: the manifest decides BOTH what /apps offers and what an
+  // installed Android build is told when it checks for an update, and those two
+  // must not be able to disagree. One file, one edit, two consumers.
+  //
+  // It is deliberately NOT part of `native-releases.json`. That document is
+  // owned by the macOS release stager and is inside its declared artifact scope
+  // (`macos-release-candidate.mjs`), so an Android edit there would land inside
+  // a macOS release candidate and trip its scope check.
+  const androidFeed = join(publicDir, ...PUBLISHED_ANDROID_FEED_PATH.split("/").slice(1));
+  await mkdir(dirname(androidFeed), { recursive: true });
+  await writeFile(androidFeed, await readFile(resolve(here, "..", ANDROID_RELEASE_FILE), "utf8"), "utf8");
+
+  console.log(
+    `gen-pages: wrote ${pages.length} pages + sitemap.xml + client-policy.json + ` +
+      `apps/android/update.json to public/`,
+  );
 }
 
 // Only run as a script, not when the test imports the builders.

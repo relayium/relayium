@@ -10,12 +10,15 @@
 //
 // The banned-claim list is IMPORTED from the SPA-side test rather than restated
 // here, because two copies of a rule is the same defect one level up.
-import { describe, it, expect } from "vitest";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { afterAll, beforeAll, describe, it, expect } from "vitest";
 import apps from "./content/apps.mjs";
 import { MAINTAINED_LANGS, FROZEN_LANGS } from "./shared.mjs";
 import en from "../../src/lib/i18n/en.ts";
 import zh from "../../src/lib/i18n/zh.ts";
 import { FORBIDDEN_APP_CLAIMS, violatesClaim } from "../../src/lib/apps-claim-rules.ts";
+import { generateWithAndroidManifest, WEB_ROOT } from "./android-manifest-fixture.mjs";
 
 const APP = { en, zh };
 
@@ -70,11 +73,15 @@ describe("the maintained twin carries the same product facts as the SPA", () => 
       const prose = strings(apps.langs[lang]).join("\n");
       const spa = strings(APP[lang].appsPage).join("\n");
       expect(APP[lang].appsPage.cards.ios, `${lang} SPA still has an iOS card`).toBeUndefined();
-      expect(APP[lang].appsPage.cards.android, `${lang} SPA still has an Android card`).toBeUndefined();
+      // Android RETURNED on 2026-09-08 — `apps/android/` publishes a real
+      // signed APK — so its card is expected on both surfaces. iOS and Windows
+      // stay absent, and the regex below stops naming Android for the same
+      // reason: naming it is now a fact rather than a promise.
+      expect(APP[lang].appsPage.cards.android, `${lang} SPA lost its Android card`).toBeTruthy();
       expect(APP[lang].appsPage.cards.windows, `${lang} SPA still has a Windows card`).toBeUndefined();
       for (const [surface, copy] of [["static", prose], ["SPA", spa]]) {
         expect(copy, `${lang} ${surface} /apps still describes a native app for an unshipped platform`)
-          .not.toMatch(/\b(?:iOS|iPhone|iPad|Android|Windows)\s+(?:native\s+|desktop\s+)*app\b|(?:iOS|iPhone|iPad|Android|Windows)\s*(?:桌面)?(?:原生)?应用/i);
+          .not.toMatch(/\b(?:iOS|iPhone|iPad|Windows)\s+(?:native\s+|desktop\s+)*app\b|(?:iOS|iPhone|iPad|Windows)\s*(?:桌面)?(?:原生)?应用/i);
       }
     }
   });
@@ -84,8 +91,10 @@ describe("the maintained twin carries the same product facts as the SPA", () => 
     // names stay — what changes is that they point at the browser and the CLI,
     // which is what actually serves those readers today.
     const facts = {
-      en: [/iPhone, iPad, Android, Windows and Linux/, /command line/i, /nothing to install/i],
-      zh: [/iPhone、iPad、Android、Windows 与 Linux/, /命令行/, /无需安装/],
+      // Android left this sentence when it gained a card of its own; it must
+      // not be listed among the platforms with no app.
+      en: [/iPhone, iPad, Windows and Linux/, /command line/i, /nothing to install/i],
+      zh: [/iPhone、iPad、Windows 与 Linux/, /命令行/, /无需安装/],
     };
     for (const lang of MAINTAINED_LANGS) {
       const prose = strings(apps.langs[lang]).join("\n");
@@ -133,5 +142,122 @@ describe("the maintained twin carries the same product facts as the SPA", () => 
         expect(spa, `${lang} SPA comparison drops ${re}`).toMatch(re);
       }
     }
+  });
+});
+
+// ── the Android download, on BOTH renderers ─────────────────────────────────
+//
+// /apps has two renderers with two different code paths: the eight localized
+// twins come from `mode-template.mjs`, and the ENGLISH route has no twin at all
+// — its crawler shell is built by `shells.mjs`'s proseBody. An anchor added to
+// one reaches half the readers, and the half it misses is the larger one.
+//
+// The generic "Relayium publishes no app for those platforms" denial and an
+// Android card cannot coexist: one of them is wrong whichever way round it is.
+describe("the Android APK is reachable from the generated pages, not just described", () => {
+
+  // ── the canonical manifest must be byte-identical afterwards ──────────────
+  //
+  // Not a formality. The first version of the fixture helper WROTE this file
+  // and restored it, and under concurrent Vitest the restore lost: the
+  // checked-in manifest was left holding a different value than it started
+  // with. A generator fixture that can change the thing it is measuring is a
+  // producer defect, not a flaky assertion, so the property is asserted
+  // directly and it holds whatever state the checkout starts in.
+  let canonicalBefore;
+  beforeAll(async () => {
+    canonicalBefore = await readFile(resolve(WEB_ROOT, "android-release.json"));
+  });
+  afterAll(async () => {
+    const after = await readFile(resolve(WEB_ROOT, "android-release.json"));
+    expect(
+      after.equals(canonicalBefore),
+      "web/android-release.json was modified by a test fixture",
+    ).toBe(true);
+  });
+  const PUBLISHED = {
+    schema: 1,
+    android: {
+      available: true,
+      applicationId: "com.relayium.android",
+      versionCode: 2,
+      versionName: "0.1.1",
+      downloadUrl:
+        "https://github.com/relayium/relayium/releases/download/android-v0.1.1/Relayium-0.1.1-2.apk",
+      sha256: "a".repeat(64),
+      size: 41184124,
+      notes: { en: "Preview.", zh: "预览版。" },
+    },
+  };
+
+  /**
+   * Isolated, never against the checkout.
+   *
+   * The first version wrote the real `web/android-release.json` and restored
+   * it. Vitest runs test FILES concurrently, so another file could observe the
+   * fixture — and the restore could lose, leaving the canonical manifest
+   * actually changed. See `android-manifest-fixture.mjs`.
+   */
+  const generateWith = (doc) =>
+    generateWithAndroidManifest(doc, `
+      const apps = (await import(IMPORTS.apps)).default;
+      const { renderModePage } = await import(IMPORTS.modeTemplate);
+      const { proseBody } = await import(IMPORTS.shells);
+      const langs = {};
+      for (const lang of ["en", "zh"]) {
+        langs[lang] = {
+          androidDownload: apps.langs[lang].androidDownload ?? null,
+          prose: JSON.stringify(apps.langs[lang]),
+          twin: renderModePage({ slug: "apps", lang, doc: apps.langs[lang], updated: apps.updated }),
+        };
+      }
+      langs.en.shell = proseBody(apps.langs.en);
+      process.stdout.write(JSON.stringify(langs));
+    `);
+
+  it("renders a real APK anchor on the localized twin and the English shell", () => {
+    const out = generateWith(PUBLISHED);
+    for (const lang of MAINTAINED_LANGS) {
+      expect(out[lang].androidDownload, `${lang} has no Android pointer`).toBeTruthy();
+      expect(out[lang].androidDownload.href).toBe(PUBLISHED.android.downloadUrl);
+      // The label names the exact build, from the manifest.
+      expect(out[lang].androidDownload.label).toContain("0.1.1");
+      // The localized twin renders it as a real anchor.
+      expect(out[lang].twin, `${lang} twin has no APK anchor`).toContain(
+        PUBLISHED.android.downloadUrl,
+      );
+    }
+    // …and so does the English crawler shell, which is a DIFFERENT function
+    // (`shells.mjs` proseBody) reading the same field. Asserting both is the
+    // point: an anchor added to one renderer silently misses the other, and
+    // English is the route with no localized twin to fall back on.
+    expect(out.en.shell, "the English shell has no APK anchor").toContain(
+      PUBLISHED.android.downloadUrl,
+    );
+  });
+
+  it("never pairs an Android card with a blanket no-app denial", () => {
+    const out = generateWith(PUBLISHED);
+    for (const lang of MAINTAINED_LANGS) {
+      expect(out[lang].prose, `${lang} names Android`).toMatch(/Android/);
+      // The denial sentence must have stopped covering Android: an Android card
+      // and "Relayium publishes no app for those platforms" cannot both be
+      // right, whichever way round they are.
+      const denial = lang === "en"
+        ? /iPhone, iPad, Android, Windows and Linux/
+        : /iPhone、iPad、Android、Windows 与 Linux/;
+      expect(out[lang].prose, `${lang} still groups Android with the no-app platforms`)
+        .not.toMatch(denial);
+      expect(out[lang].twin, `${lang} twin still carries the old denial`).not.toMatch(denial);
+    }
+  });
+
+  it("offers no anchor at all while the manifest advertises nothing", () => {
+    const out = generateWith({ schema: 1, android: { available: false } });
+    for (const lang of MAINTAINED_LANGS) {
+      expect(out[lang].androidDownload, `${lang} offered an APK it has none of`).toBeNull();
+      expect(out[lang].twin).not.toMatch(/releases\/download\/android-v/);
+    }
+    expect(out.en.shell).not.toMatch(/releases\/download\/android-v/);
   });
 });

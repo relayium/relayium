@@ -222,6 +222,93 @@ check(
   + "would offer users an entry point that does nothing.",
 );
 
+// ── 5. the update check ─────────────────────────────────────────────────────
+//
+// The updater decides where an install link comes from, so its debug-only feed
+// override is fenced exactly as the backend override is — and for the same
+// reason. These facts have the same shape as the ones above: no Kotlin test can
+// assert them, because AGP generates host unit tests for the test build type
+// only, so a release assertion would be skipped in every run that exists.
+
+const updateEndpoint = codeOf(read("app/src/main/kotlin/com/relayium/android/update/UpdateEndpoint.kt"));
+// RAW, not comment-stripped. `codeOf` treats `//` as a line comment, and the
+// official URL contains one inside its string literal — stripping it would
+// truncate the very line being asserted and the check would fail on correct
+// source. Nothing below matches a construct this file's prose also names, so
+// the raw text is safe here.
+const updateFeed = read("app/src/main/kotlin/com/relayium/android/update/UpdateFeed.kt");
+const viewModel = codeOf(read("app/src/main/kotlin/com/relayium/android/TransferViewModel.kt"));
+
+check(
+  /buildConfigField\(\s*"boolean",\s*"ALLOW_UPDATE_FEED_OVERRIDE",\s*"false"\s*\)/.test(releaseBlock),
+  "the release build no longer sets ALLOW_UPDATE_FEED_OVERRIDE=false. A shipped build could then "
+  + "be pointed at a feed that is not the official one, which is where an install link comes from.",
+);
+check(
+  /buildConfigField\(\s*"boolean",\s*"ALLOW_UPDATE_FEED_OVERRIDE",\s*"true"\s*\)/.test(debugBlock),
+  "the debug build no longer sets ALLOW_UPDATE_FEED_OVERRIDE=true, so the acceptance cannot point "
+  + "the real updater at a throwaway feed and the available/error branches become untestable on a device.",
+);
+
+// MANDATORY, not a default parameter. An explicit `allowOverride = true` must
+// not be able to reopen it in a release build — R18's lesson, applied here.
+check(
+  /if\s*\(\s*!BuildConfig\.ALLOW_UPDATE_FEED_OVERRIDE\s*\|\|/.test(updateEndpoint),
+  "UpdateEndpoint.resolve no longer reads BuildConfig.ALLOW_UPDATE_FEED_OVERRIDE as a mandatory "
+  + "conjunct. As a default parameter it could be bypassed by an explicit argument.",
+);
+check(
+  !/allowOverride:\s*Boolean\s*=\s*BuildConfig\./.test(updateEndpoint),
+  "UpdateEndpoint.resolve makes the variant flag a DEFAULT for its parameter. That would let an "
+  + "explicit `allowOverride = true` reopen the fence in a release build.",
+);
+
+// No installer privilege. The flow is browser-mediated on purpose: the browser
+// downloads, and the system installer asks the user to confirm. Holding
+// REQUEST_INSTALL_PACKAGES would let this app install a package itself, which
+// is a materially different trust posture and is not what any of the copy says.
+check(
+  !/REQUEST_INSTALL_PACKAGES/.test(mainManifest),
+  "the manifest requests REQUEST_INSTALL_PACKAGES. The update flow hands a URL to the browser and "
+  + "the system installer asks the user; an installer privilege is neither needed nor described anywhere.",
+);
+check(
+  !/PackageInstaller|packageInstaller/.test(viewModel),
+  "the ViewModel reaches for PackageInstaller. Nothing in this product installs a package itself.",
+);
+
+// The release TestHooks must not carry a settable launcher: the debug variant's
+// stand-in exists so the acceptance can observe the download URL, and a release
+// build must have exactly one launch path.
+check(
+  /fun updateLauncher\(\)/.test(releaseHooks) && !/\bvar\s+installedLauncher/.test(releaseHooks),
+  "the RELEASE `TestHooks` exposes a settable update launcher. Its answer must be a constant null "
+  + "with no field behind it, so no in-process surface can redirect where an update link sends the user.",
+);
+
+// The two halves of the version must move together. `versionCode` is the only
+// ordering the update check uses; a bump of one without the other publishes a
+// build the client cannot order correctly.
+const versionCode = /versionCode\s*=\s*(\d+)/.exec(gradle)?.[1];
+const versionName = /versionName\s*=\s*"([^"]+)"/.exec(gradle)?.[1];
+check(
+  versionCode !== undefined && versionName !== undefined,
+  "app/build.gradle.kts no longer declares both versionCode and versionName.",
+);
+check(
+  versionName === undefined || /^\d+\.\d+\.\d+$/.test(versionName),
+  `versionName ${JSON.stringify(versionName)} is not X.Y.Z. The download URL is DERIVED from it, `
+  + "so an arbitrary label would mean an arbitrary path component.",
+);
+
+// The official feed URL and the publisher's must be the same string, or an
+// installed build reads a document nothing publishes.
+check(
+  /const val OFFICIAL_URL = "https:\/\/relayium\.com\/apps\/android\/update\.json"/.test(updateFeed),
+  "UpdateFeed.OFFICIAL_URL is not https://relayium.com/apps/android/update.json, which is where "
+  + "gen-pages publishes the manifest. A mismatch is invisible until a user presses Check for updates.",
+);
+
 if (failures.length) {
   for (const f of failures) console.error(`  ✗ ${f}`);
   console.error(`android-policy-test: ${failures.length} failure(s)`);

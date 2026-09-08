@@ -50,10 +50,15 @@ const CLAUSE_SPLIT = /[.,;:!?—]|[。，；：！？]/g;
 // never match, so the Chinese negators are a separate, boundary-free
 // alternation. Bare 无 and 不 are deliberately absent from it — they sit inside
 // ordinary words (无需, 不再) — so only the compounds this copy uses are listed.
+// `不在` joined them on 2026-09-08: "不在 Google Play 上架" is the Chinese for
+// "Not on Google Play", and without it the page could not state that absence in
+// Chinese at all — the store rule would fire on the very sentence that denies
+// the claim, which is the exact failure this whole negator mechanism exists to
+// prevent.
 const NEGATOR_EN =
   /\b(?:no|not|never|neither|nor|without|none|cannot|can't|doesn't|don't|isn't|aren't|won't|lacks?|lacking)\b/i;
 const NEGATOR_ZH =
-  /没有|没|无法|不提供|不发布|不推出|不存在|并非|并没|未发布|未上架|未推出|从不|绝不|尚无|均无/;
+  /没有|没|无法|不提供|不发布|不推出|不存在|不在|并非|并没|未发布|未上架|未推出|从不|绝不|尚无|均无/;
 
 /** Is the match at `at` inside a clause whose negator precedes it? */
 function insideDenial(text: string, at: number): boolean {
@@ -116,6 +121,10 @@ export const FORBIDDEN_APP_CLAIMS: ClaimRule[] = [
     permitted: [
       "Also on the Mac App Store.",
       "同时上架 Mac App Store。",
+      // The accurate denials, in both maintained languages. The Android APK is
+      // distributed from GitHub, so the page has to be able to say this.
+      "Not on Google Play. It contains no Play Services.",
+      "不在 Google Play 上架，不含 Play 服务。",
     ],
   },
   {
@@ -124,37 +133,42 @@ export const FORBIDDEN_APP_CLAIMS: ClaimRule[] = [
     probes: ["coming soon", "即将推出"],
   },
   {
-    // Added 2026-08-28. `apps/ios` exists but its development is paused and it
-    // has no public listing; there is no Android or Windows native app in this
-    // repository at all — `apps/` contains `mac/`, `ios/` and `RelayiumKit/`
-    // and nothing else. /apps carried a card for each of the three anyway, two
-    // of them saying a native app "is being built". The OS NAMES stay legal on
-    // purpose: the CLI genuinely ships Windows builds and the web app genuinely
-    // runs in an Android browser, and a page that could not say so would push
-    // its editor into vagueness. What is banned is naming an APP for one of
-    // them, which is the only part that was untrue.
-    // Widened 2026-08-28 in the other direction too: it only saw the
-    // "<platform> app" word order, so "an app for iOS", "our client on
-    // iPhone" and "the Android version of the app" all walked past a rule
-    // written to stop exactly that promise.
+    // Added 2026-08-28, narrowed 2026-09-08.
+    //
+    // The rule was written when `apps/` held no Android or Windows target at
+    // all and /apps carried a card for each anyway. Android came OUT of it on
+    // 2026-09-08 because the premise stopped being true: `apps/android/` builds
+    // a signed APK, it is published from `web/android-release.json`, and a rule
+    // forbidding the page to name it would now forbid the truth rather than a
+    // promise. iOS and Windows stay banned — nothing in this repository
+    // publishes either, and iOS development is paused with no public listing.
+    //
+    // Note what did NOT change. Google Play is still forbidden, by the store
+    // rule above: shipping an APK from GitHub is not a listing, and that rule
+    // is now the one carrying the whole "no Play" claim. "Background transfer"
+    // is still forbidden too, and it applies to Android exactly as written —
+    // the client has no resident session.
+    //
+    // The word order is deliberately wide: it only saw "<platform> app" at
+    // first, so "an app for iOS", "our client on iPhone" and "the Windows
+    // version of the app" all walked past a rule written to stop exactly that
+    // promise.
     //
     // `allow` carries the truthful half. Relayium genuinely runs in a browser
-    // on an iPhone and an Android phone, and the lease is explicit that saying
-    // so is a Web-platform statement rather than a native-app promise — so
-    // "web app", "browser" and their Chinese equivalents are subtracted before
-    // the ban is applied, and "the web app on iPhone" stays sayable.
-    why: "this repository ships no iOS, Android or Windows app to promise",
-    re: /\b(?:iOS|iPhone|iPad|Android|Windows)\s+(?:native\s+|desktop\s+|companion\s+|mobile\s+)*(?:app|application|client)\b|\b(?:native\s+|desktop\s+|companion\s+|mobile\s+)*(?:app|application|client)\s+(?:for|on)\s+(?:iOS|iPhone|iPad|Android|Windows)\b|\b(?:iOS|iPhone|iPad|Android|Windows)\s+version of the (?:app|client)\b|(?:iOS|iPhone|iPad|Android|Windows)\s*(?:桌面|移动)?(?:原生)?(?:应用|客户端)|(?:原生)?(?:应用|客户端)[^。，；]{0,4}(?:适用于|支持|登陆)\s*(?:iOS|iPhone|iPad|Android|Windows)/i,
+    // on an iPhone, and saying so is a Web-platform statement rather than a
+    // native-app promise — so "web app", "browser" and their Chinese
+    // equivalents are subtracted before the ban is applied, and "the web app on
+    // iPhone" stays sayable.
+    why: "this repository ships no iOS or Windows app to promise",
+    re: /\b(?:iOS|iPhone|iPad|Windows)\s+(?:native\s+|desktop\s+|companion\s+|mobile\s+)*(?:app|application|client)\b|\b(?:native\s+|desktop\s+|companion\s+|mobile\s+)*(?:app|application|client)\s+(?:for|on)\s+(?:iOS|iPhone|iPad|Windows)\b|\b(?:iOS|iPhone|iPad|Windows)\s+version of the (?:app|client)\b|(?:iOS|iPhone|iPad|Windows)\s*(?:桌面|移动)?(?:原生)?(?:应用|客户端)|(?:原生)?(?:应用|客户端)[^。，；]{0,4}(?:适用于|支持|登陆)\s*(?:iOS|iPhone|iPad|Windows)/i,
     allow: /\b(?:web|browser|progressive\s+web|mobile\s+web)\s+(?:app|application|client)\b|\bin (?:the )?(?:browser|Safari|Chrome)\b|网页(?:应用|版)|浏览器(?:里|中|内)?/gi,
     probes: [
       "the iOS app is in development",
       "A native Windows desktop app is being built",
-      "download the app for Android",
       "our client on iPhone",
-      "the Android version of the app",
-      "原生 Android 应用正在开发中",
+      "the Windows version of the app",
       "iOS 应用仍在开发中",
-      "客户端支持 Android",
+      "客户端支持 Windows",
     ],
     permitted: [
       // True today, and the page has to be able to keep saying it.
@@ -162,7 +176,42 @@ export const FORBIDDEN_APP_CLAIMS: ClaimRule[] = [
       "在 iPhone 的浏览器里打开网页版即可。",
       // The accurate denial, which the old rule flagged as a promise.
       "Relayium publishes no iPhone or iPad app.",
-      "Relayium 没有 Android 应用。",
+      // Android is a published product now; naming it is a fact, not a promise.
+      "Download the Android app.",
+      "下载 Android 应用。",
+    ],
+  },
+  {
+    // Added 2026-09-08 alongside the Android card. The previous rule stopped
+    // banning the WORDS "Android app" because there is one — which means the
+    // page can now say true things about it, and could just as easily say
+    // untrue ones. This rule bans the specific overclaims the client cannot
+    // support: it joins transfers rather than starting them, it has no account
+    // features, no Device Inbox, no nearby discovery and no share-sheet entry.
+    //
+    // These are not hypothetical. Every one of them is a capability the macOS
+    // app genuinely has, so the nearest available copy to reuse describes a
+    // product this APK is not.
+    // Lookaround rather than a spanning match, deliberately. `insideDenial`
+    // judges whether a negator precedes the MATCH POSITION, so a pattern that
+    // started at "Android" and ran forward to "Device Inbox" would put the
+    // match before the "no" in "the Android app has no Device Inbox" — and the
+    // rule would reject the very sentence that tells the truth. Anchoring on
+    // the claim word keeps the denial sayable.
+    why: "the Android preview joins transfers and has no account, inbox, nearby or share-sheet features",
+    re: /(?<=\bAndroid\b[^.。]{0,40})(?:Device Inbox|share[- ]sheet|nearby devices?|account features?)\b|(?:Device Inbox|share[- ]sheet|nearby devices?)\b(?=[^.。]{0,40}\bAndroid\b)|(?<=Android[^。，；]{0,20})(?:设备收件箱|分享菜单|附近设备)|(?:设备收件箱|分享菜单|附近设备)(?=[^。，；]{0,20}Android)/i,
+    probes: [
+      "Android supports Device Inbox",
+      "Send from the share sheet on Android",
+      "Android finds nearby devices",
+      "Android 支持设备收件箱",
+      "在 Android 上从分享菜单发送",
+    ],
+    permitted: [
+      // The accurate denials, which the page must be able to state plainly.
+      "The Android app has no Device Inbox, no account features and no nearby discovery.",
+      "Android 应用没有设备收件箱、账户功能，也没有附近设备发现。",
+      "Relayium publishes no Android receiver for Device Inbox.",
     ],
   },
 ];

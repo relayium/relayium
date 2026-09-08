@@ -58,8 +58,15 @@ describe("public repository status", () => {
     expect(delivery).toMatch(/never been publicly released/i);
     expect(delivery).toMatch(/no App Store listing/i);
     // …and the platforms that have no app must still be told what to use.
-    const browserRow = statusRows["iPhone, iPad, Android, Windows, Linux"] ?? "";
+    const browserRow = statusRows["iPhone, iPad, Windows, Linux"] ?? "";
     expect(browserRow, "the no-native-app platforms lost their row").toContain("web app");
+    // Android moved OUT of that row into one of its own when the APK was
+    // published; it must have a row, and that row must carry the preview's
+    // real limits rather than reading as a full client.
+    const androidRow = statusRows.Android ?? "";
+    expect(androidRow, "Android has no delivery-status row").toContain("APK");
+    expect(androidRow).toMatch(/no Google Play/i);
+    expect(androidRow).toMatch(/no Device Inbox/i);
     expect(browserRow).toMatch(/publishes no app for these platforms/i);
     // Distribution truth, matched by shape rather than by one exact sentence, so
     // it survives an ordinary rewrite of the surrounding prose.

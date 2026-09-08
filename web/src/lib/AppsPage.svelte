@@ -3,15 +3,32 @@
   import { navigate, CLI_PATH } from "./router.svelte";
   import { detectPlatform, type Platform } from "./platform";
   import releases from "../../native-releases.json";
+  import androidRelease from "../../android-release.json";
 
   type MacRelease = { available: boolean; downloadUrl: string | null };
-  // The ids this page can render. It lost `ios`, `android` and `windows` on
-  // 2026-08-28: `apps/` contains no Android or Windows target at all, and iOS
-  // development is paused with no public listing, so three of the six cards
-  // advertised products a reader could not get. The in-development group and
-  // every path that feeds it stayed — see `futureCards` — because the next
-  // platform that really is being built should be one entry, not a rebuild.
-  type AppId = "web" | "cli" | "mac";
+  // The SAME canonical document `gen-pages` publishes as
+  // /apps/android/update.json, which is what an installed Android build reads
+  // when the user presses Check for updates. One source, so the page and the
+  // updater cannot disagree about whether a download exists.
+  type AndroidRelease = {
+    available: boolean;
+    versionName?: string;
+    versionCode?: number;
+    downloadUrl?: string;
+  };
+  // The ids this page can render. All three of `ios`, `android` and `windows`
+  // were removed on 2026-08-28, when `apps/` contained no Android or Windows
+  // target at all and iOS development was paused with no public listing — three
+  // of the six cards advertised products a reader could not get. The
+  // in-development group and every path that feeds it stayed (see
+  // `futureCards`), so the next platform that really shipped would be one entry
+  // rather than a rebuild; this is that entry.
+  //
+  // `android` returned on 2026-09-08, and only because there is now a real APK
+  // to hand a reader: `apps/android/` builds a signed direct-APK preview that
+  // the manifest below points at. `ios` and `windows` stay absent — nothing in
+  // this repository publishes either.
+  type AppId = "web" | "cli" | "mac" | "android";
   type AppCard = {
     id: AppId;
     name: string;
@@ -27,8 +44,13 @@
   // neither, so the shipped page still reads the build-time manifest and UA.
   let {
     macRelease = releases.macos,
+    androidRel = androidRelease.android as AndroidRelease,
     platformOverride,
-  }: { macRelease?: MacRelease; platformOverride?: Platform } = $props();
+  }: {
+    macRelease?: MacRelease;
+    androidRel?: AndroidRelease;
+    platformOverride?: Platform;
+  } = $props();
 
   const t = $derived<Messages>(messages[lang()]);
   const installCmd = "curl -fsSL https://relayium.com/install.sh | sh";
@@ -52,10 +74,26 @@
   // the browser IS the Relayium client on those platforms. Pointing them at a
   // card that said "in development" told a visitor their platform was not
   // served, when the very page they were reading is what serves it.
+  // Fails closed exactly as the macOS card does, and on one more field: the
+  // version is rendered in the card, so a manifest that says `available` without
+  // saying WHICH version cannot produce a card that names a release it does not
+  // know. The placeholder manifest (`{"available": false}`) therefore yields no
+  // card action at all, which is the state the site ships in until root has
+  // published the APK.
+  const androidAvailable = $derived(
+    androidRel.available === true && !!androidRel.downloadUrl && !!androidRel.versionName,
+  );
+
   const highlightIds = $derived<Set<AppId>>(
     new Set<AppId>(
       platform === "mac" ? ["mac"]
       : platform === "windows" || platform === "linux" ? ["cli"]
+      // An Android visitor is pointed at the Android card ONLY while the
+      // manifest really offers a download. With `available:false` — before the
+      // first release, or after one is withdrawn — the honest answer is still
+      // the browser, which is what actually serves them. Being highlighted
+      // never grants an action; it only says "this row is about your machine".
+      : platform === "android" && androidAvailable ? ["android"]
       : ["web"],
     ),
   );
@@ -93,8 +131,35 @@
       available: macAvailable, href: macAvailable ? macRelease.downloadUrl! : undefined,
       cta: macAvailable ? t.appsPage.cards.mac.cta : undefined,
     },
+    {
+      id: "android", name: t.appsPage.cards.android.name, desc: t.appsPage.cards.android.desc,
+      available: androidAvailable,
+      href: androidAvailable ? androidRel.downloadUrl! : undefined,
+      cta: androidAvailable ? t.appsPage.cards.android.cta(androidRel.versionName!) : undefined,
+    },
   ]);
-  const availableCards = $derived(cards.filter((card) => card.available));
+  const availableCards = $derived(
+    (() => {
+      const available = cards.filter((card) => card.available);
+      // An Android visitor gets the Android card FIRST, and only then.
+      //
+      // Measured, not guessed: at 320px with an Android user agent the card
+      // began 1293px down and its download button 1928px, behind three cards
+      // about other people's machines. Highlighting a row the reader has to
+      // scroll past three others to reach is a highlight that does not do
+      // anything.
+      //
+      // Scoped to Android deliberately. The other platforms' order is
+      // unchanged, and this is NOT a recommendation: nothing here says the app
+      // is better or faster than the browser, only that a reader on Android who
+      // is being offered an APK should not have to hunt for it. While the
+      // manifest offers no download the Android card is not in this list at
+      // all, and the highlight stays on the web card, which is what serves them.
+      if (platform !== "android" || !androidAvailable) return available;
+      const android = available.filter((card) => card.id === "android");
+      return [...android, ...available.filter((card) => card.id !== "android")];
+    })(),
+  );
   // Empty today, and rendered conditionally rather than deleted. A card whose
   // `available` is false — the unreleased macOS manifest state, or a genuinely
   // in-development platform added later — lands here with no action and the
@@ -124,6 +189,17 @@
           >
             <h3>{card.name}</h3>
             <p class="ui-card-sub card-desc">{card.desc}</p>
+            {#if card.id === "android"}
+              <!-- Requirements immediately under the description, so the button
+                   below is reached knowing what it needs. The limitations stay
+                   in this same card — a direct APK has no store listing, no
+                   review page and no "what's included" panel, so they have to
+                   travel with the download or the reader never sees them — but
+                   they sit AFTER the action rather than in front of it, because
+                   burying the download behind a four-item list is what put its
+                   button 1928px down the page. -->
+              <p class="req">{t.appsPage.cards.android.requirements}</p>
+            {/if}
             {#if card.id === "cli"}
               <p class="cli-install" id="cli-install-label">{t.appsPage.cliInstallLabel}</p>
               <!-- svelte-ignore a11y_no_noninteractive_tabindex (the named
@@ -137,6 +213,12 @@
               ><code>{installCmd}</code></div>
             {/if}
             <a class="btn btn-primary cta" href={card.href} onclick={card.onclick}>{card.cta}</a>
+            {#if card.id === "android"}
+              <ul class="limits">
+                {#each t.appsPage.cards.android.limitations as limit}<li>{limit}</li>{/each}
+              </ul>
+              <p class="cli-install">{t.appsPage.cards.android.installNote}</p>
+            {/if}
           </article>
         {/each}
       </div>
@@ -190,6 +272,33 @@
 </section>
 
 <style>
+  .req {
+    margin: 0; font-size: var(--fs-sm); color: var(--text-2); font-weight: 600;
+  }
+  .limits {
+    margin: 0; padding-inline-start: 1.15em; display: flex; flex-direction: column;
+    gap: var(--space-1); font-size: var(--fs-sm); color: var(--text-2);
+  }
+  /* The Android card carries four limitations the others do not, so in an equal
+     track it becomes a tall, narrow column with the rest of its row empty
+     beside it — measured on the desktop render, not guessed. Giving it the full
+     row and letting the list flow into columns spends that space on the text
+     that was causing the height, rather than on padding. */
+  @media (min-width: 621px) {
+    .available-grid > #app-android { grid-column: 1 / -1; }
+    #app-android .limits {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+      column-gap: var(--space-4);
+      row-gap: var(--space-1);
+    }
+    /* The card is a flex column, so `justify-self` does not apply to a child of
+       it: this sets a floor, not a cap, and the button still spans the card.
+       Measured and accepted as-is rather than reworked — the note is here so
+       nobody reads the rule as constraining a width it does not constrain. */
+    #app-android .cta { min-inline-size: min(320px, 100%); }
+  }
+
   .apps { max-width: 960px; margin: 0 auto; padding-bottom: var(--space-8); }
   .head { margin-block: var(--space-3) var(--space-2); }
   .head .tagline { max-inline-size: 58ch; }

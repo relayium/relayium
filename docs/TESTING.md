@@ -2242,7 +2242,7 @@ no message at all.
 
 ## Android client `[AUTOMATED + MANUAL]`
 
-The native Android client (`apps/android/`, in development, not public) has its
+The native Android client (`apps/android/`, public preview at 0.1.1) has its
 own gates and they are not duplicated here:
 
 ```bash
@@ -2257,6 +2257,16 @@ cd apps/android && ./gradlew -Prelayium.android=true :app:testDebugUnitTest :app
 
 # The comparison that lane's one bit of value comes from, judged in isolation
 node scripts/test/android-interop-oracle-test.mjs
+
+# The manual update check, against a real HTTP feed on the host, on an emulator
+./scripts/android-update-acceptance.sh
+
+# The rule that decides whether an instrumentation run passed (no SDK, no device)
+node scripts/test/android-instrumentation-result-test.mjs
+
+# The release tooling: ordering/flags, and the publisher actually executed
+node scripts/test/android-publish-order-test.mjs
+node scripts/test/android-publish-behavior-test.mjs
 ```
 
 The interop acceptance drives the real `MainActivity`/`TransferViewModel`
@@ -2279,6 +2289,34 @@ saves a three-file batch to a real folder, and Android sends a three-file batch
 through its directory path — the browser half's ledger wraps both the
 single-file `showSaveFilePicker` path and the multi-file `showDirectoryPicker`
 path, so every file is compared by its real bytes whichever the Web app takes.
+
+`scripts/android-update-acceptance.sh` is the update check's own acceptance. It
+serves a throwaway feed on the host and points the app at it through the
+debug-only feed override — the same fenced seam `Backend` uses for the backend
+origin, and it exists for the same reason: 0.1.1 is the FIRST build with an
+updater, so the "an update is available" branch cannot be reached on a device
+at all until something newer is already public. Every test asserts the app
+RESOLVED this run's feed before believing any answer it shows, because the
+override fails closed to production and a run that skipped that check could
+read the real feed and report whatever it says.
+
+Eight scenarios run per configuration corner, across en/default, en/320 dp/font 2
+and zh/320 dp/font 2: a newer version offering a download with its notes; this
+version reporting up to date and offering nothing; an unreachable feed rendering
+as an error and never as up to date; the REAL `ACTION_VIEW` Intent, observed by
+an `ActivityMonitor` that blocks the launch so nothing is downloaded, navigated
+to or installed; the exact URL handed to the system; the no-browser fallback
+showing a copyable address; a stalled check cancelled and staying cancelled when
+its late answer arrives; and the idle row naming the installed version. Eighteen
+screenshots are collected and the count is asserted, so a claimed visual pass
+cannot be a stale directory.
+
+`am instrument` exits 0 for a crashed process, a missing instrumentation and an
+empty run alike, so the driver does not trust it: `scripts/lib/instrumentation-result.sh`
+requires POSITIVE evidence that exactly one test finished OK and that the run
+reached a successful terminal, and `android-instrumentation-result-test.mjs`
+executes that program against recorded broken-device logs. Without it the whole
+matrix would be a very slow `true`.
 
 **What a green run does NOT prove.** It is an AOSP emulator image with no Google
 Play services, on host ICE candidates — not a physical device, not its radios,
