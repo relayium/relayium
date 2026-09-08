@@ -222,6 +222,13 @@ async function authLandingScenario(browser, base) {
 const APPS_SOURCE = readFileSync(new URL("../src/lib/AppsPage.svelte", import.meta.url), "utf8");
 const ROUTER_SOURCE = readFileSync(new URL("../src/lib/router.svelte.ts", import.meta.url), "utf8");
 const NATIVE_RELEASES = JSON.parse(readFileSync(new URL("../native-releases.json", import.meta.url), "utf8"));
+// The Android half has its own canonical manifest — the same document
+// `gen-pages` publishes as the update feed and `AppsPage.svelte` imports — so
+// this model reads the release state from the same place the page does rather
+// than from a second copy that could disagree with it.
+const ANDROID_RELEASE = JSON.parse(
+  readFileSync(new URL("../android-release.json", import.meta.url), "utf8"),
+).android;
 
 /** A required capture out of a source file, or a loud failure saying it moved. */
 function grab(source, re, what) {
@@ -247,6 +254,13 @@ const AVAILABILITY = {
   // flag alone is not enough, the download URL has to be there too.
   macAvailable: () =>
     NATIVE_RELEASES.macos.available === true && Boolean(NATIVE_RELEASES.macos.downloadUrl),
+  // The same three-part guard the component applies, and for the same reason:
+  // the card renders its version, so a manifest that says `available` without
+  // saying WHICH version must not produce an executable card either.
+  androidAvailable: () =>
+    ANDROID_RELEASE.available === true &&
+    Boolean(ANDROID_RELEASE.downloadUrl) &&
+    Boolean(ANDROID_RELEASE.versionName),
 };
 
 /**
@@ -259,6 +273,7 @@ const CTA_TARGET = {
   web: grab(ROUTER_SOURCE, /export const LAN_PATH = "([^"]+)";/, "LAN_PATH"),
   cli: grab(ROUTER_SOURCE, /export const CLI_PATH = "([^"]+)";/, "CLI_PATH"),
   mac: NATIVE_RELEASES.macos.downloadUrl,
+  android: ANDROID_RELEASE.downloadUrl,
 };
 
 /**
@@ -292,13 +307,19 @@ function appsCardModel() {
   if (unknown.length) {
     throw new Error(`apps card model: unrecognised availability ${JSON.stringify(unknown)} — teach AVAILABILITY what it means rather than guessing`);
   }
-  const missingCta = ids.filter((id) => !CTA_TARGET[id]);
+  const available = entries.filter((e) => AVAILABILITY[e.expr]()).map((e) => e.id);
+  const future = entries.filter((e) => !AVAILABILITY[e.expr]()).map((e) => e.id);
+
+  // Only the EXECUTABLE cards need a CTA target. An in-development card has no
+  // action by definition, and demanding a target for one would make this model
+  // fail whenever a manifest is legitimately unpublished — the exact state the
+  // page is designed to render honestly. Scoping it to `available` keeps the
+  // guard (an executable card with no declared target is still an error) while
+  // letting either manifest state through.
+  const missingCta = available.filter((id) => !CTA_TARGET[id]);
   if (missingCta.length) {
     throw new Error(`apps card model: no CTA target declared for ${missingCta.join(", ")}`);
   }
-
-  const available = entries.filter((e) => AVAILABILITY[e.expr]()).map((e) => e.id);
-  const future = entries.filter((e) => !AVAILABILITY[e.expr]()).map((e) => e.id);
 
   // The chooser's two columns are H3s as well, and they are part of the page's
   // heading structure whether or not a card is in development. Counted from the

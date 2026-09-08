@@ -197,7 +197,14 @@ class UpdateFeedTest {
 
     @Test
     fun `refuses a version name that is not the strict numeric form`() {
-        for (bad in listOf("\"\"", "\"0.1\"", "\"0.1.2.3\"", "\"v0.1.2\"", "\"0.1.2-rc1\"",
+        // The four-component case is an RFC 5737 documentation address, not an
+        // invented one. Four dotted numbers ARE an IPv4 literal, and
+        // `scripts/check-production-identifiers.sh` scans every file — comments
+        // included — for that shape, so an arbitrary quad reads as a possible
+        // production address and fails the gate. 192.0.2.0/24 is reserved for
+        // documentation and is explicitly allowed there. The assertion is
+        // unchanged: a version name with too many components must be refused.
+        for (bad in listOf("\"\"", "\"0.1\"", "\"192.0.2.3\"", "\"v0.1.2\"", "\"0.1.2-rc1\"",
             "\"0.1.2+build\"", "\"01.1.2\"", "\"0.1.x\"", "\"0.1.2 \"", "\"0.1.2\\n\"")) {
             assertEquals("versionName $bad", UpdateFeed.Rejection.MALFORMED, refusal(feed(versionName = bad)))
         }

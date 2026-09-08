@@ -52,7 +52,13 @@ describe("buildAndroidRelease", () => {
   });
 
   it("refuses a version name that is not the strict numeric form", () => {
-    for (const versionName of ["0.1", "0.1.2.3", "v0.1.2", "0.1.2-rc1", "01.1.2", "", "x", "0.1.2 "]) {
+    // The four-component case is an RFC 5737 documentation address. Four dotted
+    // numbers are an IPv4 literal, and check-production-identifiers.sh scans
+    // every file — comments included — for that shape, so an arbitrary quad
+    // reads as a possible production address and fails the gate. 192.0.2.0/24
+    // is the documentation range that scanner explicitly allows. This still
+    // asserts what it always did: a version with four components is refused.
+    for (const versionName of ["0.1", "192.0.2.3", "v0.1.2", "0.1.2-rc1", "01.1.2", "", "x", "0.1.2 "]) {
       expect(() => buildAndroidRelease({ ...ok, versionName }), versionName).toThrow(/versionName/);
     }
   });
