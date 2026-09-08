@@ -50,6 +50,26 @@ class StoredUploadPlan(
 /** What the server created. */
 data class StoredUploadResult(val id: String, val expiresAt: Long)
 
+/**
+ * What an uploaded object IS, which decides who may ever read it.
+ *
+ * A closed set rather than a caller-supplied string: the value goes into the
+ * `purpose` query the server authorizes on, and a free-typed one is how a
+ * device delivery ends up created as a public capability-link object. The two
+ * members are the two the server understands (`account/taskobject.go`).
+ */
+enum class StoredUploadPurpose(val wire: String) {
+    /** The ordinary capability-link object: public meta/blob, listed, burnable. */
+    SHARE("share"),
+
+    /**
+     * Ciphertext that exists only to be delivered to one of the account's own
+     * devices through the Device Inbox queue. Never public, never listed, and
+     * unlimited-until-TTL by server rule — see [CloudClient.initUpload].
+     */
+    DEVICE_TASK("device_task"),
+}
+
 /** A resumable session and the append size the server issued with it. The size
  *  belongs to the SESSION: a later process must persist it rather than guess
  *  today's default. */
@@ -238,11 +258,19 @@ class CloudClient(
      * counts framed file ciphertext from zero and never includes this header.
      *
      * Retention rides on the QUERY, exactly as it does for the single-shot
-     * route, and `purpose=share` is stated rather than left to the server's
+     * route, and the purpose is stated rather than left to the server's
      * backfill: a defaulted purpose is one refactor away from publishing
      * something that was never meant to be a public object. `size` is advisory
      * — the server never re-checks it — so it buys an early quota refusal and
      * nothing else.
+     *
+     * [purpose] defaults to [StoredUploadPurpose.SHARE], so every existing
+     * caller sends exactly the query it sent before. A
+     * [StoredUploadPurpose.DEVICE_TASK] object must be unlimited-until-TTL: the
+     * queue refuses a limited one, and the server refuses the combination
+     * outright rather than rewriting it. That refusal is repeated HERE, before
+     * a socket is opened, because it costs a round trip to learn it remotely
+     * and because a caller that asked for both wanted two different objects.
      */
     suspend fun initUpload(
         header: ByteArray,
@@ -250,10 +278,14 @@ class CloudClient(
         ttlSeconds: Int,
         payloadTotal: Long,
         token: String,
+        purpose: StoredUploadPurpose = StoredUploadPurpose.SHARE,
     ): ResumableSession = withContext(io) {
+        if (purpose == StoredUploadPurpose.DEVICE_TASK && burnAfterRead) {
+            throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+        }
         val url = base.newBuilder()
             .addPathSegments("api/uploads")
-            .addQueryParameter("purpose", "share")
+            .addQueryParameter("purpose", purpose.wire)
             .addQueryParameter("burnAfterRead", if (burnAfterRead) "1" else "0")
             .addQueryParameter("ttl", ttlSeconds.toString())
             .addQueryParameter("size", payloadTotal.toString())

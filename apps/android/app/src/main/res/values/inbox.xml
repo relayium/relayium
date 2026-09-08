@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Device Inbox surface. English is the source language; every key here has a
+  Simplified Chinese twin in values-zh-rCN/inbox.xml, checked by
+  InboxStringsParityTest.
+
+  Two rules the copy keeps:
+   * it never promises background delivery, because there is none;
+   * it never says a delivery was saved unless central said so.
+-->
+<resources>
+    <string name="inbox_title">Device Inbox</string>
+    <string name="inbox_signed_out_body">Sign in to send files and messages straight to your other devices, end-to-end encrypted.</string>
+    <string name="inbox_signed_out_action">Sign in</string>
+    <string name="inbox_loading">Loading your devices…</string>
+    <string name="inbox_retry">Try again</string>
+    <string name="inbox_cancel">Cancel</string>
+
+    <string name="inbox_error_network">Relayium could not reach the server. Check your connection and try again.</string>
+    <string name="inbox_error_signed_out">Your session has ended. Sign in again to use the Device Inbox.</string>
+    <string name="inbox_error_storage">This device could not read or write its Inbox records.</string>
+    <string name="inbox_error_ledger_full">This device’s Inbox history has reached its storage limit. More history cannot be saved right now.</string>
+    <string name="inbox_error_key_repair">This device cannot repair its Inbox key right now. Its secure storage is unavailable.</string>
+    <string name="inbox_error_unsupported_build">The server selected an Inbox protocol this version of Relayium cannot use. Update the app.</string>
+    <string name="inbox_error_protocol">The server sent a response Relayium could not accept.</string>
+
+    <string name="inbox_receive_title">Receiving</string>
+    <string name="inbox_this_device">This device: %1$s</string>
+    <string name="inbox_policy_off">Off</string>
+    <string name="inbox_policy_ask">Ask</string>
+    <string name="inbox_policy_auto">Automatic</string>
+    <string name="inbox_policy_off_help">This device accepts nothing. Your other devices are told it is not receiving, so they will not offer to send to it.</string>
+    <string name="inbox_policy_ask_help">Deliveries wait until you accept them here.</string>
+    <string name="inbox_policy_auto_help">Deliveries from your own devices are accepted and saved automatically.</string>
+    <string name="inbox_state_off">Receiving is off.</string>
+    <string name="inbox_state_stopped">Not receiving right now.</string>
+    <string name="inbox_state_listening">Listening for deliveries.</string>
+    <string name="inbox_state_receiving">Receiving a delivery…</string>
+    <string name="inbox_state_unavailable">Receiving is on, but this device cannot write to its received folder.</string>
+    <string name="inbox_directory_blocked">The received folder is blocked by something else with the same name.</string>
+    <string name="inbox_directory_full">There is no room left to save a delivery.</string>
+    <string name="inbox_directory_denied">Relayium is not allowed to write to its received folder.</string>
+    <string name="inbox_foreground_note">Relayium receives only while this screen is open. It does not deliver in the background.</string>
+
+    <string name="inbox_key_title">Encryption key</string>
+    <string name="inbox_key_healthy">This device holds the key your other devices encrypt to.</string>
+    <string name="inbox_key_not_held">Your account publishes an Inbox key this device does not hold, so it cannot open anything sent to it.</string>
+    <string name="inbox_key_unreadable">This device\'s stored Inbox keys cannot be read. They may come back if secure storage is restored.</string>
+    <string name="inbox_key_disagrees">The key this device recorded does not match the one your account publishes.</string>
+    <string name="inbox_key_ambiguous">Your account publishes more than one active Inbox key for this device. Relayium will not guess which one is meant; remove this device\'s Inbox from another device and set it up again.</string>
+    <string name="inbox_key_unavailable">This device\'s secure storage cannot hold a new key, so the repair would leave it unable to receive. Nothing was changed.</string>
+    <string name="inbox_key_repair_action">Repair key</string>
+    <string name="inbox_key_repairing">Repairing…</string>
+    <string name="inbox_key_repair_confirm_title">Repair this device\'s key?</string>
+    <string name="inbox_key_repair_confirm_body">A new key will be published for this device. Anything already queued to the old key stays encrypted to it and cannot be opened here. Your existing files and messages are not affected.</string>
+    <string name="inbox_key_repair_confirm_action">Repair</string>
+
+    <string name="inbox_pending_title">Waiting for you</string>
+    <string name="inbox_pending_body">%1$s wants to send %2$s.</string>
+    <string name="inbox_pending_accept">Accept</string>
+    <string name="inbox_pending_decline">Decline</string>
+
+    <string name="inbox_devices_title">Your devices</string>
+    <string name="inbox_devices_empty">No other device on this account has a Device Inbox yet.</string>
+    <string name="inbox_devices_blocked_title">Cannot receive</string>
+    <string name="inbox_block_identifier">Relayium cannot use this device\'s identifier.</string>
+    <string name="inbox_block_not_enrolled">This device has no Device Inbox. Open Relayium there once.</string>
+    <string name="inbox_block_revoked">This device\'s Inbox was revoked. Set it up again there.</string>
+    <string name="inbox_block_cannot_receive">The server says this device cannot receive right now.</string>
+    <string name="inbox_block_capability">This device runs a version Relayium cannot send to. Update it.</string>
+    <string name="inbox_block_key">This device has not published a usable encryption key.</string>
+    <string name="inbox_block_receive_off">Receiving is switched off on this device.</string>
+    <string name="inbox_caveat_approval">Someone has to accept it there.</string>
+    <string name="inbox_caveat_directory">That device last reported it cannot save files.</string>
+    <string name="inbox_caveat_offline">That device is offline. The delivery will wait.</string>
+
+    <string name="inbox_send_to">Send to %1$s</string>
+    <string name="inbox_send_choose_files">Choose files…</string>
+    <string name="inbox_send_message_label">Message</string>
+    <string name="inbox_send_message">Send message</string>
+    <string name="inbox_send_no_text">This device cannot show messages, so only files can be sent to it.</string>
+
+    <string name="inbox_sending_title">Outgoing</string>
+    <string name="inbox_sending_to">To %1$s</string>
+    <string name="inbox_sending_staged">Ready to send. Nothing has been sent yet.</string>
+    <string name="inbox_sending_active">Sending…</string>
+    <string name="inbox_sending_delivered">Delivered to your account. Waiting for that device to save it.</string>
+    <string name="inbox_sending_stopped">Stopped.</string>
+    <string name="inbox_sending_ambiguous">Relayium cannot tell whether this reached the other device. Trying again is safe: the server keeps only one copy of this delivery.</string>
+    <string name="inbox_sending_cancel">Stop</string>
+    <string name="inbox_sending_retry">Send</string>
+    <string name="inbox_stop_ineligible">That device cannot receive this right now.</string>
+    <string name="inbox_stop_stale_key">That device changed its key while this was being sent.</string>
+    <string name="inbox_stop_conflict">The server already holds a different delivery under this one\'s identity.</string>
+    <string name="inbox_stop_bound">These encrypted bytes already belong to another delivery.</string>
+    <string name="inbox_stop_queue_full">That device already has as many waiting deliveries as the server will hold.</string>
+    <string name="inbox_stop_transport">Relayium could not finish sending. Nothing was lost; try again.</string>
+    <string name="inbox_stop_storage">This device could not write what it needs to send. Nothing was sent.</string>
+
+    <string name="inbox_history_title">History</string>
+    <string name="inbox_history_empty">Nothing has been exchanged with your other devices yet.</string>
+    <string name="inbox_history_open">Open</string>
+    <string name="inbox_detail_back">Back to history</string>
+    <string name="inbox_entry_received">Received</string>
+    <string name="inbox_entry_sent">Sent</string>
+    <string name="inbox_entry_message">Message · %1$s</string>
+    <string name="inbox_entry_message_loading">Loading the message…</string>
+    <string name="inbox_entry_message_unavailable">The text of this message is no longer stored on this device.</string>
+    <string name="inbox_sent_staged">Ready to send</string>
+    <string name="inbox_sent_sending">Sending</string>
+    <string name="inbox_sent_created">Waiting for that device</string>
+    <string name="inbox_sent_saved">Saved on that device</string>
+    <string name="inbox_sent_stopped">Stopped</string>
+    <string name="inbox_action_open">Open</string>
+    <string name="inbox_action_export">Save a copy…</string>
+    <string name="inbox_action_share">Share</string>
+    <string name="inbox_action_copy">Copy</string>
+    <string name="inbox_delete_title">Delete from history?</string>
+    <string name="inbox_delete_body">This removes the entry from this device\'s history only. It does not cancel anything, does not clear the other device, and does not delete files you have already saved.</string>
+    <string name="inbox_delete_action">Delete</string>
+
+    <string name="inbox_unknown_device">A device that has left this account</string>
+    <string name="inbox_bytes">%1$s bytes</string>
+    <string name="inbox_bytes_kb">%1$s kB</string>
+    <string name="inbox_bytes_mb">%1$s MB</string>
+    <string name="inbox_bytes_gb">%1$s GB</string>
+    <string name="inbox_storage_note">Received files and messages live inside Relayium on this device. Clearing the app\'s data, or uninstalling it, deletes those copies. They are never included in a cloud backup or a phone-to-phone transfer.</string>
+
+    <plurals name="inbox_entry_files">
+        <item quantity="one">%1$d file</item>
+        <item quantity="other">%1$d files</item>
+    </plurals>
+    <plurals name="inbox_history_unread">
+        <item quantity="one">%1$d unread</item>
+        <item quantity="other">%1$d unread</item>
+    </plurals>
+</resources>
