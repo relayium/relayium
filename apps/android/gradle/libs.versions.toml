@@ -61,6 +61,22 @@ espresso = "3.7.0"
 # same-uid provider stub deliberately does not exercise. Test-only.
 androidxUiAutomator = "2.3.0"
 
+# Scanning a pairing QR code, and showing one.
+#
+# CameraX 1.6.2 (stable, released 2026-08-26) is the STABLE line and not the
+# alpha the release page's dependency sample happens to print; that alpha is a
+# different artifact and is deliberately not what is pinned here. 1.6.2 is the
+# release that fixes the JSpecify annotation breakage, which is not optional for
+# a Kotlin consumer. CameraX is a Jetpack library and pulls in no Google Play
+# Services, which is what keeps this build installable without GMS.
+camerax = "1.6.2"
+# The decoder, and the encoder for the code this device shows. `core` is the
+# pure-Java module: no native code, no GMS, no downloaded model — which is also
+# what lets the whole decode path be covered by host unit tests against real
+# ZXing rather than only on a device. ML Kit is not used: its bundled build is
+# a closed model, and Google's code scanner runs through Play Services.
+zxing = "3.5.4"
+
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
@@ -100,6 +116,12 @@ androidx-test-runner = { module = "androidx.test:runner", version.ref = "android
 androidx-test-rules = { module = "androidx.test:rules", version.ref = "androidxTestRules" }
 espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
 androidx-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "androidxUiAutomator" }
+
+androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "camerax" }
+androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
+androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
+androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

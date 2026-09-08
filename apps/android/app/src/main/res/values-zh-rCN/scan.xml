@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="scan_title">扫码</string>
+    <string name="scan_hint">将摄像头对准另一台设备上的二维码。</string>
+    <string name="scan_cancel">取消</string>
+    <string name="scan_manual">也可以直接输入六位数字。</string>
+
+    <string name="scan_denied_title">摄像头权限未开启</string>
+    <string name="scan_denied_body">Relayium 需要摄像头来读取配对码，仅用于此用途。</string>
+    <string name="scan_denied_retry">允许使用摄像头</string>
+    <string name="scan_denied_forever_body">Relayium 的摄像头权限已被关闭。可在系统设置中重新开启，或直接输入六位数字。</string>
+    <string name="scan_denied_forever_action">打开设置</string>
+    <string name="scan_unavailable_title">此设备没有摄像头</string>
+    <string name="scan_unavailable_body">请输入另一台设备上的六位数字。</string>
+    <string name="scan_failed_title">摄像头无法启动</string>
+    <string name="scan_failed_body">可能有其他应用正在使用摄像头。请重试，或直接输入六位数字。</string>
+    <string name="scan_failed_retry">重试</string>
+
+    <string name="qr_title">用另一台设备扫描此码</string>
+    <string name="qr_description">包含本设备配对链接的二维码</string>
+    <string name="qr_expired">此配对码已过期。请重新创建后再显示二维码。</string>
+</resources>

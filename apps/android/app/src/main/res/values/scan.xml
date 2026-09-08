@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Scanning a pairing code, and showing one.
+
+     A separate file from strings.xml so this feature's copy is claimable
+     independently. `AppStringsParityTest` walks every `values*/…xml` in both
+     maintained languages rather than the two files it used to name, so a
+     split file cannot silently escape the EN/zh parity gate. -->
+<resources>
+    <string name="scan_title">Scan a code</string>
+    <string name="scan_hint">Point the camera at the QR code on the other device.</string>
+    <string name="scan_cancel">Cancel</string>
+    <string name="scan_manual">Or type the six digits instead.</string>
+
+    <!-- Refusals. Each one has a different way forward, which is why they are
+         different strings rather than one "camera error". -->
+    <string name="scan_denied_title">Camera access is off</string>
+    <string name="scan_denied_body">Relayium needs the camera to read a code. It is used for nothing else.</string>
+    <string name="scan_denied_retry">Allow camera</string>
+    <string name="scan_denied_forever_body">Camera access was turned off for Relayium. You can turn it back on in Settings, or type the six digits instead.</string>
+    <string name="scan_denied_forever_action">Open settings</string>
+    <string name="scan_unavailable_title">No camera on this device</string>
+    <string name="scan_unavailable_body">Type the six digits from the other device instead.</string>
+    <string name="scan_failed_title">The camera could not start</string>
+    <string name="scan_failed_body">Another app may be using it. Try again, or type the six digits instead.</string>
+    <string name="scan_failed_retry">Try again</string>
+
+    <!-- The code this device shows. -->
+    <string name="qr_title">Scan this from the other device</string>
+    <string name="qr_description">QR code containing this device\'s pairing link</string>
+    <string name="qr_expired">This code has expired. Create a new one to show a QR code.</string>
+</resources>

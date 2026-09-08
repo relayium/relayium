@@ -1,12 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Everything this app does needs the network and nothing else. No
+    <!-- The network, and the camera only for scanning a pairing code. No
          storage permission: files are read and written through the system
          document picker, which grants access per document. No contacts, no
          location, no notifications, no background service. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Scanning a pairing code, and NOTHING else: there is no photo capture,
+         no recording and no upload of anything the camera sees. Frames are
+         decoded in memory, looking for one URL, and are never written to disk
+         or sent anywhere. The permission is requested when the user opens the
+         scanner rather than at launch, so the prompt arrives attached to the
+         thing that needs it. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- NOT required. Declaring the CAMERA permission makes Play and other
+         installers infer `android.hardware.camera` as a requirement, which
+         would hide this app from devices that have no camera — for a feature
+         that is one convenience on one screen. Typing six digits is the full
+         path and stays available, so a camera-less device is a supported
+         device. `camera.autofocus` is listed for the same reason: some
+         hardware has a fixed-focus camera, which reads a printed code fine. -->
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
     <!-- Direct APK distribution: no Play Services, no Play Billing, and nothing
          in this manifest requires either. -->

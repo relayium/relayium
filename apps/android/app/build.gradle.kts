@@ -127,6 +127,17 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.webrtc)
 
+    // Scanning a pairing code. `camera-core` and `camera-camera2` are the
+    // pipeline and its Camera2 implementation, `camera-lifecycle` is what binds
+    // the capture to a LifecycleOwner so an off-screen scanner cannot keep the
+    // camera open, and `camera-view` provides the preview surface. `zxing:core`
+    // is pure Java, so the decode is also a host unit test.
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.zxing.core)
+
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.graphics)

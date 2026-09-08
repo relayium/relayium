@@ -38,8 +38,9 @@ class IngressSurfaceGuardTest {
      * guard that quietly passed when it could not find its files would be worse
      * than no guard, so the walk up is explicit and a miss is a failure.
      */
-    private fun locate(): File {
-        val relative = "src/main/kotlin/com/relayium/android/ingress"
+    private fun locate(): File = locate("src/main/kotlin/com/relayium/android/ingress")
+
+    private fun locate(relative: String): File {
         var here: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
         while (here != null) {
             val candidate = File(here, relative)
@@ -48,7 +49,15 @@ class IngressSurfaceGuardTest {
             if (nested.isDirectory) return nested
             here = here.parentFile
         }
-        throw AssertionError("ingress sources not found from ${System.getProperty("user.dir")}")
+        throw AssertionError("$relative not found from ${System.getProperty("user.dir")}")
+    }
+
+    /** The scanner's sources, held to the same absences. */
+    private val scanSources: Map<String, String> by lazy {
+        val directory = locate("src/main/kotlin/com/relayium/android/scan")
+        val files = directory.listFiles { file: File -> file.name.endsWith(".kt") }.orEmpty()
+        assertTrue("no scan sources found in $directory", files.isNotEmpty())
+        files.associate { it.name to it.readText() }
     }
 
     /** Source with comments removed: a rule must not trip on its own rationale. */
@@ -142,6 +151,51 @@ class IngressSurfaceGuardTest {
             if (name == adapter) continue
             assertFalse("$name opens content itself", code(text).contains("openInputStream"))
         }
+    }
+
+    @Test
+    fun `the scanner cannot join, log, or remember what it saw`() {
+        // The same absences, for the module that holds a camera. A scanner is
+        // the surface where "just log the payload while debugging" is most
+        // tempting, and the payload is the pairing code.
+        for ((name, text) in scanSources) {
+            val body = code(text)
+            for (symbol in listOf(
+                "TransferController", "TransferViewModel", "controller.join",
+                "android.util.Log", "Log.d(", "Log.e(", "println(",
+                "Bundle", "SavedStateHandle",
+                "FileOutputStream", "getFilesDir",
+                "OkHttpClient", "newCall",
+            )) {
+                assertFalse("$name mentions $symbol", body.contains(symbol))
+            }
+            // `rememberSaveable` is allowed in exactly one file and for exactly
+            // one value: the permission-request counter in `ScannerSheet`,
+            // which has to survive the recreation that happens while the system
+            // dialog is in front. The exemption is named rather than implied,
+            // so a second use has to be argued for here before it compiles
+            // through. Nothing that could carry a code, a key, a payload or a
+            // path may be saved.
+            if (name != "ScannerSheet.kt") {
+                assertFalse("$name saves UI state", body.contains("rememberSaveable"))
+            }
+        }
+    }
+
+    @Test
+    fun `the scanner's decision layer needs no framework to be tested`() {
+        // The files a hostile payload reaches first — the packer, the codec,
+        // the run fence, the state machine — stay host-testable. The camera
+        // adapter and the two composables are where the framework lives.
+        val android = setOf("QrAnalyzer.kt", "ScannerController.kt", "ScannerSheet.kt", "PairingQrCard.kt")
+        for ((name, text) in scanSources) {
+            if (name in android) continue
+            val found = Regex("""(?m)^import android[x]?\.""").find(code(text))
+            assertFalse("$name imports ${found?.value?.trim()}", found != null)
+        }
+        assertTrue("the pure files are missing", scanSources.keys.containsAll(
+            setOf("LuminanceFrame.kt", "QrCodec.kt", "ScanSession.kt", "ScannerState.kt", "PairingQr.kt"),
+        ))
     }
 
     @Test
