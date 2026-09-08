@@ -40,10 +40,11 @@ tasks.withType<Test>().configureEach {
     // vectors it never re-read, on exactly the fixture-only commits the
     // always-on compat lane exists to catch. RELATIVE sensitivity keeps the
     // fingerprint on (name, content), so moving the repository does not
-    // invalidate while editing or swapping either file does.
+    // invalidate while editing or swapping any of them does.
     inputs.files(
         sharedFixtures.file("crypto-vectors.json"),
         sharedFixtures.file("realtime-wire-vectors.json"),
+        sharedFixtures.file("store-wire-vectors.json"),
     )
         .withPropertyName("relayiumSharedFixtures")
         .withPathSensitivity(PathSensitivity.RELATIVE)

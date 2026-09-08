@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Button
@@ -69,10 +70,10 @@ import com.relayium.android.update.UpdateChecker
 import com.relayium.protocol.JoinInput
 import kotlinx.coroutines.delay
 
-/** The two things this build can do, and nothing it cannot. There is no tab
- *  here for a feature that is not implemented: a destination that opens onto a
+/** The things this build can do, and nothing it cannot. There is no tab here
+ *  for a feature that is not implemented: a destination that opens onto a
  *  placeholder is a claim the product does not honour. */
-internal enum class Destination { TRANSFER, ACCOUNT }
+internal enum class Destination { TRANSFER, CLOUD, ACCOUNT }
 
 /**
  * The shell: a destination bar, and one of two surfaces under it. The layout
@@ -118,6 +119,39 @@ fun RelayiumApp(viewModel: TransferViewModel) {
         ActivityResultContracts.OpenDocumentTree(),
     ) { tree -> viewModel.acceptIncoming(savePromptId, tree, saveLinkId) }
 
+    // The cloud surface's own pair. Separate launchers rather than shared ones
+    // because their results mean different things — a cloud file choice starts
+    // an upload, a link file choice stages a send on a live session — and one
+    // launcher would have to carry a mode through the system round trip to tell
+    // them apart. Registered HERE for the same reason as the two above: the
+    // registration must outlive a tab change and an Activity recreation.
+    // The request this pick is happening under, saved across the system round
+    // trip exactly as the session pickers' link tokens are. A plain counter,
+    // and nothing secret.
+    var cloudPickId by rememberSaveable { mutableIntStateOf(0) }
+
+    /** The transfer a folder choice is being made for; rechecked at the save. */
+    var cloudTransferId by rememberSaveable { mutableIntStateOf(0) }
+
+    val cloudFilePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris -> viewModel.cloudFilesPicked(uris, cloudPickId) }
+
+    val cloudFolderPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { tree -> viewModel.cloudFolderPicked(tree, cloudTransferId) }
+
+    val cloudPickers = CloudPickers(
+        chooseFiles = {
+            cloudPickId = viewModel.cloudUpload.beginSelection()
+            cloudFilePicker.launch(arrayOf("*/*"))
+        },
+        chooseFolder = {
+            cloudTransferId = viewModel.cloudDownload.currentTransfer()
+            cloudFolderPicker.launch(null)
+        },
+    )
+
     val pickers = Pickers(
         chooseFiles = { linkId ->
             sendLinkId = linkId
@@ -145,6 +179,12 @@ fun RelayiumApp(viewModel: TransferViewModel) {
                     onClick = { destination = Destination.TRANSFER },
                     icon = { Icon(Icons.Filled.Send, contentDescription = null) },
                     label = { Text(stringResource(R.string.tab_transfer)) },
+                )
+                NavigationBarItem(
+                    selected = destination == Destination.CLOUD,
+                    onClick = { destination = Destination.CLOUD },
+                    icon = { Icon(Icons.Filled.Share, contentDescription = null) },
+                    label = { Text(stringResource(R.string.tab_cloud)) },
                 )
                 NavigationBarItem(
                     selected = destination == Destination.ACCOUNT,
@@ -191,6 +231,9 @@ fun RelayiumApp(viewModel: TransferViewModel) {
                         -> ConnectingScreen(state, viewModel)
                         TransferController.Phase.CONNECTED ->
                             SessionScreen(state, pickError, viewModel, pickers)
+                    }
+                    Destination.CLOUD -> CloudScreen(viewModel, cloudPickers) {
+                        destination = Destination.ACCOUNT
                     }
                     Destination.ACCOUNT -> AccountScreen(viewModel)
                 }

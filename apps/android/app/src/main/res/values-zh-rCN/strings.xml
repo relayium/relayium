@@ -221,4 +221,86 @@
     <string name="account_error_pair_unavailable">当前无法创建配对码。请稍后重试。</string>
     <string name="account_error_pair_code">Relayium 返回了本应用不会显示的码。没有创建任何内容。</string>
     <string name="account_error_credential_unusable">本机保存的登录信息无法使用。请重新登录以替换它。</string>
+
+    <!-- 云端（存储）传输。见英文文件中关于该措辞的说明。 -->
+    <string name="tab_cloud">云端</string>
+    <string name="cloud_send_title">发送到云端</string>
+    <string name="cloud_send_intro">文件在本机加密后上传，然后分享一条链接。对方不必此刻在线，也不需要账户。</string>
+    <string name="cloud_needs_account">上传需要账户：存储的内容会计入该账户的额度。打开链接则始终不需要账户。</string>
+    <string name="cloud_open_account">前往账户</string>
+    <string name="cloud_choose_files">选择文件</string>
+    <string name="cloud_change_files">重新选择文件</string>
+    <plurals name="cloud_selected">
+        <item quantity="other">%1$d 个文件，共 %2$s</item>
+    </plurals>
+    <string name="cloud_retention_label">保存时长</string>
+    <string name="cloud_retention_hour">1 小时</string>
+    <string name="cloud_retention_day">1 天</string>
+    <string name="cloud_retention_three_days">3 天</string>
+    <string name="cloud_retention_week">1 周</string>
+    <string name="cloud_retention_two_weeks">2 周</string>
+    <string name="cloud_retention_note">你的套餐可能会缩短该时长。链接生成后会显示服务器实际给出的期限。</string>
+    <string name="cloud_burn_label">首次下载后删除</string>
+    <string name="cloud_upload">上传</string>
+    <string name="cloud_uploading">正在上传… 已传 %1$s / %2$s</string>
+    <string name="cloud_cancel">取消</string>
+    <string name="cloud_ready_title">可以分享了</string>
+    <string name="cloud_ready_note">拿到这条链接的人都能打开这些文件：密钥就在链接里。我们无法读取文件，也无法为你找回这条链接。</string>
+    <string name="cloud_ready_expires">%1$s 过期</string>
+    <string name="cloud_ready_burn">首次下载后即删除。</string>
+    <string name="cloud_ready_keep">离开此页面前请先复制——本机不会保存密钥。</string>
+    <string name="cloud_copy">复制链接</string>
+    <string name="cloud_copied">链接已复制</string>
+    <string name="cloud_share">分享</string>
+    <string name="cloud_send_another">再发送其他文件</string>
+
+    <string name="cloud_receive_title">打开链接</string>
+    <string name="cloud_receive_intro">粘贴一条 Relayium 链接。文件会在本机解密。</string>
+    <string name="cloud_link_label">链接</string>
+    <string name="cloud_open">打开</string>
+    <string name="cloud_loading">正在打开…</string>
+    <plurals name="cloud_contents">
+        <item quantity="other">%1$d 个文件，共 %2$s</item>
+    </plurals>
+    <string name="cloud_will_burn">这是一次性链接：在此保存后，服务器上的文件即被删除。</string>
+    <string name="cloud_expires">%1$s 过期</string>
+    <string name="cloud_choose_folder">选择文件夹并保存</string>
+    <string name="cloud_saving">正在保存… 已存 %1$s / %2$s</string>
+    <plurals name="cloud_saved">
+        <item quantity="other">已保存 %1$d 个文件。</item>
+    </plurals>
+    <string name="cloud_open_another">打开另一条链接</string>
+    <string name="cloud_cleanup_incomplete">本次传输创建的部分空文件夹未能删除，你可以自行删除。</string>
+
+    <!-- 失败提示：只说明发生了什么、可以怎么做，不显示服务器原文或状态码。 -->
+    <string name="cloud_error_not_signed_in">请先登录后再上传。</string>
+    <string name="cloud_error_stale_account">上传过程中账户发生了变化，因此未显示链接。请重新上传。</string>
+    <string name="cloud_error_unauthorized">此设备的登录状态已失效，请重新登录。</string>
+    <string name="cloud_error_rate_limited">请求过于频繁，请稍后再试。</string>
+    <string name="cloud_error_daily_quota">这超出了今天剩余的额度，额度将于明天重置。</string>
+    <string name="cloud_error_monthly_traffic">该账户已达到本月流量上限。</string>
+    <string name="cloud_error_storage_limit">这超出了该账户可保存的空间。</string>
+    <string name="cloud_error_server_full">服务端存储空间已满，请稍后再试。</string>
+    <string name="cloud_error_storage_unavailable">存储服务暂时不可用，请稍后再试。</string>
+    <string name="cloud_error_rejected">服务器拒绝了这些选项。</string>
+    <string name="cloud_error_server">服务器无法完成此操作。</string>
+    <string name="cloud_error_network">没有网络连接。</string>
+    <string name="cloud_error_timeout">服务器响应超时。</string>
+    <string name="cloud_error_malformed">无法解析服务器的响应。</string>
+    <string name="cloud_error_link_invalid">这不是本应用能打开的 Relayium 链接。</string>
+    <string name="cloud_error_not_found">该链接已过期、已被下载或已被删除。</string>
+    <string name="cloud_error_download_limited">当前下载请求过多，或发送方流量已用尽，请稍后再试。</string>
+    <string name="cloud_error_download_unavailable">暂时无法获取文件。你的链接和密钥没有问题，请稍后再试。</string>
+    <string name="cloud_error_untrusted_redirect">服务器指向了本应用不会跟随的地址。</string>
+    <string name="cloud_error_damaged">这些文件传输不完整，未予保存。</string>
+    <string name="cloud_error_unsafe_name">该传输中的文件名无法安全保存，因此未保存任何内容。</string>
+    <string name="cloud_error_name_collision">该传输中有两个文件会保存为同一名称，因此未保存任何内容。</string>
+    <string name="cloud_error_name_taken">该文件夹中已存在同名文件，未覆盖任何内容。</string>
+    <string name="cloud_error_no_space">本机空间不足。</string>
+    <string name="cloud_error_save_failed">无法将文件写入该文件夹。</string>
+    <string name="cloud_error_unreadable_selection">其中有文件的名称或大小无法读取，因此无法上传。请换一个文件。</string>
+    <string name="cloud_error_destination_unavailable">无法打开该文件夹。请重新选择，或换一个文件夹。</string>
+    <string name="cloud_error_source_failed">上传过程中有文件无法读取，它可能已被修改或删除。</string>
+    <string name="cloud_error_cancelled">已取消。</string>
+
 </resources>

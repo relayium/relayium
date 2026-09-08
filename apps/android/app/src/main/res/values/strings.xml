@@ -265,4 +265,98 @@
     <string name="account_error_pair_unavailable">No code could be created just now. Try again in a moment.</string>
     <string name="account_error_pair_code">Relayium answered with a code this app will not show. Nothing was created.</string>
     <string name="account_error_credential_unusable">The sign-in stored on this device cannot be used. Sign in again to replace it.</string>
+
+    <!-- Cloud (stored) transfers.
+
+         The product distinction this copy must keep straight: a link transfer
+         is two devices online AT THE SAME TIME, while a cloud transfer is a
+         file the server holds until someone fetches it. The server holds
+         CIPHERTEXT: the key is in the link fragment, which a browser never
+         sends to a server, so the copy can say "we cannot read it" without
+         qualification. Sending needs an account because the bytes are stored
+         and metered against one; receiving never does. -->
+    <string name="tab_cloud">Cloud</string>
+    <string name="cloud_send_title">Send to the cloud</string>
+    <string name="cloud_send_intro">Upload files encrypted on this device, then share one link. The other person does not need to be online now, and does not need an account.</string>
+    <string name="cloud_needs_account">Uploading needs an account: what you store counts toward that account\'s allowance. Opening a link never needs one.</string>
+    <string name="cloud_open_account">Go to Account</string>
+    <string name="cloud_choose_files">Choose files</string>
+    <string name="cloud_change_files">Choose different files</string>
+    <plurals name="cloud_selected">
+        <item quantity="one">%1$d file, %2$s</item>
+        <item quantity="other">%1$d files, %2$s</item>
+    </plurals>
+    <string name="cloud_retention_label">Keep for</string>
+    <string name="cloud_retention_hour">1 hour</string>
+    <string name="cloud_retention_day">1 day</string>
+    <string name="cloud_retention_three_days">3 days</string>
+    <string name="cloud_retention_week">1 week</string>
+    <string name="cloud_retention_two_weeks">2 weeks</string>
+    <string name="cloud_retention_note">Your plan may shorten this. The link shows what the server actually granted.</string>
+    <string name="cloud_burn_label">Delete after the first download</string>
+    <string name="cloud_upload">Upload</string>
+    <string name="cloud_uploading">Uploading… %1$s of %2$s</string>
+    <string name="cloud_cancel">Cancel</string>
+    <string name="cloud_ready_title">Ready to share</string>
+    <string name="cloud_ready_note">Anyone with this link can open the files: it contains the key. We cannot read them and cannot recover this link for you.</string>
+    <string name="cloud_ready_expires">Expires %1$s</string>
+    <string name="cloud_ready_burn">Deleted after the first download.</string>
+    <string name="cloud_ready_keep">Copy it before leaving this screen — this device does not store the key.</string>
+    <string name="cloud_copy">Copy link</string>
+    <string name="cloud_copied">Link copied</string>
+    <string name="cloud_share">Share</string>
+    <string name="cloud_send_another">Send something else</string>
+
+    <string name="cloud_receive_title">Open a link</string>
+    <string name="cloud_receive_intro">Paste a Relayium link. The files are decrypted on this device.</string>
+    <string name="cloud_link_label">Link</string>
+    <string name="cloud_open">Open</string>
+    <string name="cloud_loading">Opening…</string>
+    <plurals name="cloud_contents">
+        <item quantity="one">%1$d file, %2$s</item>
+        <item quantity="other">%1$d files, %2$s</item>
+    </plurals>
+    <string name="cloud_will_burn">This is a one-time link: saving it here deletes it from the server.</string>
+    <string name="cloud_expires">Expires %1$s</string>
+    <string name="cloud_choose_folder">Choose a folder and save</string>
+    <string name="cloud_saving">Saving… %1$s of %2$s</string>
+    <plurals name="cloud_saved">
+        <item quantity="one">Saved %1$d file.</item>
+        <item quantity="other">Saved %1$d files.</item>
+    </plurals>
+    <string name="cloud_open_another">Open another link</string>
+    <string name="cloud_cleanup_incomplete">Some empty folders this transfer created could not be removed. You can delete them yourself.</string>
+
+    <!-- Failures. Each one names what happened and what the person can do
+         about it; none of them prints a server message or a status code. -->
+    <string name="cloud_error_not_signed_in">Sign in to upload.</string>
+    <string name="cloud_error_stale_account">The account changed while this was uploading, so the link was not shown. Upload it again.</string>
+    <string name="cloud_error_unauthorized">This device is no longer signed in. Sign in again.</string>
+    <string name="cloud_error_rate_limited">Too many requests just now. Try again in a moment.</string>
+    <string name="cloud_error_daily_quota">This is more than today\'s remaining allowance. It resets tomorrow.</string>
+    <string name="cloud_error_monthly_traffic">This account has reached its monthly traffic limit.</string>
+    <string name="cloud_error_storage_limit">This is larger than the space this account can keep.</string>
+    <string name="cloud_error_server_full">The service is out of storage. Try again later.</string>
+    <string name="cloud_error_storage_unavailable">Storage is unavailable right now. Try again later.</string>
+    <string name="cloud_error_rejected">The server refused these options.</string>
+    <string name="cloud_error_server">The server could not complete this.</string>
+    <string name="cloud_error_network">No connection.</string>
+    <string name="cloud_error_timeout">The server took too long to answer.</string>
+    <string name="cloud_error_malformed">The server\'s answer could not be read.</string>
+    <string name="cloud_error_link_invalid">That is not a Relayium link this app can open.</string>
+    <string name="cloud_error_not_found">This link is expired, already downloaded, or was deleted.</string>
+    <string name="cloud_error_download_limited">Too many downloads just now, or the sender is out of traffic. Try again later.</string>
+    <string name="cloud_error_download_unavailable">The files could not be fetched right now. Your link and key are fine — try again later.</string>
+    <string name="cloud_error_untrusted_redirect">The server pointed somewhere this app will not follow.</string>
+    <string name="cloud_error_damaged">These files did not arrive intact and were not saved.</string>
+    <string name="cloud_error_unsafe_name">This transfer names a file that cannot be saved safely, so nothing was saved.</string>
+    <string name="cloud_error_name_collision">Two files in this transfer would be saved to the same name, so nothing was saved.</string>
+    <string name="cloud_error_name_taken">That folder already has a file with one of these names. Nothing was overwritten.</string>
+    <string name="cloud_error_no_space">Not enough space on this device.</string>
+    <string name="cloud_error_save_failed">The files could not be written to that folder.</string>
+    <string name="cloud_error_unreadable_selection">One of those files has no name or size this app can read, so it cannot be uploaded. Choose a different file.</string>
+    <string name="cloud_error_destination_unavailable">That folder could not be opened. Choose it again, or pick another one.</string>
+    <string name="cloud_error_source_failed">One of those files could not be read while uploading. It may have changed or been removed.</string>
+    <string name="cloud_error_cancelled">Cancelled.</string>
+
 </resources>

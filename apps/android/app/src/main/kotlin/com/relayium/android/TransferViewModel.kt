@@ -14,12 +14,22 @@ import com.relayium.android.account.CreateLinkModel
 import com.relayium.android.account.KeystoreTokenStore
 import com.relayium.android.account.MintedCode
 import com.relayium.android.account.pairCode
+import com.relayium.android.cloud.CloudClient
+import com.relayium.android.cloud.CloudDownloadModel
+import com.relayium.android.cloud.CloudLinkDraft
+import com.relayium.android.cloud.CloudSelection
+import com.relayium.android.cloud.CloudUploadModel
 import com.relayium.android.storage.ProviderOps
+import com.relayium.android.storage.ReceiveStore
+import java.io.File
 import com.relayium.android.update.UpdateChecker
 import com.relayium.android.update.UpdateEndpoint
 import com.relayium.protocol.FileMeta
 import com.relayium.protocol.JoinInput
+import com.relayium.protocol.stored.PlaintextSource
+import java.util.concurrent.Executors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -93,6 +103,35 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Minting the six digits a second device joins. */
     val createLink: CreateLinkModel
+
+    /** Uploading files the server holds until someone fetches them. */
+    val cloudUpload: CloudUploadModel
+
+    /** Opening a stored link somebody sent. */
+    val cloudDownload: CloudDownloadModel
+
+    /**
+     * The link the user is part-way through pasting.
+     *
+     * Owned here rather than by the composable for the same reason the account
+     * draft is — and for one more: a stored link carries the KEY in its
+     * fragment, so `rememberSaveable` would write a decryption key into saved
+     * instance state. See [CloudLinkDraft].
+     */
+    val cloudLinkDraft = CloudLinkDraft()
+
+    /**
+     * The ONE thread that owns the cloud receive store, its destination
+     * provider and the transport that feeds them.
+     *
+     * Single-threaded on purpose: [com.relayium.android.storage.ReceiveStore] is
+     * not thread-safe, and its writes, exports and rollbacks must be serialised
+     * with each other AND with the chunk callback that drives them. Not the main
+     * thread, because all of it is disk and document-provider IO.
+     */
+    private val cloudStorageExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "relayium-cloud-store").apply { isDaemon = true }
+    }
 
     /**
      * The address and the form mode the user is part-way through typing.
@@ -171,6 +210,156 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
             origin = origin,
             now = { System.currentTimeMillis() / 1000L },
         )
+
+        val cloudUserAgent = "Relayium-Android/${BuildConfig.VERSION_NAME} (cloud)"
+        cloudUpload = CloudUploadModel(
+            scope = viewModelScope,
+            owner = owner,
+            io = Dispatchers.IO,
+            client = CloudClient(origin, cloudUserAgent),
+            session = account,
+            // The link is composed against the app's OWN resolved backend, never
+            // against anything the server said.
+            origin = origin,
+            open = { selection -> openForUpload(app, selection) },
+        )
+        val storage = cloudStorageExecutor.asCoroutineDispatcher()
+        cloudDownload = CloudDownloadModel(
+            scope = viewModelScope,
+            storage = storage,
+            // Bound to the store's own thread, so the chunk callback that drives
+            // write/export cannot run beside a rollback.
+            clientFor = { io -> CloudClient(origin, cloudUserAgent, io = io) },
+            origin = origin,
+            store = ReceiveStore(File(app.cacheDir, "cloud-incoming")),
+        )
+
+        // A shown upload link is a capability for ONE account's files. When the
+        // session changes under it — a sign-out, or a sign-in as somebody else —
+        // it stops being this user's to see.
+        viewModelScope.launch {
+            account.state.collect { cloudUpload.accountChanged() }
+        }
+    }
+
+    /**
+     * Open a chosen document as a forward-only plaintext source.
+     *
+     * The stream is opened ONCE and held for the whole upload, rather than the
+     * URI being reopened per chunk: reopening would resolve the same name a
+     * second time, and the second resolution is the one that can point at
+     * different bytes than the ones the user approved. What this cannot prevent
+     * is the document's CONTENT changing in place — which is why the encoder
+     * refuses a source that disagrees with the size the manifest declared.
+     */
+    private fun openForUpload(app: Application, selection: CloudSelection): PlaintextSource? {
+        val stream = runCatching {
+            app.contentResolver.openInputStream(selection.uri.toUri())
+        }.getOrNull() ?: return null
+        return object : PlaintextSource {
+            override val name = selection.name
+            override val size = selection.size
+
+            override fun read(max: Int): ByteArray {
+                if (max <= 0) return ByteArray(0)
+                val buffer = ByteArray(max)
+                var read = 0
+                // A content stream may return a short read at any point; only a
+                // -1 means the end. Filling the buffer keeps chunks at the wire
+                // size instead of producing a stream of small frames.
+                while (read < max) {
+                    val n = stream.read(buffer, read, max - read)
+                    if (n <= 0) break
+                    read += n
+                }
+                return if (read == max) buffer else buffer.copyOf(read)
+            }
+
+            override fun close() {
+                runCatching { stream.close() }
+            }
+        }
+    }
+
+    /**
+     * Resolve what the cloud file picker returned into a describable selection.
+     *
+     * A document with no display name or no reported size cannot be sent: the
+     * manifest commits to both, and the receiver checks the delivered bytes
+     * against them. That is reported as its own failure rather than silently
+     * dropping the pick.
+     *
+     * [request] comes from [CloudUploadModel.beginSelection] and is carried
+     * through the picker round trip; the MODEL checks it in the same turn that
+     * commits the selection, so a slow first pick cannot land on top of a newer
+     * one.
+     */
+    fun cloudFilesPicked(uris: List<Uri>, request: Int) {
+        if (uris.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val resolver = getApplication<Application>().contentResolver
+            val selections = ArrayList<CloudSelection>(uris.size)
+            var unreadable = false
+            for (uri in uris) {
+                var name: String? = null
+                var size = -1L
+                runCatching {
+                    // Exactly the two columns this needs. A null projection asks
+                    // a document provider for every column it has, which is more
+                    // of the user's metadata than a file picker requires.
+                    resolver.query(
+                        uri,
+                        arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                        null,
+                        null,
+                        null,
+                    )?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val nameIx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                            val sizeIx = cursor.getColumnIndex(OpenableColumns.SIZE)
+                            if (nameIx >= 0) name = cursor.getString(nameIx)
+                            if (sizeIx >= 0 && !cursor.isNull(sizeIx)) size = cursor.getLong(sizeIx)
+                        }
+                    }
+                }
+                val resolved = name
+                if (resolved.isNullOrBlank() || size < 0) {
+                    unreadable = true
+                    break
+                }
+                selections.add(CloudSelection(uri.toString(), resolved, size))
+            }
+            if (unreadable) {
+                cloudUpload.selectionUnreadable(request)
+            } else {
+                cloudUpload.select(selections, request)
+            }
+        }
+    }
+
+    /**
+     * Hand the cloud folder-picker result to the download model.
+     *
+     * A null tree is the user backing out — not a failure, and the transfer
+     * stays open. A tree that will not RESOLVE is a different thing: the grant
+     * was revoked or the provider is gone, and the user needs to be told rather
+     * than left looking at a button that did nothing.
+     *
+     * Resolution runs off the main thread: `DocumentFile.fromTreeUri` and the
+     * metadata it reads are provider IO. [transfer] identifies the transfer the
+     * folder was chosen FOR, and the model rechecks it at the save — a folder
+     * picked for one link must not receive another.
+     */
+    fun cloudFolderPicked(tree: Uri?, transfer: Int) {
+        if (tree == null) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val node = runCatching { RealDeps.resolveTree(saf, tree) }.getOrNull()
+            if (node == null) {
+                cloudDownload.destinationUnavailable(transfer)
+            } else {
+                cloudDownload.save(saf, node, transfer)
+            }
+        }
     }
 
     /**
@@ -547,6 +736,11 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun dismissCleanupWarning() = controller.dismissCleanupWarning()
 
-    /** Nonblocking by design; a parked provider cannot ANR this. */
-    override fun onCleared() = controller.shutdown()
+    /** Nonblocking by design; a parked provider cannot ANR this. The cloud
+     *  store thread is asked to stop after its queued work drains, so a save in
+     *  flight still rolls itself back rather than being killed mid-export. */
+    override fun onCleared() {
+        controller.shutdown()
+        cloudStorageExecutor.shutdown()
+    }
 }

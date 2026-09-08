@@ -79,6 +79,9 @@ const REQUIRED = [
   "app/src/main/kotlin/com/relayium/android/account/KeystoreTokenStore.kt",
   "app/src/main/kotlin/com/relayium/android/account/OkHttpAccountTransport.kt",
   "app/src/main/kotlin/com/relayium/android/ui/AccountScreen.kt",
+  "app/src/main/kotlin/com/relayium/android/ui/CloudScreen.kt",
+  "app/src/main/kotlin/com/relayium/android/cloud/CloudClient.kt",
+  "app/src/main/kotlin/com/relayium/android/cloud/CloudLinkDraft.kt",
 ];
 for (const relative of REQUIRED) {
   check(read(relative) !== null, `apps/android/${relative} is missing. This file asserts rules `
@@ -404,11 +407,69 @@ check(
   + "must not be carried or displayed.",
 );
 
+// ── the stored-transfer key never reaches durable state ─────────────────────
+//
+// A stored link carries its decryption KEY in the `#k=` fragment, so anything
+// that persists a link persists the ability to read the files. Two rules, and
+// both are about a construct that would look entirely ordinary in review.
+
+const cloudScreen = codeOf(read("app/src/main/kotlin/com/relayium/android/ui/CloudScreen.kt"));
+const cloudClient = codeOf(read("app/src/main/kotlin/com/relayium/android/cloud/CloudClient.kt"));
+
+// `rememberSaveable` writes into the Activity's saved-instance Bundle, which the
+// system may persist to disk and restore into a LATER PROCESS. The pasted-link
+// field is therefore a ViewModel draft (CloudLinkDraft), not saveable state. The
+// two `rememberSaveable` uses this screen may legitimately have hold a copied
+// flag and picker request numbers, so the rule is on what they are initialised
+// WITH: anything string-typed is refused.
+const saveableStrings = cloudScreen.match(/rememberSaveable\s*\{[^}]*mutableStateOf\s*\(\s*"/g);
+check(
+  saveableStrings === null,
+  "CloudScreen.kt holds string state in `rememberSaveable`. A stored link carries its decryption "
+  + "key in its `#k=` fragment and saved instance state is written to disk and restored into a "
+  + "later process, so link text belongs in the ViewModel-owned CloudLinkDraft instead.",
+);
+
+// The anonymous ciphertext read must carry no credential. It has to FOLLOW
+// redirects — server/account/files.go 302s to a fleet node whenever the file is
+// eligible, with or without the opt-in header — so the protection cannot be the
+// account transport's blanket refusal; it is that the request is anonymous and
+// every hop is rebuilt rather than delegated to OkHttp's follower.
+const downloadSection = cloudClient.slice(cloudClient.indexOf("fun downloadBlob"));
+check(
+  downloadSection.length > 0 && !/Authorization/.test(downloadSection),
+  "CloudClient.downloadBlob sets an Authorization header. A stored-ciphertext read is anonymous "
+  + "and follows redirects to storage nodes, including hosts a user advertised; a credential on "
+  + "that request would be forwarded to them.",
+);
+check(
+  /followRedirects\(false\)/.test(cloudClient) && /followSslRedirects\(false\)/.test(cloudClient),
+  "a CloudClient OkHttp client follows redirects itself. Every hop of a blob read is rebuilt and "
+  + "validated by BlobRedirect; delegating to OkHttp's follower would carry this request's headers "
+  + "to the new host.",
+);
+
+// The key must not be interpolated into a request URL or a log. `#k=` belongs in
+// exactly one place: the link the user is shown and chooses to share.
+const cloudSources = [
+  "app/src/main/kotlin/com/relayium/android/cloud/CloudClient.kt",
+  "app/src/main/kotlin/com/relayium/android/cloud/CloudUploadModel.kt",
+  "app/src/main/kotlin/com/relayium/android/cloud/CloudDownloadModel.kt",
+].map((relative) => codeOf(read(relative) ?? ""));
+for (const source of cloudSources) {
+  check(
+    !/\bLog\.[a-z]/.test(source) && !/println\(/.test(source),
+    "a cloud source logs. These types hold a decryption key, a bearer and a fragment-bearing "
+    + "link; none of them belongs in logcat.",
+  );
+}
+
 if (failures.length) {
   for (const f of failures) console.error(`  ✗ ${f}`);
   console.error(`android-policy-test: ${failures.length} failure(s)`);
   process.exit(1);
 }
 console.error(
-  "android-policy-test: OK (release fence, debug-only surfaces, exported surface, account credential)",
+  "android-policy-test: OK (release fence, debug-only surfaces, exported surface, "
+  + "account credential, stored-transfer key)",
 );

@@ -1,11 +1,17 @@
 package com.relayium.android
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
@@ -74,164 +80,71 @@ class UiSessionAcceptanceTest {
     private fun clickText(id: Int) =
         compose.onNodeWithText(s(id)).performScrollTo().performClick()
 
-    /** Case-insensitive substring match on text OR content-description:
-     *  DocumentsUI capitalises labels differently across releases ("Use this
-     *  folder" rendered USE THIS FOLDER) and exposes some affordances only by
-     *  description, so both are tried. */
-    private fun byLabel(label: String) = By.text(
-        Pattern.compile(".*" + Pattern.quote(label) + ".*", Pattern.CASE_INSENSITIVE),
-    )
-    private fun byDesc(label: String) = By.desc(
-        Pattern.compile(".*" + Pattern.quote(label) + ".*", Pattern.CASE_INSENSITIVE),
-    )
+    // The DocumentsUI selectors and their hard-won ordering live in
+    // `DocumentsUiDriver`, shared with the cloud acceptance. These remain the
+    // names this test reads by, with the session's own readiness observable
+    // supplied where the driver takes one.
+    private fun byLabel(label: String) = DocumentsUiDriver.byLabel(label)
 
-    /** The visible text and content-descriptions on screen, so a selector that
-     *  stopped matching a new DocumentsUI names the labels it actually saw
-     *  instead of a bare timeout. Bounded. */
-    private fun uiDump(): String =
-        device.findObjects(By.clazz(Pattern.compile(".*")))
-            .mapNotNull { o -> (o.text ?: o.contentDescription)?.takeIf { t -> t.isNotBlank() } }
-            .distinct().take(40).joinToString(" | ")
+    private fun uiDump(): String = DocumentsUiDriver.uiDump()
 
-    /** Find a DocumentsUI affordance by text or description and click it,
-     *  re-finding on a StaleObjectException. DocumentsUI animates between the
-     *  roots drawer, the directory list and the confirm bar, so a reference
-     *  found a frame before the click can go stale mid-transition; the fix is to
-     *  look it up again, not to sleep and hope. */
-    private fun tapInDocumentsUi(label: String, what: String, requireEnabled: Boolean = false) {
-        val deadline = System.currentTimeMillis() + 25_000
-        var lastSeen = ""
-        while (System.currentTimeMillis() < deadline) {
-            val obj = device.wait(Until.findObject(byLabel(label)), 2_000)
-                ?: device.findObject(byDesc(label))
-            if (obj != null) {
-                try {
-                    // The tree-confirm button ("Use this folder") is DISABLED
-                    // until a selectable root is actually chosen; clicking it
-                    // then does nothing. Wait for it to become enabled rather
-                    // than tapping a dead control.
-                    if (requireEnabled && !obj.isEnabled) {
-                        lastSeen = "$label present but disabled"
-                    } else {
-                        obj.click()
-                        return
-                    }
-                } catch (_: androidx.test.uiautomator.StaleObjectException) {
-                    // The view moved under us; re-find on the next loop.
-                }
-            } else {
-                lastSeen = uiDump()
-            }
-        }
-        error("DocumentsUI never let $what ('$label') be tapped; last visible: $lastSeen")
-    }
+    private fun tapInDocumentsUi(label: String, what: String, requireEnabled: Boolean = false) =
+        DocumentsUiDriver.tap(label, what, requireEnabled)
 
-    /** Complete a fresh tree grant: click the scoped-access ALLOW dialog if the
-     *  platform shows one, or confirm the app returned (DocumentsUI gone and the
-     *  folder prompt consumed) if it auto-granted. Fails only if neither happens
-     *  within the bound — i.e. the picker is genuinely stuck — rather than
-     *  falling through while it is still open. */
-    private fun confirmTreeGrant(vm: TransferViewModel) {
-        // EXACT "Allow", not a substring: the dialog TITLE ("Allow Relayium to
-        // access files in Relayium test tree?") also contains "Allow" and is an
-        // enabled TextView, so a `.*Allow.*` match clicks the title and the
-        // grant never happens — which is exactly how a run hung here with the
-        // consent dialog still on screen. `^Allow$` targets the BUTTON.
-        val allowButton = By.text(Pattern.compile("^Allow$", Pattern.CASE_INSENSITIVE))
-        val deadline = System.currentTimeMillis() + 25_000
-        while (System.currentTimeMillis() < deadline) {
-            val allow = device.wait(Until.findObject(allowButton), 1_000)
-            if (allow != null) {
-                try {
-                    if (allow.isEnabled) {
-                        allow.click()
-                        // The grant is only real once the dialog is GONE and the
-                        // app has consumed the prompt — not the moment the click
-                        // is dispatched.
-                        device.wait(Until.gone(allowButton), 5_000)
-                        if (waitPromptConsumed(vm)) return
-                    }
-                } catch (_: androidx.test.uiautomator.StaleObjectException) { /* re-find */ }
-            }
-            // Auto-grant path: no dialog, the picker closed and the app returned.
-            val docsUiGone = device.wait(
-                Until.gone(By.pkg("com.android.documentsui").depth(0)), 500,
-            ) ?: false
-            if (docsUiGone && !state(vm).awaitingFolder) return
-        }
-        error("the scoped-access grant never completed; visible: ${uiDump()}")
-    }
+    private fun confirmTreeGrant(vm: TransferViewModel) =
+        DocumentsUiDriver.confirmTreeGrant { !state(vm).awaitingFolder }
 
-    /** True once the app has left the folder prompt (accepted the tree), within
-     *  a short bound — the observable that the grant actually reached the app. */
-    private fun waitPromptConsumed(vm: TransferViewModel): Boolean {
-        val until = System.currentTimeMillis() + 5_000
-        while (System.currentTimeMillis() < until) {
-            if (!state(vm).awaitingFolder) return true
-            Thread.sleep(50)
-        }
-        return false
-    }
+    private fun enterTestRootThenTap(fileName: String) =
+        DocumentsUiDriver.enterTestRootThenTap(fileName)
 
-    private val docsPkg = "com.android.documentsui"
+    private fun openRoots() = DocumentsUiDriver.openRoots()
+
+    private val docsPkg = DocumentsUiDriver.DOCS_PKG
 
     /**
-     * Enter the disposable provider's ROOT in the file picker (OPEN_DOCUMENT),
-     * then tap a document in it. This picker's home is "Recent", whose apps row
-     * carries a BACKGROUND tile of the same "Relayium test tree" label — and
-     * that tile stays in the view tree even after the roots drawer opens, so a
-     * bare label match selects the wrong node. The provider root is therefore
-     * entered from the drawer's `roots_list` (opened via "Show roots"), and
-     * readiness is the provider's OWN document list appearing — the target file
-     * present — which is how a stale Recent view (a leftover recent file) is
-     * told apart from the real root having loaded.
+     * Wait for the join to connect, and on timeout say what the app actually
+     * thought — which is the difference between "the click never took effect"
+     * and "the code was refused".
+     *
+     * `joinError` is a separate observable from the controller's `errorKey`: a
+     * refused code leaves the phase IDLE with no error key and only
+     * `joinError` set, so a report that omits it cannot tell the two apart.
+     * That is exactly the ambiguity the first RED run left behind.
+     *
+     * Everything reported is an enum or a boolean. The pairing code itself is
+     * not printed — a disposable test code is not a secret worth arguing
+     * about, but a failure label is a durable artifact and there is no reason
+     * for it to carry one.
      */
-    private fun enterTestRootThenTap(fileName: String) {
-        device.wait(Until.findObject(By.pkg(docsPkg).depth(0)), 20_000)
-            ?: error("the system file picker never appeared; visible: ${uiDump()}")
-        // Open the roots drawer via its "Show roots" affordance (found by its
-        // current bounds, not hardcoded). The file picker's home is "Recent",
-        // whose apps row carries a BACKGROUND tile of the same "Relayium test
-        // tree" label — which is why the root MUST be selected from the drawer's
-        // `roots_list`, never by a bare label that would match that background
-        // tile. The drawer is open once "Open from" and the roots list appear.
-        device.wait(Until.findObject(By.desc("Show roots")), 8_000)?.click()
-            ?: error("the file picker showed no Show roots affordance; visible: ${uiDump()}")
-        device.wait(Until.findObject(By.textContains("Open from")), 5_000)
-        val rootsList = device.wait(Until.findObject(By.res(docsPkg, "roots_list")), 8_000)
-            ?: error("the roots drawer never opened; visible: ${uiDump()}")
-        val rootRow = rootsList.findObject(By.textContains("Relayium test tree"))
-            ?: error("the test root is not in the drawer's roots list; visible: ${uiDump()}")
+    private fun awaitJoinConnected(vm: TransferViewModel, code: String) {
         try {
-            rootRow.click()
-        } catch (_: androidx.test.uiautomator.StaleObjectException) {
-            device.findObject(By.res(docsPkg, "roots_list"))
-                ?.findObject(By.textContains("Relayium test tree"))?.click()
+            awaitTrue("the UI join reached CONNECTED", 90_000) {
+                state(vm).phase == TransferController.Phase.CONNECTED
+            }
+        } catch (timeout: IllegalStateException) {
+            // `awaitTrue` reports a timeout through `error(...)`, which is an
+            // IllegalStateException — NOT an AssertionError. Catching the wrong
+            // type is how a diagnostic silently never runs, which is exactly
+            // what left the first RED ambiguous.
+            throw AssertionError(
+                "${timeout.message} | finalPhase=${state(vm).phase}" +
+                    " finalJoinError=${vm.joinError.value}" +
+                    " finalErrorKey=${state(vm).errorKey}" +
+                    " fieldHeldCode=${
+                        runCatching { editableTextOf(compose.onNode(hasSetTextAction())) == code }
+                            .getOrDefault(false)
+                    }",
+                timeout,
+            )
         }
-        // Readiness: the provider's OWN file list, proven by the target file
-        // appearing — not merely that some list rendered (the stale Recent view
-        // shows a different, leftover document).
-        device.wait(Until.findObject(byLabel(fileName)), 20_000)
-            ?: error("the provider root never listed $fileName after entering it; visible: ${uiDump()}")
-        tapInDocumentsUi(fileName, "the staged outgoing document")
     }
 
-    /** Open the roots drawer if it is not already showing the roots list. AOSP
-     *  releases label the toggle differently ("Show roots", a navigation
-     *  description) or open it by an edge swipe, so several are tried before
-     *  giving up with what was actually on screen. */
-    private fun openRoots() {
-        val opener = device.wait(Until.findObject(byDesc("Show roots")), 5_000)
-            ?: device.wait(Until.findObject(byDesc("roots")), 2_000)
-            ?: device.wait(Until.findObject(byDesc("navigation")), 2_000)
-            ?: device.wait(Until.findObject(byDesc("drawer")), 2_000)
-        if (opener != null) {
-            opener.click()
-            return
-        }
-        // No labelled toggle: swipe the drawer open from the left edge.
-        device.swipe(0, device.displayHeight / 2, device.displayWidth / 2, device.displayHeight / 2, 10)
-    }
+    /** What the user typed, and nothing else — the `EditableText` semantics
+     *  property, read exactly rather than matched against the node's text
+     *  values (which include the field's label). */
+    private fun editableTextOf(node: SemanticsNodeInteraction): String? =
+        node.fetchSemanticsNode().config
+            .getOrNull(SemanticsProperties.EditableText)?.text
 
     @Test
     fun round() {
@@ -260,11 +173,34 @@ class UiSessionAcceptanceTest {
             InteropDriver.stageOutgoing(sendName, body)
 
             // ── join through the REAL form ──────────────────────────────────
-            compose.onNode(hasSetTextAction()).performTextInput(code)
-            compose.onNodeWithText(s(R.string.join_action)).performClick()
-            awaitTrue("the UI join reached CONNECTED", 90_000) {
-                state(vm).phase == TransferController.Phase.CONNECTED
-            }
+            //
+            // Every step is a precondition rather than a hope, because an
+            // observed run reached the 90s CONNECTED timeout with
+            // `joinError == null`, phase IDLE and no error key — the signature
+            // of `join()` never having been CALLED, since a click that landed
+            // on an empty field would have set `EMPTY`. This does not establish
+            // WHY (a private variant that merely added an assertion before the
+            // click completed the whole run), so the repair is determinism, not
+            // a fix for a diagnosed cause: replace rather than append text,
+            // assert the field really holds the code, and require the button to
+            // be scrolled to, displayed and enabled before it is clicked.
+            //
+            // Deliberately absent: sleeps, retry clicks, and any direct call to
+            // the ViewModel. A retry would hide exactly the flake this is meant
+            // to expose, and driving `vm.join` would stop testing the form.
+            val field = compose.onNode(hasSetTextAction())
+            field.performScrollTo().performTextReplacement(code)
+            // EXACT editable text, not a text-value match: the field's
+            // semantics also carry its label, so anything comparing the node's
+            // text values is either label-coupled or satisfied by the label
+            // alone. This reads the one property the user actually typed into.
+            assertEquals("the field must hold exactly the code", code, editableTextOf(field))
+
+            val joinButton = compose.onNodeWithText(s(R.string.join_action))
+            joinButton.performScrollTo().assertIsDisplayed().assertIsEnabled()
+            joinButton.performClick()
+
+            awaitJoinConnected(vm, code)
             val link = state(vm).linkId
             observations["sas"] = state(vm).sas
             observations["linkId"] = link

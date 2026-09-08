@@ -40,8 +40,36 @@ no password at all, restore across launches, explicit sign-out with real
 revocation, and the account's identity, plan, quota and device list read from the
 existing server APIs. See "Account" below.
 
-**Two destinations**, Transfer and Account, and nothing else: this build has no
-tab that opens onto a placeholder.
+**Stored (cloud) transfers, both directions.** Files are encrypted on the device
+and uploaded as one opaque object; the link that opens them carries the key in
+its `#k=` fragment, which a browser never sends to a server, so the server holds
+ciphertext it cannot read.
+
+* **Send** — a SAF selection, a retention choice and an optional
+  burn-after-read, uploaded under the signed-in account's bearer as a streamed
+  `POST /api/files`. The link is composed against this app's OWN resolved
+  origin, never against anything the server said, and the expiry shown is the
+  server's own `expiresAt` rather than the requested TTL — the account's plan
+  may shorten it. Uploading needs an account because the bytes are stored and
+  metered against one.
+* **Receive** — any `…/d/<id>#k=<key>` link on this app's origin, **anonymously**
+  and with no account at all, decrypted on the device and saved into a folder the
+  user chose. The ciphertext read carries no bearer and no cookie.
+
+The wire is `docs/protocol/relayium-stored-wire-v1.md`, and the Kotlin port is
+pinned to the same frozen `store-wire-vectors.json` the Web and Swift ports
+assert against. Cross-codec interop with the Web implementation is verified in
+both directions.
+
+**What stored transfers do NOT do yet.** The upload is single-shot: there is no
+resumable upload, no pending-job restoration and no history of past uploads, so
+a finished link survives an Activity recreation (it lives in the ViewModel) but
+NOT process death — and the key is not persisted anywhere, which is why the UI
+says to copy the link before leaving. iOS has all three. That is the next
+bounded cloud parity checkpoint, and it is open, not done.
+
+**Three destinations**, Transfer, Cloud and Account, and nothing else: this build
+has no tab that opens onto a placeholder.
 
 ### The iOS cross-network mismatch, stated plainly
 
@@ -254,9 +282,12 @@ apps/android/
               appears anywhere in it, and its conformance suite reads the
               SAME frozen fixtures under apps/RelayiumKit/Tests/Fixtures/
               that the Swift and Web suites assert against.
+              The `stored/` package there is the zero-knowledge cloud wire:
+              key codec, framing, manifest, destination planning.
   app/        the Android half: Compose UI, ViewModel, TransferController
               (JVM-testable through injected seams), OkHttp signalling,
-              WebRTC transport, SAF storage.
+              WebRTC transport, SAF storage, and `cloud/` — the stored-transfer
+              transport and its two models.
 ```
 
 The build has two shapes, chosen by an explicit property
@@ -346,6 +377,24 @@ through the server's own session-authed approval endpoint), a real mint whose
 room is actually joined, navigation not disturbing that live session, and a
 sign-out reaching the state only a server-confirmed revocation can reach. No
 credential is ever printed or written into a report.
+
+`scripts/android-cloud-acceptance.sh` is the stored-transfer evidence, on the
+same shape: its own throwaway server, a disposable fixture account, and
+`CloudAcceptanceTest` under BOTH maintained languages against the real
+`MainActivity`. It covers the account gate (uploading needs one, opening a link
+does not), a mixed selection — a zero-byte file, one larger than a 192 KiB
+chunk, and a small one — uploaded and then opened from its own link and saved,
+compared by SHA-256 at both ends; burn-after-read saved once with the second
+open correctly reporting the object gone; a hostile manifest (a traversing name,
+and two entries that would land on one document) refused BEFORE a folder is
+asked for and with nothing created in the tree; a finished upload surviving an
+Activity recreation; and one case that drives the REAL DocumentsUI through the
+cloud surface's own launchers, across a recreation, into a system-granted tree.
+That last one exists because the cloud launchers are not the session launchers:
+`android-ui-session-acceptance.sh` says nothing about them. Outgoing fixtures
+and saved documents live in different trees, so the store's refusal to overwrite
+is never mistaken for a failure. No link is printed or written into a report — a
+stored link carries its decryption key.
 
 `InteropAcceptanceTest` stubs only the picker UI (the grant a same-uid provider
 gives is the grant the picker returns). Two more entry points cover the rest:
