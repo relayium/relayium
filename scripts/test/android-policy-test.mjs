@@ -88,6 +88,153 @@ for (const relative of REQUIRED) {
     + `ABOUT it, so a rename that is not reflected here turns every rule below into a check `
     + `that matches nothing and passes.`);
 }
+// ── recoverable uploads: the facts no Kotlin test can assert about itself ────
+//
+// A resumable upload leaves the user's ciphertext, its content key and their
+// filenames on the device between two processes. Three properties make that
+// safe, and each is one edit away from being silently untrue while every test
+// still passes.
+
+const pendingStore = codeOf(read("app/src/main/kotlin/com/relayium/android/cloud/PendingUpload.kt") ?? "");
+const secretBox = codeOf(read("app/src/main/kotlin/com/relayium/android/cloud/SecretBox.kt") ?? "");
+const cloudWiring = codeOf(read("app/src/main/kotlin/com/relayium/android/TransferViewModel.kt") ?? "");
+const bearerStore = codeOf(read("app/src/main/kotlin/com/relayium/android/account/KeystoreTokenStore.kt") ?? "");
+
+// 1. Both stores live where Android's backup machinery cannot reach them. A
+//    restored spool is inert — the keystore key is not backed up either — but an
+//    inert blob that still looks like a resumable upload is exactly the
+//    confusing state `noBackupFilesDir` exists to prevent.
+check(
+  /noBackupFilesDir/.test(cloudWiring)
+  && /PendingUploadStore\(/.test(cloudWiring)
+  && /StoredLinkKeyStore\(/.test(cloudWiring),
+  "the pending-upload and stored-link-key stores are not constructed under "
+  + "`noBackupFilesDir` in TransferViewModel. Both hold the user's filenames and an object's "
+  + "content key; a path outside it is copied by backup and device transfer.",
+);
+
+// 2. The pending-upload keystore alias is NOT the bearer's. KeystoreTokenStore
+//    DELETES its alias on `clear()`, which is what makes a sign-out
+//    unrecoverable — and would, if the alias were shared, shred the content key
+//    of every interrupted upload on the device, including one belonging to the
+//    account the user is about to sign back into.
+const bearerAlias = /const val ALIAS = "([^"]+)"/.exec(bearerStore)?.[1];
+const pendingAlias = /const val DEFAULT_ALIAS = "([^"]+)"/.exec(secretBox)?.[1];
+check(
+  Boolean(bearerAlias) && Boolean(pendingAlias) && bearerAlias !== pendingAlias,
+  "the pending-upload keystore alias is missing or is the same as the bearer's "
+  + `(bearer ${bearerAlias}, pending ${pendingAlias}). KeystoreTokenStore.clear deletes its `
+  + "alias, so sharing one would make signing out destroy every interrupted upload's key.",
+);
+check(
+  !/deleteEntry/.test(secretBox),
+  "KeystoreSecretBox deletes its keystore entry. Discarding a job removes that job's own files, "
+  + "which is what makes its key unrecoverable; deleting the alias would take every OTHER "
+  + "pending upload and every stored-link key with it.",
+);
+
+// 3. Durability is a real barrier, not a comment. The recovery rules turn on
+//    "this write landed before that request left", and a rename is a DIRECTORY
+//    write that an fsync on the renamed file says nothing about.
+check(
+  /Os\.fsync/.test(secretBox) && /S_ISDIR/.test(secretBox),
+  "SecretBox.kt does not fsync a directory whose type it has checked. The finalize-attempt "
+  + "marker and the plan-written-last rule are claims about directory entries; without a "
+  + "directory sync they are claims about the page cache.",
+);
+check(
+  /class PendingUploadStore\([\s\S]{0,400}?durable: DurableFiles = DurableFiles\.Platform/.test(pendingStore),
+  "PendingUploadStore does not default its write barriers to DurableFiles.Platform. The "
+  + "injectable seam exists so a test can fail a NAMED barrier; the platform one must be what "
+  + "the app gets without asking.",
+);
+
+// ── the recovery acceptance is a process death, not a recreation ─────────────
+//
+// This is the assertion the harness cannot make about itself. `ActivityScenario
+// .recreate` restarts an Activity inside a living process; the whole claim of a
+// resumable upload is about the process ENDING. A future edit that replaced the
+// force-stop with a recreation would leave a green suite proving nothing.
+const recoveryScript = readFileSync(
+  resolve(repoRoot, "scripts/android-cloud-recovery-acceptance.sh"), "utf8",
+);
+// Matched on ORDER, not on presence. The script's cleanup handler force-stops
+// the app too, so "a force-stop appears somewhere" would stay true after the
+// phase-boundary kill was deleted — which is exactly the edit this must catch.
+const firstPhase = recoveryScript.indexOf('-e class "$test_class#${phases[0]}"');
+const boundaryKill = recoveryScript.indexOf(
+  'adbs shell am force-stop "$app_id" >/dev/null || fail',
+);
+// The script asks `pidof` twice — once to prove the app is ALIVE at the moment
+// of the kill, once to prove it is gone afterwards — so the two are located
+// from opposite ends rather than by a first match.
+const livenessVerified = recoveryScript.indexOf('pidof "$app_id"');
+const deathVerified = recoveryScript.lastIndexOf('pidof "$app_id"');
+const laterPhases = recoveryScript.indexOf('for phase in "${phases[@]:1}"');
+check(
+  firstPhase >= 0 && boundaryKill > firstPhase && laterPhases > boundaryKill,
+  "scripts/android-cloud-recovery-acceptance.sh does not force-stop the app BETWEEN the first "
+  + "phase and the rest. Without that kill it is an Activity-recreation test, and the durable "
+  + "spool, plan and content key are never recovered from disk by a new process.",
+);
+check(
+  deathVerified > boundaryKill && deathVerified < laterPhases,
+  "the recovery acceptance does not verify the app process actually died before the resuming "
+  + "phases. `am force-stop` returning is not the process being gone, and a phase that ran in "
+  + "the surviving process would pass while proving nothing.",
+);
+check(
+  livenessVerified > firstPhase && livenessVerified < boundaryKill,
+  "the recovery acceptance does not verify the app was still RUNNING when the kill was due. "
+  + "Killing a process that had already finished its upload proves nothing about recovery.",
+);
+// Decoded plaintext at the far end does NOT distinguish a replay from a client
+// that re-encrypted the user's files and uploaded them from zero — both produce
+// the same bytes. The job's identity is what tells them apart, so the run has
+// to compare it.
+check(
+  /spoolSha256/.test(recoveryScript) && /uploadId/.test(recoveryScript),
+  "the recovery acceptance does not compare the job's spool hash and upload id across the "
+  + "process death. Without them a re-encrypted, re-initialised upload passes the digest check "
+  + "and the replay claim is unproven.",
+);
+check(
+  (recoveryScript.match(/pm clear/g) ?? []).length === 1,
+  "the recovery acceptance clears the app's data more than once. It must be cleared ONLY before "
+  + "the first phase: a clear between phases deletes the staged upload the run exists to recover.",
+);
+
+// Every phase the script orders must exist as a test method, and vice versa: a
+// renamed method would otherwise make `am instrument` run zero tests, which the
+// per-phase count check catches, while a method the script never runs would be
+// dead evidence nobody notices.
+const recoveryTest = readFileSync(
+  resolve(android, "app/src/androidTest/kotlin/com/relayium/android/CloudRecoveryAcceptanceTest.kt"),
+  "utf8",
+);
+const scriptPhases = /phases=\(([^)]*)\)/.exec(recoveryScript)?.[1]
+  ?.split(/\s+/).filter((line) => /^[a-zA-Z]/.test(line)) ?? [];
+check(
+  scriptPhases.length === 4,
+  `the recovery acceptance declares ${scriptPhases.length} phases; four are expected `
+  + "(stage, resume, decode, history).",
+);
+for (const phase of scriptPhases) {
+  check(
+    new RegExp(`fun ${phase}\\(`).test(recoveryTest),
+    `scripts/android-cloud-recovery-acceptance.sh runs ${phase}, which CloudRecoveryAcceptanceTest `
+    + "does not declare. `am instrument` would run zero tests for it.",
+  );
+}
+const declared = [...recoveryTest.matchAll(/@Test\s+fun ([a-zA-Z]+)\(/g)].map((m) => m[1]);
+for (const method of declared) {
+  check(
+    scriptPhases.includes(method),
+    `CloudRecoveryAcceptanceTest declares ${method}, which the recovery acceptance never runs. `
+    + "An unrun phase is evidence nobody collects.",
+  );
+}
+
 if (failures.length) {
   for (const f of failures) console.error(`  ✗ ${f}`);
   console.error(`android-policy-test: ${failures.length} failure(s)`);
@@ -455,6 +602,10 @@ const cloudSources = [
   "app/src/main/kotlin/com/relayium/android/cloud/CloudClient.kt",
   "app/src/main/kotlin/com/relayium/android/cloud/CloudUploadModel.kt",
   "app/src/main/kotlin/com/relayium/android/cloud/CloudDownloadModel.kt",
+  "app/src/main/kotlin/com/relayium/android/cloud/CloudHistoryModel.kt",
+  "app/src/main/kotlin/com/relayium/android/cloud/PendingUpload.kt",
+  "app/src/main/kotlin/com/relayium/android/cloud/StoredLinkKeys.kt",
+  "app/src/main/kotlin/com/relayium/android/cloud/SecretBox.kt",
 ].map((relative) => codeOf(read(relative) ?? ""));
 for (const source of cloudSources) {
   check(
@@ -471,5 +622,6 @@ if (failures.length) {
 }
 console.error(
   "android-policy-test: OK (release fence, debug-only surfaces, exported surface, "
-  + "account credential, stored-transfer key)",
+  + "account credential, stored-transfer key, recoverable-upload storage and process-death "
+  + "acceptance)",
 );

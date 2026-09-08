@@ -46,12 +46,19 @@ its `#k=` fragment, which a browser never sends to a server, so the server holds
 ciphertext it cannot read.
 
 * **Send** — a SAF selection, a retention choice and an optional
-  burn-after-read, uploaded under the signed-in account's bearer as a streamed
-  `POST /api/files`. The link is composed against this app's OWN resolved
-  origin, never against anything the server said, and the expiry shown is the
-  server's own `expiresAt` rather than the requested TTL — the account's plan
-  may shorten it. Uploading needs an account because the bytes are stored and
-  metered against one.
+  burn-after-read, uploaded under the signed-in account's bearer. The link is
+  composed against this app's OWN resolved origin, never against anything the
+  server said, and the expiry shown is the server's own `expiresAt` rather than
+  the requested TTL — the account's plan may shorten it. Uploading needs an
+  account because the bytes are stored and metered against one.
+
+  Two paths, chosen by size. Below `CloudUploadModel.RESUMABLE_MIN_BYTES`
+  (8 MiB) it is a single streamed `POST /api/files`: nothing is staged, and an
+  interruption costs one re-pick, which the surface says before the upload
+  rather than after. At or above it the selection is encrypted ONCE into a spool
+  in `noBackupFilesDir` and driven through the resumable API
+  (`POST /api/uploads` → `PATCH` → `finalize`), so an interrupted upload can be
+  continued — see "Recoverable uploads" below.
 * **Receive** — any `…/d/<id>#k=<key>` link on this app's origin, **anonymously**
   and with no account at all, decrypted on the device and saved into a folder the
   user chose. The ciphertext read carries no bearer and no cookie.
@@ -61,12 +68,47 @@ pinned to the same frozen `store-wire-vectors.json` the Web and Swift ports
 assert against. Cross-codec interop with the Web implementation is verified in
 both directions.
 
-**What stored transfers do NOT do yet.** The upload is single-shot: there is no
-resumable upload, no pending-job restoration and no history of past uploads, so
-a finished link survives an Activity recreation (it lives in the ViewModel) but
-NOT process death — and the key is not persisted anywhere, which is why the UI
-says to copy the link before leaving. iOS has all three. That is the next
-bounded cloud parity checkpoint, and it is open, not done.
+**Recoverable uploads and the file list.** A large upload survives process
+death, and the account's stored files are listed with the links this device can
+still rebuild.
+
+* **The spool is immutable.** The selection is encrypted once into
+  `noBackupFilesDir/cloud/pending-uploads/<job>/spool.bin`, and a resume replays
+  exactly those bytes from the offset the server reports. Re-encrypting the
+  user's current files instead would seal DIFFERENT plaintext under the same key
+  and frame sequence, which destroys the integrity of every frame already
+  uploaded. The plan and the content key sit beside it, each AES-GCM-wrapped by
+  an `AndroidKeyStore` alias that is deliberately NOT the bearer's — signing out
+  hides a pending upload, it does not shred it.
+* **Offsets are payload-relative.** The init header (`uint32BE(len)||encManifest`)
+  is stored separately by the server, so every `Content-Range` counts framed file
+  ciphertext from zero and the completeness gate is `cipherSize(sizes)`. The
+  server silently caps one append and does not verify completeness at finalize,
+  so both are the client's job.
+* **A lost finalize answer becomes uncertainty, never a second object.** An
+  attempt marker is fsync'd — file, then the directory that names it — before
+  finalize is requested. After that a retry may re-ask the SAME session; nothing
+  may open a new one, because 409 and 404 carry no object id and prove neither
+  publication nor its absence. The surface offers a retry and a local discard and
+  points at the file list; it never republishes on its own.
+* **Cleanup is licensed by the key being filed.** A finished job is removed only
+  once its key is durably stored under the account, because until then the job
+  directory holds the only copy of the key to an object the account is paying
+  for.
+* **The file list is `GET /api/files`** — server facts only, share-purpose rows
+  only. A row with no link is not a missing file: the key never reaches the
+  server, so an object uploaded from another device is listed, deletable, and
+  has no link that can be rebuilt here. Deletion is confirmed, and a 404 is
+  reported as "the server no longer has this", never as a deletion this device
+  performed. The list is unpaged server-side, so an account holding more than
+  `CloudClient.MAX_HISTORY_ROWS` rows is refused with an actionable message
+  rather than shown partially.
+
+**What it does NOT do.** Uploading runs only while the app does. There is no
+foreground service and no background delivery: what is promised, and what the
+copy says, is that an interrupted upload can be *continued*, not that it
+continues on its own. Uploads below the staging threshold are not resumable at
+all.
 
 **Three destinations**, Transfer, Cloud and Account, and nothing else: this build
 has no tab that opens onto a placeholder.
@@ -90,12 +132,18 @@ and with other Android devices".
 
 ### What is still absent, and is not claimed anywhere
 
-No stored-transfer (`#k=`) support, no LAN/nearby discovery, no Device Inbox, no
-`ACTION_SEND` share target, no QR entry point, and no billing of any kind — the
-app makes no checkout, subscription or plan-change request and offers no control
-that would start one. There is still no resident session and no
-background-transfer claim: when Android stops the process the session ends and
-the next launch opens afresh. The link intent filter is deliberately **not** a
+No LAN/nearby discovery, no Device Inbox, no `ACTION_SEND` share target, no QR
+entry point, and no billing of any kind — the app makes no checkout,
+subscription or plan-change request and offers no control that would start one.
+(Stored `#k=` transfers WERE absent and are not any more: this section said so
+until the cloud slices landed send, receive, resumable uploads and the file
+list, and the correction belongs here rather than in a later cleanup.)
+
+There is still no resident session and no background-transfer claim: when
+Android stops the process, transfers stop with it. A large cloud upload is the
+one thing that survives, and only in the specific sense described above — its
+encrypted spool and its plan are on disk, so the next launch can OFFER to
+continue it. Nothing continues on its own, and a realtime session ends outright. The link intent filter is deliberately **not** a
 verified App Link (no assetlinks.json on the server), so on Android 12+ tapping a
 link opens the browser; the app is reached by pasting the code or link into the
 join form, or by the user enabling "open supported links" manually.
@@ -395,6 +443,24 @@ That last one exists because the cloud launchers are not the session launchers:
 and saved documents live in different trees, so the store's refusal to overwrite
 is never mistaken for a failure. No link is printed or written into a report — a
 stored link carries its decryption key.
+
+`scripts/android-cloud-recovery-acceptance.sh` is the evidence for recoverable
+uploads, and it is the one harness here that cannot be a single instrumentation
+run. `ActivityScenario.recreate` restarts an Activity inside a living process,
+and the whole claim is about the process ENDING — so the shell runs
+`CloudRecoveryAcceptanceTest`'s four phases separately and `am force-stop`s the
+app between the first and the rest, verifying with `pidof` that it actually
+died. Phase one stages a 12 MiB selection and lets the server commit part of it;
+phase two finds the offer in a process that has never seen the user's files and
+resumes it to a link; phase three downloads what the server ended up holding
+through the app's own receive path and compares SHA-256 against phase one's
+fixture — a stream re-encrypted rather than replayed fails there and nowhere
+else; phase four lists the object and deletes it on confirmation. The app's data
+is cleared once, before phase one; clearing between phases would delete the
+thing under test. `scripts/test/android-policy-test.mjs` asserts that ordering,
+because a future edit replacing the kill with a recreation would leave a green
+suite proving nothing. Set `RELAYIUM_RECOVERY_PROXY` to exercise a committed
+append whose response is dropped as well as the process-death path.
 
 `InteropAcceptanceTest` stubs only the picker UI (the grant a same-uid provider
 gives is the grant the picker returns). Two more entry points cover the rest:

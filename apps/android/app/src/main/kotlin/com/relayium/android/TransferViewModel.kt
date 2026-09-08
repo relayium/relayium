@@ -16,9 +16,13 @@ import com.relayium.android.account.MintedCode
 import com.relayium.android.account.pairCode
 import com.relayium.android.cloud.CloudClient
 import com.relayium.android.cloud.CloudDownloadModel
+import com.relayium.android.cloud.CloudHistoryModel
 import com.relayium.android.cloud.CloudLinkDraft
 import com.relayium.android.cloud.CloudSelection
 import com.relayium.android.cloud.CloudUploadModel
+import com.relayium.android.cloud.KeystoreSecretBox
+import com.relayium.android.cloud.PendingUploadStore
+import com.relayium.android.cloud.StoredLinkKeyStore
 import com.relayium.android.storage.ProviderOps
 import com.relayium.android.storage.ReceiveStore
 import java.io.File
@@ -109,6 +113,22 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Opening a stored link somebody sent. */
     val cloudDownload: CloudDownloadModel
+
+    /** The files this account is storing, and the links this device can still
+     *  rebuild for them. */
+    val cloudHistory: CloudHistoryModel
+
+    /**
+     * Where interrupted uploads are staged.
+     *
+     * Exposed for the same reason [backendOrigin] is: the on-device acceptance
+     * has to assert facts about the ACTUAL durable state this instance owns —
+     * that a resumed upload replayed the same spool under the same session
+     * rather than re-staging or re-initialising — and re-deriving the path in
+     * the harness would be asserting against a second copy of the rule.
+     * `internal`, so nothing outside this module can reach it.
+     */
+    internal val cloudPending: PendingUploadStore
 
     /**
      * The link the user is part-way through pasting.
@@ -212,16 +232,37 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
         )
 
         val cloudUserAgent = "Relayium-Android/${BuildConfig.VERSION_NAME} (cloud)"
+        // Both stores live under `noBackupFilesDir` — the platform's own
+        // statement that a path is excluded from backup and device transfer —
+        // and both are wrapped by one Keystore alias that is deliberately NOT
+        // the bearer's: signing out must hide a pending upload, not shred it.
+        val cloudSecrets = KeystoreSecretBox()
+        val cloudRoot = File(app.noBackupFilesDir, "cloud")
+        val pendingUploads = PendingUploadStore(File(cloudRoot, "pending-uploads"), cloudSecrets)
+        cloudPending = pendingUploads
+        val storedLinkKeys = StoredLinkKeyStore(File(cloudRoot, "stored-link-keys"), cloudSecrets)
+        val cloudClient = CloudClient(origin, cloudUserAgent)
         cloudUpload = CloudUploadModel(
             scope = viewModelScope,
             owner = owner,
             io = Dispatchers.IO,
-            client = CloudClient(origin, cloudUserAgent),
+            client = cloudClient,
             session = account,
             // The link is composed against the app's OWN resolved backend, never
             // against anything the server said.
             origin = origin,
             open = { selection -> openForUpload(app, selection) },
+            pending = pendingUploads,
+            linkKeys = storedLinkKeys,
+        )
+        cloudHistory = CloudHistoryModel(
+            scope = viewModelScope,
+            owner = owner,
+            io = Dispatchers.IO,
+            client = cloudClient,
+            session = account,
+            origin = origin,
+            keys = storedLinkKeys,
         )
         val storage = cloudStorageExecutor.asCoroutineDispatcher()
         cloudDownload = CloudDownloadModel(
@@ -234,11 +275,22 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
             store = ReceiveStore(File(app.cacheDir, "cloud-incoming")),
         )
 
-        // A shown upload link is a capability for ONE account's files. When the
-        // session changes under it — a sign-out, or a sign-in as somebody else —
-        // it stops being this user's to see.
+        // A shown upload link is a capability for ONE account's files, and so
+        // is a staged job and a file list. When the session changes under them —
+        // a sign-out, or a sign-in as somebody else — they stop being this
+        // user's to see.
+        //
+        // Recovery runs on the same signal and only when a session is live: it
+        // is an offer made from this device's own disk, never a transfer started
+        // on the user's behalf.
         viewModelScope.launch {
-            account.state.collect { cloudUpload.accountChanged() }
+            account.state.collect { state ->
+                cloudUpload.accountChanged()
+                cloudHistory.accountChanged()
+                if (state is com.relayium.android.account.AccountState.Ready) {
+                    cloudUpload.recoverPendingJob()
+                }
+            }
         }
     }
 

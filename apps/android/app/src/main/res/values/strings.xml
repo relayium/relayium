@@ -359,4 +359,69 @@
     <string name="cloud_error_source_failed">One of those files could not be read while uploading. It may have changed or been removed.</string>
     <string name="cloud_error_cancelled">Cancelled.</string>
 
+    <!-- Recoverable uploads. A large upload is spooled, encrypted, to this
+         device so an interrupted one can continue from the byte the server
+         actually holds. -->
+    <string name="cloud_staging">Preparing… %1$s of %2$s</string>
+    <string name="cloud_staging_note">Large uploads are encrypted onto this device first, so they can be continued if something interrupts them.</string>
+    <string name="cloud_small_note">Small uploads are sent in one go. If one is interrupted, choose the files again.</string>
+    <string name="cloud_background_note">Uploading runs only while Relayium is open. If it stops, the encrypted copy stays on this device and you can resume it.</string>
+    <string name="cloud_pending_title">Unfinished upload</string>
+    <plurals name="cloud_pending_summary">
+        <item quantity="one">%1$d file, %2$s, waiting to finish.</item>
+        <item quantity="other">%1$d files, %2$s, waiting to finish.</item>
+    </plurals>
+    <string name="cloud_pending_resume">Resume</string>
+    <string name="cloud_pending_discard">Discard</string>
+    <string name="cloud_pending_discard_confirm">Discard this upload? The encrypted copy on this device is deleted and nothing is published.</string>
+    <string name="cloud_pending_discard_cancel">Keep it</string>
+    <string name="cloud_checking">Checking the copy on this device…</string>
+    <string name="cloud_uncertain_title">This upload may already be finished</string>
+    <string name="cloud_uncertain_body">The server was asked to complete it and no answer arrived. Check Your files below before sending again — repeating it could store the same files twice.</string>
+    <string name="cloud_uncertain_retry">Try to complete it</string>
+    <string name="cloud_uncertain_discard">Remove the copy on this device</string>
+    <string name="cloud_uncertain_discard_confirm">Remove the copy on this device? This deletes only the local recovery copy and its key. If the upload did finish, the stored file stays on the server, and its link can no longer be rebuilt here.</string>
+    <string name="cloud_cleanup_failed">The upload finished. The temporary copy on this device could not be removed.</string>
+    <string name="cloud_link_key_not_saved">The link above could not be saved on this device, so it will not appear under Your files.</string>
+    <string name="cloud_stranded_title">Interrupted upload data</string>
+    <string name="cloud_stranded_body">This device is holding an interrupted upload it can no longer read, so it cannot be resumed.</string>
+    <string name="cloud_stranded_remove">Remove it</string>
+
+    <!-- The account's stored files. Server facts; links only where this
+         installation kept the key. -->
+    <string name="cloud_history_title">Your files</string>
+    <string name="cloud_history_intro">Files this account is storing. A link can only be rebuilt on the device that uploaded it — the key never reaches the server.</string>
+    <string name="cloud_history_refresh">Refresh</string>
+    <string name="cloud_history_loading">Loading…</string>
+    <string name="cloud_history_empty">This account is storing no files.</string>
+    <string name="cloud_history_signed_out">Sign in to see the files this account is storing.</string>
+    <string name="cloud_history_size">%1$s, uploaded %2$s</string>
+    <string name="cloud_history_expires">Expires %1$s</string>
+    <string name="cloud_history_expired">Expired — the server removes it shortly.</string>
+    <string name="cloud_history_burn">Deleted after the first download.</string>
+    <plurals name="cloud_history_downloads">
+        <item quantity="one">Downloaded %1$d time.</item>
+        <item quantity="other">Downloaded %1$d times.</item>
+    </plurals>
+    <string name="cloud_history_not_downloaded">Not downloaded yet.</string>
+    <string name="cloud_history_no_key">The key for this file is not on this device, so its link cannot be rebuilt here.</string>
+    <string name="cloud_history_delete">Delete</string>
+    <string name="cloud_history_delete_confirm">Delete this file from the server? It cannot be undone, and any link to it stops working.</string>
+    <string name="cloud_history_delete_cancel">Keep it</string>
+    <string name="cloud_history_deleting">Deleting…</string>
+    <string name="cloud_history_deleted">Deleted.</string>
+    <string name="cloud_history_delete_gone">The server no longer has this file. This device did not delete anything.</string>
+    <string name="cloud_history_local_key_kept">Deleted from the server. The key copy on this device could not be removed.</string>
+
+    <string name="cloud_error_upload_session_gone">The server no longer has this upload. Start it again.</string>
+    <string name="cloud_error_already_finalized">This upload\'s session had already been used, so nothing was sent again. Whether the file was stored is not something this device can tell — check Your files below.</string>
+    <string name="cloud_error_history_too_large">This account is storing more files than this app can list. Remove some from the website first.</string>
+    <string name="cloud_error_spool_unusable">The copy on this device no longer matches this upload, so it cannot be continued. Discard it and choose the files again.</string>
+    <string name="cloud_error_protection_unavailable">This device could not unlock the upload it saved. Try again, or discard it.</string>
+    <string name="cloud_error_stage_failed">The encrypted copy could not be written to this device.</string>
+    <string name="cloud_error_no_progress">The upload stopped making progress. Try again.</string>
+
+    <string name="cloud_completing_title">This upload finished</string>
+    <string name="cloud_completing_body">The files are stored. This device still has to prepare the link before it can show it to you.</string>
+    <string name="cloud_completing_action">Get the link</string>
 </resources>

@@ -30,6 +30,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import okio.BufferedSink
 
 /** What a stored upload is being asked to create. */
@@ -48,6 +49,34 @@ class StoredUploadPlan(
 
 /** What the server created. */
 data class StoredUploadResult(val id: String, val expiresAt: Long)
+
+/** A resumable session and the append size the server issued with it. The size
+ *  belongs to the SESSION: a later process must persist it rather than guess
+ *  today's default. */
+data class ResumableSession(val uploadId: String, val chunkSize: Int)
+
+/**
+ * The server's authoritative committed offset, and whether it answered 409.
+ *
+ * Both statuses carry the same fact — how much framed ciphertext the blob holds
+ * — and a caller must act on the number rather than on its own idea of what it
+ * just sent. [conflict] is kept only because the two are worth telling apart in
+ * a no-progress guard, never because they mean different offsets.
+ */
+data class UploadOffset(val received: Long, val conflict: Boolean)
+
+/** One row of `GET /api/files`, field for field. */
+data class StoredFileRow(
+    val id: String,
+    val size: Long,
+    val createdAt: Long,
+    val expiresAt: Long,
+    val burnAfterRead: Boolean,
+    /** A boolean the server derives from its own timestamp column — not a
+     *  date. */
+    val downloaded: Boolean,
+    val downloadCount: Long,
+)
 
 /** What a stored object says about itself, before any ciphertext is fetched. */
 data class StoredFileMeta(
@@ -197,6 +226,262 @@ class CloudClient(
         val expiresAt = parsed.whole("expiresAt")
             ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
         StoredUploadResult(id, expiresAt)
+    }
+
+    // ── resumable upload ────────────────────────────────────────────────────
+
+    /**
+     * Open a resumable session: `POST /api/uploads`.
+     *
+     * The body is the init header — `uint32BE(len) || encManifest` — and the
+     * server stores it SEPARATELY from the blob. Every offset below therefore
+     * counts framed file ciphertext from zero and never includes this header.
+     *
+     * Retention rides on the QUERY, exactly as it does for the single-shot
+     * route, and `purpose=share` is stated rather than left to the server's
+     * backfill: a defaulted purpose is one refactor away from publishing
+     * something that was never meant to be a public object. `size` is advisory
+     * — the server never re-checks it — so it buys an early quota refusal and
+     * nothing else.
+     */
+    suspend fun initUpload(
+        header: ByteArray,
+        burnAfterRead: Boolean,
+        ttlSeconds: Int,
+        payloadTotal: Long,
+        token: String,
+    ): ResumableSession = withContext(io) {
+        val url = base.newBuilder()
+            .addPathSegments("api/uploads")
+            .addQueryParameter("purpose", "share")
+            .addQueryParameter("burnAfterRead", if (burnAfterRead) "1" else "0")
+            .addQueryParameter("ttl", ttlSeconds.toString())
+            .addQueryParameter("size", payloadTotal.toString())
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .header("Accept", "application/json")
+            .header("User-Agent", userAgent)
+            .header("Authorization", "Bearer $token")
+            .post(header.toRequestBody(OCTETS))
+            .build()
+        val (status, text) = execute(authed.newCall(request))
+        if (status != 200) throw CloudException(uploadFailure(status, text))
+        val parsed = Json.parseOrNull(text) as? Json.Obj
+            ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+        val id = (parsed["uploadId"] as? Json.Str)?.value?.let { StoredObjectId.accepted(it) }
+            ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+        // The id is composed into every path below, so it is refused here rather
+        // than at three call sites.
+        val issued = parsed.whole("chunkSize")
+            ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+        // 0 means "use the protocol default", as the Web and Swift ports read
+        // it. Anything above the ceiling is refused, never clamped: the value
+        // sizes a buffer, and quietly shrinking a server's answer would hide a
+        // disagreement about chunk boundaries.
+        val chunk = if (issued == 0L) PendingUploadStore.DEFAULT_CHUNK_SIZE.toLong() else issued
+        if (chunk <= 0 || chunk > PendingUploadStore.MAX_CHUNK_SIZE) {
+            throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+        }
+        ResumableSession(id, chunk.toInt())
+    }
+
+    /**
+     * Append one range: `PATCH /api/uploads/{id}`.
+     *
+     * `Content-Range: bytes <from>-<inclusiveEnd>/<payloadTotal>`. Both answers
+     * the caller must act on carry the server's authoritative offset — 200 when
+     * the range started at or below what it holds, 409 when it started past it —
+     * and the server silently caps how much ONE append may commit, so a 200 may
+     * acknowledge less than was sent. The caller replays from the offset it is
+     * given; it never assumes its own range landed whole.
+     */
+    suspend fun patchChunk(
+        uploadId: String,
+        body: ByteArray,
+        length: Int,
+        from: Long,
+        payloadTotal: Long,
+        token: String,
+        onSent: (Long) -> Unit,
+    ): UploadOffset = withContext(io) {
+        require(length > 0 && length <= body.size) { "an empty append has no Content-Range" }
+        val safe = StoredObjectId.accepted(uploadId)
+            ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+        val request = Request.Builder()
+            .url(base.newBuilder().addPathSegments("api/uploads/$safe").build())
+            .header("Accept", "application/json")
+            .header("User-Agent", userAgent)
+            .header("Authorization", "Bearer $token")
+            .header("Content-Range", "bytes $from-${from + length - 1}/$payloadTotal")
+            .patch(ProgressBody(body, length, onSent))
+            .build()
+        val (status, text) = execute(authed.newCall(request))
+        when (status) {
+            200, 409 -> Unit
+            404 -> throw CloudException(CloudFailure(CloudFailure.Kind.UPLOAD_SESSION_GONE))
+            else -> throw CloudException(uploadFailure(status, text))
+        }
+        val parsed = Json.parseOrNull(text) as? Json.Obj
+            ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+        val received = parsed.whole("received")
+            ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+        UploadOffset(received, conflict = status == 409)
+    }
+
+    /** `GET /api/uploads/{id}` — where to resume from. 404 means the session is
+     *  gone: reaped while idle, or already terminal. */
+    suspend fun uploadOffset(uploadId: String, token: String): Long = withContext(io) {
+        val safe = StoredObjectId.accepted(uploadId)
+            ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+        val request = Request.Builder()
+            .url(base.newBuilder().addPathSegments("api/uploads/$safe").build())
+            .header("Accept", "application/json")
+            .header("User-Agent", userAgent)
+            .header("Authorization", "Bearer $token")
+            .build()
+        val (status, text) = execute(authed.newCall(request))
+        when (status) {
+            200 -> Unit
+            404 -> throw CloudException(CloudFailure(CloudFailure.Kind.UPLOAD_SESSION_GONE))
+            else -> throw CloudException(uploadFailure(status, text))
+        }
+        (Json.parseOrNull(text) as? Json.Obj)?.whole("received")
+            ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+    }
+
+    /**
+     * `POST /api/uploads/{id}/finalize`.
+     *
+     * The server does NOT verify that the expected bytes all arrived — it
+     * commits whatever the blob holds — so completeness is the client's own
+     * gate and is checked before this is called.
+     *
+     * 409 is a session already claimed, and it carries no object id: it cannot
+     * prove this upload published, and it cannot license a fresh session either.
+     * The caller keeps that uncertainty rather than resolving it here.
+     */
+    suspend fun finalizeUpload(uploadId: String, token: String): StoredUploadResult =
+        withContext(io) {
+            val safe = StoredObjectId.accepted(uploadId)
+                ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+            val request = Request.Builder()
+                .url(base.newBuilder().addPathSegments("api/uploads/$safe/finalize").build())
+                .header("Accept", "application/json")
+                .header("User-Agent", userAgent)
+                .header("Authorization", "Bearer $token")
+                .post(ByteArray(0).toRequestBody(OCTETS))
+                .build()
+            val (status, text) = execute(authed.newCall(request))
+            when (status) {
+                200 -> Unit
+                409 -> throw CloudException(CloudFailure(CloudFailure.Kind.ALREADY_FINALIZED))
+                404 -> throw CloudException(CloudFailure(CloudFailure.Kind.UPLOAD_SESSION_GONE))
+                else -> throw CloudException(uploadFailure(status, text))
+            }
+            val parsed = Json.parseOrNull(text) as? Json.Obj
+                ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+            val id = (parsed["id"] as? Json.Str)?.value?.let { StoredObjectId.accepted(it) }
+                ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+            val expiresAt = parsed.whole("expiresAt")
+                ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+            StoredUploadResult(id, expiresAt)
+        }
+
+    // ── history ─────────────────────────────────────────────────────────────
+
+    /**
+     * `GET /api/files` — the account's shares, as the SERVER describes them.
+     *
+     * Unpaged server-side, so the response is bounded here twice: by bytes,
+     * because a body over the transport ceiling is refused rather than
+     * truncated, and by rows. Both refusals are reported as
+     * [CloudFailure.Kind.HISTORY_TOO_LARGE] rather than as a partial list — a
+     * list that silently stopped would offer a delete button over an incomplete
+     * picture of what the account holds.
+     *
+     * Types are read as the server writes them: `downloaded` is a BOOLEAN it
+     * derives from a timestamp column, and the two dates are Unix seconds.
+     */
+    suspend fun listFiles(token: String): List<StoredFileRow> = withContext(io) {
+        val request = Request.Builder()
+            .url(base.newBuilder().addPathSegments("api/files").build())
+            .header("Accept", "application/json")
+            .header("User-Agent", userAgent)
+            .header("Authorization", "Bearer $token")
+            .build()
+        val (status, text, oversize) = executeBounded(authed.newCall(request))
+        if (oversize) throw CloudException(CloudFailure(CloudFailure.Kind.HISTORY_TOO_LARGE))
+        if (status != 200) throw CloudException(uploadFailure(status, text))
+        val parsed = Json.parseOrNull(text) as? Json.Obj
+            ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+        val items = (parsed["files"] as? Json.Arr)?.items
+            ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+        if (items.size > MAX_HISTORY_ROWS) {
+            throw CloudException(CloudFailure(CloudFailure.Kind.HISTORY_TOO_LARGE))
+        }
+        items.map { item ->
+            val row = item as? Json.Obj
+                ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+            val id = (row["id"] as? Json.Str)?.value?.let { StoredObjectId.accepted(it) }
+                ?: throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+            StoredFileRow(
+                id = id,
+                size = row.whole("size") ?: malformed(),
+                createdAt = row.whole("createdAt") ?: malformed(),
+                expiresAt = row.whole("expiresAt") ?: malformed(),
+                burnAfterRead = (row["burnAfterRead"] as? Json.Bool)?.value ?: malformed(),
+                downloaded = (row["downloaded"] as? Json.Bool)?.value ?: malformed(),
+                downloadCount = row.whole("downloadCount") ?: malformed(),
+            )
+        }
+    }
+
+    /**
+     * `DELETE /api/files/{id}`.
+     *
+     * A 404 is deliberately ambiguous on the server: missing, owned by somebody
+     * else, or not a share all answer alike. It is surfaced as
+     * [CloudFailure.Kind.NOT_FOUND] and must never be reported as a successful
+     * deletion — this client did not cause it and cannot know that it happened.
+     */
+    suspend fun deleteFile(id: String, token: String): Unit = withContext(io) {
+        val safe = StoredObjectId.accepted(id)
+            ?: throw CloudException(CloudFailure(CloudFailure.Kind.LINK_INVALID))
+        val request = Request.Builder()
+            .url(base.newBuilder().addPathSegments("api/files/$safe").build())
+            .header("Accept", "application/json")
+            .header("User-Agent", userAgent)
+            .header("Authorization", "Bearer $token")
+            .delete()
+            .build()
+        val (status, text) = execute(authed.newCall(request))
+        when (status) {
+            200 -> Unit
+            404 -> throw CloudException(CloudFailure(CloudFailure.Kind.NOT_FOUND))
+            else -> throw CloudException(uploadFailure(status, text))
+        }
+    }
+
+    private fun malformed(): Nothing = throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+
+    /** One authenticated JSON round trip, cancellable for its whole lifetime. */
+    private suspend fun execute(call: Call): Pair<Int, String> {
+        val (status, text, oversize) = executeBounded(call)
+        if (oversize) throw CloudException(CloudFailure(CloudFailure.Kind.MALFORMED))
+        return status to text
+    }
+
+    private suspend fun executeBounded(call: Call): Triple<Int, String, Boolean> = try {
+        withCancellation(call) {
+            call.execute().use { response ->
+                val body = response.body.byteString(MAX_JSON_BYTES)
+                Triple(response.code, body ?: "", body == null)
+            }
+        }
+    } catch (e: IOException) {
+        coroutineContext.ensureActive()
+        throw CloudException(transportFailure(e))
     }
 
     // ── download ────────────────────────────────────────────────────────────
@@ -439,6 +724,12 @@ class CloudClient(
         /** A metadata or result document. Anything larger is not one. */
         private const val MAX_JSON_BYTES = 256 * 1024L
 
+        /** A second, independent bound on the account's unpaged file list. The
+         *  byte ceiling above already refuses a huge body; this refuses a body
+         *  that fits and still describes more rows than a phone can usefully
+         *  present or a user can reason about. */
+        const val MAX_HISTORY_ROWS = 1000
+
         private const val READ_BUFFER_BYTES = 64 * 1024
 
         private val OCTETS = "application/octet-stream".toMediaType()
@@ -592,4 +883,41 @@ private fun Json.Obj.whole(key: String): Long? {
     if (value.isNaN() || value != Math.floor(value)) return null
     if (value < 0 || value > MANIFEST_MAX_SAFE_INTEGER.toDouble()) return null
     return value.toLong()
+}
+
+
+/**
+ * A fixed byte range, written in slices so progress follows the bytes rather
+ * than the chunk boundary.
+ *
+ * Replayable: the array is the caller's immutable spool page and is not
+ * consumed, so OkHttp retrying this body would send the same bytes. It is still
+ * declared one-shot, because a silent retry would double-count progress the
+ * caller is using to decide whether the transfer is advancing.
+ */
+private class ProgressBody(
+    private val bytes: ByteArray,
+    private val length: Int,
+    private val onSent: (Long) -> Unit,
+) : RequestBody() {
+
+    override fun contentType() = "application/octet-stream".toMediaType()
+
+    override fun contentLength() = length.toLong()
+
+    override fun isOneShot() = true
+
+    override fun writeTo(sink: BufferedSink) {
+        var written = 0
+        while (written < length) {
+            val step = minOf(SLICE_BYTES, length - written)
+            sink.write(bytes, written, step)
+            written += step
+            onSent(written.toLong())
+        }
+    }
+
+    private companion object {
+        const val SLICE_BYTES = 64 * 1024
+    }
 }

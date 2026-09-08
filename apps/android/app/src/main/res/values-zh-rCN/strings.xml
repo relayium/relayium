@@ -303,4 +303,64 @@
     <string name="cloud_error_source_failed">上传过程中有文件无法读取，它可能已被修改或删除。</string>
     <string name="cloud_error_cancelled">已取消。</string>
 
+    <!-- 可恢复上传：大文件先在本机加密落盘，中断后可从服务端实际收到的字节续传。 -->
+    <string name="cloud_staging">正在准备…… %2$s 中的 %1$s</string>
+    <string name="cloud_staging_note">大文件会先在本机加密保存，这样中断后还能继续。</string>
+    <string name="cloud_small_note">小文件一次性发送。若中途中断，请重新选择文件。</string>
+    <string name="cloud_background_note">上传仅在 Relayium 打开时进行。若中断，加密副本会留在本机，可随时继续。</string>
+    <string name="cloud_pending_title">未完成的上传</string>
+    <plurals name="cloud_pending_summary">
+        <item quantity="other">%1$d 个文件，共 %2$s，等待完成。</item>
+    </plurals>
+    <string name="cloud_pending_resume">继续</string>
+    <string name="cloud_pending_discard">丢弃</string>
+    <string name="cloud_pending_discard_confirm">要丢弃这次上传吗？本机上的加密副本会被删除，服务端不会保存任何内容。</string>
+    <string name="cloud_pending_discard_cancel">保留</string>
+    <string name="cloud_checking">正在校验本机副本……</string>
+    <string name="cloud_uncertain_title">这次上传可能已经完成</string>
+    <string name="cloud_uncertain_body">已请求服务端完成，但没有收到回应。请先查看下方“我的文件”，重复发送可能会保存两份相同文件。</string>
+    <string name="cloud_uncertain_retry">尝试完成</string>
+    <string name="cloud_uncertain_discard">删除本机副本</string>
+    <string name="cloud_uncertain_discard_confirm">要删除本机副本吗？这只会删除本地的恢复副本及其密钥。如果这次上传其实已经完成，服务器上的文件会保留，并且其链接将无法再在本机重建。</string>
+    <string name="cloud_cleanup_failed">上传已完成。本机上的临时副本未能删除。</string>
+    <string name="cloud_link_key_not_saved">上方的链接未能保存到本机，因此不会出现在“我的文件”中。</string>
+    <string name="cloud_stranded_title">中断上传的残留数据</string>
+    <string name="cloud_stranded_body">本机保留了一份已无法读取的中断上传，无法继续。</string>
+    <string name="cloud_stranded_remove">删除</string>
+
+    <!-- 账户已存储的文件：服务端事实；仅在保留密钥的设备上才能重建链接。 -->
+    <string name="cloud_history_title">我的文件</string>
+    <string name="cloud_history_intro">此账户正在存储的文件。链接只能在上传它的那台设备上重建——密钥从不上传到服务器。</string>
+    <string name="cloud_history_refresh">刷新</string>
+    <string name="cloud_history_loading">正在加载……</string>
+    <string name="cloud_history_empty">此账户没有存储任何文件。</string>
+    <string name="cloud_history_signed_out">登录后可查看此账户存储的文件。</string>
+    <string name="cloud_history_size">%1$s，上传于 %2$s</string>
+    <string name="cloud_history_expires">%1$s 到期</string>
+    <string name="cloud_history_expired">已过期——服务器稍后会清除。</string>
+    <string name="cloud_history_burn">首次下载后删除。</string>
+    <plurals name="cloud_history_downloads">
+        <item quantity="other">已下载 %1$d 次。</item>
+    </plurals>
+    <string name="cloud_history_not_downloaded">尚未下载。</string>
+    <string name="cloud_history_no_key">此文件的密钥不在本机，无法在这里重建它的链接。</string>
+    <string name="cloud_history_delete">删除</string>
+    <string name="cloud_history_delete_confirm">要从服务器删除此文件吗？该操作无法撤销，指向它的链接会立即失效。</string>
+    <string name="cloud_history_delete_cancel">保留</string>
+    <string name="cloud_history_deleting">正在删除……</string>
+    <string name="cloud_history_deleted">已删除。</string>
+    <string name="cloud_history_delete_gone">服务器上已没有此文件。本设备没有删除任何内容。</string>
+    <string name="cloud_history_local_key_kept">已从服务器删除。本机上的密钥副本未能移除。</string>
+
+    <string name="cloud_error_upload_session_gone">服务器上已没有这次上传，请重新开始。</string>
+    <string name="cloud_error_already_finalized">这次上传的会话此前已被使用，因此没有重复发送。文件是否已保存，本机无法确定——请查看下方“我的文件”。</string>
+    <string name="cloud_error_history_too_large">此账户存储的文件数量超出本应用可列出的范围。请先在网站上删除一些。</string>
+    <string name="cloud_error_spool_unusable">本机副本与这次上传不再匹配，无法继续。请丢弃后重新选择文件。</string>
+    <string name="cloud_error_protection_unavailable">本机无法解锁已保存的上传。请重试，或将其丢弃。</string>
+    <string name="cloud_error_stage_failed">加密副本无法写入本机存储。</string>
+    <string name="cloud_error_no_progress">上传停止了进展，请重试。</string>
+
+    <string name="cloud_completing_title">这次上传已完成</string>
+    <string name="cloud_completing_body">文件已保存。本机还需要准备好链接才能显示。</string>
+    <string name="cloud_completing_action">获取链接</string>
 </resources>

@@ -123,6 +123,41 @@ data class CloudFailure(val kind: Kind, val status: Int = 0) {
          */
         SOURCE_FAILED,
 
+        /**
+         * The server no longer has the upload session this job was feeding —
+         * reaped while idle, or already terminal.
+         *
+         * Recoverable ONLY when durable state proves finalize was never
+         * requested; otherwise the object may already exist and a fresh session
+         * would publish the same bytes twice.
+         */
+        UPLOAD_SESSION_GONE,
+
+        /** 409 on finalize: the session is already claimed. It carries no
+         *  object id, so it proves neither success nor safety to start again. */
+        ALREADY_FINALIZED,
+
+        /** The account's file list is larger than this build will read whole.
+         *  Refused rather than shown partially. */
+        HISTORY_TOO_LARGE,
+
+        /** The staged ciphertext is missing, the wrong length, or no longer
+         *  matches what the job recorded. It cannot be re-staged under the same
+         *  key, so the upload can only be discarded. */
+        SPOOL_UNUSABLE,
+
+        /** This device's key store could not protect or read the upload's own
+         *  records. Distinct from a missing one: the bytes may still be here. */
+        PROTECTION_UNAVAILABLE,
+
+        /** Writing the staged copy failed for a reason other than a full
+         *  disk. */
+        STAGE_FAILED,
+
+        /** The server kept answering without its committed offset advancing.
+         *  Reported rather than retried forever. */
+        NO_PROGRESS,
+
         /** The user stopped it. */
         CANCELLED,
     }
