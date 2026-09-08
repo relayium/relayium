@@ -2,8 +2,10 @@ package com.relayium.android
 
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import java.util.regex.Pattern
 
@@ -28,6 +30,17 @@ import java.util.regex.Pattern
 object DocumentsUiDriver {
 
     const val DOCS_PKG = "com.android.documentsui"
+
+    /** Bounds on the scroll below: a list that will never contain the target
+     *  must produce a diagnosis rather than a hang. Twelve screens is far past
+     *  any fixture this suite stages, and 30 s far past the time DocumentsUI
+     *  takes to settle one of them. */
+    private const val MAX_SCROLL_STEPS = 12
+    private const val SCROLL_TIMEOUT_MS = 30_000L
+
+    /** Deliberately less than a full screen, so an item straddling the fold
+     *  cannot be scrolled past without ever having been visible. */
+    private const val SCROLL_FRACTION = 0.7f
 
     private val device: UiDevice
         get() = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
@@ -199,17 +212,121 @@ object DocumentsUiDriver {
     }
 
     /**
-     * Enter the provider root, then tap a document in it.
+     * Enter the provider root, then tap a document in it — SCROLLING to it when
+     * the list is longer than the screen.
      *
-     * Readiness is the provider's OWN document list appearing — the target
-     * present — which is how a stale home view is told apart from the real root
+     * Readiness is the provider's OWN document list appearing with the target
+     * in it, which is how a stale home view is told apart from the real root
      * having loaded.
+     *
+     * ## Why the scroll had to exist
+     *
+     * A round that sends several batches stages a document per batch AND
+     * receives the peer's into the same disposable tree, so the root grows as
+     * the round proceeds. On AOSP 36 the picker opens as a GRID, and a measured
+     * run had four files plus a folder filling the viewport with the fifth
+     * document below the fold: the wait timed out, and the census it printed
+     * showed the tell exactly — `Preview the file <name>` was present while
+     * `<name>` was not. The preview affordance's accessibility node extends
+     * slightly past the visible region; the document's own label does not.
+     *
+     * **That is also why the tap here does not go through [tap].** `tap` falls
+     * back to a content-DESCRIPTION match, which would have found
+     * `Preview the file <name>` and clicked the PREVIEW — opening a viewer
+     * instead of choosing the document, and returning no result to the app. A
+     * document is chosen by its own visible label or not at all.
      */
     fun enterTestRootThenTap(fileName: String) {
         enterTestRootFromDrawer()
-        device.wait(Until.findObject(byLabel(fileName)), 20_000)
-            ?: error("the provider root never listed $fileName after entering it; visible: ${uiDump()}")
-        tap(fileName, "the staged outgoing document")
+        val node = scrollListTo(fileName, "the staged outgoing document")
+        clickReFindingOnStale(node, fileName, "the staged outgoing document")
+    }
+
+    /**
+     * The document list, scrolled until [label]'s own TEXT node is visible.
+     *
+     * Bounded twice — by steps and by a deadline — because an unbounded scroll
+     * on a list that will never contain the target is a hang rather than a
+     * diagnosis. Returns the node it found, so the caller clicks the very thing
+     * that was seen rather than looking it up again.
+     *
+     * Nothing here injects a provider, a document or a model: it scrolls the
+     * REAL picker and reads what the real picker shows.
+     */
+    private fun scrollListTo(label: String, what: String): UiObject2 {
+        val deadline = System.currentTimeMillis() + SCROLL_TIMEOUT_MS
+        var steps = 0
+        var atEnd = false
+        while (System.currentTimeMillis() < deadline) {
+            visibleLabel(label)?.let { return it }
+            if (atEnd || steps >= MAX_SCROLL_STEPS) break
+            val container = listContainer()
+            if (container == null) {
+                // No scrollable list yet: the root may still be loading, so
+                // this is a wait rather than a failure.
+                Thread.sleep(250)
+                continue
+            }
+            // `scroll` answers false once it can go no further. One more lookup
+            // still happens after that, because the target may be in the final
+            // screen the last scroll brought into view.
+            atEnd = !runCatching { container.scroll(Direction.DOWN, SCROLL_FRACTION) }
+                .getOrDefault(false)
+            steps += 1
+            device.waitForIdle(1_000)
+        }
+        visibleLabel(label)?.let { return it }
+        error(
+            "the provider root never showed $what ('$label') after $steps scroll step(s)" +
+                (if (atEnd) " and reaching the end of the list" else "") +
+                ". visible: ${uiDump()}",
+        )
+    }
+
+    /**
+     * [label]'s own TEXT node, and only when it is really on screen.
+     *
+     * `visibleBounds` is clipped to the visible region, so a node that exists
+     * in the tree but sits past the fold degenerates to an empty rectangle —
+     * which is exactly the state a bare `findObject` reports as success and a
+     * click then dispatches into nothing.
+     */
+    private fun visibleLabel(label: String): UiObject2? {
+        val node = device.findObject(byLabel(label)) ?: return null
+        return runCatching {
+            val bounds = node.visibleBounds
+            if (bounds.width() > 0 && bounds.height() > 0) node else null
+        }.getOrNull()
+    }
+
+    /**
+     * The picker's DOCUMENT list. `dir_list` is DocumentsUI's own id for it.
+     *
+     * The fallback exists for a release that renamed it, and it excludes
+     * `roots_list` explicitly — the roots DRAWER is scrollable too, and
+     * `enterTestRootFromDrawer` has just closed it, so a first-scrollable-wins
+     * fallback can grab the drawer mid-animation and scroll the wrong list
+     * while the document the caller wants stays exactly where it was.
+     */
+    private fun listContainer(): UiObject2? =
+        device.findObject(By.res(DOCS_PKG, "dir_list"))
+            ?: device.findObjects(By.pkg(DOCS_PKG).scrollable(true))
+                .firstOrNull { candidate ->
+                    runCatching { candidate.resourceName }.getOrNull()
+                        ?.endsWith("roots_list") != true
+                }
+
+    /** Click a node found a moment ago, re-finding it ONCE if the list moved
+     *  under us. DocumentsUI animates its scroll, so a reference taken a frame
+     *  before the click can go stale mid-settle. */
+    private fun clickReFindingOnStale(node: UiObject2, label: String, what: String) {
+        try {
+            node.click()
+        } catch (_: StaleObjectException) {
+            val again = visibleLabel(label)
+                ?: error("$what ('$label') moved out of view before it could be tapped")
+            again.click()
+        }
     }
 
     /**
@@ -224,12 +341,12 @@ object DocumentsUiDriver {
      */
     fun enterTestRootThenOpenDirectory(directoryName: String) {
         enterTestRootFromDrawer()
-        device.wait(Until.findObject(byLabel(directoryName)), 20_000)
-            ?: error(
-                "the provider root never listed the directory '$directoryName'; " +
-                    "visible: ${uiDump()}",
-            )
-        tap(directoryName, "the destination subfolder")
+        // The SAME scroll, for the same reason: the tree picker lists the
+        // received batches' folders beside the destination, so a root that grew
+        // during a round can push the destination below the fold. A directory
+        // that is already visible costs zero scroll steps.
+        val node = scrollListTo(directoryName, "the destination subfolder")
+        clickReFindingOnStale(node, directoryName, "the destination subfolder")
         // Inside it now: the confirm button is only the right one to press once
         // the picker is actually showing this directory.
         device.wait(Until.findObject(byLabel(directoryName)), 10_000)
