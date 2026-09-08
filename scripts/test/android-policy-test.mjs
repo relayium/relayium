@@ -29,7 +29,7 @@
 // Run by `repo-hygiene.yml` on every push, which is the point — a check that
 // only ran when someone remembered it is the state that lets these recur.
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -76,6 +76,9 @@ const REQUIRED = [
   "app/src/debug/kotlin/com/relayium/android/TestHooks.kt",
   "app/src/release/kotlin/com/relayium/android/TestHooks.kt",
   "app/src/debug/kotlin/com/relayium/android/TestDocumentsProvider.kt",
+  "app/src/main/kotlin/com/relayium/android/account/KeystoreTokenStore.kt",
+  "app/src/main/kotlin/com/relayium/android/account/OkHttpAccountTransport.kt",
+  "app/src/main/kotlin/com/relayium/android/ui/AccountScreen.kt",
 ];
 for (const relative of REQUIRED) {
   check(read(relative) !== null, `apps/android/${relative} is missing. This file asserts rules `
@@ -309,9 +312,103 @@ check(
   + "gen-pages publishes the manifest. A mismatch is invisible until a user presses Check for updates.",
 );
 
+// ── 6. the account credential ───────────────────────────────────────────────
+//
+// These are source-shape facts, and each is a one-line edit away from being
+// silently untrue in a way that no Kotlin test can observe about itself: the app
+// still builds, every unit test still passes, and the only evidence is where a
+// credential ended up on a real device.
+
+const keystoreStore = codeOf(read("app/src/main/kotlin/com/relayium/android/account/KeystoreTokenStore.kt"));
+const accountTransport = codeOf(read("app/src/main/kotlin/com/relayium/android/account/OkHttpAccountTransport.kt"));
+const accountScreen = codeOf(read("app/src/main/kotlin/com/relayium/android/ui/AccountScreen.kt"));
+
+// The bearer is wrapped by a key this process cannot export, and the ciphertext
+// lives where the platform itself says backup and device transfer do not reach.
+// `allowBackup="false"` in the manifest is the other half; neither is enough
+// alone, because each is one attribute or one path away from being reverted.
+check(
+  /noBackupFilesDir/.test(keystoreStore),
+  "KeystoreTokenStore no longer writes into noBackupFilesDir. The wrapped bearer would then be "
+  + "eligible for backup and device-to-device transfer, where it is a credential in someone else's "
+  + "hands rather than an inert file.",
+);
+check(
+  /"AndroidKeyStore"/.test(keystoreStore) && /AES\/GCM\/NoPadding/.test(keystoreStore),
+  "KeystoreTokenStore no longer wraps the bearer with an AndroidKeyStore AES-GCM key. Anything "
+  + "weaker means the ciphertext file is openable by whoever can read it.",
+);
+check(
+  /setRandomizedEncryptionRequired\(true\)/.test(keystoreStore),
+  "KeystoreTokenStore no longer requires randomized encryption. Without it a caller may supply the "
+  + "IV, and a reused nonce under one AES-GCM key destroys the integrity of every message under it.",
+);
+check(
+  /android:allowBackup="false"/.test(read("app/src/main/AndroidManifest.xml")),
+  "the manifest no longer sets allowBackup=false.",
+);
+
+// A bearer belongs in a header. In a URL it lands in every proxy and access log
+// between here and the server, and in this app's own crash reports.
+for (const [name, source] of [
+  ["OkHttpAccountTransport", accountTransport],
+  ["AccountClient", codeOf(read("app/src/main/kotlin/com/relayium/android/account/AccountClient.kt"))],
+]) {
+  check(
+    !/[?&](token|access_token|bearer)=/.test(source),
+    `${name} composes a URL carrying a credential in its query string. The bearer is an `
+    + "Authorization header precisely so it does not reach a proxy log.",
+  );
+}
+check(
+  /followRedirects\(false\)/.test(accountTransport) && /followSslRedirects\(false\)/.test(accountTransport),
+  "the account transport follows redirects. These requests carry a bearer, so a redirect would "
+  + "forward the credential to whatever host answered.",
+);
+
+// Nothing in the account layer logs. Several of these values ARE credentials,
+// and a log line is the one place they would survive outside the process.
+const accountDir = resolve(android, "app/src/main/kotlin/com/relayium/android/account");
+for (const file of existsSync(accountDir) ? readdirSync(accountDir) : []) {
+  if (!file.endsWith(".kt")) continue;
+  const body = codeOf(readFileSync(resolve(accountDir, file), "utf8"));
+  check(
+    !/\b(android\.util\.)?Log\.[dviwe]\s*\(|println\s*\(/.test(body),
+    `apps/android/app/src/main/kotlin/com/relayium/android/account/${file} logs. Bearers, `
+    + "passwords and reactivation tokens pass through this package, and a log line is the one place "
+    + "they would outlive the process.",
+  );
+}
+
+// The password is collected by a composable and cleared when the request owns
+// it. `rememberSaveable` would write it into saved instance state, which the
+// system persists OUTSIDE this process.
+check(
+  /var password by remember \{/.test(accountScreen),
+  "AccountScreen no longer holds the password in plain `remember`. If it became `rememberSaveable` "
+  + "the credential would be written into saved instance state, outside this app's memory.",
+);
+check(
+  !/rememberSaveable[^\n]*password/i.test(accountScreen),
+  "AccountScreen puts the password into rememberSaveable. Saved instance state is persisted by the "
+  + "system outside this process.",
+);
+
+// The reactivation token is the one value that can undo a deletion. It is read
+// from the wire and deliberately never carried into a state object or a screen.
+const accountModels = codeOf(read("app/src/main/kotlin/com/relayium/android/account/AccountModels.kt"));
+check(
+  !/reactivateToken/.test(accountModels) && !/reactivateToken/.test(accountScreen),
+  "the reactivation token has been given a home in the account models or on the account screen. It "
+  + "is the single value that can undo a deletion; this app has no screen that can spend it, so it "
+  + "must not be carried or displayed.",
+);
+
 if (failures.length) {
   for (const f of failures) console.error(`  ✗ ${f}`);
   console.error(`android-policy-test: ${failures.length} failure(s)`);
   process.exit(1);
 }
-console.error("android-policy-test: OK (release fence, debug-only surfaces, exported surface)");
+console.error(
+  "android-policy-test: OK (release fence, debug-only surfaces, exported surface, account credential)",
+);

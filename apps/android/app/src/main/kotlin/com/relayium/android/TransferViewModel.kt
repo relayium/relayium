@@ -6,6 +6,14 @@ import android.provider.OpenableColumns
 import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.relayium.android.account.AccountAccessDraft
+import com.relayium.android.account.AccountClient
+import com.relayium.android.account.AccountSession
+import com.relayium.android.account.BrowserLoginModel
+import com.relayium.android.account.CreateLinkModel
+import com.relayium.android.account.KeystoreTokenStore
+import com.relayium.android.account.MintedCode
+import com.relayium.android.account.pairCode
 import com.relayium.android.storage.ProviderOps
 import com.relayium.android.update.UpdateChecker
 import com.relayium.android.update.UpdateEndpoint
@@ -66,6 +74,38 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
      *  to production cannot be mistaken for a working test seam. */
     val updateFeedUrl: String
 
+    /**
+     * Who is signed in.
+     *
+     * A model of its own rather than state on this class, and constructed with
+     * injected seams — an HTTP transport, a token store, a dispatcher and a
+     * clock — so its ownership rules run under plain JVM tests. Nothing
+     * Android-typed reaches it: [KeystoreTokenStore] is passed in as a
+     * [com.relayium.android.account.TokenStore], and it never learns what a
+     * `Context` is.
+     */
+    val account: AccountSession
+
+    /** Approving this device in a browser, for the accounts that have no
+     *  password at all (Apple/Google sign-in) — this build ships no Google SDK
+     *  and there is no other way in for them. */
+    val browserLogin: BrowserLoginModel
+
+    /** Minting the six digits a second device joins. */
+    val createLink: CreateLinkModel
+
+    /**
+     * The address and the form mode the user is part-way through typing.
+     *
+     * Owned HERE rather than by the form composable because the form is removed
+     * from the composition while a sign-in is in flight — see
+     * [AccountAccessDraft] for the state loss that produced. It survives that
+     * round trip, an Activity recreation and a tab change, exactly as the
+     * message draft does, and for the same reason: the ViewModel's lifetime is
+     * the one the work actually has.
+     */
+    val accessDraft = AccountAccessDraft()
+
     init {
         val origin = Backend.resolve(Backend.readDebugOverride())
         backendOrigin = origin
@@ -89,6 +129,47 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
                     ?: "en"
             },
             openUrl = { url -> openInBrowser(app, url) },
+        )
+
+        // ONE dispatcher owns every account state transition (see
+        // AccountSession): the main dispatcher, which is single-threaded and
+        // serialising and is also where Compose wants the result. All blocking
+        // keystore and disk work is handed to `io` from inside it, and the
+        // HTTP bodies are consumed on OkHttp's own threads before any
+        // continuation resumes here.
+        val client = AccountClient(
+            com.relayium.android.account.OkHttpAccountTransport(
+                origin = origin,
+                userAgent = "Relayium-Android/${BuildConfig.VERSION_NAME} (account)",
+            ),
+        )
+        val owner = Dispatchers.Main.immediate
+        account = AccountSession(
+            scope = viewModelScope,
+            owner = owner,
+            io = Dispatchers.IO,
+            client = client,
+            tokenStore = KeystoreTokenStore(app),
+            deviceName = android.os.Build.MODEL ?: "Android",
+        )
+        browserLogin = BrowserLoginModel(
+            scope = viewModelScope,
+            owner = owner,
+            client = client,
+            session = account,
+            deviceName = android.os.Build.MODEL ?: "Android",
+            // The app's OWN resolved origin — the server's verification page
+            // must be on it, or the approval URL is refused rather than opened.
+            trustedOrigin = origin,
+            now = { System.currentTimeMillis() / 1000L },
+        )
+        createLink = CreateLinkModel(
+            scope = viewModelScope,
+            owner = owner,
+            client = client,
+            session = account,
+            origin = origin,
+            now = { System.currentTimeMillis() / 1000L },
         )
     }
 
@@ -177,15 +258,52 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── joining ─────────────────────────────────────────────────────────────
 
-    /** Raw input from the join field or an incoming relayium.com link. */
+    /**
+     * Raw input from the join field or an incoming relayium.com link.
+     *
+     * Anonymous: joining has never required an account and still does not. The
+     * account is what MINTING needs, because the code's owner pays for whatever
+     * is relayed through it.
+     *
+     * A successful parse retires any code this device minted. That is what
+     * keeps the connecting screen honest: the minted-code card is drawn from
+     * [createLink], and without this a stale `Showing` would reappear over a
+     * session started by pasting somebody else's code — six digits presented as
+     * "give these to the other device" that name a different room entirely.
+     */
     fun join(raw: String) {
         when (val parsed = JoinInput.parse(raw)) {
             is JoinInput.Result.Code -> {
                 _joinError.value = null
+                createLink.cancel()
                 controller.join(parsed.code)
             }
             is JoinInput.Result.Rejected -> _joinError.value = parsed.reason
         }
+    }
+
+    /**
+     * Mint a code and join the room it names.
+     *
+     * The commit runs on the account model's own dispatcher, immediately before
+     * the join and after the mint has already been re-checked against the live
+     * account and the code's expiry (see [CreateLinkModel]). What it adds is the
+     * TRANSFER side of the same question: is this device actually free?
+     *
+     * `phase` is read as a snapshot and that is sound here, because the only
+     * thing that can take this app out of IDLE/ENDED is a local join or a local
+     * mint — a peer can move a session forward but cannot start one. So a mint
+     * whose answer arrives after the user has already joined somebody else's
+     * code refuses, and the live transfer is left alone.
+     */
+    fun createCrossNetworkLink() = createLink.create { minted: MintedCode ->
+        val phase = controller.state.value.phase
+        if (phase != TransferController.Phase.IDLE && phase != TransferController.Phase.ENDED) {
+            return@create false
+        }
+        _joinError.value = null
+        controller.join(minted.pairCode())
+        true
     }
 
     fun clearJoinError() { _joinError.value = null }
@@ -359,7 +477,74 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── session ─────────────────────────────────────────────────────────────
 
-    fun disconnect() = controller.disconnect()
+    // ── account, where it meets the transfer ────────────────────────────────
+
+    /**
+     * Leave the check-email or frozen-account notice and go back to the form,
+     * as a SIGN-IN.
+     *
+     * Two things move together, which is why this is one action rather than the
+     * session call on its own. The session leaves the notice; the draft
+     * explicitly selects the sign-in half — because the way a user reaches the
+     * check-email screen is usually by REGISTERING, and the draft still says so.
+     * Without this, "Back to sign in" put them on the create-account form, which
+     * is the one place that button promises not to go.
+     *
+     * The typed address is deliberately kept: it is the account they are trying
+     * to reach, and it is the field they would otherwise retype. And this is not
+     * the ordinary rejected-form recovery — a refused registration stays a
+     * registration, and nothing here runs on that path.
+     */
+    fun returnToSignInForm() {
+        accessDraft.setCreating(false)
+        account.backToSignIn()
+    }
+
+    /** Start a browser approval. The model claims its account-access attempt
+     *  and hands the bearer over itself; see [BrowserLoginModel.begin]. */
+    fun beginBrowserLogin() = browserLogin.begin()
+
+    /**
+     * Sign out, and take everything that depended on the credential with it.
+     *
+     * Three things are ended together, because a revocation that left any of
+     * them running would leave the app acting on an account it no longer has:
+     *
+     *  * an in-flight **browser approval**, whose whole purpose is to produce a
+     *    bearer for the account being signed out of. Cancelling bumps its
+     *    generation, so a token that arrives afterwards is revoked rather than
+     *    adopted;
+     *  * a **minted code that nobody has joined yet**. It names a room reserved
+     *    under the credential being revoked, so leaving it on screen would offer
+     *    six digits belonging to an account this device no longer holds;
+     *  * nothing else. A session a peer has ALREADY joined is left alone: it is
+     *    an established end-to-end link that uses no bearer, and tearing down a
+     *    running transfer because the user signed out would destroy work they
+     *    never asked to lose.
+     */
+    fun signOutAccount() {
+        browserLogin.cancel()
+        val phase = controller.state.value.phase
+        if (phase == TransferController.Phase.CONNECTING ||
+            phase == TransferController.Phase.WAITING_PEER
+        ) {
+            // Only while the room is still unjoined; see above.
+            if (createLink.state.value !is CreateLinkModel.State.Idle) {
+                createLink.cancel()
+                controller.disconnect()
+            }
+        } else {
+            createLink.cancel()
+        }
+        account.signOut()
+    }
+
+    fun disconnect() {
+        // The minted code goes with the session it belonged to: leaving the room
+        // it names makes it six digits nothing is listening on.
+        createLink.cancel()
+        controller.disconnect()
+    }
     fun dismissCleanupWarning() = controller.dismissCleanupWarning()
 
     /** Nonblocking by design; a parked provider cannot ANR this. */

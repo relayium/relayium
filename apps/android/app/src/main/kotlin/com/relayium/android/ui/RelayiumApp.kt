@@ -1,5 +1,8 @@
 package com.relayium.android.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,20 +21,29 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,13 +62,37 @@ import com.relayium.android.BuildConfig
 import com.relayium.android.R
 import com.relayium.android.TransferController
 import com.relayium.android.TransferViewModel
+import com.relayium.android.account.AccountState
+import com.relayium.android.account.CreateLinkModel
+import com.relayium.android.account.PairCodeExpiry
 import com.relayium.android.update.UpdateChecker
 import com.relayium.protocol.JoinInput
+import kotlinx.coroutines.delay
+
+/** The two things this build can do, and nothing it cannot. There is no tab
+ *  here for a feature that is not implemented: a destination that opens onto a
+ *  placeholder is a claim the product does not honour. */
+internal enum class Destination { TRANSFER, ACCOUNT }
 
 /**
- * One screen, routed by the controller's phase. The layout constants follow
- * the app-wide rhythm: 16dp card padding, 20dp between sections, a readable
- * max width on tablets, and every tappable target at least 48dp.
+ * The shell: a destination bar, and one of two surfaces under it. The layout
+ * constants follow the app-wide rhythm — 16dp card padding, 20dp between
+ * sections, a readable max width on tablets, every tappable target at least
+ * 48dp.
+ *
+ * ## Why the system pickers are launched from HERE
+ *
+ * `rememberLauncherForActivityResult` registers its result callback for as long
+ * as the composable that called it stays in the composition, and unregisters it
+ * when that composable leaves. Registering the file and folder pickers inside
+ * the transfer surface would therefore tie them to the SELECTED TAB: a user who
+ * opened the document picker and — while the system UI was in front — had the
+ * app recreated onto the account tab would come back to a result with nobody
+ * left to receive it, which reads as a chosen file that silently never sends.
+ * Hoisting them above the destination switch means the registration outlives
+ * every tab change, and the two link fences the results carry (see
+ * [TransferViewModel.sendPicked] and the controller's own `promptId`) are
+ * unchanged.
  */
 @Composable
 fun RelayiumApp(viewModel: TransferViewModel) {
@@ -64,7 +100,61 @@ fun RelayiumApp(viewModel: TransferViewModel) {
     val joinError by viewModel.joinError.collectAsStateWithLifecycle()
     val pickError by viewModel.pickError.collectAsStateWithLifecycle()
 
-    Scaffold { insets ->
+    var destination by rememberSaveable { mutableStateOf(Destination.TRANSFER) }
+
+    // The controller-owned link identity each picker result must be handed back
+    // with, captured AT LAUNCH and saved across the picker round trip. The
+    // CONTROLLER compares it on its session executor before any lane mutation,
+    // so a file chosen for one connection can never be sent on the next.
+    var sendLinkId by rememberSaveable { mutableIntStateOf(0) }
+    var saveLinkId by rememberSaveable { mutableIntStateOf(0) }
+    var savePromptId by rememberSaveable { mutableIntStateOf(0) }
+
+    val filePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris -> viewModel.sendPicked(uris, sendLinkId) }
+
+    val folderPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { tree -> viewModel.acceptIncoming(savePromptId, tree, saveLinkId) }
+
+    val pickers = Pickers(
+        chooseFiles = { linkId ->
+            sendLinkId = linkId
+            filePicker.launch(arrayOf("*/*"))
+        },
+        chooseFolder = { linkId, promptId ->
+            saveLinkId = linkId
+            savePromptId = promptId
+            folderPicker.launch(null)
+        },
+    )
+
+    // Back returns to the transfer surface rather than leaving the app. Enabled
+    // only off the transfer tab, so the system's own "back closes the app"
+    // behaviour is untouched where it is the right one.
+    BackHandler(enabled = destination != Destination.TRANSFER) {
+        destination = Destination.TRANSFER
+    }
+
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = destination == Destination.TRANSFER,
+                    onClick = { destination = Destination.TRANSFER },
+                    icon = { Icon(Icons.Filled.Send, contentDescription = null) },
+                    label = { Text(stringResource(R.string.tab_transfer)) },
+                )
+                NavigationBarItem(
+                    selected = destination == Destination.ACCOUNT,
+                    onClick = { destination = Destination.ACCOUNT },
+                    icon = { Icon(Icons.Filled.Person, contentDescription = null) },
+                    label = { Text(stringResource(R.string.tab_account)) },
+                )
+            }
+        },
+    ) { insets ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -80,26 +170,47 @@ fun RelayiumApp(viewModel: TransferViewModel) {
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
-                // Session-level, above everything: leftovers are real whatever
-                // phase the link is in, and the warning stays until dismissed.
+                // Session-level, above everything and on BOTH surfaces:
+                // leftovers are real whatever the user is looking at, and the
+                // warning stays until dismissed.
                 if (state.cleanupIncomplete) {
                     CleanupWarningCard(onDismiss = viewModel::dismissCleanupWarning)
                 }
-                when (state.phase) {
-                    TransferController.Phase.IDLE ->
-                        JoinScreen(state, joinError, endedBanner = false, viewModel)
-                    TransferController.Phase.ENDED ->
-                        JoinScreen(state, joinError, endedBanner = true, viewModel)
-                    TransferController.Phase.CONNECTING,
-                    TransferController.Phase.WAITING_PEER,
-                    -> ConnectingScreen(state, viewModel)
-                    TransferController.Phase.CONNECTED ->
-                        SessionScreen(state, pickError, viewModel)
+                when (destination) {
+                    Destination.TRANSFER -> when (state.phase) {
+                        TransferController.Phase.IDLE ->
+                            JoinScreen(state, joinError, endedBanner = false, viewModel) {
+                                destination = Destination.ACCOUNT
+                            }
+                        TransferController.Phase.ENDED ->
+                            JoinScreen(state, joinError, endedBanner = true, viewModel) {
+                                destination = Destination.ACCOUNT
+                            }
+                        TransferController.Phase.CONNECTING,
+                        TransferController.Phase.WAITING_PEER,
+                        -> ConnectingScreen(state, viewModel)
+                        TransferController.Phase.CONNECTED ->
+                            SessionScreen(state, pickError, viewModel, pickers)
+                    }
+                    Destination.ACCOUNT -> AccountScreen(viewModel)
                 }
             }
         }
     }
 }
+
+/**
+ * The two system pickers, as callbacks the session surface invokes.
+ *
+ * A holder rather than two parameters because both carry the SAME contract: the
+ * caller passes the link (and, for a folder, the prompt) the launch is happening
+ * under, and nothing downstream re-derives it. See [RelayiumApp] for why the
+ * launchers themselves live above the destination switch.
+ */
+internal class Pickers(
+    val chooseFiles: (linkId: Int) -> Unit,
+    val chooseFolder: (linkId: Int, promptId: Int) -> Unit,
+)
 
 // ── join ────────────────────────────────────────────────────────────────────
 
@@ -109,6 +220,7 @@ private fun JoinScreen(
     joinError: JoinInput.Result.Reason?,
     endedBanner: Boolean,
     viewModel: TransferViewModel,
+    onOpenAccount: () -> Unit,
 ) {
     var input by rememberSaveable { mutableStateOf("") }
 
@@ -139,6 +251,15 @@ private fun JoinScreen(
     Text(
         text = stringResource(R.string.join_intro),
         style = MaterialTheme.typography.bodyLarge,
+    )
+
+    CreateCard(viewModel, onOpenAccount)
+
+    HorizontalDivider()
+
+    Text(
+        text = stringResource(R.string.join_section_title),
+        style = MaterialTheme.typography.titleMedium,
     )
 
     OutlinedTextField(
@@ -349,6 +470,195 @@ private fun updateErrorText(error: UpdateChecker.UpdateError): Int = when (error
     UpdateChecker.UpdateError.UNTRUSTED -> R.string.update_error_untrusted
 }
 
+// ── creating ────────────────────────────────────────────────────────────────
+
+/**
+ * Minting a link, and the honest reason when this device cannot.
+ *
+ * Creating needs an account and joining does not, and that asymmetry is the
+ * server's, not a paywall this screen invented: whatever the room relays is
+ * metered against the creating account's monthly allowance, so `POST /api/pair`
+ * refuses an anonymous caller. The copy says that rather than showing a
+ * disabled button — and says allowance rather than billing, because a mint
+ * costs nothing.
+ */
+@Composable
+private fun CreateCard(viewModel: TransferViewModel, onOpenAccount: () -> Unit) {
+    val account by viewModel.account.state.collectAsStateWithLifecycle()
+    val create by viewModel.createLink.state.collectAsStateWithLifecycle()
+
+    Card {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                text = stringResource(R.string.create_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                text = stringResource(R.string.create_intro),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            if (account !is AccountState.Ready) {
+                Text(
+                    text = stringResource(R.string.create_needs_account),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Button(
+                    onClick = onOpenAccount,
+                    modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
+                ) {
+                    Text(stringResource(R.string.create_open_account))
+                }
+                return@Column
+            }
+
+            when (val c = create) {
+                is CreateLinkModel.State.Minting -> Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(Modifier.height(20.dp).width(20.dp), strokeWidth = 2.dp)
+                    Text(
+                        text = stringResource(R.string.create_minting),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+
+                else -> {
+                    if (c is CreateLinkModel.State.Failed) {
+                        StatusCard(text = accountErrorMessage(c.failure), isError = true)
+                    }
+                    // A code that was minted and then could not be used. Said
+                    // out loud rather than dropped: the user asked for digits
+                    // and got none, and a button that silently does nothing
+                    // reads as a broken one.
+                    if (c is CreateLinkModel.State.Superseded) {
+                        StatusCard(text = stringResource(R.string.create_superseded), isError = true)
+                    }
+                    Button(
+                        onClick = viewModel::createCrossNetworkLink,
+                        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
+                    ) {
+                        Text(stringResource(R.string.create_action))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The six digits, the full link, and how long either is worth anything.
+ *
+ * Drawn only while this device is IN the room it minted — the connecting and
+ * waiting phases — so a code can never be presented as "give these to the other
+ * device" while nothing is listening on it. It disappears when the peer arrives,
+ * because at that point the code has done its job.
+ */
+@Composable
+private fun MintedCodeCard(showing: CreateLinkModel.State.Showing, viewModel: TransferViewModel) {
+    // One tick a second, so the countdown is a reading rather than a stale
+    // number. It costs nothing when this card is not on screen, because the
+    // effect is scoped to the card being in the composition.
+    val now by produceState(initialValue = System.currentTimeMillis() / 1000L, showing) {
+        while (true) {
+            value = System.currentTimeMillis() / 1000L
+            delay(1_000L)
+        }
+    }
+    val expiry = PairCodeExpiry.presentation(showing.expiresAt, now)
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var copied by rememberSaveable { mutableStateOf(false) }
+    // The confirmation belongs to ONE copy; a later change of what is on screen
+    // must not leave it standing.
+    LaunchedEffect(showing.code, expiry.usable) { copied = false }
+
+    Card {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                text = stringResource(R.string.create_code_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            if (!expiry.usable) {
+                // The server refuses the code from this second onward, so the
+                // digits are not shown at all: a person reading an expired code
+                // aloud gets a "code not found" on the other device and no way
+                // to tell which of the two ends is wrong.
+                StatusCard(text = stringResource(R.string.create_code_expired), isError = true)
+                return@Column
+            }
+            SelectionContainer {
+                Text(
+                    text = showing.code,
+                    style = MonospaceDigits,
+                    modifier = Modifier.fillMaxWidth().semantics {
+                        // Read as digits rather than as one large number.
+                        contentDescription = showing.code.toCharArray().joinToString(" ")
+                    },
+                    textAlign = TextAlign.Center,
+                )
+            }
+            expiry.countdown?.let { countdown ->
+                Text(
+                    text = stringResource(R.string.create_code_expires_in, countdown),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = stringResource(R.string.create_code_hint),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            SelectionContainer {
+                Text(
+                    text = showing.link,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        clipboard.setText(androidx.compose.ui.text.AnnotatedString(showing.link))
+                        copied = true
+                    },
+                    modifier = Modifier.weight(1f).defaultMinSize(minHeight = 48.dp),
+                ) {
+                    Text(stringResource(R.string.create_copy_link))
+                }
+                OutlinedButton(
+                    onClick = {
+                        // The system sheet, with no target chosen for the user:
+                        // whichever app they pick is the one that receives it.
+                        val send = android.content.Intent(android.content.Intent.ACTION_SEND)
+                            .setType("text/plain")
+                            .putExtra(android.content.Intent.EXTRA_TEXT, showing.link)
+                        runCatching {
+                            context.startActivity(
+                                android.content.Intent.createChooser(send, null),
+                            )
+                        }
+                    },
+                    modifier = Modifier.weight(1f).defaultMinSize(minHeight = 48.dp),
+                ) {
+                    Text(stringResource(R.string.create_share_link))
+                }
+            }
+            if (copied) {
+                Text(
+                    text = stringResource(R.string.create_copied),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            }
+        }
+    }
+}
+
 // ── connecting ──────────────────────────────────────────────────────────────
 
 @Composable
@@ -356,6 +666,16 @@ private fun ConnectingScreen(
     state: TransferController.State,
     viewModel: TransferViewModel,
 ) {
+    val create by viewModel.createLink.state.collectAsStateWithLifecycle()
+
+    // The code THIS device minted for the room it is now sitting in. Any other
+    // create state — including a code minted for a session that has since been
+    // replaced — draws nothing; `TransferViewModel.join` retires it, so a
+    // session started from a pasted code never shows one.
+    (create as? CreateLinkModel.State.Showing)?.let { showing ->
+        MintedCodeCard(showing, viewModel)
+    }
+
     Spacer(Modifier.height(24.dp))
     Column(
         modifier = Modifier.fillMaxWidth(),

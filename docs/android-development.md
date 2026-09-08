@@ -5,6 +5,10 @@
 direct APK only — no Google Play listing, no Play Billing, and no Play Services
 or GMS dependency of any kind.
 
+Its first published build was join-only; the current source additionally creates
+cross-network links and has a real account surface (see below). That is source
+state, not a release: no version number has moved and nothing is published for it.
+
 Since 2026-09-08 the website offers it: `/apps` renders a download card whenever
 `web/android-release.json` says a release is published, and the same document is
 copied to `web/public/apps/android/update.json`, which is the feed an installed
@@ -13,21 +17,150 @@ the manifest says `available: false`, and every surface — the card, the
 static twins and the app itself — reports "no download is published" rather than
 inventing one.
 
-## What the first stage is, honestly
+## What the app can do today, honestly
 
-Join-only. The app joins a live transfer another device started — a six-digit
-code or a `https://relayium.com/cross-network#c=…` link — anonymously, and then
-BOTH sides can send and receive files and messages on the one verified link.
-It does not mint codes, has no account features, no stored-transfer (`#k=`)
-support, no nearby discovery, and no background-transfer claim: there is no
-resident session, so when Android stops the process the session simply ends,
-and the next launch opens the join form afresh (the live UI is not left
-claiming a session that is gone). The link intent filter is deliberately
-**not** a verified App Link (no assetlinks.json on the server), so on Android
-12+ tapping a link opens the browser; the app is reached by pasting the code or
-link into the join form, or — for a link — by the user enabling "open
-supported links" manually. There is no `ACTION_SEND` handler, so sharing a link
-INTO the app is not a supported entry point.
+**Cross-network transfer, both directions.** The app can now CREATE a link as
+well as join one:
+
+* **Join** — a six-digit code or a `https://relayium.com/cross-network#c=…`
+  link, **anonymously**. Joining has never needed an account and still does not.
+* **Create** — `POST /api/pair` under the signed-in account's bearer, showing the
+  six digits and the full official link with a live countdown, and joining the
+  room those digits name through the same controller a pasted code goes through.
+  Creating needs an account because whatever the room relays is metered against
+  the creating account's monthly allowance (`account.PairMintRefusal`); a mint
+  itself costs nothing.
+
+Once connected, both sides send and receive files and messages on the one
+verified `link/1` session, exactly as before.
+
+**An account.** Email/password sign-in, registration with email verification and
+resend, password-reset request, browser-approved sign-in for accounts that have
+no password at all, restore across launches, explicit sign-out with real
+revocation, and the account's identity, plan, quota and device list read from the
+existing server APIs. See "Account" below.
+
+**Two destinations**, Transfer and Account, and nothing else: this build has no
+tab that opens onto a placeholder.
+
+### The iOS cross-network mismatch, stated plainly
+
+**An Android-created code cannot currently be joined by iOS, and vice versa.**
+Android speaks `link/1` and only `link/1`: `Signal.kt` classifies the legacy
+FILE/TEXT generations but never constructs them, while iOS's own `RelayiumApp`
+states that unified `link/1` is its **LAN** path and its cross-network rooms are
+the legacy ones. So the Android↔Web interop this repository proves — which is
+real, and which the interop lane runs on every change — does **not** establish
+Android↔iOS cross-network parity, and no surface here claims it does.
+
+Closing it means implementing the compatible legacy mode on Android (or another
+explicitly reviewed full-interoperability answer). It is a later slice: the
+frozen iOS side is deliberately not being changed to meet Android, and this
+build must not advertise a capability it does not have. Until then, the honest
+statement is "Android creates and joins cross-network links with the Web client
+and with other Android devices".
+
+### What is still absent, and is not claimed anywhere
+
+No stored-transfer (`#k=`) support, no LAN/nearby discovery, no Device Inbox, no
+`ACTION_SEND` share target, no QR entry point, and no billing of any kind — the
+app makes no checkout, subscription or plan-change request and offers no control
+that would start one. There is still no resident session and no
+background-transfer claim: when Android stops the process the session ends and
+the next launch opens afresh. The link intent filter is deliberately **not** a
+verified App Link (no assetlinks.json on the server), so on Android 12+ tapping a
+link opens the browser; the app is reached by pasting the code or link into the
+join form, or by the user enabling "open supported links" manually.
+
+## Account
+
+`app/src/main/kotlin/com/relayium/android/account/` is a JVM-testable core with
+the Android types pushed to its edges: an injected HTTP transport, an injected
+token store, an injected clock, and one owning dispatcher.
+
+```
+AccountTransport.kt      the request/response seam and the body ceiling.
+OkHttpAccountTransport.kt the real transport: bounded body, redirects REFUSED,
+                         strict UTF-8, bodies consumed off the main thread.
+AccountClient.kt         what each server answer MEANS. Strict; never guesses.
+AccountModels.kt         the outcomes, and the failure CLASSIFICATION the UI
+                         renders in the user's language.
+AccountState.kt          every state the surface can be in.
+AccountSession.kt        the state machine: one dispatcher, one generation.
+BrowserLoginModel.kt     the device-authorization approval loop.
+CreateLinkModel.kt       minting six digits, and the three fences on using them.
+PairCodeExpiry.kt        what a code's deadline means on screen.
+AccountAccessDraft.kt    the address and form mode, owned outside the composition.
+Bearer.kt                what this app will accept as a token, before adopting it.
+TokenStore.kt            the persistence contract: every failure is reported.
+KeystoreTokenStore.kt    AndroidKeyStore AES-GCM, in noBackupFilesDir, atomic.
+```
+
+### Where the credential lives
+
+The bearer — and only the bearer; never a password, never the pending-deletion
+reactivation token — is wrapped by an `AndroidKeyStore` AES-GCM key this process
+cannot export, and the ciphertext is written into `noBackupFilesDir` with a
+temp-file-plus-`fsync`-plus-rename replacement. It is **not** described as
+hardware-backed: whether the key sits in a TEE or in a software keymaster is a
+property of the device, and the AOSP emulator every acceptance here runs on has
+the latter. `scripts/test/android-policy-test.mjs` asserts the storage shape,
+that nothing in the package logs, that no bearer reaches a URL query, and that
+the password is never put into saved instance state.
+
+### The rules that took a bug to learn
+
+Each of these was reproduced before it was fixed:
+
+* **A token is validated before it is adopted.** A bearer containing a newline is
+  accepted by a lenient reader, stored, and then thrown out of OkHttp as an
+  `IllegalArgumentException` — from a value that came off the wire, with the
+  credential quoted in the message. `Bearer` refuses it at issue and the
+  transport classifies the throw as well.
+* **A quota is refused rather than rounded.** `cap <= 0` is the server's spelling
+  of "unlimited", so a negative cap read leniently renders a broken response as
+  an *unlimited* plan. And at or above 2^53 consecutive integers stop being
+  distinguishable, so `9007199254740993` silently becomes `…992`.
+* **The poll interval is the server's floor**, refused rather than clamped: a
+  client that polls faster than asked earns a 429 that reads as a failed login.
+* **`persisted` belongs to the credential, not the screen.** Derived per load it
+  reported a durable sign-in that was never written, as soon as one load failed
+  in between.
+* **A sign-out cannot be overtaken.** `SigningOut` is entered BEFORE the request,
+  so `authority()` answers null and nothing — a mint, a room, a device list —
+  can start on a credential being destroyed. A revocation that FAILS keeps the
+  token for an explicit retry rather than forgetting a credential that may still
+  be live.
+* **A bearer that arrives too late is revoked, not dropped.** An abandoned
+  browser approval, or a sign-in that landed after a sign-out, has produced a
+  live long-lived credential; silently discarding it leaves a working token on
+  the account that this device can no longer revoke.
+* **One account-access attempt at a time.** The browser approval claims an
+  attempt number from the session and hands it back at the adopt commit, so
+  "start a browser approval → sign in with a password → sign out → the approval
+  finally completes" ends signed out.
+* **The access draft lives outside the composition.** The form is REMOVED while a
+  request is in flight, so a rejection used to come back beside two empty fields
+  — and a refused registration came back as a sign-in form.
+* **"Back to sign in" selects the sign-in half explicitly**, because the way a
+  user reaches the check-email screen is by registering.
+
+### The browser-approved route, and why it exists
+
+Plenty of Relayium accounts have no password: they were created with Sign in with
+Apple or Google. This build ships **no Google SDK and no Play Services**, so
+without a browser-delegated route those accounts could not sign in on Android at
+all. The flow is the server's existing device-authorization pair
+(`/api/cli/device/{start,poll}`), which the CLI already uses. The one rule that
+carries the whole flow: the server's `verification_uri` must be on the app's own
+resolved origin, PARSED rather than prefix-matched, or the page is refused rather
+than opened — it is where a human is asked to authorise a credential.
+
+Note for harness authors: `verification_uri` is `<BaseURL>/device` from the
+server's **configured** base URL, not the request origin, so a local harness must
+start the server with `RELAYIUM_BASE_URL` set to the exact origin the device
+resolves. Widening the app's trust check to make a harness pass would remove the
+only thing protecting that page.
 
 ## Update checking
 
@@ -164,9 +297,11 @@ there is no signing secret in CI and no automated job that could publish.
 
 Three further gates run outside the Android lanes, in `repo-hygiene.yml`:
 
-* `scripts/test/android-policy-test.mjs` — the build-configuration facts no
-  Kotlin test can assert about itself, now including the release update-feed
-  fence and the absence of `REQUEST_INSTALL_PACKAGES`.
+* `scripts/test/android-policy-test.mjs` — the build-configuration and
+  source-shape facts no Kotlin test can assert about itself: the release
+  backend and update-feed fences, the absence of `REQUEST_INSTALL_PACKAGES`,
+  and the account credential's storage shape, no-logging rule, header-only
+  bearer and never-saved password.
 * `scripts/test/android-publish-order-test.mjs` — the publish helper's ordering
   and flags, read as text.
 * `scripts/test/android-publish-behavior-test.mjs` — the publish helper actually
@@ -198,6 +333,19 @@ followed by a fresh transfer on the same link. Files are compared by SHA-256 in
 both directions and include a zero-byte file and a >192 KiB body; repeated
 batches on one link prove the global file sequence advances. A terminal in-band
 handshake holds the Activity open until the browser confirms it saw everything.
+
+`scripts/android-account-acceptance.sh` is the account and create evidence. It
+starts its OWN throwaway server — with `RELAYIUM_BASE_URL` pointed at
+`http://10.0.2.2:<port>`, for the reason above — creates a disposable fixture
+account, and runs `AccountAcceptanceTest` under BOTH maintained languages against
+the real `MainActivity`. It covers native sign-in and the server's own account
+facts, a refused sign-in and a refused registration each returning to a form that
+still has what the user typed, registration success and the way back from it,
+browser-approved sign-in (the shell half approves the code the app displays,
+through the server's own session-authed approval endpoint), a real mint whose
+room is actually joined, navigation not disturbing that live session, and a
+sign-out reaching the state only a server-confirmed revocation can reach. No
+credential is ever printed or written into a report.
 
 `InteropAcceptanceTest` stubs only the picker UI (the grant a same-uid provider
 gives is the grant the picker returns). Two more entry points cover the rest:

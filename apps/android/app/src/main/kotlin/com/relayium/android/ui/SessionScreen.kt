@@ -1,7 +1,5 @@
 package com.relayium.android.ui
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,9 +17,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
@@ -46,9 +41,10 @@ internal fun SessionScreen(
     state: TransferController.State,
     pickError: TransferViewModel.PickError?,
     viewModel: TransferViewModel,
+    pickers: Pickers,
 ) {
     VerificationCard(state, viewModel)
-    FilesCard(state, pickError, viewModel)
+    FilesCard(state, pickError, viewModel, pickers)
     MessagesCard(state, viewModel)
 }
 
@@ -98,25 +94,15 @@ private fun FilesCard(
     state: TransferController.State,
     pickError: TransferViewModel.PickError?,
     viewModel: TransferViewModel,
+    pickers: Pickers,
 ) {
-    // The controller-owned link identity each picker result must be handed
-    // back with. Captured AT LAUNCH and saved across the picker round-trip;
-    // the CONTROLLER compares it on its session executor before any lane
-    // mutation, so a file chosen for one connection can never be sent on the
-    // next, and a folder chosen for one offer can never accept another (the
-    // controller's promptId is the second fence).
-    var sendLinkId by rememberSaveable { mutableIntStateOf(0) }
-    var saveLinkId by rememberSaveable { mutableIntStateOf(0) }
-    var savePromptId by rememberSaveable { mutableIntStateOf(0) }
-
-    val filePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenMultipleDocuments(),
-    ) { uris -> viewModel.sendPicked(uris, sendLinkId) }
-
-    val folderPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree(),
-    ) { tree -> viewModel.acceptIncoming(savePromptId, tree, saveLinkId) }
-
+    // The launchers themselves live in [RelayiumApp], ABOVE the destination
+    // switch, so a tab change cannot unregister a picker whose result is still
+    // to come. What is unchanged is the contract they carry: the link (and, for
+    // a folder, the prompt) captured AT LAUNCH and compared by the CONTROLLER on
+    // its session executor before any lane mutation, so a file chosen for one
+    // connection can never be sent on the next and a folder chosen for one offer
+    // can never accept another.
     Card {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
@@ -164,11 +150,7 @@ private fun FilesCard(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Button(
-                            onClick = {
-                                saveLinkId = state.linkId
-                                savePromptId = state.promptId
-                                folderPicker.launch(null)
-                            },
+                            onClick = { pickers.chooseFolder(state.linkId, state.promptId) },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(48.dp),
@@ -214,10 +196,7 @@ private fun FilesCard(
             // ── outgoing ────────────────────────────────────────────────────
             if (state.outgoing.isEmpty()) {
                 Button(
-                    onClick = {
-                        sendLinkId = state.linkId
-                        filePicker.launch(arrayOf("*/*"))
-                    },
+                    onClick = { pickers.chooseFiles(state.linkId) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp),

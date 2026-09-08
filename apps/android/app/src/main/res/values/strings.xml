@@ -125,4 +125,144 @@
     <string name="cd_progress">Transfer progress</string>
     <string name="cd_message_list">Conversation</string>
     <string name="cd_update_status">Update status</string>
+
+    <!-- Navigation. Two destinations, and both of them do something: a tab
+         that opens onto a placeholder is a claim the product does not honour. -->
+    <string name="tab_transfer">Transfer</string>
+    <string name="tab_account">Account</string>
+
+    <!-- Creating a link.
+
+         The asymmetry this copy must keep straight: JOINING has never needed an
+         account and still does not, but MINTING does, because whatever the room
+         relays is METERED against the creating account's monthly allowance.
+         That is the server's rule (see PairMintRefusal), stated plainly, and
+         not a paywall this screen invented. Nothing here says a mint costs
+         money, because it does not: it reserves a room and passes an allowance
+         check, and the allowance is a quota rather than a bill. -->
+    <string name="create_title">Create a link</string>
+    <string name="create_intro">Get a six-digit code and a link the other device can open. It works across networks.</string>
+    <string name="create_needs_account">Creating a link needs an account: what the link transfers counts toward that account\'s monthly allowance. Joining a link never needs one.</string>
+    <string name="create_open_account">Go to Account</string>
+    <string name="create_action">Create a link</string>
+    <string name="create_minting">Creating…</string>
+    <string name="create_superseded">That code could not be used, because this device had already started another session. Create a new one.</string>
+    <string name="create_code_title">Give these to the other device</string>
+    <string name="create_code_hint">Enter the code in Relayium on the other device, or open this link there:</string>
+    <string name="create_code_expires_in">Stops working in %1$s</string>
+    <string name="create_code_expired">This code has expired. Disconnect and create a new one.</string>
+    <string name="create_copy_link">Copy link</string>
+    <string name="create_share_link">Share link</string>
+    <string name="create_copied">Link copied.</string>
+
+    <string name="join_section_title">Or open a link you were given</string>
+
+    <!-- Account.
+
+         Three things this copy must never say, because none of them is true:
+         that this app can change, buy or cancel a plan (it makes no billing
+         request of any kind), that a verification or reset email was definitely
+         sent (both endpoints answer the same way whether they sent one or
+         swallowed the request), and that signing out has removed a credential
+         when the server did not confirm it. -->
+    <string name="account_title">Account</string>
+    <string name="account_restoring">Checking this device…</string>
+    <string name="account_signing_in">Signing in…</string>
+    <string name="account_registering">Creating your account…</string>
+    <string name="account_signing_out">Signing out…</string>
+
+    <string name="account_signin_title">Sign in</string>
+    <string name="account_signin_intro">Sign in to create links from this device and to see your plan and devices.</string>
+    <string name="account_signin_action">Sign in</string>
+    <string name="account_create_title">Create an account</string>
+    <string name="account_create_intro">We will email you a link to confirm your address. You can sign in once you have opened it.</string>
+    <string name="account_create_action">Create account</string>
+    <string name="account_switch_to_create">Don\'t have an account? Create one</string>
+    <string name="account_switch_to_signin">Already have an account? Sign in</string>
+    <string name="account_email_label">Email</string>
+    <string name="account_password_label">Password</string>
+    <string name="account_name_label">Display name</string>
+    <string name="account_name_optional">Optional.</string>
+    <string name="account_forgot_action">Forgot your password?</string>
+    <string name="account_forgot_sending">Asking…</string>
+    <string name="account_forgot_sent">If that address has an account, a reset link is on its way. Open it in a browser to choose a new password.</string>
+
+    <!-- Browser approval. It exists because accounts created with Apple or
+         Google have no password at all, and this app ships no Google services.
+         The address is always shown, not only when opening it fails: it is the
+         page that authorises a credential, so a person is entitled to read
+         where they are being sent before they tap. -->
+    <string name="account_browser_title">Sign in with a browser</string>
+    <string name="account_browser_intro">For accounts that sign in with Apple or Google, approve this device in a browser where you are already signed in.</string>
+    <string name="account_browser_action">Approve in a browser</string>
+    <string name="account_browser_starting">Asking for a code…</string>
+    <string name="account_browser_code_hint">Open the page below and confirm this code:</string>
+    <string name="account_browser_open">Open the approval page</string>
+    <string name="account_browser_waiting">Waiting for you to approve…</string>
+    <string name="account_browser_busy">A browser approval is in progress. Cancel it below to sign in with a password instead.</string>
+
+    <string name="account_verify_title">Confirm your email</string>
+    <string name="account_verify_body">Open the link we sent to %1$s. Until then this account cannot sign in.</string>
+    <string name="account_verify_resend">Send it again</string>
+    <string name="account_verify_resending">Asking…</string>
+    <string name="account_verify_resent">Asked. If that address is waiting to be confirmed, another email is on its way.</string>
+    <string name="account_back_to_signin">Back to sign in</string>
+
+    <string name="account_frozen_title">This account is scheduled for deletion</string>
+    <string name="account_frozen_body">It will be permanently removed after %1$s, and cannot sign in until it is restored. Use the restore link in the email sent when the deletion was requested.</string>
+
+    <string name="account_methods">Sign-in methods: %1$s</string>
+    <string name="account_refresh">Refresh</string>
+    <string name="account_sign_out">Sign out</string>
+    <string name="account_retry">Try again</string>
+    <string name="account_stale">These figures could not be refreshed just now, so they may be out of date.</string>
+    <string name="account_not_persisted">You are signed in, but this device could not store the credential — you will have to sign in again after closing the app.</string>
+    <string name="account_unavailable">You are signed in, but your account could not be loaded.</string>
+    <string name="account_signout_failed">Your credential could NOT be revoked, so it may still be usable. It has been kept on this device so you can try again.</string>
+    <string name="account_signout_retry">Try signing out again</string>
+    <string name="account_signout_note">You were signed out and the credential was revoked, but it could not be removed from this device. It no longer works.</string>
+    <string name="account_unreadable">This device has a stored sign-in it can no longer read. That happens after a factory reset or a screen-lock change. Sign in again to replace it.</string>
+    <string name="account_unreadable_discard">Discard it and sign in again</string>
+
+    <string name="account_plan_title">Plan</string>
+    <string name="account_quota_traffic">Transfer</string>
+    <string name="account_quota_storage">Storage</string>
+    <string name="account_quota_used">%1$s: %2$s of %3$s</string>
+    <string name="account_quota_unlimited">%1$s: %2$s used, no limit</string>
+    <string name="account_quota_resets">Resets on %1$s</string>
+
+    <string name="account_devices_title">Devices</string>
+    <string name="account_devices_loading">Loading your devices…</string>
+    <string name="account_devices_empty">No devices are signed in to this account.</string>
+    <string name="account_device_unnamed">Unnamed device</string>
+    <string name="account_device_current">This device</string>
+    <string name="account_device_last_seen">Last used %1$s</string>
+    <string name="account_device_never_used">Never used since it was added</string>
+    <string name="account_device_revoke">Remove</string>
+    <string name="account_device_revoke_title">Remove this device?</string>
+    <string name="account_device_revoke_body">“%1$s” will be signed out and will need to sign in again.</string>
+    <string name="account_device_revoke_self">“%1$s” is this device. Removing it signs you out here.</string>
+    <string name="account_device_revoke_confirm">Remove</string>
+
+    <!-- Account errors. Every one of these is a CLASSIFICATION rendered in the
+         user's language; the server's own prose is never displayed. -->
+    <string name="account_error_network">Could not reach Relayium. Check this device\'s connection and try again.</string>
+    <string name="account_error_timeout">Relayium did not answer in time. Try again in a moment.</string>
+    <string name="account_error_too_large">The answer was larger than expected and was refused.</string>
+    <string name="account_error_malformed">Relayium answered something this app could not read, so nothing was changed.</string>
+    <string name="account_error_server">Relayium answered unexpectedly (%1$d), so nothing was changed.</string>
+    <string name="account_error_rate_limited">Too many attempts. Wait a little and try again.</string>
+    <string name="account_error_credentials">That email and password do not match an account.</string>
+    <string name="account_error_not_signed_in">You are not signed in.</string>
+    <string name="account_error_email_invalid">That does not look like an email address.</string>
+    <string name="account_error_password_short">That password is too short.</string>
+    <string name="account_error_email_taken">An account already exists for that address. Sign in instead.</string>
+    <string name="account_error_pending_deletion">An account for that address is scheduled for deletion. Use the restore link that was emailed, or try again once the grace period ends.</string>
+    <string name="account_error_device_denied">The approval was refused in the browser.</string>
+    <string name="account_error_device_expired">The approval was not completed in time. Start again.</string>
+    <string name="account_error_untrusted_url">Relayium named an approval page that is not on relayium.com, so it was not opened.</string>
+    <string name="account_error_traffic_spent">This account has used its transfer allowance for the month, so a cross-network link would not be able to carry anything. Transfers on the same network are unaffected.</string>
+    <string name="account_error_pair_unavailable">No code could be created just now. Try again in a moment.</string>
+    <string name="account_error_pair_code">Relayium answered with a code this app will not show. Nothing was created.</string>
+    <string name="account_error_credential_unusable">The sign-in stored on this device cannot be used. Sign in again to replace it.</string>
 </resources>
