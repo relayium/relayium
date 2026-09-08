@@ -37,6 +37,41 @@ With an Apple peer it is the shipped older wire, which carries files **or**
 messages per connection — see "Two wires, and which peer gets which" below for
 which one a session gets and what the UI says about it.
 
+**Nearby, without a code.** The app can find other Relayium devices on the same
+network and transfer to one the user picks, with no six-digit code involved. It
+offers two rooms, and they are genuinely different products rather than one
+feature with a setting:
+
+* **On this network only** — Bonjour (`NsdManager`) discovery and direct TCP
+  signalling on the local link. **No Relayium server is contacted at all**, not
+  even to introduce the two devices, and no ICE credentials are fetched; two
+  devices on one link reach each other on host candidates. This is the same
+  rendezvous the iOS client uses (`_relayium._tcp`, a 32-hex per-channel
+  identity as the instance name, TXT `i`/`n`/`c`), so an iPhone and an Android
+  phone on one Wi-Fi network can find each other directly.
+* **Through relayium.com** — the code-less rendezvous room the Web and macOS
+  clients join, which the server keys by the **public address it observes**. The
+  UI says so, because it matters: anything else reaching the internet from that
+  address can appear in the list. The introduction goes through relayium.com;
+  the transfer itself is still device to device and end-to-end encrypted.
+
+In both rooms **nothing connects without a person**. The device list is only a
+list: an outgoing connection needs an explicit selection, and an inbound one
+raises a prompt naming the peer that must be accepted. A second device asking
+while a prompt is up is refused in band rather than replacing the question, a
+live session is never replaced by tapping another row, and the peer list is
+never a queue whose first or newest entry is taken automatically. Discovery caps
+are treated as compatibility hints and nothing else — the commit-reveal
+handshake and the six-digit SAS are what authenticate a session, exactly as on
+a pairing code.
+
+Nearby is **foreground only** and the app says so. Leaving the app stops
+advertising, stops browsing, closes every socket and ends any transfer, because
+this build has no foreground service and cannot honour a presence claim it
+cannot keep. Its own document picker and a configuration change are NOT leaving
+the app — both stop the Activity, and treating either as abandonment made the
+file flows impossible to complete.
+
 **An account.** Email/password sign-in, registration with email verification and
 resend, password-reset request, browser-approved sign-in for accounts that have
 no password at all, restore across launches, explicit sign-out with real
@@ -468,6 +503,45 @@ followed by a fresh transfer on the same link. Files are compared by SHA-256 in
 both directions and include a zero-byte file and a >192 KiB body; repeated
 batches on one link prove the global file sequence advances. A terminal in-band
 handshake holds the Activity open until the browser confirms it saw everything.
+
+`scripts/android-nearby-acceptance.sh` is the Nearby evidence, and it needs TWO
+running instances — it takes both serials and creates neither. It builds the
+debug and instrumentation APKs, installs on both, and runs
+`NearbyLanAcceptanceTest` on each with opposite roles: one selects the other
+from its discovered list, the other accepts the prompt that produces. Nothing in
+the run passes an address to either half, so a round that never LISTED the peer
+fails as the discovery failure it is rather than falling through to something
+that would pass.
+
+`scripts/test/android-nearby-oracle.py` owns every comparison and is a separate
+program on purpose: a shell that greps its own log for the word it printed is
+checking that it printed a word. It re-derives each claim from what the two
+halves independently observed — that both listed a peer and reported DIFFERENT
+peer ids, that the host was prompted by the device it selected, that both
+derived the SAME SAS, that both established `link/1`, that each saved exactly
+the bytes the other sent (SHA-256, in both directions), that finishing returned
+to a live device list rather than ending the room, and that the session survived
+its own document picker. A missing field is a failure, never a default: "the
+round stopped before observing it" and "the round observed false" must not look
+alike.
+
+The `direct` mode additionally points each build at a loopback port with nothing
+but a **connection counter** behind it, and the round fails if a single
+connection arrives. That is the only honest way to check "this path contacts no
+server": asserting that a URL was empty proves nothing, and "the request failed"
+is a different claim from "no request was made". A run where the property was
+never set fails at the first assertion rather than quietly proving nothing.
+
+`NearbyLifecycleAcceptanceTest` is the single-device half of the same question:
+on the real `MainActivity`, leaving the app stops Nearby, a recreation does not,
+and switching between the Nearby and cross-network surfaces requires a button
+that names what it ends. A run that "passes" by ending and rejoining a session
+is a run that failed — the assertions are on the same room and link identity,
+not on a session existing again afterwards.
+
+Neither is physical-phone evidence, and neither says anything about the Apple
+counterpart: that lane is separate, and a manually entered address is never a
+substitute for a Bonjour discovery.
 
 `scripts/android-account-acceptance.sh` is the account and create evidence. It
 starts its OWN throwaway server — with `RELAYIUM_BASE_URL` pointed at

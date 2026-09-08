@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -24,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -37,9 +40,11 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -49,15 +54,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.activity.compose.LocalActivity
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.relayium.android.BuildConfig
 import com.relayium.android.R
@@ -70,10 +82,15 @@ import com.relayium.android.update.UpdateChecker
 import com.relayium.protocol.JoinInput
 import kotlinx.coroutines.delay
 
-/** The things this build can do, and nothing it cannot. There is no tab here
- *  for a feature that is not implemented: a destination that opens onto a
- *  placeholder is a claim the product does not honour. */
-internal enum class Destination { TRANSFER, CLOUD, ACCOUNT }
+/**
+ * The things this build can do, and nothing it cannot. There is no destination
+ * here for a feature that is not implemented: one that opens onto a placeholder
+ * is a claim the product does not honour.
+ *
+ * The order is the order they are shown in, and it is the order of how often
+ * they are used rather than the order they were built in.
+ */
+internal enum class Destination { TRANSFER, NEARBY, CLOUD, ACCOUNT }
 
 /**
  * The shell: a destination bar, and one of two surfaces under it. The layout
@@ -111,13 +128,33 @@ fun RelayiumApp(viewModel: TransferViewModel) {
     var saveLinkId by rememberSaveable { mutableIntStateOf(0) }
     var savePromptId by rememberSaveable { mutableIntStateOf(0) }
 
+    /**
+     * How many of THIS app's own system pickers are in front of it right now.
+     *
+     * Saved, because the whole point is to survive the round trip that saves and
+     * restores this composition. A counter rather than a flag: the cloud and
+     * session surfaces each own a pair of launchers, and two overlapping round
+     * trips must not have the first one to return declare the app abandoned.
+     *
+     * It exists for exactly one decision — see the lifecycle observer below —
+     * and it is deliberately not derived from any session state, because the
+     * question it answers is about this Activity, not about a transfer.
+     */
+    var pickersInFlight by rememberSaveable { mutableIntStateOf(0) }
+
     val filePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
-    ) { uris -> viewModel.sendPicked(uris, sendLinkId) }
+    ) { uris ->
+        pickersInFlight = (pickersInFlight - 1).coerceAtLeast(0)
+        viewModel.sendPicked(uris, sendLinkId)
+    }
 
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
-    ) { tree -> viewModel.acceptIncoming(savePromptId, tree, saveLinkId) }
+    ) { tree ->
+        pickersInFlight = (pickersInFlight - 1).coerceAtLeast(0)
+        viewModel.acceptIncoming(savePromptId, tree, saveLinkId)
+    }
 
     // The cloud surface's own pair. Separate launchers rather than shared ones
     // because their results mean different things — a cloud file choice starts
@@ -135,19 +172,27 @@ fun RelayiumApp(viewModel: TransferViewModel) {
 
     val cloudFilePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
-    ) { uris -> viewModel.cloudFilesPicked(uris, cloudPickId) }
+    ) { uris ->
+        pickersInFlight = (pickersInFlight - 1).coerceAtLeast(0)
+        viewModel.cloudFilesPicked(uris, cloudPickId)
+    }
 
     val cloudFolderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
-    ) { tree -> viewModel.cloudFolderPicked(tree, cloudTransferId) }
+    ) { tree ->
+        pickersInFlight = (pickersInFlight - 1).coerceAtLeast(0)
+        viewModel.cloudFolderPicked(tree, cloudTransferId)
+    }
 
     val cloudPickers = CloudPickers(
         chooseFiles = {
             cloudPickId = viewModel.cloudUpload.beginSelection()
+            pickersInFlight++
             cloudFilePicker.launch(arrayOf("*/*"))
         },
         chooseFolder = {
             cloudTransferId = viewModel.cloudDownload.currentTransfer()
+            pickersInFlight++
             cloudFolderPicker.launch(null)
         },
     )
@@ -155,14 +200,60 @@ fun RelayiumApp(viewModel: TransferViewModel) {
     val pickers = Pickers(
         chooseFiles = { linkId ->
             sendLinkId = linkId
+            pickersInFlight++
             filePicker.launch(arrayOf("*/*"))
         },
         chooseFolder = { linkId, promptId ->
             saveLinkId = linkId
             savePromptId = promptId
+            pickersInFlight++
             folderPicker.launch(null)
         },
     )
+
+    // Nearby is a FOREGROUND claim: while it runs, this device is advertising
+    // itself to other devices and holding sockets open. The app has no
+    // foreground service and no background permission, so the moment it stops
+    // being on screen that claim becomes false — and a device still announcing
+    // itself is offering a delivery it cannot make.
+    //
+    // Bound to the LIFECYCLE and hoisted above the destination switch for the
+    // same reason the pickers are: switching tabs is not leaving the app, and a
+    // session that ended because the user looked at their account would be a
+    // transfer lost to navigation. Tab changes therefore keep it; ON_STOP does
+    // not.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val activity = LocalActivity.current
+    DisposableEffect(lifecycleOwner, activity) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event != Lifecycle.Event.ON_STOP) return@LifecycleEventObserver
+            // ON_STOP is NOT "the user left". Three different things produce it
+            // and only one of them is abandonment:
+            //
+            //  * this app's OWN system picker came to the front. `DocumentsUI`
+            //    is a separate Activity, so choosing a file to send — or a
+            //    folder to receive into — stops this one every single time.
+            //    Ending the session here would make Nearby's file flows
+            //    impossible to complete: the user taps Send, and the transfer
+            //    they were arranging is gone before they have chosen anything.
+            //  * a configuration this Activity does not handle changed. A locale
+            //    switch is the ordinary one — it is deliberately absent from the
+            //    manifest's `configChanges`, because the whole UI has to be
+            //    rebuilt for it. The Activity is coming straight back, with the
+            //    same ViewModel and the same live session.
+            //  * the user really did leave, and then a device that goes on
+            //    advertising itself is claiming a delivery this build cannot
+            //    make. That one, and only that one, stops Nearby.
+            //
+            // The picker count is saved state, so it survives the very
+            // recreation it exists to see through.
+            val ownedRoundTrip = pickersInFlight > 0
+            val recreating = activity?.isChangingConfigurations == true
+            if (!ownedRoundTrip && !recreating) viewModel.nearbyLeftForeground()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     // Back returns to the transfer surface rather than leaving the app. Enabled
     // only off the transfer tab, so the system's own "back closes the app"
@@ -172,28 +263,7 @@ fun RelayiumApp(viewModel: TransferViewModel) {
     }
 
     Scaffold(
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = destination == Destination.TRANSFER,
-                    onClick = { destination = Destination.TRANSFER },
-                    icon = { Icon(Icons.Filled.Send, contentDescription = null) },
-                    label = { Text(stringResource(R.string.tab_transfer)) },
-                )
-                NavigationBarItem(
-                    selected = destination == Destination.CLOUD,
-                    onClick = { destination = Destination.CLOUD },
-                    icon = { Icon(Icons.Filled.Share, contentDescription = null) },
-                    label = { Text(stringResource(R.string.tab_cloud)) },
-                )
-                NavigationBarItem(
-                    selected = destination == Destination.ACCOUNT,
-                    onClick = { destination = Destination.ACCOUNT },
-                    icon = { Icon(Icons.Filled.Person, contentDescription = null) },
-                    label = { Text(stringResource(R.string.tab_account)) },
-                )
-            }
-        },
+        bottomBar = { DestinationBar(destination) { destination = it } },
     ) { insets ->
         Box(
             modifier = Modifier
@@ -217,21 +287,51 @@ fun RelayiumApp(viewModel: TransferViewModel) {
                     CleanupWarningCard(onDismiss = viewModel::dismissCleanupWarning)
                 }
                 when (destination) {
-                    Destination.TRANSFER -> when (state.phase) {
-                        TransferController.Phase.IDLE ->
-                            JoinScreen(state, joinError, endedBanner = false, viewModel) {
-                                destination = Destination.ACCOUNT
-                            }
-                        TransferController.Phase.ENDED ->
-                            JoinScreen(state, joinError, endedBanner = true, viewModel) {
-                                destination = Destination.ACCOUNT
-                            }
-                        TransferController.Phase.CONNECTING,
-                        TransferController.Phase.WAITING_PEER,
-                        -> ConnectingScreen(state, viewModel)
-                        TransferController.Phase.CONNECTED ->
-                            SessionScreen(state, pickError, viewModel, pickers)
+                    // A session belongs to the destination it was STARTED from.
+                    // Without that, a Nearby transfer would also paint the
+                    // cross-network tab — the two share one controller, and its
+                    // phase alone cannot say which door the user came through.
+                    Destination.TRANSFER -> if (state.nearby.active) {
+                        // NOT the join form. Joining or minting a code replaces
+                        // whatever this controller is doing, and a Nearby
+                        // session — possibly a running transfer — is what it is
+                        // doing. Offering the form here would destroy that from
+                        // a button that says nothing about it, so the switch is
+                        // made explicit instead.
+                        SwitchAwayCard(
+                            explanation = stringResource(R.string.transfer_nearby_running),
+                            action = stringResource(R.string.transfer_stop_nearby),
+                            onSwitch = viewModel::endSessionForSwitch,
+                        )
+                    } else {
+                        when (state.phase) {
+                            TransferController.Phase.IDLE ->
+                                JoinScreen(state, joinError, endedBanner = false, viewModel) {
+                                    destination = Destination.ACCOUNT
+                                }
+                            TransferController.Phase.ENDED ->
+                                JoinScreen(state, joinError, endedBanner = true, viewModel) {
+                                    destination = Destination.ACCOUNT
+                                }
+                            TransferController.Phase.CONNECTING,
+                            TransferController.Phase.WAITING_PEER,
+                            -> ConnectingScreen(state, viewModel)
+                            TransferController.Phase.CONNECTED ->
+                                SessionScreen(state, pickError, viewModel, pickers)
+                        }
                     }
+                    Destination.NEARBY ->
+                        if (state.nearby.active &&
+                            state.phase == TransferController.Phase.CONNECTED
+                        ) {
+                            // The SAME session surface a pairing code reaches.
+                            // A Nearby transfer is not a different product once
+                            // it is connected, and a second copy of that screen
+                            // is a second place for its rules to drift.
+                            SessionScreen(state, pickError, viewModel, pickers)
+                        } else {
+                            NearbyScreen(state, viewModel)
+                        }
                     Destination.CLOUD -> CloudScreen(viewModel, cloudPickers) {
                         destination = Destination.ACCOUNT
                     }
@@ -241,6 +341,140 @@ fun RelayiumApp(viewModel: TransferViewModel) {
         }
     }
 }
+
+/**
+ * One surface saying what the OTHER one is doing, and offering the one button
+ * that would free it.
+ *
+ * There is a single [TransferController] and it owns one connection, so the two
+ * transfer surfaces genuinely cannot both be live. The choice is between doing
+ * the replacement silently and saying so; this says so, and the destruction
+ * happens on a press whose label names it.
+ */
+@Composable
+internal fun SwitchAwayCard(explanation: String, action: String, onSwitch: () -> Unit) {
+    StatusCard(text = explanation, isError = false)
+    OutlinedButton(
+        onClick = onSwitch,
+        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
+    ) {
+        Text(action)
+    }
+}
+
+/**
+ * The destination bar, in the form the current screen can actually render.
+ *
+ * ## Why it adapts
+ *
+ * A [NavigationBar] divides its width evenly and gives each item one line for
+ * its label. At four destinations on a 320dp screen that is 80dp each, and at
+ * font scale 2 a word like "Transfer" needs closer to 110 — so the labels
+ * ellipsize, and the user is choosing between truncated words. Adding the fifth
+ * destination this shell is heading for makes it worse.
+ *
+ * So when the row cannot hold full labels, it becomes a horizontally SCROLLING
+ * row that gives each destination as much width as its label needs. Nothing is
+ * abbreviated and nothing is hidden behind a menu.
+ *
+ * A drawer was the other candidate and is deliberately not this. It would put
+ * every destination behind an extra tap and behind a control the user has to
+ * discover, and it would make each destination reachable only after opening it —
+ * which is a real accessibility regression for screen-reader traversal, not only
+ * a preference. Scrolling keeps every destination a first-class, directly
+ * addressable, fully labelled target in EVERY configuration.
+ *
+ * Both forms carry `Role.Tab` selection semantics, so what a screen reader — and
+ * an instrumentation test — sees does not change with the screen size.
+ */
+@Composable
+private fun DestinationBar(current: Destination, onSelect: (Destination) -> Unit) {
+    val entries = listOf(
+        Triple(Destination.TRANSFER, Icons.Filled.Send, R.string.tab_transfer),
+        Triple(Destination.NEARBY, Icons.Filled.Search, R.string.tab_nearby),
+        Triple(Destination.CLOUD, Icons.Filled.Share, R.string.tab_cloud),
+        Triple(Destination.ACCOUNT, Icons.Filled.Person, R.string.tab_account),
+    )
+    val density = LocalDensity.current
+    // The WINDOW's width, not the screen's: `Configuration.screenWidthDp` rounds
+    // to whole dp and applies insets differently across target versions, and
+    // this bar is laid out in the window it is actually in — which on a split
+    // screen or a freeform window is not the display.
+    val widthDp = with(density) { LocalWindowInfo.current.containerSize.width.toDp() }
+    // Derived from what actually breaks — the width one label gets — rather than
+    // from a device class, so adding a destination moves the threshold by itself.
+    val roomPerLabel = widthDp / entries.size
+    val compact = roomPerLabel < MIN_LABEL_DP || density.fontScale > MAX_EVEN_FONT_SCALE
+
+    if (!compact) {
+        NavigationBar {
+            for ((target, icon, label) in entries) {
+                NavigationBarItem(
+                    selected = current == target,
+                    onClick = { onSelect(target) },
+                    icon = { Icon(icon, contentDescription = null) },
+                    label = { Text(stringResource(label)) },
+                )
+            }
+        }
+        return
+    }
+
+    Surface(tonalElevation = 3.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            for ((target, icon, label) in entries) {
+                val selected = current == target
+                Column(
+                    modifier = Modifier
+                        .selectable(
+                            selected = selected,
+                            onClick = { onSelect(target) },
+                            role = Role.Tab,
+                        )
+                        .defaultMinSize(minWidth = 72.dp, minHeight = 56.dp)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        tint = if (selected) {
+                            MaterialTheme.colorScheme.onSecondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                    // softWrap off and NO width bound: the row scrolls instead
+                    // of the word breaking, which is the whole point of this
+                    // form. A label is never shortened.
+                    Text(
+                        text = stringResource(label),
+                        style = MaterialTheme.typography.labelLarge,
+                        softWrap = false,
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.onSecondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Below this much width per destination, an even split starts truncating. */
+private val MIN_LABEL_DP = 88.dp
+
+/** Above this, even a wide screen's even split cannot hold a full label. */
+private const val MAX_EVEN_FONT_SCALE = 1.3f
 
 /**
  * The two system pickers, as callbacks the session surface invokes.
@@ -809,6 +1043,7 @@ internal fun errorText(key: String): Int = when (key) {
     "error_text_buffer_full" -> R.string.error_text_buffer_full
     "error_text_refused" -> R.string.error_text_refused
     "error_legacy_no_offer" -> R.string.error_legacy_no_offer
+    "error_nearby_unavailable" -> R.string.error_nearby_unavailable
     else -> R.string.error_transfer_failed
 }
 

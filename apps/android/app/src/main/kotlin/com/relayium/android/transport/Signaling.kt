@@ -21,7 +21,16 @@ import okhttp3.WebSocketListener
 class SignalingClient(
     private val http: OkHttpClient,
     private val origin: String,
-    private val code: PairCode,
+    /**
+     * The room: a pairing code, or NULL for the code-less room.
+     *
+     * Null is a real, server-defined room and not a missing value. `/ws` with
+     * no `code` parameter is what `signal.RoomForResolved` routes by the address
+     * it OBSERVES — the same room the Web and macOS clients join for Nearby —
+     * and it is deliberately the same socket, the same envelope and the same
+     * roster semantics as a coded room. Only the URL differs.
+     */
+    private val code: PairCode?,
     private val deviceName: String,
     private val events: Events,
 ) : SignalingHandle {
@@ -44,7 +53,7 @@ class SignalingClient(
 
     override fun connect() {
         val request = Request.Builder()
-            .url(JoinInput.webSocketUrl(origin, code))
+            .url(webSocketUrl(origin, code))
             .build()
         socket = http.newWebSocket(
             request,
@@ -107,6 +116,22 @@ class SignalingClient(
 
     companion object {
         private const val NORMAL_CLOSURE = 1000
+
+        /**
+         * The rendezvous socket for [code], or for the code-less room.
+         *
+         * The coded form is [JoinInput.webSocketUrl] verbatim; the code-less one
+         * is the same base with the query omitted, which is exactly what
+         * `web/src/lib/transfer-link.ts`'s `wsURL` does with an empty code. It
+         * lives here rather than beside its coded twin because the code-less
+         * room is a client composition choice, not part of the pairing-code
+         * vocabulary the protocol module defines.
+         */
+        fun webSocketUrl(origin: String, code: PairCode?): String {
+            if (code != null) return JoinInput.webSocketUrl(origin, code)
+            val base = origin.replaceFirst("https://", "wss://").replaceFirst("http://", "ws://")
+            return "$base/ws"
+        }
 
         /**
          * One client for the whole app.

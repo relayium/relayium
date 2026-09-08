@@ -22,6 +22,7 @@ import com.relayium.android.cloud.CloudSelection
 import com.relayium.android.cloud.CloudUploadModel
 import com.relayium.android.cloud.KeystoreSecretBox
 import com.relayium.android.cloud.PendingUploadStore
+import com.relayium.android.nearby.ConnectionSource
 import com.relayium.android.cloud.StoredLinkKeyStore
 import com.relayium.android.storage.ProviderOps
 import com.relayium.android.storage.ReceiveStore
@@ -576,6 +577,95 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearJoinError() { _joinError.value = null }
+
+    // ── nearby ──────────────────────────────────────────────────────────────
+
+    /**
+     * Whether a Nearby session may be started right now.
+     *
+     * One [TransferController] owns one connection, so Nearby and the
+     * cross-network code are two doors into the same room. Starting one while
+     * the other holds a live or connecting session would silently end work the
+     * user did not ask to lose, so the screen says so instead of doing it.
+     */
+    val canStartNearby: Boolean
+        get() {
+            val current = controller.state.value
+            if (current.nearby.active) return true
+            return current.phase == TransferController.Phase.IDLE ||
+                current.phase == TransferController.Phase.ENDED
+        }
+
+    /**
+     * Start discovery on the local link — Bonjour and direct TCP, no server.
+     *
+     * A minted cross-network code goes with it, for the reason [join] gives: it
+     * names a room nothing is listening on once this device has left it.
+     */
+    fun startNearbyDirect() = startNearby(ConnectionSource.Direct)
+
+    /** Start discovery through the code-less rendezvous room, which is what the
+     *  Web and macOS clients join. */
+    fun startNearbyHub() = startNearby(ConnectionSource.Hub)
+
+    private fun startNearby(source: ConnectionSource) {
+        if (!canStartNearby) return
+        _joinError.value = null
+        createLink.cancel()
+        controller.join(source)
+    }
+
+    /** [expectedRoom] is [TransferController.Nearby.roomId] as the tapped row was
+     *  RENDERED; the controller enforces it on its session executor. */
+    fun connectToPeer(peerId: String, expectedRoom: Int) =
+        controller.connectToPeer(peerId, expectedRoom)
+
+    /** [expectedPrompt] is [TransferController.Nearby.incomingPromptId] as the
+     *  answered question was RENDERED. */
+    fun admitPeer(peerId: String, expectedPrompt: Int) = controller.admitPeer(peerId, expectedPrompt)
+
+    fun rejectPeer(peerId: String, expectedPrompt: Int) = controller.rejectPeer(peerId, expectedPrompt)
+
+    fun retryNearby() = controller.retryNearby()
+
+    fun stopNearby() = controller.stopNearby()
+
+    /**
+     * The user LEFT the app, and Nearby stops completely: advertising, browsing,
+     * every socket and any live transfer.
+     *
+     * This build has no foreground service, no background permission and no way
+     * to keep a WebRTC link alive with the process stopped, so a device that
+     * kept announcing itself would be offering a delivery it cannot make — and
+     * one that kept a half-open session would show the peer a transfer that is
+     * not going to finish.
+     *
+     * "Left the app" is a narrower thing than "the Activity stopped", and the
+     * caller is what tells them apart — see the lifecycle observer in
+     * `RelayiumApp`. The system document picker STOPS this Activity while it is
+     * in front, and so does a locale change; treating either as abandonment
+     * would kill the transfer the user is in the middle of arranging.
+     *
+     * Deliberately does NOT touch a cross-network session: that one is entered
+     * from a code the user is holding and is left by the Disconnect they press.
+     * Only the discovery surface makes a presence claim to other devices.
+     */
+    fun nearbyLeftForeground() {
+        if (controller.state.value.nearby.active) controller.stopNearby()
+    }
+
+    /**
+     * End whatever session is running so the OTHER surface can start one.
+     *
+     * Both directions are explicit and neither is silent. `join`/`createLink`
+     * would tear a Nearby session down through `TransferController.join`, and
+     * starting Nearby during a pairing session is refused by [canStartNearby];
+     * in both cases the screen shows what is running and offers this, so
+     * whatever is destroyed is destroyed by a button the user pressed.
+     */
+    fun endSessionForSwitch() {
+        if (controller.state.value.nearby.active) controller.stopNearby() else controller.disconnect()
+    }
 
     // ── outgoing files ──────────────────────────────────────────────────────
 

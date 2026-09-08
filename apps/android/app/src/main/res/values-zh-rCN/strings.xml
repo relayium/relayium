@@ -34,6 +34,7 @@
     <string name="error_transfer_failed">传输已中断，未能完成。</string>
     <string name="error_text_refused">对方拒绝了这次会话。</string>
     <string name="error_legacy_no_offer">对方设备始终没有发起连接。如果它也是加入这个配对码，就需要有一台设备改为创建配对码。</string>
+    <string name="error_nearby_unavailable">无法在这个网络上搜索。请确认已开启 Wi-Fi，并且该网络允许设备互相发现。</string>
     <string name="error_integrity">收到的文件与发送的内容不一致，已丢弃。没有保存任何文件。</string>
     <!-- 不承诺"没有写入任何内容"：此键同样用于写入中途和清理受限的失败，
          部分文件或已创建的文件夹可能合理残留——由独立的清理提示如实告知。 -->
@@ -372,4 +373,38 @@
     <string name="cloud_completing_title">这次上传已完成</string>
     <string name="cloud_completing_body">文件已保存。本机还需要准备好链接才能显示。</string>
     <string name="cloud_completing_action">获取链接</string>
+
+    <!-- Nearby: the local-link and code-less rendezvous surface. -->
+    <string name="tab_nearby">附近</string>
+    <string name="nearby_title">附近的设备</string>
+    <string name="nearby_intro">直接发送给同一网络里的设备，不需要配对码。</string>
+    <string name="nearby_mode_direct">仅限本网络</string>
+    <string name="nearby_mode_direct_detail">通过 Wi-Fi 直接查找设备。不会向 Relayium 服务器发送任何内容——连让两台设备互相认识都不需要。</string>
+    <string name="nearby_mode_hub">通过 relayium.com</string>
+    <string name="nearby_mode_hub_detail">查找从同一公网地址上网的设备，包括 Relayium 网页版和 Mac 应用。互相认识这一步会经过 relayium.com；文件仍然是端到端加密、设备直传。</string>
+    <string name="nearby_mode_hub_warning">任何共用你公网地址的设备都可能出现在这里。连接前请先确认名称，不认识的设备不要接受。</string>
+    <string name="nearby_start_direct">搜索本网络</string>
+    <string name="nearby_start_hub">通过 relayium.com 搜索</string>
+    <string name="nearby_stop">停止</string>
+    <string name="nearby_searching">正在搜索…</string>
+    <string name="nearby_reconnecting">连接已断开，正在重新搜索…</string>
+    <string name="nearby_empty">还没有发现其他设备。请在另一台设备上打开 Relayium，同样开启“附近”。</string>
+    <string name="nearby_empty_direct_hint">两台设备必须在同一个 Wi-Fi 网络。部分访客网络和公共网络会禁止设备互相发现。</string>
+    <string name="nearby_retry">重新搜索</string>
+    <string name="nearby_devices_title">已发现的设备</string>
+    <string name="nearby_unnamed">未命名设备</string>
+    <string name="nearby_device_label">%1$s · %2$s</string>
+    <string name="nearby_connect">连接</string>
+    <string name="nearby_connecting_to">正在连接 %1$s…</string>
+    <string name="nearby_cannot_link">这台设备使用的是较旧版本的 Relayium。它仍然可以接收，但不支持本应用能发送的全部内容。</string>
+    <string name="nearby_incoming_title">%1$s 请求连接</string>
+    <string name="nearby_incoming_detail">只有在你认识这台设备时才接受。传输开始前，你还需要和它核对一组六位数字。</string>
+    <string name="nearby_accept">接受</string>
+    <string name="nearby_decline">拒绝</string>
+    <string name="nearby_busy">请先完成当前传输，再开始“附近”。</string>
+    <string name="nearby_foreground_only">“附近”仅在 Relayium 打开时可用。离开应用会停止搜索并关闭正在进行的传输。</string>
+    <string name="cd_nearby_status">附近状态</string>
+    <string name="nearby_busy_end">结束当前传输</string>
+    <string name="transfer_nearby_running">“附近”正在运行。在这里加入或创建配对码会结束它，请先停止“附近”。</string>
+    <string name="transfer_stop_nearby">停止“附近”</string>
 </resources>

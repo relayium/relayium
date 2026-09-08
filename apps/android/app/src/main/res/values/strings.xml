@@ -42,6 +42,7 @@
     <string name="error_transfer_failed">The transfer stopped and was not completed.</string>
     <string name="error_text_refused">The other device declined the conversation.</string>
     <string name="error_legacy_no_offer">The other device never started the connection. If it also joined this code, one device has to create a code instead.</string>
+    <string name="error_nearby_unavailable">Could not search this network. Check that Wi-Fi is on and that this network allows devices to see each other.</string>
     <string name="error_integrity">The received file did not match what was sent, so it was discarded. Nothing was saved.</string>
     <!-- No "nothing was written" claim: this key also covers mid-write and
          cleanup-limited failures, where partial files or created folders can
@@ -433,4 +434,38 @@
     <string name="cloud_completing_title">This upload finished</string>
     <string name="cloud_completing_body">The files are stored. This device still has to prepare the link before it can show it to you.</string>
     <string name="cloud_completing_action">Get the link</string>
+
+    <!-- Nearby: the local-link and code-less rendezvous surface. -->
+    <string name="tab_nearby">Nearby</string>
+    <string name="nearby_title">Nearby devices</string>
+    <string name="nearby_intro">Send to a device on the same network, without a code.</string>
+    <string name="nearby_mode_direct">On this network only</string>
+    <string name="nearby_mode_direct_detail">Finds devices directly over Wi-Fi. Nothing is sent to a Relayium server — not even to introduce the two devices.</string>
+    <string name="nearby_mode_hub">Through relayium.com</string>
+    <string name="nearby_mode_hub_detail">Finds devices that reach the internet from the same address, including the Relayium website and Mac app. The introduction goes through relayium.com; your files still go device to device, encrypted end to end.</string>
+    <string name="nearby_mode_hub_warning">Anything else sharing your public address can appear here. Check the name before you connect, and never accept a device you do not recognise.</string>
+    <string name="nearby_start_direct">Search this network</string>
+    <string name="nearby_start_hub">Search through relayium.com</string>
+    <string name="nearby_stop">Stop</string>
+    <string name="nearby_searching">Searching…</string>
+    <string name="nearby_reconnecting">Lost the connection. Searching again…</string>
+    <string name="nearby_empty">No other devices yet. Open Relayium on the other device and turn Nearby on there too.</string>
+    <string name="nearby_empty_direct_hint">Both devices must be on the same Wi-Fi network. Some guest and public networks stop devices from seeing each other.</string>
+    <string name="nearby_retry">Search again</string>
+    <string name="nearby_devices_title">Devices found</string>
+    <string name="nearby_unnamed">Unnamed device</string>
+    <string name="nearby_device_label">%1$s · %2$s</string>
+    <string name="nearby_connect">Connect</string>
+    <string name="nearby_connecting_to">Connecting to %1$s…</string>
+    <string name="nearby_cannot_link">This device announced an older version of Relayium. It can still receive, but not everything this app can send.</string>
+    <string name="nearby_incoming_title">%1$s wants to connect</string>
+    <string name="nearby_incoming_detail">Accept only if you recognise this device. You will compare a six-digit code with it before anything is sent.</string>
+    <string name="nearby_accept">Accept</string>
+    <string name="nearby_decline">Decline</string>
+    <string name="nearby_busy">Finish the current transfer before starting Nearby.</string>
+    <string name="nearby_foreground_only">Nearby works only while Relayium is open. Leaving the app stops searching and closes any transfer.</string>
+    <string name="cd_nearby_status">Nearby status</string>
+    <string name="nearby_busy_end">End the current transfer</string>
+    <string name="transfer_nearby_running">Nearby is running. Joining or creating a code here would end it, so stop Nearby first.</string>
+    <string name="transfer_stop_nearby">Stop Nearby</string>
 </resources>

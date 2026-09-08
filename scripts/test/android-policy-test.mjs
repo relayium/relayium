@@ -516,6 +516,240 @@ check(
 // downloads, and the system installer asks the user to confirm. Holding
 // REQUEST_INSTALL_PACKAGES would let this app install a package itself, which
 // is a materially different trust posture and is not what any of the copy says.
+// ── every Android acceptance addresses the INSTRUMENTATION package ─────────
+//
+// The runner is registered under `<applicationId>.test`, not under the app.
+// Naming the app package produces "Unable to find instrumentation info" — which
+// `am instrument` reports while EXITING 0, so a driver that trusted the exit
+// status reports a green run in which nothing ran at all. This has already been
+// got wrong once; the shape is invisible in review and obvious here.
+for (const entry of readdirSync(resolve(repoRoot, "scripts"))) {
+  if (!/^android-.*acceptance\.sh$/.test(entry)) continue;
+  const script = readFileSync(resolve(repoRoot, "scripts", entry), "utf8");
+  if (!/am instrument/.test(script)) continue;
+  check(
+    !/"\$app_id\/androidx\.test/.test(script) && !/\$\{app_id\}\/androidx\.test/.test(script),
+    `scripts/${entry} addresses the instrumentation as $app_id/... The runner lives in `
+    + "$app_id.test; am instrument cannot find it there and still exits 0, so the run "
+    + "reports success having executed nothing.",
+  );
+  check(
+    /\$test_pkg\/\$runner|\$\{test_pkg\}\/|\.test\/androidx\.test/.test(script),
+    `scripts/${entry} does not address the instrumentation through its own .test package.`,
+  );
+}
+
+// The Nearby run must never be able to resolve production. Both modes point the
+// build at a local origin and say which; CLEARING the override resolves to
+// Backend.PRODUCTION, which is how an acceptance ends up driving the real
+// service while looking green.
+{
+  const nearbyScript = readFileSync(resolve(repoRoot, "scripts/android-nearby-acceptance.sh"), "utf8");
+  check(
+    /nearby\.expectOrigin/.test(nearbyScript),
+    "the Nearby acceptance no longer passes the origin it expects the build to resolve. "
+    + "Backend.readDebugOverride fails closed to PRODUCTION, so a property that did not take "
+    + "must fail the round rather than silently redirect it.",
+  );
+  check(
+    /acceptance_start_server/.test(nearbyScript),
+    "the Nearby acceptance's hub mode no longer starts its own throwaway server. Leaving the "
+    + "override unset resolves to production.",
+  );
+  check(
+    /go build -o "\$run_root\/relayium-server"/.test(nearbyScript),
+    "the Nearby acceptance's hub mode starts a server it never builds. "
+    + "acceptance_start_server EXECUTES $run_root/relayium-server and does not produce it, so "
+    + "the run fails at 'the server exited' with no binary to have exited.",
+  );
+  check(
+    !/setprop debug\.relayium\.backend ""[^"]/.test(nearbyScript),
+    "the Nearby acceptance clears the backend override during a run. An empty override is "
+    + "PRODUCTION, not 'no backend'.",
+  );
+  // macOS ships Bash 3.2, where `"${empty[@]}"` under `set -u` is an UNBOUND
+  // VARIABLE error rather than an empty expansion. Two identical device models
+  // leave the optional peer-name arrays empty, which is the ordinary case for a
+  // two-emulator run — so the bare form fails exactly the configuration this
+  // script exists for, before a single device is touched. Reproduced on
+  // /bin/bash 3.2.57: `set -u; a=(); echo "${a[@]}"` → `a[@]: unbound variable`.
+  for (const name of ["host_peer_args", "guest_peer_args", "mode_args"]) {
+    // The lookbehind matters: the SAFE form `${name+"${name[@]}"}` contains the
+    // unsafe form as a substring, so a plain match flags the fix as the defect.
+    check(
+      !new RegExp(`(?<!\\+)"\\$\\{${name}\\[@\\]\\}"`).test(nearbyScript),
+      `scripts/android-nearby-acceptance.sh expands $${name} as "\${${name}[@]}". `
+      + "On Bash 3.2 — which is what macOS runs — that is an unbound-variable error when the "
+      + `array is empty. Use \${${name}+"\${${name}[@]}"}, as lib/local-acceptance.sh does.`,
+    );
+    check(
+      new RegExp(`\\$\\{${name}\\+"\\$\\{${name}\\[@\\]\\}"\\}`).test(nearbyScript),
+      `scripts/android-nearby-acceptance.sh no longer expands $${name} with the `
+      + "empty-safe form; an optional argument list must survive being empty.",
+    );
+  }
+
+  check(
+    /run_barrier_phase transfer nearby-ready\.json/.test(nearbyScript)
+    && /run_barrier_phase room nearby-room-ready\.json/.test(nearbyScript),
+    "the Nearby acceptance no longer holds both halves at BOTH barriers. One guards the session "
+    + "(the message history is session state, and a side that disconnects first empties its "
+    + "counterpart's mid-assertion); the other guards the roster (stopping Nearby withdraws this "
+    + "device's advertisement, so the peer correctly vanishes from the other's list). One barrier "
+    + "alone only moves the race to the phase after it.",
+  );
+
+  check(
+    /acceptance_begin/.test(nearbyScript) && /completed=1/.test(nearbyScript)
+    && /acceptance_extra_cleanup\(\)/.test(nearbyScript),
+    "the Nearby acceptance no longer uses the shared local-acceptance lifecycle. Its own trap "
+    + "left adb children, device properties and the run's reports behind on failure.",
+  );
+}
+
+// The Nearby acceptance's own diagnostic thread must never be able to fail the
+// round it is watching. An uncaught InterruptedException out of a thread body
+// reaches Android's default handler, which KILLS THE PROCESS — and it did,
+// during the `finally` of a round whose transfers had all succeeded, turning a
+// fully passing run into a failure reported by its own instrumentation.
+{
+  const lanTest = readFileSync(
+    resolve(android, "app/src/androidTest/kotlin/com/relayium/android/nearby/NearbyLanAcceptanceTest.kt"),
+    "utf8",
+  );
+  check(
+    /catch \(_: InterruptedException\)[\s\S]{0,900}?Thread\.currentThread\(\)\.interrupt\(\)/.test(lanTest),
+    "the Nearby acceptance's progression thread no longer handles its own interrupt. "
+    + "close() interrupts the sampling sleep; letting that escape the thread body crashes "
+    + "the app process from inside the diagnostics.",
+  );
+  check(
+    /thread\.join\(JOIN_MS\)/.test(lanTest),
+    "the progression recorder no longer joins its thread on close, so the transcript can be "
+    + "read while it is still being written.",
+  );
+}
+
+// The Apple counterpart judge reads a TYPED receipt, and must never go back to
+// searching the document for the digest. That earlier rule was not a receipt: a
+// FAILED run whose diagnostic quoted the digest it was waiting for passed it,
+// and a digest and a name could be satisfied by two DIFFERENT files. The peer
+// publishes `files: [{name, size, sha256, path?}]` from `FileReceipt`
+// (`LocalTransferPeer/main.swift`, `State.result`), so that is what is asserted.
+{
+  const oracle = readFileSync(resolve(repoRoot, "scripts/test/android-nearby-oracle.py"), "utf8");
+  check(
+    !/walk_strings/.test(oracle),
+    "the Nearby oracle is walking every string in the Apple peer's document again. A digest "
+    + "found anywhere is not a receipt — a failed run that quoted it in a diagnostic passed.",
+  );
+  check(
+    /def judge_apple/.test(oracle)
+    && /phase != "done"/.test(oracle)
+    && /len\(files\) != 1/.test(oracle)
+    && /if name != expected_name/.test(oracle)
+    && /if sha != expected_sha/.test(oracle)
+    && /if size != expected_size/.test(oracle),
+    "the Apple counterpart judge no longer binds phase, file count, name, digest and size to "
+    + "the ONE received file. Each of those was a way a non-delivery could pass.",
+  );
+  check(
+    /apple_sas != android_sas/.test(oracle),
+    "the Apple counterpart judge no longer compares the two clients' SAS values. Two clients "
+    + "can move bytes without having authenticated each other; the SAS is what shows they did.",
+  );
+}
+
+// ── Nearby: the local link, and what it must never reach ───────────────────
+//
+// The direct path's entire claim is that nothing about a transfer leaves the
+// local link. That is enforced in two places at run time — the controller skips
+// the ICE fetch for a source that may not use the backend, and `RealDeps`
+// refuses one again at the seam — and both are assertions about SOURCE that a
+// later edit can quietly move. These are the guards that notice.
+
+const connectionSource = codeOf(read("app/src/main/kotlin/com/relayium/android/nearby/ConnectionSource.kt"));
+const realDeps = codeOf(read("app/src/main/kotlin/com/relayium/android/RealDeps.kt"));
+const controller = codeOf(read("app/src/main/kotlin/com/relayium/android/TransferController.kt"));
+const nsdTransport = codeOf(read("app/src/main/kotlin/com/relayium/android/nearby/NsdLocalPeerTransport.kt"));
+const advertisement = codeOf(read("app/src/main/kotlin/com/relayium/android/nearby/LocalPeerAdvertisement.kt"));
+
+check(
+  /data object Direct[\s\S]{0,400}?override val usesBackend get\(\) = false/.test(connectionSource),
+  "the DIRECT Nearby source no longer declares usesBackend = false. That flag is what stops the "
+  + "controller fetching ICE and what RealDeps refuses on; flipping it silently turns the "
+  + "no-server path into one that contacts a server.",
+);
+check(
+  /if \(!source\.usesBackend\) return IceConfig\.Result\(emptyList\(\), ""\)/.test(realDeps),
+  "RealDeps no longer refuses an ICE fetch for a source that may not use the backend. The "
+  + "controller's own skip is the first fence; this is the one a controller edit cannot remove.",
+);
+check(
+  /if \(!source\.usesBackend\) \{[\s\S]{0,200}?ice = IceConfig\.Result\(emptyList\(\), ""\)/.test(controller),
+  "TransferController.openRoom no longer skips the ICE fetch for a no-backend source. An empty "
+  + "result is not the same promise as a request that is never made.",
+);
+
+// The two Nearby rooms admit nobody without a person. `others.firstOrNull()` is
+// correct for a two-participant pairing room and is exactly wrong for a room
+// keyed by a public address or by whatever is advertising on a link.
+check(
+  /if \(admission == PeerAdmission\.EXPLICIT\) \{[\s\S]{0,600}?publishNearby\(\)\s*\n\s*return/.test(controller),
+  "TransferController.onRoster no longer returns before establishment under EXPLICIT admission. "
+  + "Without that fork the code-less room — which lists every device behind one public address — "
+  + "would connect to whichever peer happened to arrive first.",
+);
+check(
+  /fun connectToPeer\(peerId: String, expectedRoom: Int\)/.test(controller)
+  && /fun admitPeer\(peerId: String, expectedPrompt: Int\)/.test(controller)
+  && /fun rejectPeer\(peerId: String, expectedPrompt: Int\)/.test(controller),
+  "a Nearby user action no longer carries the room or prompt it was rendered against. A peer id "
+  + "alone is not authority: a local-link device keeps its identity while it keeps advertising, "
+  + "so a stale tap would still name something that matches.",
+);
+
+// The platform's own local-network rules, as this build's target actually
+// stands. Raising the target is a separate, deliberate decision that brings a
+// runtime permission with it; it must not happen as a side effect.
+check(
+  /targetSdk = "36"/.test(read("gradle/libs.versions.toml")),
+  "targetSdk moved off 36. Local network access is granted under INTERNET at 36 and below; "
+  + "target 37 requires ACCESS_LOCAL_NETWORK at run time, with denial and revocation paths "
+  + "this build has neither written nor tested.",
+);
+check(
+  !/ACCESS_LOCAL_NETWORK|CHANGE_WIFI_MULTICAST_STATE|ACCESS_FINE_LOCATION|ACCESS_COARSE_LOCATION/.test(mainManifest),
+  "the manifest declares a local-network, multicast or location permission. NsdManager needs "
+  + "none of them at this target, and declaring one asks the user for access this build does "
+  + "not use.",
+);
+
+// The wire itself. Each of these is a value an Apple peer compares exactly; a
+// drift here is a device that appears on one platform and is invisible on the
+// other, which no unit test on one side can see.
+check(
+  /const val SERVICE_TYPE = "_relayium\._tcp\."/.test(advertisement)
+  && /const val IDENTITY_LENGTH = 32/.test(advertisement)
+  && /const val MAX_NAME_BYTES = 64/.test(advertisement)
+  && /const val MAX_CAPABILITY_BYTES = 24/.test(advertisement)
+  && /const val MAX_CAPABILITIES = 8/.test(advertisement),
+  "a discovery-record bound no longer matches LocalPeerAdvertisement.swift. These are compared "
+  + "byte for byte by the shipped Apple clients.",
+);
+check(
+  /LocalPeerFraming\.strictUtf8\(bytes\) \?: return/.test(nsdTransport),
+  "the NSD transport no longer decodes TXT values strictly. The lenient decoder substitutes "
+  + "U+FFFD, which would admit a name or a capability the peer never sent — and a capability is "
+  + "compared for exact equality everywhere it is read.",
+);
+check(
+  /const val MAX_FRAME_BYTES = 64 \* 1024/.test(
+    codeOf(read("app/src/main/kotlin/com/relayium/android/nearby/LocalPeerFraming.kt")),
+  ),
+  "the signalling frame ceiling no longer matches LocalPeerFraming.swift's 64 KiB.",
+);
+
 check(
   !/REQUEST_INSTALL_PACKAGES/.test(mainManifest),
   "the manifest requests REQUEST_INSTALL_PACKAGES. The update flow hands a URL to the browser and "

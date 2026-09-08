@@ -1,9 +1,14 @@
 package com.relayium.android
 
+import com.relayium.android.nearby.ConnectionSource
+import com.relayium.android.nearby.NearbyDevice
+import com.relayium.android.nearby.PeerAdmission
+import com.relayium.android.nearby.nearbyDevices
 import com.relayium.android.storage.ProviderOps
 import com.relayium.android.storage.ReceiveStore
 import com.relayium.android.transport.IceConfig
 import com.relayium.android.transport.LinkTransport
+import com.relayium.android.transport.PeerScopedSignaling
 import com.relayium.android.transport.SignalingClient
 import com.relayium.android.transport.SignalingFactory
 import com.relayium.android.transport.SignalingHandle
@@ -69,7 +74,10 @@ class TransferController(
 ) {
 
     class Deps(
-        val fetchIce: suspend (PairCode) -> IceConfig.Result,
+        /** Called ONLY for a source whose [ConnectionSource.usesBackend] is
+         *  true. The direct local path has no server to ask and must not
+         *  acquire one; see [openRoom]. */
+        val fetchIce: suspend (ConnectionSource) -> IceConfig.Result,
         val signals: SignalingFactory,
         val transports: TransportFactory,
         val store: ReceiveStore,
@@ -88,6 +96,12 @@ class TransferController(
         val textEndAckMs: Long = TextLaneSession.END_ACK_TIMEOUT_MS,
         val abortBarrierMs: Long = FileLaneSession.ABORT_BARRIER_TIMEOUT_MS,
         val textIdleMs: Long = TextSessionLimits.IDLE_MS,
+        /** How long an unanswered inbound admission prompt may stand. Matched
+         *  to the peer's own request deadline, so the two sides give up
+         *  together instead of one waiting on a prompt the other abandoned. */
+        val pendingAdmissionMs: Long = LinkProtocol.LINK_REQUEST_TIMEOUT_MS,
+        /** The first room-reconnect delay; later attempts scale it. */
+        val roomRetryMs: Long = 2_000L,
     )
 
     // ── observable state ────────────────────────────────────────────────────
@@ -120,6 +134,67 @@ class TransferController(
     data class Progress(val name: String, val done: Long, val total: Long)
 
     data class Message(val body: String, val fromPeer: Boolean)
+
+    /**
+     * Whether the discovery half of a Nearby source is usable RIGHT NOW.
+     *
+     * Published separately from [Phase] because the two are genuinely
+     * independent: a WebRTC connection is peer-to-peer and keeps working while
+     * the room that introduced the peers is gone, and a room that is searching
+     * again is not a transfer that is connecting. Collapsing them is how a
+     * screen ends up claiming a list is live when nothing is maintaining it.
+     */
+    enum class NearbyRoom {
+        /** Not a Nearby source, or the user stopped it. */
+        OFF,
+        /** Opening the rendezvous; nothing is listed, because a roster that
+         *  cannot exclude this device would offer the user their own phone. */
+        CONNECTING,
+        /** Live. The list is meaningful, though it may legitimately be empty. */
+        JOINED,
+        /** The room dropped or could not run, and a bounded retry is armed.
+         *  Deliberately NOT "joined with an old list": nothing is maintaining
+         *  that list, so it is cleared rather than left on screen. */
+        RECONNECTING,
+    }
+
+    /**
+     * The discovery surface, and NOTHING that decides a transfer.
+     *
+     * Everything here is either what the user is looking at or what they chose.
+     * No field is ever read as permission: [NearbyDevice] carries what a peer
+     * ANNOUNCED, and commit-reveal plus the SAS are what authenticate.
+     */
+    data class Nearby(
+        /** A Nearby source is running. False for a pairing code. */
+        val active: Boolean = false,
+        /** The local-link path: no server of any kind was contacted. Published
+         *  so the screen can say which of the two rooms this is — their privacy
+         *  properties genuinely differ, and describing both the same way would
+         *  be untrue about one of them. */
+        val direct: Boolean = false,
+        val room: NearbyRoom = NearbyRoom.OFF,
+        val devices: List<NearbyDevice> = emptyList(),
+        /** The device the user picked, or null. Only ever set by an explicit
+         *  choice — never by arrival order, never by "the most recent one". */
+        val selectedId: String? = null,
+        /** A peer asking to connect, awaiting the user's answer. At most one: a
+         *  second asker is refused in band rather than queued behind a prompt
+         *  the user has not answered. */
+        val incomingId: String? = null,
+        /**
+         * Identity of the CURRENT prompt, and of the room the list belongs to.
+         *
+         * Both are monotonic, never reused, and both must be handed back with
+         * the user action they authorise — [connectToPeer] takes the room,
+         * [admitPeer]/[rejectPeer] take the prompt. A peer id is not enough on
+         * its own: a device on the local link keeps its identity for as long as
+         * it keeps advertising, so a tap that crossed a withdrawn prompt or a
+         * reopened room would otherwise still name something that matches.
+         */
+        val incomingPromptId: Int = 0,
+        val roomId: Int = 0,
+    )
 
     data class State(
         val phase: Phase = Phase.IDLE,
@@ -178,6 +253,8 @@ class TransferController(
          *  be removed. Session-level and sticky across links until the user
          *  acknowledges it — never silently erased by a generation fence. */
         val cleanupIncomplete: Boolean = false,
+        /** The discovery surface. Empty and inert for a pairing code. */
+        val nearby: Nearby = Nearby(),
     ) {
         /** Whether THIS connection can carry files at all. */
         val canSendFiles: Boolean get() = wire == Wire.LINK || wire == Wire.LEGACY_FILES
@@ -245,7 +322,28 @@ class TransferController(
     private val sessionDispatcher = session.asCoroutineDispatcher()
     private val storage = ScheduledThreadPoolExecutor(1)
 
+    /**
+     * The CONNECTION generation, and the published `linkId`.
+     *
+     * Unchanged in meaning: it fences the transport, both lanes, the pump,
+     * every storage completion and every picker result, and it is bumped by
+     * anything that retires a connection. What changed is only that it is no
+     * longer also the rendezvous' generation — see [roomGen] — so a Nearby
+     * session can retire a connection and build a fresh one to another device
+     * without tearing down the room the user is looking at.
+     */
     private var epoch = 0
+
+    /**
+     * The ROOM generation: the rendezvous socket, the capability registry, this
+     * device's room identity and the roster.
+     *
+     * Signalling callbacks fence on this instead of on [epoch], because their
+     * subject outlives an individual connection. For a pairing code the two
+     * always move together — every path that bumps one bumps the other — so
+     * that room's behaviour is exactly what it was.
+     */
+    private var roomGen = 0
     private var batchGen = 0
     private var receiveGen = 0
     private var textBarrierGen = 0
@@ -275,6 +373,25 @@ class TransferController(
         }
     }
 
+    /**
+     * Post one ROOM effect, fenced by the room generation.
+     *
+     * Deliberately a separate fence from [post]'s epoch, and the separation is
+     * the whole point of the split: a signalling frame is about the ROOM, and
+     * dropping it because a connection inside that room was retired would make
+     * the roster stop updating the moment a user finished one transfer.
+     * Everything a room effect then does to a CONNECTION still reads the live
+     * `epoch` on this thread, so nothing crosses the other way either.
+     */
+    private fun postRoom(expected: Int, task: () -> Unit) {
+        runCatching {
+            session.execute {
+                if (expected != roomGen) return@execute
+                task()
+            }
+        }
+    }
+
     /** Submit one storage effect, fenced by the receive generation AT EXECUTION
      *  so a cancel drops the effect too, and inert if the executor has stopped. */
     private fun submitStorage(gen: Int, effect: () -> Unit) {
@@ -295,6 +412,51 @@ class TransferController(
     // ── session objects (session thread only) ───────────────────────────────
 
     private var signaling: SignalingHandle? = null
+
+    /** Why this client is in a room. Null before the first join. */
+    private var source: ConnectionSource? = null
+
+    /** How a peer becomes THE peer. Read in the two places that would otherwise
+     *  pick one implicitly, and nowhere else. */
+    private val admission: PeerAdmission
+        get() = source?.admission ?: PeerAdmission.AUTOMATIC
+
+    /** The room's last roster, verbatim. Room-scoped: it means nothing outside
+     *  the room that issued its ids. */
+    private var roster: List<Envelope.Peer> = emptyList()
+
+    /** The one peer asking to connect, awaiting the user's answer, and the
+     *  bounded, ordered buffer of ITS establishment frames — the offer that
+     *  raised the prompt and whatever chases it. Replayed into the transport on
+     *  admission, discarded on every other exit. */
+    private var pendingPeer: String? = null
+    /** Which wire the prompt is ABOUT. A frame of another generation is not part
+     *  of this ask and is never buffered into it. */
+    private var pendingGeneration: Signal.Generation = Signal.Generation.LINK
+    /** The legacy lane an older peer offered, or null for `link/1`. Recorded so
+     *  the admitted profile is the one the user was asked about. */
+    private var pendingLane: LegacyProtocol.Lane? = null
+    private val pendingSignals = ArrayList<Json>()
+
+    /**
+     * Monotonic identity of the CURRENT prompt, never reused across prompts or
+     * rooms.
+     *
+     * Published, and required back from the user action that answers it. A tap
+     * is composed against one rendered question, and by the time it reaches this
+     * executor that question may have been withdrawn and another one raised —
+     * by a different device, in a different room. On the local link a peer's
+     * identity is stable for as long as it keeps advertising, so "same peer id"
+     * is NOT enough to prove the answer belongs to the ask; this is.
+     */
+    private var pendingPromptId = 0
+
+    /** A room drop that arrived while a connection was live. The reconnect is
+     *  deferred rather than dropped: replacing the registry under a live link
+     *  would take its leave budget and its room identity with it. */
+    private var roomRetryPending = false
+    private var reconnectAttempt = 0
+
     private var transport: TransportHandle? = null
     private var linkSession: LinkSession? = null
     private var fileLane: FileLaneSession? = null
@@ -333,6 +495,8 @@ class TransferController(
     private var textEndTimer: ScheduledFuture<*>? = null
     private var abortBarrierTimer: ScheduledFuture<*>? = null
     private var textIdleTimer: ScheduledFuture<*>? = null
+    private var pendingTimer: ScheduledFuture<*>? = null
+    private var reconnectTimer: ScheduledFuture<*>? = null
     /** The bounded wait for a legacy peer's offer, for a JOINER — which never
      *  offers, on any wire. */
     private var legacyOfferTimer: ScheduledFuture<*>? = null
@@ -340,53 +504,104 @@ class TransferController(
     // ── joining ─────────────────────────────────────────────────────────────
 
     /**
-     * Join [code] as [intent].
+     * Join a pairing code as [intent].
      *
-     * The intent is REQUIRED rather than inferred, and it is the whole reason
-     * this parameter exists: on the shipped legacy wire it decides who offers,
-     * and a device that minted a code and one that typed it in look identical
-     * from inside a room. Nothing downstream re-derives it.
+     * KEPT as the pairing room's own entry point rather than folded into the
+     * general one: the intent is not a property of a code, it is a property of
+     * how this device came to hold one, and spelling that out at the call site
+     * is what has kept a minter from ever behaving like a joiner.
      */
-    fun join(code: PairCode, intent: Intent) = post {
+    fun join(code: PairCode, intent: Intent) = join(ConnectionSource.Pairing(code, intent))
+
+    /**
+     * Join whatever rendezvous [source] names, and leave whatever this device
+     * was in before.
+     *
+     * The source decides three things and nothing else decides them: which
+     * rendezvous is opened, whether the backend may be contacted at all, and
+     * whether a peer may be taken without a person choosing it. Everything
+     * downstream — the capability registry, the role rule, the handshake, both
+     * lanes — is identical across all three.
+     */
+    fun join(source: ConnectionSource) = post {
         closeOnSession()
         epoch++
-        this.intent = intent
+        roomGen++
+        this.source = source
+        this.intent = (source as? ConnectionSource.Pairing)?.intent ?: Intent.JOINER
         val mine = epoch
+        val room = roomGen
+        val explicit = source.admission == PeerAdmission.EXPLICIT
         // A fresh link, but not a fresh disk: an unacknowledged leftover
         // warning survives the reset because the leftover itself does.
         _state.value = State(
             phase = Phase.CONNECTING,
             linkId = mine,
             cleanupIncomplete = _state.value.cleanupIncomplete,
+            nearby = if (explicit) {
+                Nearby(
+                    active = true,
+                    direct = !source.usesBackend,
+                    room = NearbyRoom.CONNECTING,
+                    roomId = room,
+                )
+            } else {
+                Nearby()
+            },
         )
+        openRoom(room, source)
+    }
+
+    /**
+     * Acquire whatever the rendezvous needs, then open it.
+     *
+     * The ICE fetch is SKIPPED — not merely defaulted to empty — for a source
+     * that may not use the backend. That is the whole content of the direct
+     * path's privacy claim at this layer: an empty list is what two devices on
+     * one link need (host candidates reach each other), and asking a server for
+     * relay credentials would be a request this path promises never to make.
+     * The composition layer refuses such a source a second time, because one
+     * fence a later edit can move is not a promise.
+     */
+    private fun openRoom(room: Int, source: ConnectionSource) {
+        if (!source.usesBackend) {
+            ice = IceConfig.Result(emptyList(), "")
+            openSignaling(room, source)
+            return
+        }
         scope.launch(sessionDispatcher) {
-            // Bounded and cancellable, with the epoch check that stops an old
-            // join's completion resurrecting a session the user already left.
-            val fetched = deps.fetchIce(code)
-            if (epoch != mine) return@launch
+            // Bounded and cancellable, with the room check that stops an old
+            // join's completion opening a room the user already left.
+            val fetched = deps.fetchIce(source)
+            if (roomGen != room) return@launch
             ice = fetched
-            openSignaling(mine, code)
+            openSignaling(room, source)
         }
     }
 
-    private fun openSignaling(mine: Int, code: PairCode) {
+    private fun openSignaling(room: Int, source: ConnectionSource) {
         val client = deps.signals.create(
-            code,
+            source,
             object : SignalingClient.Events {
-                override fun onSelfId(id: String, ip: String) = post(mine) { onWelcome(id) }
-                override fun onPeers(peers: List<Envelope.Peer>) = post(mine) { onRoster(mine, peers) }
-                override fun onPeerLeft(peerId: String) = post(mine) {
+                override fun onSelfId(id: String, ip: String) = postRoom(room) { onWelcome(id) }
+                override fun onPeers(peers: List<Envelope.Peer>) = postRoom(room) { onRoster(peers) }
+                override fun onPeerLeft(peerId: String) = postRoom(room) {
+                    // The rendezvous saying a PHYSICAL connection closed. It
+                    // retires whatever is bound to that id and nothing else: a
+                    // Nearby room keeps listing every other device.
                     if (peerId == this@TransferController.peerId && peerId.isNotEmpty()) {
                         endSession("error_connection_lost")
                     }
+                    if (peerId == pendingPeer) clearPendingAdmission()
+                    if (admission == PeerAdmission.EXPLICIT) publishNearby()
                 }
-                override fun onSignal(from: String, data: Json) = post(mine) { onSignalFrame(mine, from, data) }
-                override fun onClosed(code: Int, reason: String) = post(mine) {
-                    if (transport == null) endSession("error_code_not_found")
+                override fun onSignal(from: String, data: Json) = postRoom(room) {
+                    onSignalFrame(from, data)
                 }
-                override fun onFailure(error: Throwable) = post(mine) {
-                    if (transport == null) endSession("error_network")
+                override fun onClosed(code: Int, reason: String) = postRoom(room) {
+                    onRoomClosed(code)
                 }
+                override fun onFailure(error: Throwable) = postRoom(room) { onRoomFailed() }
             },
         )
         signaling = client
@@ -395,38 +610,112 @@ class TransferController(
 
     private fun onWelcome(id: String) {
         if (id.isEmpty()) {
-            endSession("error_network")
+            if (admission == PeerAdmission.EXPLICIT) failRoom("error_nearby_unavailable")
+            else endSession("error_network")
             return
         }
-        // The registry and every signed leave payload bind to the REAL hub id.
+        // The registry and every signed leave payload bind to the REAL room id.
         selfId = id
         linkSession = LinkSession(id)
+        // A join is what proves a retry worked; anything short of it and the
+        // next drop must not start from zero again.
+        reconnectAttempt = 0
+        if (admission == PeerAdmission.EXPLICIT) {
+            _state.value = _state.value.copy(
+                nearby = _state.value.nearby.copy(room = NearbyRoom.JOINED),
+            )
+            publishNearby()
+        }
     }
 
-    private fun onRoster(mine: Int, peers: List<Envelope.Peer>) {
+    private fun onRoster(peers: List<Envelope.Peer>) {
         val registry = linkSession ?: return
         val others = peers.map { it.id }.filter { it != selfId }
         registry.retainPeers(others)
         for (id in registry.rosterChanged(others)) {
             signaling?.sendSignal(id, registry.capsSignal())
         }
-        armHelloRetry(mine)
+        armHelloRetry(roomGen)
+        roster = peers
+
+        if (admission == PeerAdmission.EXPLICIT) {
+            // The ONE fork, and it is a subtraction: the roster is published and
+            // NOTHING is established. A room that lists devices the user did not
+            // ask about — the code-less room lists everything behind one public
+            // address, the local link lists everything advertising on it — has no
+            // "the other peer" to take.
+            val present = others.toSet()
+            if (pendingPeer != null && pendingPeer !in present) clearPendingAdmission()
+            publishNearby()
+            return
+        }
+
         if (others.isEmpty() && transport == null) {
             _state.value = _state.value.copy(phase = Phase.WAITING_PEER)
         }
         others.firstOrNull()?.let { peer ->
-            armSettle(mine, peer)
-            maybeEstablish(mine, peer)
+            armSettle(epoch, peer)
+            maybeEstablish(epoch, peer)
         }
     }
 
+    /**
+     * Recompute the list the user picks from, and the phase that describes it.
+     *
+     * Reads the SAME capability registry the admission rules read, so a row can
+     * never claim a wire the routing predicate would then refuse. Called after
+     * a roster frame AND after a capability hello, because a hello changes what
+     * a listed device is shown as able to do — but never adds one: a peer no
+     * roster has delivered is simply not listed until one does.
+     */
+    private fun publishNearby() {
+        if (admission != PeerAdmission.EXPLICIT) return
+        val registry = linkSession
+        val devices = nearbyDevices(
+            roster = roster,
+            selfId = selfId,
+            supportsLink = { registry?.peerSupportsLink(it) == true },
+            announcesText = { registry?.peerSupportsText(it) == true },
+        )
+        val current = _state.value
+        val listed = devices.mapTo(HashSet()) { it.id }
+        _state.value = current.copy(
+            // Browsing is WAITING_PEER: a room with no connection in it. A live
+            // connection owns the phase, and a terminal one is not repainted.
+            phase = if (transport == null && current.phase != Phase.ENDED) {
+                Phase.WAITING_PEER
+            } else {
+                current.phase
+            },
+            nearby = current.nearby.copy(
+                roomId = roomGen,
+                devices = devices,
+                // A device that left must not leave a selection pointing at
+                // nothing: the next action would dial an id the room no longer
+                // contains, and that id could by then belong to another device.
+                // The selection is KEPT while a connection to it is live, because
+                // then it is the peer of a session rather than a row in a list.
+                selectedId = current.nearby.selectedId
+                    ?.takeIf { it in listed || (transport != null && it == peerId) },
+                incomingId = pendingPeer,
+                incomingPromptId = pendingPromptId,
+            ),
+        )
+    }
+
+
     /** Three hello attempts spaced 1.5 s, the first on roster gain. The peer
-     *  does not retry on this side's behalf. */
-    private fun armHelloRetry(mine: Int) {
+     *  does not retry on this side's behalf.
+     *
+     *  Fenced by the ROOM, not by the connection: greeting the devices in a
+     *  room is what makes them selectable at all, and a Nearby session that
+     *  finished one transfer must keep announcing to everything else in the
+     *  room rather than going quiet. */
+    private fun armHelloRetry(room: Int) {
         if (helloTimer != null) return
         helloTimer = session.scheduleWithFixedDelay(
             {
-                if (epoch != mine) { helloTimer?.cancel(false); helloTimer = null; return@scheduleWithFixedDelay }
+                if (roomGen != room) { helloTimer?.cancel(false); helloTimer = null; return@scheduleWithFixedDelay }
                 val registry = linkSession ?: return@scheduleWithFixedDelay
                 val due = registry.helloRetryTick()
                 for (id in due) signaling?.sendSignal(id, registry.capsSignal())
@@ -557,20 +846,28 @@ class TransferController(
         }
     }
 
-    private fun onSignalFrame(mine: Int, from: String, data: Json) {
+    private fun onSignalFrame(from: String, data: Json) {
         val registry = linkSession ?: return
+        val mine = epoch
 
         // Caps may ride ANY frame — a bare hello, but also every conforming
         // offer and answer. Record them and keep routing; return early only for
         // a capability-only hello.
         val wasHello = registry.recordPeerCaps(from, data)
-        if (wasHello) registry.didHearFrom(from)
+        if (wasHello) {
+            registry.didHearFrom(from)
+            // What a listed device is shown as able to do just changed.
+            if (admission == PeerAdmission.EXPLICIT) publishNearby()
+        }
         val signal = Signal.fromJson(data)
         val capabilityOnly = wasHello && signal != null &&
             signal.sdpType == null && signal.candidate == null && signal.revealKey == null &&
             signal.commit == null && !signal.busy && !signal.leave && !signal.linkRequest
         if (capabilityOnly) {
-            maybeEstablish(mine, from)
+            // An announcement is an announcement. Under explicit admission it
+            // updates the row and stops there; it is not an ask, and treating it
+            // as one would let anything on the link start a connection.
+            if (admission == PeerAdmission.AUTOMATIC) maybeEstablish(mine, from)
             return
         }
         if (signal == null) return
@@ -601,6 +898,23 @@ class TransferController(
         }
 
         if (transport == null) {
+            // Nothing establishes without a person — except the peer a person
+            // already chose. See [isAwaitedSelection].
+            if (admission == PeerAdmission.EXPLICIT && !isAwaitedSelection(from)) {
+                offerAdmission(
+                    from = from,
+                    data = data,
+                    asks = signal.isLinkOffer || signal.isLinkRequest,
+                    generation = Signal.Generation.LINK,
+                    lane = null,
+                    // An offer composes a `link` frame, which nothing else can
+                    // do, so it stands in for a hello that never arrived. A
+                    // REQUEST does not: the proof exception is offer-only,
+                    // exactly as it is in the automatic room.
+                    provesLink = signal.isLinkOffer,
+                )
+                return
+            }
             when {
                 // An OFFER from a peer that announced nothing is itself the
                 // announcement (and never overrules an incompatible snapshot).
@@ -632,7 +946,18 @@ class TransferController(
         // made, so routing stops here as well as at the transport boundary —
         // the two checks answer to different callers and neither is the other's
         // backstop.
-        if (wireProfile !is WireProfile.Link) return
+        val profile = wireProfile as? WireProfile.Link ?: return
+        // A second OFFER reaching the side that already offered.
+        //
+        // On a pairing code this cannot happen from a conforming peer and the
+        // transport's own commitment rule answers it. In a Nearby room it CAN,
+        // benignly: the peer this device just finished with may still have an
+        // establishment frame in flight when a fresh one to the same device
+        // begins, and feeding a stale offer to a new handshake fails it as a
+        // replaced commitment. The role rule is the single tiebreak everywhere
+        // else in this protocol; here it says the same thing — the initiator
+        // offered, so an inbound offer is not this connection's.
+        if (profile.role == LinkProtocol.Role.INITIATOR && signal.isLinkOffer) return
         transport?.onSignal(data)
     }
 
@@ -668,12 +993,472 @@ class TransferController(
             transport?.onSignal(data)
             return
         }
+        // A legacy offer must never silently replace a running or proven link
+        // with an older wire.
         if (registry.peerSupportsLink(from)) return
+        val lane = LegacyProtocol.inboundOfferLane(signal)
+        if (admission == PeerAdmission.EXPLICIT && !isAwaitedSelection(from)) {
+            // The SAME gate the `link` generation goes through. Without this an
+            // older peer's offer would establish with no consent and no roster
+            // check at all, because a Nearby source has no minter to be — its
+            // intent defaults to JOINER, which is exactly the value this path
+            // used to read as permission to answer.
+            offerAdmission(
+                from = from,
+                data = data,
+                asks = lane != null,
+                generation = signal.generation,
+                lane = lane,
+                provesLink = false,
+            )
+            return
+        }
         if (intent != Intent.JOINER) return
-        val lane = LegacyProtocol.inboundOfferLane(signal) ?: return
+        if (lane == null) return
         peerId = from
         startTransport(mine, from, WireProfile.Legacy(LinkProtocol.Role.RESPONDER, lane))
         transport?.onSignal(data)
+    }
+
+    // ── explicit admission (Nearby) ─────────────────────────────────────────
+
+    /**
+     * An inbound establishment frame in a room where nothing establishes
+     * without a person. Every generation goes through here — `link/1` and both
+     * shipped legacy wires — because a consent gate one wire can walk around is
+     * not a consent gate.
+     *
+     * Only an ASK may raise a prompt, and the restriction is the point: an
+     * offer, or the content-free link request, are the two ways a peer asks for
+     * a connection. A candidate, a reveal, a stray commitment or a capability
+     * piggyback is not an ask, and letting one raise a prompt would let anything
+     * in the room — the code-less room contains every device behind one public
+     * address — put a question in front of this user, or open a buffer in this
+     * process, without ever asking for anything.
+     *
+     * The peer must also be one the ROSTER has delivered. A device the user
+     * cannot see in their list must not be able to interrupt them.
+     *
+     * @param asks whether this frame is a request to connect at all.
+     * @param generation which wire the ask is FOR. A prompt is about one wire,
+     *   and later frames are buffered only when they belong to it — replaying a
+     *   frame from another generation into the admitted transport is exactly
+     *   what that transport's own filter exists to refuse.
+     * @param lane the legacy lane an older peer offered, or null for `link/1`.
+     *   Recorded with the prompt so the admitted profile is the one the user was
+     *   actually asked about.
+     * @param provesLink whether this frame is itself proof of `link/1`.
+     */
+    private fun offerAdmission(
+        from: String,
+        data: Json,
+        asks: Boolean,
+        generation: Signal.Generation,
+        lane: LegacyProtocol.Lane?,
+        provesLink: Boolean,
+    ) {
+        val registry = linkSession ?: return
+        val pending = pendingPeer
+
+        if (pending == null) {
+            if (!asks) return
+            if (provesLink) registry.recordProvenLink(from)
+            // `link/1` needs the announcement; the legacy path has already
+            // established that this peer does NOT speak it.
+            if (lane == null && !registry.peerSupportsLink(from)) return
+            if (roster.none { it.id == from }) return
+            pendingPeer = from
+            pendingGeneration = generation
+            pendingLane = lane
+            pendingSignals.clear()
+            pendingPromptId++
+            // An offer is KEPT, in order. Answering later means answering THIS
+            // offer; discarding it would leave the admitted transport waiting
+            // for an SDP the peer has already sent and will not repeat. A
+            // content-free request carries nothing to replay.
+            if (data.carriesOffer()) pendingSignals.add(data)
+            armPendingAdmission(roomGen)
+            publishNearby()
+            return
+        }
+
+        if (from != pending) {
+            // A THIRD device while a prompt is up. Refused in band with exactly
+            // the `busy` an established session sends, so it reaches a truthful
+            // terminal state instead of waiting out its own deadline — and the
+            // prompt the user is reading is not replaced by whoever asked last.
+            signaling?.sendSignal(from, Signal.busy().toJson())
+            return
+        }
+
+        // Not this prompt's wire. Dropped rather than buffered: the user is
+        // being asked about one connection, and a frame for another generation
+        // is not part of it.
+        if (generation != pendingGeneration) return
+
+        if (pendingSignals.size >= LinkProtocol.HELD_SIGNAL_MAX) {
+            // More than a whole establishment's worth of frames chasing a prompt
+            // nobody has answered. The buffer is dropped WITH the admission
+            // rather than grown; the peer is told, and may ask again.
+            rejectPendingAdmission("error_connection_lost")
+            return
+        }
+        pendingSignals.add(data)
+    }
+
+    /**
+     * Whether [from] is the peer this device is CURRENTLY establishing to
+     * because a person chose it.
+     *
+     * The exception exists because half of every explicit selection does not
+     * look like one from the wire's side. `linkRole` gives the offer to the
+     * smaller room id, and which id is smaller has nothing to do with who
+     * pressed Connect: a device that picks a peer sorting below it sends a
+     * content-free link REQUEST and waits to be offered. The offer that comes
+     * back is the ANSWER to a question this device asked. Reading it as a fresh
+     * ask put a second consent prompt in front of the user for the device they
+     * had just tapped Connect on — nobody answers a question they did not
+     * expect, and both sides then sat until their own deadlines. Observed on two
+     * real emulators, where the chosen peer's id happened to sort above this
+     * one; the run reached discovery, selection and admission and then made no
+     * progress for thirty seconds.
+     *
+     * It is deliberately the NARROWEST statement of "already consented", and
+     * every clause is load-bearing:
+     *
+     *  - EXPLICIT admission only; the automatic room never reaches here.
+     *  - no transport yet, so it cannot adopt a frame into a live session.
+     *  - [Intent.MINTER], which ONLY [connectToPeer] sets. A device that was
+     *    admitted, or that is idle, is not awaiting anything.
+     *  - the sender is [peerId] — the peer `maybeEstablish` committed to for
+     *    this establishment — AND the selection the UI is currently publishing.
+     *
+     * So a third device, a device nobody selected, and the same device offering
+     * again after its session ended are all still asks: `closeConnection` clears
+     * `peerId` and the selection, so the consent does not outlive the connection
+     * it was given for. Each of those is a test.
+     */
+    private fun isAwaitedSelection(from: String): Boolean =
+        admission == PeerAdmission.EXPLICIT &&
+            transport == null &&
+            intent == Intent.MINTER &&
+            from.isNotEmpty() &&
+            from == peerId &&
+            from == _state.value.nearby.selectedId
+
+    /** Whether a raw signal payload carries an SDP at all — the thing worth
+     *  replaying. Read off the parsed signal rather than the caller's opinion,
+     *  so the buffer holds what it says it holds. */
+    private fun Json.carriesOffer(): Boolean = Signal.fromJson(this)?.sdpType != null
+
+    /** A prompt nobody answers must not stand forever: it would hide later asks
+     *  (only one may be pending) and hold the peer's frames. Fenced by the room,
+     *  because that is what the prompt belongs to. */
+    private fun armPendingAdmission(room: Int) {
+        pendingTimer?.cancel(false)
+        pendingTimer = session.schedule(
+            {
+                pendingTimer = null
+                if (roomGen != room || pendingPeer == null) return@schedule
+                rejectPendingAdmission(null)
+            },
+            deps.timeouts.pendingAdmissionMs, TimeUnit.MILLISECONDS,
+        )
+    }
+
+    /** Retire the prompt in silence. For the cases where the peer already knows:
+     *  it left the roster, or this device is leaving the room. */
+    private fun clearPendingAdmission() {
+        pendingTimer?.cancel(false)
+        pendingTimer = null
+        pendingPeer = null
+        pendingLane = null
+        pendingGeneration = Signal.Generation.LINK
+        pendingSignals.clear()
+    }
+
+    /** Retire the prompt and TELL the peer, with the same `busy` an established
+     *  session sends. [errorKey] is what this side shows, and is null for an
+     *  ordinary decline — refusing a device is not a fault. */
+    private fun rejectPendingAdmission(errorKey: String?) {
+        val peer = pendingPeer
+        clearPendingAdmission()
+        if (peer != null) signaling?.sendSignal(peer, Signal.busy().toJson())
+        if (errorKey != null) _state.value = _state.value.copy(errorKey = errorKey)
+        publishNearby()
+    }
+
+    /**
+     * Open a NEW connection identity inside a room that stays.
+     *
+     * Every generation a connection owns is bumped here, so a late storage
+     * completion, a retired pump's read, a cancelled batch's export or an old
+     * transport's callback from the PREVIOUS peer drops itself on arrival —
+     * exactly as it does when a whole session is replaced. The published
+     * `linkId` moves with it, which is what stops a file picked while connected
+     * to one device from being sent to the next.
+     */
+    private fun beginConnection(peer: String): Int {
+        cancelConnectionTimers()
+        epoch++
+        batchGen++
+        bumpReceiveGen()
+        textBarrierGen++
+        receivedBytes = 0
+        pendingExports = 0
+        val mine = epoch
+        val current = _state.value
+        _state.value = current.copy(
+            phase = Phase.CONNECTING,
+            linkId = mine,
+            wire = null,
+            sas = null,
+            errorKey = null,
+            incoming = emptyList(),
+            outgoing = emptyList(),
+            messages = emptyList(),
+            promptId = promptCounter,
+            awaitingFolder = false,
+            receiveProgress = null,
+            sendProgress = null,
+            savedBatch = false,
+            sentBatch = false,
+            savedBatchCount = 0,
+            sentBatchCount = 0,
+            fileLaneDown = false,
+            textState = TextLaneSession.State.IDLE,
+            textCanRequest = false,
+            nearby = current.nearby.copy(selectedId = peer, incomingId = null),
+        )
+        return mine
+    }
+
+    /**
+     * The user picked a device.
+     *
+     * This is the ONLY thing that replaces `others.firstOrNull()` in an explicit
+     * room, and it hands the chosen peer to exactly the establishment path a
+     * pairing room uses — the settle window, the capability predicate, the role
+     * rule, the legacy fallback. There is no second way to establish.
+     *
+     * It refuses while a connection is LIVE. Retiring a running transfer because
+     * a row was tapped would destroy work the user never asked to lose; the
+     * screen ends the current one first, which is an action they take on purpose.
+     */
+    fun connectToPeer(peerId: String, expectedRoom: Int) = post {
+        // The ROOM the list was rendered against. Room ids are monotonic and
+        // never reused, so a tap composed against a room that has since dropped
+        // and reopened — where the very same local-link peer id may still be
+        // advertising — cannot dial in the new one.
+        if (expectedRoom != roomGen) return@post
+        if (admission != PeerAdmission.EXPLICIT) return@post
+        if (transport != null) return@post
+        if (selfId.isEmpty() || peerId == selfId) return@post
+        if (roster.none { it.id == peerId }) return@post
+        // Tapping Connect on the very device that is asking is an ACCEPT: it is
+        // the same decision, and answering the offer already in hand beats
+        // throwing it away and asking the peer to start again.
+        if (pendingPeer == peerId) {
+            admitOnSession(peerId)
+            return@post
+        }
+        // A prompt from someone ELSE is retired: leaving it standing would let a
+        // later Accept connect to a device the user has moved on from.
+        if (pendingPeer != null) rejectPendingAdmission(null)
+        // MINTER, because this device is the one that dialled. On the shipped
+        // legacy wire that is what decides who offers, and a Nearby room has no
+        // pairing code to infer it from.
+        intent = Intent.MINTER
+        val mine = beginConnection(peerId)
+        armSettle(mine, peerId)
+        maybeEstablish(mine, peerId)
+    }
+
+    /**
+     * The user accepted the prompt naming [peerId].
+     *
+     * [expectedPrompt] is the [Nearby.incomingPromptId] the screen was RENDERING
+     * when the user tapped, and it is checked here, on the session executor,
+     * because that is the only place a prompt withdrawn between the tap and this
+     * turn can be seen. Peer id alone is not enough: a local-link peer keeps its
+     * identity while it keeps advertising, so a stale tap naming the same device
+     * would otherwise authorise an ask the user never read.
+     */
+    fun admitPeer(peerId: String, expectedPrompt: Int) = post {
+        if (expectedPrompt != pendingPromptId) return@post
+        admitOnSession(peerId)
+    }
+
+    private fun admitOnSession(peerId: String) {
+        if (admission != PeerAdmission.EXPLICIT) return
+        if (transport != null) return
+        if (pendingPeer != peerId) return
+        val registry = linkSession ?: return
+        val lane = pendingLane
+        // The wire the user was ASKED about, not one re-derived now: a peer that
+        // announced `link/1` after raising a legacy prompt has not been consented
+        // to for `link/1`, and the reverse would answer an older offer on a wire
+        // the peer never sent one on.
+        val profile = if (lane == null) {
+            if (!registry.peerSupportsLink(peerId)) return
+            WireProfile.Link(LinkProtocol.linkRole(selfId, peerId))
+        } else {
+            WireProfile.Legacy(LinkProtocol.Role.RESPONDER, lane)
+        }
+        val buffered = ArrayList(pendingSignals)
+        clearPendingAdmission()
+        // JOINER: the peer dialled, so on the older wire it is the side that
+        // offers and this one must not.
+        intent = Intent.JOINER
+        val mine = beginConnection(peerId)
+        this.peerId = peerId
+        startTransport(mine, peerId, profile)
+        // In arrival order, into a transport that exists: the offer that raised
+        // the prompt, then whatever chased it.
+        for (data in buffered) {
+            if (epoch != mine) return
+            transport?.onSignal(data)
+        }
+    }
+
+    /** The user refused the prompt naming [peerId]. The room continues.
+     *  [expectedPrompt] identifies the question being answered — see
+     *  [admitPeer]. */
+    fun rejectPeer(peerId: String, expectedPrompt: Int) = post {
+        if (expectedPrompt != pendingPromptId) return@post
+        if (pendingPeer != peerId) return@post
+        rejectPendingAdmission(null)
+    }
+
+    /** Search again now, after a failure the user can see. Resets the backoff,
+     *  because a person asking is new information. */
+    fun retryNearby() = post {
+        if (!_state.value.nearby.active) return@post
+        if (transport != null) return@post
+        reconnectAttempt = 0
+        roomRetryPending = false
+        scheduleRoomReconnect(immediate = true)
+    }
+
+    /**
+     * Leave the room entirely: the lifecycle-off path.
+     *
+     * Distinct from [disconnect], which retires the CONNECTION and stays in the
+     * room. This one stops advertising, stops browsing, closes every socket and
+     * ends the session, which is what leaving the screen or backgrounding the
+     * app must do — a device that keeps announcing itself while its owner
+     * believes they closed the feature is the dishonest state this separation
+     * exists to prevent.
+     */
+    fun stopNearby() = post {
+        if (!_state.value.nearby.active) return@post
+        // A live peer is told, with the same authenticated leave an ordinary
+        // disconnect sends. Leaving the room without it would look to the peer
+        // like this device dropped off the network.
+        announceLeave()
+        _state.value = _state.value.copy(
+            phase = Phase.ENDED,
+            receiveProgress = null,
+            sendProgress = null,
+            awaitingFolder = false,
+            nearby = Nearby(),
+        )
+        closeOnSession()
+    }
+
+    // ── the room's own lifetime ─────────────────────────────────────────────
+
+    private fun onRoomClosed(code: Int) {
+        if (admission == PeerAdmission.EXPLICIT) {
+            // A negative code is this build's own marker for a local transport
+            // that could not run — it could not advertise, could not browse, or
+            // neither half came up inside the arming window. An ordinary close
+            // is a drop, which needs no error copy: "searching again" IS the
+            // message.
+            failRoom(if (code < 0) "error_nearby_unavailable" else null)
+            return
+        }
+        if (transport == null) endSession("error_code_not_found")
+    }
+
+    private fun onRoomFailed() {
+        if (admission == PeerAdmission.EXPLICIT) {
+            failRoom("error_nearby_unavailable")
+            return
+        }
+        if (transport == null) endSession("error_network")
+    }
+
+    /**
+     * The room is gone; the CONNECTION may not be.
+     *
+     * A WebRTC link is peer-to-peer and keeps working when the thing that
+     * introduced the two devices goes away, so a live transfer is left running
+     * and its reconnect is DEFERRED. That is not a nicety: reopening would mint
+     * a new room identity, and the registry bound to the live link holds the
+     * leave budget and the id every signed leave payload is checked against.
+     *
+     * What does happen immediately is the honest part — the list is CLEARED.
+     * Nothing is maintaining it, and a list left on screen is a claim that
+     * those devices are still reachable.
+     */
+    private fun failRoom(errorKey: String?) {
+        // Bumped first, so the close below cannot be read back as another drop.
+        roomGen++
+        helloTimer?.cancel(false)
+        helloTimer = null
+        clearPendingAdmission()
+        runCatching { signaling?.close() }
+        signaling = null
+        roster = emptyList()
+        _state.value = _state.value.copy(
+            errorKey = errorKey ?: _state.value.errorKey,
+            nearby = _state.value.nearby.copy(
+                room = NearbyRoom.RECONNECTING,
+                devices = emptyList(),
+                incomingId = null,
+            ),
+        )
+        if (transport != null) {
+            roomRetryPending = true
+            return
+        }
+        scheduleRoomReconnect(immediate = false)
+    }
+
+    /**
+     * Bounded backoff, and it stops GROWING rather than stopping altogether.
+     *
+     * The common cause is a network this device will rejoin — sleep, a Wi-Fi
+     * change, a link that has not come up yet — and a client that gives up
+     * permanently is a client that is silently no longer discoverable while its
+     * screen still says Nearby.
+     */
+    private fun scheduleRoomReconnect(immediate: Boolean) {
+        val src = source ?: return
+        if (!_state.value.nearby.active) return
+        // Safe now: nothing is bound to the old room's identity.
+        releaseRoomObjects()
+        val step = ROOM_BACKOFF_STEPS[minOf(reconnectAttempt, ROOM_BACKOFF_STEPS.size - 1)]
+        val delay = if (immediate) 0L else deps.timeouts.roomRetryMs * step
+        reconnectAttempt++
+        roomGen++
+        val room = roomGen
+        reconnectTimer?.cancel(false)
+        reconnectTimer = session.schedule(
+            {
+                reconnectTimer = null
+                if (roomGen != room || !_state.value.nearby.active) return@schedule
+                _state.value = _state.value.copy(
+                    nearby = _state.value.nearby.copy(
+                        room = NearbyRoom.CONNECTING,
+                        roomId = room,
+                    ),
+                )
+                openRoom(room, src)
+            },
+            delay, TimeUnit.MILLISECONDS,
+        )
     }
 
     private fun startTransport(mine: Int, peer: String, profile: WireProfile) {
@@ -1559,21 +2344,84 @@ class TransferController(
 
     // ── ending ──────────────────────────────────────────────────────────────
 
+    /**
+     * End the CONNECTION.
+     *
+     * In a pairing room that is the whole session. In a Nearby room the room
+     * stays and the user returns to the device list — see [endSession] — which
+     * is the distinction between finishing a transfer and leaving the feature.
+     * [stopNearby] is the other one.
+     */
     fun disconnect() = post {
-        val link = transport
-        val registry = linkSession
-        val k = keys
-        // The authenticated leave is a `link/1` signal — it rides the `link`
-        // generation and carries an HMAC over a link payload. Sending one to a
-        // legacy peer would be a frame it filters out by generation and could
-        // not verify anyway, so that wire simply closes.
-        if (!isLegacy && link != null && registry != null && k != null && peerId.isNotEmpty()) {
-            link.leaveAndClose(registry.leaveSignal(peerId, k))
-        }
+        announceLeave()
         endSession(null)
     }
 
+    /** Tell the peer this side is going, if there is a peer and a wire that can
+     *  carry it. The authenticated leave is a `link/1` signal — it rides the
+     *  `link` generation and carries an HMAC over a link payload. Sending one to
+     *  a legacy peer would be a frame it filters out by generation and could not
+     *  verify anyway, so that wire simply closes. Best effort throughout: a
+     *  leave that never arrives degrades to the peer's ordinary drop handling. */
+    private fun announceLeave() {
+        val link = transport ?: return
+        val registry = linkSession ?: return
+        val k = keys ?: return
+        if (isLegacy || peerId.isEmpty()) return
+        link.leaveAndClose(registry.leaveSignal(peerId, k))
+    }
+
+    /**
+     * One connection is over.
+     *
+     * In a PAIRING room the session is the connection, so this is terminal and
+     * behaves exactly as it always has. In a Nearby room the room outlives it:
+     * the transfer ends, the stream that carried it is closed, and the user is
+     * returned to the list they were looking at — which is what makes "finish
+     * with this device, then connect to that one" a real thing rather than a
+     * re-join under a new identity.
+     */
     private fun endSession(errorKey: String?) {
+        if (admission == PeerAdmission.EXPLICIT && _state.value.nearby.active) {
+            val retiring = peerId
+            closeConnection()
+            // Close the stream this establishment used, where the transport has
+            // one per peer. That is what makes "a frame from the finished
+            // connection cannot reach the next one" structural: the peer's
+            // in-flight signals were addressed to a socket that no longer
+            // exists, and a fresh establishment dials a fresh one. It is NOT a
+            // departure — the device is still advertising and stays listed.
+            if (retiring.isNotEmpty()) {
+                (signaling as? PeerScopedSignaling)?.retirePeer(retiring)
+            }
+            val current = _state.value
+            _state.value = current.copy(
+                phase = Phase.WAITING_PEER,
+                wire = null,
+                sas = null,
+                // Cleared, not preserved: this is a live surface the user acts
+                // on next, and a stale failure standing over a fresh list reads
+                // as the list being broken.
+                errorKey = errorKey,
+                incoming = emptyList(),
+                outgoing = emptyList(),
+                messages = emptyList(),
+                awaitingFolder = false,
+                receiveProgress = null,
+                sendProgress = null,
+                fileLaneDown = false,
+                textState = TextLaneSession.State.IDLE,
+                textCanRequest = false,
+                nearby = current.nearby.copy(selectedId = null),
+            )
+            publishNearby()
+            // A room drop that waited for this connection can happen now.
+            if (roomRetryPending) {
+                roomRetryPending = false
+                scheduleRoomReconnect(immediate = false)
+            }
+            return
+        }
         _state.value = _state.value.copy(
             phase = Phase.ENDED,
             errorKey = errorKey ?: _state.value.errorKey,
@@ -1584,23 +2432,37 @@ class TransferController(
         closeOnSession()
     }
 
-    /** Session-thread teardown. Epoch and every generation bump FIRST, so every
-     *  callback, timer and storage completion under the old ones drops itself. */
-    private fun closeOnSession() {
+    /** Every timer a CONNECTION owns. The hello retry is not one of them: it
+     *  belongs to the room. */
+    private fun cancelConnectionTimers() {
+        for (timer in listOf(
+            settleTimer, requestRetryTimer, requestDeadlineTimer,
+            textEndTimer, abortBarrierTimer, textIdleTimer, legacyOfferTimer,
+        )) {
+            timer?.cancel(false)
+        }
+        settleTimer = null; requestRetryTimer = null; requestDeadlineTimer = null
+        textEndTimer = null; abortBarrierTimer = null; textIdleTimer = null
+        legacyOfferTimer = null
+    }
+
+    /**
+     * Session-thread teardown of ONE connection. Epoch and every generation bump
+     * FIRST, so every callback, timer and storage completion under the old ones
+     * drops itself.
+     *
+     * Deliberately leaves the room alone: the signalling handle, the capability
+     * registry, this device's room id, the roster and the ICE the room was
+     * issued are all still exactly as true as they were. In a pairing room
+     * [closeRoom] runs immediately after this, so nothing observes the split.
+     */
+    private fun closeConnection() {
         epoch++
         batchGen++
         bumpReceiveGen()
         textBarrierGen++
         retirePump()
-        for (timer in listOf(
-            helloTimer, settleTimer, requestRetryTimer, requestDeadlineTimer,
-            textEndTimer, abortBarrierTimer, textIdleTimer, legacyOfferTimer,
-        )) {
-            timer?.cancel(false)
-        }
-        helloTimer = null; settleTimer = null; requestRetryTimer = null
-        requestDeadlineTimer = null; textEndTimer = null; abortBarrierTimer = null
-        textIdleTimer = null; legacyOfferTimer = null
+        cancelConnectionTimers()
         // The final disk cleanup is QUEUED, never awaited, and its outcome is
         // still surfaced: leftovers a teardown could not remove are as real as
         // any other batch's. shutdown() stops the storage executor only AFTER
@@ -1608,19 +2470,51 @@ class TransferController(
         discardStorage()
         transport?.close("local-close")
         transport = null
-        runCatching { signaling?.close() }
-        signaling = null
         keys?.destroy()
         keys = null
         fileLane = null
         textLane = null
         wireProfile = null
-        linkSession = null
-        selfId = ""
         peerId = ""
-        ice = IceConfig.Result(emptyList(), "")
         receivedBytes = 0
         pendingExports = 0
+    }
+
+    /** Everything that belongs to the RENDEZVOUS, and only that. A peer id, a
+     *  capability announcement and an ICE grant all mean nothing outside the
+     *  room that issued them. */
+    private fun closeRoom() {
+        roomGen++
+        helloTimer?.cancel(false)
+        helloTimer = null
+        reconnectTimer?.cancel(false)
+        reconnectTimer = null
+        clearPendingAdmission()
+        runCatching { signaling?.close() }
+        signaling = null
+        linkSession = null
+        selfId = ""
+        roster = emptyList()
+        source = null
+        roomRetryPending = false
+        reconnectAttempt = 0
+        ice = IceConfig.Result(emptyList(), "")
+    }
+
+    /** Release the room's objects WITHOUT ending the Nearby session, so a
+     *  reconnect starts from a clean registry. [source] survives: it is what the
+     *  reconnect reopens. */
+    private fun releaseRoomObjects() {
+        val src = source
+        closeRoom()
+        source = src
+    }
+
+    /** Both halves. Every existing caller — a fresh join, a terminal session, a
+     *  ViewModel clear — means exactly this, which is why it stayed the name. */
+    private fun closeOnSession() {
+        closeConnection()
+        closeRoom()
     }
 
     fun close() = post { closeOnSession() }
@@ -1671,6 +2565,10 @@ class TransferController(
 
     private companion object {
         const val POLL_MS = 20L
+        /** Room-reconnect delays, as multiples of [Timeouts.roomRetryMs]: 2, 4,
+         *  10, 20, 30, 30 seconds at the default. Bounded, and it stops growing
+         *  rather than stopping. */
+        val ROOM_BACKOFF_STEPS = intArrayOf(1, 2, 5, 10, 15, 15)
         /** SCTP send-queue ceiling, independent of the application window. */
         const val BUFFERED_HIGH = 8L * 1024 * 1024
         /** Enqueued-but-uncompleted receive plaintext ceiling: twice the flow

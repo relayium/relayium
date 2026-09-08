@@ -49,14 +49,17 @@ object IceConfig {
     suspend fun fetch(
         http: OkHttpClient,
         origin: String,
-        code: PairCode,
+        /** Null asks for the code-less room's configuration, which is what the
+         *  Web client requests for Nearby. Having no TURN there is the normal,
+         *  correct state rather than a denial. */
+        code: PairCode?,
         timeoutSeconds: Long = 10,
     ): Result {
         val bounded = http.newBuilder()
             .callTimeout(timeoutSeconds, TimeUnit.SECONDS)
             .readTimeout(timeoutSeconds, TimeUnit.SECONDS)
             .build()
-        val call = bounded.newCall(Request.Builder().url(JoinInput.iceUrl(origin, code)).build())
+        val call = bounded.newCall(Request.Builder().url(iceUrl(origin, code)).build())
         return suspendCancellableCoroutine { continuation ->
             continuation.invokeOnCancellation { call.cancel() }
             call.enqueue(object : Callback {
@@ -80,6 +83,11 @@ object IceConfig {
             })
         }
     }
+
+    /** `/api/ice?code=…` for a pairing room, `/api/ice` for the code-less one —
+     *  the same split `web/src/lib/ice.ts` makes on an empty code. */
+    internal fun iceUrl(origin: String, code: PairCode?): String =
+        if (code != null) JoinInput.iceUrl(origin, code) else "$origin/api/ice"
 
     internal fun parse(body: String): Result {
         val root = Json.parseOrNull(body) as? Json.Obj ?: return Result(emptyList(), "")
