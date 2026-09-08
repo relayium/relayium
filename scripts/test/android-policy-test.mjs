@@ -660,6 +660,371 @@ for (const entry of readdirSync(resolve(repoRoot, "scripts"))) {
   );
 }
 
+// The Android ↔ Web code-less-room lane. Its central claim is a SELECTION —
+// "the device the user picked, out of several" — and every way that claim can be
+// weakened is invisible in review: a target that sorts first, a decoy check that
+// only looks at the end, a browser half that dials instead of answering, a
+// judge that reads its own side's echo. These are the guards that notice.
+{
+  const webScript = readFileSync(
+    resolve(repoRoot, "scripts/android-nearby-web-acceptance.sh"), "utf8",
+  );
+  check(
+    /web\.expectOrigin/.test(webScript) && /acceptance_start_server/.test(webScript)
+    && /go build -o "\$run_root\/relayium-server"/.test(webScript),
+    "scripts/android-nearby-web-acceptance.sh no longer builds and starts its OWN throwaway "
+    + "server and tells the build which origin to expect. Backend.readDebugOverride fails "
+    + "closed to PRODUCTION, so a property that did not take must fail the round rather than "
+    + "silently redirect it at the real service.",
+  );
+  check(
+    /\ncompleted=1\n?$/.test(webScript),
+    "scripts/android-nearby-web-acceptance.sh does not end with `completed=1`. "
+    + "scripts/lib/local-acceptance.sh treats a run that stops early as a failure, and that "
+    + "flag on the LAST line is the only thing that distinguishes one.",
+  );
+  // macOS ships Bash 3.2, where `"${empty[@]}"` under `set -u` is an unbound
+  // variable error rather than the empty expansion Bash 4.4+ produces — and the
+  // array here is empty on every ORDINARY run, so the bare form would fail
+  // exactly the configuration this script exists for.
+  check(
+    /\$\{negative_args\+"\$\{negative_args\[@\]\}"\}/.test(webScript),
+    'scripts/android-nearby-web-acceptance.sh no longer expands $negative_args with the '
+    + '${name+"${name[@]}"} form. On Bash 3.2 with set -u the bare form is an unbound '
+    + "variable error whenever the array is empty, which is every ordinary run.",
+  );
+  check(
+    /--self-check/.test(webScript),
+    "scripts/android-nearby-web-acceptance.sh no longer runs the browser half's self-check "
+    + "before it starts. Those scripts run inside a page, where a mistake in them is silent: "
+    + "a latch that never looked reports the same zeroes a clean decoy does.",
+  );
+  check(
+    /RELAYIUM_NEARBY_WEB_NEGATIVE/.test(webScript)
+    && /web\.wrongSelection/.test(webScript)
+    && /the NEGATIVE CONTROL passed/.test(webScript),
+    "scripts/android-nearby-web-acceptance.sh no longer offers a negative control that makes "
+    + "the phone tap the wrong row and REFUSES a run in which that still passed. An "
+    + "acceptance whose central invariant cannot be made to fail is evidence of nothing.",
+  );
+  // "The round failed" is satisfied by a crash, a missing runner, an APK that
+  // never built and a plain timeout — none of which exercises the selection. A
+  // control built on that would always hold and would therefore say nothing.
+  check(
+    /judge_negative/.test(webScript) && /web-negative/.test(webScript)
+    && /INCONCLUSIVE/.test(webScript),
+    "scripts/android-nearby-web-acceptance.sh accepts ANY failure as its negative control "
+    + "holding. It must require the control's own typed evidence — three candidates listed, "
+    + "the FIRST row tapped, a DECOY connected to, and the browser's independent sighting of "
+    + "that dial — and report anything else as inconclusive.",
+  );
+  // A successful run's per-run root is removed by lib/local-acceptance.sh, and a
+  // HELD control is a successful run — so without this the evidence for the one
+  // result that most needs it is deleted.
+  // The phone writes its report from a `finally`, so a FAILED round produces one
+  // too — and that partial is the most valuable artefact a failed round has. The
+  // judging paths all return early, so the capture cannot live inside them.
+  check(
+    /capture_native_report/.test(webScript)
+    && /json\.load\(open\(sys\.argv\[1\]\)\)/.test(webScript)
+    && webScript.indexOf("capture_native_report || true")
+       < webScript.indexOf("am force-stop"),
+    "scripts/android-nearby-web-acceptance.sh no longer captures the phone's partial report "
+    + "before the force-stop, on every path, validating that it is JSON. A judging path that "
+    + "returns early would otherwise discard the one artefact a failed round has, and an "
+    + "unchecked redirect would store run-as's own error text as a report.",
+  );
+  check(
+    /RELAYIUM_NEARBY_WEB_ARTIFACTS/.test(webScript) && /snapshot_artifacts/.test(webScript),
+    "scripts/android-nearby-web-acceptance.sh no longer offers an artifact snapshot. "
+    + "lib/local-acceptance.sh removes the run root on success, so a passing round and a held "
+    + "negative control both leave nothing behind.",
+  );
+  // Three separate ways restoring this property goes wrong, and all three have
+  // been made once: clearing instead of restoring; "restoring" on a path where
+  // the run never overrode it (cleanup runs on EVERY exit, including a build
+  // failure long before the capture); and assembling the remote command from
+  // fragments, which `adb shell`'s argv re-join can split or execute.
+  check(
+    /getprop debug\.relayium\.backend >"\$run_root\/backend-before\.raw"/.test(webScript)
+    && /backend_overridden=1/.test(webScript)
+    && /shlex\.quote/.test(webScript)
+    && /UNREPRESENTABLE/.test(webScript),
+    "scripts/android-nearby-web-acceptance.sh no longer captures the debug backend property "
+    + "before overriding it, gates the restore on having actually overridden it, and builds "
+    + "ONE already-quoted remote command (refusing a value it cannot represent, before any "
+    + "mutation). Clearing on exit is not restoration, and a cleanup that runs before the "
+    + "capture would reset a device this run never changed.",
+  );
+  // The cleanup must have no unconditional branch: an `else` that clears is
+  // exactly the pre-capture failure path that resets an untouched device.
+  {
+    const cleanup = /acceptance_extra_cleanup\(\) \{([\s\S]*?)\n\}/.exec(webScript)?.[1] ?? "";
+    check(
+      /backend_overridden/.test(cleanup) && !/\belse\b/.test(cleanup),
+      "scripts/android-nearby-web-acceptance.sh's cleanup touches the backend property on a "
+      + "path where this run may never have overridden it.",
+    );
+  }
+  // A shebang picks up whatever `node` is on PATH, so a run that carefully
+  // selected a Node for the browser half would build the bundle with another.
+  check(
+    /node_modules\/vite\/bin\/vite\.js/.test(webScript),
+    "scripts/android-nearby-web-acceptance.sh builds the bundle through a shebang wrapper "
+    + "instead of running vite's entry point with the Node this run selected.",
+  );
+
+  const webBrowser = readFileSync(
+    resolve(repoRoot, "web/e2e/android-nearby-hub.mjs"), "utf8",
+  );
+  // `.open-workspace` is the OUTBOUND action on a peer card. A browser half that
+  // clicked it would be dialling the phone, and "the phone chose this device"
+  // would be a claim about a session this side opened.
+  check(
+    !/OPEN_WORKSPACE\}'\)\.click\(\)|querySelector\('\.open-workspace'\)\.click/.test(webBrowser),
+    "web/e2e/android-nearby-hub.mjs clicks the peer card's own workspace action. That is the "
+    + "OUTBOUND control: a browser half that dials cannot show that the PHONE selected it.",
+  );
+  // A page renders both directions as `.msg-body`; only the `<li>` says which.
+  // Reading every one of them lets this side's own echo satisfy an assertion
+  // about what arrived, which is the one thing a text lane must not be able to
+  // fake.
+  check(
+    /\.msg:not\(\.out\) \.msg-body/.test(webBrowser),
+    "web/e2e/android-nearby-hub.mjs no longer restricts the received-message reading to "
+    + "INBOUND bodies. `.msg-body` renders both directions, so an unrestricted read lets the "
+    + "browser's own echo satisfy an assertion about what the phone sent.",
+  );
+  // ── the two defects the v1 owning run exposed ─────────────────────────
+  //
+  // Both were harness assumptions about shipped behaviour, and both are the kind
+  // that reads as a product failure. Fenced here so they cannot come back.
+  //
+  // 1. `MessagePanel.svelte` renders the composer whenever `composing` is true,
+  //    which in the unified workspace is `open || connecting || waitingAccept`,
+  //    while `canSend` requires `status === "open"`. A blocking wait for Send to
+  //    enable therefore starves the very loop that answers the consent card
+  //    which would have opened the lane.
+  check(
+    /const trySendMessage/.test(webBrowser)
+    && /'send-disabled'/.test(webBrowser)
+    && !/const sendMessage = async/.test(webBrowser),
+    "web/e2e/android-nearby-hub.mjs is waiting for the composer's Send to enable instead of "
+    + "attempting one non-blocking tick. The composer renders in connecting and waitingAccept "
+    + "too, so that wait blocks the loop that answers the consent card which opens the lane — "
+    + "which is exactly how the v1 owning run died.",
+  );
+  // The only wait left may be the one that predates any session or sentinel.
+  {
+    const waits = [...webBrowser.matchAll(/\.waitFor\(/g)].length;
+    check(
+      waits <= 1,
+      `web/e2e/android-nearby-hub.mjs has ${waits} blocking waitFor calls. Every long wait in `
+      + "this round must sample the decoys and answer consent while it waits "
+      + "(awaitWithSentinels); only the pre-session join wait may block.",
+    );
+  }
+  // A link the product has already declared over must be reported as that, not
+  // waited out — and the fail-fast must be sticky, because the workspace head
+  // unmounts and remounts as the panel switches views.
+  // 4. The anti-vacuity counter must answer to the CHOOSER surface, not to the
+  //    peer card's button. `App.svelte`'s chooser is empty|link|radar by
+  //    visiblePeers.length, and a peer CARD renders only for `selectedPeer` —
+  //    automatic only when there is exactly ONE visible peer. With three peers a
+  //    page sits in radar mode with nothing selected and renders no card, so a
+  //    device that never passed through a one-peer moment never sees the button.
+  //    That is ordering-dependent: v3's decoy01 passed and decoy02 did not.
+  check(
+    /const CHOOSER = "\.radar, \.peerlink"/.test(webBrowser)
+    && /querySelector\(\$\{JSON\.stringify\(CHOOSER\)\}\)\) l\.chooser\+\+/.test(webBrowser),
+    "web/e2e/android-nearby-hub.mjs is using something other than the chooser surface "
+    + "(.radar / .peerlink) as its anti-vacuity signal. `.open-workspace` is NOT always "
+    + "present: a page in radar mode with nothing selected renders no peer card, which is "
+    + "how v3 failed at the finish line having proved everything else.",
+  );
+  // And it must be a PRECONDITION, not only an end-of-run check — the roster
+  // section is `{#if !mixed && …}`, so the chooser is gone once a workspace
+  // exists, and a page that was never live would otherwise be discovered last.
+  check(
+    /observers are live/.test(webBrowser)
+    && webBrowser.indexOf("observers are live") < webBrowser.indexOf("to be given a workspace"),
+    "web/e2e/android-nearby-hub.mjs no longer proves every observer is live BEFORE the "
+    + "transfer starts. The chooser it checks for is gone once a workspace exists, so this "
+    + "is the last moment the check is even possible.",
+  );
+  check(
+    /wh-restart/.test(webBrowser) && /terminalTicks >= 6/.test(webBrowser),
+    "web/e2e/android-nearby-hub.mjs waits out its whole timeout on a link the product has "
+    + "already ended. `.wh-restart` is the product's own terminal marker; report it, after "
+    + "enough consecutive ticks that a remount cannot be mistaken for an ending.",
+  );
+  check(
+    /function selfCheck\(/.test(webBrowser) && /runInNewContext/.test(webBrowser),
+    "web/e2e/android-nearby-hub.mjs no longer carries a self-check that RUNS its injected page "
+    + "scripts. Syntax alone is not the risk; a dial classifier that counted a caps broadcast, "
+    + "or ignored an unrecognised frame, would silently invert the decoy claim.",
+  );
+  check(
+    /new MutationObserver\(look\)/.test(webBrowser) && /window\.__signals/.test(webBrowser),
+    "web/e2e/android-nearby-hub.mjs no longer latches the decoys at BOTH the wire and the "
+    + "DOM across the whole run. A wrong dial that was abandoned leaves nothing for a final "
+    + "check to find.",
+  );
+
+  // 2. The shipped Web opens the text lane BY ITSELF, once per authenticated
+  //    mixed link (App.svelte's textOpener). A native half that unconditionally
+  //    requests one and waits for OPEN never answers the INCOMING_REQUEST it is
+  //    actually holding — `requestText` does not accept one — and both endpoints
+  //    wait forever.
+  {
+    const nativeHalf = readFileSync(
+      resolve(repoRoot,
+        "apps/android/app/src/androidTest/kotlin/com/relayium/android/nearby/"
+        + "NearbyWebCounterpartTest.kt"),
+      "utf8",
+    );
+    // The phone's own receipt of the negotiation, because the oracle cannot
+    // assume which side was offered the prompt. Prompts are EDGES into
+    // INCOMING_REQUEST, never raw clicks.
+    check(
+      /observed\["textNegotiation"\]/.test(nativeHalf)
+      && /incomingPrompts\+\+/.test(nativeHalf)
+      && /acceptedPrompts\+\+/.test(nativeHalf)
+      && /insidePrompt/.test(nativeHalf),
+      "NearbyWebCounterpartTest no longer reports the text-lane negotiation it actually "
+      + "observed, with prompts counted as edges into INCOMING_REQUEST. Without it the judge "
+      + "has to assume which endpoint answered, which is the assumption v4 died on.",
+    );
+    check(
+      /INCOMING_REQUEST ->/.test(nativeHalf)
+      && /R\.string\.text_accept/.test(nativeHalf)
+      && /State\.IDLE -> \{[\s\S]{0,200}?if \(!requestedLocally\)/.test(nativeHalf),
+      "NearbyWebCounterpartTest no longer answers an INCOMING_REQUEST through the real Accept "
+      + "control and request the lane only when IDLE. The shipped Web opens the text lane by "
+      + "itself once per authenticated link, so an unconditional requestText() waits for an "
+      + "OPEN that nothing will produce — the v1 owning run's error_connection_lost.",
+    );
+  }
+
+  // 3. Every other real UI acceptance in this repository scrolls a control into
+  //    view before pressing it (AccountAcceptanceTest.signInThroughTheForm,
+  //    CloudAcceptanceTest). Compose will click a node that exists in the
+  //    semantics tree but is scrolled off screen, so a bare performClick on a
+  //    control below the fold reports success and does nothing — which reads
+  //    exactly like the product ignoring the press. The composer is tall, so
+  //    Send is below the fold precisely once a draft has been typed.
+  {
+    const nativeHalf = readFileSync(
+      resolve(repoRoot,
+        "apps/android/app/src/androidTest/kotlin/com/relayium/android/nearby/"
+        + "NearbyWebCounterpartTest.kt"),
+      "utf8",
+    );
+    check(
+      /performScrollTo\(\)/.test(nativeHalf)
+      && /assertIsDisplayed\(\)/.test(nativeHalf)
+      && /assertIsEnabled\(\)/.test(nativeHalf),
+      "NearbyWebCounterpartTest presses controls without scrolling to them and proving they "
+      + "are displayed and enabled. Compose clicks off-screen nodes happily, so an unreachable "
+      + "control looks like a product that ignored the press.",
+    );
+    // Exactly one click SITE in the code. A blind second Send is a second
+    // message, and an assertion that only passes because it pressed twice is not
+    // evidence about the press. Counted over `codeOf`, because the comments
+    // explaining the rule naturally quote the call it forbids duplicating.
+    {
+      const clicks = (codeOf(nativeHalf).match(/\.performClick\(\)/g) ?? []).length;
+      check(
+        clicks === 1 && /private fun reachAndClick\(/.test(nativeHalf),
+        `NearbyWebCounterpartTest has ${clicks} performClick call sites in code, not 1. Every `
+        + "press must go through the single scroll-prove-click path, so a retry cannot "
+        + "silently become a second message.",
+      );
+    }
+    // The diagnostics that let a harness failure be told from a product one —
+    // and never a character of the user's text.
+    check(
+      /draftMatchesFixture/.test(nativeHalf) && /sendGeometry/.test(nativeHalf)
+      && /belowFold/.test(nativeHalf)
+      && !/"draft" to draft\.text/.test(nativeHalf),
+      "NearbyWebCounterpartTest no longer captures the state and geometry needed to tell a "
+      + "harness failure from a product one — or it has started recording the draft's text. "
+      + "Lengths and a match flag, never content.",
+    );
+  }
+
+  const nearbyOracle = readFileSync(
+    resolve(repoRoot, "scripts/test/android-nearby-oracle.py"), "utf8",
+  );
+  check(
+    /def judge_web_negative/.test(nearbyOracle)
+    && /selected_id == target_id/.test(nearbyOracle)
+    && /tapped != shown_order\[0\]/.test(nearbyOracle),
+    "the wrong-selection control's judge no longer requires the phone to have tapped the FIRST "
+    + "row and connected to something OTHER than the target. Without both, any failing round "
+    + "would count as the control holding.",
+  );
+  check(
+    /def judge_web/.test(nearbyOracle)
+    && /model_order\.index\(target_name\) == 0/.test(nearbyOracle)
+    && /shown_order\.index\(target_name\) == 0/.test(nearbyOracle),
+    "the code-less-room judge no longer refuses a round in which the target was FIRST in the "
+    + "model order or the FIRST ROW on screen. Either one lets a client that simply took the "
+    + "first entry connect to the target and pass while proving nothing.",
+  );
+  check(
+    /strict_count\(decoy\.get\("dialFrames"\)[\s\S]{0,80}?\) != 0/.test(nearbyOracle)
+    && /latchTicks/.test(nearbyOracle) && /latchChooser/.test(nearbyOracle),
+    "the code-less-room judge no longer requires both decoys to be un-dialled AND their "
+    + "latches to have observed a live DOM. A latch that never looked reports the same zeroes "
+    + "a clean decoy does.",
+  );
+  check(
+    /r\.get\("path"\) == want\["path"\]/.test(nearbyOracle),
+    "the code-less-room judge no longer binds each received file to its exact relative PATH. "
+    + "A nested file that landed flat satisfies a name check and is still the wrong tree.",
+  );
+  // 5. Which endpoint answers the text consent is decided by the SHIPPED
+  //    design — the Web opens the lane by itself once per authenticated link —
+  //    so an oracle that always demanded the browser's consent is asserting a
+  //    party contract the product does not have. Run v4 passed every real
+  //    assertion and failed on exactly that rule.
+  check(
+    !/acceptedTextRequest"\) is not True/.test(nearbyOracle)
+    && /textNegotiation/.test(nearbyOracle)
+    && /NEITHER endpoint answered/.test(nearbyOracle),
+    "the code-less-room judge has gone back to requiring a particular endpoint to answer the "
+    + "text consent. It must require that SOME endpoint answered a real prompt, appropriate "
+    + "to the negotiation that actually happened — and still fail when neither did.",
+  );
+  // `bool` is a subclass of `int` in Python, so `isinstance(True, int)` holds and
+  // `True >= 1` is satisfied: a receipt that said `true` where a COUNT belongs
+  // would pass every naive count check. That is the shape a fabricated receipt
+  // takes, so counts and decisions are read through strict typed readers.
+  check(
+    /def strict_count/.test(nearbyOracle) && /def strict_bool/.test(nearbyOracle)
+    && /isinstance\(value, bool\) or not isinstance\(value, int\)/.test(nearbyOracle)
+    && /strict_count\(browser\["target"\]\.get\("acceptedFileRequests"\)/.test(nearbyOracle)
+    && /strict_count\(decoy\.get\("dialFrames"\)/.test(nearbyOracle),
+    "the code-less-room judge reads counts or decisions without the strict typed readers. In "
+    + "Python a boolean IS an int, so `true` satisfies a count check and `False != 0` is "
+    + "false — a counterfeit receipt would read as a clean decoy.",
+  );
+  // A card can still be on screen on the tick after a successful press, so raw
+  // clicks are not prompts.
+  check(
+    /acceptedPrompts/.test(nearbyOracle) && /incomingPrompts/.test(nearbyOracle)
+    && /is not a second prompt/.test(nearbyOracle),
+    "the code-less-room judge counts raw consent CLICKS rather than distinct prompts. A "
+    + "repeated click on one card is not a second person answering a second question.",
+  );
+  check(
+    /def selftest/.test(nearbyOracle) && /--selftest/.test(nearbyOracle),
+    "scripts/test/android-nearby-oracle.py no longer carries its executable negative controls. "
+    + "An oracle nobody has tried to fool is a formatting exercise.",
+  );
+}
+
 // ── Nearby: the local link, and what it must never reach ───────────────────
 //
 // The direct path's entire claim is that nothing about a transfer leaves the
