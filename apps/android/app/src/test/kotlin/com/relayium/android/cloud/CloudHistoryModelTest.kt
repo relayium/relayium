@@ -11,6 +11,9 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.job
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -281,14 +284,9 @@ class CloudHistoryModelTest {
 
     @Test
     fun `an account change during a delete's local cleanup publishes nothing`() {
-        val gate = Object()
         RecordingHttpServer { request, out ->
-            if (request.method == "DELETE") {
-                RecordingHttpServer.respond(out, body = """{"status":"ok"}""".toByteArray())
-                synchronized(gate) { gate.wait(5_000) }
-            } else {
-                RecordingHttpServer.respond(out, body = listBody(row(objectA)).toByteArray())
-            }
+            val body = if (request.method == "DELETE") """{"status":"ok"}""" else listBody(row(objectA))
+            RecordingHttpServer.respond(out, body = body.toByteArray())
         }.use { server ->
             val session = session()
             val account = signIn(session)
@@ -297,21 +295,102 @@ class CloudHistoryModelTest {
             model.refresh()
             await({ model.state.value }) { it is CloudHistoryModel.State.Ready }
 
-            model.delete(objectA)
-            await({ model.deleting.value }) { it != null }
-            session.signOut()
-            await({ session.state.value }) { it is AccountState.SignedOut }
-            model.accountChanged()
-            await({ model.state.value }) { it is CloudHistoryModel.State.Idle }
-            synchronized(gate) { gate.notifyAll() }
+            // The barrier is the LOCAL CLEANUP, not the request.
+            //
+            // This test used to answer the DELETE and then hold the server
+            // thread, which holds nothing: the client already had its response,
+            // so the whole delete could finish before the first observation and
+            // the busy marker this test is about was read after it was cleared.
+            // `StoredLinkKeyStore.remove` syncs the account's directory after
+            // unlinking the key, so parking exactly that sync stops the delete
+            // where the title says it does — inside the local cleanup, with the
+            // server's work already done and nothing left to undo.
+            val idle = scope.coroutineContext.job.children.toSet()
+            barriers.syncGate = File(root, account)
+            try {
+                model.delete(objectA)
+                await({ barriers.gateEntries }) { it > 0 }
+                // The delete's own coroutine, identified while it is the only
+                // thing this scope has started since. Joining it is the finish
+                // line; a counter incremented INSIDE the parked sync is not,
+                // because it runs before the continuation is even dispatched.
+                val deleting = (scope.coroutineContext.job.children.toSet() - idle).single()
 
-            // The server acted and nothing undoes that. What must not happen is
-            // an outcome about one account's files appearing under the next
-            // account's cleared screen.
-            Thread.sleep(300)
-            assertTrue(model.state.value is CloudHistoryModel.State.Idle)
-            assertNull(model.notice.value)
-            assertNull(model.deleting.value)
+                // Held there, and still observably busy. An observation delayed
+                // after `delete` returns finds the same thing, which is what the
+                // server-side gate could not promise.
+                assertEquals(objectA, model.deleting.value)
+
+                session.signOut()
+                await({ session.state.value }) { it is AccountState.SignedOut }
+                model.accountChanged()
+                await({ model.state.value }) { it is CloudHistoryModel.State.Idle }
+                assertNull(model.deleting.value)
+
+                barriers.releaseGate()
+                runBlocking { withTimeout(10_000) { deleting.join() } }
+
+                // The server acted and nothing undoes that. What must not happen
+                // is an outcome about one account's files appearing under the
+                // next account's cleared screen — and the delete is now over, so
+                // this is its final answer rather than a snapshot of its middle.
+                assertTrue(model.state.value is CloudHistoryModel.State.Idle)
+                assertNull(model.notice.value)
+                assertNull(model.deleting.value)
+
+                // ...and the cleanup really ran. Silence has to mean "did the
+                // work and reported nothing", not "never got there".
+                assertNull(keys.record(account, objectA))
+            } finally {
+                // A failed assertion must not leave a NonCancellable io block
+                // parked on a barrier this test owns.
+                barriers.releaseGate()
+            }
+        }
+    }
+
+    /**
+     * The positive control for the barrier above.
+     *
+     * Same parked cleanup, same release, same join, and the ONLY difference is
+     * that the account stays. If this did not publish, the silence asserted
+     * above would be evidence about the barrier rather than about the account
+     * change.
+     */
+    @Test
+    fun `the same parked cleanup publishes normally when the account stays`() {
+        RecordingHttpServer { request, out ->
+            val body = if (request.method == "DELETE") """{"status":"ok"}""" else listBody(row(objectA))
+            RecordingHttpServer.respond(out, body = body.toByteArray())
+        }.use { server ->
+            val session = session()
+            val account = signIn(session)
+            keys.save(account, objectA, "A".repeat(43), 1_800_000_000, 1)
+            val model = model(server, session)
+            model.refresh()
+            await({ model.state.value }) { it is CloudHistoryModel.State.Ready }
+
+            val idle = scope.coroutineContext.job.children.toSet()
+            barriers.syncGate = File(root, account)
+            try {
+                model.delete(objectA)
+                await({ barriers.gateEntries }) { it > 0 }
+                val deleting = (scope.coroutineContext.job.children.toSet() - idle).single()
+                assertEquals(objectA, model.deleting.value)
+                assertNull(model.notice.value)
+
+                barriers.releaseGate()
+                runBlocking { withTimeout(10_000) { deleting.join() } }
+
+                // Terminal, so every one of these is the delete's final answer.
+                assertEquals(CloudHistoryModel.Notice.DELETED, model.notice.value)
+                assertNull(model.deleting.value)
+                assertNull(keys.record(account, objectA))
+                val ready = model.state.value as CloudHistoryModel.State.Ready
+                assertTrue(ready.entries.none { it.id == objectA })
+            } finally {
+                barriers.releaseGate()
+            }
         }
     }
 }
