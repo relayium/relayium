@@ -18,14 +18,14 @@ android {
         applicationId = "com.relayium.android"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        // 0.2.0 (3), the internal feature-parity upgrade candidate.
-        // `versionCode` is the only ordering the update
+        // 0.2.1 (4), the UI and motion polish release over the 0.2.0 public
+        // preview. `versionCode` is the only ordering the update
         // check ever uses — `versionName` is a display string and "0.1.10" sorts
         // before "0.1.9" as text — so it must increase monotonically for every
         // published APK, forever. `scripts/test/android-policy-test.mjs` asserts
         // the two move together.
-        versionCode = 3
-        versionName = "0.2.0"
+        versionCode = 4
+        versionName = "0.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
