@@ -186,17 +186,25 @@ class NearbyControllerTest {
     }
 
     private fun connect(rig: Rig, peer: String): Crypto.SessionKeys {
+        // The rig keeps every transport it ever built, so on a second dial
+        // "a transport exists" is already true before this one has made its
+        // own. Waiting on that would hand the readiness below to the FINISHED
+        // transport, whose callbacks the controller correctly drops — leaving
+        // the wait for CONNECTED to time out. So wait for the transport THIS
+        // dial adds, and carry that exact handle into the readiness: re-reading
+        // the queue afterwards is what let the target drift in the first place.
+        val before = rig.transports.size
         rig.controller.connectToPeer(peer, rig.nearby.roomId)
-        awaitTrue("a transport for $peer") { rig.transports.isNotEmpty() }
-        return ready(rig)
+        awaitTrue("a transport for $peer") { rig.transports.size > before }
+        return ready(rig, rig.transports.elementAt(before))
     }
 
-    private fun ready(rig: Rig): Crypto.SessionKeys {
+    private fun ready(rig: Rig, transport: FakeTransport = rig.transport): Crypto.SessionKeys {
         val a = Crypto.generateKeyPair()
         val b = Crypto.generateKeyPair()
         val local = Crypto.deriveSession(Crypto.Role.INITIATOR, a, b.publicKey)
         val remote = Crypto.deriveSession(Crypto.Role.RESPONDER, b, a.publicKey)
-        rig.transport.events.onReady(local, "705955", RealtimeFrame.CONSERVATIVE_MAX_FRAME_BYTES)
+        transport.events.onReady(local, "705955", RealtimeFrame.CONSERVATIVE_MAX_FRAME_BYTES)
         awaitTrue("connected") { rig.state.phase == TransferController.Phase.CONNECTED }
         return remote
     }
