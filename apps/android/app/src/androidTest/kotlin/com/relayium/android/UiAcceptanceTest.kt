@@ -33,9 +33,10 @@ import org.junit.runner.RunWith
  * hard-coding English.
  *
  * The join test here presses the real Connect button over an INVALID code, so
- * no join ever leaves the device. The lifecycle test DOES join (a valid-shaped
- * code) and therefore refuses to run unless the app's resolved backend is the
- * origin the driver announced — the same fail-closed preflight the interop
+ * no join ever leaves the device. The lifecycle test DOES join — but only after
+ * a real tap on Connect, because a launch link now prefills rather than joins —
+ * and therefore refuses to run unless the app's resolved backend is the origin
+ * the driver announced — the same fail-closed preflight the interop
  * acceptance runs, so a reflective override that quietly fell back to
  * production can never send even one stray join there.
  */
@@ -137,30 +138,47 @@ class UiAcceptanceTest {
     }
 
     /**
-     * A link is consumed EXACTLY ONCE, and recreation does not re-consume it.
+     * A launch link PREFILLS; the join is the user's own tap; recreation
+     * replays neither.
      *
-     * The origin preflight comes BEFORE any link is delivered — deliberately.
-     * If a reflective override fell back to production, an ACTION_VIEW launch
-     * would join THERE inside `onCreate`, before any assertion could run; a
-     * post-launch check cannot un-send that. So this launches the plain
-     * launcher intent first (which joins nothing), proves the resolved backend
-     * is this run's local origin, and only then delivers the cold VIEW launch.
-     * The controller's link ids are monotonic but `join` closes any prior
-     * session first, so the first id is not necessarily 1; "joined" is a
-     * non-zero id, and "recreation did not re-consume the link" is that
-     * captured id staying UNCHANGED (a replay would advance it) with the
-     * ViewModel identity preserved across `recreate()`.
+     * This test previously asserted that an `ACTION_VIEW` launch joined inside
+     * `onCreate`. That was true of the build it was written against and is the
+     * exact behaviour 0.2 removed: `MainActivity.joinFromIntent` used to call
+     * `viewModel.join(url)` for any VIEW intent, so a tapped link replaced a
+     * running transfer with no confirmation. `IngressCoordinator` cannot join
+     * at all now — structurally, not by convention — and `applyIngressLink`
+     * resolves `IngressRequest.PrefillCode` to a write into `_joinDraft` and
+     * nothing else. So the old assertion was demanding the app re-acquire a
+     * defect, and it timed out waiting for a join that must never happen.
+     *
+     * The lifecycle worth testing is the real one, in four steps:
+     *
+     *  1. the origin preflight, BEFORE any external intent;
+     *  2. the cold VIEW launch prefills the field and does NOT join;
+     *  3. a real tap on the real Connect button is what joins;
+     *  4. recreation does not re-consume the link into a second JOIN.
+     *
+     * The origin preflight stays first and stays deliberate. If a reflective
+     * override fell back to production, a VIEW launch would reach THERE inside
+     * `onCreate`, before any assertion could run, and a post-launch check
+     * cannot un-send that. A plain launcher intent has no such leak, so it is
+     * the safe place to prove the resolved backend is this run's local origin.
+     * That guard matters MORE now, not less: step 3 deliberately does join.
+     *
+     * "Joined" is a non-zero controller link id, and "no replay" is that
+     * captured id staying UNCHANGED. The ids are monotonic but `join` closes
+     * any prior session first, so the first id is not necessarily 1 — the
+     * captured value is what a replay would move, never a literal.
      */
     @Test
-    fun aLaunchLinkJoinsOnceAndRecreationDoesNotRejoin() {
+    fun aLaunchLinkPrefillsThenJoinsOnlyOnConsentAndRecreationDoesNotReplay() {
         val expectedOrigin = InteropDriver.requireArg("relayium.origin")
 
-        // STEP 1 — a plain launcher intent joins NOTHING, and it is where the
-        // origin is proven local. Doing this before any ACTION_VIEW is the
-        // whole point: if the reflective override fell back to production, a
-        // VIEW launch would join THERE inside onCreate, and no post-launch
-        // assertion could recall it. A plain launch has no such join to leak,
-        // so it is the safe place to verify the resolved backend first.
+        // STEP 1 — a plain launcher intent joins NOTHING and prefills nothing,
+        // and it is where the origin is proven local. Doing this before any
+        // ACTION_VIEW is the whole point: a VIEW launch against a fallen-back
+        // backend could reach production inside onCreate, and no post-launch
+        // assertion could recall it.
         ActivityScenario.launch(MainActivity::class.java).use {
             val vm = InteropDriver.viewModel()
             assertEquals(
@@ -169,31 +187,81 @@ class UiAcceptanceTest {
             )
             Thread.sleep(500)
             assertEquals("a launch without a link must not join", 0, InteropDriver.state(vm).linkId)
+            assertEquals(
+                "a launch without a link must not prefill the join field",
+                "", vm.joinDraft.value,
+            )
         }
 
         // STEP 2 — only now, with the backend proven local in this very
-        // process, deliver the cold ACTION_VIEW launch: onCreate consumes it
-        // once, and a recreation (savedInstanceState != null) must NOT replay
-        // it and tear down the live session the retained ViewModel holds.
+        // process, deliver the cold ACTION_VIEW launch. It may NAVIGATE and
+        // PREFILL, and it may not do anything else.
+        //
+        // The link is built from THIS RUN'S origin, not from a hard-coded
+        // `relayium.com`. That was the test's second stale assumption and the
+        // actual cause of the hosted timeout: `IngressLinkPolicy` takes its
+        // `trustedOrigin` from `Backend`'s resolved origin — deliberately, so
+        // the policy cannot drift from the origin the app really talks to —
+        // and this harness overrides that to a disposable loopback. A
+        // relayium.com link is therefore FOREIGN_ORIGIN here and is refused
+        // before anything acts on it, so the old test waited forever for a
+        // join that the policy had already, correctly, rejected. Hard-coding
+        // the production host would also make the assertion pass only on a
+        // build pointed at production, which is the one thing the preflight
+        // above exists to forbid.
         val view = Intent(context, MainActivity::class.java)
             .setAction(Intent.ACTION_VIEW)
-            .setData(Uri.parse("https://relayium.com/cross-network#c=123456"))
+            .setData(Uri.parse("$expectedOrigin/cross-network#c=123456"))
         ActivityScenario.launch<MainActivity>(view).use { scenario ->
             val vm = InteropDriver.viewModel()
             assertEquals(
                 "even the VIEW launch must be local; the prop was proven, this re-reads it",
                 expectedOrigin, vm.backendOrigin,
             )
-            // The controller's epoch advances once for the fresh session
-            // (`join` closes any prior session first, so the FIRST link id is
-            // not necessarily 1); the CAPTURED value is what a replay would
-            // change, not a literal. Waiting for it to be non-zero is "the
-            // launch joined".
-            InteropDriver.awaitTrue("the launch link joined") {
+
+            // The link's ONLY write: the code lands in the field the user then
+            // presses Connect on. Asserted positively, so "no join" below
+            // cannot pass merely because the intent was dropped on the floor —
+            // which would be a different defect wearing the same green.
+            InteropDriver.awaitTrue("the launch link prefilled the join field") {
+                vm.joinDraft.value == "123456"
+            }
+
+            // And it must NOT join. A negative claim, so it gets a bounded
+            // window rather than an instant read: an autojoin regression would
+            // post within milliseconds of onCreate, well inside this.
+            Thread.sleep(1_500)
+            assertEquals(
+                "an ACTION_VIEW launch must not join before the user has confirmed",
+                0, InteropDriver.state(vm).linkId,
+            )
+
+            // STEP 3 — consent, as a person gives it: a real tap on the real
+            // Connect button in the real Compose tree. This is the only thing
+            // in the whole test that may start a session.
+            submit()
+            InteropDriver.awaitTrue("the tap on Connect started the join") {
                 InteropDriver.state(vm).linkId != 0
             }
             val joinedLink = InteropDriver.state(vm).linkId
 
+            // STEP 4 — recreation (savedInstanceState != null) must not replay
+            // the link into a second JOIN, which would tear down the live
+            // session the retained ViewModel holds.
+            //
+            // Scope note, because the obvious extra assertion here is a trap.
+            // This does NOT also prove the PREFILL was not replayed, and a
+            // `joinDraft` check after `recreate()` would not prove it either:
+            // `join` deliberately leaves the draft alone (see
+            // `TransferViewModel.join` — it clears the error and retires a
+            // minted code, and never touches `_joinDraft`), so the field still
+            // reads "123456" at this point. A replayed `PrefillCode` would
+            // write that same value over itself and the assertion could never
+            // fail — vacuously green, and worse than absent, because it would
+            // read as coverage. Proving prefill non-replay needs the draft to
+            // DIFFER from the link's code first, which means editing the field
+            // after consent, and the join screen is gone by then. Left out on
+            // purpose rather than faked.
             scenario.recreate()
             InteropDriver.awaitTrue("the recreated Activity re-registered its ViewModel") {
                 TestHooks.viewModel != null
@@ -202,9 +270,6 @@ class UiAcceptanceTest {
                 "recreation must reuse the SAME ViewModel, not build a second session owner",
                 TestHooks.viewModel === vm,
             )
-            // A replayed intent would post a second join within milliseconds of
-            // onCreate, advancing the link id off the captured one. This is a
-            // NEGATIVE claim, so it gets a bounded window.
             Thread.sleep(1_500)
             assertEquals(
                 "recreation must not re-consume the launch link — the session's identity is unchanged",
