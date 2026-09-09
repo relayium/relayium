@@ -9,6 +9,7 @@
    * it never says a delivery was saved unless central said so.
 -->
 <resources>
+    <string name="inbox_intro">Your devices, end-to-end encrypted.</string>
     <string name="inbox_title">Device Inbox</string>
     <string name="inbox_signed_out_body">Sign in to send files and messages straight to your other devices, end-to-end encrypted.</string>
     <string name="inbox_signed_out_action">Sign in</string>

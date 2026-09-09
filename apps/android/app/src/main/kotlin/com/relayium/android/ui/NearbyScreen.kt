@@ -54,9 +54,9 @@ internal fun NearbyScreen(
 ) {
     val nearby = state.nearby
 
-    Text(
-        text = stringResource(R.string.nearby_title),
-        style = MaterialTheme.typography.headlineSmall,
+    ScreenHeader(
+        title = stringResource(R.string.nearby_title),
+        supporting = stringResource(R.string.nearby_intro),
     )
 
     if (!nearby.active) {
@@ -144,7 +144,8 @@ internal fun NearbyScreen(
             )
             OutlinedButton(
                 onClick = viewModel::disconnect,
-                modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                colors = accentOutlinedColors(),
+                modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
             ) {
                 Text(stringResource(R.string.files_cancel))
             }
@@ -166,12 +167,10 @@ internal fun NearbyScreen(
             // The list is EMPTY here by construction: nothing is maintaining it,
             // and leaving devices on screen would claim they are still reachable.
             StatusCard(text = stringResource(R.string.nearby_reconnecting), isError = false)
-            Button(
+            PrimaryAction(
+                label = stringResource(R.string.nearby_retry),
                 onClick = viewModel::retryNearby,
-                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
-            ) {
-                Text(stringResource(R.string.nearby_retry))
-            }
+            )
         }
 
         nearby.devices.isEmpty() -> Column(
@@ -216,21 +215,14 @@ internal fun NearbyScreen(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
-    OutlinedButton(
+    SecondaryAction(
+        label = stringResource(R.string.nearby_stop),
         onClick = viewModel::stopNearby,
-        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
-    ) {
-        Text(stringResource(R.string.nearby_stop))
-    }
+    )
 }
 
 @Composable
 private fun NearbyStartCard(viewModel: TransferViewModel) {
-    Text(
-        text = stringResource(R.string.nearby_intro),
-        style = MaterialTheme.typography.bodyLarge,
-    )
-
     if (!viewModel.canStartNearby) {
         // One controller owns one connection, so this is a real constraint
         // rather than a policy. Saying so beats silently ending the transfer the
@@ -244,44 +236,28 @@ private fun NearbyStartCard(viewModel: TransferViewModel) {
         return
     }
 
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(
-                text = stringResource(R.string.nearby_mode_direct),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = stringResource(R.string.nearby_mode_direct_detail),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(
-                onClick = viewModel::startNearbyDirect,
-                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
-            ) {
-                Text(stringResource(R.string.nearby_start_direct))
-            }
-        }
+    SectionCard(title = stringResource(R.string.nearby_mode_direct)) {
+        Text(
+            text = stringResource(R.string.nearby_mode_direct_detail),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        PrimaryAction(
+            label = stringResource(R.string.nearby_start_direct),
+            onClick = viewModel::startNearbyDirect,
+        )
     }
 
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(
-                text = stringResource(R.string.nearby_mode_hub),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = stringResource(R.string.nearby_mode_hub_detail),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedButton(
-                onClick = viewModel::startNearbyHub,
-                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
-            ) {
-                Text(stringResource(R.string.nearby_start_hub))
-            }
-        }
+    SectionCard(title = stringResource(R.string.nearby_mode_hub)) {
+        Text(
+            text = stringResource(R.string.nearby_mode_hub_detail),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        SecondaryAction(
+            label = stringResource(R.string.nearby_start_hub),
+            onClick = viewModel::startNearbyHub,
+        )
     }
 
     Text(
@@ -293,67 +269,53 @@ private fun NearbyStartCard(viewModel: TransferViewModel) {
 
 @Composable
 private fun IncomingRequestCard(label: String, onAccept: () -> Unit, onDecline: () -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-        ),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(
-                text = stringResource(R.string.nearby_incoming_title, label),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-            Text(
-                text = stringResource(R.string.nearby_incoming_detail),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-            // Stacked, not side by side: at font scale 2 on a 320dp screen two
-            // buttons in a row have about 70dp of text width each, and Accept
-            // and Decline are the last pair of controls that may be hard to
-            // tell apart.
-            Button(
-                onClick = onAccept,
-                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
-            ) {
-                Text(stringResource(R.string.nearby_accept))
-            }
-            OutlinedButton(
-                onClick = onDecline,
-                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
-            ) {
-                Text(stringResource(R.string.nearby_decline))
-            }
-        }
+    SectionCard(tone = CardTone.ATTENTION) {
+        Text(
+            text = stringResource(R.string.nearby_incoming_title, label),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+        )
+        Text(
+            text = stringResource(R.string.nearby_incoming_detail),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+        )
+        // Stacked, not side by side: at font scale 2 on a 320dp screen two
+        // buttons in a row have about 70dp of text width each, and Accept
+        // and Decline are the last pair of controls that may be hard to
+        // tell apart.
+        PrimaryAction(
+            label = stringResource(R.string.nearby_accept),
+            onClick = onAccept,
+        )
+        SecondaryAction(
+            label = stringResource(R.string.nearby_decline),
+            onClick = onDecline,
+        )
     }
 }
 
 @Composable
 private fun DeviceRow(device: NearbyDevice, onConnect: () -> Unit) {
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    SectionCard {
+        Text(
+            text = deviceLabel(device, device.id),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        if (!device.supportsLink) {
             Text(
-                text = deviceLabel(device, device.id),
-                style = MaterialTheme.typography.titleSmall,
+                text = stringResource(R.string.nearby_cannot_link),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (!device.supportsLink) {
-                Text(
-                    text = stringResource(R.string.nearby_cannot_link),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            // Full width and stacked under the name rather than beside it: a
-            // row would give a long device name and a button the same line, and
-            // at font scale 2 one of them loses.
-            Button(
-                onClick = onConnect,
-                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
-            ) {
-                Text(stringResource(R.string.nearby_connect))
-            }
         }
+        // Full width and stacked under the name rather than beside it: a
+        // row would give a long device name and a button the same line, and
+        // at font scale 2 one of them loses.
+        PrimaryAction(
+            label = stringResource(R.string.nearby_connect),
+            onClick = onConnect,
+        )
     }
 }
 

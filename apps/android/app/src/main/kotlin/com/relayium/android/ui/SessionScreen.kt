@@ -66,15 +66,12 @@ internal fun SessionScreen(
 /** One capability this connection does not have, named and explained. */
 @Composable
 private fun UnavailableLaneCard(titleRes: Int, bodyRes: Int) {
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(text = stringResource(titleRes), style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = stringResource(bodyRes),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+    SectionCard(title = stringResource(titleRes)) {
+        Text(
+            text = stringResource(bodyRes),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -85,11 +82,13 @@ private fun VerificationCard(
     state: TransferController.State,
     viewModel: TransferViewModel,
 ) {
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    SectionCard {
+        run {
             Text(
                 text = stringResource(R.string.status_connected),
                 style = MaterialTheme.typography.titleMedium,
+                // The accent TEXT role: a state that has actually been reached
+                // is one of the three places the brand belongs.
                 color = MaterialTheme.colorScheme.secondary,
             )
             when (state.wire) {
@@ -120,9 +119,10 @@ private fun VerificationCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = viewModel::disconnect, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(stringResource(R.string.status_disconnect))
-                }
+                TertiaryAction(
+                    label = stringResource(R.string.status_disconnect),
+                    onClick = viewModel::disconnect,
+                )
             }
         }
     }
@@ -144,16 +144,15 @@ private fun FilesCard(
     // its session executor before any lane mutation, so a file chosen for one
     // connection can never be sent on the next and a folder chosen for one offer
     // can never accept another.
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(
-                text = stringResource(R.string.files_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
-
+    SectionCard(title = stringResource(R.string.files_title)) {
+        run {
             if (state.fileLaneDown) {
-                StatusCard(text = stringResource(R.string.files_lane_down), isError = true)
-                return@Column
+                InlineMessage(
+                    text = stringResource(R.string.files_lane_down),
+                    tone = MessageTone.ERROR,
+                    announce = true,
+                )
+                return@run
             }
 
             // ── incoming ────────────────────────────────────────────────────
@@ -235,19 +234,19 @@ private fun FilesCard(
             }
 
             if (state.savedBatch) {
-                StatusCard(text = stringResource(R.string.files_saved), isError = false)
+                InlineMessage(
+                    text = stringResource(R.string.files_saved),
+                    tone = MessageTone.DONE,
+                    announce = true,
+                )
             }
 
             // ── outgoing ────────────────────────────────────────────────────
             if (state.outgoing.isEmpty()) {
-                Button(
+                PrimaryAction(
+                    label = stringResource(R.string.files_pick),
                     onClick = { pickers.chooseFiles(state.linkId) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp),
-                ) {
-                    Text(stringResource(R.string.files_pick))
-                }
+                )
             } else {
                 state.outgoing.forEach { meta ->
                     Text(
@@ -280,7 +279,11 @@ private fun FilesCard(
             // Success text comes from the peer's verified COMPLETE
             // (state.sentBatch) and never from progress merely clearing.
             if (state.sentBatch) {
-                StatusCard(text = stringResource(R.string.files_sent_batch), isError = false)
+                InlineMessage(
+                    text = stringResource(R.string.files_sent_batch),
+                    tone = MessageTone.DONE,
+                    announce = true,
+                )
             }
 
             // Only THIS link's picker failure: an old pick's error must not
@@ -297,12 +300,10 @@ private fun FilesCard(
                     },
                     isError = true,
                 )
-                TextButton(
+                TertiaryAction(
+                    label = stringResource(R.string.cleanup_dismiss),
                     onClick = viewModel::clearPickError,
-                    modifier = Modifier.heightIn(min = 48.dp),
-                ) {
-                    Text(stringResource(R.string.cleanup_dismiss))
-                }
+                )
             }
 
             // A live in-session error (save failure, integrity, …) that did not
@@ -317,11 +318,15 @@ private fun FilesCard(
 @Composable
 private fun TransferProgress(progress: TransferController.Progress) {
     val cd = stringResource(R.string.cd_progress)
-    LinearProgressIndicator(
-        progress = {
-            if (progress.total <= 0L) 0f
-            else (progress.done.toDouble() / progress.total).toFloat().coerceIn(0f, 1f)
+    SmoothLinearProgress(
+        fraction = if (progress.total <= 0L) {
+            0f
+        } else {
+            (progress.done.toDouble() / progress.total).toFloat()
         },
+        // The file this bar is about. A new one in the batch restarts at its
+        // own fraction rather than easing down from the last one's.
+        operation = progress.name,
         modifier = Modifier
             .fillMaxWidth()
             .semantics { contentDescription = cd },
@@ -359,13 +364,8 @@ private fun MessagesCard(
     val renderedLink = state.linkId
     val draft = if (draftState.linkId == renderedLink) draftState.text else ""
 
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(
-                text = stringResource(R.string.text_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
-
+    SectionCard(title = stringResource(R.string.text_title)) {
+        run {
             when (state.textState) {
                 TextLaneSession.State.OPEN -> {
                     if (state.messages.isEmpty()) {
@@ -392,6 +392,7 @@ private fun MessagesCard(
                         onValueChange = { viewModel.updateDraft(it, renderedLink) },
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text(stringResource(R.string.text_field_label)) },
+                        colors = accentFieldColors(),
                         isError = tooLong,
                         supportingText = if (tooLong) {
                             { Text(stringResource(R.string.text_too_long, bytes, state.textLimit)) }
@@ -477,23 +478,23 @@ private fun MessagesCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Button(
+                    PrimaryAction(
+                        label = stringResource(R.string.text_start),
                         onClick = viewModel::requestText,
                         // False for the whole life of a legacy conversation:
                         // there is nothing to reopen, so the control is drawn
                         // disabled rather than removed, and the ENDED note
                         // above it says what happened.
                         enabled = state.textCanRequest,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp),
-                    ) {
-                        Text(stringResource(R.string.text_start))
-                    }
+                    )
                 }
 
                 TextLaneSession.State.FAILED -> {
-                    StatusCard(text = stringResource(R.string.text_failed), isError = true)
+                    InlineMessage(
+                        text = stringResource(R.string.text_failed),
+                        tone = MessageTone.ERROR,
+                        announce = true,
+                    )
                 }
             }
         }

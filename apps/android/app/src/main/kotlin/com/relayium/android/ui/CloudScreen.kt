@@ -68,7 +68,11 @@ internal fun CloudScreen(
     pickers: CloudPickers,
     onOpenAccount: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Metrics.section)) {
+        ScreenHeader(
+            title = stringResource(R.string.cloud_title),
+            supporting = stringResource(R.string.cloud_intro),
+        )
         SendCard(viewModel, pickers, onOpenAccount)
         ReceiveCard(viewModel, pickers)
         HistoryCard(viewModel)
@@ -97,11 +101,8 @@ private fun SendCard(
     val burn by viewModel.cloudUpload.burnAfterRead.collectAsStateWithLifecycle()
     val signedIn = account is AccountState.Ready
 
-    Card {
-        Column(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    SectionCard {
+        run {
             Text(stringResource(R.string.cloud_send_title), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.cloud_send_intro), style = MaterialTheme.typography.bodyMedium)
 
@@ -112,11 +113,11 @@ private fun SendCard(
                     stringResource(R.string.cloud_needs_account),
                     style = MaterialTheme.typography.bodySmall,
                 )
-                Button(
+                SecondaryAction(
+                    label = stringResource(R.string.cloud_open_account),
                     onClick = onOpenAccount,
-                    modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                ) { Text(stringResource(R.string.cloud_open_account)) }
-                return@Column
+                )
+                return@run
             }
 
             when (val current = state) {
@@ -162,10 +163,10 @@ private fun SendCard(
                         )
                         Switch(checked = burn, onCheckedChange = viewModel.cloudUpload::chooseBurnAfterRead)
                     }
-                    Button(
+                    PrimaryAction(
+                        label = stringResource(R.string.cloud_upload),
                         onClick = viewModel.cloudUpload::upload,
-                        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
-                    ) { Text(stringResource(R.string.cloud_upload)) }
+                    )
                     ChooseFilesButton(pickers, R.string.cloud_change_files, outlined = true)
                 }
 
@@ -179,14 +180,13 @@ private fun SendCard(
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     )
-                    LinearProgressIndicator(
-                        progress = {
-                            if (current.total > 0) {
-                                (current.sent.toFloat() / current.total.toFloat()).coerceIn(0f, 1f)
-                            } else {
-                                0f
-                            }
+                    SmoothLinearProgress(
+                        fraction = if (current.total > 0) {
+                            current.sent.toFloat() / current.total.toFloat()
+                        } else {
+                            0f
                         },
+                        operation = current.total,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedButton(
@@ -266,10 +266,11 @@ private fun SendCard(
 /** A determinate bar that never divides by zero and never exceeds full. */
 @Composable
 private fun Progress(done: Long, total: Long) {
-    LinearProgressIndicator(
-        progress = {
-            if (total > 0) (done.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
-        },
+    SmoothLinearProgress(
+        fraction = if (total > 0) done.toFloat() / total.toFloat() else 0f,
+        // The job's own size: a different one is a different operation, and
+        // its bar starts where it actually is rather than easing down.
+        operation = total,
         modifier = Modifier.fillMaxWidth(),
     )
 }
@@ -555,11 +556,8 @@ private fun ReceiveCard(viewModel: TransferViewModel, pickers: CloudPickers) {
     // [com.relayium.android.cloud.CloudLinkDraft].
     val link by viewModel.cloudLinkDraft.text.collectAsStateWithLifecycle()
 
-    Card {
-        Column(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    SectionCard {
+        run {
             Text(stringResource(R.string.cloud_receive_title), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.cloud_receive_intro), style = MaterialTheme.typography.bodyMedium)
 
@@ -578,6 +576,7 @@ private fun ReceiveCard(viewModel: TransferViewModel, pickers: CloudPickers) {
                         value = link,
                         onValueChange = viewModel.cloudLinkDraft::set,
                         label = { Text(stringResource(R.string.cloud_link_label)) },
+                        colors = accentFieldColors(),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -702,11 +701,8 @@ private fun HistoryCard(viewModel: TransferViewModel) {
         if (signedIn && state is CloudHistoryModel.State.Idle) viewModel.cloudHistory.refresh()
     }
 
-    Card {
-        Column(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    SectionCard {
+        run {
             Text(stringResource(R.string.cloud_history_title), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.cloud_history_intro), style = MaterialTheme.typography.bodyMedium)
 
@@ -715,7 +711,7 @@ private fun HistoryCard(viewModel: TransferViewModel) {
                     stringResource(R.string.cloud_history_signed_out),
                     style = MaterialTheme.typography.bodySmall,
                 )
-                return@Column
+                return@run
             }
 
             notice?.let {

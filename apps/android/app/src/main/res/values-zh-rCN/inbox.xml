@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="inbox_intro">你的设备之间，端到端加密。</string>
     <string name="inbox_title">设备收件箱</string>
     <string name="inbox_signed_out_body">登录后可以把文件和消息端到端加密地直接发送到你的其他设备。</string>
     <string name="inbox_signed_out_action">登录</string>

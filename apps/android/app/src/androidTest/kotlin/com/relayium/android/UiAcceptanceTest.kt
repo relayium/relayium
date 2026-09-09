@@ -9,6 +9,11 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.geometry.Rect
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
@@ -100,6 +105,7 @@ class UiAcceptanceTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             val vm = InteropDriver.viewModel()
             compose.onNode(hasSetTextAction()).performTextInput("12345")
+            awaitKeyboard()
             submit()
             // Prove the submit actually ran VALIDATION — not an off-screen no-op
             // click on a Connect button the IME pushed below the fold, which is
@@ -127,14 +133,67 @@ class UiAcceptanceTest {
         }
     }
 
-    /** Press Connect the way a person does: bring the action into view first.
-     *  With the soft keyboard open, the button can sit BELOW the visible
-     *  viewport, and a click on an off-screen node never reaches it — so the
-     *  submit silently does nothing. Scrolling to the ACTION is legitimate;
-     *  scrolling the error after submit, or force-hiding the IME, would mask the
-     *  very visibility this test exists to check. */
+    /**
+     * Press Connect the way a person does: bring the action into view, confirm
+     * it is really there, and then press it once.
+     *
+     * `performTextInput` asks for the soft keyboard but does not wait for it, so
+     * a bare `performScrollTo().performClick()` scrolls against the pre-IME
+     * layout — where the button is already on screen and the scroll does
+     * nothing — and the touch is then injected at that stale coordinate after
+     * `imePadding` has shrunk the viewport and clipped the button away. The
+     * observed effect is a submit that never reaches validation. Author
+     * evidence: `android-ui-polish-20260909/author/diagnostic-bounds.log`,
+     * which records the button's own bounds through both sequences.
+     *
+     * So this waits for an observable condition — displayed, with a non-empty
+     * box that survives the next layout pass — and never for a duration. No
+     * sleep, no relaxed timeout, no hiding of the IME, and no scrolling of the
+     * error the assertion is about; a genuinely clipped control keeps zero
+     * bounds, exhausts the window and fails, so real clipping is still caught.
+     *
+     * The retry covers APPEARANCE only. The press happens once, after the loop,
+     * so a retried observation can never become a duplicate dispatch.
+     */
     private fun submit() {
-        compose.onNodeWithText(s(R.string.join_action)).performScrollTo().performClick()
+        val connect = compose.onNodeWithText(s(R.string.join_action))
+        var previous: Rect? = null
+        compose.waitUntil(15_000) {
+            runCatching { connect.performScrollTo() }
+            val now = runCatching { connect.fetchSemanticsNode().boundsInWindow }.getOrNull()
+            val settled = now != null &&
+                now.height > 0f &&
+                now == previous &&
+                runCatching { connect.assertIsDisplayed() }.isSuccess
+            previous = now
+            settled
+        }
+        connect.performClick()
+    }
+
+    /**
+     * Wait for the soft keyboard to actually be up.
+     *
+     * Called by the cases that type, because that is the layout change the
+     * submit above has to be on the far side of. It reads the window's own IME
+     * inset rather than guessing from elapsed time, and it is bounded: an IME
+     * that never appears fails here, loudly, instead of turning into a confusing
+     * timeout further down.
+     */
+    private fun awaitKeyboard() {
+        compose.waitUntil(10_000) { imeVisible() }
+    }
+
+    private fun imeVisible(): Boolean {
+        var visible = false
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val activity = ActivityLifecycleMonitorRegistry.getInstance()
+                .getActivitiesInStage(Stage.RESUMED)
+                .firstOrNull()
+            val insets = activity?.window?.decorView?.let(ViewCompat::getRootWindowInsets)
+            visible = insets?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        }
+        return visible
     }
 
     /**

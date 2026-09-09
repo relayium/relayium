@@ -133,7 +133,7 @@
     <string name="create_share_link">分享链接</string>
     <string name="create_copied">链接已复制。</string>
 
-    <string name="join_section_title">或者打开别人给你的链接</string>
+    <string name="create_section_title">或在此设备上创建链接</string>
 
     <!-- 账户。三件绝不能说的事：本应用可以更改、购买或取消套餐（它不发起任何计费
          请求）、验证邮件或重置邮件一定已发出（两个接口无论是否发信都返回同样的
@@ -234,6 +234,8 @@
 
     <!-- 云端（存储）传输。见英文文件中关于该措辞的说明。 -->
     <string name="tab_cloud">云端</string>
+    <string name="cloud_title">云端</string>
+    <string name="cloud_intro">通过链接分享加密文件，也可以打开别人分享的链接。</string>
     <string name="cloud_send_title">发送到云端</string>
     <string name="cloud_send_intro">文件在本机加密后上传，然后分享一条链接。对方不必此刻在线，也不需要账户。</string>
     <string name="cloud_needs_account">上传需要账户：存储的内容会计入该账户的额度。打开链接则始终不需要账户。</string>

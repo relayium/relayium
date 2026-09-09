@@ -85,8 +85,19 @@ fun InboxScreen(
     actions: InboxActions,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(20.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Metrics.section)) {
         val authority = state.authority
+        ScreenHeader(
+            title = stringResource(R.string.inbox_title),
+            // Only once there is an account. Signed out, the card below is the
+            // whole surface and carries the full explanation, so a supporting
+            // line here would say the same thing twice on one screen.
+            supporting = if (authority == null) {
+                null
+            } else {
+                stringResource(R.string.inbox_intro)
+            },
+        )
         if (authority == null) {
             SignedOutCard(actions)
         } else {
@@ -154,21 +165,19 @@ class InboxActions(
 
 @Composable
 private fun SignedOutCard(actions: InboxActions) {
-    Card {
-        Column(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(stringResource(R.string.inbox_title), style = MaterialTheme.typography.titleMedium)
-            Text(
-                stringResource(R.string.inbox_signed_out_body),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Button(
-                onClick = actions.signIn,
-                modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-            ) { Text(stringResource(R.string.inbox_signed_out_action)) }
-        }
+    // The whole destination while signed out, so it is a real empty state:
+    // one sentence and the single thing that can be done about it, full width
+    // rather than a small button trailing off to the left of an empty screen.
+    SectionCard {
+        Text(
+            stringResource(R.string.inbox_signed_out_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        PrimaryAction(
+            label = stringResource(R.string.inbox_signed_out_action),
+            onClick = actions.signIn,
+        )
     }
 }
 
@@ -177,12 +186,8 @@ private fun SignedOutCard(actions: InboxActions) {
  *  leave a spinner running forever. */
 @Composable
 private fun InitialCard(state: InboxModel.State, actions: InboxActions) {
-    Card {
-        Column(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(stringResource(R.string.inbox_title), style = MaterialTheme.typography.titleMedium)
+    SectionCard {
+        run {
             if (state.failure != null) {
                 Text(
                     failureText(state.failure),
@@ -211,11 +216,8 @@ private fun InitialCard(state: InboxModel.State, actions: InboxActions) {
 
 @Composable
 private fun FailureCard(failure: InboxModel.State.Failure, actions: InboxActions) {
-    Card {
-        Column(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    SectionCard {
+        run {
             Text(
                 failureText(failure),
                 style = MaterialTheme.typography.bodyMedium,
@@ -254,11 +256,8 @@ private fun failureText(failure: InboxModel.State.Failure): String = stringResou
 
 @Composable
 private fun ReceivingCard(state: InboxModel.State, actions: InboxActions) {
-    Card {
-        Column(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    SectionCard {
+        run {
             Text(
                 stringResource(R.string.inbox_receive_title),
                 style = MaterialTheme.typography.titleMedium,
@@ -351,11 +350,8 @@ private fun KeyHealthCard(
     actions: InboxActions,
 ) {
     var confirming by remember { mutableStateOf(false) }
-    Card {
-        Column(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    SectionCard {
+        run {
             Text(
                 stringResource(R.string.inbox_key_title),
                 style = MaterialTheme.typography.titleMedium,
@@ -421,11 +417,8 @@ private fun keyHealthText(health: InboxKeyHealth): String = when (health) {
  *  answers them automatically, which is the whole point of the `ask` policy. */
 @Composable
 private fun PendingCard(state: InboxModel.State, actions: InboxActions) {
-    Card {
-        Column(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    SectionCard {
+        run {
             Text(
                 stringResource(R.string.inbox_pending_title),
                 style = MaterialTheme.typography.titleMedium,
@@ -467,11 +460,8 @@ private fun DevicesCard(state: InboxModel.State, actions: InboxActions) {
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     val selected = state.devices.firstOrNull { it.deviceId == selectedId }
 
-    Card {
-        Column(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    SectionCard {
+        run {
             Text(
                 stringResource(R.string.inbox_devices_title),
                 style = MaterialTheme.typography.titleMedium,
@@ -557,11 +547,8 @@ private fun SendCard(state: InboxModel.State, target: InboxSendTarget, actions: 
     // `rememberSaveable` would put it in a Bundle the system may persist.
     var message by remember(state.authority, target.deviceId) { mutableStateOf("") }
 
-    Card {
-        Column(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    SectionCard {
+        run {
             Text(
                 stringResource(R.string.inbox_send_to, target.name),
                 style = MaterialTheme.typography.titleMedium,
@@ -576,6 +563,7 @@ private fun SendCard(state: InboxModel.State, target: InboxSendTarget, actions: 
                     value = message,
                     onValueChange = { message = it },
                     label = { Text(stringResource(R.string.inbox_send_message_label)) },
+                    colors = accentFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Button(
@@ -604,11 +592,8 @@ private fun SendCard(state: InboxModel.State, target: InboxSendTarget, actions: 
  */
 @Composable
 private fun SendsCard(state: InboxModel.State, actions: InboxActions) {
-    Card {
-        Column(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    SectionCard {
+        run {
             Text(
                 stringResource(R.string.inbox_sending_title),
                 style = MaterialTheme.typography.titleMedium,
@@ -705,11 +690,8 @@ private fun HistoryCard(state: InboxModel.State, actions: InboxActions) {
     var openPeer by rememberSaveable { mutableStateOf<String?>(null) }
     val conversation = state.conversations.firstOrNull { it.peerDeviceId == openPeer }
 
-    Card {
-        Column(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    SectionCard {
+        run {
             Text(
                 stringResource(R.string.inbox_history_title),
                 style = MaterialTheme.typography.titleMedium,

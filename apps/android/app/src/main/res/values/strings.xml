@@ -165,7 +165,7 @@
     <string name="create_share_link">Share link</string>
     <string name="create_copied">Link copied.</string>
 
-    <string name="join_section_title">Or open a link you were given</string>
+    <string name="create_section_title">Or create a link on this device</string>
 
     <!-- Account.
 
@@ -286,6 +286,8 @@
          qualification. Sending needs an account because the bytes are stored
          and metered against one; receiving never does. -->
     <string name="tab_cloud">Cloud</string>
+    <string name="cloud_title">Cloud</string>
+    <string name="cloud_intro">Share encrypted files with a link, or open a link you received.</string>
     <string name="cloud_send_title">Send to the cloud</string>
     <string name="cloud_send_intro">Upload files encrypted on this device, then share one link. The other person does not need to be online now, and does not need an account.</string>
     <string name="cloud_needs_account">Uploading needs an account: what you store counts toward that account\'s allowance. Opening a link never needs one.</string>

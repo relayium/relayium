@@ -3,9 +3,13 @@
 package com.relayium.android.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -408,16 +412,24 @@ fun RelayiumApp(viewModel: TransferViewModel) {
                 // Session-level, above everything and on BOTH surfaces:
                 // leftovers are real whatever the user is looking at, and the
                 // warning stays until dismissed.
+                //
+                // These three blocks are deliberately OUTSIDE the destination
+                // transition below. They are true wherever the user is, so they
+                // must not fade, move or re-enter when the user moves.
                 if (state.cleanupIncomplete) {
                     CleanupWarningCard(onDismiss = viewModel::dismissCleanupWarning)
                 }
-                // Why something handed to this app was refused. Above the
-                // surfaces for the same reason: it is true wherever the user is.
+                // Why something handed to this app was refused.
                 ingressRefusal?.let { reason ->
-                    StatusCard(text = stringResource(ingressRefusalText(reason)), isError = true)
-                    TextButton(onClick = viewModel.ingress::clearRefusal) {
-                        Text(stringResource(R.string.ingress_dismiss))
-                    }
+                    InlineMessage(
+                        text = stringResource(ingressRefusalText(reason)),
+                        tone = MessageTone.ERROR,
+                        announce = true,
+                    )
+                    TertiaryAction(
+                        label = stringResource(R.string.ingress_dismiss),
+                        onClick = viewModel.ingress::clearRefusal,
+                    )
                 }
                 val held = staged
                 if (held != null && !showShare) {
@@ -427,6 +439,11 @@ fun RelayiumApp(viewModel: TransferViewModel) {
                     // accepted it.
                     StagedShareBanner(held) { showShare = true }
                 }
+                // The surface itself, and the one thing in the shell that
+                // animates. Keyed on WHICH surface is showing and nothing else,
+                // so a phase change or an arriving error inside a destination
+                // changes in place.
+                DestinationEntrance(key = if (showShare && held != null) SHARE_KEY else destination) {
                 if (showShare && held != null) {
                     ShareSurface(
                         staged = held,
@@ -495,10 +512,15 @@ fun RelayiumApp(viewModel: TransferViewModel) {
                     Destination.ACCOUNT -> AccountScreen(viewModel)
                     }
                 }
+                }
             }
         }
     }
 }
+
+/** The share surface is not a [Destination], but it IS a different surface, so
+ *  it needs an identity of its own for the entrance transition. */
+private const val SHARE_KEY = "share"
 
 /**
  * One surface saying what the OTHER one is doing, and offering the one button
@@ -511,13 +533,10 @@ fun RelayiumApp(viewModel: TransferViewModel) {
  */
 @Composable
 internal fun SwitchAwayCard(explanation: String, action: String, onSwitch: () -> Unit) {
-    StatusCard(text = explanation, isError = false)
-    OutlinedButton(
-        onClick = onSwitch,
-        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
-    ) {
-        Text(action)
-    }
+    // WARNING rather than neutral: pressing the control below ends a live
+    // session, so the sentence that says so should not read as an aside.
+    InlineMessage(text = explanation, tone = MessageTone.WARNING)
+    SecondaryAction(label = action, onClick = onSwitch)
 }
 
 /**
@@ -583,12 +602,31 @@ private fun DestinationBar(current: Destination, onSelect: (Destination) -> Unit
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                // The system navigation bar, consumed HERE and only here.
+                //
+                // `NavigationBar` — the other branch — applies
+                // `NavigationBarDefaults.windowInsets` itself, so this is the
+                // form that had nothing: on a device with three-button
+                // navigation the destination labels were laid out underneath
+                // the system's own back/home/recents strip, which is exactly
+                // where this branch is used (320dp, font 2) and exactly where
+                // the labels are tallest. Applied to the Row rather than to the
+                // Surface so the tonal background still runs to the bottom edge
+                // and only the content is lifted clear.
+                .windowInsetsPadding(WindowInsets.navigationBars)
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             for ((target, icon, label) in entries) {
                 val selected = current == target
+                // Animated, because this form had no selection feedback at all
+                // while the wide `NavigationBar` animates its own indicator —
+                // so the bar behaved differently at 320dp and font 2 than
+                // everywhere else. Colour only: nothing here changes size, so
+                // no label can be clipped or displaced by the transition.
+                val content = selectionColor(selected)
+                val pill = selectionContainer(selected)
                 Column(
                     modifier = Modifier
                         .selectable(
@@ -597,19 +635,12 @@ private fun DestinationBar(current: Destination, onSelect: (Destination) -> Unit
                             role = Role.Tab,
                         )
                         .defaultMinSize(minWidth = 72.dp, minHeight = 56.dp)
+                        .background(pill, MaterialTheme.shapes.medium)
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Icon(
-                        icon,
-                        contentDescription = null,
-                        tint = if (selected) {
-                            MaterialTheme.colorScheme.onSecondaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
+                    Icon(icon, contentDescription = null, tint = content)
                     // softWrap off and NO width bound: the row scrolls instead
                     // of the word breaking, which is the whole point of this
                     // form. A label is never shortened.
@@ -617,11 +648,7 @@ private fun DestinationBar(current: Destination, onSelect: (Destination) -> Unit
                         text = stringResource(label),
                         style = MaterialTheme.typography.labelLarge,
                         softWrap = false,
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.onSecondaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                        color = content,
                     )
                 }
             }
@@ -704,72 +731,81 @@ private fun JoinScreen(
         viewModel.joinFromDraft()
     }
 
-    Text(
-        text = stringResource(R.string.join_title),
-        style = MaterialTheme.typography.headlineSmall,
+    // ORDER. The heading says "Open a link", so opening one is what comes
+    // first: the field, its action, and the camera shortcut, inside the one
+    // card this screen leads with. Creating a link follows it.
+    //
+    // The 0.2.0 build had this the other way round — a prominent Create card
+    // with a filled "Go to Account" sat between the heading and the field it
+    // named, so the first action offered was an account trip for the task the
+    // user had not asked to do, and the primary action was below three
+    // paragraphs. Nothing was removed to fix it; the create half moved below
+    // and dropped to a secondary action so the screen has one obvious next
+    // step. The account and allowance facts are unchanged and still stated
+    // before any account trip is offered.
+    ScreenHeader(
+        title = stringResource(R.string.join_title),
+        supporting = stringResource(R.string.join_intro),
     )
 
     if (endedBanner) {
-        StatusCard(
+        InlineMessage(
             text = state.errorKey?.let { stringResource(errorText(it)) }
                 ?: stringResource(R.string.session_ended),
-            isError = state.errorKey != null,
+            tone = if (state.errorKey != null) MessageTone.ERROR else MessageTone.NEUTRAL,
+            announce = true,
         )
     }
 
-    Text(
-        text = stringResource(R.string.join_intro),
-        style = MaterialTheme.typography.bodyLarge,
-    )
+    SectionCard {
+        OutlinedTextField(
+            value = input,
+            onValueChange = { viewModel.updateJoinDraft(it) },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(stringResource(R.string.join_field_label)) },
+            colors = accentFieldColors(),
+            placeholder = {
+                Text(stringResource(R.string.join_field_hint), style = MonospaceDigits)
+            },
+            textStyle = if (input.length <= JoinInput.CODE_LENGTH && input.all { it.isDigit() }) {
+                MonospaceDigits
+            } else {
+                MaterialTheme.typography.bodyLarge
+            },
+            isError = joinError != null,
+            supportingText = joinError?.let { { Text(stringResource(joinErrorText(it))) } },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+            keyboardActions = KeyboardActions(onDone = { submit() }),
+        )
 
-    CreateCard(viewModel, onOpenAccount)
+        // A MINIMUM height, never a fixed one. The former `height(52.dp)` was a
+        // ceiling as well as a floor, so at font scale 2 the label had less
+        // room than it needed on the one control this screen exists for.
+        PrimaryAction(
+            label = if (endedBanner) {
+                stringResource(R.string.status_reconnect)
+            } else {
+                stringResource(R.string.join_action)
+            },
+            onClick = { submit() },
+        )
 
-    HorizontalDivider()
+        // The camera is the SHORTCUT, and the field above is the full path.
+        // This button is the only thing that ever asks for the camera
+        // permission: asking at launch would be a prompt for a feature nobody
+        // has touched, and it teaches people to deny the one that matters
+        // later.
+        SecondaryAction(
+            label = stringResource(R.string.scan_open),
+            onClick = { scanning = true },
+        )
 
-    Text(
-        text = stringResource(R.string.join_section_title),
-        style = MaterialTheme.typography.titleMedium,
-    )
-
-    OutlinedTextField(
-        value = input,
-        onValueChange = { viewModel.updateJoinDraft(it) },
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text(stringResource(R.string.join_field_label)) },
-        placeholder = { Text(stringResource(R.string.join_field_hint), style = MonospaceDigits) },
-        textStyle = if (input.length <= JoinInput.CODE_LENGTH && input.all { it.isDigit() }) {
-            MonospaceDigits
-        } else {
-            MaterialTheme.typography.bodyLarge
-        },
-        isError = joinError != null,
-        supportingText = joinError?.let { { Text(stringResource(joinErrorText(it))) } },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-        keyboardActions = KeyboardActions(onDone = { submit() }),
-    )
-
-    Button(
-        onClick = { submit() },
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(52.dp),
-    ) {
         Text(
-            if (endedBanner) stringResource(R.string.status_reconnect)
-            else stringResource(R.string.join_action),
+            text = stringResource(R.string.join_helper),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-
-    // The camera is the SHORTCUT, and the field above is the full path. This
-    // button is the only thing that ever asks for the camera permission: asking
-    // at launch would be a prompt for a feature nobody has touched, and it
-    // teaches people to deny the one that matters later.
-    OutlinedButton(
-        onClick = { scanning = true },
-        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
-    ) {
-        Text(stringResource(R.string.scan_open))
     }
 
     if (scanning) {
@@ -821,11 +857,13 @@ private fun JoinScreen(
         }
     }
 
+    // The other half of the screen, below the task it is named for.
     Text(
-        text = stringResource(R.string.join_helper),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        text = stringResource(R.string.create_section_title),
+        style = MaterialTheme.typography.titleMedium,
     )
+
+    CreateCard(viewModel, onOpenAccount)
 
     // The update row lives HERE and only here. Being drawn by JoinScreen — the
     // IDLE and ENDED phases — is what makes "a check can never interrupt a
@@ -868,19 +906,15 @@ private fun UpdateRow(viewModel: TransferViewModel) {
             if (state is UpdateChecker.UpdateUi.Checking) {
                 // Cancel replaces Check while a request is in flight, so the
                 // control is never a dead disabled button.
-                TextButton(
+                TertiaryAction(
+                    label = stringResource(R.string.update_cancel),
                     onClick = updates::cancel,
-                    modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                ) {
-                    Text(stringResource(R.string.update_cancel))
-                }
+                )
             } else {
-                TextButton(
+                TertiaryAction(
+                    label = stringResource(R.string.update_check),
                     onClick = updates::check,
-                    modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                ) {
-                    Text(stringResource(R.string.update_check))
-                }
+                )
             }
         }
 
@@ -910,75 +944,80 @@ private fun UpdateRow(viewModel: TransferViewModel) {
                 )
             }
 
+            // A check the user asked for that came back clean is something
+            // that finished, so it says so rather than sharing the neutral
+            // container with every other statement of fact.
             is UpdateChecker.UpdateUi.UpToDate -> Box(status) {
-                StatusCard(
+                InlineMessage(
                     text = stringResource(R.string.update_up_to_date, s.installedVersionName),
-                    isError = false,
+                    tone = MessageTone.DONE,
                 )
             }
 
             is UpdateChecker.UpdateUi.NoneDistributed -> Box(status) {
-                StatusCard(text = stringResource(R.string.update_none), isError = false)
+                InlineMessage(
+                    text = stringResource(R.string.update_none),
+                    tone = MessageTone.NEUTRAL,
+                )
             }
 
             is UpdateChecker.UpdateUi.Failed -> Box(status) {
-                StatusCard(text = stringResource(updateErrorText(s.error)), isError = true)
+                InlineMessage(
+                    text = stringResource(updateErrorText(s.error)),
+                    tone = MessageTone.ERROR,
+                )
             }
 
-            is UpdateChecker.UpdateUi.Available -> Card(modifier = status) {
-                Column(
-                    Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
+            is UpdateChecker.UpdateUi.Available -> SectionCard(modifier = status) {
+                Text(
+                    text = stringResource(R.string.update_available, s.versionName),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                if (s.note.isNotBlank()) {
                     Text(
-                        text = stringResource(R.string.update_available, s.versionName),
-                        style = MaterialTheme.typography.titleSmall,
+                        text = stringResource(R.string.update_notes_title),
+                        style = MaterialTheme.typography.labelLarge,
                     )
-                    if (s.note.isNotBlank()) {
-                        Text(
-                            text = stringResource(R.string.update_notes_title),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        // PLAIN TEXT. The note comes off the network, so it is
-                        // rendered as prose and nothing in it is made tappable
-                        // — a link in a release note would be a tap target a
-                        // feed author chose, which is the one thing this
-                        // screen must not hand out.
-                        Text(text = s.note, style = MaterialTheme.typography.bodyMedium)
-                    }
+                    // PLAIN TEXT. The note comes off the network, so it is
+                    // rendered as prose and nothing in it is made tappable
+                    // — a link in a release note would be a tap target a
+                    // feed author chose, which is the one thing this
+                    // screen must not hand out.
+                    Text(text = s.note, style = MaterialTheme.typography.bodyMedium)
+                }
+                Text(
+                    text = stringResource(R.string.update_download_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                // defaultMinSize, NOT height: 52dp is the touch target, not
+                // a ceiling. "Open the download page" is a long label, and at
+                // font scale 2 on a 320dp screen a fixed height clips it —
+                // the Chinese string is short enough to hide that entirely,
+                // which is why the acceptance covers English at that size too.
+                // That floor is now [Metrics.action], applied by the shared
+                // primitive so a future control cannot reintroduce a fixed
+                // height by writing one out again.
+                PrimaryAction(
+                    label = stringResource(R.string.update_download),
+                    onClick = updates::download,
+                )
+                // Only after a launch actually failed: the address as
+                // selectable text, so a device with no browser leaves the
+                // user with something they can act on instead of a button
+                // that silently does nothing.
+                browserMissing?.let { url ->
                     Text(
-                        text = stringResource(R.string.update_download_hint),
+                        text = stringResource(R.string.update_no_browser),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.error,
                     )
-                    // defaultMinSize, NOT height: 52dp is the touch target, not
-                    // a ceiling. "Open the download page" is a long label, and at
-                    // font scale 2 on a 320dp screen a fixed height clips it —
-                    // the Chinese string is short enough to hide that entirely,
-                    // which is why the acceptance covers English at that size too.
-                    Button(
-                        onClick = updates::download,
-                        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
-                    ) {
-                        Text(stringResource(R.string.update_download))
-                    }
-                    // Only after a launch actually failed: the address as
-                    // selectable text, so a device with no browser leaves the
-                    // user with something they can act on instead of a button
-                    // that silently does nothing.
-                    browserMissing?.let { url ->
+                    SelectionContainer {
                         Text(
-                            text = stringResource(R.string.update_no_browser),
+                            text = url,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        SelectionContainer {
-                            Text(
-                                text = url,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
                     }
                 }
             }
@@ -1013,63 +1052,67 @@ private fun CreateCard(viewModel: TransferViewModel, onOpenAccount: () -> Unit) 
     val account by viewModel.account.state.collectAsStateWithLifecycle()
     val create by viewModel.createLink.state.collectAsStateWithLifecycle()
 
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(
-                text = stringResource(R.string.create_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = stringResource(R.string.create_intro),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+    SectionCard(title = stringResource(R.string.create_title)) {
+        Text(
+            text = stringResource(R.string.create_intro),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
-            if (account !is AccountState.Ready) {
+        if (account !is AccountState.Ready) {
+            // Unchanged in substance: the account requirement and what it
+            // means for the allowance are still stated, and still stated
+            // BEFORE the control that would take the user to the account.
+            Text(
+                text = stringResource(R.string.create_needs_account),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            SecondaryAction(
+                label = stringResource(R.string.create_open_account),
+                onClick = onOpenAccount,
+            )
+            return@SectionCard
+        }
+
+        when (val c = create) {
+            is CreateLinkModel.State.Minting -> Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(Modifier.height(20.dp).width(20.dp), strokeWidth = 2.dp)
                 Text(
-                    text = stringResource(R.string.create_needs_account),
+                    text = stringResource(R.string.create_minting),
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                Button(
-                    onClick = onOpenAccount,
-                    modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
-                ) {
-                    Text(stringResource(R.string.create_open_account))
-                }
-                return@Column
             }
 
-            when (val c = create) {
-                is CreateLinkModel.State.Minting -> Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    CircularProgressIndicator(Modifier.height(20.dp).width(20.dp), strokeWidth = 2.dp)
-                    Text(
-                        text = stringResource(R.string.create_minting),
-                        style = MaterialTheme.typography.bodyMedium,
+            else -> {
+                if (c is CreateLinkModel.State.Failed) {
+                    InlineMessage(
+                        text = accountErrorMessage(c.failure),
+                        tone = MessageTone.ERROR,
+                        announce = true,
                     )
                 }
-
-                else -> {
-                    if (c is CreateLinkModel.State.Failed) {
-                        StatusCard(text = accountErrorMessage(c.failure), isError = true)
-                    }
-                    // A code that was minted and then could not be used. Said
-                    // out loud rather than dropped: the user asked for digits
-                    // and got none, and a button that silently does nothing
-                    // reads as a broken one.
-                    if (c is CreateLinkModel.State.Superseded) {
-                        StatusCard(text = stringResource(R.string.create_superseded), isError = true)
-                    }
-                    Button(
-                        onClick = viewModel::createCrossNetworkLink,
-                        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
-                    ) {
-                        Text(stringResource(R.string.create_action))
-                    }
+                // A code that was minted and then could not be used. Said
+                // out loud rather than dropped: the user asked for digits
+                // and got none, and a button that silently does nothing
+                // reads as a broken one.
+                if (c is CreateLinkModel.State.Superseded) {
+                    InlineMessage(
+                        text = stringResource(R.string.create_superseded),
+                        tone = MessageTone.ERROR,
+                        announce = true,
+                    )
                 }
+                // Secondary, not filled: the screen's primary action is the
+                // join above. Same label, same reachability, one obvious
+                // leading control per surface.
+                SecondaryAction(
+                    label = stringResource(R.string.create_action),
+                    onClick = viewModel::createCrossNetworkLink,
+                )
             }
         }
     }
@@ -1102,19 +1145,19 @@ private fun MintedCodeCard(showing: CreateLinkModel.State.Showing, viewModel: Tr
     // must not leave it standing.
     LaunchedEffect(showing.code, expiry.usable) { copied = false }
 
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(
-                text = stringResource(R.string.create_code_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
+    SectionCard(title = stringResource(R.string.create_code_title)) {
+        run {
             if (!expiry.usable) {
                 // The server refuses the code from this second onward, so the
                 // digits are not shown at all: a person reading an expired code
                 // aloud gets a "code not found" on the other device and no way
                 // to tell which of the two ends is wrong.
-                StatusCard(text = stringResource(R.string.create_code_expired), isError = true)
-                return@Column
+                InlineMessage(
+                    text = stringResource(R.string.create_code_expired),
+                    tone = MessageTone.ERROR,
+                    announce = true,
+                )
+                return@run
             }
             SelectionContainer {
                 Text(
@@ -1146,16 +1189,16 @@ private fun MintedCodeCard(showing: CreateLinkModel.State.Showing, viewModel: Tr
                 )
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(
+                SecondaryAction(
+                    label = stringResource(R.string.create_copy_link),
                     onClick = {
                         clipboard.setText(androidx.compose.ui.text.AnnotatedString(showing.link))
                         copied = true
                     },
-                    modifier = Modifier.weight(1f).defaultMinSize(minHeight = 48.dp),
-                ) {
-                    Text(stringResource(R.string.create_copy_link))
-                }
-                OutlinedButton(
+                    modifier = Modifier.weight(1f),
+                )
+                SecondaryAction(
+                    label = stringResource(R.string.create_share_link),
                     onClick = {
                         // The system sheet, with no target chosen for the user:
                         // whichever app they pick is the one that receives it.
@@ -1168,10 +1211,8 @@ private fun MintedCodeCard(showing: CreateLinkModel.State.Showing, viewModel: Tr
                             )
                         }
                     },
-                    modifier = Modifier.weight(1f).defaultMinSize(minHeight = 48.dp),
-                ) {
-                    Text(stringResource(R.string.create_share_link))
-                }
+                    modifier = Modifier.weight(1f),
+                )
             }
             if (copied) {
                 Text(
@@ -1220,7 +1261,10 @@ private fun ConnectingScreen(
         )
         OutlinedButton(
             onClick = viewModel::disconnect,
-            modifier = Modifier.height(48.dp),
+            colors = accentOutlinedColors(),
+            // A floor, not a fixed height — "Cancel" is short in both
+            // languages, but nothing in this app sets a ceiling on a label.
+            modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
         ) {
             Text(stringResource(R.string.files_cancel))
         }
@@ -1229,48 +1273,39 @@ private fun ConnectingScreen(
 
 // ── shared pieces ───────────────────────────────────────────────────────────
 
+/**
+ * The app's older two-state status line, now drawn by [InlineMessage].
+ *
+ * Kept as the name the screens already call, so one change gives every one of
+ * them the marker, the container and the immediate-appearance contract without
+ * a rename touching six files. A call site that can say something more precise
+ * than "error or not" — something finished, something to be careful about —
+ * uses [InlineMessage] and its [MessageTone] directly.
+ */
 @Composable
 internal fun StatusCard(text: String, isError: Boolean) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = if (isError) {
-                MaterialTheme.colorScheme.errorContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            },
-        ),
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(16.dp),
-            color = if (isError) {
-                MaterialTheme.colorScheme.onErrorContainer
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            style = MaterialTheme.typography.bodyMedium,
-        )
-    }
+    InlineMessage(
+        text = text,
+        tone = if (isError) MessageTone.ERROR else MessageTone.NEUTRAL,
+    )
 }
 
 @Composable
 private fun CleanupWarningCard(onDismiss: () -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer,
-        ),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = stringResource(R.string.cleanup_incomplete),
-                color = MaterialTheme.colorScheme.onErrorContainer,
-                style = MaterialTheme.typography.bodyMedium,
+    // Files the app could not remove from a folder the user chose. It outlives
+    // every screen and is dismissed explicitly, so it is a card with its own
+    // action rather than a line of status.
+    SectionCard(tone = CardTone.ERROR) {
+        Text(
+            text = stringResource(R.string.cleanup_incomplete),
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TertiaryAction(
+                label = stringResource(R.string.cleanup_dismiss),
+                onClick = onDismiss,
             )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss, modifier = Modifier.height(48.dp)) {
-                    Text(stringResource(R.string.cleanup_dismiss))
-                }
-            }
         }
     }
 }
@@ -1348,30 +1383,25 @@ private fun shareSkippedText(reason: ShareItemRefusal): Int = when (reason) {
  */
 @Composable
 private fun StagedShareBanner(staged: IngressHost.Staged, onOpen: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                text = when (staged.kind) {
-                    IngressHost.Staged.Kind.TEXT -> stringResource(R.string.share_banner_text)
-                    IngressHost.Staged.Kind.FILES -> pluralStringResource(
-                        R.plurals.share_banner_files,
-                        staged.itemCount,
-                        staged.itemCount,
-                    )
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-            )
-            Button(
-                onClick = onOpen,
-                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
-            ) {
-                Text(stringResource(R.string.share_banner_action))
-            }
-        }
+    // ATTENTION: something is being held for the user and is waiting on them.
+    SectionCard(tone = CardTone.ATTENTION) {
+        Text(
+            text = when (staged.kind) {
+                IngressHost.Staged.Kind.TEXT -> stringResource(R.string.share_banner_text)
+                IngressHost.Staged.Kind.FILES -> pluralStringResource(
+                    R.plurals.share_banner_files,
+                    staged.itemCount,
+                    staged.itemCount,
+                )
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        )
+        PrimaryAction(
+            label = stringResource(R.string.share_banner_action),
+            onClick = onOpen,
+        )
     }
 }
 
@@ -1412,16 +1442,10 @@ private fun ShareSurface(
     val signedIn = account is AccountState.Ready
     val connected = state.phase == TransferController.Phase.CONNECTED
 
-    Text(
-        text = stringResource(R.string.share_title),
-        style = MaterialTheme.typography.headlineSmall,
-    )
+    ScreenHeader(title = stringResource(R.string.share_title))
 
-    Card {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+    SectionCard {
+        run {
             when (staged.kind) {
                 IngressHost.Staged.Kind.TEXT -> {
                     Text(
@@ -1527,12 +1551,12 @@ private fun ShareSurface(
             unavailable = stringResource(R.string.share_needs_account),
             onClick = {},
         )
-        OutlinedButton(
+        // The one thing that can actually be done from here while signed out,
+        // so it is the one prominent control on the surface.
+        PrimaryAction(
+            label = stringResource(R.string.share_sign_in),
             onClick = onOpenAccount,
-            modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
-        ) {
-            Text(stringResource(R.string.share_sign_in))
-        }
+        )
     } else {
         val targets = if (staged.kind == IngressHost.Staged.Kind.TEXT) {
             // Only devices that announced they can PRESENT a message. Writing a
@@ -1577,9 +1601,10 @@ private fun ShareSurface(
     // Cancelling RELEASES the grants rather than merely hiding the screen: a
     // share nobody will dispatch is a claim on somebody's document that this
     // app should not keep.
-    TextButton(onClick = { viewModel.cancelStagedShare(); onDismiss() }) {
-        Text(stringResource(R.string.share_discard))
-    }
+    TertiaryAction(
+        label = stringResource(R.string.share_discard),
+        onClick = { viewModel.cancelStagedShare(); onDismiss() },
+    )
 }
 
 /**
@@ -1596,13 +1621,11 @@ private fun DestinationButton(
     unavailable: String?,
     onClick: () -> Unit,
 ) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
-    ) {
-        Text(label)
-    }
+    // A list of peers, not a primary among alternatives: these are the places
+    // the share can go and no one of them is the app's recommendation, so they
+    // are all drawn at the same weight. Filling every one of them was how this
+    // surface ended up with four competing prominent buttons.
+    SecondaryAction(label = label, onClick = onClick, enabled = enabled)
     unavailable?.let {
         Text(
             text = it,

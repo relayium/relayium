@@ -440,6 +440,84 @@ anything exported. It exists because 0.1.1 is the first build with an updater �
 without it, the "an update is available" branch could not be exercised on a
 device until something newer was already public.
 
+## UI and motion
+
+`app/src/main/kotlin/com/relayium/android/ui/Design.kt` holds the whole visual
+and motion vocabulary; `Theme.kt` holds the colour roles it resolves through.
+A new screen composes `ScreenHeader`, `SectionCard`, `PrimaryAction`,
+`SecondaryAction`, `TertiaryAction` and `InlineMessage` rather than writing out
+its own paddings, heights and containers.
+
+Three rules are load-bearing rather than stylistic:
+
+- **The surfaces are neutral; the violet is not decoration.** Material's
+  purple-seeded defaults tint the page and the cards, which spends the brand
+  colour on the background. The ramp in `Theme.kt` is grey, and the violet is
+  left for the action a screen wants next, the destination you are on, and state
+  that has been reached. `SectionCard` asks for `surfaceContainerLow`, which is
+  given the card value in BOTH schemes — `surfaceContainerLowest` is an end of
+  Material's ramp and inverts between light and dark.
+- **A non-filled control should not take `colorScheme.primary`.** That role is
+  the action FILL: correct behind a white button label, and unreadable as a
+  label, a thin border or a cursor on a dark background — which is what
+  Material's defaults for `TextButton`, `OutlinedButton` and
+  `OutlinedTextFieldDefaults` all use. The shared helpers `SecondaryAction`,
+  `TertiaryAction` and `accentFieldColors()` take `colorScheme.secondary`, the
+  accent TEXT role, and so do the individual controls touched so far. This is
+  the rule for new and edited controls, not a claim that every remaining
+  `TextButton` has been migrated: several still carry the Material default.
+- **Motion never changes which surface owns an action or a piece of state.**
+  Only a layer's opacity and offset, a colour, and an already-reported number
+  animate, all within 150–250ms. A `graphicsLayer` offset does move where a
+  control is drawn and pressed while it runs, so the guarantee is about
+  ownership rather than about pixels: exactly one destination is composed at a
+  time, nothing is inserted into an animating height, and no control outlives
+  the state that justified it. There is deliberately no `animateContentSize`
+  and no `AnimatedVisibility` anywhere — the first clips newly inserted content
+  to an animating height, the second keeps outgoing content composed and
+  clickable after its state is gone, and what gets inserted into these
+  containers is consent prompts, failures and actions. `DestinationEntrance` is
+  entrance-only for the same reason a `Crossfade` is not used: it would keep the
+  previous destination's flow collectors, `LaunchedEffect`s and Disconnect
+  button alive on top of the new one.
+
+`Settings.Global.ANIMATOR_DURATION_SCALE` is observed through a `ContentObserver`
+in `rememberMotionEnabled()` and published as `LocalMotionEnabled`; at zero every
+spec becomes `snap()`. A static `ValueAnimator.areAnimatorsEnabled()` read was
+rejected because it cannot tell Compose the answer changed.
+
+The shared action helpers give their touch target as a content-growing minimum
+— `defaultMinSize` in `Design.kt`, `heightIn(min = …)` where a call site already
+used it — because a fixed `height` is a ceiling as well as a floor and clips
+these labels at font scale 2 on a 320dp screen. A few older controls still pass
+`Modifier.height(48.dp)` or rely on Material's default sizing; prefer a minimum
+when touching one.
+
+### Running the UI acceptance by hand
+
+The owning `scripts/android-host-acceptance.sh` installs with `-g`. A build
+installed by hand does not, so grant the camera before running
+`HostIntegrationTest`, whose scanner case deliberately excludes the permission
+journey:
+
+```sh
+adb shell pm grant com.relayium.android.debug android.permission.CAMERA
+```
+
+`HostIntegrationTest` has 20 methods. It never joins, so it builds its prefill
+link from `viewModel.backendOrigin` rather than `JoinInput.DEFAULT_ORIGIN` — a
+run that overrides the backend to a local address would otherwise see a
+production link as `FOREIGN_ORIGIN`, refuse it correctly, and read as a prefill
+regression. `UiAcceptanceTest` does dispatch a join and therefore keeps its
+strict expected-origin preflight.
+
+`UiAcceptanceTest.submit()` waits for the Connect button to be displayed with a
+box that survives the next layout pass before pressing it once.
+`performTextInput` asks for the keyboard but does not wait for it, so a bare
+`performScrollTo().performClick()` scrolls the pre-IME layout and then injects
+the touch at that stale point after `imePadding` has clipped the button away.
+The retry covers appearance only; the press happens once.
+
 ## Publishing a release
 
 Metadata is derived from the artifact, never written by hand:

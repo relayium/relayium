@@ -451,10 +451,28 @@ class HostIntegrationTest {
 
     @Test
     fun aValidJoinLinkPrefillsAndDoesNotConnect() {
+        // The link is built from the origin THIS BUILD actually resolved, not
+        // from `JoinInput.DEFAULT_ORIGIN`.
+        //
+        // `IngressLinkPolicy` takes its trusted origin from `Backend` —
+        // deliberately, so the policy cannot drift from the origin the app
+        // really talks to — and a run that overrides the backend to a local
+        // address therefore sees a production link as FOREIGN_ORIGIN and
+        // refuses it before anything acts on it. The assertion below then reads
+        // an empty draft and reports a prefill regression that is really a
+        // correct refusal of the wrong fixture.
+        //
+        // No expected-origin preflight here, unlike `UiAcceptanceTest`: that
+        // class DISPATCHES a join and needs the fail-closed guarantee that it
+        // cannot reach production. This one never joins — the assertions below
+        // are precisely that nothing connects — so requiring an override would
+        // only break the owning `android-host-acceptance.sh`, which passes
+        // `relayium.origin` without setting a debug backend.
+        val origin = viewModel.backendOrigin
         deliver(
             Intent(
                 Intent.ACTION_VIEW,
-                android.net.Uri.parse("${com.relayium.protocol.JoinInput.DEFAULT_ORIGIN}/cross-network#c=123456"),
+                android.net.Uri.parse("$origin/cross-network#c=123456"),
             ),
         )
 
@@ -475,6 +493,17 @@ class HostIntegrationTest {
 
     // ── the scanner ─────────────────────────────────────────────────────────
 
+    /**
+     * PRECONDITION: `android.permission.CAMERA` is already granted.
+     *
+     * The owning `scripts/android-host-acceptance.sh` installs with `-g`, which
+     * grants it. A build installed by hand — `adb install -r -t` — does not, and
+     * this class deliberately excludes the permission journey (that is
+     * `ScannerPermissionJourneyTest`), so an ungranted device fails here on a
+     * permission dialog rather than on anything about the scanner. Grant it with
+     * `adb shell pm grant com.relayium.android.debug android.permission.CAMERA`
+     * before running this class outside the owning script.
+     */
     @Test
     fun theScannerOpensOnlyFromItsOwnButton() {
         select(R.string.tab_transfer)

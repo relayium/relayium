@@ -13,6 +13,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -84,10 +85,7 @@ internal fun AccountScreen(viewModel: TransferViewModel) {
     // owns. The explicit retry affordances below are unchanged — they are for a
     // restore that FAILED, which is a different thing from one never started.
 
-    Text(
-        text = stringResource(R.string.account_title),
-        style = MaterialTheme.typography.headlineSmall,
-    )
+    ScreenHeader(title = stringResource(R.string.account_title))
 
     if (note) {
         StatusCard(text = stringResource(R.string.account_signout_note), isError = true)
@@ -112,25 +110,23 @@ internal fun AccountScreen(viewModel: TransferViewModel) {
         is AccountState.PendingDeletion -> PendingDeletionCard(s.purgeAfter, viewModel)
         is AccountState.Ready -> ReadyCards(s, viewModel)
 
-        is AccountState.Unavailable -> Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = stringResource(R.string.account_unavailable),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                StatusCard(text = accountErrorMessage(s.failure), isError = true)
-                Button(
-                    onClick = viewModel.account::refresh,
-                    modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
-                ) {
-                    Text(stringResource(R.string.account_retry))
-                }
-                TextButton(
-                    onClick = viewModel::signOutAccount,
-                    modifier = Modifier.height(48.dp),
-                ) {
-                    Text(stringResource(R.string.account_sign_out))
-                }
+        is AccountState.Unavailable -> SectionCard {
+            Text(
+                text = stringResource(R.string.account_unavailable),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            StatusCard(text = accountErrorMessage(s.failure), isError = true)
+            Button(
+                onClick = viewModel.account::refresh,
+                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
+            ) {
+                Text(stringResource(R.string.account_retry))
+            }
+            TextButton(
+                onClick = viewModel::signOutAccount,
+                modifier = Modifier.height(48.dp),
+            ) {
+                Text(stringResource(R.string.account_sign_out))
             }
         }
 
@@ -138,32 +134,28 @@ internal fun AccountScreen(viewModel: TransferViewModel) {
         // is withheld here on purpose: the account is in an unresolved state,
         // and offering anything but the retry would be acting on a session the
         // user has already asked to end.
-        is AccountState.SignOutFailed -> Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatusCard(text = stringResource(R.string.account_signout_failed), isError = true)
-                Text(
-                    text = accountErrorMessage(s.failure),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Button(
-                    onClick = viewModel.account::retrySignOut,
-                    modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
-                ) {
-                    Text(stringResource(R.string.account_signout_retry))
-                }
+        is AccountState.SignOutFailed -> SectionCard {
+            StatusCard(text = stringResource(R.string.account_signout_failed), isError = true)
+            Text(
+                text = accountErrorMessage(s.failure),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(
+                onClick = viewModel.account::retrySignOut,
+                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
+            ) {
+                Text(stringResource(R.string.account_signout_retry))
             }
         }
 
-        is AccountState.CredentialUnreadable -> Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatusCard(text = stringResource(R.string.account_unreadable), isError = true)
-                Button(
-                    onClick = viewModel.account::discardUnreadableCredential,
-                    modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
-                ) {
-                    Text(stringResource(R.string.account_unreadable_discard))
-                }
+        is AccountState.CredentialUnreadable -> SectionCard {
+            StatusCard(text = stringResource(R.string.account_unreadable), isError = true)
+            Button(
+                onClick = viewModel.account::discardUnreadableCredential,
+                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
+            ) {
+                Text(stringResource(R.string.account_unreadable_discard))
             }
         }
     }
@@ -216,8 +208,8 @@ private fun AccessForm(viewModel: TransferViewModel, rejection: AccountFailure?)
     val browserBusy = browser is BrowserLoginModel.State.Starting ||
         browser is BrowserLoginModel.State.Waiting
 
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    SectionCard {
+        run {
             Text(
                 text = stringResource(
                     if (creating) R.string.account_create_title else R.string.account_signin_title,
@@ -241,6 +233,7 @@ private fun AccessForm(viewModel: TransferViewModel, rejection: AccountFailure?)
                 onValueChange = viewModel.accessDraft::setEmail,
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.account_email_label)) },
+                colors = accentFieldColors(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Email,
@@ -253,6 +246,7 @@ private fun AccessForm(viewModel: TransferViewModel, rejection: AccountFailure?)
                     onValueChange = viewModel.accessDraft::setDisplayName,
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.account_name_label)) },
+                    colors = accentFieldColors(),
                     supportingText = { Text(stringResource(R.string.account_name_optional)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
@@ -263,6 +257,7 @@ private fun AccessForm(viewModel: TransferViewModel, rejection: AccountFailure?)
                 onValueChange = { password = it },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.account_password_label)) },
+                colors = accentFieldColors(),
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(
@@ -284,7 +279,7 @@ private fun AccessForm(viewModel: TransferViewModel, rejection: AccountFailure?)
                     password = ""
                 },
                 enabled = !browserBusy && email.isNotBlank() && password.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
+                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = Metrics.action),
             ) {
                 Text(
                     stringResource(
@@ -300,7 +295,10 @@ private fun AccessForm(viewModel: TransferViewModel, rejection: AccountFailure?)
                     viewModel.account.backToSignIn()
                 },
                 enabled = !browserBusy,
-                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.secondary,
+                ),
+                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = Metrics.touch),
             ) {
                 Text(
                     stringResource(
@@ -326,8 +324,11 @@ private fun AccessForm(viewModel: TransferViewModel, rejection: AccountFailure?)
                 // is no dead end on a device without one.
                 when (val r = recovery) {
                     is RequestState.Sending -> Busy(R.string.account_forgot_sending)
-                    is RequestState.Requested ->
-                        StatusCard(text = stringResource(R.string.account_forgot_sent), isError = false)
+                    is RequestState.Requested -> InlineMessage(
+                        text = stringResource(R.string.account_forgot_sent),
+                        tone = MessageTone.DONE,
+                        announce = true,
+                    )
                     is RequestState.Failed ->
                         StatusCard(text = accountErrorMessage(r.failure), isError = true)
                     is RequestState.Idle -> Unit
@@ -365,8 +366,8 @@ private fun BrowserLoginCard(state: BrowserLoginModel.State, viewModel: Transfer
     val context = LocalContext.current
     var noBrowser by rememberSaveable { mutableStateOf(false) }
 
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    SectionCard {
+        run {
             Text(
                 text = stringResource(R.string.account_browser_title),
                 style = MaterialTheme.typography.titleMedium,
@@ -383,15 +384,13 @@ private fun BrowserLoginCard(state: BrowserLoginModel.State, viewModel: Transfer
                     if (state is BrowserLoginModel.State.Failed) {
                         StatusCard(text = accountErrorMessage(state.failure), isError = true)
                     }
-                    Button(
+                    SecondaryAction(
+                        label = stringResource(R.string.account_browser_action),
                         onClick = {
                             noBrowser = false
                             viewModel.beginBrowserLogin()
                         },
-                        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
-                    ) {
-                        Text(stringResource(R.string.account_browser_action))
-                    }
+                    )
                 }
 
                 is BrowserLoginModel.State.Starting -> Busy(R.string.account_browser_starting)
@@ -408,7 +407,8 @@ private fun BrowserLoginCard(state: BrowserLoginModel.State, viewModel: Transfer
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
-                    Button(
+                    PrimaryAction(
+                        label = stringResource(R.string.account_browser_open),
                         onClick = {
                             val opened = runCatching {
                                 context.startActivity(
@@ -417,10 +417,7 @@ private fun BrowserLoginCard(state: BrowserLoginModel.State, viewModel: Transfer
                             }.isSuccess
                             noBrowser = !opened
                         },
-                        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
-                    ) {
-                        Text(stringResource(R.string.account_browser_open))
-                    }
+                    )
                     if (noBrowser) {
                         Text(
                             text = stringResource(R.string.update_no_browser),
@@ -466,8 +463,8 @@ private fun BrowserLoginCard(state: BrowserLoginModel.State, viewModel: Transfer
 private fun CheckEmailCard(email: String, viewModel: TransferViewModel) {
     val resend by viewModel.account.resend.collectAsStateWithLifecycle()
 
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    SectionCard {
+        run {
             Text(
                 text = stringResource(R.string.account_verify_title),
                 style = MaterialTheme.typography.titleMedium,
@@ -513,8 +510,8 @@ private fun CheckEmailCard(email: String, viewModel: TransferViewModel) {
  */
 @Composable
 private fun PendingDeletionCard(purgeAfter: Long, viewModel: TransferViewModel) {
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    SectionCard {
+        run {
             Text(
                 text = stringResource(R.string.account_frozen_title),
                 style = MaterialTheme.typography.titleMedium,
@@ -543,8 +540,8 @@ private fun ReadyCards(ready: AccountState.Ready, viewModel: TransferViewModel) 
     // the next signed-out screen from opening on the previous session's account.
     LaunchedEffect(ready.user.id) { viewModel.accessDraft.clear() }
 
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    SectionCard {
+        run {
             Text(
                 text = ready.user.email,
                 style = MaterialTheme.typography.titleMedium,
@@ -599,8 +596,8 @@ private fun ReadyCards(ready: AccountState.Ready, viewModel: TransferViewModel) 
  *  offered for sale: this app makes no billing request of any kind. */
 @Composable
 private fun PlanCard(ready: AccountState.Ready) {
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    SectionCard {
+        run {
             Text(
                 text = stringResource(R.string.account_plan_title),
                 style = MaterialTheme.typography.titleMedium,
@@ -660,8 +657,8 @@ private fun DevicesCard(viewModel: TransferViewModel) {
 
     LaunchedEffect(Unit) { viewModel.account.loadDevices() }
 
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    SectionCard {
+        run {
             Text(
                 text = stringResource(R.string.account_devices_title),
                 style = MaterialTheme.typography.titleMedium,
