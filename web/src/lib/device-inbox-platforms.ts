@@ -12,17 +12,33 @@
 // **The rule this file exists to enforce (PRD §12 "一级产品入口"): a platform whose
 // native receiver does not exist gets no native command or button.** A separately
 // shipped CLI/Web alternative may appear only with its limitation in the same
-// section, whatever the native status is. iPhone and Android therefore have no
-// command at all; macOS shows the launchd CLI as the unattended alternative
-// BESIDE its published app, and Windows shows only the verified foreground CLI.
+// section, whatever the native status is. macOS shows the launchd CLI as the
+// unattended alternative BESIDE its published app, and Windows shows only the
+// verified foreground CLI. iPhone has no command because it has no receiver;
+// Android has none because a phone has no shell — see the Android note below,
+// which is a different reason for the same null.
 //
 // The second rule, added 2026-08-28: **an absent native receiver is stated as an
-// absence, never as a plan.** Relayium publishes a native app for macOS only.
-// iOS development is paused. Android now HAS a published app (2026-09-08) but
-// it is a join-only live-transfer client with no account features, so it is
-// still not a Device Inbox receiver — the status below is unchanged and only
-// the REASON the copy gives has changed. There is no Windows app commitment,
-// so nothing here — badge, prose or comment — may describe a future one.
+// absence, never as a plan.** iOS development is paused and there is no Windows
+// app commitment, so nothing here — badge, prose or comment — may describe a
+// future one for either.
+//
+// Android stopped being one of those absences on 2026-09-09. The 0.2.0 public
+// preview really is a Device Inbox receiver: it enrols a key, holds the
+// receiving policy (off / ask / automatic), decrypts deliveries onto the phone
+// and keeps a durable history. So its status is `available` and its section
+// describes a receiver rather than an absence.
+//
+// What Android still has no COMMAND for is why `setup` stays null here. This
+// field is a literal terminal block, and the phone's instruction is a sequence
+// of taps: install the APK, sign in, switch Receiving on. That belongs in the
+// translated `deviceInboxPage.platforms.android.setup` prose, which every
+// section renders, not in a code fence that would imply a shell.
+//
+// And `available` is not a residency claim. It means installable today and
+// honest about what its own section promises — which for Android is foreground
+// receiving only, exactly as Linux desktop is `available` while stopping at
+// logout. There is no foreground service and no background delivery.
 
 import type { IconName } from "./icon-name.js";
 
@@ -192,8 +208,10 @@ relayium inbox resume
 relayium inbox disable    # revoke the inbox and delete its private keys`;
 
 /** The six platform sections, in the order the page renders them: what works
- *  today first, then macOS, then the three platforms Relayium publishes no app
- *  for. */
+ *  today first, then macOS, then Windows and iPhone, which Relayium publishes no
+ *  app for, and last Android — a real receiver since 0.2.0, kept in place rather
+ *  than reordered so an existing deep link into the page still lands where its
+ *  reader left it. */
 export const INBOX_PLATFORMS: readonly InboxPlatform[] = [
   {
     id: "server",
@@ -246,7 +264,11 @@ export const INBOX_PLATFORMS: readonly InboxPlatform[] = [
   },
   {
     id: "android",
-    status: "planned",
+    // A published receiver since the 0.2.0 public preview — see the note at the
+    // top of this file for why that is `available` and why `setup` is still
+    // null. The install instruction is prose because it is a sequence of taps,
+    // not a command, and /apps is where the APK itself is offered.
+    status: "available",
     icon: "robot",
     setup: null,
     setupTitle: null,

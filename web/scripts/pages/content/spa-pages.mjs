@@ -144,7 +144,7 @@ export const cli = {
       },
       {
         title: "Device Inbox",
-        desc: "Another device can be offline. Send from a browser or a native app into a folder on a machine you own. In the CLI this is the RECEIVE side only — there is no CLI command that sends into an inbox; to move files between two of your own servers, use serve with push or sync. Both ends must be signed in to the same account, and receiving stays off until someone at that machine picks a folder and turns it on there. If the machine is offline the encrypted task waits in the queue; until that machine reports it wrote the file to disk, the status says the ciphertext is uploaded, never that it arrived. The content key is sealed to a public key that machine published, so Relayium never sees the plaintext, the file names or the folder structure, and an existing file is never overwritten. There is no official Relayium container image.",
+        desc: "Another device can be offline. Send from a browser or a native app into a folder on a machine you own. In the CLI this is the RECEIVE side only — there is no CLI command that sends into an inbox; to move files between two of your own servers, use serve with push or sync. Both ends must be signed in to the same account, and receiving stays off until someone at that machine turns it on there. If the machine is offline the encrypted task waits in the queue; until that machine reports it wrote the file to disk, the status says the ciphertext is uploaded, never that it arrived. The content key is sealed to a public key that machine published, so Relayium never sees the plaintext, the file names or the folder structure, and an existing file is never overwritten. There is no official Relayium container image.",
       },
       {
         title: "text",
@@ -265,8 +265,8 @@ export const deviceInbox = {
         desc: "Relayium publishes no iPhone or iPad app, so there is nothing to install here. What works today: an iPhone signs in to relayium.com in Safari and sends from this page to a Mac, PC or server of yours that has Device Inbox switched on. iPhone is a sender here and not a receiver, so nothing is delivered onto the phone.",
       },
       {
-        title: "Android — no inbox receiver",
-        desc: "Relayium publishes no Android Device Inbox receiver. There IS an Android app now — a direct-APK preview — but it is a join-only live-transfer client with no account features and no resident session, so it is not a Device Inbox receiver and there is nothing to install here. Today an Android phone signs in in its mobile browser and sends from this page to any device of yours that has Device Inbox switched on. Android is a sender here and not a receiver, so nothing is delivered onto the phone.",
+        title: "Android — available now",
+        desc: "The Android app receives too, since the 0.2.0 public preview: install the APK from the Apps page, sign in to the same account, open the Inbox screen and set Receiving to Ask or Automatic. It is off until you turn it on, and it receives on whichever screen you are on — but only while the app is open, because there is no foreground service and no background delivery. Deliveries land inside Relayium's own storage on the phone rather than a folder you pick; from the Inbox screen an entry can be opened, shared, or saved out to your own location. Clearing the app's data or uninstalling it deletes those copies. A phone can still be a sender instead: sign in at relayium.com in its browser and send from this page.",
       },
     ],
   },
@@ -275,7 +275,7 @@ export const deviceInbox = {
     items: [
       {
         title: "An account on both ends, and receiving switched on at the device",
-        body: "Device Inbox is the one part of Relayium that writes to your own disk, so it is tied to an account rather than to a link anyone could hold. A device only accepts work from the account it is signed in to, and receiving stays off until someone with access to that machine picks a folder and turns it on there. If the device is asleep or offline you can still send: the encrypted task waits in the queue and is delivered when it comes back.",
+        body: "Device Inbox is the one part of Relayium that writes to your own disk, so it is tied to an account rather than to a link anyone could hold. A device only accepts work from the account it is signed in to, and receiving stays off until someone with access to that machine turns it on there, choosing where deliveries land on the platforms that offer that choice. If the device is asleep or offline you can still send: the encrypted task waits in the queue and is delivered when it comes back.",
       },
       {
         title: "A share link is a different permission",

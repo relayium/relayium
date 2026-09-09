@@ -3,14 +3,14 @@
   "android": {
     "available": true,
     "applicationId": "com.relayium.android",
-    "versionCode": 2,
-    "versionName": "0.1.1",
-    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.1.1/Relayium-0.1.1-2.apk",
-    "sha256": "a69e621a23a5d0a021e075b3f3b75083e57c5a363acfac3f0c1c76bd7c1c2e16",
-    "size": 41212796,
+    "versionCode": 3,
+    "versionName": "0.2.0",
+    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.2.0/Relayium-0.2.0-3.apk",
+    "sha256": "333c66b43d64606ddfea49d79fd01e43ec6ffc49b665981cd40cfeb46cee7923",
+    "size": 45865546,
     "notes": {
-      "en": "Adds manual update checking from the join screen and browser-based APK downloads. Public preview: join an existing transfer and keep the app open. No account features, Device Inbox or nearby discovery.",
-      "zh": "新增首页手动检查更新，可通过浏览器下载新版 APK。公开预览版：加入已有传输，传输时请保持应用打开。暂不支持账号功能、设备收件箱和附近发现。"
+      "en": "Public preview 0.2.0. Five destinations: Transfer, Nearby, Inbox, Cloud and Account. The app can now create a pairing code or link as well as join one, find devices on the same network with no code, receive Device Inbox deliveries and read their full history, send and open encrypted cloud links, and start a transfer from the Android share sheet or a scanned QR code. Sign in with email and password, or approve a sign-in in the browser. Everything runs while the app is open: there is no background transfer and no resident session. Direct APK only, not on Google Play, and it contains no Play Services and no Play Billing.",
+      "zh": "公开预览版 0.2.0。五个页面：传输、附近、收件箱、云端与账户。除了加入传输，现在也能自己生成配对码或链接；可以在同一网络内免配对码发现设备；可以接收设备收件箱的投递并查看完整历史；可以发送和打开加密的云端链接；还能从 Android 分享菜单或扫描二维码发起传输。支持邮箱密码登录，也支持在浏览器中确认登录。所有功能都只在应用打开时运行：没有后台传输，也没有常驻会话。仅以 APK 直接分发，不在 Google Play 上架，不含 Play 服务与 Play 结算。"
     }
   }
 }

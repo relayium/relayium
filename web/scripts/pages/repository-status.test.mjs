@@ -63,10 +63,26 @@ describe("public repository status", () => {
     // Android moved OUT of that row into one of its own when the APK was
     // published; it must have a row, and that row must carry the preview's
     // real limits rather than reading as a full client.
+    //
+    // Rewritten 2026-09-09 for 0.2.0. This used to require `no Device Inbox`,
+    // which was true of 0.1.1 and is now the opposite of the product: the
+    // Android client enrols a key, holds a receiving policy and keeps a durable
+    // history. The limit that IS still real is residency, so that is what the
+    // row must carry — and the stale denial is asserted ABSENT, because a row
+    // that kept it would be actively wrong rather than merely out of date.
     const androidRow = statusRows.Android ?? "";
     expect(androidRow, "Android has no delivery-status row").toContain("APK");
     expect(androidRow).toMatch(/no Google Play/i);
-    expect(androidRow).toMatch(/no Device Inbox/i);
+    expect(androidRow, "the row still denies the Device Inbox 0.2.0 ships")
+      .not.toMatch(/no Device Inbox|not a Device Inbox receiver/i);
+    expect(androidRow, "the row does not state the foreground-only limit")
+      .toMatch(/foreground only/i);
+    // And it must not describe macOS's receive-folder model. Android commits
+    // into app-private, account-scoped storage (InboxContainer.kt): there is no
+    // folder to pick and none to reconnect, so copy borrowed from the Mac
+    // receiver would send a reader looking for a control that does not exist.
+    expect(androidRow, "the row claims a user-chosen receive folder Android has no such thing")
+      .not.toMatch(/receive folder|folder you (?:pick|chose|choose)|choose a folder/i);
     expect(browserRow).toMatch(/publishes no app for these platforms/i);
     // Distribution truth, matched by shape rather than by one exact sentence, so
     // it survives an ordinary rewrite of the surrounding prose.

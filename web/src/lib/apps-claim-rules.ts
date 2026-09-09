@@ -182,36 +182,63 @@ export const FORBIDDEN_APP_CLAIMS: ClaimRule[] = [
     ],
   },
   {
-    // Added 2026-09-08 alongside the Android card. The previous rule stopped
-    // banning the WORDS "Android app" because there is one — which means the
-    // page can now say true things about it, and could just as easily say
-    // untrue ones. This rule bans the specific overclaims the client cannot
-    // support: it joins transfers rather than starting them, it has no account
-    // features, no Device Inbox, no nearby discovery and no share-sheet entry.
+    // Added 2026-09-08 alongside the Android card, REWRITTEN 2026-09-09 for the
+    // 0.2.0 public preview.
     //
-    // These are not hypothetical. Every one of them is a capability the macOS
-    // app genuinely has, so the nearest available copy to reuse describes a
-    // product this APK is not.
-    // Lookaround rather than a spanning match, deliberately. `insideDenial`
-    // judges whether a negator precedes the MATCH POSITION, so a pattern that
-    // started at "Android" and ran forward to "Device Inbox" would put the
-    // match before the "no" in "the Android app has no Device Inbox" — and the
-    // rule would reject the very sentence that tells the truth. Anchoring on
-    // the claim word keeps the denial sayable.
-    why: "the Android preview joins transfers and has no account, inbox, nearby or share-sheet features",
-    re: /(?<=\bAndroid\b[^.。]{0,40})(?:Device Inbox|share[- ]sheet|nearby devices?|account features?)\b|(?:Device Inbox|share[- ]sheet|nearby devices?)\b(?=[^.。]{0,40}\bAndroid\b)|(?<=Android[^。，；]{0,20})(?:设备收件箱|分享菜单|附近设备)|(?:设备收件箱|分享菜单|附近设备)(?=[^。，；]{0,20}Android)/i,
+    // The rule this replaces banned "Device Inbox", "share sheet", "nearby
+    // devices" and "account features" near the word Android, because the 0.1.1
+    // preview was a join-only client that had none of them. 0.2.0 has all four:
+    // five destinations (Transfer, Nearby, Inbox, Cloud, Account), an
+    // ACTION_SEND share target and a QR entry point. Keeping the old rule would
+    // have forbidden the page from describing the product it now ships — and
+    // worse, its `permitted` list asserted the FALSE denials had to stay
+    // sayable, which would have pinned the stale copy in place.
+    //
+    // What is still not true is the residency axis, and that is what this rule
+    // now guards. Every one of those features is FOREGROUND ONLY: there is no
+    // foreground service, no resident session and no background delivery, so
+    // when Android stops the process the transfer stops with it. A large cloud
+    // upload's spool survives and can be OFFERED for continuation on the next
+    // launch; nothing continues on its own.
+    //
+    // The second half is provenance. Everything is proved on the AOSP 36
+    // emulator against the real Go backend and the real Apple host modules —
+    // real execution, but not a physical phone and not an iPhone. An emulator
+    // result is not a device certification and the page must not imply one.
+    //
+    // Note what did NOT move. "Background transfer" is still banned by its own
+    // rule above and applies to Android exactly as written; Google Play, Play
+    // Billing and store listings are still banned by the store rule, because
+    // shipping an APK from GitHub is not a listing; and the app makes no
+    // checkout, subscription or plan-change request of any kind.
+    //
+    // Lookaround rather than a spanning match, for the same reason as before:
+    // `insideDenial` judges the negator against the MATCH POSITION, so a
+    // pattern starting at "Android" and running forward to "resident session"
+    // would put the match before the "no" in "the Android app has no resident
+    // session" — and the rule would reject the sentence that tells the truth.
+    why: "the Android preview is foreground-only and no physical-device certification is claimed for it",
+    re: /(?<=\bAndroid\b[^.。]{0,40})(?:resident session|always[- ]on|background service|foreground service|receives? while closed|device[- ]certified)\b|(?:resident session|always[- ]on|background service|foreground service|receives? while closed|device[- ]certified)\b(?=[^.。]{0,40}\bAndroid\b)|(?<=Android[^。，；]{0,20})(?:常驻会话|始终在线|后台服务|前台服务|真机认证)|(?:常驻会话|始终在线|后台服务|前台服务|真机认证)(?=[^。，；]{0,20}Android)/i,
     probes: [
-      "Android supports Device Inbox",
-      "Send from the share sheet on Android",
-      "Android finds nearby devices",
-      "Android 支持设备收件箱",
-      "在 Android 上从分享菜单发送",
+      "Android keeps a resident session",
+      "the Android app is always-on",
+      "Android runs a foreground service",
+      "Android is device-certified",
+      "Android 应用有常驻会话",
+      "Android 始终在线",
+      "Android 已通过真机认证",
     ],
     permitted: [
-      // The accurate denials, which the page must be able to state plainly.
-      "The Android app has no Device Inbox, no account features and no nearby discovery.",
-      "Android 应用没有设备收件箱、账户功能，也没有附近设备发现。",
-      "Relayium publishes no Android receiver for Device Inbox.",
+      // The accurate statements of the limit, which the page must be able to
+      // make plainly in both maintained languages.
+      "The Android app has no resident session and is not always-on.",
+      "Android 应用没有常驻会话，也没有始终在线的接收端。",
+      "Android has no foreground service, so leaving the app ends the transfer.",
+      "Android 没有前台服务，离开应用就会结束传输。",
+      // Naming the shipped 0.2.0 features is a fact, not an overclaim. These are
+      // exactly the strings the old rule rejected.
+      "On Android, Device Inbox receiving, nearby discovery, the share sheet and account sign-in all work while the app is open.",
+      "在 Android 上，设备收件箱接收、附近设备发现、分享菜单与账户登录都在应用打开时可用。",
     ],
   },
 ];

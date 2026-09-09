@@ -58,8 +58,8 @@ const en = {
         ? "macOS app — download the signed and notarized native menu-bar app."
         : "macOS app — the native menu-bar app is an engineering build and is not publicly available yet.",
       ANDROID_AVAILABLE
-        ? `Android app — download the ${ANDROID.versionName} preview APK directly. It joins a live transfer another device started; there is no Google Play listing.`
-        : "Android app — a direct-APK preview that joins a live transfer another device started. It is not publicly downloadable yet.",
+        ? `Android app — download the ${ANDROID.versionName} preview APK directly: pairing transfers either direction, nearby devices with no code, Device Inbox, encrypted links and an account. There is no Google Play listing.`
+        : "Android app — a direct-APK preview with pairing transfers, nearby devices, Device Inbox, encrypted links and an account. It is not publicly downloadable yet.",
       "Everywhere else — iPhone, iPad, Windows and Linux run the web app in the browser with nothing to install; Windows and Linux can also install the command line.",
     ],
   },
@@ -86,8 +86,8 @@ const en = {
         // store listing where a reader could otherwise find them. Same set the
         // runtime card carries, kept in step with it deliberately.
         desc: ANDROID_AVAILABLE
-          ? `A direct-APK public preview (${ANDROID.versionName}). Android 8.0 or newer, arm64 or x86_64. It joins a live transfer another device started — it cannot create a pairing code or a link yet — and then sends and receives files and messages on that connection. Transfers run while the app is open: there is no background transfer and no resident session. No account features, no Device Inbox, no nearby discovery and no share-sheet entry point. Not on Google Play, and it contains no Play Services. Check for updates from the app's own join screen; Relayium does not download or install anything itself.`
-          : "A direct-APK public preview: Android 8.0 or newer, arm64 or x86_64. It joins a live transfer another device started — it cannot create one — and runs only while the app is open, with no account features, no Device Inbox, no nearby discovery and no share-sheet entry point. Not on Google Play. It is not publicly downloadable yet.",
+          ? `A direct-APK public preview (${ANDROID.versionName}). Android 8.0 or newer, arm64 or x86_64. Five screens — Transfer, Nearby, Inbox, Cloud and Account: it starts a pairing transfer as well as joining one, reaches a device on the same network with no code, receives what your own devices send you and keeps that history, sends and opens encrypted links, and can be entered from the system share sheet or a scanned QR code. It runs while the app is open: there is no background delivery and no resident session. For large encrypted uploads, progress is saved on the phone and the next launch can offer to continue one, though nothing continues on its own. Received files and messages live inside Relayium on the phone: clearing the app's data or uninstalling it deletes those copies, and saving a copy somewhere else is an explicit action. Not on Google Play, and it contains no Play Services and no Play Billing. Check for updates from the app's own Transfer screen; Relayium does not download or install anything itself.`
+          : "A direct-APK public preview: Android 8.0 or newer, arm64 or x86_64. Five screens — Transfer, Nearby, Inbox, Cloud and Account — covering pairing transfers either direction, nearby devices with no code, Device Inbox with its history, encrypted links and an account. It runs while the app is open, with no background delivery and no resident session. Not on Google Play. It is not publicly downloadable yet.",
       },
       {
         title: "Every other platform",
@@ -122,7 +122,7 @@ const en = {
       },
       {
         title: "On every other platform, the browser is the app",
-        body: "iPhone, iPad, Windows and Linux all open relayium.com and get the same end-to-end encrypted transfer, with nothing to install and nothing to update. On Windows and Linux the command line adds scripting, folder sync and scheduled backups. Relayium publishes no client for those platforms, so the web app is not a fallback there — it is the product. On Android the browser works the same way, and there is additionally a direct-APK preview that joins a transfer another device started.",
+        body: "iPhone, iPad, Windows and Linux all open relayium.com and get the same end-to-end encrypted transfer, with nothing to install and nothing to update. On Windows and Linux the command line adds scripting, folder sync and scheduled backups. Relayium publishes no client for those platforms, so the web app is not a fallback there — it is the product. On Android the browser works the same way, and there is additionally a direct-APK preview that does the whole job natively — pairing transfers either direction, nearby devices, Device Inbox and encrypted links — while the app is open.",
       },
     ],
   },
@@ -148,8 +148,8 @@ const zh = {
         ? "macOS 应用——下载已经签名并通过公证的原生菜单栏应用。"
         : "macOS 应用——原生菜单栏应用目前是工程版本，尚未开放公开下载。",
       ANDROID_AVAILABLE
-        ? `Android 应用——直接下载 ${ANDROID.versionName} 预览版 APK，加入另一台设备发起的实时传输；没有 Google Play 上架。`
-        : "Android 应用——以 APK 直接分发的预览版，加入另一台设备发起的实时传输，目前尚未开放公开下载。",
+        ? `Android 应用——直接下载 ${ANDROID.versionName} 预览版 APK：配对传输双向可用、免配对码连接同网络设备、设备收件箱、加密链接与账户功能。不在 Google Play 上架。`
+        : "Android 应用——以 APK 直接分发的预览版，支持配对传输、附近设备、设备收件箱、加密链接与账户功能，目前尚未开放公开下载。",
       "其他平台——iPhone、iPad、Windows 与 Linux 都用浏览器打开网页版，无需安装；Windows 与 Linux 还可以另外装命令行工具。",
     ],
   },
@@ -173,8 +173,8 @@ const zh = {
       {
         title: "Android 应用",
         desc: ANDROID_AVAILABLE
-          ? `以 APK 直接分发的预览版（${ANDROID.versionName}）。需要 Android 8.0 及以上，arm64 或 x86_64。它加入另一台设备发起的实时传输——目前还不能自己生成配对码或链接——连接后双向收发文件与消息。传输只在应用打开时进行：没有后台传输，也没有常驻会话。没有账户功能、设备收件箱、附近设备发现，也没有分享菜单入口。不在 Google Play 上架，不含 Play 服务。可在应用的连接页面手动检查更新；Relayium 自身不会下载或安装任何内容。`
-          : "以 APK 直接分发的预览版：需要 Android 8.0 及以上，arm64 或 x86_64。它只能加入另一台设备发起的实时传输，且只在应用打开时进行，没有账户功能、设备收件箱、附近设备发现与分享菜单入口。不在 Google Play 上架。目前尚未开放公开下载。",
+          ? `以 APK 直接分发的预览版（${ANDROID.versionName}）。需要 Android 8.0 及以上，arm64 或 x86_64。五个页面——传输、附近、收件箱、云端与账户：既能加入传输，也能自己发起配对；可以免配对码连上同一网络内的设备；可以接收自己其他设备发来的内容并保留历史；可以发送和打开加密链接；还能从系统分享菜单或扫描二维码进入。只在应用打开时运行：没有后台投递，也没有常驻会话。大文件加密上传的进度会保留在手机上，下次启动时可以选择继续，但它不会自行继续。收到的文件与消息保存在手机上 Relayium 的应用内部：清除应用数据或卸载应用会删除这些副本，要另存到别处需要你显式操作。不在 Google Play 上架，不含 Play 服务与 Play 结算。可在应用的「传输」页面手动检查更新；Relayium 自身不会下载或安装任何内容。`
+          : "以 APK 直接分发的预览版：需要 Android 8.0 及以上，arm64 或 x86_64。五个页面——传输、附近、收件箱、云端与账户——涵盖双向配对传输、免配对码的附近设备、带历史的设备收件箱、加密链接与账户功能。只在应用打开时运行，没有后台投递，也没有常驻会话。不在 Google Play 上架。目前尚未开放公开下载。",
       },
       {
         title: "其他所有平台",
@@ -198,7 +198,7 @@ const zh = {
       },
       {
         title: "在其他平台上，浏览器就是那个应用",
-        body: "iPhone、iPad、Windows 与 Linux 打开 relayium.com，得到的就是同一套端到端加密传输，不用安装，也不用更新。在 Windows 与 Linux 上，命令行工具还能做脚本化传输、文件夹同步与定时备份。Relayium 没有为这些平台发布客户端，所以在那里网页版不是退而求其次的方案——它就是产品本身。在 Android 上浏览器同样如此，另外还有一个以 APK 直接分发的预览版，用来加入另一台设备发起的传输。",
+        body: "iPhone、iPad、Windows 与 Linux 打开 relayium.com，得到的就是同一套端到端加密传输，不用安装，也不用更新。在 Windows 与 Linux 上，命令行工具还能做脚本化传输、文件夹同步与定时备份。Relayium 没有为这些平台发布客户端，所以在那里网页版不是退而求其次的方案——它就是产品本身。在 Android 上浏览器同样如此，另外还有一个以 APK 直接分发的预览版，在应用打开时原生完成整套工作——双向配对传输、附近设备、设备收件箱与加密链接。",
       },
     ],
   },

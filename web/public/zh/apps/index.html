@@ -85,7 +85,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <p class="pitch">同一套端到端加密的传输，既传文件也发临时文本，随处可用。选择你的平台。</p>
       <a class="cta" href="/apps?lang=zh">打开网页版</a>
       <a class="cta" href="https://github.com/relayium/relayium/releases/download/macos-v1.3.10/Relayium.dmg">下载 macOS 版</a>
-      <a class="cta" href="https://github.com/relayium/relayium/releases/download/android-v0.1.1/Relayium-0.1.1-2.apk">下载 Android 0.1.1（APK）</a>
+      <a class="cta" href="https://github.com/relayium/relayium/releases/download/android-v0.2.0/Relayium-0.2.0-3.apk">下载 Android 0.2.0（APK）</a>
 
       <section class="reveal">
       <h2>该用哪一个？</h2>
@@ -93,7 +93,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
         <li>网页版——零安装，任意操作系统的现代浏览器打开即用，传文件也传临时文本。</li>
         <li>命令行——可脚本化的文件传输、文件夹同步、服务器备份与临时文本，支持 macOS、Linux 与 Windows。</li>
         <li>macOS 应用——下载已经签名并通过公证的原生菜单栏应用。</li>
-        <li>Android 应用——直接下载 0.1.1 预览版 APK，加入另一台设备发起的实时传输；没有 Google Play 上架。</li>
+        <li>Android 应用——直接下载 0.2.0 预览版 APK：配对传输双向可用、免配对码连接同网络设备、设备收件箱、加密链接与账户功能。不在 Google Play 上架。</li>
         <li>其他平台——iPhone、iPad、Windows 与 Linux 都用浏览器打开网页版，无需安装；Windows 与 Linux 还可以另外装命令行工具。</li>
       </ol>
       </section>
@@ -104,7 +104,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
         <li><b>网页版</b> — 无需安装。在任意系统的现代浏览器中打开，即可传文件，也能发临时文本。</li>
         <li><b>命令行</b> — 可脚本化的文件传输、文件夹同步、服务器间备份与临时文本，支持 macOS、Linux 与 Windows。</li>
         <li><b>macOS 应用</b> — 真正的原生菜单栏应用（com.relayium.mac）：与附近设备或用配对码互传文件和文本、收发加密链接、管理账号与设备。现已提供经过签名和公证的下载版本，也可从 Mac App Store 获取。</li>
-        <li><b>Android 应用</b> — 以 APK 直接分发的预览版（0.1.1）。需要 Android 8.0 及以上，arm64 或 x86_64。它加入另一台设备发起的实时传输——目前还不能自己生成配对码或链接——连接后双向收发文件与消息。传输只在应用打开时进行：没有后台传输，也没有常驻会话。没有账户功能、设备收件箱、附近设备发现，也没有分享菜单入口。不在 Google Play 上架，不含 Play 服务。可在应用的连接页面手动检查更新；Relayium 自身不会下载或安装任何内容。</li>
+        <li><b>Android 应用</b> — 以 APK 直接分发的预览版（0.2.0）。需要 Android 8.0 及以上，arm64 或 x86_64。五个页面——传输、附近、收件箱、云端与账户：既能加入传输，也能自己发起配对；可以免配对码连上同一网络内的设备；可以接收自己其他设备发来的内容并保留历史；可以发送和打开加密链接；还能从系统分享菜单或扫描二维码进入。只在应用打开时运行：没有后台投递，也没有常驻会话。大文件加密上传的进度会保留在手机上，下次启动时可以选择继续，但它不会自行继续。收到的文件与消息保存在手机上 Relayium 的应用内部：清除应用数据或卸载应用会删除这些副本，要另存到别处需要你显式操作。不在 Google Play 上架，不含 Play 服务与 Play 结算。可在应用的「传输」页面手动检查更新；Relayium 自身不会下载或安装任何内容。</li>
         <li><b>其他所有平台</b> — iPhone、iPad、Windows 与 Linux 都通过浏览器使用 Relayium——同一套端到端加密传输，无需安装。在 Windows 与 Linux 上，命令行工具还能做脚本化传输、文件夹同步与定时备份。Relayium 没有为这些平台发布任何客户端程序。</li>
       </ul>
       </section>
@@ -117,7 +117,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <h3>装上 macOS 应用</h3>
       <p>它常驻菜单栏，点一下就用，不必再去找某个窗口或某个标签页。你可以在访达、照片等应用里用「分享」菜单直接发送——文件、图片和视频都能交给 Relayium；也可以在访达里用「打开方式」，或者把文件和文件夹拖到程序坞图标上，就地开始传输。relayium.com 的传输链接会直接在应用里打开，而不是回到浏览器。用设备收件箱接收时，从你自己账户发到这台 Mac 的文件会写进你在这台机器上选定的文件夹，而且只有真正落盘之后才会报告为「已保存」。</p>
       <h3>在其他平台上，浏览器就是那个应用</h3>
-      <p>iPhone、iPad、Windows 与 Linux 打开 relayium.com，得到的就是同一套端到端加密传输，不用安装，也不用更新。在 Windows 与 Linux 上，命令行工具还能做脚本化传输、文件夹同步与定时备份。Relayium 没有为这些平台发布客户端，所以在那里网页版不是退而求其次的方案——它就是产品本身。在 Android 上浏览器同样如此，另外还有一个以 APK 直接分发的预览版，用来加入另一台设备发起的传输。</p>
+      <p>iPhone、iPad、Windows 与 Linux 打开 relayium.com，得到的就是同一套端到端加密传输，不用安装，也不用更新。在 Windows 与 Linux 上，命令行工具还能做脚本化传输、文件夹同步与定时备份。Relayium 没有为这些平台发布客户端，所以在那里网页版不是退而求其次的方案——它就是产品本身。在 Android 上浏览器同样如此，另外还有一个以 APK 直接分发的预览版，在应用打开时原生完成整套工作——双向配对传输、附近设备、设备收件箱与加密链接。</p>
       </div>
       </section>
 

@@ -554,16 +554,16 @@ const en: Messages = {
       },
       android: {
         name: "Android app",
-        desc: "A public preview, distributed as a direct APK. It joins a live transfer that another device started, then sends and receives files and messages on that connection.",
+        desc: "A public preview, distributed as a direct APK. Five screens — Transfer, Nearby, Inbox, Cloud and Account: start a pairing transfer or join one, reach a device on the same network with no code at all, receive what your own devices send you, and send or open an encrypted link.",
         cta: (version) => `Download ${version} for Android`,
-        requirements: "Android 8.0 or newer · arm64 or x86_64 · about 40 MB",
+        requirements: "Android 8.0 or newer · arm64 or x86_64 · about 46 MB",
         limitations: [
-          "It joins transfers; it cannot create a pairing code or a link yet — start one on your other device.",
-          "Transfers run while the app is open. There is no background transfer and no resident session.",
-          "No account features, no Device Inbox, no nearby discovery and no share-sheet entry point.",
+          "It runs while the app is open. There is no background delivery and no resident session.",
+          "For large encrypted uploads, progress is saved on the phone, so the next launch can offer to continue one. Nothing continues on its own.",
+          "Received files and messages live inside Relayium on the phone. Clearing the app's data or uninstalling it deletes those copies; saving a copy somewhere else is an explicit action.",
           "Not on Google Play. It contains no Play Services and no Play Billing.",
         ],
-        installNote: "Direct APK. Android asks you to confirm the install. Later versions are found with Check for updates on the app's own join screen.",
+        installNote: "Direct APK. Android asks you to confirm the install. Later versions are found with Check for updates on the app's own Transfer screen.",
       },
     },
     chooser: {
@@ -622,7 +622,7 @@ const en: Messages = {
     prereqSameAccount:
       "The same account on both ends. A device only accepts work from the account it is signed in to; there is no way to make someone else's device receive from you.",
     prereqEnable:
-      "Receiving switched on at the device itself. It is off until someone with access to that machine picks a folder and turns it on there — that choice cannot be made for it from the web.",
+      "Receiving switched on at the device itself. It is off until someone with access to that machine turns it on there, choosing where deliveries land on the platforms that offer that choice — and that opt-in cannot be made for it from the web.",
     prereqOffline:
       "Nothing else. If the device is asleep, offline or mid-reboot you can still send: the encrypted task waits in the queue and is delivered when the device comes back.",
     linkBoundaryH3: "A share link is a different permission",
@@ -744,15 +744,16 @@ const en: Messages = {
       },
       android: {
         name: "Android",
-        use: "The same idea as iPhone: get something off the phone and onto a machine you own, in one step.",
+        use: "Both directions on the phone: send something off it in one step, and receive what your other devices send you.",
         setup:
-          "The Android app is a join-only live-transfer client with no account features, so it is not a Device Inbox receiver and there is nothing to install here. Today: open Relayium in your mobile browser, sign in, and send from this page to any device of yours that has Device Inbox switched on.",
-        files: "Not applicable: Android is a sender here and not a Device Inbox receiver, so nothing is delivered onto the phone.",
+          "There is no command to run on a phone. Install the Android app from the Get Relayium page, sign in to your account, open the Inbox screen and switch Receiving to Ask or Automatic. Receiving is off until you turn it on, and it runs only while the app is open — Relayium receives on whichever screen you are on, and it does not deliver in the background.",
+        files: "Deliveries are decrypted and saved inside Relayium's own storage on the phone rather than a folder you choose. From the Inbox screen an entry can be opened, shared, or saved out to your own location, and the history is rebuilt from durable records so it is still there after a restart. Clearing Relayium's data or uninstalling it deletes those copies, and they are never in a cloud backup or a phone-to-phone transfer.",
         residency:
-          "None, because Android receives nothing here. Relayium publishes no Android Device Inbox receiver — the Android app joins a live transfer while it is open and has no resident session — so there is nothing to keep alive and no always-on behaviour is claimed for the phone.",
-        send: "Open this page in your mobile browser and send to any device that has Device Inbox switched on.",
-        recovery: "Not applicable: Android is a sender here, so there is no receive folder or device credential on the phone to repair.",
-        stop: "Not applicable: nothing is enrolled on the phone, so there is nothing here to pause, stop or revoke.",
+          "There is none, and the app says so rather than letting you discover it. Android has no foreground service, so receiving stops when the app does — no background delivery, no resident session, and no always-on behaviour is claimed for the phone. Switching off tells the server this device is not receiving, so your other devices stop offering to send to it instead of waiting out a timeout.",
+        send: "Two ways. From the phone, sign in and send from the Inbox screen. Or open this page in any browser and send to any device that has Device Inbox switched on.",
+        recovery:
+          "The Inbox screen reports this device's key health plainly, and a repair is explicit: a new key is published for the phone, and anything already queued to the old key stays sealed to it and cannot be opened here. There is no receive folder to reconnect — but if Relayium cannot write a delivery right now the phone says so, and tells your other devices it is not receiving rather than letting a delivery be promised.",
+        stop: "Set Receiving to Off on the Inbox screen; the server is told this device is not receiving. Signing out revokes this device's credential. To remove the phone's inbox entirely, do it from another signed-in device.",
       },
     },
     macNoDownload:
@@ -834,7 +835,7 @@ const en: Messages = {
         lead: "Send from a browser or a native app into a folder on a machine you own. In the CLI this is the RECEIVE side only — there is no CLI command that sends into an inbox.",
         notes: [
           "To move files between two of your own servers, use serve with push or sync instead. This mode's sender is always the Web app or a native app.",
-          "Both ends must be signed in to the same account, and receiving stays off until someone at that machine picks a folder and turns it on there. No sender, share link or task can perform that local opt-in.",
+          "Both ends must be signed in to the same account, and receiving stays off until someone at that machine turns it on there. No sender, share link or task can perform that local opt-in.",
           "If the machine is offline the encrypted task waits in the queue and is delivered when it comes back. Until that machine reports it wrote the file to disk, the status says the ciphertext is uploaded — never that it arrived.",
           "The content key is sealed to a public key that machine published, so Relayium never sees the plaintext, the file names or the folder structure. An existing file is never overwritten: a name collision gets a safe new name.",
           "The Linux installer is the recommended server path and installs a reboot-persistent systemd service. inbox status reports the folder, credential, worker and server truth. inbox run is only the foreground diagnostic or container entrypoint — it does not fork and writes no pid file. Advanced operators can render systemd-user, systemd-system, launchd or container definitions with inbox service, choosing the account a system-wide unit runs as with --service-user.",

@@ -241,12 +241,23 @@ describe("the six platform sections", () => {
     // type against. It now means "Relayium publishes no native receiver here",
     // and the maintained badge a reader sees says exactly that — asserted on the
     // next line so the id and the visible word cannot drift apart again.
-    for (const id of ["windows", "iphone", "android"]) expect(status(id), id).toBe("planned");
-    for (const id of ["windows", "iphone", "android"]) {
+    //
+    // Android LEFT this set on 2026-09-09: the 0.2.0 preview is a real Device
+    // Inbox receiver, so its badge must read "available now" beside the two
+    // platforms that still publish none. Asserted explicitly rather than by
+    // dropping the id, because a silently missing platform is how the macOS
+    // drift below went unnoticed for weeks.
+    for (const id of ["windows", "iphone"]) expect(status(id), id).toBe("planned");
+    for (const id of ["windows", "iphone"]) {
       const badge = root.querySelector(`[data-platform="${id}"] .badge`)!.textContent!;
       expect(badge, id).toContain(en().statusPlanned);
       expect(badge, `${id} badge still promises a plan`).not.toMatch(/\bplanned\b/i);
     }
+    expect(status("android"), "android").toBe("available");
+    expect(
+      root.querySelector('[data-platform="android"] .badge')!.textContent,
+      "the Android badge still denies a receiver that ships",
+    ).toContain(en().statusAvailable);
   });
 
   // The badge and the download button answer to ONE input, and this is the pair

@@ -3,20 +3,42 @@
 **Status: public preview.** `apps/android/` is the native Android client,
 applicationId `com.relayium.android`, distributed as a direct APK only — no
 Google Play listing, no Play Billing, and no Play Services or GMS dependency of
-any kind. The published build is 0.1.1 (versionCode 2). The source is 0.2.0
-(versionCode 3), which is not published: the update feed still offers 0.1.1, and
-the download surface is unchanged.
+any kind. The published build is 0.2.0 (versionCode 3), and it is the source:
+the update feed, the download surface and this tree describe one build.
 
-The published build is join-only. The source additionally creates cross-network
-links and has a real account surface, LAN/nearby discovery, the Device Inbox, an
-`ACTION_SEND` share target and a QR entry point (see below). Those are proved on
+### Provenance of the 0.2.0 release — read this before auditing the tag
+
+The APK and the metadata that describes it were produced at DIFFERENT commits,
+on purpose, and the release tag names the second one:
+
+* the artifact `Relayium-0.2.0-3.apk`, SHA-256
+  `333c66b43d64606ddfea49d79fd01e43ec6ffc49b665981cd40cfeb46cee7923`,
+  45,865,546 bytes, signing certificate SHA-256
+  `ac867828a511f15e9214498f234d8898bbd56033342edd7e70d8037c20380aad`, was built
+  and signed from **`4f3a024f9453219ed817ae2b7c582729437ff49b`**;
+* `web/android-release.json` and the public copy were written afterwards, in a
+  metadata-and-copy-only commit, and `scripts/publish-android-release.sh`
+  requires `--target` to equal the manifest repository HEAD — so the
+  `android-v0.2.0` tag points at that LATER commit, not at `4f3a024f`.
+
+This is the intended order (build → observe those exact bytes → commit the
+metadata → publish the same file), not a drift: the tag exists to pin the release
+INPUTS, and the artifact's own provenance is the commit above. An auditor
+comparing the tagged tree against the APK must compile `4f3a024f`, and the
+difference between the two commits is metadata and public copy only, containing
+no `apps/android/` source change.
+
+The 0.2.0 feature set — cross-network links in both directions, a real account
+surface, LAN/nearby discovery, the Device Inbox, an `ACTION_SEND` share target
+and a QR entry point (see below) — is proved on
 the AOSP 36 emulator — the UI, the system services, SAF and `DocumentsUI`, the
 non-exported provider, a separate-uid fixture process, and the Go backend and
 Apple host modules on the other side of the wire all really run — and not on a
 physical phone or an iPhone. An emulator result is not a device certification,
 and none is claimed here.
 
-Since 2026-09-08 the website offers it: `/apps` renders a download card whenever
+Since 2026-09-08 the website offers it, and since 2026-09-09 the offer is 0.2.0:
+`/apps` renders a download card whenever
 `web/android-release.json` says a release is published, and the same document is
 copied to `web/public/apps/android/update.json`, which is the feed an installed
 build reads when the user presses **Check for updates**. Until the APK is published
@@ -429,11 +451,11 @@ Metadata is derived from the artifact, never written by hand:
 #    root to the working directory, so without it this writes
 #    <repo>/android-release.json instead of web/android-release.json.
 node web/scripts/stage-android-release.mjs --web-root web \
-     --apk Relayium-0.1.1-2.apk \
-     --version 0.1.1 --code 2 --notes-en "…" --notes-zh "…"
+     --apk Relayium-0.2.0-3.apk \
+     --version 0.2.0 --code 3 --notes-en "…" --notes-zh "…"
 # 3. commit the metadata-only diff
-# 4. publish the SAME file
-scripts/publish-android-release.sh --apk Relayium-0.1.1-2.apk
+# 4. publish the SAME file, pinned to the commit that carries that metadata
+scripts/publish-android-release.sh --apk Relayium-0.2.0-3.apk --target <metadata-commit>
 ```
 
 The staging tool reads the package, versionCode, versionName and signing

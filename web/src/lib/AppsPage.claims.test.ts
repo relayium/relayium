@@ -230,8 +230,26 @@ describe("what the Apps page may not claim", () => {
     expect(cta.textContent).toContain("0.1.1");
     // And the limits travel with the download, because a direct APK has no
     // store listing where a reader could otherwise find them.
-    expect(card.textContent ?? "").toMatch(/joins/i);
-    expect(card.textContent ?? "").toMatch(/Android 8\.0/);
+    //
+    // This used to look for /joins/, which was the 0.1.1 limit — the client
+    // could only join a transfer somebody else started. 0.2.0 mints one too, so
+    // that word is gone and the limits that are still REAL are what the card has
+    // to carry: foreground-only residency, no store, and where received files
+    // actually live.
+    const shown = card.textContent ?? "";
+    expect(shown, "the card does not carry the foreground-only limit")
+      .toMatch(/while the app is open/i);
+    expect(shown, "the card does not deny background delivery")
+      .toMatch(/no background delivery/i);
+    expect(shown, "the card does not state the no-store distribution")
+      .toMatch(/not on Google Play/i);
+    expect(shown, "the card does not say where received files live")
+      .toMatch(/inside Relayium/i);
+    expect(shown, "the card no longer states the platform requirement")
+      .toMatch(/Android 8\.0/);
+    // The 0.1.1-era join-only claim must not come back.
+    expect(shown, "the card still says the app can only join a transfer")
+      .not.toMatch(/\bjoins transfers\b|join-only|cannot create a pairing code/i);
   });
 
   // A half-filled manifest must fail closed exactly as the macOS one does.

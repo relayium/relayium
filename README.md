@@ -56,9 +56,9 @@ build, published as a direct download from its own GitHub Release,
 [`macos-v1.3.10`](https://github.com/relayium/relayium/releases/tag/macos-v1.3.10).
 A separately versioned Mac App Store release is also public, currently
 [1.3.8](https://apps.apple.com/app/id6801142976); the two channels ship the same
-product behaviour on independent version lines. There is no Relayium app for
-iOS, Android or Windows — on those platforms the browser is the client, and
-Windows and Linux can also install the CLI.
+product behaviour on independent version lines. An Android public preview is published as a
+direct APK. There is no Relayium app for iOS or Windows — on those platforms the
+browser is the client, and Windows and Linux can also install the CLI.
 
 > 👉 **Try it now: [relayium.com](https://relayium.com/)** — use two devices on
 > the same LAN without an account, or sign in to create a cross-network pairing
@@ -305,7 +305,7 @@ pairing code requires sign-in; joining with that code does not.
 | **Web** | [Live at relayium.com](https://relayium.com/) | LAN and cross-network file/text transfer, encrypted stored links, accounts, and usage controls. |
 | **CLI and nodes** | [Published on GitHub](https://github.com/relayium/relayium/releases) | Pairing-code transfer, encrypted links, direct transfer, folder sync, self-hosting, and relay/storage nodes. |
 | **macOS** | [1.3.10 direct download](https://github.com/relayium/relayium/releases/tag/macos-v1.3.10) and [1.3.8 on the Mac App Store](https://apps.apple.com/app/id6801142976) | The independently versioned channels share product behavior but use Developer ID/Sparkle and Mac App Store/StoreKit delivery respectively. |
-| **Android** | Direct-APK public preview, from its own `android-v*` GitHub Release | Joins a live transfer another device started, then sends and receives on it. Foreground only, no account features, no Device Inbox, no nearby discovery. No Google Play listing and no Play Services. |
+| **Android** | Direct-APK public preview, from its own `android-v*` GitHub Release | Five screens — Transfer, Nearby, Inbox, Cloud, Account: pairing transfers either direction, nearby devices with no code, Device Inbox receiving with durable history, encrypted stored links, and an account. Foreground only — no background delivery and no resident session. Received files live in app-private storage; exporting elsewhere is explicit. No Google Play listing and no Play Services. |
 | **iPhone, iPad, Windows, Linux** | The web app, plus the CLI on Windows and Linux | Relayium publishes no app for these platforms. The browser is the client and is not a fallback there — it carries the same end-to-end encrypted transfer, with nothing to install. |
 
 Relayium currently maintains English and Simplified Chinese; the seven earlier
@@ -321,16 +321,40 @@ the iOS sections of [`apps/README.md`](apps/README.md) describe a build in
 development, not something a reader can install.
 
 **On Android:** `apps/android/` is a native Kotlin/Compose client, at version
-`0.1.1` (versionCode 2), offered as a **public preview** distributed as a direct
+`0.2.0` (versionCode 3), offered as a **public preview** distributed as a direct
 APK — no Google Play listing and no Google Play Services dependency of any kind.
-It joins an existing transfer (a six-digit code or a `cross-network` link) and
-then sends and receives files and text in both directions on that connection. It
-cannot mint a code or a link, it has no account features, no Device Inbox, no
-nearby discovery and no share-sheet entry point, and transfers run only while
-the app is open — there is no background transfer and no resident session.
+It has five destinations — Transfer, Nearby, Inbox, Cloud and Account — and none
+of them opens onto a placeholder:
 
-It checks for updates when the user asks it to, from a button on its own join
-screen: it reads a small metadata document from relayium.com over HTTPS, and if
+* **Transfer** joins an existing transfer (a six-digit code or a `cross-network`
+  link, anonymously) and now **mints** one too, under a signed-in account.
+* **Nearby** finds other Relayium devices with no code at all, either on the
+  local link alone — contacting no Relayium server — or through the code-less
+  rendezvous room the Web and macOS clients join. Nothing connects without an
+  explicit selection or an accepted prompt.
+* **Inbox** is a real Device Inbox receiver: it enrols a key, holds the
+  receiving policy (off / ask / automatic), decrypts deliveries and keeps a
+  durable history with grant-based open, share and export.
+* **Cloud** sends and opens zero-knowledge `#k=` stored links, with resumable
+  uploads for large selections.
+* **Account** covers email/password sign-in, registration with verification,
+  password reset, and browser-approved sign-in for accounts that have no
+  password.
+
+There is also an `ACTION_SEND` share target and a QR entry point. Everything is
+**foreground only**: there is no foreground service, no background delivery and
+no resident session. For large encrypted uploads the spool and plan are on
+disk, so the next launch can *offer* to continue one; nothing continues on its
+own, and this is not background delivery. Received files and messages live in app-private,
+account-scoped storage rather than a folder the user picks, because Android
+gives an unattended writer no safe way to commit into a SAF tree; saving a copy
+out is a separate explicit action, and clearing the app's data or uninstalling
+it deletes those copies. Everything above is verified on the AOSP 36 emulator
+against the real Go backend and the shipped Apple transport — not on a physical
+handset, and no device certification is claimed.
+
+It checks for updates when the user asks it to, from a button on its own
+Transfer screen: it reads a small metadata document from relayium.com over HTTPS, and if
 a newer build is published it opens the download page in the system browser. Relayium never
 downloads or installs anything itself, and the app holds no installer
 permission; Android asks the user to confirm, and will only replace an installed

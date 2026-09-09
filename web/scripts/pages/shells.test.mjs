@@ -262,19 +262,23 @@ describe("buildShells", () => {
     ])
       expect(body, `${promise}`).not.toMatch(promise);
     // And each platform without a published Device Inbox receiver says so as an
-    // absence. Android moved from "no app" to "no RECEIVER" on 2026-09-08: the
-    // app exists now, and the thing that does not exist is narrower — it is a
-    // join-only live-transfer client with no account, so it is not an inbox
-    // endpoint. The page must keep saying the true absence rather than the
-    // stale one, and must not quietly stop saying anything.
+    // absence. Windows and iPhone are the two that are left.
     for (const id of ["windows", "iphone"])
       expect(body, id).toMatch(new RegExp(`publishes no [^.]*${id === "iphone" ? "iPhone" : id}`, "i"));
-    // The crawler shell renders each platform's `setup`, so that is where the
-    // absence has to be legible without JavaScript.
-    expect(body, "android").toMatch(/publishes no Android Device Inbox receiver/i);
-    // The narrower denial must not become an app denial again, because that
-    // would now be false.
+    // Android stopped being one of them on 2026-09-09. It went "no app" →
+    // "no RECEIVER" on 2026-09-08 and then to a real receiver at 0.2.0, so BOTH
+    // of those denials are now false and the crawler shell — which renders each
+    // platform's `setup` — must carry neither.
+    expect(body, "android").not.toMatch(/publishes no Android Device Inbox receiver/i);
     expect(body, "android").not.toMatch(/publishes no Android app/i);
+    // What it must say instead, without JavaScript: the receiver exists, it is
+    // reached by installing the APK and signing in, and it is foreground only.
+    expect(body, "android").toMatch(/Inbox/);
+    expect(body, "android").toMatch(/only while the app is open|while the app is open/i);
+    // Android's destination is app-private and fixed (InboxContainer.kt), so the
+    // crawler copy must not offer a receive folder borrowed from the Mac app.
+    expect(body, "android receive-folder claim")
+      .not.toMatch(/Android[^.]{0,120}(?:receive folder|folder you (?:pick|chose|choose))/i);
   });
 
   it("emits FAQPage structured data where the doc has an FAQ", () => {

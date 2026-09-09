@@ -310,22 +310,27 @@ describe("English keeps the availability boundaries it is the master of", () => 
       // Inverted 2026-08-28. This used to REQUIRE "planned, not built" and a
       // "best-effort" background story, which was an honest description of work
       // that was going to happen. It is not going to: iOS development is paused
-      // and there is no Android commitment, so the same sentences became a
+      // and there is no Windows commitment, so the same sentences became a
       // roadmap promise for apps nobody is building. What the section owes a
       // reader now is the absence, said plainly.
-      // Android's absence became NARROWER on 2026-09-08: the app exists, and
-      // what does not exist is a Device Inbox receiver. iPhone still has no app
-      // at all, so its denial is unchanged.
-      expect(p.setup, id).toMatch(
-        id === "android"
-          ? /not a Device Inbox receiver/i
-          : /Relayium publishes no (iPhone or iPad) app/i,
-      );
-      expect(p.setup, id).toMatch(/nothing to install here/i);
-      expect(p.residency, id).toMatch(/receives nothing here/i);
+      //
+      // The absence half is iPhone's ALONE as of 2026-09-09. Android's absence
+      // narrowed on 2026-09-08 (an app, but not a receiver) and then closed:
+      // 0.2.0 enrols a key, holds a receiving policy and keeps a durable
+      // history, so requiring "not a Device Inbox receiver" of it here would
+      // pin a false denial in place. Its own expectations are asserted in
+      // "describes Android as a real receiver…" below.
+      //
+      // The always-on and guarantee checks above deliberately still cover BOTH:
+      // gaining a receiver is exactly when a section is tempted to overpromise
+      // residency, and Android's is foreground-only.
+      if (id === "iphone") {
+        expect(p.setup, id).toMatch(/Relayium publishes no (iPhone or iPad) app/i);
+        expect(p.setup, id).toMatch(/nothing to install here/i);
+        expect(p.residency, id).toMatch(/receives nothing here/i);
+      }
     }
     expect(d.platforms.iphone.residency).toMatch(/no always-on iPhone receiver/i);
-    expect(d.platforms.android.residency).toMatch(/publishes no Android Device Inbox receiver/i);
   });
 
   it("describes Windows as foreground-only with no service or startup entry", () => {
@@ -398,8 +403,10 @@ describe("English keeps the availability boundaries it is the master of", () => 
 // file is built around.
 describe("maintained copy never promises a native app that is not coming", () => {
   /** Platforms Relayium publishes no app for. macOS is deliberately absent: it
-   *  HAS a published app, so its section is allowed to talk about one. */
-  const NO_APP = ["iphone", "android", "windows"] as const;
+   *  HAS a published app, so its section is allowed to talk about one. Android
+   *  left this set on 2026-09-09 for the same reason — the 0.2.0 APK is
+   *  published, so its section may name the app it really ships. */
+  const NO_APP = ["iphone", "windows"] as const;
 
   /** Future-native promises, per maintained language. Each entry is a phrase
    *  that only makes sense if an unshipped native client is on its way. */
@@ -457,6 +464,9 @@ describe("maintained copy never promises a native app that is not coming", () =>
       // The positive half. Removing a promise must not leave the phone sections
       // saying nothing about what a phone owner can actually do today, and the
       // macOS section must not fill the gap by implying an iPhone app.
+      // Android keeps this expectation even though it now has an app: the phone
+      // can still be a plain sender from its browser, and the section says so
+      // beside the native route rather than instead of it.
       for (const id of ["iphone", "android"] as const) {
         const send = [d.platforms[id].setup, d.platforms[id].send].join("\n");
         expect(send, `${code}.platforms.${id}`).toMatch(code === "en" ? /browser|safari/i : /浏览器|Safari/i);
@@ -470,24 +480,63 @@ describe("maintained copy never promises a native app that is not coming", () =>
   it("english states the absence itself, so the ban cannot pass by saying nothing", () => {
     const d = locales.en.deviceInboxPage;
     expect(d.platforms.iphone.setup).toMatch(/publishes no iPhone or iPad app/i);
-    expect(d.platforms.android.setup).toMatch(/not a Device Inbox receiver/i);
     expect(d.platforms.windows.setup).toMatch(/publishes no Windows app/i);
-    // iPhone and Android are senders, not Inbox receivers, and both say so.
-    for (const id of ["iphone", "android"] as const) {
-      expect(d.platforms[id].files, id).toMatch(/not a Device Inbox receiver/i);
-    }
+    // iPhone is a sender, not an Inbox receiver, and says so. Android used to be
+    // asserted here too; it is a receiver as of 0.2.0, so the denial moved out
+    // and its positive expectations live in the Android test below.
+    expect(d.platforms.iphone.files).toMatch(/not a Device Inbox receiver/i);
     // Windows keeps the one receiver it really has.
     expect(d.platforms.windows.setup).toMatch(/command-line receiver running in the foreground/i);
+  });
+
+  // Added 2026-09-09 with the 0.2.0 public preview. The Android section stopped
+  // being an absence and became a real receiver section, and the two ways it can
+  // go wrong are opposite: it can keep denying a feature that now ships, or it
+  // can describe the MACOS receiver instead of the Android one.
+  //
+  // The second is the live hazard rather than a hypothetical. The nearest copy
+  // available to reuse is the Mac section, and its model — an open panel, a
+  // chosen receive folder, a security-scoped bookmark — is precisely what
+  // `InboxContainer.kt` documents Android as NOT doing: a SAF tree is not a
+  // POSIX filesystem, so the commit ordering could not be expressed against
+  // one, and deliveries land in fixed app-private, account-scoped storage with
+  // export as a separate explicit action. A reader told to pick a receive folder
+  // would go looking for a control that does not exist.
+  it("describes Android as a real receiver, in app storage rather than a chosen folder", () => {
+    for (const code of CODES) {
+      const a = locales[code].deviceInboxPage.platforms.android;
+      const all = [a.use, a.setup, a.files, a.residency, a.send, a.recovery, a.stop].join("\n");
+
+      // The stale denials, in both maintained languages. Either one reappearing
+      // means the section went back to describing 0.1.1.
+      expect(all, `${code}: Android still denies the Device Inbox it ships`)
+        .not.toMatch(/not a Device Inbox receiver|publishes no Android Device Inbox receiver|不是设备收件箱的接收端/i);
+      expect(all, `${code}: Android still claims it can only join a transfer`)
+        .not.toMatch(/join-only|只能加入/i);
+
+      // Borrowed macOS storage copy — the wrong-folder claim this test exists for.
+      expect(all, `${code}: Android copy offers a user-chosen receive folder`)
+        .not.toMatch(/choose a receive folder|pick a receive folder|receive folder you (?:pick|chose|choose)|选择接收目录|选定的目录/i);
+      // And it must state where deliveries really land.
+      expect(all, `${code}: Android copy does not say deliveries live in app storage`)
+        .toMatch(code === "en" ? /inside Relayium/i : /Relayium 应用自己的存储|应用内部/);
+      // Export/open/share is the explicit escape hatch, and must be named.
+      expect(all, `${code}: Android copy does not name the explicit save-out step`)
+        .toMatch(code === "en" ? /saved out to your own location|saved elsewhere/i : /另存/);
+      // Residency, which is the limit that IS still real.
+      expect(all, `${code}: Android copy does not state the foreground-only limit`)
+        .toMatch(code === "en" ? /while the app is open/i : /应用打开时/);
+      expect(all, `${code}: Android copy promises background delivery`)
+        .toMatch(code === "en" ? /not deliver in the background|no background delivery/i : /不会在后台投递|没有后台投递/);
+    }
   });
 
   it("chinese states the same absence in its own words", () => {
     const d = locales.zh.deviceInboxPage;
     expect(d.platforms.iphone.setup).toMatch(/不提供 iPhone \/ iPad 应用/);
-    expect(d.platforms.android.setup).toMatch(/不是设备收件箱的接收端/);
     expect(d.platforms.windows.setup).toMatch(/不提供 Windows 原生应用/);
-    for (const id of ["iphone", "android"] as const) {
-      expect(d.platforms[id].files, id).toMatch(/不是设备收件箱的接收端/);
-    }
+    // Android's denial was removed at 0.2.0 — it IS a receiver now.
+    expect(d.platforms.iphone.files).toMatch(/不是设备收件箱的接收端/);
     expect(d.platforms.windows.setup).toMatch(/命令行接收端的前台运行/);
   });
 });
