@@ -323,8 +323,24 @@ async function checkPage(tab, base, view) {
   if (status.macos !== wantMac) {
     throw new Error(`${view.id}: macOS is marked ${status.macos}, but native-releases.json says ${wantMac}`);
   }
-  for (const planned of ["windows", "iphone", "android"]) {
+  // Android LEFT this set when 0.2.0 shipped a real Device Inbox receiver: it
+  // enrols a key, holds the receiving policy and keeps a durable history, so
+  // demanding "planned" here would require the badge to deny a feature the app
+  // has. Windows and iPhone still publish no receiver and keep the badge.
+  for (const planned of ["windows", "iphone"]) {
     if (status[planned] !== "planned") throw new Error(`${view.id}: ${planned} is marked ${status[planned]}`);
+  }
+  // The positive half, asserted explicitly rather than by dropping the id — a
+  // silently unchecked platform is how the macOS badge above drifted for weeks.
+  if (status.android !== "available") {
+    throw new Error(`${view.id}: android is marked ${status.android}, expected available`);
+  }
+  const androidBadge = (
+    await tab.evaluate(`document.querySelector('[data-platform="android"] .badge')?.textContent ?? ""`)
+  ).trim();
+  const wantBadge = view.lang === "zh" ? "现已可用" : "Available now";
+  if (!androidBadge.includes(wantBadge)) {
+    throw new Error(`${view.id}: the Android badge reads ${JSON.stringify(androidBadge)}, expected ${wantBadge}`);
   }
 
   // The disclosure is a summary of what is inside, so from here on everything
@@ -348,12 +364,41 @@ async function checkPage(tab, base, view) {
   // …and the same measurement again, now that all six carry their commands.
   await checkShape(tab, view, "every platform expanded");
 
-  // A native product that does not exist gets no command. The macOS branch is
-  // tied to the same canonical release manifest as the rendered page, so this
-  // journey remains meaningful before and after the release-state transition.
+  // No command block for either phone platform — but for two DIFFERENT reasons,
+  // and the reason matters because only one of them is an absent product.
+  // iPhone has no receiver at all. Android has one and no shell to run it from:
+  // its instruction is a sequence of taps, which is prose, so a `pre` block here
+  // would imply a terminal on a phone. The macOS branch is tied to the same
+  // canonical release manifest as the rendered page, so this journey remains
+  // meaningful before and after the release-state transition.
   for (const id of ["iphone", "android"]) {
     const cmds = await tab.evaluate(`document.querySelectorAll('[data-platform="${id}"] pre').length`);
     if (cmds !== 0) throw new Error(`${view.id}: the ${id} section shows ${cmds} runnable command block(s)`);
+  }
+
+  // Android's section is now a receiver section, so the two ways it can lie are
+  // asserted here: overclaiming residency, and borrowing the Mac app's
+  // chosen-receive-folder model. Deliveries commit into fixed app-private,
+  // account-scoped storage (InboxContainer.kt); telling a reader to pick a
+  // receive folder would send them after a control that does not exist.
+  const androidText = (
+    await tab.evaluate(`document.querySelector('[data-platform="android"]')?.textContent ?? ""`)
+  ).replace(/\s+/g, " ").trim();
+  const androidMust = view.lang === "zh"
+    ? [/应用打开时/, /不会在后台投递|没有后台投递/]
+    : [/while the app is open/i, /does not deliver in the background|no background delivery/i];
+  for (const re of androidMust) {
+    if (!re.test(androidText)) {
+      throw new Error(`${view.id}: the Android section does not state its foreground-only limit (${re})`);
+    }
+  }
+  const androidNever = view.lang === "zh"
+    ? [/不是设备收件箱的接收端/, /选择接收目录|选定的目录/]
+    : [/not a Device Inbox receiver/i, /choose a receive folder|pick a receive folder/i];
+  for (const re of androidNever) {
+    if (re.test(androidText)) {
+      throw new Error(`${view.id}: the Android section carries a stale or borrowed claim (${re})`);
+    }
   }
   const macDownload = await tab.evaluate(
     `document.querySelector('[data-di="mac-download"]')?.getAttribute('href') ?? null`,

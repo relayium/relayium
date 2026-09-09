@@ -2963,10 +2963,41 @@ final class IOSSurfaceGuardTests: XCTestCase {
 
         // The platforms with no native client are still told what to use, so
         // removing the row is not the same as removing the answer.
-        let browsers = try XCTUnwrap(deliveryStatusEntry("iPhone, iPad, Android, Windows, Linux"),
+        //
+        // Android LEFT this row when its APK was published, so the row name no
+        // longer contains it. Asserting the old five-platform name would fail
+        // for the opposite reason this guard exists: it would demand the README
+        // keep listing a platform among those with no app, which is now the
+        // false claim.
+        let browsers = try XCTUnwrap(deliveryStatusEntry("iPhone, iPad, Windows, Linux"),
                                      "the no-native-app platforms lost their row")
         XCTAssertTrue(browsers.contains("web app"))
         XCTAssertTrue(browsers.contains("publishes no app for these platforms"))
+        // NOTE: `deliveryStatusEntry` returns the row LOWERCASED, so every
+        // literal compared against it must be lowercase. A capitalised needle
+        // here does not fail loudly — it silently never matches, which turns a
+        // negative assertion into a vacuous pass. That is exactly what the
+        // first draft of the line below did with "Android".
+        XCTAssertFalse(browsers.contains("android"),
+                       "Android is back in the no-native-app row; it ships a published APK")
+
+        // And the positive half, so this guard cannot be satisfied by silence:
+        // Android has a row of its own, and it carries the distribution channel
+        // and the limit that is still real rather than reading as a full client.
+        let android = try XCTUnwrap(deliveryStatusEntry("Android"),
+                                    "Android has no delivery-status row of its own")
+        XCTAssertTrue(android.contains("apk"),
+                      "the Android row does not name the direct-APK channel")
+        XCTAssertTrue(android.contains("no google play listing"),
+                      "the Android row no longer states there is no Play listing")
+        XCTAssertTrue(android.contains("foreground only"),
+                      "the Android row does not state the foreground-only limit")
+        // The 0.1.1-era denials must not come back: the client is a Device Inbox
+        // receiver now and mints a pairing code as well as joining one.
+        for stale in ["no device inbox", "no nearby discovery", "no account features"] {
+            XCTAssertFalse(android.contains(stale),
+                           "the Android row still denies a 0.2.0 feature: \(stale)")
+        }
     }
 
     /// The Next bullet is the roadmap, so what it lists as remaining has to be
@@ -3003,8 +3034,28 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "testflight.apple.com"] {
             XCTAssertFalse(readme.contains(offer), "the README offers an iOS download: \(offer)")
         }
-        XCTAssertTrue(readme.contains("there is no relayium app for ios, android or windows"),
+        XCTAssertTrue(readme.contains("there is no relayium app for ios or windows"),
                       "the README no longer states that these platforms have no app")
+        // Android came OUT of that sentence rather than the sentence being
+        // deleted, and the replacement fact has to be present — otherwise this
+        // guard would pass on a README that simply stopped mentioning Android.
+        XCTAssertTrue(readme.contains("an android public preview is published as a direct apk"),
+                      "the README dropped Android from the no-app sentence without stating what it does ship")
+        // The iOS half of the claim is unchanged and must stay unchanged.
+        //
+        // Narrowed after review: this first read `contains("relayium app for
+        // android")`, which bans the DENIAL and the affirmative alike — "the
+        // Relayium app for Android is a public preview" is a true sentence the
+        // README must stay free to write. A guard that forbids the correction
+        // as well as the error is the same failure this file's iOS half was
+        // rewritten to stop. So the needles are denial forms only, and they are
+        // the shapes this repository has actually shipped.
+        for denial in ["no relayium app for android",
+                       "relayium app for ios, android or windows",
+                       "publishes no android app"] {
+            XCTAssertFalse(readme.contains(denial),
+                           "the README denies the published Android app: \(denial)")
+        }
     }
 
     /// The management model is app-scoped and injected once.
