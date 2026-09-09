@@ -28,8 +28,8 @@
   six already-Approved `com.relayium.mac.*` subscription products instead of a
   catalogue of its own.
 - `android/` — native Android client (`com.relayium.android`), Kotlin + Jetpack
-  Compose over a pure-JVM `:protocol` module. **Public preview at 0.2.0
-  (versionCode 3)**; direct APK only, no Google Play, no Play Services, no Play
+  Compose over a pure-JVM `:protocol` module. **Public preview at 0.2.1
+  (versionCode 4)**; direct APK only, no Google Play, no Play Services, no Play
   Billing. Five destinations — Transfer, Nearby, Inbox, Cloud, Account: it mints
   a six-digit code or `/cross-network#c=` link as well as joining one, finds
   devices with no code at all, receives Device Inbox deliveries into app-private

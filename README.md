@@ -321,7 +321,7 @@ the iOS sections of [`apps/README.md`](apps/README.md) describe a build in
 development, not something a reader can install.
 
 **On Android:** `apps/android/` is a native Kotlin/Compose client, at version
-`0.2.0` (versionCode 3), offered as a **public preview** distributed as a direct
+`0.2.1` (versionCode 4), offered as a **public preview** distributed as a direct
 APK — no Google Play listing and no Google Play Services dependency of any kind.
 It has five destinations — Transfer, Nearby, Inbox, Cloud and Account — and none
 of them opens onto a placeholder:
