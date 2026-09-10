@@ -43,6 +43,10 @@ const note = (line) => {
 };
 
 const DEADLINE = { install: 180_000, launch: 120_000, exit: 60_000, uninstall: 180_000 };
+/** One attach attempt's socket budget, inside `DEADLINE.launch`. */
+const ATTACH_OPEN_MS = 10_000;
+/** One `/json/list` request's budget, including its body. */
+const CDP_HTTP_MS = 10_000;
 
 function bail(reason) {
   process.stdout.write(`RELAYIUM_INSTALLED ${JSON.stringify({ failures: [reason], notes })}\n`);
@@ -104,6 +108,15 @@ const owned = {
 };
 /** Only PIDs this run spawned. Never a name or image match. */
 const spawnedPids = new Set();
+/** The child object for each owned PID, so an exit can be JOINED rather than
+ *  assumed. A PID whose object this run no longer holds is polled instead. */
+const spawnedChildren = new Map();
+/** Every CDP session this run opened. The explicit closes below are the normal
+ *  path; this is the `finally` that covers a throw between attach and close. */
+const openSessions = new Set();
+/** In-flight kills, so two callers for one PID join the SAME attempt instead of
+ *  racing two `taskkill`s and two polls. */
+const killing = new Map();
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -123,6 +136,23 @@ function freeLoopbackPort() {
       server.close(() => resolve(port));
     });
   });
+}
+
+/** Bounded poll that records NOTHING. The caller reports, so one problem does
+ *  not become two failures. */
+async function poll(predicate, timeoutMs) {
+  const started = Date.now();
+  for (;;) {
+    let ok = false;
+    try {
+      ok = await predicate();
+    } catch {
+      ok = false;
+    }
+    if (ok) return true;
+    if (Date.now() - started > timeoutMs) return false;
+    await sleep(250);
+  }
 }
 
 async function waitFor(what, predicate, timeoutMs) {
@@ -213,13 +243,27 @@ function runInstaller(args, timeoutMs, label, executable = installer) {
       argv0: `"${executable}"`,
       stdio: "ignore",
     });
-    if (child.pid) spawnedPids.add(child.pid);
+    if (child.pid) {
+      spawnedPids.add(child.pid);
+      spawnedChildren.set(child.pid, child);
+    }
     let settled = false;
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      killOwned(child.pid);
-      resolve({ ok: false, code: null, reason: `${label} did not finish within ${timeoutMs}ms` });
+      // Joined BEFORE resolving. Returning while the timed-out installer is
+      // still alive hands the next phase a running NSIS process holding the
+      // very directory it is about to assert on.
+      void (async () => {
+        const joined = await killOwned(child.pid);
+        resolve({
+          ok: false,
+          code: null,
+          reason: joined
+            ? `${label} did not finish within ${timeoutMs}ms`
+            : `${label} did not finish within ${timeoutMs}ms and could not be joined after taskkill`,
+        });
+      })();
     }, timeoutMs);
     child.on("error", (err) => {
       if (settled) return;
@@ -232,25 +276,92 @@ function runInstaller(args, timeoutMs, label, executable = installer) {
       settled = true;
       clearTimeout(timer);
       spawnedPids.delete(child.pid);
+      spawnedChildren.delete(child.pid);
       resolve({ ok: true, code, reason: null });
     });
   });
 }
 
+/**
+ * Kill one owned process and JOIN it.
+ *
+ * `taskkill /F` returns as soon as the request is made; the process, its
+ * children and the file handles they hold outlive that return. The previous
+ * version dropped the PID from the registry immediately, so cleanup deleted the
+ * install directory while the app still had it open — the `EPERM` this run
+ * reported. Now the exit is OBSERVED: the child's own `exit` event when this run
+ * still has the object, otherwise a bounded liveness poll on the exact PID.
+ *
+ * The PID stays registered until the exit is observed, and a process that never
+ * exits is a recorded failure rather than a silent one.
+ */
 function killOwned(pid) {
-  if (!pid || !spawnedPids.has(pid)) return;
+  if (!pid || !spawnedPids.has(pid)) return Promise.resolve(true);
+  const already = killing.get(pid);
+  if (already) return already;
+  const attempt = killOwnedOnce(pid).finally(() => killing.delete(pid));
+  killing.set(pid, attempt);
+  return attempt;
+}
+
+async function killOwnedOnce(pid) {
+  const child = spawnedChildren.get(pid) ?? null;
+  const exited =
+    child === null || child.exitCode !== null || child.signalCode !== null
+      ? null
+      : new Promise((resolve) => child.once("exit", () => resolve(true)));
   // The exact PID and its children. Never `/IM`, which would reach a Relayium
   // this run did not start.
   spawnSync("taskkill.exe", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" });
-  spawnedPids.delete(pid);
+  if (exited !== null) {
+    await Promise.race([exited, sleep(DEADLINE.exit)]);
+  }
+  // The child object covers only the process this run spawned. The poll
+  // confirms that PID is released; it says nothing about descendants — see
+  // `alive`.
+  const gone = await poll(() => !alive(pid), DEADLINE.exit);
+  if (gone) {
+    spawnedPids.delete(pid);
+    spawnedChildren.delete(pid);
+  }
+  return gone;
+}
+
+/**
+ * Whether a PID still exists. Signal 0 tests for existence and sends nothing.
+ *
+ * This is the PARENT only. `/T` asks the kernel to kill the tree, but polling
+ * one PID does not prove every descendant is gone, and this run does not
+ * enumerate them. The bounded removal retry in `cleanup()` is what actually
+ * observes a lingering handle: a directory that will not go is reported.
+ */
+function alive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // EPERM means it exists and is not ours to signal — which for a PID this
+    // run spawned means it is still there, so it is NOT reported as gone.
+    return err?.code === "EPERM";
+  }
 }
 
 // ---------------------------------------------------------------------------
 // CDP over the loopback debugging port. Node 24's built-in WebSocket.
 // ---------------------------------------------------------------------------
 
+/**
+ * The debugging endpoint's target list, on a finite budget.
+ *
+ * An unbounded `fetch` cannot be bounded by the poll around it: a request that
+ * never settles holds the predicate open past the deadline the poll exists to
+ * enforce. The signal stays armed across the body read — aborting it errors the
+ * body stream — so a half-sent response cannot hang here either.
+ */
 async function cdpTargets(port) {
-  const res = await fetch(`http://127.0.0.1:${port}/json/list`);
+  const res = await fetch(`http://127.0.0.1:${port}/json/list`, {
+    signal: AbortSignal.timeout(CDP_HTTP_MS),
+  });
   if (!res.ok) throw new Error(`/json/list returned ${res.status}`);
   return res.json();
 }
@@ -260,20 +371,37 @@ class CdpSession {
   #next = 1;
   #pending = new Map();
 
-  static async open(wsUrl) {
+  /**
+   * Connect, on this call's OWN budget, closing the socket on any failure.
+   *
+   * A caller racing `open()` against a timer cannot clean up after it: the
+   * promise it holds has rejected, so there is no session to close and the
+   * socket is left connecting. So the deadline lives here, and every failure
+   * path closes the socket before rejecting.
+   */
+  static async open(wsUrl, timeoutMs = ATTACH_OPEN_MS) {
     const session = new CdpSession();
     session.#ws = new WebSocket(wsUrl);
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("CDP connect timed out")), 30_000);
-      session.#ws.addEventListener("open", () => {
-        clearTimeout(timer);
-        resolve();
-      }, { once: true });
-      session.#ws.addEventListener("error", () => {
-        clearTimeout(timer);
-        reject(new Error("CDP socket error"));
-      }, { once: true });
-    });
+    try {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`CDP connect timed out after ${timeoutMs}ms`)), timeoutMs);
+        session.#ws.addEventListener("open", () => {
+          clearTimeout(timer);
+          resolve();
+        }, { once: true });
+        session.#ws.addEventListener("error", () => {
+          clearTimeout(timer);
+          reject(new Error("CDP socket error"));
+        }, { once: true });
+      });
+    } catch (err) {
+      try {
+        session.#ws.close();
+      } catch {
+        /* nothing to close */
+      }
+      throw err;
+    }
     session.#ws.addEventListener("message", (event) => {
       let msg;
       try {
@@ -286,6 +414,7 @@ class CdpSession {
       session.#pending.delete(msg.id);
       waiter(msg);
     });
+    openSessions.add(session);
     return session;
   }
 
@@ -319,6 +448,7 @@ class CdpSession {
   }
 
   close() {
+    openSessions.delete(this);
     try {
       this.#ws.close();
     } catch {
@@ -347,24 +477,78 @@ function launchInstalled(port, extraEnv = {}) {
       },
     },
   );
-  if (child.pid) spawnedPids.add(child.pid);
+  if (child.pid) {
+    spawnedPids.add(child.pid);
+    spawnedChildren.set(child.pid, child);
+  }
   return child;
 }
 
-/** The one page target, once the app has one. */
-async function attachToApp(port) {
-  let pageTarget = null;
-  const ready = await waitFor(
-    "the app's debugging endpoint",
-    async () => {
-      const targets = await cdpTargets(port);
-      pageTarget = targets.find((t) => t.type === "page" && typeof t.webSocketDebuggerUrl === "string");
-      return pageTarget !== undefined && pageTarget !== null;
-    },
-    DEADLINE.launch,
-  );
-  if (!ready) return null;
-  return pageTarget;
+/**
+ * Attach to the app's window, once the PRELOAD BRIDGE is actually usable.
+ *
+ * A page target appears before the bridge exists. The previous version returned
+ * the first `type: "page"` target it saw, so an `evaluate` could land on the
+ * document before `contextBridge` had exposed `globalThis.relayium` — which is
+ * exactly how the tenth run failed, reading `.auth` of `undefined` after the
+ * reinstall. The earlier attaches were the same race, won by luck.
+ *
+ * So readiness is a property of the BRIDGE, not of the target list, and it is
+ * bounded: within `DEADLINE.launch` there must be a page on the app scheme whose
+ * `globalThis.relayium.auth.state` is callable. Anything else is a hard failure
+ * with the last observation attached — never a relaxed assertion, and never a
+ * skip.
+ *
+ * Returns the ready target and its OPEN session; the caller closes the session
+ * in a `finally`.
+ */
+async function attachToApp(port, label) {
+  let target = null;
+  let session = null;
+  let last = "no page target";
+  const ready = await poll(async () => {
+    const targets = await cdpTargets(port).catch(() => []);
+    const page = targets.find(
+      (t) =>
+        t.type === "page" &&
+        typeof t.webSocketDebuggerUrl === "string" &&
+        typeof t.url === "string" &&
+        t.url.startsWith("app://relayium/"),
+    );
+    if (!page) {
+      last = `targets: ${targets.map((t) => `${t.type} ${t.url ?? ""}`).join(", ") || "(none)"}`;
+      return false;
+    }
+    // A fresh session per attempt: a target that went away mid-poll leaves a
+    // dead socket, and reusing it would report the wrong reason.
+    let attempt = null;
+    try {
+      // `open` carries its own deadline and closes its own socket, so this
+      // poll cannot outlive a connect that never settles and cannot leak one.
+      attempt = await CdpSession.open(page.webSocketDebuggerUrl);
+      const bridged = await attempt.evaluate(
+        "typeof globalThis.relayium?.auth?.state === 'function' && typeof globalThis.relayium?.appInfo === 'function'",
+      );
+      if (bridged !== true) {
+        last = `page ${page.url} has no bridge yet`;
+        attempt.close();
+        return false;
+      }
+      target = page;
+      session = attempt;
+      return true;
+    } catch (err) {
+      attempt?.close();
+      last = `session on ${page.url}: ${String(err)}`;
+      return false;
+    }
+  }, DEADLINE.launch);
+  if (!ready || session === null || target === null) {
+    check(`${label} exposed a usable app bridge`, false, last);
+    session?.close();
+    return null;
+  }
+  return { target, cdp: session };
 }
 
 // ---------------------------------------------------------------------------
@@ -420,21 +604,13 @@ async function main() {
   const port = await freeLoopbackPort();
   const app1 = launchInstalled(port);
   owned.dataRoot = true;
-  const target1 = await attachToApp(port);
-  if (!check("the installed app exposed a page target", target1 !== null)) {
-    killOwned(app1.pid);
+  const attached1 = await attachToApp(port, "the installed app");
+  if (attached1 === null) {
+    await killOwned(app1.pid);
     return;
   }
+  const { target: target1, cdp } = attached1;
   check("page served from the app scheme", target1.url.startsWith("app://relayium/"), target1.url);
-
-  let cdp;
-  try {
-    cdp = await CdpSession.open(target1.webSocketDebuggerUrl);
-  } catch (err) {
-    check("CDP session opened", false, String(err));
-    killOwned(app1.pid);
-    return;
-  }
 
   const info = await cdp.evaluate("globalThis.relayium.appInfo()");
   check("production origin despite an injected override", info.origin === "https://relayium.com", JSON.stringify(info));
@@ -523,17 +699,21 @@ async function main() {
 
   // ---- Second instance restores the first window -----------------------
   const second = spawn(installedExe, [], { stdio: "ignore" });
-  if (second.pid) spawnedPids.add(second.pid);
+  if (second.pid) {
+    spawnedPids.add(second.pid);
+    spawnedChildren.set(second.pid, second);
+  }
   const secondExited = await new Promise((resolve) => {
     const timer = setTimeout(() => resolve(false), DEADLINE.exit);
     second.on("exit", () => {
       clearTimeout(timer);
       spawnedPids.delete(second.pid);
+      spawnedChildren.delete(second.pid);
       resolve(true);
     });
   });
   check("a second launch exits instead of running alongside", secondExited);
-  if (!secondExited) killOwned(second.pid);
+  if (!secondExited) await killOwned(second.pid);
 
   const targetsAfter = (await cdpTargets(port)).filter((t) => t.type === "page");
   check("still exactly one window", targetsAfter.length === 1, `saw ${targetsAfter.length}`);
@@ -551,7 +731,7 @@ async function main() {
   check("a sealed identity was written", sealedBefore !== null);
 
   cdp.close();
-  killOwned(app1.pid);
+  await killOwned(app1.pid);
   // Joined properly: the debugging endpoint disappearing is the observable
   // signal that the process is really gone, and the reinstall below must not
   // race a still-running app holding files open.
@@ -588,20 +768,22 @@ async function main() {
   notes.push(`profile after first launch: ${JSON.stringify(profileState())}`);
   const portR = await freeLoopbackPort();
   const appR = launchInstalled(portR);
-  const targetR = await attachToApp(portR);
-  if (check("the relaunched app exposed a page target", targetR !== null)) {
-    const cdpR = await CdpSession.open(targetR.webSocketDebuggerUrl);
-    const stateR = await cdpR.evaluate("globalThis.relayium.auth.state()");
-    notes.push(`store after forced-kill relaunch, no reinstall: ${stateR.store}`);
-    check(
-      "secret store readable after a forced kill, WITHOUT any reinstall",
-      stateR.store === "ok",
-      JSON.stringify(stateR),
-    );
-    check("sealed identity byte-identical after the relaunch", hashSealed() === sealedBefore);
-    cdpR.close();
+  const attachedR = await attachToApp(portR, "the relaunched app");
+  if (attachedR !== null) {
+    try {
+      const stateR = await attachedR.cdp.evaluate("globalThis.relayium.auth.state()");
+      notes.push(`store after forced-kill relaunch, no reinstall: ${stateR.store}`);
+      check(
+        "secret store readable after a forced kill, WITHOUT any reinstall",
+        stateR.store === "ok",
+        JSON.stringify(stateR),
+      );
+      check("sealed identity byte-identical after the relaunch", hashSealed() === sealedBefore);
+    } finally {
+      attachedR.cdp.close();
+    }
   }
-  killOwned(appR.pid);
+  await killOwned(appR.pid);
   await waitFor(
     "the relaunched app's debugging endpoint to disappear",
     async () => {
@@ -706,20 +888,22 @@ async function main() {
   // distinguish reading the old one from silently minting a new one.
   const port2 = await freeLoopbackPort();
   const app2 = launchInstalled(port2);
-  const target2 = await attachToApp(port2);
-  if (check("the reinstalled app exposed a page target", target2 !== null)) {
-    const cdp2 = await CdpSession.open(target2.webSocketDebuggerUrl);
-    const state2 = await cdp2.evaluate("globalThis.relayium.auth.state()");
-    notes.push(`store after reinstall: ${state2.store}`);
-    notes.push(`profile after reinstall: ${JSON.stringify(profileState())}`);
-    // Unchanged and NOT relaxed: an unreadable store here is a failure. The
-    // diagnostics above exist to explain it, not to excuse it.
-    check("secret store still healthy after reinstall", state2.store === "ok", JSON.stringify(state2));
-    check("still signed out after reinstall", state2.signedIn === false, JSON.stringify(state2));
-    check("sealed identity unchanged by the second read", hashSealed() === sealedBefore);
-    cdp2.close();
+  const attached2 = await attachToApp(port2, "the reinstalled app");
+  if (attached2 !== null) {
+    try {
+      const state2 = await attached2.cdp.evaluate("globalThis.relayium.auth.state()");
+      notes.push(`store after reinstall: ${state2.store}`);
+      notes.push(`profile after reinstall: ${JSON.stringify(profileState())}`);
+      // Unchanged and NOT relaxed: an unreadable store here is a failure. The
+      // diagnostics above exist to explain it, not to excuse it.
+      check("secret store still healthy after reinstall", state2.store === "ok", JSON.stringify(state2));
+      check("still signed out after reinstall", state2.signedIn === false, JSON.stringify(state2));
+      check("sealed identity unchanged by the second read", hashSealed() === sealedBefore);
+    } finally {
+      attached2.cdp.close();
+    }
   }
-  killOwned(app2.pid);
+  await killOwned(app2.pid);
 
   // ---- Uninstall --------------------------------------------------------
   if (check("uninstaller exists", existsSync(uninstaller), uninstaller)) {
@@ -1012,8 +1196,30 @@ function hashSealed() {
   return hash.digest("hex");
 }
 
-function cleanup() {
-  for (const pid of [...spawnedPids]) killOwned(pid);
+async function cleanup() {
+  // Any session still open here belongs to a phase that threw between attach
+  // and its explicit close.
+  for (const session of [...openSessions]) session.close();
+  // Joined, not merely signalled. A directory cannot be removed while a process
+  // this run started still holds a handle inside it, and `taskkill` returning is
+  // not that process being gone.
+  const unjoined = [];
+  for (const pid of [...spawnedPids]) {
+    if (!(await killOwned(pid))) unjoined.push(pid);
+  }
+  if (unjoined.length > 0) {
+    // PRESERVE. Removing directories, releasing the drive mapping or deleting
+    // the class key while a process this run started is still alive would tear
+    // state out from under it and could destroy evidence of why it would not
+    // die. The host is left dirty ON PURPOSE, and loudly: the next run's
+    // preconditions will refuse it rather than a later run inheriting a mess
+    // with no explanation.
+    failures.push(
+      `owned process(es) ${unjoined.join(", ")} did not exit; preserved every owned directory, ` +
+        `the drive mapping and the class key rather than unwinding around a live child`,
+    );
+    return;
+  }
   // Before the directories: a junction inside `aliasRoot` points AT the data
   // root, and removing the mapping first keeps a recursive delete from
   // following one. `rmSync` removes a junction without descending, but the
@@ -1026,12 +1232,26 @@ function cleanup() {
   // it — not derived from a path it merely knows about.
   for (const dir of [owned.schemeInstallParent, owned.aliasRoot, owned.installParent, owned.dataRoot ? dataRoot : null]) {
     if (dir === null || !existsSync(dir)) continue;
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch (err) {
+    // Two things this covers, and it is the only place either is observed:
+    // Windows releases a terminated process's handles asynchronously, and the
+    // parent-PID poll above says nothing about descendants `/T` was asked to
+    // take. A handle either goes within this bound or the directory is reported
+    // as a leftover — bounded, and never silently retried forever.
+    let removed = false;
+    let lastError = null;
+    for (let attempt = 0; attempt < 20 && !removed; attempt += 1) {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+        removed = !existsSync(dir);
+      } catch (err) {
+        lastError = err;
+        await sleep(250);
+      }
+    }
+    if (!removed) {
       // Reported, not swallowed: a path this run created and could not remove
       // is a leftover, and claiming otherwise would be false.
-      failures.push(`could not remove owned directory ${dir}: ${String(err)}`);
+      failures.push(`could not remove owned directory ${dir}: ${String(lastError)}`);
     }
   }
 }
@@ -1040,8 +1260,8 @@ main()
   .catch((err) => {
     failures.push(`threw: ${String(err?.stack ?? err)}`);
   })
-  .finally(() => {
-    cleanup();
+  .finally(async () => {
+    await cleanup();
     process.stdout.write(`RELAYIUM_INSTALLED ${JSON.stringify({ failures, notes })}\n`);
     if (failures.length > 0) {
       process.stderr.write(`installed acceptance: ${failures.length} failed\n${failures.join("\n")}\n`);

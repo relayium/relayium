@@ -137,6 +137,22 @@ jobs:
       - name: Electron bootstrap smoke
         run: npm run test:smoke
 
+      # The resident lifecycle, on Windows, for the first time.
+      #
+      # Every CP14 resident run so far happened on a macOS-hosted Electron, so
+      # this main/preload/renderer lifecycle has never run on the platform it is
+      # written for. Placed before packaging so a broken lifecycle fails ahead of
+      # the installer steps.
+      #
+      # What it proves, exactly: the real Electron main, preload and renderer
+      # behave on Windows. `resident-main` INJECTS the login-item read/write and
+      # answers the native confirmations itself, so this step does NOT touch the
+      # OS startup entry and does NOT exercise a native consent dialog. Whether
+      # Windows actually launches the app at sign-in stays unproven here and
+      # belongs to the later full-product acceptance.
+      - name: Resident lifecycle smoke
+        run: npm run test:smoke:resident
+
       # Why a sealed identity stops being readable.
       #
       # Runs after `build` because it drives the real `SecretStore` out of
