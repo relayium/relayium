@@ -9,6 +9,11 @@
 # dependency, so `web/**` is a real trigger — a change to `crypto.ts` must run
 # the Windows lane or the fixture conformance below is a check nobody ran.
 #
+# The `realtime` job widens that further. It drives the shipped web UI through
+# CDP, imports the shared e2e harness, and compiles and runs the real server, so
+# `web/src/**`, `web/e2e/**`, `server/**` and the web build inputs are all real
+# triggers for this lane rather than `web.yml`'s alone.
+#
 # It deliberately does NOT name `apps/RelayiumKit/**`. The Swift package is not
 # an input to this build; the frozen fixtures it happens to host are read as
 # data, and `compat.yml` already gates those unfiltered for every platform.
@@ -27,11 +32,19 @@ on:
     paths:
       - apps/windows/**
       # Dependency closure, named precisely rather than as all of `web/`. The
-      # client compiles the protocol modules in `web/src/lib` and installs the
-      # web client's toolchain from its lockfile; it does not read the marketing
-      # pages, the generated static site or the e2e harnesses, and triggering on
-      # those would make an unrelated copy edit pay for a Windows runner.
-      - web/src/lib/**
+      # client compiles the protocol modules under `web/src`, installs the web
+      # client's toolchain from its lockfile, and — since `realtime` — drives the
+      # shipped web UI, imports the shared e2e harness and runs the real server.
+      # It still does not read the marketing pages or the generated static site,
+      # and triggering on those would make an unrelated copy edit pay for a
+      # Windows runner.
+      #
+      # `web/e2e/**` is the whole directory rather than the three files reached
+      # today: the harness is shared, its own imports may grow, and a filter that
+      # under-triggers is a Windows lane that silently stops running.
+      - web/src/**
+      - web/e2e/**
+      - server/**
       - web/package.json
       - web/package-lock.json
       # The TypeScript and Svelte configuration is a real transitive input, not
@@ -43,6 +56,13 @@ on:
       - web/tsconfig.app.json
       - web/tsconfig.node.json
       - web/svelte.config.js
+      # The web BUILD inputs. `npm run build` in `web/` is
+      # `gen-pages.mjs && vite build`, and `realtime` serves the built bundle.
+      - web/vite.config.ts
+      - web/vite-plugin-pwa.ts
+      - web/vite-plugin-route-shells.ts
+      - web/index.html
+      - web/scripts/**
       - .github/workflows/windows.yml
   workflow_dispatch:
   workflow_call:
@@ -305,6 +325,183 @@ jobs:
             apps/windows/release/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 7
+
+  # The Windows client and a real browser, in one room, on a Windows runner.
+  #
+  # ## What this job is for
+  #
+  # Every other Windows result is single-client: unit tests, the bootstrap and
+  # resident smokes, the installed artifact, the Inbox backend run. Interop
+  # evidence for this client has until now been produced on a Mac host, where
+  # the Electron client runs but the real Windows destination — the lease, the
+  # `winpath` guards and the native helper — cannot exist, and every destination
+  # assertion is answered by the fixture's portable provider instead. This is the
+  # first lane that runs it where those exist.
+  #
+  # No `needs:`, for the same reason `native` has none: it must still run when
+  # another job is red, and it is not gated on producing an installer.
+  #
+  # No signing, no fixture requiring a credential, no publication, no artifact
+  # upload. Nothing here needs a secret and nothing here produces a distributable.
+  realtime:
+    runs-on: windows-latest
+    # The fixture's own budget is 25 minutes and it runs up to 8 rounds, each
+    # with its own server, Electron and Chrome. 35 leaves room for the two npm
+    # installs, two builds and the Go work in front of it without letting a
+    # genuinely hung round run until the runner is killed.
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            apps/windows/package-lock.json
+            web/package-lock.json
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          # From the module's own `go` directive, like the `native` job, so the
+          # toolchain cannot drift from what the module declares. All three
+          # modules this job builds — the guardian, the native helper and the
+          # server — declare the same version.
+          go-version-file: apps/windows/test/native/owned-process/go.mod
+          cache-dependency-path: |
+            apps/windows/test/native/owned-process/go.sum
+            apps/windows/native/go.sum
+            server/go.sum
+
+      # Chrome, resolved HERE because the shared harness cannot resolve it.
+      #
+      # `resolveChrome` (`web/e2e/harness.mjs`) has candidate paths for darwin
+      # and linux and NONE for win32, so on this runner it throws
+      # "no Chrome found on platform win32" unless `CHROME_PATH` is set. That
+      # harness is shared with the lanes owning the other platforms and is not
+      # this job's to edit, so the path is supplied from outside instead.
+      #
+      # A missing browser is a FAILURE rather than a skip: a realtime interop
+      # job that quietly did not have a second peer is the exact shape of green
+      # that proves nothing.
+      - name: Resolve the browser
+        shell: pwsh
+        run: |
+          $candidates = @(
+            "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+            "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
+            "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
+          )
+          $chrome = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+          if (-not $chrome) {
+            throw "no Chrome on this runner; tried:`n  $($candidates -join "`n  ")"
+          }
+          Write-Host "browser: $chrome ($((Get-Item -LiteralPath $chrome).VersionInfo.ProductVersion))"
+          "CHROME_PATH=$chrome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # Both dependency trees, from the existing reviewed lockfiles.
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: web
+      - name: Install Windows client dependencies
+        run: npm ci
+        working-directory: apps/windows
+
+      # The bundle the browser half actually loads. `npm run build` here is
+      # `gen-pages.mjs && vite build`; the fixture serves `web/dist` from the
+      # real server and refuses to start without it.
+      - name: Build the web bundle
+        run: npm run build
+        working-directory: web
+
+      # The client the Electron half actually runs.
+      - name: Build the Windows client
+        run: npm run build
+        working-directory: apps/windows
+
+      # The native receive helper. On win32 the fixture uses the REAL
+      # destination, which spawns this binary — `resolveHelperPath` resolves it
+      # from `dist/main/io/../../../native/build/` in the unpackaged layout. Its
+      # absence would not skip the typed-refusal check: the check would FAIL,
+      # with `helper-unavailable` instead of the helper's own `E_MANIFEST`.
+      # Built where `electron-builder.yml`'s `extraResources` expects it, the
+      # same path the `build` job uses.
+      #
+      # Each build's exit status is checked immediately. `pwsh` does not stop a
+      # multi-line script when a native command fails, so without these the
+      # second `go build` succeeding would mask the first one failing and the
+      # step would exit 0. The existence assertion below does NOT cover that: a
+      # stale binary from a previous step or a cached workspace would satisfy it.
+      - name: Build the native helpers
+        shell: pwsh
+        working-directory: apps/windows/native
+        run: |
+          go build -o build/relayium-io-helper.exe ./cmd/relayium-io-helper
+          if ($LASTEXITCODE -ne 0) { throw "relayium-io-helper.exe failed to build ($LASTEXITCODE)" }
+          go build -o build/relayium-secret-helper.exe ./cmd/relayium-secret-helper
+          if ($LASTEXITCODE -ne 0) { throw "relayium-secret-helper.exe failed to build ($LASTEXITCODE)" }
+
+      - name: Assert the helper binary exists
+        shell: pwsh
+        working-directory: apps/windows
+        run: |
+          $helper = "native/build/relayium-io-helper.exe"
+          if (-not (Test-Path -LiteralPath $helper)) {
+            throw "native helper missing at $helper; the real Windows destination cannot open a lease without it"
+          }
+          Write-Host "helper: $helper $((Get-Item -LiteralPath $helper).Length) bytes"
+
+      # The test-only Job Object guardian's own tests.
+      #
+      # `-count=1` because a cached PASS says nothing about this commit's real
+      # handle behaviour; `-timeout` bounds a wedged child into a reported
+      # failure; `-v` so which cases executed is readable off the log. Exit
+      # status is `go test`'s own — no pipeline, same reasoning as `native`.
+      - name: Owned-process guardian tests
+        run: go test -v -count=1 -timeout 12m ./...
+        working-directory: apps/windows/test/native/owned-process
+
+      # The Windows-only half must have COMPILED IN, not merely not-failed.
+      #
+      # `go test ./...` is green on a build where `guard_windows_test.go` was
+      # excluded — the 24 platform-independent cases pass on their own, and the
+      # job-object cases that are the entire point of this module would simply be
+      # absent. `-list` reports the tests this build configuration WOULD run,
+      # honouring build tags, and the step above ran the whole package with no
+      # `-run` filter and no `t.Skip` anywhere in it. Present in `-list` plus a
+      # green unfiltered run is therefore execution.
+      - name: Assert every Windows job-object case is compiled in
+        shell: pwsh
+        working-directory: apps/windows/test/native/owned-process
+        run: |
+          $expected = @(
+            "TestTheJobHoldsAChildAndItsGrandchildAndAccountsForBoth",
+            "TestAForcedShutdownEmptiesTheWholeTree",
+            "TestATargetThatWillNotLeaveIsReportedAndThenEnded",
+            "TestAChildThatExitsImmediatelyLeavesAnEmptyJob",
+            "TestAFailedAssignmentTerminatesTheProcessAndObservesItsExit",
+            "TestAFailedAssignmentWhoseTerminationCANNOTBeObservedIsUNPROVEN",
+            "TestAFailedResumeDisposesThroughTheJobAndProvesIt",
+            "TestKillingTheGuardianItselfStillCollectsTheTree",
+            "TestKillingTheGuardedChildTakesItsDescendantsToo",
+            "TestAnExecutableThatCannotStartIsAFailure"
+          )
+          $listed = go test -list ".*" ./...
+          if ($LASTEXITCODE -ne 0) { throw "go test -list failed with $LASTEXITCODE" }
+          $missing = $expected | Where-Object { $listed -notcontains $_ }
+          if ($missing) {
+            throw "these Windows job-object cases are not in this build: $($missing -join ', ')"
+          }
+          Write-Host "all $($expected.Count) Windows job-object cases are compiled in"
+
+      # The acceptance itself, at its OWN defaults.
+      #
+      # No `RT_ROUNDS`, no `RT_CONTROL`, no `INTEROP_*`. The round loop covers
+      # both link roles, both code roles and every required case, and each of
+      # those is asserted to have actually RUN — capping the rounds would forfeit
+      # that coverage rather than shorten the job. Exit is 0 only when there are
+      # no failures AND no cleanup findings.
+      - name: Realtime pairing acceptance
+        run: node test/smoke/realtime-pairing-acceptance.mjs
+        working-directory: apps/windows
 
   # The native receive helper, on its own.
   #
