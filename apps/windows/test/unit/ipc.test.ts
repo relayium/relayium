@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { isTrustedSender, expectChunk, expectIndex, expectObject, expectString } from "../../src/main/ipc.js";
+import { IpcRouter, isTrustedSender, expectChunk, expectIndex, expectObject, expectString } from "../../src/main/ipc.js";
 import { isAppBundleURL } from "../../src/main/window.js";
-import { IPC_CHANNELS } from "../../src/shared/ipc-contract.js";
+import { IPC_CHANNELS, IPC_EVENT_NAMES } from "../../src/shared/ipc-contract.js";
 
 const SCHEME = "app";
 const HOST = "relayium";
@@ -113,9 +113,28 @@ describe("the preload bridge matches the contract", () => {
     "utf8",
   );
   const exposed = [...preload.matchAll(/invoke\("([^"]+)"\)/g)].map((m) => m[1]!);
+  const subscribed = [...preload.matchAll(/subscribe\("([^"]+)"\)/g)].map((m) => m[1]!);
 
   it("exposes exactly the declared channels", () => {
     expect([...exposed].sort()).toEqual([...IPC_CHANNELS].sort());
+  });
+
+  // The event direction gets the same treatment as the invoke direction, and
+  // for the same reason: a SECOND main-to-renderer message must not be able to
+  // arrive without being declared and reviewed. Without this assertion the push
+  // direction would be the one capability class with no parity check on it.
+  it("subscribes to exactly the declared events", () => {
+    expect([...subscribed].sort()).toEqual([...IPC_EVENT_NAMES].sort());
+  });
+
+  it("does not expose a generic event subscription", () => {
+    // The helper binds ONE literal per exposed subscription. Two ways that
+    // could stop being true, and both are what a generic forwarder looks like
+    // the moment before it becomes one: `subscribe` applied to something other
+    // than a string literal, or `subscribe` handed to the renderer uncurried so
+    // the renderer picks the channel itself.
+    expect(preload).not.toMatch(/\bsubscribe\((?!")/);
+    expect(preload).not.toMatch(/:\s*subscribe\s*[,}]/);
   });
 
   it("exposes no generic forwarder and no raw Electron surface", () => {
@@ -124,5 +143,172 @@ describe("the preload bridge matches the contract", () => {
     expect(preload).not.toMatch(/exposeInMainWorld\([^)]*ipcRenderer/);
     expect(preload).not.toMatch(/\bprocess\b\s*[,}]/);
     expect(preload).not.toContain("require(");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Document generations
+// ---------------------------------------------------------------------------
+//
+// The id alone stopped being enough once main could hold state on the
+// renderer's behalf. A reload keeps the same `WebContents` and the same id, so
+// `destroyed` never fires and nothing that hangs off it ever runs — but every
+// socket, subscription and lease the previous document asked for is orphaned,
+// and the new document never asked for any of them.
+
+/** A `WebContents` a test can drive. Only what `IpcRouter.bind` touches. */
+class FakeContents {
+  readonly id = 7;
+  destroyed = false;
+  readonly sent: Array<{ channel: string; payload: unknown }> = [];
+  readonly listeners = new Map<string, Array<(...args: unknown[]) => void>>();
+
+  on(event: string, cb: (...args: unknown[]) => void): this {
+    (this.listeners.get(event) ?? this.listeners.set(event, []).get(event)!).push(cb);
+    return this;
+  }
+
+  once(event: string, cb: (...args: unknown[]) => void): this {
+    return this.on(event, cb);
+  }
+
+  isDestroyed(): boolean {
+    return this.destroyed;
+  }
+
+  send(channel: string, payload: unknown): void {
+    if (this.destroyed) throw new Error("destroyed");
+    this.sent.push({ channel, payload });
+  }
+
+  fire(event: string, ...args: unknown[]): void {
+    for (const cb of this.listeners.get(event) ?? []) cb(...args);
+  }
+}
+
+function boundRouter() {
+  const contents = new FakeContents();
+  const router = new IpcRouter("app", "relayium");
+  const retired: number[] = [];
+  router.bind(contents as never);
+  router.onRevoke((generation) => retired.push(generation));
+  return { router, contents, retired };
+}
+
+describe("a document generation retires what main held for it", () => {
+  it("starts at zero and moves on a main-frame navigation", () => {
+    const { router, contents, retired } = boundRouter();
+    expect(router.generation).toBe(0);
+
+    contents.fire("did-start-navigation", { isMainFrame: true });
+
+    expect(retired).toEqual([0]);
+    expect(router.generation).toBe(1);
+  });
+
+  it("treats a navigation with no frame information as a main-frame one", () => {
+    // Only an explicit `isMainFrame: false` is a subframe. Guessing the other
+    // way would keep a retired document's sockets open.
+    const { router, contents } = boundRouter();
+    contents.fire("did-start-navigation", {});
+    expect(router.generation).toBe(1);
+  });
+
+  it("does NOT move for a same-document navigation", () => {
+    // `isSameDocument` is Electron's own name for a hash change, `pushState` /
+    // `replaceState`, and same-page history. The document and everything main
+    // holds for it survive untouched, so revoking here would cancel a transfer
+    // in progress because the user switched which page of the app they were
+    // looking at.
+    const { router, contents, retired } = boundRouter();
+
+    contents.fire("did-start-navigation", { isMainFrame: true, isSameDocument: true });
+
+    expect(retired).toEqual([]);
+    expect(router.generation).toBe(0);
+  });
+
+  it("still moves for a real main-frame navigation that replaces the document", () => {
+    const { router, contents } = boundRouter();
+    contents.fire("did-start-navigation", { isMainFrame: true, isSameDocument: false });
+    expect(router.generation).toBe(1);
+  });
+
+  it("does NOT move for a subframe navigation", () => {
+    const { router, contents, retired } = boundRouter();
+    contents.fire("did-start-navigation", { isMainFrame: false });
+    expect(retired).toEqual([]);
+    expect(router.generation).toBe(0);
+  });
+
+  it("moves when the renderer crashes, which sends no close for anything it held", () => {
+    const { router, contents, retired } = boundRouter();
+    contents.fire("render-process-gone");
+    expect(retired).toEqual([0]);
+    expect(router.generation).toBe(1);
+  });
+
+  it("moves when the window is destroyed", () => {
+    const { router, contents, retired } = boundRouter();
+    contents.fire("destroyed");
+    expect(retired).toEqual([0]);
+    expect(router.generation).toBe(1);
+  });
+
+  it("subscribes to nothing a hidden window would fire", () => {
+    // Hiding a window navigates nothing and kills nothing, so a hidden window
+    // keeps its sockets and its transfers. Asserted as the exact listener set
+    // rather than by describing it, because R-RESIDENT depends on it.
+    const { contents } = boundRouter();
+    expect([...contents.listeners.keys()].sort()).toEqual([
+      "destroyed",
+      "did-start-navigation",
+      "render-process-gone",
+    ]);
+  });
+
+  it("runs every revocation even when one of them throws", () => {
+    const { router, contents } = boundRouter();
+    const reached: string[] = [];
+    router.onRevoke(() => {
+      reached.push("first");
+      throw new Error("teardown failed");
+    });
+    router.onRevoke(() => reached.push("second"));
+
+    contents.fire("render-process-gone");
+
+    // One holder's failed teardown must not strand the others.
+    expect(reached).toEqual(["first", "second"]);
+  });
+});
+
+describe("the push direction refuses what the invoke direction refuses", () => {
+  it("refuses to emit an event name the contract does not declare", () => {
+    const { router } = boundRouter();
+    expect(() => router.emit("relayium:something-else", 0, {})).toThrow(/undeclared/);
+  });
+
+  it("emits a declared event to the bound renderer", () => {
+    const { router, contents } = boundRouter();
+    expect(router.emit(IPC_EVENT_NAMES[0]!, 0, { token: "t", kind: "open" })).toBe(true);
+    expect(contents.sent).toEqual([
+      { channel: IPC_EVENT_NAMES[0], payload: { token: "t", kind: "open" } },
+    ]);
+  });
+
+  it("drops an event addressed to a generation that has been retired", () => {
+    const { router, contents } = boundRouter();
+    contents.fire("did-start-navigation", { isMainFrame: true });
+    // Pushing the old document's frames into the new one is a cross-document
+    // leak; the frame is dropped rather than delivered to whoever is there now.
+    expect(router.emit(IPC_EVENT_NAMES[0]!, 0, { token: "t", kind: "open" })).toBe(false);
+    expect(contents.sent).toEqual([]);
+  });
+
+  it("drops an event once the WebContents is destroyed", () => {
+    const { router, contents } = boundRouter();
+    contents.destroyed = true;
+    expect(router.emit(IPC_EVENT_NAMES[0]!, 0, {})).toBe(false);
   });
 });

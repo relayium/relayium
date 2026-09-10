@@ -51,10 +51,11 @@
 //      return after it, and adopting that success is precisely the hole a
 //      renderer-side countdown cannot close.
 
-import { MAX_ATTEMPT_NONCE_LENGTH } from "../shared/ipc-contract.js";
+import { MAX_ATTEMPT_NONCE_LENGTH, type PublishReport, type ReceiveAuthority } from "../shared/ipc-contract.js";
 import { BEARER_KEY, approvalURL, type DeviceAuthClient } from "./account/device-auth.js";
 import { loadOrMintInstallID } from "./account/install-id.js";
 import { ReceiveLease, type ReceiveLeaseError } from "./io/receive-lease.js";
+import { LeaseReceiveAdapter, type NativeReceiveAdapter } from "./net/native-receive-adapter.js";
 import { SecretStoreError, type SecretStore } from "./secrets.js";
 import type { ManifestEntry } from "./io/plan.js";
 
@@ -75,6 +76,23 @@ export interface AppServiceDeps {
   /** Hand the validated approval URL to the browser. */
   openApproval(url: string): Promise<boolean>;
   newId(): string;
+  /**
+   * Which DOCUMENT is currently allowed to hold state in this process.
+   *
+   * Separate from the account epoch, and neither substitutes for the other. The
+   * epoch fences an ACCOUNT change; this fences the renderer's identity. A
+   * reload keeps the same `WebContents` — so `destroyed` never fires and
+   * `dispose()` never runs — but everything the previous document asked for is
+   * gone, and the new one never asked for any of it. Without this, a reload or
+   * a renderer crash mid-transfer leaves a lease holding an open handle and
+   * staged bytes in the user's folder that nothing will ever finish or clean
+   * up, and a picker the user was looking at can still register a lease into a
+   * document that no longer exists.
+   *
+   * Absent means "one document, forever", which is what every existing test and
+   * the accepted auth lifecycle assume.
+   */
+  documentGeneration?: () => number;
   /** Injectable so a test can drive a deadline without waiting for one. */
   now?: () => number;
 }
@@ -175,6 +193,41 @@ interface Session {
   readonly installID: string;
 }
 
+/**
+ * One open receive lease and everything that owns it.
+ *
+ * `terminal` is the publication barrier. A lease whose files are being moved to
+ * their final names is still THIS process's responsibility, so it stays
+ * registered until that operation actually settles — an account transition, a
+ * revocation or a quit that could not see it would return while a publication
+ * was still writing to the user's disk, and would then report a clean teardown
+ * it had not performed. Deleting the entry first is the shape that reads as
+ * tidy and is wrong; with the native helper integrated it becomes real files
+ * appearing after the app believed it had finished with them.
+ */
+interface LeaseEntry {
+  readonly adapter: NativeReceiveAdapter;
+  readonly authority: ReceiveAuthority;
+  readonly epoch: number;
+  /** The renderer document that asked for this lease. */
+  readonly document: number;
+  /** Non-null while a terminal publication is running. Never rejects — the
+   *  caller gets the real error; this exists only to be JOINED. */
+  terminal: Promise<void> | null;
+  /**
+   * The ONE retirement of this lease, shared by every caller that asks for it.
+   *
+   * Removing an entry from the map is not the end of ownership — it is only the
+   * point after which no NEW work is accepted. An explicit cancel that removed
+   * the entry and then awaited its own cleanup left a concurrent quit or
+   * account transition with nothing to find, so those returned reporting a
+   * teardown that was still running. The promise lives on the entry and the
+   * entry stays reachable through `retiring` until it settles, so every
+   * teardown caller joins the same operation instead of missing it.
+   */
+  retirement: Promise<void> | null;
+}
+
 export class AppService {
   private sessionPromise: Promise<Session> | null = null;
   private epoch = 0;
@@ -187,7 +240,60 @@ export class AppService {
   /** Nonces cancelled before their `start` arrived. Without this, a Cancel that
    *  overtook its own `start` would be a no-op and the start would proceed. */
   private readonly cancelledNonces = new RecentNonces(NONCE_MEMORY);
-  private readonly leases = new Map<string, { lease: ReceiveLease; epoch: number }>();
+  /**
+   * Every open receive lease, and WHICH authority owns it.
+   *
+   * ## Why a lease has an authority kind at all
+   *
+   * `openReceive` used to await `session()` unconditionally, so a signed-out
+   * LAN transfer needed usable encrypted account storage before it could pick a
+   * folder — and an account transition cancelled every lease, so signing in
+   * mid-transfer killed a transfer between two machines that never had an
+   * account in it. Neither is what the product does: `LanTransferDestination`
+   * on Mac holds no `AccountSession` at all.
+   *
+   * The existing account fencing is NOT weakened to fix that. It stays exactly
+   * as accepted and stays the DEFAULT, so every guarantee it established — a
+   * picker that returned after a sign-out is refused, an account change retires
+   * in-flight leases — applies unchanged to anything that does not explicitly
+   * ask otherwise. `direct` is an opt-out for the two flows that genuinely have
+   * no account in them, and it opts out of the account fence ONLY: a direct
+   * lease is still cancelled by its own room, by an explicit cancel, and by
+   * quit.
+   */
+  private readonly leases = new Map<string, LeaseEntry>();
+  /**
+   * Leases removed from the map whose cleanup has NOT settled.
+   *
+   * The reason a teardown cannot simply read `leases`. An explicit cancel
+   * removes an entry immediately — correctly, so no further work is accepted —
+   * but the files are still this process's responsibility until the cancel
+   * finishes. A quit that consulted only the map would find nothing and return.
+   */
+  private readonly retiring = new Set<LeaseEntry>();
+  /**
+   * A BOUNDED summary of cleanup failures the publication path could not report.
+   *
+   * A publication that fails runs its own cleanup, and its caller is given the
+   * PUBLICATION's error because that is the more accurate one for them. If the
+   * cleanup ALSO fails, that second failure describes bytes left in the user's
+   * folder and must not be dropped — so a summary is kept and the next teardown
+   * surfaces it.
+   *
+   * A count and the first reason, not an array of `Error`s. Retaining every
+   * error object would grow without bound across repeated failures, each one
+   * pinning a stack and whatever its closure captured, in the privileged
+   * process and on a path a failing disk drives repeatedly. The count is what
+   * the message needs; the first reason is what a diagnosis needs; the tenth
+   * duplicate is neither.
+   *
+   * The publication caller SHOULD eventually receive this alongside its own
+   * error rather than only the teardown seeing it. That needs a UI that can
+   * render two distinct facts — "the save did not complete" and "and some
+   * staged bytes could not be removed" — which does not exist yet. Carried as
+   * an explicit R-LAN plan item, not left as an implicit gap.
+   */
+  private cleanupResidue: { count: number; firstReason: string } | null = null;
   private disposed = false;
   /** Transitions run one at a time, in order. See `runTransition`. */
   private transitionTail: Promise<unknown> = Promise.resolve();
@@ -226,6 +332,23 @@ export class AppService {
   /** The value an operation captures at entry and re-checks after every await. */
   private currentEpoch(): number {
     return this.epoch;
+  }
+
+  /** Which document may hold state right now. */
+  private currentDocument(): number {
+    return this.deps.documentGeneration ? this.deps.documentGeneration() : 0;
+  }
+
+  /**
+   * Refuse if the document that started this operation is gone.
+   *
+   * Applied to BOTH authorities, unlike the epoch. A `direct` lease opts out of
+   * the account fence because it has no account; it does not opt out of
+   * belonging to the page that asked for it.
+   */
+  private assertDocument(captured: number): void {
+    if (this.disposed) throw new ServiceRefusal("service disposed");
+    if (captured !== this.currentDocument()) throw new ServiceRefusal("document changed");
   }
 
   private assertEpoch(captured: number): void {
@@ -271,22 +394,127 @@ export class AppService {
     return run;
   }
 
-  /** Cancel and forget every lease. Failures are surfaced, never swallowed. */
+  /**
+   * Retire the leases an ACCOUNT change invalidates. Failures are surfaced,
+   * never swallowed.
+   *
+   * `account` leases only, and this is the single line where the authority
+   * split has any effect on the accepted cancellation behaviour. An account
+   * lease is cancelled exactly as before. A `direct` lease is left alone
+   * because nothing about it changed: it was opened without a session, it is
+   * fenced on no epoch, and its files are going to a folder the user chose for
+   * a transfer that has no account in it. Cancelling it on sign-in would be the
+   * bug, not the safeguard.
+   */
   private async cancelLeases(): Promise<void> {
-    const retiring = [...this.leases.values()];
-    this.leases.clear();
-    const failures: unknown[] = [];
-    for (const entry of retiring) {
-      await entry.lease.cancel().catch((err: unknown) => failures.push(err));
+    await this.retireLeases((entry) => entry.authority === "account");
+  }
+
+  /**
+   * Cancel and forget every lease the predicate selects.
+   *
+   * The join is the part that must not be skipped. A lease with a publication
+   * in flight is moving files on the user's disk right now, and cancelling
+   * around it would race the teardown against the write — so the terminal
+   * operation is awaited FIRST, and only then is the staging residue removed.
+   * A transition that returned before that join would report a completed
+   * cleanup while a publication it could not see was still running.
+   *
+   * Entries are removed from the map before anything is awaited, so a
+   * concurrent caller cannot start a second teardown of the same lease.
+   *
+   * Named apart from the sign-in `retire` below: they retire different things.
+   */
+  private async retireLeases(select: (entry: LeaseEntry) => boolean): Promise<void> {
+    const chosen: LeaseEntry[] = [];
+    for (const [id, entry] of [...this.leases]) {
+      if (!select(entry)) continue;
+      // Removed first, so no NEW work is accepted while the cleanup runs.
+      this.leases.delete(id);
+      chosen.push(entry);
     }
-    if (failures.length > 0) {
-      throw new ServiceRefusal(`could not clean up ${failures.length} transfer(s)`);
+    // And the ones an explicit cancel already removed from the map but whose
+    // cleanup has not settled. This is the half that was missing: ownership
+    // does not end at map removal, so a teardown that only looked at the map
+    // returned while a publication it should have joined was still writing.
+    for (const entry of this.retiring) {
+      if (select(entry) && !chosen.includes(entry)) chosen.push(entry);
+    }
+
+    const outcomes = await Promise.allSettled(chosen.map((entry) => this.retireEntry(entry)));
+    const failed = outcomes.filter((outcome) => outcome.status === "rejected").length;
+    // Plus any cleanup failure a publication's own catch absorbed. Its caller
+    // was given the publication error; this is the residue that describes bytes
+    // still in the user's folder, and it is reported here rather than lost.
+    const residue = this.cleanupResidue;
+    this.cleanupResidue = null;
+    const total = failed + (residue?.count ?? 0);
+    if (total > 0) {
+      throw new ServiceRefusal(
+        `could not clean up ${total} transfer(s)${residue ? `: ${residue.firstReason}` : ""}`,
+      );
     }
   }
 
-  /** The authority string a lease is fenced on. */
-  private authorityFor(epoch: number): string {
-    return `epoch-${epoch}`;
+  /** Bounded: a count, and the first reason only. See `cleanupResidue`. */
+  private recordCleanupResidue(err: unknown): void {
+    if (this.cleanupResidue) {
+      this.cleanupResidue.count += 1;
+      return;
+    }
+    const raw = err instanceof Error ? (err.message ?? err.name) : String(err);
+    this.cleanupResidue = { count: 1, firstReason: raw.slice(0, 200) };
+  }
+
+  /**
+   * Cancel one lease, exactly once, however many callers ask.
+   *
+   * Idempotent by construction rather than by convention: the promise is stored
+   * on the entry, so a second caller joins the first operation instead of
+   * starting a competing one against the same files.
+   */
+  private retireEntry(entry: LeaseEntry): Promise<void> {
+    if (entry.retirement) return entry.retirement;
+    const run = (async () => {
+      // Never rejects; the publisher's own caller owns that error. What this
+      // await buys is that the cancel below does not race a publication for the
+      // same files.
+      await entry.terminal;
+      await entry.adapter.cancel();
+    })();
+    entry.retirement = run;
+    this.retiring.add(entry);
+    // The registry entry is dropped only once the work has actually settled.
+    // The `catch` is what keeps a rejected retirement from becoming an
+    // unhandled rejection when its real caller has already taken the error.
+    void run.catch(() => undefined).finally(() => this.retiring.delete(entry));
+    return run;
+  }
+
+  /**
+   * The renderer document that asked for this went away.
+   *
+   * Reached from a main-frame navigation and from a renderer crash — neither of
+   * which destroys the `WebContents`, so neither reaches `dispose()`. Both
+   * authorities are retired: a `direct` lease survives an ACCOUNT change, which
+   * is the whole point of it, but it does not survive the document that owns it
+   * ceasing to exist. Hiding the window is not this: it navigates nothing and
+   * kills nothing, so a hidden window keeps receiving.
+   */
+  async revokeDocument(generation: number): Promise<void> {
+    await this.retireLeases((entry) => entry.document === generation);
+  }
+
+  /**
+   * The authority string a lease is fenced on.
+   *
+   * A direct lease is fenced on a constant, not on an epoch: it has no account
+   * to be invalidated by. The string still exists — `ReceiveLease.assertAuthority`
+   * is what stops one lease's handle being driven under another's identity — it
+   * simply names an authority that does not rotate.
+   */
+  private authorityFor(authority: ReceiveAuthority, epoch: number): string {
+    return authority === "direct" ? "direct" : `epoch-${epoch}`;
   }
 
   private now(): number {
@@ -680,58 +908,148 @@ export class AppService {
    */
   async openReceive(
     manifest: readonly ManifestEntry[],
+    authority: ReceiveAuthority = "account",
   ): Promise<{ cancelled: true } | { leaseId: string; files: number }> {
     const captured = this.currentEpoch();
-    await this.session();
-    this.assertEpoch(captured);
+    // Captured BEFORE any await, both of them. The picker is a dialog the user
+    // can sit in front of for minutes, and either identity can change while
+    // they do: the account, and the document. Reading either afterwards would
+    // stamp a lease begun under the old one with the new one's authority.
+    const document = this.currentDocument();
+    // The account path is untouched, down to the ordering: the session is
+    // required before the picker opens, and the epoch is re-checked after every
+    // await. `direct` skips exactly this — it needs no store, no installation
+    // identity and no bearer, which is what lets a signed-out LAN transfer
+    // work even when encrypted account storage is unreadable.
+    if (authority === "account") {
+      await this.session();
+      this.assertEpoch(captured);
+    }
+    this.assertDocument(document);
 
     const directory = await this.deps.pickDirectory();
-    this.assertEpoch(captured);
+    if (authority === "account") this.assertEpoch(captured);
+    this.assertDocument(document);
     if (directory === null) return { cancelled: true };
 
     const id = this.deps.newId();
     const lease = await ReceiveLease.open({
       id,
-      authorityId: this.authorityFor(captured),
+      authorityId: this.authorityFor(authority, captured),
       rootPath: directory,
       manifest,
     });
     // Re-checked after the open, too: creating the staging directory is IO and
-    // the account can change during it. A lease that survived to here under a
-    // retired epoch is cancelled rather than registered.
-    if (captured !== this.epoch || this.disposed) {
+    // both identities can change during it. A lease that survived to here under
+    // a retired epoch or a retired document is cancelled rather than
+    // registered — otherwise a picker held open across a reload would install a
+    // live lease into a page that is already gone.
+    const accountStale = authority === "account" && captured !== this.epoch;
+    const documentStale = document !== this.currentDocument();
+    if (accountStale || documentStale || this.disposed) {
       await lease.cancel().catch(() => undefined);
-      throw new ServiceRefusal("account changed");
+      throw new ServiceRefusal(
+        accountStale ? "account changed" : documentStale ? "document changed" : "service disposed",
+      );
     }
-    this.leases.set(id, { lease, epoch: captured });
+    this.leases.set(id, {
+      adapter: new LeaseReceiveAdapter(lease),
+      authority,
+      epoch: captured,
+      document,
+      terminal: null,
+      retirement: null,
+    });
     return { leaseId: id, files: lease.files.length };
   }
 
-  private leaseFor(leaseId: string): ReceiveLease {
+  private entryFor(leaseId: string): LeaseEntry {
     const entry = this.leases.get(leaseId);
     if (!entry) throw new ServiceRefusal("unknown lease");
-    this.assertEpoch(entry.epoch);
-    entry.lease.assertAuthority(this.authorityFor(entry.epoch));
-    return entry.lease;
+    // An account lease is fenced exactly as before, INCLUDING the refusal while
+    // a transition is running. A direct lease is not, and must not be: the
+    // whole point is that a sign-in happening elsewhere does not interrupt it.
+    if (entry.authority === "account") this.assertEpoch(entry.epoch);
+    // Both authorities are fenced on the document, and a lease whose terminal
+    // publication has begun accepts no further work of any kind.
+    this.assertDocument(entry.document);
+    if (entry.terminal) throw new ServiceRefusal("publication in progress");
+    entry.adapter.assertAuthority(this.authorityFor(entry.authority, entry.epoch));
+    return entry;
+  }
+
+  private leaseFor(leaseId: string): NativeReceiveAdapter {
+    return this.entryFor(leaseId).adapter;
   }
 
   async beginFile(leaseId: string, index: number): Promise<void> {
-    await this.leaseFor(leaseId).beginFile(index);
+    await this.leaseFor(leaseId).begin(index);
   }
 
   async writeChunk(leaseId: string, index: number, chunk: Uint8Array): Promise<void> {
-    await this.leaseFor(leaseId).writeChunk(index, chunk);
+    await this.leaseFor(leaseId).write(index, chunk);
   }
 
   async finishFile(leaseId: string, index: number): Promise<void> {
-    await this.leaseFor(leaseId).finishFile(index);
+    await this.leaseFor(leaseId).finish(index);
+  }
+
+  /**
+   * The terminal step, and the only one that means "saved".
+   *
+   * ## The lease stays registered until this actually settles
+   *
+   * Not until it is STARTED. A publication is the one operation that writes to
+   * the user's chosen names, so while it runs this process still owns files —
+   * and an account transition, a document revocation or a quit that could not
+   * see the lease would join nothing, cancel nothing, and return reporting a
+   * teardown it had not performed. `terminal` is what those three join, and
+   * removing the entry only in the `finally` is what keeps it joinable for the
+   * whole operation rather than for the instant before it.
+   *
+   * The id is forgotten afterwards whatever the outcome: a `partial` has moved
+   * some files under their final names and cannot be retried against the same
+   * staging set, and a rejection has already run its own cleanup.
+   */
+  async publishReceive(leaseId: string): Promise<PublishReport> {
+    const entry = this.entryFor(leaseId);
+    const run = (async (): Promise<PublishReport> => {
+      try {
+        return await entry.adapter.publish();
+      } catch (err) {
+        // Publication failed, so the staged bytes are this app's to remove. The
+        // original failure is what the caller is told about — a cleanup that
+        // also fails must not replace it with a less accurate error — but it is
+        // RECORDED rather than swallowed, and the next teardown surfaces it.
+        await entry.adapter.cancel().catch((cleanupErr: unknown) => {
+          this.recordCleanupResidue(cleanupErr);
+        });
+        throw err;
+      }
+    })();
+    // Never rejects. A teardown joins this to know the write has STOPPED; the
+    // failure itself belongs to the caller below.
+    entry.terminal = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    try {
+      return await run;
+    } finally {
+      this.leases.delete(leaseId);
+    }
   }
 
   async cancelReceive(leaseId: string): Promise<void> {
     const entry = this.leases.get(leaseId);
     if (!entry) throw new ServiceRefusal("unknown lease");
     this.leases.delete(leaseId);
-    await entry.lease.cancel();
+    // The SHARED retirement, not a private one. A cancel that arrives during a
+    // publication waits for it rather than racing it for the same files — and,
+    // because the entry stays in `retiring` until this settles, a quit or an
+    // account transition that starts meanwhile joins this exact operation
+    // instead of finding an empty map and returning.
+    await this.retireEntry(entry);
   }
 
   /**
@@ -752,14 +1070,16 @@ export class AppService {
     this.disposal = (async () => {
       // Let an in-flight transition unwind before deleting what it is using.
       await this.transitionTail.catch(() => undefined);
-      const open = [...this.leases.values()];
-      this.leases.clear();
-      const failures: unknown[] = [];
-      for (const entry of open) {
-        await entry.lease.cancel().catch((err: unknown) => failures.push(err));
-      }
-      if (failures.length > 0) {
-        throw new ServiceRefusal(`could not clean up ${failures.length} transfer(s) on shutdown`);
+      // EVERY lease, both authorities, INCLUDING any whose cleanup an explicit
+      // cancel already started. Quit is the one teardown a direct lease does
+      // not survive: the app is going away, and staged bytes with no process to
+      // finish them are exactly the residue `dispose` exists to remove.
+      try {
+        await this.retireLeases(() => true);
+      } catch (err) {
+        throw new ServiceRefusal(
+          `could not clean up transfers on shutdown: ${(err as Error)?.message ?? String(err)}`,
+        );
       }
     })();
     return this.disposal;

@@ -17,7 +17,7 @@
 // unvalidated one.
 
 import { ipcMain, type IpcMainInvokeEvent, type WebContents } from "electron";
-import { IPC_CHANNELS } from "../shared/ipc-contract.js";
+import { IPC_CHANNELS, IPC_EVENT_NAMES } from "../shared/ipc-contract.js";
 import { isAppBundleURL } from "./window.js";
 
 export class IpcRefusal extends Error {
@@ -59,9 +59,28 @@ export function isTrustedSender(args: {
 /**
  * The registry. Holds the one WebContents id that is allowed to talk to it, so
  * "our window" is an identity rather than a description.
+ *
+ * ## Generations
+ *
+ * The id alone is not enough once main can hold state on the renderer's behalf.
+ * A reload keeps the same `WebContents` and the same id, but everything the
+ * previous document asked for — its sockets, its subscriptions, its leases — is
+ * gone, and the new document never asked for any of it. Pushing an old
+ * document's frames into a new one is a cross-document leak; keeping its
+ * sockets open is a resource the user cannot see or close.
+ *
+ * So every navigation of the MAIN frame that actually replaces the document,
+ * and every renderer crash, bumps a generation counter and runs the registered
+ * revocations. A holder captures the generation it was created under and is
+ * dropped the moment that number moves. A same-document navigation — a hash
+ * change, `pushState`, same-page history — replaces nothing and revokes
+ * nothing; see `bind`.
  */
 export class IpcRouter {
   private expectedId: number | null = null;
+  private contents: WebContents | null = null;
+  private generationValue = 0;
+  private readonly revocations = new Set<(generation: number) => void>();
 
   constructor(
     private readonly scheme: string,
@@ -71,9 +90,86 @@ export class IpcRouter {
   /** Called once, with the window this app created. */
   bind(contents: WebContents): void {
     this.expectedId = contents.id;
+    this.contents = contents;
+
+    // What actually retires a document, and what only looks like it does.
+    //
+    // A SUBFRAME navigation is not this frame's, and must not revoke the top
+    // frame's state.
+    //
+    // A SAME-DOCUMENT navigation is not a new document at all — `Electron`'s
+    // own `WebContentsDidStartNavigationEventParams.isSameDocument` names
+    // exactly this case: "reference fragment navigations, pushState/replaceState,
+    // and same page history navigation". The document, its scripts and every
+    // object main is holding state for survive it untouched. Revoking there
+    // would tear down live sockets and cancel a transfer in progress because
+    // the user changed which page of the app they were looking at, which is a
+    // thing a routed UI does constantly.
+    //
+    // So the claim this makes is narrower than "a main-frame navigation is a new
+    // document", because that claim is false.
+    contents.on(
+      "did-start-navigation",
+      (details: { isMainFrame?: boolean; isSameDocument?: boolean }) => {
+        if (details?.isMainFrame === false) return;
+        if (details?.isSameDocument === true) return;
+        this.revoke();
+      },
+    );
+    // A crashed or killed renderer never sends a close for anything it held.
+    contents.on("render-process-gone", () => this.revoke());
     contents.once("destroyed", () => {
       this.expectedId = null;
+      this.contents = null;
+      this.revoke();
     });
+  }
+
+  /** The document generation currently allowed to hold state in main. */
+  get generation(): number {
+    return this.generationValue;
+  }
+
+  /**
+   * Register a teardown for anything held on the current document's behalf.
+   *
+   * Called with the generation being retired, so a holder can tell "my document
+   * went away" from "a later document's did".
+   */
+  onRevoke(fn: (generation: number) => void): void {
+    this.revocations.add(fn);
+  }
+
+  private revoke(): void {
+    const retiring = this.generationValue;
+    this.generationValue += 1;
+    for (const fn of [...this.revocations]) {
+      try {
+        fn(retiring);
+      } catch {
+        // One holder's failed teardown must not strand the others.
+      }
+    }
+  }
+
+  /**
+   * Push one declared event to the bound renderer.
+   *
+   * Three refusals, and none of them is an optimisation. A destroyed
+   * `WebContents` throws on send. A stale generation means the document that
+   * asked for this is gone. An undeclared event name is a capability nobody
+   * reviewed — the same rule `handle` applies to channels, applied to the
+   * direction that pushes.
+   */
+  emit(event: string, generation: number, payload: unknown): boolean {
+    if (!IPC_EVENT_NAMES.includes(event)) {
+      throw new Error(`refusing to emit undeclared IPC event: ${event}`);
+    }
+    if (generation !== this.generationValue) return false;
+    const contents = this.contents;
+    if (!contents || contents.isDestroyed()) return false;
+    contents.send(event, payload);
+    return true;
   }
 
   handle<T>(channel: string, body: (payload: unknown) => Promise<T>): void {

@@ -490,3 +490,87 @@ Function .onVerifyInstDir
   Pop $R9
   Pop $R8
 FunctionEnd
+
+; ---------------------------------------------------------------------------
+; `relayium://` registration.
+;
+; ## Why this is here and not in electron-builder
+;
+; `electron-builder.yml` has a `protocols:` block, and until run 102806132639 a
+; comment in this project claimed the installer owned the association because of
+; it. That was false. `protocols` is consumed only by `LinuxTargetHelper` and
+; `AppxTarget` in the pinned app-builder-lib; **the NSIS target does not read it
+; at all** (`grep -rn protocol templates/nsis/` and `out/targets/nsis/` return
+; nothing). The installer registered nothing.
+;
+; What actually registered the scheme was `main.ts` calling
+; `setAsDefaultProtocolClient` at runtime, on first launch. That produced exactly
+; the three failures the first Windows job found: the key was absent before the
+; app had ever run, and the uninstaller — which knew nothing about a key it did
+; not write — left it behind pointing at a deleted executable.
+;
+; So registration moves here, where the uninstaller can also remove it.
+;
+; ## HKCU only
+;
+; Written to `HKCU` literally rather than `SHELL_CONTEXT`. This is a per-user
+; install and a per-user association; hard-coding the hive means a later change
+; to `perMachine` cannot silently turn this into a machine-wide association.
+; Nothing here writes `HKLM`.
+
+; ## `relayium://` registration
+;
+; The NSIS target does not read `electron-builder.yml`'s `protocols:` key — the
+; pinned app-builder-lib consumes it only in its Linux and Appx targets. So this
+; file is the sole writer of the association, and the sole remover.
+;
+; `${APP_EXECUTABLE_FILENAME}` is not defined where this file is PARSED
+; (electron-builder emits it into the common header, before `common.nsh`), but a
+; macro body is not parsed until it is inserted, and both insertion points are
+; after that include. An undefined `${...}` is not an NSIS error — it survives as
+; a literal — so each macro asserts the define at its own expansion rather than
+; trusting it.
+
+!define RELAYIUM_SCHEME "relayium"
+!define RELAYIUM_SCHEME_KEY "Software\Classes\${RELAYIUM_SCHEME}"
+!define RELAYIUM_SCHEME_CMD_KEY "${RELAYIUM_SCHEME_KEY}\shell\open\command"
+
+!macro customInstall
+  !ifndef APP_EXECUTABLE_FILENAME
+    !error "APP_EXECUTABLE_FILENAME undefined at customInstall: the registration would write a literal placeholder"
+  !endif
+  ; After extraction: the value must name an executable that is on disk.
+  DetailPrint "Registering ${RELAYIUM_SCHEME}:// for this user"
+  WriteRegStr HKCU "${RELAYIUM_SCHEME_KEY}" "" "URL:Relayium Protocol"
+  WriteRegStr HKCU "${RELAYIUM_SCHEME_KEY}" "URL Protocol" ""
+  WriteRegStr HKCU "${RELAYIUM_SCHEME_KEY}\DefaultIcon" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}",0'
+  ; Quoted path, then the URL as ONE quoted argument. Unquoted, a destination
+  ; containing a space would hand the app a truncated path as argv[1].
+  WriteRegStr HKCU "${RELAYIUM_SCHEME_CMD_KEY}" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"'
+!macroend
+
+!macro customUnInstall
+  !ifndef APP_EXECUTABLE_FILENAME
+    !error "APP_EXECUTABLE_FILENAME undefined at customUnInstall: the ownership test would compare a literal placeholder"
+  !endif
+  ; Runs before the installed files are removed, so `$INSTDIR` still spells the
+  ; executable this installation registered.
+  ;
+  ; EXACT match against the one command this installer writes. An earlier version
+  ; accepted any quoted path under `$INSTDIR\`, which also accepts a different
+  ; program dropped in that directory and accepts `$INSTDIR\..\other.exe` —
+  ; a prefix test is not an identity test. Since this file is the only writer,
+  ; the exact string is available and is what ownership means.
+  ;
+  ; Conditional because an association is a shared, single-valued resource: if
+  ; the user has since pointed `relayium://` at another program, that
+  ; registration is not ours to delete.
+  Push $0
+  ReadRegStr $0 HKCU "${RELAYIUM_SCHEME_CMD_KEY}" ""
+  ${If} $0 == '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"'
+    DeleteRegKey HKCU "${RELAYIUM_SCHEME_KEY}"
+  ${Else}
+    DetailPrint "Leaving ${RELAYIUM_SCHEME}:// registered: it does not name this installation"
+  ${EndIf}
+  Pop $0
+!macroend

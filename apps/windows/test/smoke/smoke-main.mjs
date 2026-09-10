@@ -180,7 +180,18 @@ async function main() {
     "JSON.stringify({ keys: Object.keys(globalThis.relayium ?? {}), hasIpc: 'ipcRenderer' in globalThis })",
   );
   const parsed = JSON.parse(bridge);
-  check("bridge exposed", parsed.keys.sort().join(",") === "appInfo,auth,receive", parsed.keys.join(","));
+  // EXACT set, not a superset: a `contains` check would pass while the preload
+  // quietly grew a surface nobody reviewed.
+  //
+  // Pinned to the reviewed realtime surface. This tree is at the foundation
+  // commit and exposes `appInfo,auth,receive`, so it fails here until the
+  // realtime lane is integrated — deliberately, because pinning the assertion to
+  // whatever this tree happens to expose would accept a stale bridge silently.
+  check(
+    "bridge exposed",
+    parsed.keys.sort().join(",") === "appInfo,auth,ice,receive,signaling",
+    parsed.keys.join(","),
+  );
   check("no raw ipcRenderer in the page", parsed.hasIpc === false);
 
   const info = await win.webContents.executeJavaScript("globalThis.relayium.appInfo()");

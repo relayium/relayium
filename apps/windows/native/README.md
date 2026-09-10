@@ -6,12 +6,30 @@ Node's `fs` cannot on Windows — publish a completed file without ever replacin
 an existing one, and stay contained in the folder the user chose even while
 directories are being swapped underneath it.
 
-**Status: core only. Not integrated, not runtime-verified.**
+**Status: core only, first Windows runtime evidence in hand. Not integrated.**
 There is no Electron adapter, no `electron-builder` packaging and no CI
-registration here; those are a later, separately owned slice. The Windows tests
-in this module have been compiled but **never executed** — no Windows host has
-run them. Cross-compilation is not acceptance, and nothing in this module should
-be described as verified until a real Windows runner reports on it.
+registration here; those are a later, separately owned slice.
+
+A real Windows runner has now executed this module's tests. **Every shipping
+`internal/winio` invariant passed**, with no skips: no-replace publication and
+the concurrent-publication conflict, existing-file and directory-type-conflict
+preservation, interior-junction refusal, root-junction follow-once-then-pin
+*including an actually-performed retarget* (reported
+`PROVEN-INVARIANT: re-pointing a root junction cannot redirect writes`),
+ancestor rename/delete refusal while pinned, cleanup by handle with unowned
+content preserved, the staging sentinel, cancel at each barrier, and — against
+the real executable — parent EOF, hard-kill residue bounds and the forced
+five-second shutdown bound.
+
+Two tests failed, both in the **quarantined experimental** on-close primitive
+that no shipping path calls: `setOnCloseDeletion` is refused with
+`STATUS_NOT_SUPPORTED` on that host. See the on-close section below; the
+capability is one-directional there, `OnCloseDeletionEnabled` stays `false`, and
+**hard-kill residue is still bounded-and-documented rather than zero.**
+
+Still not verified: the module is unintegrated, so nothing here has run behind a
+real Electron adapter or from a packaged install, and no host other than that
+runner has been observed.
 
 ## The invariant everything else follows from
 
@@ -205,9 +223,8 @@ reported · `4` internal · `5` shutdown grace exceeded.
   `<root>\.relayium-incoming-<32 hex>` directory containing at most N `.part`
   files. Residue is never at a destination pathname, never overwrites anything,
   and is never adopted or swept by a later session — sweeping would mean deleting
-  objects another live lease may own. See `internal/winio/onclose_windows.go` for
-  why the primitive that could shrink this to zero is quarantined rather than
-  used.
+  objects another live lease may own. The primitive that could shrink this to
+  zero is quarantined; the section below records what a real host said about it.
 * **Interior reparse points are refused**, including ones the user created
   legitimately. Containment to the chosen subtree is the product promise, and the
   alternative — resolving and string-comparing against the root — is the
@@ -215,6 +232,27 @@ reported · `4` internal · `5` shutdown grace exceeded.
 * **Destinations longer than 260 characters are allowed** (everything is
   handle-relative, so `MAX_PATH` does not apply) and reported via
   `longPath: true` so the UI can warn that some Win32 applications will struggle.
+* **SETTING delete-on-close through the disposition class is refused, not
+  merely unproven** — the clear direction is accepted, so this is a statement
+  about one flag combination and not about the class or about all hosts. The
+  withdrawn zero-residue design needed to SET delete-on-close on a staged file
+  through `FILE_DISPOSITION_INFORMATION_EX`. On the first real runner that call
+  returned `STATUS_NOT_SUPPORTED`:
+
+  | Flags | Value | Result |
+  |---|---|---|
+  | `DELETE\|ON_CLOSE\|IGNORE_READONLY` (set) | `0x19` | **refused** |
+  | `DO_NOT_DELETE\|ON_CLOSE` (clear) | `0x08` | accepted |
+  | `DELETE\|POSIX\|IGNORE_READONLY` (`deleteByHandle`) | `0x13` | accepted |
+
+  The third row is why this is a statement about the flag combination and not
+  about the information class: `deleteByHandle` uses the same class and its
+  tests pass. Clearing works — a file created with the `FILE_DELETE_ON_CLOSE`
+  create option survived its close after a clear — so the primitive is
+  available in ONE direction. That is not enough to build the design on, and
+  half a primitive is not a primitive. `OnCloseDeletionEnabled` stays `false`,
+  `setOnCloseDeletion` has no caller, and bounded hard-kill residue above
+  remains the shipped and documented behaviour.
 * **The native manifest bounds are stricter than the TypeScript planner's**:
   1 MiB aggregate name bytes and 4096 distinct directories, neither of which
   exists in `src/main/io/plan.ts`. Both bound resources this process holds. They
@@ -248,6 +286,7 @@ invariants in this module were established.** Read the markers:
 |---|---|
 | `PROVEN-INVARIANT:` | the attack step actually ran and the invariant held |
 | `UNPROVEN-INVARIANT:` | this run did NOT establish the named claim |
+| `EXPERIMENT-UNSUPPORTED:` | the platform DECLINED a disabled experimental capability. Not a shipping failure, and not evidence the capability works |
 | `OPEN-QUESTION:` | a platform answer was recorded, not an invariant asserted |
 
 ```

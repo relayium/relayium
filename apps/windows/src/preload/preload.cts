@@ -21,6 +21,31 @@ import { contextBridge, ipcRenderer } from "electron";
 
 const invoke = (channel: string) => (payload?: unknown) => ipcRenderer.invoke(channel, payload);
 
+/**
+ * The one main-to-renderer event, subscribed by its literal name.
+ *
+ * ## Why this is a named subscription and not `on(channel, cb)`
+ *
+ * A generic forwarder would make every present and future main-to-renderer
+ * message reachable from any script the renderer runs — the exact mirror of the
+ * generic `invoke` this bridge already refuses, and it would arrive without
+ * anybody reviewing what started being pushed. So the name is spelled here,
+ * once, and `ipc-contract.test.ts` asserts the set matches the contract.
+ *
+ * `ipcRenderer` and the Electron `event` object are both dropped: the callback
+ * receives the payload and nothing else, so a renderer cannot reach `sender`
+ * and turn a subscription into a channel of its own.
+ *
+ * Returns an unsubscribe. A room that closes must be able to stop listening —
+ * without one, every reopened room would add a listener to the same emitter and
+ * the old ones would keep receiving.
+ */
+const subscribe = (channel: string) => (cb: (payload: unknown) => void) => {
+  const listener = (_event: unknown, payload: unknown) => cb(payload);
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+};
+
 contextBridge.exposeInMainWorld("relayium", {
   appInfo: invoke("relayium:app-info"),
   auth: {
@@ -36,5 +61,15 @@ contextBridge.exposeInMainWorld("relayium", {
     write: invoke("relayium:receive-write"),
     finish: invoke("relayium:receive-finish"),
     cancel: invoke("relayium:receive-cancel"),
+    publish: invoke("relayium:receive-publish"),
+  },
+  signaling: {
+    open: invoke("relayium:signaling-open"),
+    send: invoke("relayium:signaling-send"),
+    close: invoke("relayium:signaling-close"),
+    subscribe: subscribe("relayium:signaling-event"),
+  },
+  ice: {
+    config: invoke("relayium:ice-config"),
   },
 });

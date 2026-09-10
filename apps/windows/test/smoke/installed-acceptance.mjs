@@ -68,12 +68,40 @@ const installDir = path.join(runnerTemp, "relayium acceptance", "Relayium");
 const dataRoot = path.join(localAppData, "Relayium");
 /** Coupled to `APP_DIRECTORY` in `storage.ts` and `installer.nsh`, via the path above. */
 const APP_DIR_NAME = path.basename(dataRoot);
+
+/**
+ * The profile directory names to survey. A CLOSED list of two known candidates,
+ * not a scan: nothing here enumerates the user's other application profiles.
+ *
+ * Both are surveyed because which one Electron uses is not obvious and guessing
+ * wrong produces the worst possible diagnostic — "no Local State anywhere",
+ * which reads as a finding and is actually a missed directory.
+ *
+ * `app.getName()` returns `productName` from the packaged `package.json`, or
+ * `name` when there is none. Extracting `app.asar` from a real build shows
+ * `{"name":"relayium-windows"}` with **no `productName`** — electron-builder's
+ * `productName: Relayium` configures the executable and install directory, not
+ * the packaged manifest — and `main.ts` never calls `app.setName`. So the live
+ * profile is expected under `relayium-windows`, and `Relayium` is surveyed as
+ * the other closed possibility rather than assumed absent.
+ */
+const PROFILE_DIR_CANDIDATES = ["relayium-windows", "Relayium"];
+
+const SCHEME_KEY = "HKCU\\Software\\Classes\\relayium";
+const SCHEME_CMD_KEY = `${SCHEME_KEY}\\shell\\open\\command`;
 const secretsDir = path.join(dataRoot, "secrets");
 const uninstaller = path.join(installDir, "Uninstall Relayium.exe");
 const installedExe = path.join(installDir, "Relayium.exe");
 
 /** Everything this run is allowed to delete, recorded as it is created. */
-const owned = { installParent: null, dataRoot: false, aliasRoot: null, substLetter: null };
+const owned = {
+  installParent: null,
+  dataRoot: false,
+  aliasRoot: null,
+  substLetter: null,
+  schemeInstallParent: null,
+  schemeKey: false,
+};
 /** Only PIDs this run spawned. Never a name or image match. */
 const spawnedPids = new Set();
 
@@ -125,6 +153,13 @@ function regQueryDefault(key) {
   const line = r.stdout.split(/\r?\n/).find((l) => /REG_SZ/.test(l));
   if (!line) return null;
   return line.slice(line.indexOf("REG_SZ") + "REG_SZ".length).trim();
+}
+
+/** Writes a key's default value. Only ever used on keys this run owns. */
+function regSetDefault(key, value) {
+  return spawnSync("reg.exe", ["add", key, "/ve", "/t", "REG_SZ", "/d", value, "/f"], {
+    stdio: "ignore",
+  }).status === 0;
 }
 
 const regKeyExists = (key) => spawnSync("reg.exe", ["query", key], { encoding: "utf8" }).status === 0;
@@ -466,6 +501,54 @@ async function main() {
     DEADLINE.exit,
   );
 
+  // ---- Crash durability, BEFORE any reinstall is involved ---------------
+  //
+  // The first launch above was ended with `taskkill /F`. That bypasses
+  // Electron's normal shutdown, and normal shutdown is where
+  // `CommitPendingWrite` flushes `Local State` — the file holding the OSCrypt
+  // key that every sealed blob depends on. If the key was minted on first run
+  // and never reached disk, the next launch mints a NEW one and the sealed
+  // identity becomes undecryptable while remaining byte-identical.
+  //
+  // This step relaunches with NO reinstall in between, which is what separates
+  // "a crash destroys the identity" from "a reinstall destroys the identity".
+  // The first Windows job could not tell them apart, because it only ever
+  // observed the store after a reinstall.
+  //
+  // Asserted, not merely noted. A forced termination is what a power cut or a
+  // Task Manager kill looks like, and an identity that does not survive one is a
+  // real durability defect, not a test artifact.
+  notes.push(`profile after first launch: ${JSON.stringify(profileState())}`);
+  const portR = await freeLoopbackPort();
+  const appR = launchInstalled(portR);
+  const targetR = await attachToApp(portR);
+  if (check("the relaunched app exposed a page target", targetR !== null)) {
+    const cdpR = await CdpSession.open(targetR.webSocketDebuggerUrl);
+    const stateR = await cdpR.evaluate("globalThis.relayium.auth.state()");
+    notes.push(`store after forced-kill relaunch, no reinstall: ${stateR.store}`);
+    check(
+      "secret store readable after a forced kill, WITHOUT any reinstall",
+      stateR.store === "ok",
+      JSON.stringify(stateR),
+    );
+    check("sealed identity byte-identical after the relaunch", hashSealed() === sealedBefore);
+    cdpR.close();
+  }
+  killOwned(appR.pid);
+  await waitFor(
+    "the relaunched app's debugging endpoint to disappear",
+    async () => {
+      try {
+        await cdpTargets(portR);
+        return false;
+      } catch {
+        return true;
+      }
+    },
+    DEADLINE.exit,
+  );
+  notes.push(`profile after relaunch: ${JSON.stringify(profileState())}`);
+
   // ---- The destination guard: a silent install must not eat the data ----
   //
   // With a real identity now on disk, point the installer at the private data
@@ -560,6 +643,10 @@ async function main() {
   if (check("the reinstalled app exposed a page target", target2 !== null)) {
     const cdp2 = await CdpSession.open(target2.webSocketDebuggerUrl);
     const state2 = await cdp2.evaluate("globalThis.relayium.auth.state()");
+    notes.push(`store after reinstall: ${state2.store}`);
+    notes.push(`profile after reinstall: ${JSON.stringify(profileState())}`);
+    // Unchanged and NOT relaxed: an unreadable store here is a failure. The
+    // diagnostics above exist to explain it, not to excuse it.
     check("secret store still healthy after reinstall", state2.store === "ok", JSON.stringify(state2));
     check("still signed out after reinstall", state2.signedIn === false, JSON.stringify(state2));
     check("sealed identity unchanged by the second read", hashSealed() === sealedBefore);
@@ -591,6 +678,51 @@ async function main() {
   }
 
   await aliasPhase();
+  await schemeOwnershipPhase();
+}
+
+/**
+ * An uninstall must remove OUR association and must not touch anyone else's.
+ *
+ * An association is a shared, single-valued resource. If the user has since
+ * pointed `relayium://` at another program, deleting it on uninstall would
+ * silently break a choice they made. The uninstaller therefore compares the
+ * registered command against the exact one it wrote, and this proves both
+ * halves — the removal is already asserted in the main flow above; what is
+ * proven here is the refusal.
+ *
+ * Runs last, with nothing installed and the scheme key absent. Every piece of
+ * state it touches it created itself.
+ */
+async function schemeOwnershipPhase() {
+  if (!check("scheme key absent before the ownership case", !regKeyExists(SCHEME_KEY))) return;
+
+  const dir = path.join(runnerTemp, "relayium acceptance", "own", "Relayium");
+  owned.schemeInstallParent = path.dirname(path.dirname(dir));
+
+  const installed = await runInstaller(["/S", `/D=${dir}`], DEADLINE.install, "install for ownership case");
+  if (!check("ownership-case install exited 0", installed.ok && installed.code === 0, `exit ${installed.code}`)) return;
+  check("ownership-case install registered the scheme", regKeyExists(SCHEME_KEY));
+
+  // Somebody else takes the association over.
+  const foreign = '"C:\\Windows\\System32\\notepad.exe" "%1"';
+  if (!check("foreign association written", regSetDefault(SCHEME_CMD_KEY, foreign))) return;
+  owned.schemeKey = true;
+
+  const un = path.join(dir, "Uninstall Relayium.exe");
+  if (check("ownership-case uninstaller exists", existsSync(un), un)) {
+    const removed = await runInstaller(["/S", `_?=${dir}`], DEADLINE.uninstall, "ownership-case uninstall", un);
+    check("ownership-case uninstall ran to completion", removed.ok, removed.reason);
+    check("ownership-case uninstall exited 0", removed.code === 0, `exit ${removed.code}`);
+  }
+
+  const after = regQueryDefault(SCHEME_CMD_KEY);
+  check(
+    "a foreign relayium:// association SURVIVED our uninstall",
+    after === foreign,
+    `expected the foreign value to be untouched, got: ${after ?? "(key deleted)"}`,
+  );
+  notes.push("scheme ownership: foreign association preserved, own registration removed");
 }
 
 /**
@@ -626,6 +758,7 @@ async function aliasPhase() {
   // junction cases carry this evidence instead of a case that may not run.
   if (!check("junction to the data root created", mklinkJ(toData, dataRoot), toData)) return;
   if (!check("junction to an ordinary directory created", mklinkJ(toOrdinary, ordinary), toOrdinary)) return;
+  notes.push("alias phase: junction preconditions created");
 
   await expectRefused("a junction onto the private data directory", toData, sealed);
   await expectRefused(
@@ -648,6 +781,7 @@ async function aliasPhase() {
     return;
   }
   owned.substLetter = letter;
+  notes.push(`alias phase: subst ${letter}: created`);
 
   await expectRefused(`a subst drive onto the profile (${letter}:)`, `${letter}:\\${APP_DIR_NAME}`, sealed);
   // Without this control, the refusal above is equally explained by NSIS or the
@@ -672,6 +806,9 @@ async function expectRefused(label, destination, sealed) {
     );
   }
   check(`the sealed identity survived the refused install into ${label}`, hashSealed() === sealed);
+  // Explicit positive output. Absence of a failure line is not evidence a case
+  // ran: a precondition that returned early would look identical in the log.
+  notes.push(`REFUSED as expected (exit ${result.code}): ${label}`);
 }
 
 /** A destination that must still install, then is uninstalled and removed. */
@@ -690,6 +827,7 @@ async function expectInstalls(label, destination) {
     await waitFor(`${label} program files to be removed`, async () => !existsSync(exe), DEADLINE.uninstall);
   }
   check(`${label} left no executable behind`, !existsSync(exe));
+  notes.push(`INSTALLED and removed as expected: ${label}`);
 }
 
 /** `mklink /J`. Needs no elevation, unlike a symlink. */
@@ -734,6 +872,47 @@ function substRelease(letter, expectedTarget) {
   if (r.status !== 0) failures.push(`could not release subst ${letter}:`);
 }
 
+/**
+ * Metadata about Chromium's `Local State`, which is where the safeStorage key
+ * lives — NOT its contents.
+ *
+ * Electron creates a `JsonPrefStore` at `DIR_SESSION_DATA/Local State`
+ * (`shell/browser/browser_process_impl.cc`) and `OSCrypt::Init(local_state)`
+ * takes the encryption key from it (`electron_browser_main_parts.cc`).
+ * `safeStorage` delegates to OSCrypt rather than calling DPAPI per value, so
+ * that one file is what makes every sealed blob readable.
+ *
+ * `main.ts` sets neither `userData` nor `sessionData`, so the profile is at
+ * Electron's default and OUTSIDE the private data root this product protects.
+ * Which directory that actually is on a runner is the thing to establish, so
+ * both candidates are probed and reported.
+ *
+ * Existence, size and a whole-file digest only. The file holds a DPAPI-wrapped
+ * key; nothing here reads, logs or transports its contents, and the digest is a
+ * change-fingerprint, not a value that can be inverted.
+ */
+function profileState() {
+  const out = {};
+  for (const [baseLabel, base] of [["roaming", process.env["APPDATA"]], ["local", localAppData]]) {
+    if (!base) continue;
+    for (const name of PROFILE_DIR_CANDIDATES) {
+      const label = `${baseLabel}/${name}`;
+      const file = path.join(base, name, "Local State");
+      if (!existsSync(file)) {
+        out[label] = { present: false };
+        continue;
+      }
+      const bytes = readFileSync(file);
+      out[label] = {
+        present: true,
+        bytes: bytes.length,
+        sha256: createHash("sha256").update(bytes).digest("hex").slice(0, 16),
+      };
+    }
+  }
+  return out;
+}
+
 /** Hash of the sealed secret files, or null when there are none. */
 function hashSealed() {
   if (!existsSync(secretsDir)) return null;
@@ -758,9 +937,12 @@ function cleanup() {
   // following one. `rmSync` removes a junction without descending, but the
   // ordering is not something to leave to a library detail.
   if (owned.substLetter !== null) substRelease(owned.substLetter, localAppData);
+  // The foreign value under this key was written by this run; the precondition
+  // asserted the key absent before anything started, so nothing here predates it.
+  if (owned.schemeKey) spawnSync("reg.exe", ["delete", SCHEME_KEY, "/f"], { stdio: "ignore" });
   // Exactly the paths this run created, each recorded at the moment it created
   // it — not derived from a path it merely knows about.
-  for (const dir of [owned.aliasRoot, owned.installParent, owned.dataRoot ? dataRoot : null]) {
+  for (const dir of [owned.schemeInstallParent, owned.aliasRoot, owned.installParent, owned.dataRoot ? dataRoot : null]) {
     if (dir === null || !existsSync(dir)) continue;
     try {
       rmSync(dir, { recursive: true, force: true });

@@ -1,6 +1,19 @@
+import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vite";
 
 export default defineConfig({
+  // The real Svelte plugin, because the tests now execute real rune modules.
+  //
+  // The foundation ran without one and was right to: only non-rune fixture
+  // modules were imported, so nothing needed compiling. The transport slice
+  // composes `peer-workspace.svelte.ts`, `mixed-session.svelte.ts` and
+  // `peer-caps.svelte.ts` — `$state` in every one — and a test that cannot run
+  // them is a test of a copy rather than of the thing that ships.
+  //
+  // Deliberately the ordinary plugin. A custom transform that stripped or
+  // rewrote runes would make these tests pass against code the renderer does
+  // not run, which is worse than not having them.
+  plugins: [svelte()],
   resolve: {
     // `web/src/lib/*` is imported directly rather than vendored — a copied
     // protocol is silent divergence with a green board on both sides, which is

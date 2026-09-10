@@ -48,10 +48,16 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  # The installer owns the `relayium://` association (see `protocols` below).
-  # The app never registers it at runtime — doing so from a development run or a
-  # test would seize the scheme from whatever already owns it on that machine.
+  # `relayium://` is registered by `assets/installer.nsh` (`customInstall`) and
+  # removed conditionally by its `customUnInstall`. NOT by the `protocols:` key
+  # below — see the note there.
 
+# INERT FOR THIS TARGET. The pinned app-builder-lib reads `protocols` only in
+# `LinuxTargetHelper` and `AppxTarget`; the NSIS target ignores it entirely.
+# Kept because it is the declared, portable statement of intent and other targets
+# would honour it — but it registers nothing here, and an earlier comment in this
+# file wrongly claimed it did. The real Windows registration is in
+# `assets/installer.nsh`.
 protocols:
   - name: Relayium
     schemes: [relayium]

@@ -253,18 +253,17 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
     handleDeepLink(argv);
   });
 
-  // ## Protocol association is the INSTALLER's job, and only on Windows
+  // ## This app never registers `relayium://`. The installer owns it.
   //
-  // `setAsDefaultProtocolClient` mutates a machine-wide association. Calling it
-  // from a development run or a smoke test would seize `relayium://` from
-  // whatever already owns it — on a developer's Mac that is the real, shipped
-  // Relayium macOS app. A test must not reach outside its own process and
-  // reconfigure the host, so this is gated on being a packaged Windows build.
-  // The NSIS installer registers the scheme at install time; the app only ever
-  // *handles* what it is given.
-  if (process.platform === "win32" && app.isPackaged) {
-    app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME);
-  }
+  // `assets/installer.nsh` writes the association at install time and removes it
+  // at uninstall, only when it still names that installation. Registering here
+  // too would put a second writer on a shared, single-valued resource and would
+  // leave a key the uninstaller could not recognise as its own.
+  //
+  // Nothing in this process mutates a host association, packaged or not: a
+  // development run or a smoke test must never seize the scheme from whatever
+  // already owns it. The app only *handles* what it is given — see
+  // `handleDeepLink`.
 
   await app.whenReady();
   const origin = apiOrigin();
