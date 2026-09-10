@@ -102,8 +102,10 @@ jobs:
         with:
           go-version-file: apps/windows/native/go.mod
           cache-dependency-path: apps/windows/native/go.sum
-      - name: Build the native helper
-        run: go build -o build/relayium-io-helper.exe ./cmd/relayium-io-helper
+      - name: Build the native helpers
+        run: |
+          go build -o build/relayium-io-helper.exe ./cmd/relayium-io-helper
+          go build -o build/relayium-secret-helper.exe ./cmd/relayium-secret-helper
         working-directory: apps/windows/native
 
       # Loudly, before anything depends on it. A missing helper would otherwise
@@ -112,11 +114,12 @@ jobs:
       - name: Assert the helper binary exists
         shell: pwsh
         run: |
-          $helper = "native/build/relayium-io-helper.exe"
-          if (-not (Test-Path -LiteralPath $helper)) {
-            throw "native helper missing at $helper; the client tests and extraResources both require it"
+          foreach ($helper in @("native/build/relayium-io-helper.exe", "native/build/relayium-secret-helper.exe")) {
+            if (-not (Test-Path -LiteralPath $helper)) {
+              throw "native helper missing at $helper; the client tests and extraResources both require it"
+            }
+            Write-Host "helper: $helper $((Get-Item -LiteralPath $helper).Length) bytes"
           }
-          Write-Host "helper: $((Get-Item -LiteralPath $helper).Length) bytes"
 
       # Unit and conformance tests. This is where the imported protocol modules
       # are executed against the frozen cross-language fixtures under
@@ -162,20 +165,25 @@ jobs:
       - name: Assert the helper was packaged
         shell: pwsh
         run: |
-          $packaged = "release/win-unpacked/resources/relayium-io-helper.exe"
-          if (-not (Test-Path -LiteralPath $packaged)) {
-            throw "helper missing from the packaged app at $packaged; electron-builder does not fail on a missing extraResources source"
-          }
+          # electron-builder does NOT fail on a missing extraResources source —
+          # measured: it logs a warning and exits 0, shipping an installer
+          # without the binary it claims to carry. So each helper is checked.
           # Existence is not enough. `release/` is not cleaned between builds, so
           # a resource left by an earlier run would satisfy a presence check
           # while the binary built this run never reached the package. Equality
           # is the assertion; presence is only its precondition.
-          $built = (Get-FileHash -LiteralPath "native/build/relayium-io-helper.exe" -Algorithm SHA256).Hash
-          $shipped = (Get-FileHash -LiteralPath $packaged -Algorithm SHA256).Hash
-          if ($built -ne $shipped) {
-            throw "packaged helper is not the one built this run: built $built, packaged $shipped"
+          foreach ($name in @("relayium-io-helper.exe", "relayium-secret-helper.exe")) {
+            $shippedPath = "release/win-unpacked/resources/$name"
+            if (-not (Test-Path -LiteralPath $shippedPath)) {
+              throw "helper missing from the packaged app at $shippedPath"
+            }
+            $built = (Get-FileHash -LiteralPath "native/build/$name" -Algorithm SHA256).Hash
+            $shipped = (Get-FileHash -LiteralPath $shippedPath -Algorithm SHA256).Hash
+            if ($built -ne $shipped) {
+              throw "packaged $name is not the one built this run: built $built, packaged $shipped"
+            }
+            Write-Host "packaged $name matches built: $built"
           }
-          Write-Host "packaged helper matches built: $built"
 
       # Root level only, and exactly one.
       #

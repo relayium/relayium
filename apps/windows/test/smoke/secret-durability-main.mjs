@@ -5,16 +5,18 @@
 // fixture, and nothing reads the user's real profile, real identity or any key
 // material.
 //
-// It uses the REAL `SecretStore` and the REAL Electron `safeStorage` cipher from
-// `dist/`. A mock would answer a question nobody asked: what is under test is
+// It uses the REAL `SecretStore` and the REAL `platformCipher()` from `dist/` —
+// on Windows that is the DPAPI helper, which is the whole point: the matrix must
+// exercise the cipher that actually ships, not the one it replaced. A mock would answer a question nobody asked: what is under test is
 // Electron's OSCrypt key lifecycle, not our wrapper's arithmetic.
 //
 // The parent chooses the cell; this process reports what happened in it.
 
-import { app, safeStorage } from "electron";
+import { app } from "electron";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const FIXTURE = "durability-fixture-v1";
 
@@ -41,11 +43,21 @@ const dataRoot = process.env["RELAYIUM_DURABILITY_DATA_ROOT"];
 const holdMs = Number(process.env["RELAYIUM_DURABILITY_HOLD_MS"] ?? "0");
 /** `quit` = normal shutdown. `exit` = abrupt, the crash analogue. */
 const exitMode = process.env["RELAYIUM_DURABILITY_EXIT"] ?? "quit";
+/**
+ * Where `dist/` is.
+ *
+ * This entry is staged into an owned app directory so `app.getAppPath()` names
+ * that directory — which is what the PRODUCTION factory reads to find the
+ * helper. It therefore cannot import `dist` by a relative path any more, and it
+ * is told instead. This is a test-only input; nothing about the shipping
+ * lookup changes.
+ */
+const distRoot = process.env["RELAYIUM_DURABILITY_DIST"];
 /** `1` reproduces the product's single-instance composition; `0` is adversarial. */
 const useLock = (process.env["RELAYIUM_DURABILITY_LOCK"] ?? "1") === "1";
 
-if (!profile || !dataRoot) {
-  emit({ fatal: "profile and data root must both be supplied" });
+if (!profile || !dataRoot || !distRoot) {
+  emit({ fatal: "profile, data root and dist root must all be supplied" });
   app.exit(2);
 }
 
@@ -184,17 +196,72 @@ async function finish(report) {
 }
 
 app.whenReady().then(async () => {
-  const report = { verb, role, exitMode, useLock, available: false, localStateAtStart: localState() };
+  // `localState()` is a DIAGNOSTIC, not a gate. It records what the Chromium
+  // profile looks like; it decides nothing.
+  const report = { verb, role, exitMode, useLock, localStateAtStart: localState() };
   try {
-    report.available = safeStorage.isEncryptionAvailable();
-    if (!report.available) {
-      report.outcome = "cipher-unavailable";
-      void finish(report);
+
+    const { SecretStore, platformCipher } = await import(
+      pathToFileURL(path.join(distRoot, "main", "secrets.js")).href
+    );
+    const store = new SecretStore(dataRoot, await platformCipher());
+    const secretFile = path.join(dataRoot, "durability.bin");
+
+    // ---- legacy and unknown envelopes ------------------------------------
+    //
+    // Written straight to the file, bypassing the store, because the store can
+    // no longer PRODUCE either form: legacy is read-only by construction and an
+    // unknown envelope is not a thing any code path emits. Placing the bytes
+    // directly is the only way to test what happens when they are found.
+    if (verb === "seal-legacy") {
+      // The ONLY cell that needs the old provider, because it is the only one
+      // that must PRODUCE the old format. Gating the DPAPI cells on
+      // `safeStorage.isEncryptionAvailable()` — as an earlier revision did —
+      // would have made the new cipher's matrix depend on the availability of
+      // the cipher it replaces, and initialised OSCrypt in every cell for no
+      // reason. A false skip there would read as a green run.
+      const { safeStorage } = await import("electron");
+      report.legacyProviderAvailable = safeStorage.isEncryptionAvailable();
+      if (!report.legacyProviderAvailable) {
+        report.outcome = "legacy-provider-unavailable";
+        void finish(report);
+        return;
+      }
+      mkdirSync(dataRoot, { recursive: true });
+      writeFileSync(secretFile, safeStorage.encryptString(FIXTURE));
+      report.outcome = "sealed-legacy";
+      report.envelopeAtStart = readFileSync(secretFile).subarray(0, 3).toString("latin1");
+      finish(report);
       return;
     }
-
-    const { SecretStore, electronCipher } = await import("../../dist/main/secrets.js");
-    const store = new SecretStore(dataRoot, await electronCipher());
+    if (verb === "seal-unknown") {
+      mkdirSync(dataRoot, { recursive: true });
+      writeFileSync(secretFile, Buffer.from("v99-not-a-format-this-app-writes"));
+      report.outcome = "sealed-unknown";
+      // FULL digest. A 16-hex-character prefix is 64 bits — fine as a
+      // change-fingerprint in a log, not enough to assert "these bytes are
+      // exactly as they were", which is what the untouched claim means.
+      report.sha256AtStart = createHash("sha256").update(readFileSync(secretFile)).digest("hex");
+      finish(report);
+      return;
+    }
+    if (verb === "read-unknown") {
+      const bytesBefore = readFileSync(secretFile);
+      try {
+        await store.get("durability");
+        report.outcome = "unexpectedly-readable";
+      } catch (err) {
+        report.outcome = "threw";
+        report.code = typeof err?.code === "string" ? err.code : null;
+      }
+      // Exact bytes, not a digest of them: an unreadable secret is never reset,
+      // and a comparison that could collide is not a proof of that.
+      const bytesAfter = readFileSync(secretFile);
+      report.sha256AtEnd = createHash("sha256").update(bytesAfter).digest("hex");
+      report.untouched = bytesBefore.equals(bytesAfter);
+      finish(report);
+      return;
+    }
 
     if (verb === "seal") {
       await store.put("durability", FIXTURE);
@@ -216,6 +283,11 @@ app.whenReady().then(async () => {
       // plaintext is not readable.
       const value = await store.get("durability");
       report.outcome = value === FIXTURE ? "ok" : "wrong-plaintext";
+      // After a legacy read the store re-seals in place; the envelope on disk is
+      // how we know migration actually happened rather than being reported.
+      if (existsSync(secretFile)) {
+        report.envelopeAfterRead = readFileSync(secretFile).subarray(0, 4).toString("latin1");
+      }
     }
   } catch (err) {
     // ## The whole reason this harness exists

@@ -44,6 +44,11 @@ files:
 extraResources:
   - from: native/build/relayium-io-helper.exe
     to: relayium-io-helper.exe
+  # The secret helper. A DISTINCT binary from the IO helper above: it protects
+  # the account bearer and installation identity with user-scope DPAPI, and
+  # `secrets.ts` resolves it at exactly this name under `process.resourcesPath`.
+  - from: native/build/relayium-secret-helper.exe
+    to: relayium-secret-helper.exe
 
 win:
   target:

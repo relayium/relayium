@@ -26,7 +26,7 @@ import { ENGINEERING_BANNER, isEngineeringBuild } from "./build-mode.js";
 import { IceControl, IceRequestRegistry } from "./net/ice-control.js";
 import { SignalingHub, isWellFormedCode, type SignalingSocketFactory } from "./net/signaling-socket.js";
 import { BoundedTransport } from "./net/transport.js";
-import { SecretStore, electronCipher } from "./secrets.js";
+import { SecretStore, platformCipher } from "./secrets.js";
 import { currentDataRoot } from "./storage.js";
 import { IpcRefusal, IpcRouter, expectChunk, expectIndex, expectObject, expectString } from "./ipc.js";
 import { openApprovedExternal } from "./window.js";
@@ -87,7 +87,7 @@ export function registerHandlers(
       (async () => {
         const root = currentDataRoot();
         if (!root.ok) throw new IpcRefusal(`data root unavailable: ${root.reason}`);
-        return new SecretStore(`${root.path}/secrets`, await electronCipher());
+        return new SecretStore(`${root.path}/secrets`, await platformCipher());
       }),
     makeAuthClient:
       composition.makeAuthClient ??

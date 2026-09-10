@@ -35,13 +35,29 @@
 import { randomBytes } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import { validateSegment } from "./io/winpath.js";
+import { RELAYIUM_ENVELOPE_V1 } from "./secret/envelope.js";
+import { MAX_BLOB_BYTES } from "./secret/protocol.js";
+
+const RELAYIUM_ENVELOPE_BYTES = RELAYIUM_ENVELOPE_V1.byteLength;
 
 export interface SecretCipher {
-  isAvailable(): boolean;
-  encrypt(plaintext: string): Buffer;
-  decrypt(ciphertext: Buffer): string;
+  // Members may return a value or a Promise. The DPAPI path is a subprocess and
+  // is necessarily async; other owners' existing synchronous fakes keep working
+  // unchanged. Every call site awaits BEFORE bounding, writing or returning —
+  // never comparing a Promise to a length or writing one to disk.
+  isAvailable(): boolean | Promise<boolean>;
+  encrypt(plaintext: string): Buffer | Promise<Buffer>;
+  decrypt(ciphertext: Buffer): string | Promise<string>;
+  /**
+   * Optional richer read: the plaintext, plus whether it came from a format
+   * that should be re-sealed.
+   *
+   * Separate from `decrypt` so existing ciphers need no change. A cipher cannot
+   * perform the migration itself — see `get` — so it reports and the store acts.
+   */
+  openWithMigration?(ciphertext: Buffer): Promise<{ value: string; needsMigration: boolean }>;
 }
 
 export type SecretFailure =
@@ -63,16 +79,19 @@ export class SecretStoreError extends Error {
 export const MAX_SECRET_BYTES = 64 * 1024;
 
 /**
- * The ceiling for a SEALED file, which is not the same number.
+ * The largest stored blob, which is not `MAX_SECRET_BYTES`.
  *
- * A cipher adds a nonce, a tag and — for DPAPI — a header, so a plaintext right
- * at `MAX_SECRET_BYTES` seals to something larger. Using one bound for both
- * would make a value this store agreed to WRITE unreadable on the way back,
- * which is the worst shape of bug: it appears only at the size boundary and
- * looks like corruption. The margin is deliberately generous; the real values
- * here are a bearer token and a 43-character identity.
+ * A cipher adds a nonce, a tag and a header, so a plaintext right at the
+ * plaintext ceiling seals to something larger. Using one bound for both would
+ * make a value this store agreed to WRITE unreadable on the way back — a bug
+ * that appears only at the size boundary and looks like corruption.
+ *
+ * Expressed from the parts rather than as a literal, so the envelope overhead is
+ * visible at the bound: the 5-byte `RLYM\x01` discriminator plus the helper's
+ * maximum DPAPI blob. The previous value was sized for the old format and would
+ * have rejected a valid new one.
  */
-export const MAX_SEALED_BYTES = MAX_SECRET_BYTES + 4096;
+export const MAX_SEALED_BYTES = RELAYIUM_ENVELOPE_BYTES + MAX_BLOB_BYTES;
 
 /**
  * A key names a file, so it is validated as a filename before becoming one.
@@ -104,8 +123,8 @@ export class SecretStore {
   }
 
   /** Checked before every operation, never cached: availability is session state. */
-  private assertAvailable(): void {
-    if (!this.cipher.isAvailable()) throw new SecretStoreError("encryption-unavailable");
+  private async assertAvailable(): Promise<void> {
+    if (!(await this.cipher.isAvailable())) throw new SecretStoreError("encryption-unavailable");
   }
 
   private fileFor(key: string): string {
@@ -145,7 +164,9 @@ export class SecretStore {
       renamed = true;
     } catch (err) {
       if (err instanceof SecretStoreError) throw err;
-      throw new SecretStoreError("unreadable", String((err as Error).message));
+      // Closed reason only: an errno message can name the path it failed on,
+      // and this value crosses into IPC.
+      throw new SecretStoreError("unreadable");
     } finally {
       // The rename consumed the name on success; on every failure path the temp
       // file is ours and is removed.
@@ -153,14 +174,36 @@ export class SecretStore {
     }
   }
 
+  /**
+   * Seal, and refuse a result this store could never read back.
+   *
+   * A blob larger than `MAX_SEALED_BYTES` would be written happily and then
+   * rejected by `readDecrypted` on every future read — a value the store agreed
+   * to store and cannot return, which looks like corruption and is not.
+   */
+  private async sealBounded(value: string): Promise<Buffer> {
+    const sealed = await this.cipher.encrypt(value);
+    if (sealed.byteLength > MAX_SEALED_BYTES) {
+      sealed.fill(0);
+      throw new SecretStoreError("too-large");
+    }
+    return sealed;
+  }
+
+  /** Refuse a decrypted value larger than this store would ever have accepted. */
+  private assertPlaintextBounded(value: string): void {
+    if (Buffer.byteLength(value, "utf8") > MAX_SECRET_BYTES) throw new SecretStoreError("undecryptable");
+  }
+
   put(key: string, value: string): Promise<void> {
     return this.serialize(key, async () => {
-      this.assertAvailable();
+      await this.assertAvailable();
       const path = this.fileFor(key);
       if (Buffer.byteLength(value, "utf8") > MAX_SECRET_BYTES) {
         throw new SecretStoreError("too-large");
       }
-      await this.writeAtomic(path, this.cipher.encrypt(value));
+      // Awaited before the write: a Promise must never reach the filesystem.
+      await this.writeAtomic(path, await this.sealBounded(value));
     });
   }
 
@@ -186,14 +229,26 @@ export class SecretStore {
    */
   putIfAbsent(key: string, value: string): Promise<{ created: boolean; value: string }> {
     return this.serialize(key, async () => {
-      this.assertAvailable();
+      await this.assertAvailable();
       const path = this.fileFor(key);
       const existing = await this.readDecrypted(path);
-      if (existing.kind === "ok") return { created: false, value: existing.value };
+      if (existing.kind === "ok") {
+        this.assertPlaintextBounded(existing.value);
+        // Migrated here too, for the same reason `get` does it: the install ID
+        // is read through THIS method, so skipping it would leave the one value
+        // most likely to predate the helper permanently on the old format.
+        if (existing.needsMigration) await this.reseal(path, existing.value);
+        return { created: false, value: existing.value };
+      }
       if (existing.kind === "unreadable") throw new SecretStoreError("unreadable");
       if (existing.kind === "undecryptable") throw new SecretStoreError("undecryptable");
+      // Without this the helper being unavailable would fall through to the
+      // write below and MINT A SECOND IDENTITY for a machine that already has
+      // one — the exact silent replacement this store exists to prevent.
+      if (existing.kind === "encryption-unavailable") throw new SecretStoreError("encryption-unavailable");
       if (Buffer.byteLength(value, "utf8") > MAX_SECRET_BYTES) throw new SecretStoreError("too-large");
-      await this.writeAtomic(path, this.cipher.encrypt(value));
+      // Awaited before the write: a Promise must never reach the filesystem.
+      await this.writeAtomic(path, await this.sealBounded(value));
       return { created: true, value };
     });
   }
@@ -201,10 +256,11 @@ export class SecretStore {
   private async readDecrypted(
     path: string,
   ): Promise<
-    | { kind: "ok"; value: string }
+    | { kind: "ok"; value: string; needsMigration: boolean }
     | { kind: "not-found" }
     | { kind: "unreadable" }
     | { kind: "undecryptable" }
+    | { kind: "encryption-unavailable" }
   > {
     let sealed: Buffer;
     try {
@@ -216,19 +272,71 @@ export class SecretStore {
     }
     if (sealed.byteLength > MAX_SEALED_BYTES) return { kind: "unreadable" };
     try {
-      return { kind: "ok", value: this.cipher.decrypt(sealed) };
-    } catch {
+      if (this.cipher.openWithMigration) {
+        const opened = await this.cipher.openWithMigration(sealed);
+        return { kind: "ok", value: opened.value, needsMigration: opened.needsMigration };
+      }
+      return { kind: "ok", value: await this.cipher.decrypt(sealed), needsMigration: false };
+    } catch (err) {
+      // A helper that could not be run is a TRANSIENT fact about this machine;
+      // "these bytes will not decrypt" is a permanent fact about the data. The
+      // caller decides very different things on each — retry versus tell the
+      // user their identity is unrecoverable — so a catch-all that flattened
+      // them would have made the sign-in path unable to tell a missing binary
+      // from a lost key.
+      if (err instanceof SecretStoreError && err.code === "encryption-unavailable") {
+        return { kind: "encryption-unavailable" };
+      }
       return { kind: "undecryptable" };
     }
   }
 
   get(key: string): Promise<string> {
     return this.serialize(key, async () => {
-      this.assertAvailable();
-      const result = await this.readDecrypted(this.fileFor(key));
-      if (result.kind === "ok") return result.value;
-      throw new SecretStoreError(result.kind);
+      await this.assertAvailable();
+      const path = this.fileFor(key);
+      const result = await this.readDecrypted(path);
+      if (result.kind !== "ok") throw new SecretStoreError(result.kind);
+      this.assertPlaintextBounded(result.value);
+      if (result.needsMigration) await this.reseal(path, result.value);
+      return result.value;
     });
+  }
+
+  /**
+   * Re-seal a legacy blob in the current format.
+   *
+   * ## Why this is here and not a call to `put`
+   *
+   * Every operation on a key runs inside that key's chain. Calling `put` from
+   * inside `get` would enqueue behind the `get` still running, and the chain
+   * would await itself — a deadlock on the sign-in path. The write is therefore
+   * performed directly, in the section already held.
+   *
+   * Holding that section is also what makes the migration safe against a
+   * concurrent sign-in: no `put` for this key can interleave, so this cannot
+   * overwrite a newly stored token with the stale plaintext it just read.
+   *
+   * ## Verified before it replaces anything
+   *
+   * The legacy blob is the only readable copy at this moment. It is replaced
+   * only after the new bytes have been sealed AND read back, because the defect
+   * that started all of this was a write that reported success and could not be
+   * read afterwards. Any failure leaves the old bytes untouched and is
+   * swallowed deliberately: the READ succeeded, and failing a caller because an
+   * optimisation failed would turn a working sign-in into an error.
+   */
+  private async reseal(path: string, value: string): Promise<void> {
+    try {
+      const sealed = await this.sealBounded(value);
+      const verify = this.cipher.openWithMigration
+        ? (await this.cipher.openWithMigration(sealed)).value
+        : await this.cipher.decrypt(sealed);
+      if (verify !== value) return;
+      await this.writeAtomic(path, sealed);
+    } catch {
+      // Not migrated. The old bytes remain, and the caller still gets its value.
+    }
   }
 
   /** Absent is success — `delete` states an end state, not an action taken. */
@@ -238,6 +346,85 @@ export class SecretStore {
     });
   }
 }
+
+/**
+ * Where `relayium-secret-helper.exe` is, and nowhere else.
+ *
+ * Two fixed locations, chosen by whether the app is packaged. Never `PATH`,
+ * never a relative guess, never an environment override: this process is about
+ * to hand it the account bearer, so "whichever one we found" is not an
+ * acceptable answer to which binary that is.
+ */
+export function secretHelperPath(packaged: boolean, resourcesPath: string, appRoot: string): string {
+  // `win32.join`, not the ambient one. These are Windows paths and this
+  // function is unit-tested on macOS and Linux, where the host module joins
+  // with `/` and yields `C:\app\resources/relayium-secret-helper.exe` — the
+  // same latent defect `storage.ts` documents. Identical on Windows, correct
+  // everywhere.
+  return packaged
+    ? win32.join(resourcesPath, "relayium-secret-helper.exe")
+    : win32.join(appRoot, "native", "build", "relayium-secret-helper.exe");
+}
+
+/**
+ * The cipher this platform actually uses.
+ *
+ * **Windows** goes through the helper: DPAPI keyed on the user's own account,
+ * persisted by Windows rather than by a Chromium preference committed at a
+ * clean shutdown. Windows run 34466025680 showed the latter loses the identity
+ * on any forced termination before that commit.
+ *
+ * **Everywhere else** keeps the existing platform cipher. The helper is a
+ * Windows binary and DPAPI is a Windows API; there is nothing here to port, and
+ * development on macOS or Linux must not start reaching for a keychain it has
+ * no reason to touch.
+ */
+export async function platformCipher(): Promise<SecretCipher> {
+  if (process.platform !== "win32") return electronCipher();
+
+  const { app } = await import("electron");
+  const [{ DpapiCipher }, { spawnHelperTransport }, { VersionedCipher }, { electronLegacyReader }] =
+    await Promise.all([
+      import("./secret/dpapi-cipher.js"),
+      import("./secret/helper-transport.js"),
+      import("./secret/versioned-cipher.js"),
+      import("./secret/legacy-cipher.js"),
+    ]);
+
+  const executable = secretHelperPath(app.isPackaged, process.resourcesPath, app.getAppPath());
+  const versioned = new VersionedCipher(
+    new DpapiCipher(
+      spawnHelperTransport({
+        executable,
+        timeoutMs: SECRET_HELPER_TIMEOUT_MS,
+        // Closed reasons only. This is a log, not a surface, and it never
+        // receives payload bytes.
+        reportFailure: (reason) => console.error(`[secret-helper] ${reason}`),
+      }),
+    ),
+    await electronLegacyReader(),
+  );
+
+  return {
+    // The helper is present or it is not; there is no partial availability to
+    // report, and probing it here would spawn a process on every check.
+    isAvailable: () => true,
+    encrypt: (plaintext) => versioned.seal(plaintext),
+    decrypt: async (sealed) => {
+      const opened = await versioned.open(sealed);
+      if (opened.kind === "ok") return opened.value;
+      throw new SecretStoreError(opened.kind === "undecryptable" ? "undecryptable" : "encryption-unavailable");
+    },
+    openWithMigration: async (sealed) => {
+      const opened = await versioned.open(sealed);
+      if (opened.kind === "ok") return { value: opened.value, needsMigration: opened.needsMigration };
+      throw new SecretStoreError(opened.kind === "undecryptable" ? "undecryptable" : "encryption-unavailable");
+    },
+  };
+}
+
+/** Generous for a DPAPI round trip; short enough that a hung helper is a failure. */
+const SECRET_HELPER_TIMEOUT_MS = 15_000;
 
 /** The production adapter. Imported lazily so unit tests never load Electron
  *  and never raise a keychain prompt on a developer's machine. */

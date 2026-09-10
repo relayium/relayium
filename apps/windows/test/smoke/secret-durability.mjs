@@ -39,8 +39,8 @@
 // the process boundary.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import electronPath from "electron";
@@ -52,7 +52,56 @@ const live = new Set();
 /** Only directories this run created. */
 const ownedDirs = [];
 
-const CHILD = path.join(import.meta.dirname, "secret-durability-main.mjs");
+const ENTRY_SOURCE = path.join(import.meta.dirname, "secret-durability-main.mjs");
+const APP_ROOT = path.resolve(import.meta.dirname, "..", "..");
+const DIST_ROOT = path.join(APP_ROOT, "dist");
+const BUILT_HELPER = path.join(APP_ROOT, "native", "build", "relayium-secret-helper.exe");
+
+/**
+ * An owned application root, because `app.getAppPath()` is what the production
+ * factory reads.
+ *
+ * Electron invoked as `electron path/to/entry.mjs` reports the ENTRY DIRECTORY
+ * as the app path — confirmed by probe on Electron 44. Passing
+ * `test/smoke/main.mjs` would therefore have the shipping lookup search
+ * `test/smoke/native/build/`, find nothing, and fail every cell for a reason
+ * that has nothing to do with durability.
+ *
+ * So the entry is staged into a directory laid out the way the factory expects,
+ * and Electron is pointed at THAT. The production path is exercised exactly as
+ * written — no ambient override is added to the shipping code to make a test
+ * convenient.
+ */
+function stageAppRoot() {
+  const root = mkdtempSync(path.join(tmpdir(), "relayium-app-"));
+  ownedDirs.push(root);
+  const helperDir = path.join(root, "native", "build");
+  mkdirSync(helperDir, { recursive: true });
+
+  copyFileSync(ENTRY_SOURCE, path.join(root, "entry.mjs"));
+  writeFileSync(
+    path.join(root, "package.json"),
+    JSON.stringify({ name: "relayium-durability-harness", version: "0.0.0", main: "entry.mjs" }),
+  );
+
+  if (!existsSync(BUILT_HELPER)) {
+    failures.push(`the secret helper was not built at ${BUILT_HELPER}; the matrix cannot exercise the real cipher`);
+    return null;
+  }
+  const staged = path.join(helperDir, "relayium-secret-helper.exe");
+  copyFileSync(BUILT_HELPER, staged);
+  // Exact hash, because a stale or truncated copy would fail the cells as if
+  // the cipher were broken.
+  const want = createHash("sha256").update(readFileSync(BUILT_HELPER)).digest("hex");
+  const got = createHash("sha256").update(readFileSync(staged)).digest("hex");
+  if (want !== got) {
+    failures.push("the staged helper does not match the built one");
+    return null;
+  }
+  return root;
+}
+
+let APP_DIR = null;
 /** Backstop only. The child is released by command, not by this elapsing. */
 const HOLD_DEADLINE_MS = 120_000;
 const BARRIER_TIMEOUT_MS = 60_000;
@@ -217,9 +266,12 @@ function spawnChild(label, env, { controlDir = null } = {}) {
   }
   const child = new OwnedChild(
     label,
-    spawn(String(electronPath), [CHILD], {
+    // The staged app DIRECTORY, not the entry file: `app.getAppPath()` reports
+    // the entry's directory, and the production helper lookup reads it.
+    spawn(String(electronPath), [APP_DIR], {
       env: {
         ...process.env,
+        RELAYIUM_DURABILITY_DIST: DIST_ROOT,
         ...env,
         ...(control ? { RELAYIUM_DURABILITY_CONTROL: control, RELAYIUM_DURABILITY_TOKEN: token } : {}),
       },
@@ -467,7 +519,133 @@ async function proveBarrier() {
   );
 }
 
+/**
+ * A legacy blob must stay readable and be migrated in place.
+ *
+ * This is the upgrade path for every installation that exists today: their
+ * identity was sealed by `safeStorage.encryptString` and must survive the move
+ * to the helper. If it does not, the fix costs users exactly what the defect
+ * did.
+ */
+async function legacyMigrationCell() {
+  const base = mkdtempSync(path.join(tmpdir(), "relayium-legacy-"));
+  ownedDirs.push(base);
+  const profile = path.join(base, "profile");
+  const dataRoot = path.join(base, "data");
+  mkdirSync(profile, { recursive: true });
+  mkdirSync(dataRoot, { recursive: true });
+  const env = {
+    RELAYIUM_DURABILITY_PROFILE: profile,
+    RELAYIUM_DURABILITY_DATA_ROOT: dataRoot,
+    RELAYIUM_DURABILITY_LOCK: "1",
+    RELAYIUM_DURABILITY_HOLD_MS: "0",
+  };
+
+  const seal = spawnChild("legacy/seal", { ...env, RELAYIUM_DURABILITY_VERB: "seal-legacy" });
+  const sealJoined = await seal.join(CHILD_TIMEOUT_MS);
+  const sealed = seal.reports()[0] ?? null;
+  // Same rule as the core four: a reader started while the writer may still be
+  // alive measures a race, not the behaviour under test.
+  if (!sealJoined) {
+    failures.push("legacy-migration: aborting — the legacy sealer never closed");
+    cells.push({ cell: "legacy-migration", aborted: "seal-never-closed" });
+    return;
+  }
+  if (sealed?.outcome !== "sealed-legacy" || seal.exit !== 0) {
+    failures.push(
+      `legacy-migration: the fixture was not written (outcome ${sealed?.outcome ?? "none"}, exit ${seal.exit})`,
+    );
+    cells.push({ cell: "legacy-migration", aborted: "fixture-not-written", sealExit: seal.exit });
+    return;
+  }
+
+  const read = spawnChild("legacy/read", { ...env, RELAYIUM_DURABILITY_VERB: "read" });
+  const readJoined = await read.join(CHILD_TIMEOUT_MS);
+  const got = read.reports()[0] ?? null;
+
+  const record = {
+    cell: "legacy-migration",
+    envelopeAtStart: sealed?.envelopeAtStart ?? null,
+    readOutcome: got?.outcome ?? null,
+    envelopeAfterRead: got?.envelopeAfterRead ?? null,
+    sealExit: seal.exit,
+    readExit: read.exit,
+  };
+  cells.push(record);
+
+  if (!readJoined) failures.push("legacy-migration: the reader never closed");
+  if (read.exit !== 0) failures.push(`legacy-migration: the reader exited ${read.exit}, expected 0`);
+  if (record.envelopeAtStart !== "v10" && record.envelopeAtStart !== "v11") {
+    failures.push(`legacy-migration: the fixture was not a legacy envelope (${record.envelopeAtStart})`);
+  }
+  if (record.readOutcome !== "ok") {
+    failures.push(`legacy-migration: a legacy secret was not readable (${record.readOutcome})`);
+  }
+  if (record.envelopeAfterRead !== "RLYM") {
+    failures.push(`legacy-migration: not re-sealed in place (envelope now ${record.envelopeAfterRead})`);
+  }
+}
+
+/** An envelope nobody writes must be refused, and left exactly as found. */
+async function unknownEnvelopeCell() {
+  const base = mkdtempSync(path.join(tmpdir(), "relayium-unknown-"));
+  ownedDirs.push(base);
+  const profile = path.join(base, "profile");
+  const dataRoot = path.join(base, "data");
+  mkdirSync(profile, { recursive: true });
+  mkdirSync(dataRoot, { recursive: true });
+  const env = {
+    RELAYIUM_DURABILITY_PROFILE: profile,
+    RELAYIUM_DURABILITY_DATA_ROOT: dataRoot,
+    RELAYIUM_DURABILITY_LOCK: "1",
+    RELAYIUM_DURABILITY_HOLD_MS: "0",
+  };
+
+  const seed = spawnChild("unknown/seed", { ...env, RELAYIUM_DURABILITY_VERB: "seal-unknown" });
+  const seedJoined = await seed.join(CHILD_TIMEOUT_MS);
+  const seeded = seed.reports()[0] ?? null;
+  if (!seedJoined) {
+    failures.push("unknown-envelope: aborting — the seeder never closed");
+    cells.push({ cell: "unknown-envelope", aborted: "seed-never-closed" });
+    return;
+  }
+  if (seeded?.outcome !== "sealed-unknown" || seed.exit !== 0) {
+    failures.push(
+      `unknown-envelope: the fixture was not written (outcome ${seeded?.outcome ?? "none"}, exit ${seed.exit})`,
+    );
+    cells.push({ cell: "unknown-envelope", aborted: "fixture-not-written", seedExit: seed.exit });
+    return;
+  }
+
+  const read = spawnChild("unknown/read", { ...env, RELAYIUM_DURABILITY_VERB: "read-unknown" });
+  const readJoined = await read.join(CHILD_TIMEOUT_MS);
+  const got = read.reports()[0] ?? null;
+
+  const record = {
+    cell: "unknown-envelope",
+    outcome: got?.outcome ?? null,
+    code: got?.code ?? null,
+    untouched: got?.untouched ?? null,
+    seedExit: seed.exit,
+    readExit: read.exit,
+  };
+  cells.push(record);
+
+  if (!readJoined) failures.push("unknown-envelope: the reader never closed");
+  if (read.exit !== 0) failures.push(`unknown-envelope: the reader exited ${read.exit}, expected 0`);
+  if (record.code !== "undecryptable") {
+    failures.push(`unknown-envelope: expected undecryptable, got ${record.code ?? record.outcome}`);
+  }
+  if (record.untouched !== true) {
+    // Never reset. The bytes may be a secret this build simply cannot read yet.
+    failures.push("unknown-envelope: the stored bytes were modified");
+  }
+}
+
 async function main() {
+  APP_DIR = stageAppRoot();
+  if (APP_DIR === null) return;
+
   // Nothing below means anything if the release mechanism is not sound.
   if (!(await proveBarrier())) {
     failures.push("skipping the matrix: the control barrier did not prove sound on this platform");
@@ -479,6 +657,13 @@ async function main() {
   await cell("no-second-forced", { forced: true, secondInstance: false });
   await cell("second-graceful", { forced: false, secondInstance: true });
   await cell("second-forced", { forced: true, secondInstance: true });
+
+  // The upgrade path, and the refusal path. Neither is a durability question,
+  // but both ship with the same change and a candidate that proved durability
+  // while silently breaking migration would be worse than one that proved
+  // nothing.
+  await legacyMigrationCell();
+  await unknownEnvelopeCell();
 }
 
 main()
