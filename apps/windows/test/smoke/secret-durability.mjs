@@ -39,7 +39,8 @@
 // the process boundary.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import electronPath from "electron";
@@ -150,23 +151,27 @@ class OwnedChild {
     }
   }
 
+  /**
+   * Order the child to end, through the control file it is polling.
+   *
+   * Written to a temp path and renamed, so the child can never read a
+   * half-written token and the file's existence always implies a complete
+   * instruction. stdin was tried first and released every cell instantly on
+   * Windows — see the child's comment; the rule that came out of it is that
+   * absence must not be readable as a command.
+   */
   release(command) {
-    const stdin = this.child.stdin;
-    if (!stdin) {
-      failures.push(`${this.label}: no stdin to release through`);
+    if (!this.control) {
+      failures.push(`${this.label}: no control channel to release through`);
       return false;
     }
-    // EPIPE arrives as an asynchronous stream event, not as a throw from
-    // `write`, so a try/catch alone would report success on a pipe that had
-    // already closed and the cell would wait out its deadline believing it had
-    // asked the child to quit.
-    stdin.on("error", (err) => failures.push(`${this.label}: stdin error during release (${String(err)})`));
     try {
-      stdin.write(`${command}\n`);
-      stdin.end();
+      const staging = `${this.control}.tmp`;
+      writeFileSync(staging, `${this.token} ${command}\n`, "utf8");
+      renameSync(staging, this.control);
       return true;
     } catch (err) {
-      failures.push(`${this.label}: could not release (${String(err)})`);
+      failures.push(`${this.label}: could not write the release command (${String(err)})`);
       return false;
     }
   }
@@ -203,14 +208,29 @@ class OwnedChild {
   }
 }
 
-function spawnChild(label, env, { withStdin = false } = {}) {
-  return new OwnedChild(
+function spawnChild(label, env, { controlDir = null } = {}) {
+  let control = null;
+  let token = null;
+  if (controlDir !== null) {
+    token = randomUUID();
+    control = path.join(controlDir, `control-${token}`);
+  }
+  const child = new OwnedChild(
     label,
     spawn(String(electronPath), [CHILD], {
-      env: { ...process.env, ...env },
-      stdio: [withStdin ? "pipe" : "ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        ...env,
+        ...(control ? { RELAYIUM_DURABILITY_CONTROL: control, RELAYIUM_DURABILITY_TOKEN: token } : {}),
+      },
+      // No stdin at all. A GUI Electron process on Windows sees it closed
+      // immediately, and the previous design read that EOF as an instruction.
+      stdio: ["ignore", "pipe", "pipe"],
     }),
   );
+  child.control = control;
+  child.token = token;
+  return child;
 }
 
 /** One matrix cell, on a profile and data root nothing else has touched. */
@@ -235,7 +255,7 @@ async function cell(name, { forced, secondInstance }) {
   const seal = spawnChild(
     `${name}/seal`,
     { ...env, RELAYIUM_DURABILITY_VERB: "seal", RELAYIUM_DURABILITY_HOLD_MS: String(HOLD_DEADLINE_MS) },
-    { withStdin: true },
+    { controlDir: base },
   );
   const sealed = await seal.waitForReport((r) => typeof r.outcome === "string", BARRIER_TIMEOUT_MS, "a seal outcome");
   record.barrierObserved = sealed !== null;
@@ -369,7 +389,91 @@ async function cleanup() {
   }
 }
 
+/**
+ * Prove the barrier itself, on this machine, before trusting any cell.
+ *
+ * Run 34464477919 produced four cells whose scenarios never happened, because
+ * the release mechanism fired on its own. The guards caught it — every cell
+ * failed rather than reporting a roundtrip — but a mechanism that can silently
+ * self-trigger must be demonstrated, not assumed, on the platform it runs on.
+ *
+ * Two properties, in order:
+ *   1. WITHOUT a command the child stays alive past a real interval. This is the
+ *      exact failure that occurred; if it recurs, everything after it is void.
+ *   2. WITH a command it exits promptly and reports `released: "quit"`.
+ */
+async function proveBarrier() {
+  const base = mkdtempSync(path.join(tmpdir(), "relayium-barrier-"));
+  ownedDirs.push(base);
+  const profile = path.join(base, "profile");
+  const dataRoot = path.join(base, "data");
+  mkdirSync(profile, { recursive: true });
+  mkdirSync(dataRoot, { recursive: true });
+
+  const child = spawnChild(
+    "barrier-proof",
+    {
+      RELAYIUM_DURABILITY_PROFILE: profile,
+      RELAYIUM_DURABILITY_DATA_ROOT: dataRoot,
+      RELAYIUM_DURABILITY_LOCK: "1",
+      RELAYIUM_DURABILITY_VERB: "seal",
+      RELAYIUM_DURABILITY_HOLD_MS: String(HOLD_DEADLINE_MS),
+    },
+    { controlDir: base },
+  );
+
+  const sealed = await child.waitForReport((r) => typeof r.outcome === "string", BARRIER_TIMEOUT_MS, "a seal outcome");
+  const proof = { barrierReportObserved: sealed !== null };
+  if (!proof.barrierReportObserved) {
+    failures.push("barrier proof: the child never reported reaching the barrier");
+  }
+
+  await sleep(3000);
+  proof.stillAliveWithoutCommand = !child.closed;
+  if (!proof.stillAliveWithoutCommand) {
+    failures.push(
+      "barrier proof: the child ended without being told to — the release mechanism self-triggers on this platform, so no cell below can be trusted",
+    );
+  }
+
+  child.release("quit");
+  proof.closedAfterCommand = await child.join(CHILD_TIMEOUT_MS);
+  proof.released = child.reports().find((r) => typeof r.released === "string")?.released ?? null;
+  proof.originalExit = child.exit;
+  proof.sealOutcome = sealed?.outcome ?? null;
+
+  if (!proof.closedAfterCommand) {
+    failures.push("barrier proof: the child did not close after being commanded to");
+  }
+  if (proof.released !== "quit") {
+    failures.push(`barrier proof: expected release by command, got "${proof.released ?? "nothing"}"`);
+  }
+  if (proof.originalExit !== 0) {
+    failures.push(`barrier proof: child exited ${proof.originalExit}, expected 0`);
+  }
+  cells.push({ cell: "barrier-proof", ...proof });
+
+  // EVERY property, not a representative pair. A proof that passes on a subset
+  // of what it measured is a claim about something it did not check — and this
+  // gate's entire purpose is to stop the matrix from running on a mechanism
+  // whose soundness was assumed. A delayed report, a child that had to be
+  // killed to close, or a non-zero exit each mean the barrier is not proven.
+  return (
+    proof.barrierReportObserved &&
+    proof.stillAliveWithoutCommand &&
+    proof.closedAfterCommand &&
+    proof.released === "quit" &&
+    proof.originalExit === 0
+  );
+}
+
 async function main() {
+  // Nothing below means anything if the release mechanism is not sound.
+  if (!(await proveBarrier())) {
+    failures.push("skipping the matrix: the control barrier did not prove sound on this platform");
+    return;
+  }
+
   // Control first: if this fails, neither remaining hypothesis survives.
   await cell("no-second-graceful", { forced: false, secondInstance: false });
   await cell("no-second-forced", { forced: true, secondInstance: false });

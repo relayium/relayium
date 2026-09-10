@@ -118,32 +118,47 @@ function classify(err) {
 /**
  * Wait for the parent to say when to end.
  *
- * A fixed timer cannot express "after the seal is done" — which is the only
- * moment the parent's actions mean anything. The report emitted just above IS
- * the barrier; the parent reads it, acts, and then writes a command here.
+ * ## Why not stdin
  *
- * The deadline is a backstop against a parent that died, not a schedule.
+ * The first version read a command line from stdin. On Windows run
+ * 34464477919 every cell released instantly with `released: "quit"`: a GUI
+ * Electron process gets an immediately-closed stdin, `end` fired at once, and
+ * the handler treated EOF as a command. Every cell then measured a process that
+ * had already exited — the forced cells' `taskkill` returned 128 (gone), the
+ * releases hit EPIPE, and the "second instance" found no lock to lose because
+ * there was nothing left holding it.
+ *
+ * The lesson is not "stdin needs a guard". It is that **absence must never be
+ * readable as a command**. A closed pipe, a missing file and a timeout all mean
+ * "no instruction", and only a positive, authenticated instruction may release.
+ *
+ * ## The control file
+ *
+ * The parent writes `<token> <command>` to a path only this cell knows. The
+ * token is per-child and must match, so a stale file from an earlier cell, a
+ * truncated read mid-write, or an empty file cannot be mistaken for an order.
+ * Nothing about the file NOT existing can release the child.
  */
-function waitForCommand() {
-  return new Promise((resolve) => {
-    let settled = false;
-    const done = (v) => {
-      if (!settled) {
-        settled = true;
-        resolve(v);
+async function waitForCommand() {
+  const control = process.env["RELAYIUM_DURABILITY_CONTROL"];
+  const token = process.env["RELAYIUM_DURABILITY_TOKEN"];
+  if (!control || !token) return "no-control-channel";
+
+  const deadline = Date.now() + holdMs;
+  for (;;) {
+    if (existsSync(control)) {
+      try {
+        const [got, command] = readFileSync(control, "utf8").trim().split(/\s+/);
+        // Both halves required. A partial read during the parent's write yields
+        // a mismatch and simply retries.
+        if (got === token && typeof command === "string" && command.length > 0) return command;
+      } catch {
+        // Mid-write or transiently locked; retry rather than treat as an order.
       }
-    };
-    process.stdin.setEncoding("utf8");
-    let buffer = "";
-    process.stdin.on("data", (chunk) => {
-      buffer += chunk;
-      const line = buffer.split(/\r?\n/)[0];
-      if (line && line.length > 0) done(line.trim());
-    });
-    process.stdin.on("end", () => done("quit"));
-    process.stdin.on("error", () => done("quit"));
-    setTimeout(() => done("deadline"), holdMs);
-  });
+    }
+    if (Date.now() > deadline) return "deadline";
+    await new Promise((r) => setTimeout(r, 100));
+  }
 }
 
 async function finish(report) {
