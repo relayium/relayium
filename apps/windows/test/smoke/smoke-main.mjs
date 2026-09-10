@@ -184,6 +184,21 @@ async function main() {
     showOnLaunch: false,
     composition: {
       makeStore: async () => smokeStore,
+      // ## The account reads are injected even though this run never signs in
+      //
+      // `AccountSummaryService.refresh()` runs at startup regardless, and the
+      // origin here is the PRODUCTION one. A signed-out profile makes no
+      // request today — but that is a property of another module's control
+      // flow, and relying on it would mean this smoke reaches the real
+      // relayium.com the day that changes. The seam costs one line and removes
+      // the possibility entirely.
+      accountSummary: {
+        fetchImpl: async () =>
+          new Response(JSON.stringify({ error: "no account in this run" }), {
+            status: 503,
+            headers: { "content-type": "application/json" },
+          }),
+      },
       makeAuthClient: () => ({
         start: async () => ({
           userCode: "SMOKE-CODE",
@@ -254,7 +269,7 @@ async function main() {
   check(
     "bridge exposed",
     parsed.keys.sort().join(",") ===
-      "appInfo,auth,ice,inbox,inboxSend,loginItem,pair,prefs,receive,resident,send,signaling,stored",
+      "accountSummary,appInfo,auth,ice,inbox,inboxSend,loginItem,pair,prefs,receive,resident,send,signaling,stored",
     parsed.keys.join(","),
   );
   check("no raw ipcRenderer in the page", parsed.hasIpc === false);
@@ -321,6 +336,12 @@ async function main() {
     // Copying a link happens in MAIN, for the same reason the Inbox message
     // copy does: `window.ts` denies the renderer clipboard permission.
     "relayium:stored-send-copy-link",
+    // The account screen. Reads and the two device mutations that already
+    // existed; the only journey out of the app is `account-manage`, which names
+    // a destination with a closed token and lets MAIN compose the address.
+    "relayium:account-summary-state", "relayium:account-summary-refresh",
+    "relayium:account-device-rename", "relayium:account-device-revoke",
+    "relayium:account-manage",
     "relayium:inbox-delete-message", "relayium:inbox-rename", "relayium:inbox-wake",
     "relayium:inbox-release-retained",
   ];

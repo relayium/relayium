@@ -14,10 +14,13 @@
   import { t } from "../i18n/index.svelte.js";
   import Card from "../shell/Card.svelte";
   import type { Phase, SignInController } from "../sign-in-controller.js";
+  import AccountDetails from "./AccountDetails.svelte";
+  import type { AccountSummaryController } from "../account/account-controller.svelte.js";
   import type { LoginItemOutcome } from "../../main/login-item.js";
 
   let {
     controller,
+    account,
     phase,
     verifyPeers,
     prefsUnreadable = false,
@@ -27,6 +30,8 @@
     onStartup,
   }: {
     controller: SignInController;
+    /** The account screen's own state. ONE prop; the component reads it all. */
+    account: AccountSummaryController;
     phase: Phase;
     verifyPeers: boolean;
     prefsUnreadable?: boolean;
@@ -142,6 +147,21 @@
     <p class="dim small" data-test="startup-state">{startupSentence}</p>
   {/if}
 </Card>
+
+<!--
+  The account itself: profile, usage and this account's devices.
+
+  BELOW the two existing cards and purely additive — neither is touched. The
+  component renders nothing at all while the profile section is `signed-out`, so
+  the sign-in card above keeps sole responsibility for saying that; there is no
+  state in which both speak.
+
+  One prop, by its own contract: the controller. Everything it shows comes from
+  a snapshot main already holds, and every mutation it offers is one of the two
+  that already existed — rename and revoke. Nothing here buys, upgrades or
+  cancels anything.
+-->
+<AccountDetails controller={account} />
 
 <style>
   h1 { margin: 0 0 var(--space-section); font-size: 20px; font-weight: 600; }

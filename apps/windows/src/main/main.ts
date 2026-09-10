@@ -555,6 +555,20 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
       control.inbox.active +
       control.storedSend.inventory().active +
       control.inboxSend.inventory().active,
+    // ## Why the account reader is deliberately NOT in that sum
+    //
+    // This number is what `quitRisk` turns into the TRANSFER prompt — "the
+    // transfer will stop and will not finish". Profile, usage and device reads
+    // are none of that: they are ordinary refreshes that cost nothing to
+    // abandon, and counting them would warn a person that their file transfer
+    // was about to be interrupted while the account page was merely reloading.
+    // A prompt that cries wolf is worse than no prompt, because the one time it
+    // matters it reads the same.
+    //
+    // The account work is still FENCED and DRAINED by the quit path, and what
+    // `quiesce` could not join is reported through the residue count — which is
+    // the honest place for "something did not finish", and says so without
+    // claiming it was a transfer.
     resident: control.resident,
     fence: control.fence,
     quiesce: control.quiesce,

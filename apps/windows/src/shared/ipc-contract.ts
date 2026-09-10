@@ -277,6 +277,32 @@ export const IPC = {
   inboxSendConverge: "relayium:inbox-send-converge",
 
   // -------------------------------------------------------------------------
+  // Account — profile, usage and this account's devices
+  // -------------------------------------------------------------------------
+  //
+  // Reads and two device mutations. Nothing here buys, upgrades, cancels or
+  // refunds anything, and there is no channel that could: the entire outbound
+  // journey is `accountManage`, which names a DESTINATION with a closed token
+  // and leaves main to map it to an address on this build's own pinned origin.
+  //
+  // Nothing in these payloads carries a bearer, an origin, a URL, an IP address
+  // or an inbox key — the shared contract has no such field to leak. A device
+  // is named by the opaque id of a row main itself handed the page, and main
+  // resolves that id against the list it currently holds, so a page cannot
+  // address a device it was never shown.
+
+  /** The snapshot main holds. Triggers no read by itself. */
+  accountSummaryState: "relayium:account-summary-state",
+  /** Read again — all three sections, or one failed card retrying alone. */
+  accountSummaryRefresh: "relayium:account-summary-refresh",
+  /** Rename one device. Tied to the document that asked. */
+  accountDeviceRename: "relayium:account-device-rename",
+  /** Revoke one device. Signs out only on a self-revoke under this account. */
+  accountDeviceRevoke: "relayium:account-device-revoke",
+  /** Open the account page, from MAIN, at an address only main composes. */
+  accountManage: "relayium:account-manage",
+
+  // -------------------------------------------------------------------------
   // Stored SEND and history
   // -------------------------------------------------------------------------
   //
@@ -389,6 +415,16 @@ export const IPC_EVENTS = {
    * drain all settle a delivery with nobody awaiting `end`.
    */
   inboxSendOutcome: "relayium:inbox-send-outcome",
+  /**
+   * A new account snapshot.
+   *
+   * Pushed because the READ is main's: an account change clears and re-reads
+   * without any page asking, and the view a page renders on arrival is the one
+   * main already holds. Emitted on the CURRENT document, like the Inbox state
+   * and for the same reason — a fact about main that every document needs and
+   * none requested.
+   */
+  accountSummary: "relayium:account-summary",
 } as const;
 
 export const IPC_EVENT_NAMES: readonly string[] = Object.values(IPC_EVENTS);

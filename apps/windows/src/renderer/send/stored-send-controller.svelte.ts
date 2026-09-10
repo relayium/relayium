@@ -93,6 +93,22 @@ export class StoredSendController {
   refusal = $state<SendRefusal | null>(null);
   /** The link for the send that just finished, held only while it is shown. */
   link = $state<string | null>(null);
+  /**
+   * WHICH send the link on screen belongs to.
+   *
+   * Captured when the link is revealed, because at that moment this object
+   * knows the job id for certain. The page used to derive it from
+   * `history[0].jobId` instead, and that is a race with a user-visible cost:
+   * the link is shown as soon as `end` reports `published`, while the history
+   * refresh that would populate row 0 is still in flight. A Copy pressed in
+   * that window named the empty string and was refused at the boundary; once
+   * the history did land, the same expression could name a DIFFERENT job than
+   * the link being displayed — and copying somebody else's link is worse than
+   * copying nothing.
+   *
+   * Identity is therefore held, never inferred from ordering.
+   */
+  linkJobId = $state<string | null>(null);
   /** What the last Copy did. Never silent: a refusal is shown. */
   copied = $state<"copied" | "failed" | null>(null);
   /** What the last delete or re-check did, so neither is silent either. */
@@ -200,6 +216,7 @@ export class StoredSendController {
     this.#attempt += 1;
     this.#jobId = null;
     this.link = null;
+    this.linkJobId = null;
     this.copied = null;
     this.history = [];
     this.historyUnavailable = false;
@@ -230,6 +247,7 @@ export class StoredSendController {
     this.outcome = null;
     this.refusal = null;
     this.link = null;
+    this.linkJobId = null;
     this.committed = 0;
     this.total = 0;
   }
@@ -240,6 +258,7 @@ export class StoredSendController {
     this.outcome = null;
     this.refusal = null;
     this.link = null;
+    this.linkJobId = null;
   }
 
   get totalBytes(): number {
@@ -262,6 +281,7 @@ export class StoredSendController {
     this.outcome = null;
     this.refusal = null;
     this.link = null;
+    this.linkJobId = null;
     this.committed = 0;
 
     // The same array, in the same order, as `encryptFiles` will walk.
@@ -396,7 +416,11 @@ export class StoredSendController {
     // A link that came back after a sign-out belongs to an account that has
     // gone away, and it is a KEY.
     if (!this.#current(attempt, epoch)) return;
+    // The link and the job it belongs to are installed TOGETHER. Nothing reads
+    // one without the other, so there is no window in which a link on screen
+    // has no identity or the wrong one.
     this.link = answer.link;
+    this.linkJobId = answer.link === null ? null : jobId;
   }
 
   /**
@@ -407,6 +431,28 @@ export class StoredSendController {
    * link under the live account and writes it. The answer is always rendered,
    * so a refusal is visible rather than a button that appears to do nothing.
    */
+  /**
+   * Copy the link that is ON SCREEN, by the identity captured with it.
+   *
+   * No argument, deliberately. The page used to pass an id it had derived from
+   * the history's ordering, which is how it came to name an empty string during
+   * the window before the history landed — and, once it had, potentially a
+   * different job than the one being displayed. There is now nothing for a
+   * caller to get wrong: this copies the link it is showing or it refuses.
+   */
+  async copyShownLink(): Promise<void> {
+    const jobId = this.linkJobId;
+    // No identity means no link is being shown, or its job is not known. Either
+    // way there is nothing to copy, and asking main with an empty id would be a
+    // request the boundary refuses — which the user would see as a failed copy
+    // of a link that is plainly on their screen.
+    if (jobId === null || this.link === null) {
+      this.copied = "failed";
+      return;
+    }
+    await this.copyLink(jobId);
+  }
+
   async copyLink(jobId: string): Promise<void> {
     const attempt = this.#attempt;
     const epoch = this.#epoch;

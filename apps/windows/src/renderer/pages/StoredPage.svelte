@@ -99,9 +99,6 @@
    * link itself, so there is no channel that puts arbitrary text on the
    * clipboard.
    */
-  const lastJobId = $derived(
-    send.outcome?.status === "published" ? (send.history[0]?.jobId ?? null) : null,
-  );
 
   /** A past send's link, held only while its row is showing it. */
   let shownLink = $state<string | null>(null);
@@ -297,7 +294,7 @@
         <div class="row">
           <label class="sr-only" for="send-link">{t("sendLinkLabel")}</label>
           <input id="send-link" data-test="send-link" readonly value={send.link} />
-          <button type="button" data-test="send-copy" onclick={() => void send.copyLink(lastJobId ?? "")}>
+          <button type="button" data-test="send-copy" onclick={() => void send.copyShownLink()}>
             {send.copied === "copied" ? t("sendCopied") : send.copied === "failed" ? t("sendCopyFailed") : t("sendCopy")}
           </button>
         </div>

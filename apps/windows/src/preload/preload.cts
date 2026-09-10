@@ -145,6 +145,18 @@ contextBridge.exposeInMainWorld("relayium", {
     forget: invoke("relayium:inbox-forget-delivery"),
     onState: subscribe("relayium:inbox-state-changed"),
   },
+  // The account screen. Reads, two device mutations, and ONE outbound journey
+  // named by a closed token — main owns the address, because a channel that
+  // took a URL from a page would be script-triggered navigation carrying the
+  // user's real session. No bearer, no origin, no IP and no key crosses here.
+  accountSummary: {
+    state: invoke("relayium:account-summary-state"),
+    refresh: invoke("relayium:account-summary-refresh"),
+    rename: invoke("relayium:account-device-rename"),
+    revoke: invoke("relayium:account-device-revoke"),
+    manage: invoke("relayium:account-manage"),
+    onState: subscribe("relayium:account-summary"),
+  },
   // Device Inbox SEND. `start` answers with this delivery's content key — the
   // one secret that travels main→renderer here, because the renderer is what
   // encrypts. `feed` carries ciphertext the other way. A target is named by

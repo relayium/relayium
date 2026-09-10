@@ -529,6 +529,132 @@ const sendSink = {
   },
 };
 
+/**
+ * The account endpoints, as an in-memory sink.
+ *
+ * ## Why this MUST be injected before the account wiring runs
+ *
+ * `AccountSummaryService.refresh()` is asked for at startup, and this run signs
+ * in for real with a synthetic bearer against the PRODUCTION origin. Without
+ * this seam those reads would leave the machine — three requests to
+ * `relayium.com` carrying a token this fixture invented. That is not a test
+ * failure mode, it is a test doing something it must never do, so the injection
+ * is a precondition of the wiring rather than a convenience.
+ *
+ * The bodies are the real contracts, spelled out: `/api/me` is WRAPPED in
+ * `user`, `/api/me/usage` is FLAT with a nested `plan`, and `/api/devices` is
+ * wrapped in `devices` with PascalCase rows. A fixture written to whatever the
+ * parser happened to accept would prove nothing about either.
+ */
+const accountSink = {
+  requests: [],
+  /** Switched by a scenario to make ONE section fail while the others succeed. */
+  failUsage: false,
+  renamed: [],
+  /** The device rows this sink serves. A rename MUTATES them. */
+  devices: [
+    { id: "smoke-device", name: "Smoke PC", createdAt: 1_780_000_000, lastSeenAt: 1_789_000_000, current: true, enrolled: true },
+    { id: "study-desktop", name: "Study desktop", createdAt: 1_770_000_000, lastSeenAt: 1_788_000_000, current: false, enrolled: false },
+  ],
+  /** `0` is UNLIMITED here — the case the UI must never render as a meter. */
+  storageCap: 0,
+  async fetch(input, init) {
+    const url = new URL(String(input));
+    const method = init?.method ?? "GET";
+    accountSink.requests.push(`${method} ${url.pathname}`);
+    const reply = (status, body) =>
+      new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+    if (url.pathname === "/api/me" && method === "GET") {
+      return reply(200, {
+        user: {
+          id: "acct-1",
+          email: "smoke@example.invalid",
+          displayName: "Smoke Owner",
+          hasPassword: true,
+          emailVerified: true,
+          onlyOwnNodes: false,
+          planId: "pro",
+          subscriptionStatus: "active",
+          subscriptionEnd: 0,
+          hasBilling: true,
+          scheduledPlanId: "",
+          scheduledCycle: "",
+          billingCycle: "monthly",
+          entitlementProvider: "stripe",
+          // The ACTUAL server shape. It returns the object with `available:
+          // false` rather than omitting the field — an omission is accepted by
+          // the parser but is not what this app will meet, and a fixture that
+          // is merely compatible proves less than one that is real.
+          appleRenewal: { available: false },
+          linkedMethods: ["password"],
+        },
+      });
+    }
+    if (url.pathname === "/api/me/usage" && method === "GET") {
+      // A section that fails on its own, beside two that succeed — the thing
+      // the design insists must never be turned into a zero or a free plan.
+      if (accountSink.failUsage) return reply(503, { error: "usage unavailable" });
+      return reply(200, {
+        period: "2026-09",
+        resetsAt: 1_790_000_000,
+        traffic: { used: 3_221_225_472, cap: 10_737_418_240 },
+        storage: { used: 1_073_741_824, cap: accountSink.storageCap },
+        plan: {
+          id: "pro",
+          name: "Pro",
+          storageBytes: accountSink.storageCap,
+          trafficBytes: 10_737_418_240,
+          retentionSecs: 1_209_600,
+          priceMonthly: 500,
+          priceYearly: 5000,
+          isTop: false,
+          subscriptionStatus: "active",
+          subscriptionEnd: 0,
+          billingCycle: "monthly",
+          scheduledPlanId: "",
+          scheduledPlanName: "",
+          scheduledCycle: "",
+          entitlementProvider: "stripe",
+          appleRenewal: { available: false },
+        },
+      });
+    }
+    if (url.pathname === "/api/devices" && method === "GET") {
+      // Served from the sink's OWN state, so a rename actually changes what a
+      // later read returns. A fixture that answered a constant would let a
+      // mutation "succeed" against a server that never moved.
+      return reply(200, {
+        devices: accountSink.devices.map((row) => ({
+          ID: row.id,
+          Name: row.name,
+          Kind: "windows",
+          CreatedAt: row.createdAt,
+          LastSeenAt: row.lastSeenAt,
+          Current: row.current,
+          Inbox: row.enrolled ? { AutoAccept: "auto" } : null,
+        })),
+      });
+    }
+    const device = /^\/api\/devices\/([A-Za-z0-9_-]+)$/.exec(url.pathname);
+    if (device !== null && method === "PATCH") {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      const name = String(body.name ?? "");
+      const row = accountSink.devices.find((entry) => entry.id === device[1]);
+      if (row === undefined) return reply(404, { error: "no such device" });
+      accountSink.renamed.push({ id: device[1], name });
+      // The server state MOVES. This is what makes the assertion below — that
+      // the row's rendered name changed — a real oracle.
+      row.name = name;
+      return reply(200, { ok: true });
+    }
+    // A DELETE is deliberately not answered here: no scenario revokes a device,
+    // because the only safe one to revoke in this run is the current device and
+    // that would sign the run out mid-flight. Root's own probe owns that case.
+    return reply(404, { error: "no route" });
+  },
+};
+
 /** One pending delivery, as central would list it. No token, no key. */
 function pendingTask(id) {
   return {
@@ -709,6 +835,10 @@ async function main() {
       // store, the `device_task` adapter and the upload engine are the shipped
       // ones, and the ciphertext comes from the renderer's own producer.
       inboxSend: { fetchImpl: (input, init) => sendSink.fetch(input, init) },
+      // The account reads. Injected because the wiring asks for them at
+      // startup under this run's synthetic bearer, and the origin is the
+      // PRODUCTION one — see `accountSink`.
+      accountSummary: { fetchImpl: (input, init) => accountSink.fetch(input, init) },
       storedReceive: { receive: streamingReceive },
       // Never the real Windows startup programs: this run must not add itself
       // to whatever machine it happens to be on.
@@ -805,6 +935,9 @@ async function main() {
   await scenarioInboxSend(win);
   // The pre-quit answer, with a delivery genuinely held open by the server.
   await scenarioSendQuitRisk(win, runtime);
+  // The account screen, composed. After the Inbox scenarios because it signs in
+  // through the same account they established.
+  await scenarioAccountScreen(win);
   // Stored send, while the smoke is signed in and BEFORE any quit scenario.
   // A quit fences admissions and a Stay clears them; running the whole send
   // flow through that would be testing the fence, which has its own coverage,
@@ -2058,6 +2191,168 @@ async function sendQuitRisk(win, runtime) {
   // The picked files survive a Stay: a person who chose to keep working must
   // not find their selection gone.
   check("the selection survived the quit prompt", (await present(win, "inbox-send-picked")) === true);
+}
+
+/**
+ * The account screen, composed: main → IPC → controller → component.
+ *
+ * The component's own DOM suite is accepted separately and proves the component.
+ * It cannot prove the WIRING, which is what this covers: that the service main
+ * composes reads through the injected client, that its snapshot crosses the
+ * five channels and the push, and that what a person ends up looking at is the
+ * account the fixture described.
+ *
+ * Nothing here reaches a real account or a provider: every request is answered
+ * by `accountSink`, and the run asserts that too.
+ */
+async function scenarioAccountScreen(win) {
+  await js(win, `(() => { document.querySelector('[data-test="nav-account"] button')?.click(); return true; })()`);
+  const mounted = await waitFor(
+    win,
+    "the account screen",
+    `document.querySelector('[data-test="account-details"]') !== null`,
+    20_000,
+  );
+  check("the account screen renders below the sign-in card", mounted === true);
+
+  // ---- the three reads actually happened, through the injected client ------
+  const asked = await waitForValue(
+    () =>
+      accountSink.requests.includes("GET /api/me") &&
+      accountSink.requests.includes("GET /api/me/usage") &&
+      accountSink.requests.includes("GET /api/devices"),
+    20_000,
+  );
+  check("main read all three sections", asked === true, accountSink.requests.join(","));
+  // And nothing left the machine: every request this run made was answered here.
+  check(
+    "no account request escaped the fixture",
+    accountSink.requests.every((r) => r.startsWith("GET /api/") || r.startsWith("PATCH /api/devices/")),
+    accountSink.requests.join(","),
+  );
+
+  // ---- what the person is looking at --------------------------------------
+  const profileName = await waitFor(
+    win,
+    "the profile to render",
+    `(document.querySelector('[data-test="profile-name"]')?.textContent ?? "").includes("Smoke Owner")`,
+    20_000,
+  );
+  check("the profile the fixture described is on screen", profileName === true);
+  check(
+    "and its email",
+    (await shown(win, "profile-email")).includes("smoke@example.invalid"),
+    await shown(win, "profile-email"),
+  );
+
+  // ## `0` is UNLIMITED — asserted as a POSITIVE fact, not as an absence
+  //
+  // "Has no digits" is satisfied by the empty string, so the first version of
+  // this would have passed over a card that rendered nothing at all. The cap
+  // must say something, and that something must not be a number.
+  const storage = await shown(win, "plan-storage");
+  check("an unlimited cap says so", storage.trim().length > 0, JSON.stringify(storage));
+  check("and does not render as a number", !/\d/.test(storage), storage);
+  const planName = await shown(win, "plan-name");
+  check("the current plan is named", planName.trim().length > 0, planName);
+
+  // The bar is `[role="progressbar"]`, which is what the component actually
+  // renders — the earlier selector looked for `progress`/`meter` elements that
+  // do not exist, so it reported "no meter" for every quota on the page.
+  const storageBars = await js(
+    win,
+    `document.querySelectorAll('[data-test="usage-storage"] [role="progressbar"]').length`,
+  );
+  check("an unlimited quota draws NO bar", storageBars === 0, String(storageBars));
+  const trafficBars = await js(
+    win,
+    `document.querySelectorAll('[data-test="usage-traffic"] [role="progressbar"]').length`,
+  );
+  // The traffic cap IS limited in this fixture, so its half must meter — which
+  // is what proves the check above is discriminating rather than vacuous.
+  check("a limited quota DOES draw one", trafficBars === 1, String(trafficBars));
+  check("retention is stated", (await shown(win, "plan-retention")).trim().length > 0);
+
+  // ---- the devices, by name ------------------------------------------------
+  const rows = await js(
+    win,
+    `[...document.querySelectorAll('[data-test="device-name"]')].map((n) => n.textContent.trim()).join("|")`,
+  );
+  check("both devices are named", rows.includes("Study desktop") && rows.includes(inbox.device.name), rows);
+  check("this PC is marked as the current one", (await present(win, "device-current")) === true);
+
+  // ---- one mutation, end to end -------------------------------------------
+  const before = accountSink.renamed.length;
+  await js(
+    win,
+    `(() => { const row = document.querySelector('[data-test="device-row"][data-device="study-desktop"]');
+      row?.querySelector('[data-test="device-rename"]')?.click(); return true; })()`,
+  );
+  const prompting = await waitFor(win, "the rename prompt", `document.querySelector('[data-test="rename-input"]') !== null`);
+  check("renaming asks first", prompting === true);
+  await js(
+    win,
+    `(() => { const input = document.querySelector('[data-test="rename-input"]');
+      input.value = "Renamed by smoke";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      return true; })()`,
+  );
+  check("the rename was saved", await clickTest(win, "rename-save"));
+  const renamed = await waitForValue(() => accountSink.renamed.length > before, 20_000);
+  check("the rename reached the server through main", renamed === true, JSON.stringify(accountSink.renamed));
+  check(
+    "with the name the person typed, for the row they chose",
+    accountSink.renamed.at(-1)?.id === "study-desktop" &&
+      accountSink.renamed.at(-1)?.name === "Renamed by smoke",
+    JSON.stringify(accountSink.renamed.at(-1)),
+  );
+  // ## The ROW's name is the oracle, not an outcome banner
+  //
+  // The component renders a successful rename by showing the new name — its
+  // outcome text for `renamed` is deliberately empty — so waiting for
+  // `device-outcome` would be waiting for something that never appears on the
+  // path that WORKED. It passed only when the rename failed.
+  const renamedRow = await waitFor(
+    win,
+    "the renamed row to render its new name",
+    `(document.querySelector('[data-test="device-row"][data-device="study-desktop"] [data-test="device-name"]')
+       ?.textContent ?? "").includes("Renamed by smoke")`,
+    20_000,
+  );
+  check("the row shows the name the person gave it", renamedRow === true);
+  // And the old name is gone from that row, so this is a change rather than an
+  // addition somewhere on the page.
+  const oldGone = await js(
+    win,
+    `!(document.querySelector('[data-test="device-row"][data-device="study-desktop"] [data-test="device-name"]')
+        ?.textContent ?? "").includes("Study desktop")`,
+  );
+  check("and no longer the old one", oldGone === true);
+
+  // ---- one section failing does not take the others down ------------------
+  accountSink.failUsage = true;
+  const asked503 = accountSink.requests.length;
+  await js(
+    win,
+    `globalThis.relayium.accountSummary.refresh({ section: "usage" }).then(() => "asked", () => "threw")`,
+  );
+  const failed = await waitFor(
+    win,
+    "the usage card's own failure",
+    `document.querySelector('[data-test="usage-failed"]') !== null
+      || document.querySelector('[data-test="plan-failed"]') !== null`,
+    20_000,
+  );
+  check("a failed section renders its own failure", failed === true);
+  check("the read was actually attempted", accountSink.requests.length > asked503);
+  // The two that succeeded are untouched — never turned into zero, a free plan
+  // or an unlimited quota.
+  check(
+    "beside sections that still show what they read",
+    (await shown(win, "profile-name")).includes("Smoke Owner"),
+    await shown(win, "profile-name"),
+  );
+  accountSink.failUsage = false;
 }
 
 /** Poll a main-process fact the scheduler produces. */

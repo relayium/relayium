@@ -39,6 +39,8 @@ import { InboxService, type InboxServiceDeps } from "./features/inbox.js";
 import { AccountIdentity } from "./features/account-identity.js";
 import { StoredSendService, type StoredSendDeps } from "./features/stored-send.js";
 import { InboxSendService, type InboxSendDeps } from "./features/inbox-send-service.js";
+import { AccountSummaryService, type AccountSummaryDeps } from "./features/account-summary.js";
+import { isAccountExternalTarget } from "../shared/account-summary.js";
 import { DeviceAuthClient } from "./account/device-auth.js";
 import { ENGINEERING_BANNER, engineeringOverride, isEngineeringBuild } from "./build-mode.js";
 import { IceControl, IceRequestRegistry } from "./net/ice-control.js";
@@ -154,6 +156,13 @@ export interface HandlerComposition {
    * cannot be replaced from here.
    */
   inboxSend?: Pick<InboxSendDeps, "runtime" | "storedRuntime" | "fetchImpl" | "requestTimeoutMs" | "now">;
+  /**
+   * Account seams: the read client and its HTTP.
+   *
+   * The origin, the account authority and the document generation are NOT in
+   * this `Pick` and cannot be replaced from here.
+   */
+  accountSummary?: Pick<AccountSummaryDeps, "makeClient" | "fetchImpl" | "timeoutMs" | "quiesceTimeoutMs">;
   /** A task-owned journal directory, so a run does not write into the user's
    *  profile — and so send is drivable on a host that is not Windows. */
   storedSendJournalDirectory?: string;
@@ -237,6 +246,8 @@ export interface HandlerControl {
   readonly storedSend: StoredSendService;
   /** Device Inbox send, for the same risk snapshot and teardown. */
   readonly inboxSend: InboxSendService;
+  /** The account screen's reader, for the quit risk snapshot and teardown. */
+  readonly accountSummary: AccountSummaryService;
   readonly resident: ResidentBridge;
   /**
    * Stop main's own outgoing work, recoverably.
@@ -838,6 +849,74 @@ export function registerHandlers(
   router.handle(IPC.inboxSendCancel, (payload) => inboxSend.cancel(inboxSendJob(payload)));
   router.handle(IPC.inboxSendConverge, (payload) => inboxSend.converge(inboxSendJob(payload)));
 
+  // -------------------------------------------------------------------------
+  // Account — profile, usage and this account's devices
+  // -------------------------------------------------------------------------
+  //
+  // The READ is main's, not the page's: the service registers its own account
+  // watcher and re-reads on a change, so the view a page renders on arrival is
+  // one main already holds. Nothing here buys, upgrades or cancels anything —
+  // the whole outbound journey is a fixed path on this build's own origin,
+  // named by a closed token and composed HERE.
+  const accountSummary = new AccountSummaryService({
+    origin,
+    // Satisfied directly by `AppService`; a signature change to any of the four
+    // members is a compile error here rather than a runtime shape mismatch.
+    account: service,
+    // The document that asked owns a mutation, so a confirmation given on a
+    // page that has since reloaded cannot submit.
+    currentDocument: () => router.generation,
+    onView: (view) => {
+      router.emit(IPC_EVENTS.accountSummary, router.generation, view);
+    },
+    reportFailure: (err) => events.reportFailure?.(err),
+    ...(composition.accountSummary ?? {}),
+  });
+  // Construction publishes only the initial loading view, so the first real
+  // read is asked for here. Not awaited: a registration that waited on the
+  // network would delay every other channel behind it.
+  void accountSummary.refresh().catch((err: unknown) => events.reportFailure?.(err));
+
+  router.handle(IPC.accountSummaryState, async () => accountSummary.view());
+  router.handle(IPC.accountSummaryRefresh, async (payload) => {
+    const section = expectObject(payload)["section"];
+    if (section === undefined) return accountSummary.refresh();
+    // A closed set. A named section is how ONE failed card retries without
+    // disturbing the two beside it that succeeded.
+    if (section !== "profile" && section !== "usage" && section !== "devices") {
+      throw new IpcRefusal("unknown account section");
+    }
+    await (section === "profile"
+      ? accountSummary.refreshProfile()
+      : section === "usage"
+        ? accountSummary.refreshUsage()
+        : accountSummary.refreshDevices());
+    return accountSummary.view();
+  });
+  router.handle(IPC.accountDeviceRename, (payload) => {
+    const body = expectObject(payload);
+    // The generation is read HERE, where the request arrives, so the mutation
+    // carries the document that asked rather than whichever one is current by
+    // the time the server answers.
+    return accountSummary.renameDevice(
+      router.generation,
+      expectString(body["id"], MAX_INBOX_ID_LENGTH),
+      expectString(body["name"], MAX_INBOX_DEVICE_NAME_LENGTH),
+    );
+  });
+  router.handle(IPC.accountDeviceRevoke, (payload) =>
+    accountSummary.revokeDevice(router.generation, expectString(expectObject(payload)["id"], MAX_INBOX_ID_LENGTH)),
+  );
+  // A closed TOKEN, never a URL. A channel that took an address from a page
+  // would be script-triggered navigation carrying the user's real session.
+  router.handle(IPC.accountManage, async (payload) => {
+    const target = expectObject(payload)["target"];
+    if (!isAccountExternalTarget(target)) throw new IpcRefusal("unknown account target");
+    const url = accountSummary.externalUrl(target);
+    if (url === null) return { ok: false };
+    return { ok: await openApprovedExternal(url, origin) };
+  });
+
   // The account moved. The service compares the epoch itself, because this also
   // fires for a document change and a reload must not stop receiving.
   const releaseAccountWatch = service.onAccountChanged(() => {
@@ -1266,6 +1345,9 @@ export function registerHandlers(
     inbox.fence();
     storedSend.fence();
     inboxSend.fence();
+    // Mutations only. An explicit READ stays open on purpose: a screen frozen
+    // mid-question is worse than one still reading.
+    accountSummary.fence();
   };
 
   const quiesce = async (): Promise<CleanupOutcome> => {
@@ -1299,18 +1381,22 @@ export function registerHandlers(
     // are abandoned before the drain, so a page that has been told to stop
     // cannot leave the join waiting for frames nobody will send.
     const inboxSendStopping = inboxSend.quiesce();
+    // Stronger than its fence on purpose: this has already reported an
+    // inventory, and anything admitted afterwards would make that report untrue.
+    const accountStopping = accountSummary.quiesce();
     // The leases, the sign-in, the queued transitions and the secret work. It
     // retires the in-flight sign-in before ITS first await too, so this is a
     // request as much as a join.
     const serviceStopping = service.quiesce();
 
-    const [sockets, reads, storedHeld, inboxHeld, sendHeld, inboxSendHeld, outcome] = await Promise.all([
+    const [sockets, reads, storedHeld, inboxHeld, sendHeld, inboxSendHeld, accountHeld, outcome] = await Promise.all([
       hub.drainClosing(NETWORK_DRAIN_MS),
       iceRequests.drain(NETWORK_DRAIN_MS),
       storedStopping,
       inboxStopping,
       sendStopping,
       inboxSendStopping,
+      accountStopping,
       serviceStopping,
     ]);
 
@@ -1339,6 +1425,10 @@ export function registerHandlers(
         // not be waiting on the user's other device, and quitting over it
         // without saying so is the same omission one line up.
         inboxSendHeld.unresolved +
+        // Work the account reader could not stop inside its bounded wait. It
+        // reports this truthfully rather than assuming it away, so a quit that
+        // ignored it would be discarding the one honest number it produces.
+        accountHeld.unjoined +
         (revocation !== null ? 1 : 0),
       networkUnsettled: sockets + reads,
       firstReason: outcome.firstReason ?? revocation,
@@ -1360,6 +1450,7 @@ export function registerHandlers(
     releaseSendAccountWatch();
     await storedSend.dispose();
     await inboxSend.dispose();
+    await accountSummary.dispose();
     await inbox.dispose();
     await storedReceive.dispose();
     await service.dispose();
@@ -1378,6 +1469,7 @@ export function registerHandlers(
     storedReceive.resume();
     storedSend.resume();
     inboxSend.resume();
+    accountSummary.resume();
     // The scheduler too: it was stopped by the same quiesce, and a Stay that
     // left it stopped would be an app that quietly never receives again.
     inbox.resume();
@@ -1389,6 +1481,7 @@ export function registerHandlers(
     inbox,
     storedSend,
     inboxSend,
+    accountSummary,
     resident,
     fence,
     quiesce,

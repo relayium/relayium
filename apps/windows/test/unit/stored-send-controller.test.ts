@@ -320,3 +320,118 @@ describe("delete and re-check always say what they did", () => {
     expect(controller.rowNotice).toEqual({ jobId: "job-1", kind: "still-unknown" });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Which link the Copy button copies
+// ---------------------------------------------------------------------------
+//
+// A real Windows failure, not a flaky clipboard: the page derived the job id
+// from `history[0]`, and the link is shown as soon as `end` reports published —
+// while the history refresh that would fill row 0 is still in flight. The copy
+// therefore named the empty string and was refused at the boundary, and once
+// the history did land the same expression could name a DIFFERENT job than the
+// link on screen.
+
+describe("copying the link that is on screen", () => {
+  /** Publish one send whose history refresh is held open. */
+  async function publishedWithHeldHistory(historyEntries: readonly StoredSendHistoryEntry[]) {
+    const held = deferred<{ entries: readonly StoredSendHistoryEntry[] | null }>();
+    const copied: string[] = [];
+    const built = bridge({
+      history: () => held.promise,
+      async copyLink(payload) {
+        copied.push(payload.jobId);
+        return { result: "copied" };
+      },
+    });
+    const controller = new StoredSendController(built.bridge);
+    controller.pick([new File([new Uint8Array(4)], "a.bin")]);
+    const sending = controller.send();
+    await settle();
+    return {
+      controller,
+      copied,
+      sending,
+      landHistory: () => held.resolve({ entries: historyEntries }),
+    };
+  }
+
+  it("copies the right job while the history has not landed yet", async () => {
+    // The exact window the Windows run failed in.
+    const h = await publishedWithHeldHistory([]);
+    expect(h.controller.link).not.toBeNull();
+    expect(h.controller.linkJobId).toBe("job-1");
+
+    await h.controller.copyShownLink();
+    // Named the job, not the empty string a refused boundary would see.
+    expect(h.copied).toEqual(["job-1"]);
+    expect(h.controller.copied).toBe("copied");
+
+    h.landHistory();
+    await h.sending;
+  });
+
+  it("does not follow the history's ordering once it does land", async () => {
+    // A newer send from another window, a re-ordered page, a row that sorts
+    // first for any reason: none of them changes which link is being displayed.
+    const h = await publishedWithHeldHistory([ENTRY("some-other-job"), ENTRY("job-1")]);
+    h.landHistory();
+    await h.sending;
+
+    expect(h.controller.link).not.toBeNull();
+    expect(h.controller.linkJobId).toBe("job-1");
+    await h.controller.copyShownLink();
+    expect(h.copied).toEqual(["job-1"]);
+    // And emphatically not the row that happens to be first.
+    expect(h.copied).not.toContain("some-other-job");
+  });
+
+  it("refuses rather than copying when no link is shown", async () => {
+    const built = bridge();
+    const controller = new StoredSendController(built.bridge);
+    // Nothing published. There is no link and no identity, so there is nothing
+    // to copy — and main is not asked with an empty id.
+    await controller.copyShownLink();
+    expect(built.calls.copy).toBe(0);
+    expect(controller.copied).toBe("failed");
+  });
+
+  it("drops the identity with the link when the account changes", async () => {
+    const built = bridge();
+    const controller = new StoredSendController(built.bridge);
+    controller.pick([new File([new Uint8Array(4)], "a.bin")]);
+    await controller.send();
+    expect(controller.linkJobId).toBe("job-1");
+
+    // A link is a KEY, and it belongs to whoever was signed in.
+    built.signOut(9);
+    expect(controller.link).toBeNull();
+    expect(controller.linkJobId).toBeNull();
+    await controller.copyShownLink();
+    expect(built.calls.copy).toBe(0);
+  });
+
+  it("drops the identity when a new selection replaces the last send", async () => {
+    const built = bridge();
+    const controller = new StoredSendController(built.bridge);
+    controller.pick([new File([new Uint8Array(4)], "a.bin")]);
+    await controller.send();
+    expect(controller.linkJobId).toBe("job-1");
+
+    // A fresh pick is a fresh job. Leaving the old link's identity behind would
+    // let a Copy press after it name a send the screen is no longer about.
+    controller.pick([new File([new Uint8Array(8)], "b.bin")]);
+    expect(controller.link).toBeNull();
+    expect(controller.linkJobId).toBeNull();
+    await controller.copyShownLink();
+    expect(built.calls.copy).toBe(0);
+  });
+
+  it("keeps a row's own Copy working, which names its row", async () => {
+    // The history rows are unaffected: each names the job it renders.
+    const built = bridge();
+    const controller = new StoredSendController(built.bridge);
+    await controller.copyLink("a-past-job");
+    expect(built.calls.copy).toBe(1);
+  });
+});

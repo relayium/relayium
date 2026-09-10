@@ -40,6 +40,8 @@
   import { StoredController, type StoredBridge } from "./stored/stored-controller.svelte.js";
   import { InboxController, type InboxBridge } from "./inbox/inbox-controller.svelte.js";
   import { InboxSendController, type InboxSendBridge } from "./inbox/inbox-send-controller.svelte.js";
+  import { AccountSummaryController } from "./account/account-controller.svelte.js";
+  import type { AccountSummaryBridge } from "./account/bridge.js";
   import { StoredSendController, type StoredSendBridge } from "./send/stored-send-controller.svelte.js";
   import { goTo, page } from "./shell/navigation.svelte.js";
   import { lang, t } from "./i18n/index.svelte.js";
@@ -76,6 +78,7 @@
       inbox: InboxBridge;
       send: StoredSendBridge;
       inboxSend: InboxSendBridge;
+      accountSummary: AccountSummaryBridge;
     };
 
   const bridge = (globalThis as unknown as { relayium: Bridge }).relayium;
@@ -212,6 +215,14 @@
    * picker can offer a machine this account does not have.
    */
   const inboxSend = new InboxSendController(bridge.inboxSend, bridge.inbox.onState);
+  /**
+   * App-lived, like every other controller here, and for the reason its own
+   * handoff gives: it takes ONE subscription for the life of the app. Built per
+   * page it would be torn down and rebuilt in the tick a push arrives in — and
+   * the read is MAIN's, so the push is how an account change reaches the screen
+   * at all.
+   */
+  const accountSummary = new AccountSummaryController(bridge.accountSummary);
 
   /** What Windows says about starting at sign-in. Null until it has answered. */
   let startup = $state<LoginItemOutcome | null>(null);
@@ -568,6 +579,7 @@
     inbox.destroy();
     send.dispose();
     inboxSend.dispose();
+    accountSummary.destroy();
     detachResident();
     controller.dispose();
     lanRoom?.stop();
@@ -585,6 +597,9 @@
   // A page that read it on mount would ask again on every navigation and would
   // have nothing at all the first time it opened.
   void inboxSend.refreshTargets().catch(() => undefined);
+  // Construction publishes only a loading view; the first real read is asked
+  // for here, once, by the shell rather than by the page.
+  void accountSummary.load().catch(() => undefined);
   void send.refreshHistory().catch(() => undefined);
   void bridge.loginItem
     .read()
@@ -672,6 +687,7 @@
   {:else}
     <AccountPage
       {controller}
+      account={accountSummary}
       {phase}
       {startup}
       verifyPeers={prefs.verifyPeers}
