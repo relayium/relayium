@@ -60,7 +60,7 @@ export const PATH_MATRIX = [
     "the server module: still not a native BUILD trigger, and still an input to both acceptances "
     + "for the same reason — each one builds this module from source"],
   ["web/src/lib/pair.ts",
-    ["android-interop.yml", "native-web-pairing.yml", "web.yml"],
+    ["android-interop.yml", "native-web-pairing.yml", "web.yml", "windows.yml"],
     "web-only: no native BUILD runner may start. Both cross-client acceptances build and serve "
     + "the Web bundle this file is compiled into, and the peer they drive it against is a real "
     + "native client, so a realtime-wire or pairing change here breaks them directly"],
@@ -151,10 +151,15 @@ export const PATH_MATRIX = [
   ["apps/android/gradle/libs.versions.toml", ["android-interop.yml", "android.yml"],
     "the pinned Android catalog: an edit to a version must rebuild and re-prove the platform "
     + "that resolves it"],
-  ["apps/windows/Relayium/App.xaml.cs", [],
-    "a platform root that does not exist yet: no current workflow may adopt it. This is the "
-    + "whole point of removing `apps/**` — the day somebody creates this file, the ONLY thing "
-    + "that runs is what its own new workflow says, plus the unfiltered always-on gates"],
+  ["apps/windows/src/main/main.ts", ["windows.yml"],
+    "the Windows client's privileged process: its own lane and nothing else. No Apple runner, "
+    + "no Android build, no web suite. This row used to name a WinUI/C# path and expect [], "
+    + "because the root did not exist and no workflow was allowed to adopt it; the root and "
+    + "`windows.yml` were then created in the same commit, which is exactly what the "
+    + "future-platform rule requires"],
+  ["apps/windows/electron-builder.yml", ["windows.yml"],
+    "the packaging configuration: the lane that builds the installer, and no other. A change "
+    + "to how the EXE is produced must rebuild it"],
   ["scripts/android-interop-acceptance.sh", ["android-interop.yml"],
     "the Android acceptance run itself: its own lane and no other — `scripts/**` appears in no "
     + "filter, so it cannot inherit a macOS runner"],

@@ -1,0 +1,46 @@
+# Windows packaging.
+#
+# Direct distribution only: an EXE the user downloads and runs. No Microsoft
+# Store, so no MSIX identity and none of the capabilities that come with it —
+# which is why the app registers its own tray, startup entry and protocol
+# handler rather than declaring them in a package manifest.
+appId: com.relayium.windows
+productName: Relayium
+copyright: Relayium
+
+directories:
+  output: release
+  buildResources: assets
+
+# Only what the app runs. `src/`, `test/` and the TypeScript sources are not
+# shipped — a smaller bundle is also a smaller thing to audit.
+files:
+  - dist/**
+  - assets/**
+  - package.json
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: assets/app-icon.png
+  # No `certificateFile`/`certificateSubjectName`: this task has no Authenticode
+  # material provisioned, so the build produces an UNSIGNED artifact and says so
+  # rather than appearing to sign. Signing is a separate, credential-bearing
+  # step that must not be inferred from a green build.
+
+nsis:
+  # Per-user, so installing needs no administrator and an install cannot write
+  # outside the user's own profile.
+  perMachine: false
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  # The installer owns the `relayium://` association (see `protocols` below).
+  # The app never registers it at runtime — doing so from a development run or a
+  # test would seize the scheme from whatever already owns it on that machine.
+
+protocols:
+  - name: Relayium
+    schemes: [relayium]

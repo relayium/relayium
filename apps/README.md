@@ -45,6 +45,30 @@
   Unlike the Apple apps it does NOT link `RelayiumKit` — its protocol layer is
   its own Kotlin implementation, held to the same frozen wire fixtures by the
   always-on `compat.yml` gate.
+- `windows/` — Windows desktop client (`com.relayium.windows`), Electron +
+  Svelte. **In development, no public build, nothing signed.** Direct-download
+  EXE outside the Microsoft Store is the intended distribution; there is no
+  Authenticode credential in this repository and the lane builds an unsigned
+  NSIS installer as build evidence only.
+
+  Unlike every other client here it neither links `RelayiumKit` nor reimplements
+  the wire: it **compiles the shipping TypeScript protocol modules out of
+  `web/src/lib` directly**, and executes them against the same frozen fixtures
+  under `RelayiumKit/Tests/Fixtures/` that hold the Swift, Kotlin and Go
+  implementations to the wire. That import is why `windows.yml` watches
+  `web/src/lib/**` as well as its own root. Being a combined work with AGPL
+  modules, this package is **AGPL-3.0-only** rather than `apps/`'s Apache-2.0 —
+  see `windows/NOTICE.md`.
+
+  What exists today is a security foundation, not a product: sandboxed
+  renderer served from a registered app scheme, sender-validated IPC with no
+  path-bearing channel, device-code sign-in with the bearer held in the main
+  process, DPAPI-backed secrets that fail closed, and a receive path that
+  validates a whole manifest before writing and stages bytes under names it
+  generates. There is no transfer UI and no Save flow — moving staged files to
+  their final names needs Windows kernel primitives Node does not expose, and it
+  refuses rather than approximating them. The complete objective and every
+  outstanding gap are tracked in `windows/DURABLE-PARITY.md`.
 - `ios/RelayiumShare/` — the iOS Share Extension (`com.relayium.mac.ShareIOS`),
   embedded in the app at `PlugIns/RelayiumShare.appex`. Links `RelayiumShareKit`
   only. **In development at 0.3.1 and not public.** Its identifier is *not*

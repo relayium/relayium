@@ -102,6 +102,7 @@ export const LANES = [
   { id: "ios", workflow: "ios.yml" },
   { id: "android", workflow: "android.yml" },
   { id: "android-interop", workflow: "android-interop.yml" },
+  { id: "windows", workflow: "windows.yml" },
   { id: "swift-package", workflow: "swift-package.yml" },
   { id: "native-web-pairing", workflow: "native-web-pairing.yml" },
   { id: "contracts", workflow: "contracts.yml" },

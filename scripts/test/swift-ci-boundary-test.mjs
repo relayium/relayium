@@ -202,6 +202,13 @@ const PARSED = [
   // that reads its frozen fixtures runs in the UNFILTERED `compat.yml`, which
   // is precisely why no Android filter needs — or may claim — the package.
   "android.yml", "android-interop.yml",
+  // The Windows desktop client's lane. Here for the same reason the Android
+  // ones are, and with the same verdict: it may not watch a Swift path. It
+  // COMPILES `web/src/lib`, so `web/src/lib/**` is in its filter; the frozen
+  // fixtures it executes those modules against live under `apps/RelayiumKit`
+  // but are read as DATA, and `compat.yml` already gates them unfiltered for
+  // every platform — so the package is not, and may not become, a trigger here.
+  "windows.yml",
 ];
 
 /**
@@ -2115,12 +2122,16 @@ const MUTATIONS = [
     // rule above is a claim about ALL filtered workflows, so a set that grows
     // behind its back is a claim that quietly stopped being checked.
     name: "a new path-filtered workflow appears that this policy does not know about",
+    // The subject used to be `windows.yml`, chosen because no such workflow
+    // existed. It does now, and it is in PARSED — so the mutation had to move to
+    // a name that is still genuinely unknown, or it would be asserting that a
+    // known workflow is unknown and could never fire.
     mutate: (w) => {
-      w.texts.set("windows.yml", "on:\n  push:\n    paths:\n      - 'apps/windows/**'\n");
-      w.filtered = [...w.filtered, "windows.yml"].sort();
+      w.texts.set("linux.yml", "on:\n  push:\n    paths:\n      - 'apps/linux/**'\n");
+      w.filtered = [...w.filtered, "linux.yml"].sort();
       return w;
     },
-    expect: /\[windows\.yml\] declare a `paths:` filter but are not in this file's PARSED list/,
+    expect: /\[linux\.yml\] declare a `paths:` filter but are not in this file's PARSED list/,
   },
   {
     name: "repo-hygiene.yml stops running this policy",

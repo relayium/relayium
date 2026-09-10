@@ -1,0 +1,61 @@
+/*
+ * The released macOS app's visual vocabulary, restated for a platform that has
+ * no equivalent of Apple's semantic colours.
+ *
+ * `apps/mac/Relayium/Components/DesignTokens.swift` deliberately contains NO
+ * colour of its own: macOS supplies semantic backgrounds and text styles that
+ * already answer light mode, dark mode, Increase Contrast and Reduce
+ * Transparency. Windows has no equivalent, so the semantic layer the Mac gets
+ * for free has to be written down — that is what this file is, and it is the
+ * one place where parity requires authoring rather than porting.
+ *
+ * The numbers are the Mac's own: 24/16/12/8/4 spacing, 10pt corner, 44pt hit
+ * floor, 720pt reading measure, accent #6D28D9 (#7C3AED in dark).
+ */
+:root {
+  color-scheme: light dark;
+
+  --space-page: 24px;
+  --space-section: 16px;
+  --space-inner: 12px;
+  --space-tight: 8px;
+  --space-hairline: 4px;
+
+  --corner: 10px;
+  --hit-target: 44px;
+  --reading-measure: 720px;
+
+  --accent: #6d28d9;
+  --bg: #ffffff;
+  --surface: #f6f6f7;
+  --border: #d8d8dc;
+  --text: #1c1c1e;
+  --text-dim: #5f5f66;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: #7c3aed;
+    --bg: #1c1c1e;
+    --surface: #2c2c2e;
+    --border: #3a3a3c;
+    --text: #f2f2f7;
+    --text-dim: #a1a1a8;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  /* Segoe UI first: the web client's stack already names it second, and on
+     Windows it is the correct system face. */
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

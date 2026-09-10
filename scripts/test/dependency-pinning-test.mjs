@@ -135,7 +135,15 @@ const RESOLVED = [
   "apps/mac/Relayium.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved",
   "apps/ios/Relayium.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved",
 ];
-const PACKAGE_LOCK = "web/package-lock.json";
+// Every npm lockfile in the repository, not just the web client's.
+//
+// This was a single path until the Windows desktop client added a second Node
+// project. A lockfile absent from this list is governed by nothing: rule 5
+// would report on `web/` alone while `apps/windows/` resolved packages from
+// anywhere, with no integrity hash required — and the gate would stay green
+// while saying "the lockfile is pinned".
+const PACKAGE_LOCKS = ["web/package-lock.json", "apps/windows/package-lock.json"];
+const PACKAGE_LOCK = PACKAGE_LOCKS[0];
 const GRADLE_CATALOG = "apps/android/gradle/libs.versions.toml";
 const GRADLE_WRAPPER_PROPS = "apps/android/gradle/wrapper/gradle-wrapper.properties";
 
@@ -171,7 +179,7 @@ async function readWorld() {
     .sort();
   const paths = [
     ...names.map((name) => `${WORKFLOW_DIR}/${name}`),
-    PACKAGE_SWIFT, ...PBXPROJS, ...RESOLVED, PACKAGE_LOCK,
+    PACKAGE_SWIFT, ...PBXPROJS, ...RESOLVED, ...PACKAGE_LOCKS,
     GRADLE_CATALOG, GRADLE_WRAPPER_PROPS,
   ];
   for (const path of paths) {
@@ -663,8 +671,7 @@ function checkNodeVersion(world, out) {
 
 const REGISTRY = "https://registry.npmjs.org/";
 
-function checkPackageLock(world, out) {
-  const path = PACKAGE_LOCK;
+function checkPackageLock(world, out, path = PACKAGE_LOCK) {
   const text = world.get(path);
   if (text === undefined) { out.push(`${path} is missing from the world`); return { entries: 0 }; }
   let lock;
@@ -818,7 +825,10 @@ function policyFailures(world) {
   checkPbxproj(world, out);
   checkResolved(world, out);
   checkNodeVersion(world, out);
-  checkPackageLock(world, out);
+  // Every lockfile, not just the first. A second Node project whose lockfile
+  // nothing reads is a package tree with no integrity requirement at all, while
+  // this gate reports "the lockfile is pinned".
+  for (const lockPath of PACKAGE_LOCKS) checkPackageLock(world, out, lockPath);
   checkGradleCatalog(world, out);
   return out;
 }
@@ -837,7 +847,10 @@ const counts = {
   pbx: checkPbxproj(world, []),
   resolved: checkResolved(world, []),
   node: checkNodeVersion(world, []),
-  lock: checkPackageLock(world, []),
+  lock: PACKAGE_LOCKS.reduce(
+    (total, lockPath) => ({ entries: total.entries + checkPackageLock(world, [], lockPath).entries }),
+    { entries: 0 },
+  ),
   gradle: checkGradleCatalog(world, []),
 };
 check(counts.actions.remoteCount >= 5, `only ${counts.actions.remoteCount} remote action`

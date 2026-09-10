@@ -1059,9 +1059,12 @@ the file split exists to keep separate — a macOS notarization failure must not
 able to block an iOS submission, and one platform's release cadence must not
 force another's.
 
-### Windows today is not a Windows app
+### Windows: the CLI ships, and a desktop client is now in development
 
-Windows already has real, shipped support, and it is **not** a native app:
+Two different things live under the Windows name, and conflating them is how a
+green board gets read as a shipped product.
+
+**Already shipping, and not a native app:**
 
 * the Go CLI and server cross-compile for `windows/amd64` and `windows/arm64`
   via `.goreleaser.yaml`, published as signed-checksum release archives;
@@ -1072,11 +1075,32 @@ Windows already has real, shipped support, and it is **not** a native app:
 * `web.yml` has a `windows-temporary-downloader` job on `windows-latest` that
   actually executes that script.
 
-None of that is a platform root. `apps/windows/` does not exist, no native
-Windows app is built or signed, and the rules above are what will apply on the
-day one is. Do not read the existing Windows support as an owned platform root,
-and do not read the absence of `windows.yml` as missing coverage for what ships
-today.
+**In development:** `apps/windows/` is a real platform root, created in the same
+commit as `.github/workflows/windows.yml` exactly as the future-platform rule
+requires. It is an Electron desktop client, and its lane builds an **unsigned**
+NSIS installer as build evidence.
+
+Two properties of that lane are worth stating, because both are unusual here:
+
+* **Its filter is wider than its own root.** The client compiles the protocol
+  modules in `web/src/lib` rather than vendoring a copy, so `web/src/lib/**`,
+  `web/package.json` and `web/package-lock.json` are real compile-time inputs
+  and are named in the filter. The filter stops there: the marketing pages, the
+  generated static site and the e2e harnesses are not inputs, and triggering on
+  them would make a copy edit pay for a Windows runner.
+* **It does not name `apps/RelayiumKit/**`.** The Swift package is not an input.
+  The frozen fixtures the lane executes the imported modules against happen to
+  live there, but they are read as data, and `compat.yml` already gates them
+  unfiltered for every platform. A Windows filter claiming the Apple package
+  would be a fan-out nobody needs.
+
+**No native Windows app is signed, published or advertised.** There is no
+Authenticode credential in this repository, `web/src/lib/apps-claim-rules.ts`
+still bans claiming a Windows app exists, and that ban is correct until there is
+a signed, owner-tested build. Do not read a green `windows` lane as a
+distributable artifact: it proves the installer is produced and the app boots on
+a runner, and nothing about the picker, DPAPI, the tray, the deep link, upgrade
+behaviour or SmartScreen.
 
 ## Concurrency, and never building the same commit twice
 

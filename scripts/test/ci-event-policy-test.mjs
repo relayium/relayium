@@ -212,6 +212,10 @@ const GOVERNED = [
   // bind them like every other lane.
   { file: "android.yml", dispatch: true, call: true, directPr: false },
   { file: "android-interop.yml", dispatch: true, call: true, directPr: false },
+  // The Windows desktop client's heavy owner. Here for the same reason every
+  // other filtered workflow is: its triggers, concurrency and push/pull_request
+  // symmetry would otherwise be governed by nothing.
+  { file: "windows.yml", dispatch: true, call: true, directPr: false },
   { file: "web.yml", dispatch: true, call: true, directPr: false },
   // The root contract tree's own lane. It is here for the reason this list
   // exists at all: a workflow absent from it is bound by none of the trigger,
@@ -320,6 +324,7 @@ const GATE_LANES = new Map([
   ["ios", "ios.yml"],
   ["android", "android.yml"],
   ["android-interop", "android-interop.yml"],
+  ["windows", "windows.yml"],
   ["swift-package", "swift-package.yml"],
   ["native-web-pairing", "native-web-pairing.yml"],
   ["contracts", "contracts.yml"],
@@ -407,6 +412,7 @@ const LITERAL_GROUP_PREFIX = new Map([
   ["ios.yml", "ios-lane"],
   ["android.yml", "android-lane"],
   ["android-interop.yml", "android-interop-lane"],
+  ["windows.yml", "windows-lane"],
   ["swift-package.yml", "swift-package-lane"],
   ["native-web-pairing.yml", "native-web-pairing-lane"],
   ["contracts.yml", "contracts-lane"],
@@ -2028,8 +2034,18 @@ const FUTURE_PLATFORMS = [
     label: "Windows",
     root: "apps/windows",
     workflow: "windows.yml",
-    sample: "apps/windows/Relayium/App.xaml.cs",
-    build: /msbuild|dotnet\s|cargo\s|cmake\b|signtool|Invoke-Pester/,
+    // A real file in the client as it was actually built. The placeholder here
+    // was `apps/windows/Relayium/App.xaml.cs`, written when nobody had chosen a
+    // toolchain; it named a WinUI/C# layout the client does not have, so a
+    // filter check against it would have been testing a path that never exists.
+    sample: "apps/windows/src/main/main.ts",
+    // Widened for the toolchain that was actually chosen. The original
+    // alternation covered .NET, C++ and Rust and would have rejected any
+    // JavaScript-hosted desktop build — not because such a build is a
+    // placeholder, but because the list predated the decision. `electron-builder`
+    // is the command that produces the installer, and it cannot be satisfied by
+    // an `echo`.
+    build: /msbuild|dotnet\s|cargo\s|cmake\b|signtool|Invoke-Pester|electron-builder/,
   },
 ];
 
@@ -6190,7 +6206,21 @@ function syntheticPlatform({ workflow, root, run, timeout = "30" }) {
 function addWorkflow(world, file, doc) {
   world.docs.set(file, doc);
   world.texts.set(file, JSON.stringify(doc));
-  world.governed.push({ file, dispatch: true });
+  // Replace, don't append. Once a future platform becomes a REAL one its file
+  // is already governed, and pushing a second entry made the same workflow
+  // appear twice in every roster the mutation cases print — which reads as a
+  // duplicate-lane bug that is not there.
+  const existing = world.governed.findIndex((entry) => entry.file === file);
+  if (existing === -1) world.governed.push({ file, dispatch: true });
+  else world.governed[existing] = { file, dispatch: true };
+  return world;
+}
+
+/** Remove a workflow from the world, for the "one half was deleted" cases. */
+function removeWorkflow(world, file) {
+  world.docs.delete(file);
+  world.texts.delete(file);
+  world.governed = world.governed.filter((entry) => entry.file !== file);
   return world;
 }
 
@@ -6307,16 +6337,18 @@ const MUTATIONS = [
     ]),
     expect: /apps\/RelayiumKit fans out to \[macos\.yml\]/,
   },
+  // Both directions of the together-or-not-at-all rule. These used to ADD one
+  // half, because `apps/windows/` and `windows.yml` did not exist; they were
+  // created in the same commit, exactly as the rule requires, so the mutation
+  // that proves the rule can still fail is now to DELETE one half.
   {
-    name: "an apps/windows root appears with no windows.yml",
-    mutate: (world) => { world.roots.add("apps/windows"); return world; },
+    name: "windows.yml is deleted while apps/windows remains",
+    mutate: (world) => removeWorkflow(world, WINDOWS.workflow),
     expect: /apps\/windows\/ exists but \.github\/workflows\/windows\.yml does not/,
   },
   {
-    name: "a windows.yml placeholder appears with no apps/windows source",
-    mutate: (world) => addWorkflow(world, WINDOWS.workflow, syntheticPlatform({
-      workflow: WINDOWS.workflow, root: WINDOWS.root, run: "dotnet build apps/windows",
-    })),
+    name: "apps/windows is deleted while windows.yml remains",
+    mutate: (world) => { world.roots.delete(WINDOWS.root); return world; },
     expect: /windows\.yml exists but apps\/windows\/ does not/,
   },
   {

@@ -11,6 +11,7 @@ the table below and the `LICENSE` file inside the relevant directory.
 | `server/`             | GNU Affero General Public License v3.0 (AGPL-3.0-only) | [`server/LICENSE`](server/LICENSE) |
 | `web/`                | GNU Affero General Public License v3.0 (AGPL-3.0-only) | [`web/LICENSE`](web/LICENSE)       |
 | `apps/`               | Apache License 2.0                        | [`apps/LICENSE`](apps/LICENSE)     |
+| `apps/windows/`       | GNU Affero General Public License v3.0 (AGPL-3.0-only) | [`apps/windows/LICENSE`](apps/windows/LICENSE) |
 | `docs/` (including `docs/protocol/`) | Creative Commons Attribution 4.0 International (CC BY 4.0) | [`docs/LICENSE`](docs/LICENSE) |
 | `scripts/`            | GNU Affero General Public License v3.0 (AGPL-3.0-only) | no separate file — covered by this default |
 
@@ -37,6 +38,15 @@ repository.
   had before (run it, modify it, redistribute it), they just can't turn a
   private fork into an unshared competing service. Grafana, MinIO, and
   Mastodon all made the same call for the same reason.
+- **AGPL-3.0** on `apps/windows/`, an exception inside the `apps/` exception.
+  The Windows client compiles the AGPL modules in `web/src/lib` directly
+  rather than vendoring a copy, so the combined work is AGPL-3.0-only —
+  labelling it Apache-2.0 would be relicensing code this project has no right
+  to relicense. The App Store incompatibility that motivates the Apache
+  exception below does not apply to it, because it is distributed as a direct
+  download and not through the Microsoft Store. Nothing under `web/` is
+  relicensed by this; see `apps/windows/NOTICE.md`.
+
 - **Apache-2.0** on `apps/` (RelayiumKit, the macOS app, and future iOS):
   GPL-family licenses' "no further restrictions" requirement is in tension
   with the App Store's terms — its DRM (FairPlay) and device-count limits

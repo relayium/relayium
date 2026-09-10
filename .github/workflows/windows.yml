@@ -1,0 +1,124 @@
+# The Windows desktop client's heavy owner.
+#
+# ## What it owns and why its filter is wider than one root
+#
+# `apps/windows/**` is this workflow's platform root, but the client does not
+# only live there: it imports the shipping protocol modules out of `web/src/lib`
+# rather than vendoring a copy, because a copied wire definition is silent
+# divergence with a green board on both sides. That import is a real compile-time
+# dependency, so `web/**` is a real trigger — a change to `crypto.ts` must run
+# the Windows lane or the fixture conformance below is a check nobody ran.
+#
+# It deliberately does NOT name `apps/RelayiumKit/**`. The Swift package is not
+# an input to this build; the frozen fixtures it happens to host are read as
+# data, and `compat.yml` already gates those unfiltered for every platform.
+#
+# ## What it does not do
+#
+# No signing. No publishing. No release artifact promoted anywhere. This lane
+# produces an unsigned installer as build evidence, and there is no Authenticode
+# credential in this repository for it to use — an absence stated here so a green
+# run is never mistaken for a distributable one.
+name: windows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/windows/**
+      # Dependency closure, named precisely rather than as all of `web/`. The
+      # client compiles the protocol modules in `web/src/lib` and installs the
+      # web client's toolchain from its lockfile; it does not read the marketing
+      # pages, the generated static site or the e2e harnesses, and triggering on
+      # those would make an unrelated copy edit pay for a Windows runner.
+      - web/src/lib/**
+      - web/package.json
+      - web/package-lock.json
+      # The TypeScript and Svelte configuration is a real transitive input, not
+      # a formality: the bundler resolves the nearest tsconfig for each file it
+      # compiles, so `web/`'s config chain is what governs how the imported
+      # protocol modules are compiled here. This was measured — an earlier
+      # attempt to compile them without that chain resolvable failed outright.
+      - web/tsconfig.json
+      - web/tsconfig.app.json
+      - web/tsconfig.node.json
+      - web/svelte.config.js
+      - .github/workflows/windows.yml
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: windows-lane-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/windows
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            apps/windows/package-lock.json
+            web/package-lock.json
+
+      # The web client's dependency tree is a real input: its Svelte and
+      # TypeScript toolchain is what compiles the protocol modules this client
+      # imports. Installed from the existing reviewed lockfile, not a fresh
+      # resolution.
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: web
+      - run: npm ci
+
+      # Types across all three programs — main, preload and renderer — before
+      # anything is built. A type error in the privileged process is the one
+      # place this project can least afford to find out at runtime.
+      - run: npm run check
+
+      # Unit and conformance tests. This is where the imported protocol modules
+      # are executed against the frozen cross-language fixtures under
+      # `apps/RelayiumKit/Tests/Fixtures/`, so the reuse claim is proven by
+      # execution rather than asserted.
+      - run: npm test
+
+      - run: npm run build
+
+      # A real Electron process, started on a real Windows runner, asserting the
+      # real window's sandbox/isolation flags, the registered app scheme, the
+      # preload bridge and the IPC handler set. A bundle that compiles proves
+      # none of that.
+      - name: Electron bootstrap smoke
+        run: npm run test:smoke
+
+      # The actual installer. Unsigned, and the step name says so.
+      - name: Package unsigned Windows installer
+        run: npx electron-builder --win --x64 --publish never
+
+      - name: Record installer provenance
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem release -Filter *.exe -Recurse | Select-Object -First 1
+          if (-not $exe) { throw "electron-builder produced no .exe" }
+          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+          Write-Host "installer: $($exe.Name)"
+          Write-Host "sha256: $hash"
+          "$hash  $($exe.Name)" | Out-File -FilePath release/SHA256SUMS.txt -Encoding ascii
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: relayium-windows-unsigned
+          path: |
+            apps/windows/release/*.exe
+            apps/windows/release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 7

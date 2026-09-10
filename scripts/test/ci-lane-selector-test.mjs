@@ -607,13 +607,17 @@ const MUTATIONS = [
     mutate: (files) => withPaths(files, "web.yml", [".github/workflows/web.yml"]),
     path: "web/src/lib/pair.ts",
     // The mutation removes `web/**` from web.yml ONLY, so `web` is what must
-    // disappear — that is the kill. The other two lanes watch this tree on
-    // their own account and are unaffected: both cross-client acceptances
-    // build and serve the Web bundle against a real native peer, so `web/**`
-    // is a genuine input to each. `android-interop` appears here since the
-    // Android lane stopped naming one harness file out of web/ while omitting
-    // the product tree around it.
-    expectSelected: ["android-interop", "native-web-pairing"],
+    // disappear — that is the kill. The other lanes watch this tree on their
+    // own account and are unaffected: both cross-client acceptances build and
+    // serve the Web bundle against a real native peer, so `web/**` is a genuine
+    // input to each. `android-interop` appears here since the Android lane
+    // stopped naming one harness file out of web/ while omitting the product
+    // tree around it. `windows` appears because the Windows client COMPILES
+    // `web/src/lib` rather than vendoring it — narrowing web.yml's filter
+    // cannot take that dependency away, and if this row ever loses `windows`
+    // without the Windows filter changing, the reuse has silently stopped being
+    // built.
+    expectSelected: ["android-interop", "native-web-pairing", "windows"],
   },
   {
     name: "an ordered exclusion is moved above the pattern it qualifies",

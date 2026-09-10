@@ -1,0 +1,46 @@
+{
+  "reject": [
+    "../escape",
+    "/absolute",
+    "C:/escape",
+    "C:relative",
+    "\\\\server\\share\\file",
+    "\\\\?\\C:\\file",
+    "name:stream",
+    "CON",
+    "nul.txt",
+    "COM1.log",
+    "COM¹.txt",
+    "LPT²",
+    "trailing.",
+    "trailing ",
+    "dir/../escape",
+    "a\\..\\escape",
+    "a\u0000b",
+    "a\nb",
+    "a?b",
+    "a*b",
+    "a|b"
+  ],
+  "positive": [
+    "report.txt",
+    "中文文档.txt",
+    "folder/sub/file.txt",
+    "report.v2.txt"
+  ],
+  "collisionPairs": [
+    [
+      "A.txt",
+      "a.txt"
+    ],
+    [
+      "file",
+      "file/child"
+    ],
+    [
+      "folder/a.txt",
+      "FOLDER/A.TXT"
+    ]
+  ],
+  "source": "https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file"
+}

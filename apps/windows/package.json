@@ -1,0 +1,33 @@
+{
+  "name": "relayium-windows",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Relayium Windows desktop client",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build:main": "tsc -p tsconfig.main.json && tsc -p tsconfig.preload.json",
+    "build:renderer": "vite build",
+    "build": "npm run build:main && npm run build:renderer",
+    "check": "svelte-check --tsconfig ./tsconfig.renderer.json && tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest run",
+    "test:smoke": "node test/smoke/electron-smoke.mjs",
+    "package:win": "electron-builder --win --x64 --publish never"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
+    "@tsconfig/svelte": "^5.0.8",
+    "@types/node": "^24.13.2",
+    "electron": "44.3.0",
+    "electron-builder": "26.15.3",
+    "svelte": "^5.57.0",
+    "svelte-check": "^4.7.6",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
+  },
+  "dependencies": {
+    "libsodium-wrappers": "^0.8.4"
+  }
+}
