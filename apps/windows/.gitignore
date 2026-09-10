@@ -1,3 +1,6 @@
 node_modules/
 dist/
 release/
+# The native receive helper, built into place by CI (and locally for packaging
+# verification). A build product of another lane, never a committed binary.
+native/build/

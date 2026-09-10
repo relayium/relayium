@@ -87,10 +87,42 @@ jobs:
       # place this project can least afford to find out at runtime.
       - run: npm run check
 
+      # The native receive helper, built BEFORE `npm test`.
+      #
+      # Not a duplicate of the independent `native` job below. That job is the
+      # helper's own Go test and build, and it deliberately has no `needs:` so
+      # this lane still runs when the helper is red. This step exists for a
+      # different reason: the TypeScript client tests drive the REAL helper
+      # subprocess, so on Windows they need the binary on disk before `npm test`
+      # runs — not after, and not from another job's workspace.
+      #
+      # `-o build/...` writes where `electron-builder.yml`'s `extraResources`
+      # expects it, so one build serves both the tests and the package.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: apps/windows/native/go.mod
+          cache-dependency-path: apps/windows/native/go.sum
+      - name: Build the native helper
+        run: go build -o build/relayium-io-helper.exe ./cmd/relayium-io-helper
+        working-directory: apps/windows/native
+
+      # Loudly, before anything depends on it. A missing helper would otherwise
+      # surface as five client tests skipping or an installer packaged without a
+      # binary it claims to ship — both of which read as success.
+      - name: Assert the helper binary exists
+        shell: pwsh
+        run: |
+          $helper = "native/build/relayium-io-helper.exe"
+          if (-not (Test-Path -LiteralPath $helper)) {
+            throw "native helper missing at $helper; the client tests and extraResources both require it"
+          }
+          Write-Host "helper: $((Get-Item -LiteralPath $helper).Length) bytes"
+
       # Unit and conformance tests. This is where the imported protocol modules
       # are executed against the frozen cross-language fixtures under
       # `apps/RelayiumKit/Tests/Fixtures/`, so the reuse claim is proven by
-      # execution rather than asserted.
+      # execution rather than asserted. On Windows it also runs the client tests
+      # that spawn the helper built above.
       - run: npm test
 
       - run: npm run build
@@ -102,9 +134,48 @@ jobs:
       - name: Electron bootstrap smoke
         run: npm run test:smoke
 
+      # Why a sealed identity stops being readable.
+      #
+      # Runs after `build` because it drives the real `SecretStore` out of
+      # `dist/`, on a fresh temp profile per cell, with a synthetic fixture.
+      #
+      # `continue-on-error` so a diagnostic result cannot prevent the installed
+      # acceptance below from running and reporting — the two answer different
+      # questions and one failing must not hide the other's answer. The failure
+      # is NOT swallowed: the gate step at the end of this job re-raises it, so a
+      # red cell still fails the run.
+      - name: Secret durability matrix
+        id: durability
+        continue-on-error: true
+        run: node test/smoke/secret-durability.mjs
+
       # The actual installer. Unsigned, and the step name says so.
       - name: Package unsigned Windows installer
         run: npx electron-builder --win --x64 --publish never
+
+      # The helper must be IN the package, not merely present on the runner.
+      #
+      # electron-builder does not enforce this: with the `extraResources` source
+      # missing it logs `file source doesn't exist` and exits 0, shipping an
+      # installer without the binary it claims to carry. Measured locally, not
+      # assumed. So the packaged tree is inspected directly.
+      - name: Assert the helper was packaged
+        shell: pwsh
+        run: |
+          $packaged = "release/win-unpacked/resources/relayium-io-helper.exe"
+          if (-not (Test-Path -LiteralPath $packaged)) {
+            throw "helper missing from the packaged app at $packaged; electron-builder does not fail on a missing extraResources source"
+          }
+          # Existence is not enough. `release/` is not cleaned between builds, so
+          # a resource left by an earlier run would satisfy a presence check
+          # while the binary built this run never reached the package. Equality
+          # is the assertion; presence is only its precondition.
+          $built = (Get-FileHash -LiteralPath "native/build/relayium-io-helper.exe" -Algorithm SHA256).Hash
+          $shipped = (Get-FileHash -LiteralPath $packaged -Algorithm SHA256).Hash
+          if ($built -ne $shipped) {
+            throw "packaged helper is not the one built this run: built $built, packaged $shipped"
+          }
+          Write-Host "packaged helper matches built: $built"
 
       # Root level only, and exactly one.
       #
@@ -119,6 +190,7 @@ jobs:
       # The resolved path is exported so the acceptance step below installs the
       # exact byte sequence whose hash is recorded and whose file is uploaded.
       - name: Record installer provenance
+        id: provenance
         shell: pwsh
         run: |
           $found = @(Get-ChildItem -LiteralPath release -Filter *.exe -File)
@@ -138,9 +210,25 @@ jobs:
       #
       # Invoked directly rather than through an npm script because
       # `apps/windows/package.json` is outside this task's writable scope.
+      # Runs regardless of the durability outcome above. These are independent
+      # questions — one is about the packaged artifact, the other about the key
+      # lifecycle — and the run needs both answers, not the first one that fails.
       - name: Installed artifact acceptance
+        if: always() && steps.provenance.outcome == 'success'
         run: node test/smoke/installed-acceptance.mjs "$env:RELAYIUM_INSTALLER"
         shell: pwsh
+
+      # Both diagnostics reported; now neither is masked.
+      #
+      # `continue-on-error` above turns a failed step into a recorded outcome
+      # rather than a stopped job. Without this gate that outcome would be a
+      # green check over a red result, which is precisely the reporting failure
+      # this lane exists to avoid.
+      - name: Fail if the durability matrix failed
+        if: always() && steps.durability.outcome == 'failure'
+        run: |
+          echo "the secret durability matrix failed; see the step above for the per-cell closed codes"
+          exit 1
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -163,9 +251,14 @@ jobs:
   # at all. Independent jobs mean each lane's result is its own, and the
   # installer acceptance above still runs when the helper is red.
   #
-  # No `needs:`, deliberately. Nothing here feeds the build: the helper is not
-  # yet bundled as a package resource and is not a dependency of the installer.
-  # Wiring that is a later, separately reviewed step.
+  # No `needs:`, deliberately — but no longer because the helper is unbundled.
+  # It IS bundled now: the `build` job compiles it and `electron-builder.yml`
+  # ships it as an `extraResources` entry. That job builds its own copy rather
+  # than depending on this one.
+  #
+  # The independence is the point: this job is the helper's own Go test and
+  # build, and keeping it off the installer lane's critical path means that lane
+  # still runs, and still reports, when the helper's tests are red.
   #
   # The native sources are read-only to this workflow's author; this job runs
   # them, it does not own them.

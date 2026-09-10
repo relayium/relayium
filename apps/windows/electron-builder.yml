@@ -25,6 +25,26 @@ files:
   - "!assets/installer.nsh"
   - package.json
 
+# The native receive helper ships beside the app, not inside the asar: it is an
+# executable the main process spawns, and a file inside an archive cannot be
+# spawned. `to:` places it at `resources/relayium-io-helper.exe`, which is what
+# `process.resourcesPath` names at runtime.
+#
+# An explicit `from`/`to` pair rather than a glob, so the intended path is
+# stated once and cannot drift.
+#
+# It does NOT make a missing helper fail the build. Measured: with the file
+# absent, electron-builder logs `file source doesn't exist` and exits **0**,
+# producing an installer with no helper in it. A warning in a log nobody reads is
+# not a gate, so the guarantee lives in `.github/workflows/windows.yml`, which
+# asserts the binary before the tests and asserts the packaged resource after.
+#
+# x64 only, matching the single `target` arch below. Nothing here builds or
+# claims arm64.
+extraResources:
+  - from: native/build/relayium-io-helper.exe
+    to: relayium-io-helper.exe
+
 win:
   target:
     - target: nsis

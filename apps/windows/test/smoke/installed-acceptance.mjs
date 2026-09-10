@@ -456,6 +456,25 @@ async function main() {
     (await cdp.evaluate("document.querySelector('[data-test=\"sign-in\"]') !== null")) === true,
   );
 
+  // ---- Profile BEFORE any second instance exists ------------------------
+  //
+  // The ordering matters more than it looks. Electron initialises OSCrypt in
+  // native start-up, before any JavaScript — including
+  // `requestSingleInstanceLock()` — has run. So a second process reaches the
+  // shared profile and can settle its encryption key while the first process is
+  // still the one holding an in-memory key it has not persisted.
+  //
+  // If that happens, the sealed identity is written under the first process's
+  // key while the key that survives on disk is the second's, and every later
+  // launch fails to decrypt a file that never changed — which is exactly the
+  // shape run 34460496151 reported: identical `Local State`, identical
+  // ciphertext, unreadable store.
+  //
+  // The previous revision sampled only AFTER the second instance, so it could
+  // not tell "this key was always here" from "the second instance put it here".
+  // This sample is the control.
+  notes.push(`profile BEFORE second instance: ${JSON.stringify(profileState())}`);
+
   // ---- Second instance restores the first window -----------------------
   const second = spawn(installedExe, [], { stdio: "ignore" });
   if (second.pid) spawnedPids.add(second.pid);
@@ -479,6 +498,8 @@ async function main() {
     targetsAfter[0]?.id === target1.id,
     `${target1.id} -> ${targetsAfter[0]?.id}`,
   );
+
+  notes.push(`profile AFTER second instance: ${JSON.stringify(profileState())}`);
 
   const sealedBefore = hashSealed();
   check("a sealed identity was written", sealedBefore !== null);
@@ -903,11 +924,26 @@ function profileState() {
         continue;
       }
       const bytes = readFileSync(file);
-      out[label] = {
+      const entry = {
         present: true,
         bytes: bytes.length,
         sha256: createHash("sha256").update(bytes).digest("hex").slice(0, 16),
       };
+      // Closed booleans and a length. The key itself is never read into a
+      // variable that outlives this block, never logged, never compared.
+      // Presence and size are enough to tell "no key yet" from "a key exists"
+      // from "the key changed", which is the whole question.
+      try {
+        const parsed = JSON.parse(bytes.toString("utf8"));
+        const osCrypt = parsed?.os_crypt;
+        entry.osCrypt = typeof osCrypt === "object" && osCrypt !== null;
+        const key = entry.osCrypt ? osCrypt.encrypted_key : undefined;
+        entry.encryptedKey = typeof key === "string";
+        entry.encryptedKeyLength = entry.encryptedKey ? key.length : 0;
+      } catch {
+        entry.parseFailed = true;
+      }
+      out[label] = entry;
     }
   }
   return out;
