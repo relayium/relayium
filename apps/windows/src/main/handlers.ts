@@ -4,7 +4,7 @@
 // The split is deliberate: rules that only exist inside an `ipcMain.handle`
 // closure cannot be tested, and the rules here are the ones a race would break.
 
-import { app, clipboard, dialog, type BrowserWindow } from "electron";
+import { app, clipboard, dialog, shell, type BrowserWindow } from "electron";
 import { randomUUID } from "node:crypto";
 import {
   IPC,
@@ -118,6 +118,8 @@ export interface HandlerComposition {
    */
   inbox?: Pick<
     InboxServiceDeps,
+    /** Substituted so a run can observe a reveal without opening Explorer. */
+    | "revealDirectory"
     | "runtime"
     | "makeApi"
     | "makeDestination"
@@ -742,6 +744,11 @@ export function registerHandlers(
     // has already received. `window.ts` denies every renderer permission —
     // including the clipboard — and that policy stays exactly as it is.
     writeClipboard: (text) => clipboard.writeText(text),
+    // Main performs it, on a path main holds. `openPath` shows the folder;
+    // it opens nothing inside it and takes nothing from the page.
+    revealDirectory: async (directory) => {
+      await shell.openPath(directory);
+    },
     // LAST, so an injected seam actually wins. Spread first — the shape the
     // stored-receive composition uses, where the keys are disjoint — the
     // defaults above would silently override every one of them, and a run that
@@ -789,6 +796,19 @@ export function registerHandlers(
     inbox.wake();
     return { ok: true };
   });
+  router.handle(IPC.inboxSetPolicy, (payload) => {
+    const body = expectObject(payload);
+    const policy = body["policy"];
+    // A closed set of three. The renderer names one; it cannot invent a fourth.
+    if (policy !== "off" && policy !== "ask" && policy !== "auto") {
+      throw new IpcRefusal("unknown inbox policy");
+    }
+    return inbox.setPolicy(policy);
+  });
+  // The generation is read HERE, so the reveal carries the document that asked.
+  router.handle(IPC.inboxRevealFolder, () => inbox.revealFolder(router.generation));
+  router.handle(IPC.inboxReceipts, async () => ({ entries: await inbox.receipts() }));
+
   router.handle(IPC.inboxReleaseRetained, (payload) => {
     const body = expectObject(payload);
     // An opaque key the service issued, never a path.

@@ -58,20 +58,21 @@ describe("the receive grant", () => {
   it("round-trips consent, the destination and a pending withdrawal", async () => {
     const store = new FakeStore();
     const grants = new InboxGrantStore(store);
-    await grants.write(ACCOUNT, { directory: "D:\\Inbox", enabled: true, withdrawalPending: false });
+    await grants.write(ACCOUNT, { directory: "D:\\Inbox", enabled: true, policy: "auto", withdrawalPending: false });
     expect(await grants.read(ACCOUNT)).toEqual({
       directory: "D:\\Inbox",
       enabled: true,
+      policy: "auto",
       withdrawalPending: false,
     });
-    await grants.write(ACCOUNT, { directory: "D:\\Inbox", enabled: false, withdrawalPending: true });
+    await grants.write(ACCOUNT, { directory: "D:\\Inbox", enabled: false, policy: "off", withdrawalPending: true });
     expect(await grants.read(ACCOUNT)).toMatchObject({ enabled: false, withdrawalPending: true });
   });
 
   it("is scoped per account, so one account's consent is not another's", async () => {
     const store = new FakeStore();
     const grants = new InboxGrantStore(store);
-    await grants.write("first", { directory: "D:\\A", enabled: true, withdrawalPending: false });
+    await grants.write("first", { directory: "D:\\A", enabled: true, policy: "ask", withdrawalPending: false });
     expect(await grants.read("second")).toBeNull();
     expect(store.values.has(grantSlotFor("first"))).toBe(true);
   });
@@ -94,9 +95,63 @@ describe("the receive grant", () => {
     expect(await new InboxGrantStore(store).read(ACCOUNT)).toBeNull();
   });
 
-  it("refuses a record with no destination in it", async () => {
+  it("migrates a v1 record to ASK, and never to auto", async () => {
+    // The decision that could not be taken back. A v1 record says receiving was
+    // on; it says NOTHING about whether the user wanted deliveries saved
+    // without being asked, because there was no such choice to make. Reading it
+    // as `auto` would start writing other devices' files to their disk
+    // unattended on consent they never gave.
     const store = new FakeStore();
-    store.values.set(grantSlotFor(ACCOUNT), JSON.stringify({ v: 1, directory: "", enabled: true }));
+    store.values.set(
+      grantSlotFor(ACCOUNT),
+      JSON.stringify({ v: 1, directory: "D:\\Inbox", enabled: true, withdrawalPending: false }),
+    );
+    const grant = await new InboxGrantStore(store).read(ACCOUNT);
+    expect(grant).toEqual({
+      directory: "D:\\Inbox",
+      enabled: true,
+      policy: "ask",
+      withdrawalPending: false,
+    });
+    expect(grant?.policy).not.toBe("auto");
+  });
+
+  it("migrates a v1 record that was off to off", async () => {
+    const store = new FakeStore();
+    store.values.set(
+      grantSlotFor(ACCOUNT),
+      JSON.stringify({ v: 1, directory: "D:\\Inbox", enabled: false }),
+    );
+    expect((await new InboxGrantStore(store).read(ACCOUNT))?.policy).toBe("off");
+  });
+
+  it("falls back to ask rather than auto when a v2 policy is unreadable", async () => {
+    const store = new FakeStore();
+    store.values.set(
+      grantSlotFor(ACCOUNT),
+      JSON.stringify({ v: 2, directory: "D:\\Inbox", enabled: true, policy: "nonsense" }),
+    );
+    expect((await new InboxGrantStore(store).read(ACCOUNT))?.policy).toBe("ask");
+  });
+
+  it("keeps a record with no destination, because Off needs none", async () => {
+    // Refusing it meant a user who chose Off with no folder had no durable
+    // record, so the announcement could never be retried and central kept
+    // whatever it was last told — possibly `auto`.
+    const store = new FakeStore();
+    store.values.set(
+      grantSlotFor(ACCOUNT),
+      JSON.stringify({ v: 2, directory: "", enabled: true, policy: "off" }),
+    );
+    expect(await new InboxGrantStore(store).read(ACCOUNT)).toMatchObject({
+      directory: "",
+      policy: "off",
+    });
+  });
+
+  it("still refuses a record whose destination is not a string", async () => {
+    const store = new FakeStore();
+    store.values.set(grantSlotFor(ACCOUNT), JSON.stringify({ v: 2, directory: 7, enabled: true }));
     expect(await new InboxGrantStore(store).read(ACCOUNT)).toBeNull();
   });
 });

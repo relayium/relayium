@@ -57,7 +57,7 @@ import { stat } from "node:fs/promises";
 import { InboxApi } from "../inbox/api.js";
 import type { AccountContext } from "../inbox/account.js";
 import { InboxFacade, facadeFailure, type FacadeApi } from "../inbox/facade.js";
-import type { ImplementedFeatures } from "../inbox/capabilities.js";
+import type { AutoAcceptPolicy, ImplementedFeatures } from "../inbox/capabilities.js";
 import type { ReceiveDestination } from "../inbox/receiver.js";
 import type { InboxRuntime, RuntimeManifest } from "../inbox/runtime-contract.js";
 import { inboxRuntime } from "../inbox/runtime.js";
@@ -76,6 +76,7 @@ import type {
   InboxRenameOutcome,
   InboxRetainedView,
   InboxSimpleOutcome,
+  InboxReceiptView,
   InboxStatus,
   InboxView,
 } from "../../shared/ipc-contract.js";
@@ -118,7 +119,11 @@ import { InboxGrantStore, type GrantSlot, type InboxGrant } from "./inbox-grant.
 export const COMPOSED_FEATURES: ImplementedFeatures = Object.freeze({
   files: true,
   text: true,
-  autoAccept: false,
+  // Composed now: the scheduler's own drain is what saves an auto-accepted
+  // delivery, and it needs no renderer to do it. The capability is advertised
+  // only when the user has actually chosen `auto` — `autoAcceptFor` gates the
+  // POLICY on consent, and this gates the CAPABILITY on the build.
+  autoAccept: true,
 });
 
 /** Seconds between passes. The Mac's `InboxBackoff`, value for value. */
@@ -246,6 +251,13 @@ export interface InboxServiceDeps {
    * already received. Nothing here takes a caller-supplied string.
    */
   writeClipboard?(text: string): void;
+  /**
+   * Show a directory to the user.
+   *
+   * Main performs it and main supplies the path; the renderer names nothing.
+   * Production is Electron's `shell.openPath`.
+   */
+  revealDirectory?(directory: string): Promise<void>;
 
   // ---- seams; production takes the defaults --------------------------------
   runtime?(): Promise<InboxRuntime>;
@@ -290,8 +302,17 @@ interface Binding {
    * while its abort is still propagating.
    */
   alive: boolean;
-  /** Whether the facade has been told to enable under this binding. */
-  enrolled: boolean;
+  /**
+   * The policy this binding last successfully announced, or null.
+   *
+   * A boolean was not enough. `off` needs no destination, so it is announced
+   * before the folder guard — and a stale `true` from an earlier `auto`
+   * enrolment would suppress the retry that tells central about the change,
+   * leaving it delivering automatically to a device whose user turned it off.
+   * Comparing the POLICY makes any change re-announce, and only a matching one
+   * counts as done.
+   */
+  announced: AutoAcceptPolicy | null;
   /** Whether the ACK replay has run since this binding started. */
   reconciled: boolean;
 }
@@ -399,6 +420,8 @@ export class InboxService {
     hasDestination: false,
     deviceName: "",
     withdrawalPending: false,
+    policy: "off",
+    epoch: 0,
     retained: [],
   };
   /**
@@ -641,7 +664,7 @@ export class InboxService {
         // successful pass established.
         const bound = this.#bound;
         if (bound !== null) {
-          bound.enrolled = false;
+          bound.announced = null;
           bound.reconciled = false;
         }
         this.publish({ kind: "offline", reason: codeOf(err), retryInSeconds: wait });
@@ -678,6 +701,8 @@ export class InboxService {
       if (bound === null) return this.backoff.idle;
     }
 
+    const facade = this.require();
+
     // ---- 2. consent ------------------------------------------------------
     if (!bound.grant.enabled) {
       if (bound.grant.withdrawalPending) await this.retryWithdrawal(bound, signal);
@@ -685,7 +710,34 @@ export class InboxService {
       return this.backoff.idle;
     }
 
-    // ---- 3. destination --------------------------------------------------
+    // ---- 3. announce the policy, BEFORE the destination guard ------------
+    //
+    // `off` needs no directory: it asks central to stop sending here, which is
+    // meaningful with or without somewhere to put what arrives. Guarding it
+    // behind the folder check meant a user who chose Off and whose folder had
+    // gone missing could NEVER tell central — so central kept the last policy
+    // it was told, which may well be `auto`, and kept delivering automatically
+    // to a device whose user had turned it off. That is the worst direction
+    // this ordering could fail in.
+    //
+    // So the announcement comes first for `off`, it is retried on every tick
+    // until central confirms it, and it reports neither `folder-missing` nor a
+    // ready heartbeat.
+    if (bound.grant.policy === "off") {
+      // The admission gate, preserved: an enrolment is a network effect a quit
+      // has already been decided over, and this branch runs before the work
+      // section's own check.
+      if (this.admissionClosed()) return this.backoff.idle;
+      if (bound.announced !== "off") {
+        await facade.enable({ enabled: true, autoAccept: false, policy: "off" }, signal);
+        this.assertLive(bound, signal);
+        bound.announced = "off";
+      }
+      this.publish({ kind: "disabled" });
+      return this.backoff.idle;
+    }
+
+    // ---- 4. destination --------------------------------------------------
     const usable = await (this.deps.directoryUsable ?? directoryExists)(bound.grant.directory);
     if (signal.aborted || !bound.alive) return this.backoff.idle;
     if (!usable) {
@@ -697,8 +749,35 @@ export class InboxService {
       return this.backoff.blocked;
     }
 
-    // ---- 4. work ---------------------------------------------------------
-    const facade = this.require();
+    // ---- 5. work ---------------------------------------------------------
+    //
+    // ## The policy is re-read HERE, after the folder probe
+    //
+    // The probe above is awaited, and a `setPolicy("off")` can complete inside
+    // it — announcing Off to central and leaving `announced === grant.policy`.
+    // The continuation would then sail past the enrolment step, send a ready
+    // heartbeat and claim, receiving deliveries the user has just told central
+    // to stop sending. Checking `bound.alive` and the fence does not catch it:
+    // the binding is fine and nothing is fenced; what changed is what the user
+    // asked for.
+    //
+    // A delivery already in flight is untouched — it keeps its own joins — and
+    // the next pass takes the Off branch above.
+    // ## Off is re-checked before EVERY admission below, not once
+    //
+    // Checking it after the folder probe alone left every later await open: a
+    // `setPolicy("off")` landing during the heartbeat, the reconcile or the
+    // pending read still let this pass claim, because by then the earlier check
+    // had already passed. Each of those is an await, and each is followed by
+    // something that admits new work.
+    //
+    // Read off the LIVE binding rather than the narrowed local — the compiler
+    // cannot see `bound.grant` being replaced across an await, and would call
+    // these checks dead code. They are the opposite of dead.
+    //
+    // A delivery already in flight is untouched: it keeps its own joins, and
+    // the next pass takes the Off branch above.
+    if (this.receivingStopped()) return this.backoff.idle;
     // ## The fence is re-checked before every step that STARTS something
     //
     // Checking it once at the top of the loop is not enough, and the gap it
@@ -718,10 +797,17 @@ export class InboxService {
     // admit, not a cancellation: a delivery mid-flight keeps going, is counted
     // in the risk the user is being asked about, and survives a Stay.
     if (this.admissionClosed()) return this.backoff.idle;
-    if (!bound.enrolled) {
-      await facade.enable({ enabled: true }, signal);
+    if (bound.announced !== bound.grant.policy) {
+      // The stored policy, not a default: a restart must re-announce what the
+      // user chose rather than quietly demoting them to `ask`. Captured before
+      // the await so what is recorded as announced is what was actually sent.
+      const announcing = bound.grant.policy;
+      await facade.enable(
+        { enabled: true, autoAccept: announcing === "auto", policy: announcing },
+        signal,
+      );
       this.assertLive(bound, signal);
-      bound.enrolled = true;
+      bound.announced = announcing;
     }
     // Presence, carrying the folder verdict this pass just measured. The facade
     // never sends this — it is not part of receiving a delivery — so the host
@@ -732,6 +818,8 @@ export class InboxService {
 
     let worked = false;
     if (this.admissionClosed()) return this.backoff.idle;
+    // After the heartbeat. This is the one root's probe caught.
+    if (this.receivingStopped()) return this.backoff.idle;
     if (!bound.reconciled) {
       // Replays acknowledgements a crash left unsent, and drains whatever is
       // leasable while it is there. Once per binding, and again after any
@@ -747,6 +835,8 @@ export class InboxService {
     }
 
     if (this.admissionClosed()) return this.backoff.idle;
+    // After the reconcile or the drain, before asking central for more.
+    if (this.receivingStopped()) return this.backoff.idle;
     const pending = await facade.listPending(MAX_INBOX_PENDING, signal);
     this.assertLive(bound, signal);
     this.#pending = pending.tasks.map(recordOfTask);
@@ -819,9 +909,10 @@ export class InboxService {
     const { api, context } = adopted;
 
     const grants = await this.ensureGrants();
-    const grant = (await grants.read(context.accountKey)) ?? {
+    const grant: InboxGrant = (await grants.read(context.accountKey)) ?? {
       directory: "",
       enabled: false,
+      policy: "off",
       withdrawalPending: false,
     };
     if (signal.aborted || authority.epoch !== this.deps.accountEpoch()) {
@@ -838,7 +929,7 @@ export class InboxService {
       grant,
       api,
       alive: true,
-      enrolled: false,
+      announced: null,
       reconciled: false,
     };
     this.#bound = bound;
@@ -880,6 +971,20 @@ export class InboxService {
    */
   private admissionClosed(): boolean {
     return this.#fenced || this.#disposed;
+  }
+
+  /**
+   * Whether the user has told central to stop sending here.
+   *
+   * Read off the LIVE binding every time, with no caching: the whole point is
+   * that it can change between two awaits in one pass. Publishing `disabled`
+   * here rather than at the caller keeps the answer and the state together.
+   */
+  private receivingStopped(): boolean {
+    const policy: AutoAcceptPolicy = this.#bound?.grant.policy ?? "off";
+    if (policy !== "off") return false;
+    this.publish({ kind: "disabled" });
+    return true;
   }
 
   /** Throws unless `bound` is still live and this operation still wanted. */
@@ -1166,7 +1271,7 @@ export class InboxService {
    * enrols nothing, so there is no state in which this device is advertised as
    * a target with no destination behind it.
    */
-  enable(): Promise<InboxEnableOutcome> {
+  enable(policy: AutoAcceptPolicy = "ask"): Promise<InboxEnableOutcome> {
     if (this.admissionClosed()) return Promise.resolve({ kind: "refused" });
     const bound = this.live();
     if (bound === "needs-account") return Promise.resolve({ kind: "needs-account" });
@@ -1183,11 +1288,11 @@ export class InboxService {
           bound,
           // Consent, destination and the withdrawal marker are all determined
           // by this act, so nothing is carried over from the old record.
-          () => ({ directory: chosen, enabled: true, withdrawalPending: false }),
+          () => ({ directory: chosen, enabled: true, policy, withdrawalPending: false }),
           myIntent,
         );
         if (grant === null) return { kind: "superseded" } as const;
-        bound.enrolled = false;
+        bound.announced = null;
         // Published as soon as the CONSENT is durable, before the enrolment is
         // attempted. The user's answer is recorded at this point and a restart
         // would honour it; showing "off" until a network call returns would
@@ -1195,9 +1300,12 @@ export class InboxService {
         // enrolment that fails is a `starting`/`offline` state rather than a
         // silent reversal of the switch they just pressed.
         this.publish();
-        await this.require().enable({ enabled: true }, signal);
+        await this.require().enable(
+          { enabled: true, autoAccept: policy === "auto", policy },
+          signal,
+        );
         if (this.superseded(bound, myIntent)) return { kind: "superseded" } as const;
-        bound.enrolled = true;
+        bound.announced = policy;
         this.publish();
         this.wake();
         return { kind: "enabled" } as const;
@@ -1244,6 +1352,132 @@ export class InboxService {
     // is written, so a failure preparing it cannot enrol a fictitious receiver.
     const usable = await (this.deps.directoryUsable ?? directoryExists)(chosen);
     return usable && !signal.aborted ? chosen : null;
+  }
+
+  /**
+   * Change the policy without re-asking for a folder.
+   *
+   * `off` needs no destination — it asks central to stop sending here, which is
+   * meaningful with or without a folder. `ask` and `auto` do, so a caller with
+   * no destination recorded is sent through `enable`, which opens the dialog.
+   *
+   * Switching AWAY from `auto` stops future admission — the next pass enrols
+   * with the new policy and central stops delivering unattended — and does not
+   * touch a delivery already in flight. A policy change is not a teardown: the
+   * user asked about what happens NEXT, and cancelling what they are already
+   * receiving would lose it.
+   */
+  setPolicy(policy: AutoAcceptPolicy): Promise<InboxEnableOutcome> {
+    if (this.admissionClosed()) return Promise.resolve({ kind: "refused" });
+    const bound = this.live();
+    if (bound === "needs-account") return Promise.resolve({ kind: "needs-account" });
+    if (policy !== "off" && bound.grant.directory.length === 0) return this.enable(policy);
+    const myIntent = ++this.#intent;
+    return this.own(async (signal) => {
+      try {
+        const grant = await this.mutateGrant(
+          bound,
+          (current) => ({
+            ...current,
+            // `off` keeps the enrolment and keeps the folder: it is a policy,
+            // not a withdrawal, and the user has not asked to forget anything.
+            enabled: true,
+            policy,
+            withdrawalPending: current.withdrawalPending,
+          }),
+          myIntent,
+        );
+        if (grant === null) return { kind: "superseded" } as const;
+        // Re-announced now rather than on the next tick, so the change the user
+        // just made is the one central is acting on.
+        bound.announced = null;
+        this.publish();
+        await this.require().enable(
+          { enabled: true, autoAccept: policy === "auto", policy },
+          signal,
+        );
+        if (this.superseded(bound, myIntent)) return { kind: "superseded" } as const;
+        bound.announced = policy;
+        this.publish();
+        this.wake();
+        return { kind: "enabled" } as const;
+      } catch (err) {
+        this.deps.reportFailure?.(err);
+        // The choice stands and the scheduler retries; what is published is the
+        // truth about the attempt, not a rollback of what they asked for.
+        this.publish();
+        this.wake();
+        return { kind: "failed", reason: codeOf(err) } as const;
+      }
+    });
+  }
+
+  /**
+   * Show the user their receiving folder.
+   *
+   * MAIN owns the path and main performs the action: the renderer asks, and
+   * there is no argument on this call that could name a directory. Refused when
+   * nothing is recorded, when a quit is being decided, and when the account or
+   * the document that asked has gone away.
+   */
+  revealFolder(document: number): Promise<InboxSimpleOutcome> {
+    if (this.admissionClosed()) return Promise.resolve({ kind: "refused" });
+    const bound = this.live();
+    if (bound === "needs-account") return Promise.resolve({ kind: "failed", reason: "account-changed" });
+    const reveal = this.deps.revealDirectory;
+    if (reveal === undefined) return Promise.resolve({ kind: "failed", reason: "internal" });
+    const directory = bound.grant.directory;
+    if (directory.length === 0) return Promise.resolve({ kind: "failed", reason: "storage-unreadable" });
+    return this.own(async () => {
+      try {
+        const usable = await (this.deps.directoryUsable ?? directoryExists)(directory);
+        if (!bound.alive || this.#bound !== bound) {
+          return { kind: "failed", reason: "account-changed" } as const;
+        }
+        if ((this.deps.currentDocument?.() ?? document) !== document) {
+          return { kind: "failed", reason: "cancelled" } as const;
+        }
+        if (this.admissionClosed()) return { kind: "refused" } as const;
+        // Refused rather than opening whatever is at a stale path.
+        if (!usable) return { kind: "failed", reason: "storage-unreadable" } as const;
+        await reveal(directory);
+        return { kind: "ok" } as const;
+      } catch (err) {
+        this.deps.reportFailure?.(err);
+        return { kind: "failed", reason: codeOf(err) } as const;
+      }
+    });
+  }
+
+  /**
+   * What this account has received. Counts and outcomes; never a name.
+   *
+   * The journal carries no filenames or paths by design, and this exposes it
+   * unchanged. `null` means the record could not be READ, which is not the same
+   * as having received nothing.
+   */
+  receipts(): Promise<readonly InboxReceiptView[] | null> {
+    if (this.#disposed) return Promise.resolve(null);
+    const bound = this.live();
+    if (bound === "needs-account") return Promise.resolve([]);
+    return this.own(async () => {
+      try {
+        const records = await this.require().receipts();
+        if (!bound.alive || this.#bound !== bound) return null;
+        return records.map((record) => ({
+          taskID: record.taskID,
+          phase: record.phase,
+          total: record.manifestTotal,
+          published: record.publishedCount,
+          text: record.text,
+          updatedAt: record.updatedAt,
+          serverTerminal: record.serverTerminal,
+        }));
+      } catch (err) {
+        this.deps.reportFailure?.(err);
+        return null;
+      }
+    });
   }
 
   /** Choose a different destination. Consent is unchanged either way. */
@@ -1298,11 +1532,11 @@ export class InboxService {
         // go", and turning it back on should not have to ask again.
         const stopped = await this.mutateGrant(
           bound,
-          (current) => ({ ...current, enabled: false, withdrawalPending: true }),
+          (current) => ({ ...current, enabled: false, policy: "off", withdrawalPending: true }),
           myIntent,
         );
         if (stopped === null) return { kind: "refused" } as const;
-        bound.enrolled = false;
+        bound.announced = null;
         this.publish();
 
         const report = await this.require().disable(signal);
@@ -1596,6 +1830,8 @@ export class InboxService {
       status: status ?? this.statusFromFacade(),
       capabilities: facade?.capabilities().capabilities ?? [],
       enabled: bound?.grant.enabled ?? false,
+      policy: bound?.grant.policy ?? "off",
+      epoch: bound?.epoch ?? 0,
       hasDestination: (bound?.grant.directory.length ?? 0) > 0,
       deviceName: bound?.deviceName ?? "",
       withdrawalPending: bound?.grant.withdrawalPending ?? false,

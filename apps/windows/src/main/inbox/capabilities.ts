@@ -96,6 +96,11 @@ export function capabilitiesFor(runtime: InboxRuntime, features: ImplementedFeat
  * this one entirely, which no user asking to enable the Inbox has requested.
  */
 export function autoAcceptFor(features: ImplementedFeatures, consent: InboxConsent): AutoAcceptPolicy {
+  // `off` is the user's explicit choice and needs no capability: it asks
+  // central to refuse sends to this device, which any build can honour. It is
+  // NEVER inferred — only `policy` says it — so an absent field keeps the
+  // answer this function has always given.
+  if (consent.policy === "off") return "off";
   return consent.autoAccept === true && features.autoAccept ? "auto" : DEFAULT_AUTO_ACCEPT;
 }
 
@@ -128,6 +133,19 @@ export interface InboxConsent {
    * receive, not consent to receive silently.
    */
   readonly autoAccept?: boolean;
+  /**
+   * The policy the user explicitly chose, when they chose one.
+   *
+   * Only `off` is read here, and only because it is otherwise unreachable:
+   * `autoAcceptFor` maps everything that is not `auto` to `ask`, so a device
+   * whose user asked to stop being a target had no way to say so. `ask` and
+   * `auto` continue to be decided by `autoAccept` and the build's capability,
+   * which is what keeps a policy from being advertised without its
+   * implementation.
+   *
+   * Absent means "no explicit choice", and every existing caller is unchanged.
+   */
+  readonly policy?: AutoAcceptPolicy;
 }
 
 export function shouldEnrol(features: ImplementedFeatures, consent: InboxConsent): boolean {

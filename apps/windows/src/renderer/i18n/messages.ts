@@ -231,7 +231,11 @@ export const en = {
   inboxOffBody:
     "Turn this on to let your other Relayium devices send files and messages to this PC. You choose the folder they arrive in, and you are asked before anything is saved.",
   inboxTurnOn: "Turn on receiving",
-  inboxTurnOff: "Turn off receiving",
+  // The WITHDRAWAL, not the Off policy. "Turn off receiving" beside an Off
+  // radio that is already selected reads as a redundant second toggle for the
+  // same thing; these are different acts. Off keeps the device enrolled and
+  // tells central to refuse sends. This unenrols it entirely.
+  inboxTurnOff: "Stop using Inbox on this PC",
   inboxOnTitle: "Receiving is on",
   // The resident promise, stated where it can be checked. This is the reason
   // the feature exists on a desktop client rather than in a browser tab.
@@ -312,11 +316,45 @@ export const en = {
 
   inboxDeclined: "No folder was chosen, so nothing was turned on.",
   inboxEnabledNotice: "Receiving is on.",
-  inboxDisabledNotice: "Receiving is off. Your messages and keys are untouched.",
+  inboxDisabledNotice:
+    "This PC is no longer set up to receive. Your messages and keys are untouched.",
   inboxRefused: "Not done — Relayium is closing.",
   inboxSuperseded: "That was replaced by a newer change, so nothing was altered.",
   inboxFailed: "That did not work. Relayium will try again on its own.",
 
+
+
+  // --- Device Inbox: policy, receipts, reveal -----------------------------
+  inboxPolicyHeading: "When something is sent to this PC",
+  inboxPolicyOff: "Don't send to this PC",
+  inboxPolicyOffBody: "Your other devices will not offer to send here.",
+  inboxPolicyAsk: "Ask me first",
+  inboxPolicyAskBody: "Deliveries wait until you accept them. Nothing is saved without you.",
+  inboxPolicyAuto: "Save automatically",
+  // Said plainly, because it is the one choice that writes files unattended.
+  inboxPolicyAutoBody:
+    "Files from your own devices are saved to your folder as they arrive, without asking. You can change this at any time.",
+  inboxPolicySetOff: "Your devices will no longer offer to send here.",
+  inboxPolicySetAsk: "Deliveries will wait for you to accept them.",
+  inboxPolicySetAuto: "Deliveries will be saved automatically.",
+  inboxRevealFolder: "Open folder",
+  inboxRevealFailed: "That folder could not be opened. It may have been moved or renamed.",
+
+  inboxReceiptsHeading: "Received",
+  inboxReceiptsEmpty: "Nothing has arrived yet.",
+  inboxReceiptsUnavailable:
+    "Your received deliveries could not be read just now. Nothing has been deleted — this is a problem reading the record.",
+  // Counts, not names. The delivery record carries no file names by design.
+  inboxReceiptFiles: "{published} of {total} file(s)",
+  inboxReceiptMessage: "A message",
+  inboxReceiptSaved: "Saved",
+  inboxReceiptAckPending: "Saved, not yet confirmed",
+  inboxReceiptPartial: "Partly saved",
+  inboxReceiptBlocked: "Needs a decision",
+  inboxReceiptWorking: "In progress",
+  inboxReceiptFailed: "Did not finish",
+  inboxReceiptNoNames:
+    "Relayium's delivery record keeps counts and outcomes, not file names. Open the folder to see what arrived.",
 
   // --- Send a link -------------------------------------------------------
   sendHeading: "Send a link",
@@ -570,7 +608,7 @@ export const zh: Record<MessageKey, string> = {
   inboxOffBody:
     "打开后，你的其他 Relayium 设备就可以向这台电脑发送文件和消息。你来选择接收文件夹，保存任何内容前都会先征得你的同意。",
   inboxTurnOn: "打开接收",
-  inboxTurnOff: "关闭接收",
+  inboxTurnOff: "停止在这台电脑上使用收件箱",
   inboxOnTitle: "接收已打开",
   inboxBackgroundNote: "即使此窗口已关闭，或你正在其他页面，也会继续接收。",
   inboxCanReceive: "这台电脑可以接收文件和消息。",
@@ -647,11 +685,41 @@ export const zh: Record<MessageKey, string> = {
 
   inboxDeclined: "未选择文件夹，因此没有打开任何功能。",
   inboxEnabledNotice: "接收已打开。",
-  inboxDisabledNotice: "接收已关闭。你的消息和密钥不受影响。",
+  inboxDisabledNotice: "这台电脑已不再设置为接收。你的消息和密钥不受影响。",
   inboxRefused: "未执行：Relayium 正在关闭。",
   inboxSuperseded: "该操作已被更新的更改取代，因此未做任何改动。",
   inboxFailed: "操作未成功。Relayium 会自行重试。",
 
+
+
+  inboxPolicyHeading: "当有内容发送到这台电脑时",
+  inboxPolicyOff: "不要发送到这台电脑",
+  inboxPolicyOffBody: "你的其他设备不会再提供发送到这里的选项。",
+  inboxPolicyAsk: "先询问我",
+  inboxPolicyAskBody: "投递会一直等待，直到你接受。没有你的同意不会保存任何内容。",
+  inboxPolicyAuto: "自动保存",
+  inboxPolicyAutoBody:
+    "来自你自己设备的文件会在到达时直接保存到你的文件夹，不再询问。你可以随时更改。",
+  inboxPolicySetOff: "你的设备将不再提供发送到这里的选项。",
+  inboxPolicySetAsk: "投递会等待你接受。",
+  inboxPolicySetAuto: "投递会自动保存。",
+  inboxRevealFolder: "打开文件夹",
+  inboxRevealFailed: "无法打开该文件夹。它可能已被移动或重命名。",
+
+  inboxReceiptsHeading: "已接收",
+  inboxReceiptsEmpty: "还没有收到任何内容。",
+  inboxReceiptsUnavailable:
+    "此刻无法读取你收到的投递记录。没有删除任何内容——这是读取记录的问题。",
+  inboxReceiptFiles: "{total} 个文件中已保存 {published} 个",
+  inboxReceiptMessage: "一条消息",
+  inboxReceiptSaved: "已保存",
+  inboxReceiptAckPending: "已保存，尚未确认",
+  inboxReceiptPartial: "部分保存",
+  inboxReceiptBlocked: "需要你决定",
+  inboxReceiptWorking: "进行中",
+  inboxReceiptFailed: "未完成",
+  inboxReceiptNoNames:
+    "Relayium 的投递记录只保存数量和结果，不保存文件名。打开文件夹即可查看收到的内容。",
 
   sendHeading: "发送链接",
   sendBody:

@@ -698,6 +698,23 @@ export class InboxFacade {
     });
   }
 
+  /**
+   * This account's delivery records. Counts and phases; never a name.
+   *
+   * The journal is deliberately free of filenames and paths — see its header —
+   * and this exposes it unchanged rather than enriching it. Under the account's
+   * own job registry with the same liveness fence `messages()` uses, so a read
+   * started before an adoption cannot resolve into a UI that has moved on.
+   */
+  receipts(): Promise<readonly TaskRecord[]> {
+    const bound = this.require();
+    return bound.jobs.run(async () => {
+      const all = await bound.journal.all();
+      this.assertStillLive(bound);
+      return all;
+    });
+  }
+
   openMessage(id: string): Promise<Uint8Array> {
     const bound = this.require();
     return bound.jobs.run(async () => {

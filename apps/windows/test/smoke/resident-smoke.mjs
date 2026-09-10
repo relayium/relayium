@@ -61,6 +61,18 @@ const owned = [
 
 /** The last of what the child said, for a failure that needs explaining. */
 const TRANSCRIPT_BYTES = 8000;
+/**
+ * The child's own measurements, whatever the outcome.
+ *
+ * `RELAYIUM_*` lines are counts, closed codes and rendered copy — never a path,
+ * a key or a secret — emitted deliberately so a run can be compared against
+ * another run rather than only read for its assertions.
+ */
+function diagnostics() {
+  const lines = out.split("\n").filter((line) => line.startsWith("RELAYIUM_") && !line.startsWith("RELAYIUM_SMOKE "));
+  return lines.length === 0 ? "" : `${lines.join("\n")}\n`;
+}
+
 function transcript() {
   const tail = (label, text) =>
     text.length === 0 ? "" : `--- child ${label} (last ${String(TRANSCRIPT_BYTES)} bytes) ---\n${text.slice(-TRANSCRIPT_BYTES)}\n`;
@@ -150,13 +162,18 @@ child.on("exit", (code) => {
     // actually fires on a broken assertion did not.
     //
     // Bounded rather than unbounded: this is a diagnostic tail, not a log.
-    finish(1, `smoke: ${failures.length} failed\n${failures.join("\n")}\n${transcript()}`);
+    finish(1, `smoke: ${failures.length} failed\n${failures.join("\n")}\n${diagnostics()}${transcript()}`);
     return;
   }
   if (code !== 0) {
     finish(1, `smoke: assertions passed but the app exited ${code}\n${err}\n`);
     return;
   }
+  // Diagnostics surface on BOTH paths. They were only ever printed when the run
+  // failed, which is precisely backwards for a measurement: the passing run is
+  // the baseline a failing one is compared against, and on a Windows CI failure
+  // there was nothing green to compare with.
+  process.stdout.write(diagnostics());
   process.stdout.write(`smoke: all resident lifecycle assertions passed\n`);
   finish(0, null);
 });

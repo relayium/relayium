@@ -190,15 +190,24 @@ const inbox = {
   enrolled: 0,
   withdrawn: 0,
   heartbeats: 0,
+  claims: 0,
+  /** Milliseconds to hold `enrol`, for the premature-barrier discrimination. */
+  enrolDelay: 0,
   lastCapabilities: [],
   lastAutoAccept: "",
   accepted: [],
   /** What `pending` hands back, so a delivery can be offered on demand. */
   tasks: [],
+  /** Every directory a reveal actually opened, in order. */
+  revealed: [],
 };
 
 const inboxApi = {
   async enrol(request) {
+    // Discrimination knob: a slow enrol is what a loaded Windows agent looks
+    // like. With it set, a fixture that waits on the DOM instead of on this
+    // call fails; one that waits on the call passes.
+    if (inbox.enrolDelay > 0) await new Promise((r) => setTimeout(r, inbox.enrolDelay));
     inbox.enrolled += 1;
     inbox.lastCapabilities = [...request.capabilities];
     inbox.lastAutoAccept = request.autoAccept;
@@ -225,6 +234,7 @@ const inboxApi = {
     return { ID: taskID, State: "queued", Terminal: false };
   },
   async claim() {
+    inbox.claims += 1;
     return { deliveries: [], leaseSeconds: 60 };
   },
   async report() {
@@ -394,7 +404,7 @@ async function main() {
       // network, the device row central would issue, the folder probe, and a
       // task-owned data root. The backoff is an hour on every arm so nothing
       // fires on its own and each pass is stepped deliberately.
-      // The stored-send engine is the REAL one; only the server it talks to is
+      // The stored-send engine is the REAL one; only the transport it hands
       // this run's. The producer is the renderer's own shared `encryptFiles`.
       storedSendJournalDirectory: sendJournalDir,
       storedSend: {
@@ -403,6 +413,11 @@ async function main() {
       },
       inbox: {
         dataRoot: () => inboxRootDir,
+        // Observed rather than opened: a run must not put Explorer on whatever
+        // machine it happens to be on.
+        revealDirectory: async (directory) => {
+          inbox.revealed.push(directory);
+        },
         makeApi: () => inboxApi,
         resolveDevice: async () => inbox.device,
         directoryUsable: async () => inbox.folderUsable,
@@ -475,6 +490,8 @@ async function main() {
   await scenarioInboxKeepsReceiving(win, runtime);
   await scenarioInboxPending(win);
   await scenarioInboxMessages(win);
+  await scenarioInboxPolicy(win);
+  await scenarioInboxReceiptsAndReveal(win);
   // Stored send, while the smoke is signed in and BEFORE any quit scenario.
   // A quit fences admissions and a Stay clears them; running the whole send
   // flow through that would be testing the fence, which has its own coverage,
@@ -602,13 +619,55 @@ async function scenarioInboxConsent(win) {
   check("turn on was clicked again", await clickTest(win, "inbox-enable"));
   const on = await waitInbox(win, "the on state", `document.querySelector('[data-test="inbox-disable"]') !== null`);
   check("choosing a folder turns receiving on", on === true);
+  // ## Bounded diagnostics, emitted whether or not the assertion holds
+  //
+  // On Windows this failed with `enrolled: 0` while the page showed the ON
+  // state. CANDIDATES, none of them established: the enrolment was still in
+  // flight when the assertion ran (a premature barrier in this fixture, since
+  // the ON state is published as soon as the consent is durable); or
+  // `facade.enable` threw before reaching `api.enrol` — key generation, the
+  // at-rest key, or a journal/vault write. The assertion alone cannot tell them
+  // apart, so the closed status and the page's own notice go into the log.
+  //
+  // Closed codes and rendered copy only — no path, no key, no secret.
+  const enrolDiag = await js(
+    win,
+    `globalThis.relayium.inbox.state().then(
+       (s) => JSON.stringify({ status: s.status, enabled: s.enabled, hasDestination: s.hasDestination, policy: s.policy }),
+       (e) => "state threw: " + String(e))`,
+  );
+  const enrolNotice = await shown(win, "inbox-notice");
+  process.stdout.write(
+    `RELAYIUM_INBOX_ENROL_DIAG ${JSON.stringify({
+      enrolled: inbox.enrolled,
+      capabilities: inbox.lastCapabilities,
+      autoAccept: inbox.lastAutoAccept,
+      state: enrolDiag,
+      notice: enrolNotice.slice(0, 240),
+    })}\n`,
+  );
+  // ## Wait on the ENROLMENT, not on the state that precedes it
+  //
+  // `view.enabled` is published as soon as the CONSENT is durable — deliberately,
+  // so a restart honours what the user chose — which means the ON state appears
+  // BEFORE `facade.enable` has reached `api.enrol`. Asserting the count straight
+  // after the DOM state is a barrier that holds on a fast machine and races on a
+  // slow one, and it is the likeliest cause of `enrolled: 0` on Windows: a
+  // FIXTURE defect, not a product one.
+  //
+  // The deadline is real and a timeout is still a failure. This waits for the
+  // operation to COMPLETE; it does not sleep past the problem.
+  const enrolled = await waitForValue(() => inbox.enrolled >= 1, 20_000);
+  check("the enrolment completed", enrolled === true, String(inbox.enrolled));
   check("it enrolled exactly once", inbox.enrolled === 1, String(inbox.enrolled));
   check(
     "it advertised only what this build composes",
-    inbox.lastCapabilities.join(",") === "inbox.receive.v3,inbox.text.v1",
+    inbox.lastCapabilities.join(",") === "inbox.receive.v3,inbox.text.v1,inbox.autoaccept.v1",
     inbox.lastCapabilities.join(","),
   );
-  check("it did not claim auto-accept", inbox.lastAutoAccept === "ask", inbox.lastAutoAccept);
+  // The CAPABILITY is the build's and the POLICY is the user's. Turning
+  // receiving on does not ask for unattended saving: that is a separate choice.
+  check("but it did not choose to accept automatically", inbox.lastAutoAccept === "ask", inbox.lastAutoAccept);
 
   // The page says the resident promise, and never the folder.
   check("the page states that receiving continues in the background", (await present(win, "inbox-resident-note")) === true);
@@ -666,7 +725,11 @@ async function scenarioInboxPending(win) {
 
   check("accept was clicked", await clickTest(win, "inbox-accept"));
   await waitForValue(() => inbox.accepted.length > 0);
-  check("the accept reached central as an accept", inbox.accepted[0]?.accept === true, JSON.stringify(inbox.accepted[0]));
+  check(
+    "the accept was handed to the transport as an accept",
+    inbox.accepted[0]?.accept === true,
+    JSON.stringify(inbox.accepted[0]),
+  );
   const outcome = await waitInbox(win, "the accept outcome", `document.querySelector('[data-test="inbox-notice"]') !== null`);
   check("the page reports the outcome", outcome === true);
   const notice = await shown(win, "inbox-notice");
@@ -678,7 +741,7 @@ async function scenarioInboxPending(win) {
   check("decline was clicked", await clickTest(win, "inbox-reject"));
   await waitForValue(() => inbox.accepted.some((entry) => entry.accept === false));
   check(
-    "a decline reaches central as a decline",
+    "a decline is handed over as a decline",
     inbox.accepted.some((entry) => entry.accept === false),
     JSON.stringify(inbox.accepted),
   );
@@ -908,9 +971,11 @@ async function goToStored(win) {
  * A complete send, from the picker to the clipboard.
  *
  * The producer is the renderer's own shared `encryptFiles`; the engine is the
- * accepted one; the server is this run's loopback. What is asserted is what
- * actually happened: the bytes the server holds, the link on screen, and the
- * bytes on the SYSTEM clipboard.
+ * accepted one; what it hands bytes to is this run's CONTROLLED IN-MEMORY
+ * transport — no socket, no HTTP, no server. What is asserted is what actually
+ * happened on this side: the bytes the transport was handed, the link on
+ * screen, and the bytes on the SYSTEM clipboard. Nothing here is evidence about
+ * a remote handler.
  */
 async function scenarioStoredSendFlow(win) {
   if (!(await goToStored(win))) return;
@@ -947,10 +1012,57 @@ async function scenarioStoredSendFlow(win) {
   check("finalize actually happened", sendHeld.finalized === true);
 
   // The link is on screen and carries its key fragment.
+  // The same shape of diagnostic for the send: on Windows no link appeared, and
+  // "a link is shown" cannot say whether the upload failed, the finalize did, or
+  // the link could not be composed from custody. All three are closed codes.
+  const sendDiag = await js(
+    win,
+    `JSON.stringify({
+       published: document.querySelector('[data-test="send-published"]') !== null,
+       ambiguous: document.querySelector('[data-test="send-ambiguous"]') !== null,
+       failed: document.querySelector('[data-test="send-failed"]') !== null,
+       cancelled: document.querySelector('[data-test="send-cancelled"]') !== null,
+       refusal: document.querySelector('[data-test="send-refusal"]')?.textContent?.trim() ?? null,
+       hasLink: document.querySelector('[data-test="send-link"]') !== null,
+     })`,
+  );
+  process.stdout.write(
+    `RELAYIUM_SEND_DIAG ${JSON.stringify({
+      page: sendDiag,
+      handedOver: sendHeld.body.byteLength,
+      manifest: sendHeld.manifest.byteLength,
+      finalized: sendHeld.finalized,
+    })}\n`,
+  );
+  // ## The link is composed AFTER the outcome, so it is waited for separately
+  //
+  // `send-published` renders from the outcome; the link is a SEPARATE on-demand
+  // composition from custody that follows it. Reading the input in the same
+  // tick as the published state holds on a fast machine and races on a slow
+  // one. A timeout here is still a failure — this waits for the composition to
+  // COMPLETE, it does not sleep past it.
+  const linkReady = await waitFor(
+    win,
+    "the link to be composed",
+    `(document.querySelector('[data-test="send-link"]')?.value ?? "").length > 0`,
+    20_000,
+  );
+  check("a link was composed", linkReady === true);
   const link = await js(win, `document.querySelector('[data-test="send-link"]')?.value ?? ""`);
   check("a link is shown", link.includes("#k="), link.slice(0, 40));
   check("the link names the id finalize returned", link.includes("object-1"), link.slice(0, 60));
 
+  // ## GLOBALLY EXCLUSIVE
+  //
+  // This writes and reads the OS clipboard, which is one shared resource per
+  // machine. Two Electron runs overlapping here read each other's value and one
+  // of them fails on a byte comparison that is correct — observed exactly once,
+  // when an author run at 21:03:02 landed inside a root run's
+  // 21:02:58–21:03:02 window and the Inbox copy read back a stored link.
+  //
+  // The assertion is NOT weakened for it: comparing actual clipboard bytes is
+  // the only thing that proves a copy happened. Runs are serialised instead.
+  //
   // ## The clipboard, by its BYTES
   //
   // Copying happens in main because `window.ts` denies the renderer clipboard
@@ -1070,6 +1182,94 @@ async function scenarioStoredSendCancelAndNavigation(win) {
 
   sendHeld.hold = null;
   release?.();
+}
+
+
+/**
+ * Off / Ask / Auto, and the folder reveal.
+ *
+ * The Inbox API is a CONTROLLED IN-MEMORY object in this run, so what is
+ * asserted is the payload MAIN HANDED IT — not what a server received, and not
+ * that a delivery happened. `claim()` here always answers with no deliveries,
+ * so this scenario proves policy selection, the enrolment payload and the
+ * claim-count gate; it proves NOTHING about automatic file delivery or about a
+ * persisted receipt record. Both are owed, and are called out in the checkpoint
+ * rather than implied by this being green.
+ */
+async function scenarioInboxPolicy(win) {
+  await openInbox(win);
+  const offered = await waitInbox(win, "the policy control", `document.querySelector('[data-test="inbox-policy"]') !== null`);
+  check("the policy is offered as three answers", offered === true);
+  check("ask is offered", (await present(win, "inbox-policy-ask")) === true);
+  check("auto is offered", (await present(win, "inbox-policy-auto")) === true);
+  check("off is offered", (await present(win, "inbox-policy-off")) === true);
+  check(
+    "ask is the one in force after enabling",
+    (await js(win, `document.querySelector('[data-test="inbox-policy-ask"]').checked`)) === true,
+  );
+
+  // ---- auto -------------------------------------------------------------
+  check("auto was chosen", await clickTest(win, "inbox-policy-auto"));
+  const announcedAuto = await waitForValue(() => inbox.lastAutoAccept === "auto", 8000);
+  check("auto was handed to the transport", announcedAuto === true, inbox.lastAutoAccept);
+  check(
+    "and it was advertised with its capability",
+    inbox.lastCapabilities.includes("inbox.autoaccept.v1"),
+    inbox.lastCapabilities.join(","),
+  );
+
+  // ---- off --------------------------------------------------------------
+  check("off was chosen", await clickTest(win, "inbox-policy-off"));
+  const announcedOff = await waitForValue(() => inbox.lastAutoAccept === "off", 8000);
+  check("off was handed to the transport", announcedOff === true, inbox.lastAutoAccept);
+
+  // Off stops future claims. Asserted on the COUNT, not on a rendered state.
+  const claimsAtOff = inbox.claims;
+  for (let i = 0; i < 3; i += 1) {
+    handlerControlWake();
+    await new Promise((r) => setTimeout(r, 60));
+  }
+  check("nothing is claimed while off", inbox.claims === claimsAtOff, String(inbox.claims));
+
+  // ---- back to ask ------------------------------------------------------
+  check("ask was chosen again", await clickTest(win, "inbox-policy-ask"));
+  const backToAsk = await waitForValue(() => inbox.lastAutoAccept === "ask", 8000);
+  check("ask was handed to the transport", backToAsk === true, inbox.lastAutoAccept);
+  handlerControlWake();
+  const claimingAgain = await waitForValue(() => inbox.claims > claimsAtOff, 8000);
+  check("and claiming resumes", claimingAgain === true, String(inbox.claims));
+}
+
+/** The receipt record, and the one main-owned reveal per section. */
+async function scenarioInboxReceiptsAndReveal(win) {
+  const shown = await waitInbox(
+    win,
+    "the received section",
+    `document.querySelector('[data-test="inbox-receipts-empty"]') !== null
+      || document.querySelector('[data-test="inbox-receipts"]') !== null`,
+  );
+  check("the received section is present", shown === true);
+
+  // ## Specific, not "either state is fine"
+  //
+  // `claim()` in this run never hands back a delivery, so the record IS empty
+  // and the page must say exactly that. An `empty OR list` assertion would have
+  // passed whatever appeared, which is how a broken list renders green.
+  //
+  // Rendering a POPULATED record — and a persisted one, after a restart — needs
+  // a real delivery, which this scenario does not drive. That is owed.
+  check("the record is empty, and says so", (await present(win, "inbox-receipts-empty")) === true);
+  check("no receipt row is rendered for it", (await present(win, "inbox-receipts")) === false);
+
+  const before = inbox.revealed.length;
+  check("reveal was clicked", await clickTest(win, "inbox-reveal"));
+  const revealed = await waitForValue(() => inbox.revealed.length > before, 8000);
+  check("reveal reached main", revealed === true, String(inbox.revealed.length));
+  check(
+    "and main opened the folder IT holds, not one the page named",
+    inbox.revealed[inbox.revealed.length - 1] === destinationDir,
+    String(inbox.revealed[inbox.revealed.length - 1]),
+  );
 }
 
 /** Poll a main-process fact the scheduler produces. */

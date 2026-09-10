@@ -36,6 +36,14 @@
   let { inbox, onSignIn }: { inbox: InboxController; onSignIn?: () => void } = $props();
 
   const status = $derived(inbox.view.status);
+  /**
+   * Whether this PC is actually going to receive anything.
+   *
+   * Enrolment and receiving are different facts. `off` is enrolled — that is
+   * how the refusal reaches senders — so the page asks the policy, not the
+   * enrolment, before it promises anything about deliveries arriving.
+   */
+  const receiving = $derived(inbox.view.enabled && inbox.view.policy !== "off");
 
   /** Bytes as a person reads them. Counts only; never a file name. */
   function size(bytes: number): string {
@@ -103,6 +111,15 @@
         return t("inboxSuperseded");
       case "renamed":
         return t("inboxRenamed");
+      case "policy":
+        // The sentence follows the choice. Reporting a successful
+        // `setPolicy("off")` as "Receiving is on" said the opposite of what the
+        // user had just asked for.
+        return notice.policy === "off"
+          ? t("inboxPolicySetOff")
+          : notice.policy === "auto"
+            ? t("inboxPolicySetAuto")
+            : t("inboxPolicySetAsk");
       case "accepted":
         return acceptedText(notice.receipt);
       default:
@@ -134,6 +151,23 @@
    * being opened — so it is rendered rather than swallowed, and the user is
    * told what to do instead.
    */
+  /** The three answers, in the order a person weighs them. */
+  const POLICIES = [
+    { value: "off", label: "inboxPolicyOff", body: "inboxPolicyOffBody" },
+    { value: "ask", label: "inboxPolicyAsk", body: "inboxPolicyAskBody" },
+    { value: "auto", label: "inboxPolicyAuto", body: "inboxPolicyAutoBody" },
+  ] as const;
+
+  /** One sentence per journal phase. Closed codes in, product copy out. */
+  function phaseOf(phase: string): string {
+    if (phase === "acked") return t("inboxReceiptSaved");
+    if (phase === "published") return t("inboxReceiptAckPending");
+    if (phase === "partial") return t("inboxReceiptPartial");
+    if (phase === "failed") return t("inboxReceiptFailed");
+    if (phase === "claimed" || phase === "publishing") return t("inboxReceiptWorking");
+    return t("inboxReceiptBlocked");
+  }
+
   let copyState = $state<{ id: string; ok: boolean } | null>(null);
   async function copyOpen(): Promise<void> {
     const id = inbox.openId;
@@ -179,8 +213,17 @@
     <p class="dim" data-test="inbox-store-unreadable">{t("inboxAccountUnreadableBody")}</p>
   </Card>
 {:else}
-  <Card title={inbox.view.enabled ? t("inboxOnTitle") : t("inboxOffTitle")}>
-    {#if inbox.view.enabled}
+  <!--
+    ## The title follows the POLICY, not the enrolment
+    //
+    Choosing "Don't send to this PC" keeps the device ENROLLED — that is what
+    makes the refusal reach senders — so `view.enabled` is true for it. Reading
+    the title off that said "Receiving is on" and promised "deliveries keep
+    arriving" directly beside the Off radio the user had just chosen. What the
+    user asked for is the policy, so that is what the page says.
+  -->
+  <Card title={receiving ? t("inboxOnTitle") : t("inboxOffTitle")}>
+    {#if receiving}
       <p class="dim" data-test="inbox-resident-note">{t("inboxBackgroundNote")}</p>
       {#if canReceive}<p class="dim small" data-test="inbox-capabilities">{canReceive}</p>{/if}
 
@@ -216,6 +259,34 @@
         <p class="problem" data-test="inbox-withdrawal-pending">{t("inboxWithdrawalPending")}</p>
       {/if}
 
+      <!--
+        The policy, as three plain answers to one question.
+
+        Radio inputs rather than a toggle: this is a choice between three, and
+        `auto` is the one that writes files without asking, so it has to be
+        selected deliberately and its consequence stated next to it.
+      -->
+      <fieldset class="policy" data-test="inbox-policy">
+        <legend>{t("inboxPolicyHeading")}</legend>
+        {#each POLICIES as option (option.value)}
+          <label class="choice">
+            <input
+              type="radio"
+              name="inbox-policy"
+              value={option.value}
+              checked={inbox.view.policy === option.value}
+              disabled={inbox.busy}
+              data-test={`inbox-policy-${option.value}`}
+              onchange={() => void inbox.setPolicy(option.value)}
+            />
+            <span>
+              <strong>{t(option.label)}</strong><br />
+              <span class="dim small">{t(option.body)}</span>
+            </span>
+          </label>
+        {/each}
+      </fieldset>
+
       <div class="row">
         <button type="button" data-test="inbox-disable" disabled={inbox.busy} onclick={() => void inbox.disable()}>
           {t("inboxTurnOff")}
@@ -230,11 +301,46 @@
         </button>
       </div>
       {#if inbox.view.hasDestination}
+        <button type="button" data-test="inbox-reveal" onclick={() => void inbox.reveal()}>
+          {t("inboxRevealFolder")}
+        </button>
+        {#if inbox.revealFailed}
+          <p class="problem" data-test="inbox-reveal-failed">{t("inboxRevealFailed")}</p>
+        {/if}
         <!-- THAT a folder is chosen, never which one: no channel in this app
              carries a path to the page, and this line is the whole of what the
              renderer is told about it. -->
         <p class="dim small" data-test="inbox-has-folder">{t("inboxFolderChosen")}</p>
       {/if}
+    {:else if inbox.view.enabled}
+      <!-- Enrolled and told to refuse: a real state with its own sentence,
+           and NOT the same as never having turned the feature on. -->
+      <p class="dim" data-test="inbox-policy-off-state">{t("inboxPolicyOffBody")}</p>
+      <fieldset class="policy" data-test="inbox-policy">
+        <legend>{t("inboxPolicyHeading")}</legend>
+        {#each POLICIES as option (option.value)}
+          <label class="choice">
+            <input
+              type="radio"
+              name="inbox-policy"
+              value={option.value}
+              checked={inbox.view.policy === option.value}
+              disabled={inbox.busy}
+              data-test={`inbox-policy-${option.value}`}
+              onchange={() => void inbox.setPolicy(option.value)}
+            />
+            <span>
+              <strong>{t(option.label)}</strong><br />
+              <span class="dim small">{t(option.body)}</span>
+            </span>
+          </label>
+        {/each}
+      </fieldset>
+      <div class="row">
+        <button type="button" data-test="inbox-disable" disabled={inbox.busy} onclick={() => void inbox.disable()}>
+          {t("inboxTurnOff")}
+        </button>
+      </div>
     {:else}
       <p class="dim">{t("inboxOffBody")}</p>
       <button class="primary" type="button" data-test="inbox-enable" disabled={inbox.busy} onclick={() => void inbox.enable()}>
@@ -328,6 +434,43 @@
       </ul>
     {/if}
     <p class="dim small">{t("inboxMessageKept")}</p>
+  </Card>
+
+  <!--
+    What has arrived.
+
+    Counts and outcomes, never names: the delivery record carries none by
+    design, and the page says so rather than leaving the absence looking like a
+    bug. Opening the folder is what shows the user their files.
+  -->
+  <Card title={t("inboxReceiptsHeading")}>
+    {#if inbox.receiptsUnavailable}
+      <p class="problem" data-test="inbox-receipts-unavailable">{t("inboxReceiptsUnavailable")}</p>
+    {:else if inbox.receipts.length === 0}
+      <p class="dim" data-test="inbox-receipts-empty">{t("inboxReceiptsEmpty")}</p>
+    {:else}
+      <ul class="list" data-test="inbox-receipts">
+        {#each inbox.receipts as receipt (receipt.taskID)}
+          <li>
+            <div class="who">
+              <span>
+                {receipt.text
+                  ? t("inboxReceiptMessage")
+                  : t("inboxReceiptFiles", { published: receipt.published, total: receipt.total })}
+              </span>
+              <span class="dim small">{when(receipt.updatedAt)}</span>
+            </div>
+            <p class="dim small" data-test="inbox-receipt-phase">{phaseOf(receipt.phase)}</p>
+          </li>
+        {/each}
+      </ul>
+      <p class="dim small" data-test="inbox-receipt-no-names">{t("inboxReceiptNoNames")}</p>
+      {#if inbox.view.hasDestination}
+        <button type="button" data-test="inbox-receipts-reveal" onclick={() => void inbox.reveal()}>
+          {t("inboxRevealFolder")}
+        </button>
+      {/if}
+    {/if}
   </Card>
 
   <!-- Retained cleanups: destinations this process could not confirm it closed.
@@ -426,6 +569,10 @@
     background: var(--accent);
     animation: indeterminate 1.4s var(--ease) infinite;
   }
+  .policy { border: 1px solid var(--border); border-radius: var(--corner); padding: var(--space-inner); margin: var(--space-inner) 0; }
+  .policy legend { padding: 0 var(--space-tight); font-weight: 600; }
+  .choice { display: flex; gap: var(--space-tight); align-items: flex-start; padding: var(--space-tight) 0; }
+  .choice input { margin-top: 3px; }
   .sr-only {
     position: absolute;
     width: 1px;

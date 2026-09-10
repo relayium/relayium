@@ -138,6 +138,9 @@ contextBridge.exposeInMainWorld("relayium", {
     rename: invoke("relayium:inbox-rename"),
     wake: invoke("relayium:inbox-wake"),
     release: invoke("relayium:inbox-release-retained"),
+    setPolicy: invoke("relayium:inbox-set-policy"),
+    reveal: invoke("relayium:inbox-reveal-folder"),
+    receipts: invoke("relayium:inbox-receipts"),
     onState: subscribe("relayium:inbox-state-changed"),
   },
 });

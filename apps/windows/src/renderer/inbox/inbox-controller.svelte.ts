@@ -29,6 +29,7 @@
 
 import type {
   InboxAcceptOutcome,
+  InboxReceiptView,
   InboxDisableOutcome,
   InboxEnableOutcome,
   InboxMessageView,
@@ -37,6 +38,9 @@ import type {
   InboxSimpleOutcome,
   InboxView,
 } from "../../shared/ipc-contract.js";
+
+/** The three answers a person can give about arriving deliveries. */
+export type InboxPolicy = "off" | "ask" | "auto";
 
 /** The preload surface this controller uses. Declared, not inferred. */
 export interface InboxBridge {
@@ -54,6 +58,9 @@ export interface InboxBridge {
   rename(payload: { name: string }): Promise<InboxRenameOutcome>;
   wake(): Promise<{ ok: boolean }>;
   release(payload: { key: string }): Promise<InboxSimpleOutcome>;
+  setPolicy(payload: { policy: InboxPolicy }): Promise<InboxEnableOutcome>;
+  reveal(): Promise<InboxSimpleOutcome>;
+  receipts(): Promise<{ entries: readonly InboxReceiptView[] | null }>;
   onState(cb: (payload: unknown) => void): () => void;
 }
 
@@ -65,6 +72,8 @@ const LOADING: InboxView = {
   hasDestination: false,
   deviceName: "",
   withdrawalPending: false,
+  policy: "off",
+  epoch: 0,
   retained: [],
 };
 
@@ -85,7 +94,15 @@ export type InboxNotice =
   | { readonly kind: "superseded" }
   | { readonly kind: "failed"; readonly reason: string }
   | { readonly kind: "accepted"; readonly receipt: InboxAcceptOutcome }
-  | { readonly kind: "renamed" };
+  | { readonly kind: "renamed" }
+  /**
+   * A policy was set, and WHICH one.
+   *
+   * Not `enabled`: `setPolicy("off")` succeeds, and reporting that success as
+   * "Receiving is on" told the user the opposite of what they had just chosen.
+   * The policy travels with the notice so the sentence can be the right one.
+   */
+  | { readonly kind: "policy"; readonly policy: InboxPolicy };
 
 export class InboxController {
   view = $state<InboxView>(LOADING);
@@ -100,8 +117,41 @@ export class InboxController {
   notice = $state<InboxNotice | null>(null);
   /** Ids currently being accepted or rejected, so one row can show progress. */
   working = $state<readonly string[]>([]);
+  /** What this account has received. Counts and outcomes; never a name. */
+  receipts = $state<readonly InboxReceiptView[]>([]);
+  /**
+   * The record could not be READ.
+   *
+   * Distinct from having received nothing, and the distinction is the point:
+   * "nothing has arrived yet" over a journal this app failed to open would tell
+   * the user their deliveries never happened.
+   */
+  receiptsUnavailable = $state(false);
+  /** What the last reveal did, so a refused one is never silent. */
+  revealFailed = $state(false);
 
   readonly #stop: Array<() => void> = [];
+  /**
+   * The account this state belongs to, and which reads may still write.
+   *
+   * The same pattern the stored send controller uses, and for the same two
+   * failures. `#epoch` drops one account's rows before another's are rendered;
+   * `#listSeq` and `#openSeq` stop an OLDER answer landing after a newer one —
+   * a list read issued before a delete putting the row back, or a message body
+   * arriving after the user opened a different one.
+   */
+  #epoch = 0;
+  #listSeq = 0;
+  #openSeq = 0;
+  /**
+   * Which view answer may still be installed.
+   *
+   * A `state()` read is a request like any other, and a slow one issued before
+   * an account push came back afterwards and rolled the UI back to the previous
+   * account's idle view — over a `needs-account` the page had already been
+   * told. Every assignment of `view` from a response goes through this.
+   */
+  #viewSeq = 0;
 
   constructor(private readonly bridge: InboxBridge) {
     // ONE subscription, for the life of the app. Rebuilding it per page would
@@ -113,7 +163,15 @@ export class InboxController {
         // malformed push must not blank a view that was known to be true.
         if (shaped === null || typeof shaped !== "object") return;
         if (typeof (shaped as { status?: unknown }).status !== "object") return;
-        this.view = shaped;
+        if (typeof shaped.epoch !== "number") return;
+        // ## A push is the newest word, whatever it says
+        //
+        // Invalidating only on an EPOCH change was not enough: a same-account
+        // push — the user choosing Off — could be overwritten by a `state()`
+        // read issued before it that answered `ask`. Every accepted push
+        // supersedes every read still in flight.
+        this.#viewSeq += 1;
+        this.#adopt(shaped);
         // A state change is the moment the lists may have moved: a delivery
         // arrived, one was worked, an account changed. Refreshed here rather
         // than on a timer in the page, because the page may not be mounted.
@@ -122,22 +180,80 @@ export class InboxController {
     );
   }
 
+  /**
+   * Install a view, whatever observed it.
+   *
+   * ONE path, because a read can be the first thing to see an account change
+   * just as a push can, and the clearing has to happen either way. It used to
+   * live only in the push handler, so a `state()` answer carrying a new epoch
+   * installed the new account's status beside the OLD account's open message
+   * body and lists.
+   */
+  #adopt(view: InboxView): void {
+    if (view.epoch !== this.#epoch) this.#forgetAccount(view.epoch);
+    this.view = view;
+  }
+
+  /**
+   * Drop everything that belonged to the account that is leaving.
+   *
+   * Synchronous, and it clears the open message body first: that is the user's
+   * own text, and it belongs to whoever was signed in.
+   */
+  #forgetAccount(epoch: number): void {
+    this.#epoch = epoch;
+    this.#viewSeq += 1;
+    this.#listSeq += 1;
+    this.#openSeq += 1;
+    this.openId = null;
+    this.openText = "";
+    this.pending = [];
+    this.messages = [];
+    this.receipts = [];
+    this.receiptsUnavailable = false;
+    this.notice = null;
+  }
+
   /** Read everything once. Called by the shell at startup, not by the page. */
   async refresh(): Promise<void> {
-    this.view = await this.bridge.state();
+    await this.#installState();
     await this.refreshLists();
   }
 
+  /** Install a view read by an action, unless something newer has spoken. */
+  async #installState(): Promise<void> {
+    const seq = ++this.#viewSeq;
+    const view = await this.bridge.state();
+    // Dropped if a push — or a newer read — has already spoken. Installing it
+    // would roll the UI back to an account, or a policy, that has moved on.
+    if (this.#viewSeq !== seq) return;
+    this.#adopt(view);
+  }
+
   private async refreshLists(): Promise<void> {
-    const [pending, messages] = await Promise.all([
+    const epoch = this.#epoch;
+    const seq = ++this.#listSeq;
+    const [pending, messages, receipts] = await Promise.all([
       this.bridge.pending().catch(() => this.pending),
       this.bridge.messages().catch(() => this.messages),
+      this.bridge.receipts().catch(() => ({ entries: null })),
     ]);
+    // An older read must not overwrite a newer one's answer, and a read issued
+    // before an account change must not restore the previous account's rows.
+    if (this.#epoch !== epoch || this.#listSeq !== seq) return;
     this.pending = pending;
     this.messages = messages;
+    if (receipts.entries === null) {
+      this.receiptsUnavailable = true;
+    } else {
+      this.receiptsUnavailable = false;
+      this.receipts = receipts.entries;
+    }
     // A message that was deleted — or that belongs to an account that has gone
     // away — must not stay on screen as though it were still there.
     if (this.openId !== null && !messages.some((message) => message.id === this.openId)) {
+      // Gone from the list. A body still in flight for it must not land either.
+      this.#openSeq += 1;
       this.openId = null;
       this.openText = "";
     }
@@ -167,7 +283,7 @@ export class InboxController {
                 : outcome.kind === "superseded"
                   ? { kind: "superseded" }
                   : { kind: "failed", reason: outcome.reason };
-      this.view = await this.bridge.state();
+      await this.#installState();
     } finally {
       this.busy = false;
     }
@@ -189,10 +305,57 @@ export class InboxController {
               : outcome.kind === "refused"
                 ? { kind: "refused" }
                 : { kind: "failed", reason: outcome.reason };
-      this.view = await this.bridge.state();
+      await this.#installState();
     } finally {
       this.busy = false;
     }
+  }
+
+  /**
+   * Choose off / ask / auto.
+   *
+   * `busy` is held around it because `ask` and `auto` with no folder recorded
+   * open the native dialog, which is modal to the window — a second click would
+   * queue a second dialog and ask the same question twice.
+   */
+  async setPolicy(policy: InboxPolicy): Promise<void> {
+    if (this.busy || this.view.policy === policy) return;
+    this.busy = true;
+    this.notice = null;
+    try {
+      const outcome = await this.bridge.setPolicy({ policy });
+      this.notice =
+        outcome.kind === "enabled"
+          ? { kind: "policy", policy }
+          : outcome.kind === "declined"
+            ? { kind: "declined" }
+            : outcome.kind === "needs-account"
+              ? { kind: "needs-account" }
+              : outcome.kind === "refused"
+                ? { kind: "refused" }
+                : outcome.kind === "superseded"
+                  ? { kind: "superseded" }
+                  : { kind: "failed", reason: outcome.reason };
+      await this.#installState();
+      await this.refreshLists();
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /**
+   * Show the receiving folder.
+   *
+   * Main performs it on a path main holds; this asks and renders the answer.
+   * A refusal is shown rather than a button that appears to do nothing.
+   */
+  async reveal(): Promise<void> {
+    const outcome = await this.bridge.reveal().catch(() => ({ kind: "failed" as const, reason: "internal" }));
+    this.revealFailed = outcome.kind !== "ok";
+    if (!this.revealFailed) return;
+    setTimeout(() => {
+      this.revealFailed = false;
+    }, 3000);
   }
 
   async chooseFolder(): Promise<void> {
@@ -202,7 +365,7 @@ export class InboxController {
     try {
       const outcome = await this.bridge.chooseFolder();
       if (outcome.kind === "failed") this.notice = { kind: "failed", reason: outcome.reason };
-      this.view = await this.bridge.state();
+      await this.#installState();
     } finally {
       this.busy = false;
     }
@@ -242,9 +405,15 @@ export class InboxController {
     if (this.openId === id) {
       this.openId = null;
       this.openText = "";
+      this.#openSeq += 1;
       return;
     }
+    const epoch = this.#epoch;
+    const seq = ++this.#openSeq;
     const answer = await this.bridge.open({ id });
+    // A body that arrived after the user opened a different message — or after
+    // the account changed — is somebody else's text on their screen.
+    if (this.#epoch !== epoch || this.#openSeq !== seq) return;
     if ("failed" in answer) {
       this.notice = { kind: "failed", reason: answer.failed };
       return;
@@ -269,6 +438,10 @@ export class InboxController {
   }
 
   async remove(id: string): Promise<void> {
+    // Invalidated BEFORE the delete, not after: an `open` already in flight for
+    // this message would otherwise come back with its plaintext and put a
+    // deleted message back on screen. The user asked for it to be gone.
+    this.#openSeq += 1;
     const outcome = await this.bridge.remove({ id });
     if (outcome.kind === "failed") this.notice = { kind: "failed", reason: outcome.reason };
     if (this.openId === id) {
@@ -291,7 +464,7 @@ export class InboxController {
       } else if (outcome.kind === "failed") {
         this.notice = { kind: "failed", reason: outcome.reason };
       }
-      this.view = await this.bridge.state();
+      await this.#installState();
     } finally {
       this.busy = false;
     }
@@ -303,9 +476,13 @@ export class InboxController {
   }
 
   async release(key: string): Promise<void> {
+    const epoch = this.#epoch;
     const outcome = await this.bridge.release({ key });
+    // The account captured at admission, re-checked before the notice: a
+    // failure from the previous account's cleanup is not this account's news.
+    if (this.#epoch !== epoch) return;
     if (outcome.kind === "failed") this.notice = { kind: "failed", reason: outcome.reason };
-    this.view = await this.bridge.state();
+    await this.#installState();
   }
 
   dismiss(): void {
@@ -314,6 +491,11 @@ export class InboxController {
 
   /** Only the app's own teardown calls this. A page never does. */
   destroy(): void {
+    // Everything in flight is invalidated: a read or a message body answering
+    // after the app has torn this down must write nothing.
+    this.#viewSeq += 1;
+    this.#listSeq += 1;
+    this.#openSeq += 1;
     for (const stop of this.#stop.splice(0)) stop();
   }
 }

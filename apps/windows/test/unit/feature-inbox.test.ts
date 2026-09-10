@@ -50,6 +50,16 @@ async function tempRoot(): Promise<string> {
   return root;
 }
 
+/** Poll a predicate that may also nudge the scheduler. */
+async function waitForValue(predicate: () => boolean, timeoutMs = 4000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  return true;
+}
+
 /** Wait for a condition the loop produces, without a fixed sleep. */
 async function waitFor(what: string, predicate: () => boolean, timeoutMs = 4000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -159,6 +169,8 @@ interface Harness {
   epoch: number;
   picked: string | null;
   hold: Promise<void> | null;
+  probeHold: Promise<void> | null;
+  readonly probeEntered: number;
   holdSecret: Promise<void> | null;
   secretEntered: (() => void) | null;
   usable: boolean;
@@ -168,6 +180,8 @@ interface Harness {
   readonly destinations: () => number;
   /** Every string a copy actually put on the clipboard, in order. */
   readonly clipboard: readonly string[];
+  /** Every directory a reveal actually opened, in order. */
+  readonly revealed: readonly string[];
   /** The task-owned data root, so a test can seed the real vault under it. */
   readonly dataRoot: string;
   /** The same encrypted store the service uses, for the same reason. */
@@ -180,7 +194,7 @@ interface Harness {
 
 async function harness(
   over: {
-    grant?: { directory: string; enabled: boolean; withdrawalPending: boolean };
+    grant?: { directory: string; enabled: boolean; policy: string; withdrawalPending: boolean };
     apiOptions?: Parameters<typeof fakeApi>[0];
     authority?: InboxAuthority;
     start?: boolean;
@@ -194,12 +208,15 @@ async function harness(
   let dialogs = 0;
   let destinations = 0;
   const clipboard: string[] = [];
+  const revealed: string[] = [];
 
   const state = {
     authority: over.authority ?? ({ kind: "ok", bearer: "bearer", epoch: 1 } as InboxAuthority),
     epoch: 1,
     picked: `${root}/chosen` as string | null,
     hold: null as Promise<void> | null,
+    probeHold: null as Promise<void> | null,
+    probeEntered: 0,
     holdSecret: null as Promise<void> | null,
     secretEntered: null as (() => void) | null,
     usable: true,
@@ -212,7 +229,7 @@ async function harness(
   // lands where the service will look for it.
   const { createHash } = await import("node:crypto");
   const accountKey = createHash("sha256").update(state.device.id, "utf8").digest("hex").slice(0, 32);
-  if (over.grant) secrets.set(grantSlotFor(accountKey), JSON.stringify({ v: 1, ...over.grant }));
+  if (over.grant) secrets.set(grantSlotFor(accountKey), JSON.stringify({ v: 2, ...over.grant }));
 
   const slot = {
     async get(key: string) {
@@ -262,7 +279,11 @@ async function harness(
     runtime: async () => runtime,
     makeApi: () => built.api as never,
     resolveDevice: async () => state.device,
-    directoryUsable: async () => state.usable,
+    async directoryUsable() {
+      state.probeEntered += 1;
+      if (state.probeHold !== null) await state.probeHold;
+      return state.usable;
+    },
     async makeDestination() {
       destinations += 1;
       return {
@@ -284,6 +305,9 @@ async function harness(
     reportFailure: () => undefined,
     writeClipboard: (text) => {
       clipboard.push(text);
+    },
+    revealDirectory: async (directory) => {
+      revealed.push(directory);
     },
   };
 
@@ -321,6 +345,15 @@ async function harness(
     set hold(next: Promise<void> | null) {
       state.hold = next;
     },
+    get probeHold() {
+      return state.probeHold;
+    },
+    set probeHold(next: Promise<void> | null) {
+      state.probeHold = next;
+    },
+    get probeEntered() {
+      return state.probeEntered;
+    },
     get holdSecret() {
       return state.holdSecret;
     },
@@ -354,6 +387,7 @@ async function harness(
     dialogs: () => dialogs,
     destinations: () => destinations,
     clipboard,
+    revealed,
     dataRoot: root,
     slot,
   };
@@ -417,21 +451,27 @@ describe("the backoff", () => {
 
 describe("what this build advertises", () => {
   it("promises only what the host actually composes", () => {
-    // Auto-accept is false and must stay false: there is no control for it on
-    // this client, so advertising it would tell central this device may take
-    // deliveries without anybody being asked.
-    expect(COMPOSED_FEATURES).toEqual({ files: true, text: true, autoAccept: false });
+    // All three are composed. Auto-accept is the build's CAPABILITY — the
+    // scheduler's own drain saves an auto-accepted delivery with no renderer —
+    // and it is deliberately not the same thing as the POLICY, which stays
+    // gated on what the user chose. A build advertising the capability without
+    // the drain would collect deliveries it never worked.
+    expect(COMPOSED_FEATURES).toEqual({ files: true, text: true, autoAccept: true });
   });
 
   it("sends exactly the composed capabilities when it enrols", async () => {
-    const h = await harness({ grant: { directory: "/chosen", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the enrolment", () => h.calls.enrol > 0);
     const sent = h.enrolled();
-    expect(sent?.capabilities).toEqual(["inbox.receive.v3", "inbox.text.v1"]);
-    // `ask`, never `off`: `off` makes central refuse every send to this device,
-    // which is not what a person who turned receiving on asked for.
+    expect(sent?.capabilities).toEqual([
+      "inbox.receive.v3",
+      "inbox.text.v1",
+      "inbox.autoaccept.v1",
+    ]);
+    // The capability is advertised because the build has it; the POLICY is
+    // `ask` because that is what this account's grant says. A device that can
+    // accept automatically is not a device that may.
     expect(sent?.autoAccept).toBe("ask");
-    expect(sent?.capabilities).not.toContain("inbox.autoaccept.v1");
     expect(sent?.platform).toBe("windows");
   });
 });
@@ -462,7 +502,7 @@ describe("the guards, in the order the Mac has them", () => {
   });
 
   it("says folder-missing, never disabled and never idle, when the folder is gone", async () => {
-    const h = await harness({ grant: { directory: "/gone", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/gone", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the enrolment", () => h.calls.enrol > 0 || status(h) === "folder-missing");
     h.usable = false;
     h.service.wake();
@@ -527,7 +567,7 @@ describe("consent", () => {
 
 describe("turning it off", () => {
   it("stops locally and durably before central is told", async () => {
-    const h = await harness({ grant: { directory: "/chosen", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the enrolment", () => h.calls.enrol > 0);
 
     expect(await h.service.disable()).toEqual({ kind: "disabled" });
@@ -543,7 +583,7 @@ describe("turning it off", () => {
   it("keeps the withdrawal pending and says so when central cannot be reached", async () => {
     let failing = true;
     const h = await harness({
-      grant: { directory: "/chosen", enabled: true, withdrawalPending: false },
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
       apiOptions: { failDelete: () => failing },
     });
     await waitFor("the enrolment", () => h.calls.enrol > 0);
@@ -562,7 +602,7 @@ describe("turning it off", () => {
   });
 
   it("erases nothing local", async () => {
-    const h = await harness({ grant: { directory: "/chosen", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the enrolment", () => h.calls.enrol > 0);
     const keysBefore = [...h.secrets.keys()].filter((key) => key.startsWith("inbox-keys-"));
     // Enrolling generated and stored this device's key pair.
@@ -582,7 +622,7 @@ describe("turning it off", () => {
 
 describe("the scheduler belongs to the application", () => {
   it("keeps passing with nobody asking it to", async () => {
-    const h = await harness({ grant: { directory: "/chosen", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the first pass", () => h.calls.pending > 0);
     const first = h.calls.pending;
     for (let i = 0; i < 3; i += 1) {
@@ -595,7 +635,7 @@ describe("the scheduler belongs to the application", () => {
   });
 
   it("cannot be started twice", async () => {
-    const h = await harness({ grant: { directory: "/chosen", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the first pass", () => h.calls.pending > 0);
     // A remounting component cannot create a second loop — there is nothing on
     // the renderer's surface that starts one, and `start` is idempotent even
@@ -629,7 +669,7 @@ describe("the quit fence", () => {
     });
     let holding = true;
     const h = await harness({
-      grant: { directory: "/chosen", enabled: true, withdrawalPending: false },
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
       apiOptions: { hold: () => (holding ? held : null) },
     });
     await waitFor("a pass to be in flight", () => h.calls.heartbeat > 0);
@@ -662,7 +702,7 @@ describe("the quit fence", () => {
 
 describe("an account change", () => {
   it("invalidates before it joins, and rebinds to the new account", async () => {
-    const h = await harness({ grant: { directory: "/chosen", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the first enrolment", () => h.calls.enrol > 0);
 
     h.epoch = 2;
@@ -684,7 +724,7 @@ describe("an account change", () => {
   it("does not stop receiving when only the document changed", async () => {
     // A reload replaces the document and fires the same watcher. Background
     // receiving must survive it — that is the resident invariant.
-    const h = await harness({ grant: { directory: "/chosen", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the enrolment", () => h.calls.enrol > 0);
     const name = h.service.view().deviceName;
 
@@ -705,7 +745,7 @@ describe("an account change", () => {
     });
     let holding = true;
     const h = await harness({
-      grant: { directory: "/chosen", enabled: true, withdrawalPending: false },
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
       apiOptions: { hold: () => (holding ? held : null) },
     });
     await waitFor("a pass to be in flight", () => h.calls.heartbeat > 0);
@@ -727,14 +767,14 @@ describe("what the page may ask for", () => {
     // The renderer names a task; it does not supply the idempotency key or the
     // creation time, which is what the dedup horizon compares against. An id
     // this process has not seen from central cannot be accepted at all.
-    const h = await harness({ grant: { directory: "/chosen", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the enrolment", () => h.calls.enrol > 0);
     expect(await h.service.accept("invented-task")).toEqual({ kind: "already-settled" });
     expect(h.calls.accept).toEqual([]);
   });
 
   it("pushes state only when it actually changed", async () => {
-    const h = await harness({ grant: { directory: "/chosen", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the first pass", () => h.calls.pending > 0);
     await waitFor("a settled state", () => status(h) === "idle");
     const seen = h.states.length;
@@ -769,7 +809,7 @@ describe("the quit fence holds for the WHOLE pass, not just its entry", () => {
     });
     let holding = true;
     const h = await harness({
-      grant: { directory: "/chosen", enabled: true, withdrawalPending: false },
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
       apiOptions: { hold: () => (holding ? held : null) },
     });
     await waitFor("a pass parked in the heartbeat", () => h.calls.heartbeat > 0);
@@ -805,7 +845,7 @@ describe("the quit fence holds for the WHOLE pass, not just its entry", () => {
     });
     let holding = true;
     const h = await harness({
-      grant: { directory: "/chosen", enabled: true, withdrawalPending: false },
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
       apiOptions: { hold: () => (holding ? held : null) },
     });
     await waitFor("a pass parked in the heartbeat", () => h.calls.heartbeat > 0);
@@ -830,7 +870,7 @@ describe("two consent changes that overlap", () => {
     const dialog = new Promise<void>((resolve) => {
       answer = resolve;
     });
-    const h = await harness({ grant: { directory: "/chosen", enabled: false, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/chosen", enabled: false, policy: "off", withdrawalPending: false } });
     await waitFor("the disabled guard", () => status(h) === "disabled");
 
     h.hold = dialog;
@@ -864,7 +904,7 @@ describe("two consent changes that overlap", () => {
     const dialog = new Promise<void>((resolve) => {
       answer = resolve;
     });
-    const h = await harness({ grant: { directory: "/first", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/first", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the enrolment", () => h.calls.enrol > 0);
 
     h.hold = dialog;
@@ -889,7 +929,7 @@ describe("two consent changes that overlap", () => {
     // The mirror of the rule above: turning receiving off must not discard the
     // folder the user chose, because turning it back on should not have to ask
     // again.
-    const h = await harness({ grant: { directory: "/first", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/first", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the enrolment", () => h.calls.enrol > 0);
 
     h.picked = "/second";
@@ -916,7 +956,7 @@ describe("a withdrawal acknowledgement that lands late", () => {
     });
     let holdingDelete = true;
     const h = await harness({
-      grant: { directory: "/first", enabled: true, withdrawalPending: false },
+      grant: { directory: "/first", enabled: true, policy: "ask", withdrawalPending: false },
       apiOptions: { holdDelete: () => (holdingDelete ? deleting : null) },
     });
     await waitFor("the enrolment", () => h.calls.enrol > 0);
@@ -950,7 +990,7 @@ describe("a withdrawal acknowledgement that lands late", () => {
     });
     let holdingDelete = true;
     const h = await harness({
-      grant: { directory: "/first", enabled: true, withdrawalPending: false },
+      grant: { directory: "/first", enabled: true, policy: "ask", withdrawalPending: false },
       apiOptions: { holdDelete: () => (holdingDelete ? deleting : null) },
     });
     await waitFor("the enrolment", () => h.calls.enrol > 0);
@@ -983,7 +1023,7 @@ describe("a withdrawal acknowledgement that lands late", () => {
   it("clears the pending marker from the scheduler's retry without reverting anything else", async () => {
     let failing = true;
     const h = await harness({
-      grant: { directory: "/first", enabled: false, withdrawalPending: true },
+      grant: { directory: "/first", enabled: false, policy: "off", withdrawalPending: true },
       apiOptions: { failDelete: () => failing },
     });
     await waitFor("the first retry", () => h.calls.deleteInbox > 0);
@@ -1011,7 +1051,7 @@ describe("copying a message", () => {
     // The renderer names the message and never supplies its text: there is no
     // channel here that takes a string and puts it on the clipboard, and
     // `window.ts` denies the browser clipboard permission outright.
-    const h = await harness({ grant: { directory: "/chosen", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the enrolment", () => h.calls.enrol > 0);
     await seedMessage(h, "msg-1", "hello from the phone");
 
@@ -1022,7 +1062,7 @@ describe("copying a message", () => {
   it("refuses after the account has gone away", async () => {
     // A copy that resumed under a new account would put the previous account's
     // message on the clipboard of whoever is using the app now.
-    const h = await harness({ grant: { directory: "/chosen", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the enrolment", () => h.calls.enrol > 0);
     await seedMessage(h, "msg-1", "private");
 
@@ -1037,7 +1077,7 @@ describe("copying a message", () => {
   });
 
   it("refuses while a quit is being decided", async () => {
-    const h = await harness({ grant: { directory: "/chosen", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the enrolment", () => h.calls.enrol > 0);
     await seedMessage(h, "msg-1", "private");
 
@@ -1047,7 +1087,7 @@ describe("copying a message", () => {
   });
 
   it("puts nothing on the clipboard for a message that is not there", async () => {
-    const h = await harness({ grant: { directory: "/chosen", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the enrolment", () => h.calls.enrol > 0);
     const outcome = await h.service.copyMessage("no-such-message", h.document);
     expect(outcome.kind).toBe("failed");
@@ -1059,7 +1099,7 @@ describe("copying a message", () => {
     // it — that is what makes receiving survive one. A copy is different: it is
     // a side effect a specific page asked for, visible OUTSIDE the app, and the
     // page that asked is gone. Held at the vault's key read, replaced, released.
-    const h = await harness({ grant: { directory: "/chosen", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the enrolment", () => h.calls.enrol > 0);
     await seedMessage(h, "msg-1", "private");
 
@@ -1087,11 +1127,298 @@ describe("copying a message", () => {
 
   it("still copies for the document that actually asked", async () => {
     // The control case, so the guard above is not merely refusing everything.
-    const h = await harness({ grant: { directory: "/chosen", enabled: true, withdrawalPending: false } });
+    const h = await harness({ grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false } });
     await waitFor("the enrolment", () => h.calls.enrol > 0);
     await seedMessage(h, "msg-1", "still mine");
     h.document = 7;
     expect(await h.service.copyMessage("msg-1", 7)).toEqual({ kind: "ok" });
     expect(h.clipboard).toEqual(["still mine"]);
+  });
+});
+
+describe("the Off policy, which needs no destination", () => {
+  it("is announced even when the folder is gone, and retried until it lands", async () => {
+    // The ordering root caught. `off` was guarded behind the folder check, so a
+    // user who chose Off and whose folder had gone missing could NEVER tell
+    // central — which kept the last policy it was told, possibly `auto`, and
+    // kept delivering automatically to a device whose user had turned it off.
+    let failing = true;
+    const h = await harness({
+      grant: { directory: "/gone", enabled: true, policy: "off", withdrawalPending: false },
+      apiOptions: { failEnrol: () => failing },
+    });
+    h.usable = false;
+
+    await waitFor("the first announcement attempt", () => h.calls.enrol > 0);
+    // Not folder-missing: the user's answer needs no folder to be true.
+    await waitFor("the disabled state", () => status(h) === "offline" || status(h) === "disabled");
+    // And nothing claimed a ready folder to central.
+    expect(h.calls.heartbeat).toBe(0);
+
+    failing = false;
+    const before = h.calls.enrol;
+    h.service.wake();
+    await waitFor("the retried announcement", () => h.calls.enrol > before);
+    await waitFor("the settled state", () => status(h) === "disabled");
+    expect(h.enrolled()?.autoAccept).toBe("off");
+  });
+
+  it("survives a restart with an empty destination and still announces", async () => {
+    const h = await harness({
+      grant: { directory: "", enabled: true, policy: "off", withdrawalPending: false },
+    });
+    await waitFor("the announcement", () => h.calls.enrol > 0);
+    expect(h.enrolled()?.autoAccept).toBe("off");
+    expect(h.calls.heartbeat).toBe(0);
+  });
+
+  it("re-announces when the policy changes, rather than trusting a stale marker", async () => {
+    // A boolean `enrolled` left over from an `auto` enrolment suppressed the
+    // retry that tells central about the change. The marker carries the POLICY
+    // now, so any change re-announces and only a matching one counts as done.
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "auto", withdrawalPending: false },
+    });
+    await waitFor("the auto enrolment", () => h.calls.enrol > 0);
+    expect(h.enrolled()?.autoAccept).toBe("auto");
+    const before = h.calls.enrol;
+
+    expect((await h.service.setPolicy("off")).kind).toBe("enabled");
+    expect(h.calls.enrol).toBeGreaterThan(before);
+    expect(h.enrolled()?.autoAccept).toBe("off");
+
+    // And a later pass does not re-announce what is already true.
+    const settled = h.calls.enrol;
+    h.service.wake();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(h.calls.enrol).toBe(settled);
+  });
+});
+
+describe("a policy that changes while a pass is mid-flight", () => {
+  it("claims nothing after Off lands during the folder probe", async () => {
+    // The exact race: the pass is inside `directoryUsable`, `setPolicy("off")`
+    // completes and announces, and the continuation then finds
+    // `announced === grant.policy` and sails on to heartbeat and CLAIM —
+    // receiving deliveries the user has just told central to stop sending.
+    // Asserted on the actual claim count, not on a published state.
+    let releaseProbe!: () => void;
+    const probe = new Promise<void>((resolve) => {
+      releaseProbe = resolve;
+    });
+    let holdingProbe = false;
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
+    });
+    await waitFor("a normal pass to claim", () => h.calls.claim > 0);
+    const claimsBeforeOff = h.calls.claim;
+    expect(claimsBeforeOff).toBeGreaterThan(0);
+
+    // Hold the NEXT pass inside the folder probe. The baseline is captured:
+    // `> 0` was already true from the pass that just ran, so the wait returned
+    // immediately and the scenario was not actually held anywhere.
+    const probesBefore = h.probeEntered;
+    holdingProbe = true;
+    h.probeHold = probe;
+    h.service.wake();
+    await waitFor("a NEW pass to reach the folder probe", () => h.probeEntered > probesBefore);
+
+    // The user chooses Off while it is held.
+    expect((await h.service.setPolicy("off")).kind).toBe("enabled");
+
+    holdingProbe = false;
+    h.probeHold = null;
+    releaseProbe();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    // Nothing new was claimed by the resumed pass.
+    expect(h.calls.claim).toBe(claimsBeforeOff);
+    expect(h.enrolled()?.autoAccept).toBe("off");
+
+    // And later passes stay at the Off branch: still no claims.
+    h.service.wake();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(h.calls.claim).toBe(claimsBeforeOff);
+  });
+
+  it("does not announce a policy after a quit fence", async () => {
+    const h = await harness({
+      grant: { directory: "", enabled: true, policy: "off", withdrawalPending: false },
+      start: false,
+    });
+    h.service.fence();
+    h.service.start();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(h.calls.enrol).toBe(0);
+  });
+});
+
+describe("adversarial: an answer that arrives after its authority went away", () => {
+  it("does not reveal a folder for a page that has been replaced", async () => {
+    // A reveal is a side effect OUTSIDE the app, asked for by a specific page.
+    // The scheduler is deliberately document-independent; this is not.
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
+    });
+    await waitFor("the enrolment", () => h.calls.enrol > 0);
+    h.document = 2;
+    expect(await h.service.revealFolder(1)).toEqual({ kind: "failed", reason: "cancelled" });
+    expect(h.revealed).toEqual([]);
+  });
+
+  it("does not reveal a folder that is not there", async () => {
+    const h = await harness({
+      grant: { directory: "/gone", enabled: true, policy: "ask", withdrawalPending: false },
+    });
+    await waitFor("the folder guard", () => status(h) === "folder-missing" || h.calls.enrol > 0);
+    h.usable = false;
+    expect(await h.service.revealFolder(h.document)).toEqual({
+      kind: "failed",
+      reason: "storage-unreadable",
+    });
+    expect(h.revealed).toEqual([]);
+  });
+
+  it("does not reveal while a quit is being decided", async () => {
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
+    });
+    await waitFor("the enrolment", () => h.calls.enrol > 0);
+    h.service.fence();
+    expect(await h.service.revealFolder(h.document)).toEqual({ kind: "refused" });
+    expect(h.revealed).toEqual([]);
+  });
+
+  it("reveals the account's own directory when everything is live", async () => {
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
+    });
+    await waitFor("the enrolment", () => h.calls.enrol > 0);
+    expect(await h.service.revealFolder(h.document)).toEqual({ kind: "ok" });
+    expect(h.revealed).toEqual(["/chosen"]);
+  });
+
+  it("returns nothing of the previous account after it goes away", async () => {
+    // The held-mid-read variant is covered by `copyMessage`'s own cases: both
+    // go through the same `own()` machinery and the same post-await account
+    // check, and the at-rest key the journal would park on is already resolved
+    // by the time a pass has run, so holding it here would prove nothing.
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
+    });
+    await waitFor("the enrolment", () => h.calls.enrol > 0);
+    h.epoch = 2;
+    h.service.onAuthorityChanged();
+    // No binding, so no account whose record to read — and emphatically not the
+    // rows of the account that just left.
+    expect(await h.service.receipts()).toEqual([]);
+  });
+
+  it("keeps an unreadable receipt record distinct from an empty one", async () => {
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
+    });
+    await waitFor("the enrolment", () => h.calls.enrol > 0);
+    // A live account with nothing received is EMPTY, and says so.
+    expect(await h.service.receipts()).toEqual([]);
+    // A signed-out one is empty too — there is no account whose record to read.
+    h.authority = { kind: "signed-out" };
+    h.epoch = 3;
+    h.service.onAuthorityChanged();
+    await waitFor("the account guard", () => status(h) === "needs-account");
+    expect(await h.service.receipts()).toEqual([]);
+  });
+});
+
+describe("Off that arrives during a held heartbeat", () => {
+  it("claims nothing afterwards, and an explicit Ask claims again", async () => {
+    // ## Adapted from root's independent probe, and it is the ordering that
+    // makes it work
+    //
+    // My own attempt at this shape released the heartbeat before the policy
+    // write had settled, so the resumed pass reached the gate first and the
+    // scenario asserted a race rather than the gate. Root's version awaits
+    // `setPolicy("off")` to completion INSIDE the held window and releases in a
+    // `finally`, which makes "Off was durable and announced before the pass
+    // resumed" a fact rather than a hope.
+    //
+    // It also starts from `auto`, so the held pass is one that would genuinely
+    // have claimed, and it keeps an explicit `ask` afterwards as a positive
+    // control — a gate that simply stopped everything fails that half.
+    //
+    // Reviewed as read-only before adapting: the body is root's, the harness
+    // names are mine, and nothing about what it asserts was softened.
+    let release!: () => void;
+    let held: Promise<void> | null = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "auto", withdrawalPending: false },
+      apiOptions: { hold: () => held },
+    });
+    await waitFor("the heartbeat to be entered", () => h.calls.heartbeat > 0);
+    expect(h.calls.claim).toBe(0);
+
+    try {
+      expect((await h.service.setPolicy("off")).kind).toBe("enabled");
+      expect(h.enrolled()?.autoAccept).toBe("off");
+    } finally {
+      held = null;
+      release();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const afterOff = h.calls.claim;
+    expect((await h.service.setPolicy("ask")).kind).toBe("enabled");
+    await waitFor("a claim after the explicit re-enable", () => h.calls.claim > afterOff);
+    expect(afterOff).toBe(0);
+  });
+});
+
+describe("Off that arrives during the held FOLDER probe", () => {
+  it("claims nothing afterwards, and an explicit Ask claims again", async () => {
+    // The sibling barrier to the heartbeat one. Same ordering discipline: Off is
+    // awaited to completion inside the held window and the probe is released in
+    // a `finally`, so "Off was durable before the pass resumed" is a fact.
+    let release!: () => void;
+    let held: Promise<void> | null = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "auto", withdrawalPending: false },
+    });
+    await waitFor("a first pass to claim", () => h.calls.claim > 0);
+    const before = h.calls.claim;
+
+    // Hold the NEXT pass inside the folder probe, measured from a captured
+    // baseline rather than `> 0`, which was already true.
+    const probesBefore = h.probeEntered;
+    h.probeHold = held;
+    // Woken repeatedly rather than once: a `wake()` that lands while a pass is
+    // still running finds no nap to end, and the pass then sleeps out its full
+    // interval afterwards. Polling the wake is how a test drives a scheduler it
+    // does not otherwise synchronise with.
+    const woken = await waitForValue(() => {
+      h.service.wake();
+      return h.probeEntered > probesBefore;
+    });
+    expect(woken).toBe(true);
+
+    try {
+      expect((await h.service.setPolicy("off")).kind).toBe("enabled");
+      expect(h.enrolled()?.autoAccept).toBe("off");
+    } finally {
+      h.probeHold = null;
+      held = null;
+      release();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const afterOff = h.calls.claim;
+    expect(afterOff).toBe(before);
+
+    // Positive control: the barrier stops Off, not everything.
+    expect((await h.service.setPolicy("ask")).kind).toBe("enabled");
+    await waitFor("a claim after the explicit re-enable", () => h.calls.claim > afterOff);
   });
 });

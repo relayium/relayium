@@ -31,9 +31,16 @@
 // never which one.
 
 import { newAtRestKeyBytes, AT_REST_KEY_BYTES } from "../inbox/atrest.js";
+import type { AutoAcceptPolicy } from "../inbox/capabilities.js";
 
-/** The record's own version, so a later shape is refused rather than guessed. */
-const GRANT_VERSION = 1;
+/**
+ * The record's own version, so a later shape is refused rather than guessed.
+ *
+ * v2 adds the explicit off/ask/auto policy. A v1 record is MIGRATED rather than
+ * refused — it is a real user's real consent — and the migration is the one
+ * decision in this file that could not be undone if it were wrong. See `read`.
+ */
+const GRANT_VERSION = 2;
 
 /**
  * The longest destination this will accept back out of the store.
@@ -49,6 +56,14 @@ export interface InboxGrant {
   readonly directory: string;
   /** Whether the user has asked to receive. */
   readonly enabled: boolean;
+  /**
+   * What the user asked central to do with an incoming delivery.
+   *
+   * `off` — refuse sends to this device, while staying enrolled.
+   * `ask`  — hold each delivery until the user accepts it.
+   * `auto` — save without asking.
+   */
+  readonly policy: AutoAcceptPolicy;
   /**
    * A withdrawal central has not confirmed.
    *
@@ -82,6 +97,30 @@ export function atRestSlotFor(accountKey: string): string {
   return `inbox-at-rest-${accountKey}`;
 }
 
+/**
+ * The policy a stored record means, including one written before policies.
+ *
+ * ## A v1 `enabled: true` migrates to `ask`, and NEVER to `auto`
+ *
+ * This is the decision that could not be taken back. A v1 record says the user
+ * turned receiving on; it says nothing about whether they wanted deliveries
+ * saved WITHOUT BEING ASKED, because at the time there was no such choice to
+ * make. Reading `enabled` as `auto` would start writing other devices' files to
+ * their disk unattended on the strength of consent they never gave — and they
+ * would find out by discovering the files.
+ *
+ * `ask` is what they actually agreed to: receiving is on, and each delivery
+ * waits for them. Choosing `auto` afterwards is one deliberate click away.
+ */
+function migratePolicy(version: unknown, stored: unknown, enabled: boolean): AutoAcceptPolicy {
+  if (version === GRANT_VERSION && (stored === "off" || stored === "ask" || stored === "auto")) {
+    return stored;
+  }
+  // A v1 record, or a v2 one whose policy is unreadable: fall back to what the
+  // user demonstrably chose, never to something stronger.
+  return enabled ? "ask" : "off";
+}
+
 export class InboxGrantStore {
   constructor(private readonly slot: GrantSlot) {}
 
@@ -110,13 +149,23 @@ export class InboxGrantStore {
     }
     if (typeof parsed !== "object" || parsed === null) return null;
     const record = parsed as Record<string, unknown>;
-    if (record["v"] !== GRANT_VERSION) return null;
+    const version = record["v"];
+    if (version !== 1 && version !== GRANT_VERSION) return null;
     const directory = record["directory"];
-    if (typeof directory !== "string" || directory.length === 0) return null;
+    // An EMPTY destination is legitimate now, and only since policies existed:
+    // `off` asks central to stop sending here and needs nowhere to put
+    // anything. Refusing the record outright meant a user who chose Off with no
+    // folder had no durable record at all, so the announcement could never be
+    // retried and central kept whatever it was last told. `ask` and `auto` are
+    // still gated on a real folder — by the destination guard, which is where
+    // that belongs.
+    if (typeof directory !== "string") return null;
     if (directory.length > MAX_DIRECTORY_LENGTH) return null;
+    const enabled = record["enabled"] === true;
     return {
       directory,
-      enabled: record["enabled"] === true,
+      enabled,
+      policy: migratePolicy(version, record["policy"], enabled),
       withdrawalPending: record["withdrawalPending"] === true,
     };
   }
@@ -129,6 +178,7 @@ export class InboxGrantStore {
         v: GRANT_VERSION,
         directory: grant.directory,
         enabled: grant.enabled,
+        policy: grant.policy,
         withdrawalPending: grant.withdrawalPending,
       }),
     );

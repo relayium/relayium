@@ -207,6 +207,23 @@ export const IPC = {
   inboxWake: "relayium:inbox-wake",
   /** Ask a retained destination to tear down again. A key, never a path. */
   inboxReleaseRetained: "relayium:inbox-release-retained",
+  /**
+   * Choose off / ask / auto.
+   *
+   * `ask` and `auto` need a destination, so a call with none recorded opens the
+   * native folder dialog exactly as enabling does. `off` needs none: it asks
+   * central to stop sending here, which is meaningful either way.
+   */
+  inboxSetPolicy: "relayium:inbox-set-policy",
+  /**
+   * Show the receiving folder.
+   *
+   * MAIN owns the path and MAIN performs the action. There is no argument here
+   * that could name a directory, and none is returned.
+   */
+  inboxRevealFolder: "relayium:inbox-reveal-folder",
+  /** What this account has received. Counts and outcomes; never a name. */
+  inboxReceipts: "relayium:inbox-receipts",
 
   // -------------------------------------------------------------------------
   // Stored SEND and history
@@ -941,7 +958,40 @@ export interface InboxView {
   readonly deviceName: string;
   /** A withdrawal central has not confirmed, retried on later ticks. */
   readonly withdrawalPending: boolean;
+  /** What the user asked central to do with an arriving delivery. */
+  readonly policy: "off" | "ask" | "auto";
+  /**
+   * The account generation this view describes.
+   *
+   * Carried so a page can tell a state change from an ACCOUNT change and drop
+   * one account's messages, receipts and open text before rendering another's.
+   * Zero when nothing is bound.
+   */
+  readonly epoch: number;
   readonly retained: readonly InboxRetainedView[];
+}
+
+/**
+ * One delivery this device has worked. Counts and phases; never a name.
+ *
+ * The Inbox journal carries no filenames or paths by design — a diagnostic
+ * record of a delivery is not a record of its contents — and this carries it
+ * unchanged rather than enriching it. Naming files in the foreground, as the
+ * Mac does, needs presentation metadata captured during receive; that is a
+ * separate design and a separate seam, and nothing here stands in for it.
+ */
+export interface InboxReceiptView {
+  readonly taskID: string;
+  /** The journal's own phase: claimed, published, acked, partial, failed… */
+  readonly phase: string;
+  /** Items the manifest declared. */
+  readonly total: number;
+  /** Items actually published. */
+  readonly published: number;
+  /** True for a message, which lands in the vault rather than on disk. */
+  readonly text: boolean;
+  readonly updatedAt: number;
+  readonly serverTerminal: boolean;
 }
 
 /** One delivery central is holding for this device. Never its contents. */

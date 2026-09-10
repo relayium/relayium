@@ -287,6 +287,8 @@ async function main() {
     // permission including the browser clipboard. It names a message this
     // account has received; there is no channel that takes a string.
     "relayium:inbox-copy-message",
+    // Off / ask / auto, the main-owned folder reveal, and the receipt listing.
+    "relayium:inbox-set-policy", "relayium:inbox-reveal-folder", "relayium:inbox-receipts",
     // Stored send and history. The renderer produces the ciphertext, so frames
     // flow renderer→main here; the one secret flowing the other way is the
     // content key `start` answers with, for the job that document owns.
