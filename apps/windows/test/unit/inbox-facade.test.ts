@@ -382,6 +382,16 @@ describe("facade lifecycle barriers", () => {
     const stalled = new Promise<void>((resolve) => {
       releaseEnrol = resolve;
     });
+    // Resolved by the fake AT the moment enrol is entered.
+    //
+    // A fixed sleep here was a guess about how fast the host is, and it was
+    // wrong on a Windows runner: the assertion below ran before the call had
+    // been made. Waiting on the event itself is exact on every host and needs
+    // no larger timeout — the test's own budget still bounds it.
+    let signalEnrolEntered: () => void = () => undefined;
+    const enrolEntered = new Promise<void>((resolve) => {
+      signalEnrolEntered = resolve;
+    });
 
     const facade = new InboxFacade({
       host: { dataRoot: root, platform: "windows", appVersion: "0.0.1" },
@@ -394,6 +404,7 @@ describe("facade lifecycle barriers", () => {
           ...api,
           enrol: async (r, s) => {
             log.push("enrol:start");
+            signalEnrolEntered();
             // Honours the signal, like the real fetch-backed client: an abort
             // is what lets `AccountJobs.close()` join promptly instead of
             // waiting out a network call.
@@ -414,21 +425,34 @@ describe("facade lifecycle barriers", () => {
 
     await facade.adopt(ACCOUNT);
     const enabling = facade.enable({ enabled: true }, new AbortController().signal);
-    // Let it reach the stalled call.
-    await new Promise((r) => setTimeout(r, 10));
-    expect(log).toContain("enrol:start");
+    try {
+      await enrolEntered;
+      expect(log).toContain("enrol:start");
 
-    // The whole point: this must not queue behind the stalled enrolment. If it
-    // did, the operation that is supposed to abort the enrol could not run
-    // until the enrol finished.
-    const adopted = facade.adopt({ accountID: "other@example.invalid", deviceID: "dev-2", epoch: 2 });
-    await expect(Promise.race([adopted, new Promise((_, rej) => setTimeout(() => rej(new Error("blocked")), 200))])).resolves.toBeDefined();
+      // The whole point: this must not queue behind the stalled enrolment. If
+      // it did, the operation that is supposed to abort the enrol could not run
+      // until the enrol finished.
+      const adopted = facade.adopt({ accountID: "other@example.invalid", deviceID: "dev-2", epoch: 2 });
+      await expect(
+        Promise.race([
+          adopted,
+          new Promise((_, rej) => setTimeout(() => rej(new Error("blocked")), 200)),
+        ]),
+      ).resolves.toBeDefined();
 
-    releaseEnrol();
-    // And the enrolment that was in flight under the OLD binding must not
-    // publish itself as enabled under the new one — it was aborted with it.
-    await expect(enabling).rejects.toBeInstanceOf(Error);
-    expect(facade.state().kind).toBe("disabled");
+      releaseEnrol();
+      // And the enrolment that was in flight under the OLD binding must not
+      // publish itself as enabled under the new one — it was aborted with it.
+      await expect(enabling).rejects.toBeInstanceOf(Error);
+      expect(facade.state().kind).toBe("disabled");
+    } finally {
+      // Released and JOINED whatever happened above. A failed assertion must not
+      // leave the parked enrol, the facade or its jobs pending into the next
+      // test — which is how one failure becomes several.
+      releaseEnrol();
+      await enabling.catch(() => undefined);
+      await facade.shutdown().catch(() => undefined);
+    }
   });
 
   it("reserves the receive slot synchronously, so two different ids cannot both start", async () => {

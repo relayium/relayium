@@ -22,6 +22,8 @@ import {
   ServiceRefusal,
   type AppServiceDeps,
 } from "../../src/main/app-service.js";
+import { LeaseReceiveAdapter } from "../../src/main/net/native-receive-adapter.js";
+import { ReceiveLease } from "../../src/main/io/receive-lease.js";
 import { SecretStore, type SecretCipher } from "../../src/main/secrets.js";
 
 const ORIGIN = "https://relayium.com";
@@ -61,6 +63,24 @@ interface Harness {
   revoke(): Promise<void>;
 }
 
+/**
+ * The PORTABLE staging destination, injected explicitly on every platform.
+ *
+ * These tests assert `ReceiveLease` staging lifecycle — a real staging
+ * directory under the chosen root, a real handle, and a publication that
+ * refuses truthfully as `unsupported`. Left to the default, `openDestination`
+ * chooses by platform: on Windows it opens the packaged native helper, which in
+ * a Vitest run has no packaged layout to resolve and fails with
+ * `NativeHelperError`. That is the SHIPPING behaviour and must not be softened;
+ * what was wrong was a test asking for portable semantics and not saying so.
+ *
+ * Stated here rather than mocked: no `process.platform` is touched, the
+ * production default is untouched, and the Windows native path keeps its own
+ * tests.
+ */
+const portableDestination: NonNullable<AppServiceDeps["makeDestination"]> = async (options) =>
+  new LeaseReceiveAdapter(await ReceiveLease.open(options));
+
 function harness(over: Partial<AppServiceDeps> = {}): Harness {
   const store = new SecretStore(join(dir, "secrets"), cipher);
   const document = { value: 0 };
@@ -82,6 +102,7 @@ function harness(over: Partial<AppServiceDeps> = {}): Harness {
     openApproval: async () => true,
     newId: () => `lease-${++leaseSeq}`,
     documentGeneration: () => document.value,
+    makeDestination: portableDestination,
     ...over,
   };
   const service = new AppService(deps);

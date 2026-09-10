@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { LeaseReceiveAdapter } from "../../src/main/net/native-receive-adapter.js";
+import { ReceiveLease } from "../../src/main/io/receive-lease.js";
 import { AppService, type AppServiceDeps } from "../../src/main/app-service.js";
 import { BEARER_KEY } from "../../src/main/account/device-auth.js";
 import { SecretStore, SecretStoreError, type SecretCipher } from "../../src/main/secrets.js";
-import { ReceiveLease } from "../../src/main/io/receive-lease.js";
 
 const ORIGIN = "https://relayium.com";
 const MAGIC = Buffer.from([0x52, 0x4c, 0x4d, 0x31]);
@@ -41,6 +42,24 @@ interface Harness {
   pickDirectory: () => Promise<string | null>;
 }
 
+/**
+ * The PORTABLE staging destination, injected explicitly on every platform.
+ *
+ * These tests assert `ReceiveLease` staging lifecycle — a real staging
+ * directory under the chosen root, a real handle, and a publication that
+ * refuses truthfully as `unsupported`. Left to the default, `openDestination`
+ * chooses by platform: on Windows it opens the packaged native helper, which in
+ * a Vitest run has no packaged layout to resolve and fails with
+ * `NativeHelperError`. That is the SHIPPING behaviour and must not be softened;
+ * what was wrong was a test asking for portable semantics and not saying so.
+ *
+ * Stated here rather than mocked: no `process.platform` is touched, the
+ * production default is untouched, and the Windows native path keeps its own
+ * tests.
+ */
+const portableDestination: NonNullable<AppServiceDeps["makeDestination"]> = async (options) =>
+  new LeaseReceiveAdapter(await ReceiveLease.open(options));
+
 function harness(over: Partial<AppServiceDeps> = {}): Harness {
   const store = new SecretStore(join(dir, "secrets"), cipher);
   const deps: AppServiceDeps = {
@@ -65,6 +84,7 @@ function harness(over: Partial<AppServiceDeps> = {}): Harness {
     pickDirectory: async () => root,
     openApproval: async () => true,
     newId: () => `lease-${Math.random().toString(16).slice(2)}`,
+    makeDestination: portableDestination,
     ...over,
   };
   return { service: new AppService(deps), store, pickDirectory: deps.pickDirectory };
