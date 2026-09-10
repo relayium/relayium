@@ -141,6 +141,22 @@ contextBridge.exposeInMainWorld("relayium", {
     setPolicy: invoke("relayium:inbox-set-policy"),
     reveal: invoke("relayium:inbox-reveal-folder"),
     receipts: invoke("relayium:inbox-receipts"),
+    history: invoke("relayium:inbox-history"),
+    forget: invoke("relayium:inbox-forget-delivery"),
     onState: subscribe("relayium:inbox-state-changed"),
+  },
+  // Device Inbox SEND. `start` answers with this delivery's content key — the
+  // one secret that travels main→renderer here, because the renderer is what
+  // encrypts. `feed` carries ciphertext the other way. A target is named by
+  // central's device id; no key, no name and no path crosses either way.
+  inboxSend: {
+    targets: invoke("relayium:inbox-send-targets"),
+    start: invoke("relayium:inbox-send-start"),
+    feed: invoke("relayium:inbox-send-feed"),
+    end: invoke("relayium:inbox-send-end"),
+    cancel: invoke("relayium:inbox-send-cancel"),
+    converge: invoke("relayium:inbox-send-converge"),
+    onProgress: subscribe("relayium:inbox-send-progress"),
+    onOutcome: subscribe("relayium:inbox-send-outcome"),
   },
 });

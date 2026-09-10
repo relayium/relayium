@@ -30,10 +30,16 @@
 <script lang="ts">
   import { t } from "../i18n/index.svelte.js";
   import Card from "../shell/Card.svelte";
+  import { sendGate } from "../send/send-gate.svelte.js";
   import type { InboxController } from "../inbox/inbox-controller.svelte.js";
+  import type { InboxSendController, TargetStatus } from "../inbox/inbox-send-controller.svelte.js";
   import type { InboxAcceptOutcome } from "../../shared/ipc-contract.js";
 
-  let { inbox, onSignIn }: { inbox: InboxController; onSignIn?: () => void } = $props();
+  let {
+    inbox,
+    send,
+    onSignIn,
+  }: { inbox: InboxController; send: InboxSendController; onSignIn?: () => void } = $props();
 
   const status = $derived(inbox.view.status);
   /**
@@ -167,6 +173,76 @@
     if (phase === "claimed" || phase === "publishing") return t("inboxReceiptWorking");
     return t("inboxReceiptBlocked");
   }
+
+  /**
+   * A target's refusal, as a sentence.
+   *
+   * The tokens are central's own — `writeInboxTaskError`'s vocabulary — and
+   * each means something different to the person reading it: one is fixed by
+   * turning receiving on over there, one cannot be fixed at all, and one will
+   * fix itself when that device next enrols a key.
+   */
+  function refusalText(refusal: string | null): string {
+    if (refusal === "auto_receive_disabled") return t("inboxSendTargetOff");
+    if (refusal === "device_inbox_revoked") return t("inboxSendTargetRevoked");
+    if (refusal === "no_active_key") return t("inboxSendTargetNoKey");
+    if (refusal === "unsupported_content_kind") return t("inboxSendTargetNoText");
+    return t("inboxSendTargetCannotReceive");
+  }
+
+  /**
+   * One target's line, in the user's words.
+   *
+   * `delivered` reports the SERVER's state rather than `created`: a converged
+   * retry reports `created: false` and is just as delivered, and a page that
+   * showed the creation flag as the delivery state would call it a failure.
+   */
+  function statusText(state: TargetStatus): string {
+    if (state.phase === "queued") return t("inboxSendQueued");
+    if (state.phase === "sending") {
+      const percent = state.total > 0 ? Math.min(100, Math.round((state.committed / state.total) * 100)) : 0;
+      return t("inboxSendSending", { percent });
+    }
+    if (state.refusal !== null) return startRefusalText(state.refusal);
+    const view = state.view;
+    if (view === null) return t("inboxSendRefusedGeneric");
+    if (view.kind === "delivered") {
+      // Central holds it. Whether the target has collected it is a different
+      // fact, and one this side genuinely knows from the task state.
+      return view.state === "acked" || view.state === "saved"
+        ? t("inboxSendDelivered")
+        : t("inboxSendDeliveredWaiting");
+    }
+    if (view.kind === "cancelled") return t("inboxSendCancelled");
+    if (view.kind === "unknown") return t("inboxSendUnknown");
+    return t("inboxSendRefused");
+  }
+
+  /** A refusal that happened before a delivery existed. */
+  function startRefusalText(refusal: string): string {
+    if (refusal === "unresolved-full") return t("inboxSendRefusedUnresolvedFull");
+    if (refusal === "at-capacity") return t("inboxSendRefusedCapacity");
+    if (refusal === "signed-out") return t("inboxSendSignedOut");
+    if (refusal === "nothing-picked") return t("inboxSendRefusedNothing");
+    if (refusal === "no-target") return t("inboxSendRefusedNoTarget");
+    if (refusal === "refused") return t("inboxSendRefusedManifest");
+    if (refusal === "unavailable") return t("inboxSendRefusedUnavailable");
+    return t("inboxSendRefusedGeneric");
+  }
+
+  /**
+   * Read what this page renders, when it is actually put on screen.
+   *
+   * The controller is app-lived and survives navigation, which is what keeps a
+   * delivery's outcome and an open message across a row change. It is NOT a
+   * substitute for reading on mount: main pushes when its STATE changes, and a
+   * record written just after the last push — the names of a delivery that has
+   * just landed — would otherwise not appear until something else happened.
+   */
+  $effect(() => {
+    void inbox.refreshLists();
+    void send.refreshTargets();
+  });
 
   let copyState = $state<{ id: string; ok: boolean } | null>(null);
   async function copyOpen(): Promise<void> {
@@ -437,11 +513,246 @@
   </Card>
 
   <!--
+    Sending to your own devices.
+
+    The mirror of everything above: this PC is a target for other devices, and
+    they are targets for it. The files are encrypted HERE — the page holds them
+    and runs the shared `encryptFiles` — and sealed to the DEVICE the user
+    picked, so the server carries ciphertext it cannot open and cannot address
+    anywhere else.
+
+    Each target is its own delivery with its own key, so each has its own line
+    and its own outcome. One device refusing is not a reason to abandon another.
+  -->
+  <Card title={t("inboxSendHeading")}>
+    <p class="dim">{t("inboxSendBody")}</p>
+
+    <!-- Files or a message: one delivery is one kind, because the manifest
+         says so. The message is encrypted here too; main is told a LENGTH. -->
+    <div class="row" role="group" aria-label={t("inboxSendHeading")}>
+      <button
+        type="button"
+        data-test="inbox-send-mode-files"
+        aria-pressed={send.mode === "files"}
+        disabled={send.busy}
+        onclick={() => (send.mode = "files")}
+      >
+        {t("inboxSendModeFiles")}
+      </button>
+      <button
+        type="button"
+        data-test="inbox-send-mode-text"
+        aria-pressed={send.mode === "text"}
+        disabled={send.busy}
+        onclick={() => (send.mode = "text")}
+      >
+        {t("inboxSendModeText")}
+      </button>
+    </div>
+
+    {#if send.mode === "files"}
+      <!-- The native pickers. `webkitdirectory` opens the Windows folder
+           dialog; neither gives this page a path it can name to main. -->
+      <div class="row">
+        <input
+          id="inbox-send-files"
+          class="sr-only"
+          type="file"
+          multiple
+          data-test="inbox-send-files"
+          onchange={(e) => send.pick([...((e.currentTarget as HTMLInputElement).files ?? [])])}
+        />
+        <label class="button" for="inbox-send-files">{t("inboxSendPickFiles")}</label>
+        <input
+          id="inbox-send-folder"
+          class="sr-only"
+          type="file"
+          webkitdirectory
+          data-test="inbox-send-folder"
+          onchange={(e) => send.pick([...((e.currentTarget as HTMLInputElement).files ?? [])])}
+        />
+        <label class="button" for="inbox-send-folder">{t("inboxSendPickFolder")}</label>
+      </div>
+      {#if send.files.length > 0}
+        <p class="dim" data-test="inbox-send-picked">
+          {t("inboxSendPicked", { count: send.files.length, size: size(send.totalBytes) })}
+        </p>
+        <!-- The actual names, because "3 files" is not what a person checks
+             before pressing send. Relative names only: the page never holds a
+             path, and these are what the manifest will declare. -->
+        <ul class="names" data-test="inbox-send-names">
+          {#each send.files.slice(0, 6) as file (file.webkitRelativePath || file.name)}
+            <li>
+              <span>{file.webkitRelativePath || file.name}</span>
+              <span class="dim small">{size(file.size)}</span>
+            </li>
+          {/each}
+        </ul>
+        {#if send.files.length > 6}
+          <p class="dim small" data-test="inbox-send-more">
+            {t("inboxHistoryMore", { count: send.files.length - 6 })}
+          </p>
+        {/if}
+      {/if}
+    {:else}
+      <textarea
+        class="message"
+        data-test="inbox-send-message"
+        bind:value={send.message}
+        disabled={send.busy}
+        placeholder={t("inboxSendMessagePlaceholder")}
+      ></textarea>
+    {/if}
+
+    <!-- Your devices. A refusal is central's own verdict, said as a sentence:
+         a greyed row with no reason is how a person ends up waiting for a
+         delivery that was never going to be accepted. -->
+    <fieldset class="policy">
+      <legend>{t("inboxSendTargetsHeading")}</legend>
+      {#if send.targetsUnavailable}
+        <p class="problem" data-test="inbox-send-targets-unavailable">
+          {send.targetsRefusal === "signed-out"
+            ? t("inboxSendSignedOut")
+            : t("inboxSendTargetsUnavailable")}
+        </p>
+        <button type="button" data-test="inbox-send-refresh" onclick={() => void send.refreshTargets()}>
+          {t("inboxSendRefresh")}
+        </button>
+      {:else if send.targets.length === 0}
+        <p class="dim" data-test="inbox-send-no-targets">{t("inboxSendNoTargets")}</p>
+        <button type="button" data-test="inbox-send-refresh" onclick={() => void send.refreshTargets()}>
+          {t("inboxSendRefresh")}
+        </button>
+      {:else}
+        {#each send.targets as target (target.deviceID)}
+          {@const state = send.status[target.deviceID] ?? null}
+          <div class="choice">
+            <input
+              type="checkbox"
+              id={`inbox-target-${target.deviceID}`}
+              data-test="inbox-send-target"
+              data-device={target.deviceID}
+              checked={send.selected.includes(target.deviceID)}
+              disabled={send.busy || !target.eligible}
+              onchange={() => send.toggle(target.deviceID)}
+            />
+            <div>
+              <label for={`inbox-target-${target.deviceID}`}>
+                {target.name === "" ? target.deviceID : target.name}
+              </label>
+              {#if !target.eligible}
+                <p class="dim small" data-test="inbox-send-target-refusal">{refusalText(target.refusal)}</p>
+              {/if}
+              {#if state !== null && state.phase !== "idle"}
+                <!-- The PHASE is carried as data, not inferred from the
+                     sentence. A fixture that waited on the text alone matched
+                     "Waiting" as readily as an outcome, which is a barrier that
+                     passes before the thing it is waiting for. -->
+                <p
+                  class="dim small"
+                  data-test="inbox-send-status"
+                  data-device={target.deviceID}
+                  data-phase={state.phase}
+                >
+                  {statusText(state)}
+                </p>
+                {#if state.view?.kind === "unknown"}
+                  <p class="dim small" data-test="inbox-send-unknown-body">{t("inboxSendUnknownBody")}</p>
+                  <button
+                    type="button"
+                    data-test="inbox-send-converge"
+                    disabled={send.checking(target.deviceID)}
+                    onclick={() => void send.converge(target.deviceID)}
+                  >
+                    {t("inboxSendCheckAgain")}
+                  </button>
+                {/if}
+                {#if state.view?.kind === "refused" && state.view.orphanedObject}
+                  <p class="dim small" data-test="inbox-send-orphan">{t("inboxSendOrphan")}</p>
+                {/if}
+              {/if}
+            </div>
+          </div>
+        {/each}
+      {/if}
+    </fieldset>
+
+    <!--
+      Deliveries nobody can account for.
+
+      Their own section, outside the device rows, because they are not part of
+      the current selection: they are things that may have happened. Keeping
+      them inside the rows meant picking or sending again took the only handle
+      on them away, and the user was left unable to ask.
+    -->
+    {#if send.unresolved.length > 0}
+      <div class="policy" data-test="inbox-send-unresolved">
+        <p class="dim">{t("inboxSendUnresolvedHeading")}</p>
+        <p class="dim small">{t("inboxSendUnresolvedBody")}</p>
+        <ul class="list">
+          {#each send.unresolved as held (held.jobId)}
+            <li>
+              <div class="who">
+                <span data-test="inbox-send-unresolved-target">
+                  {t("inboxSendUnresolvedTo", { device: held.name === "" ? held.deviceID : held.name })}
+                </span>
+              </div>
+              <button
+                type="button"
+                data-test="inbox-send-unresolved-check"
+                disabled={send.checking(held.jobId)}
+                onclick={() => void send.convergeJob(held.jobId)}
+              >
+                {t("inboxSendCheckAgain")}
+              </button>
+            </li>
+          {/each}
+        </ul>
+      </div>
+    {/if}
+
+    <div class="row">
+      {#if send.busy}
+        <button type="button" data-test="inbox-send-cancel" onclick={() => void send.cancel()}>
+          {t("inboxSendCancel")}
+        </button>
+      {:else}
+        <!--
+          The page's own admission, not just main's.
+
+          Main refuses a new delivery while a quit is being decided, but the
+          control has to say so too: a button that looks live and then answers
+          "not right now" is a worse quit than one that is visibly held. The
+          TICKET is what makes it correct rather than cosmetic — permission is
+          taken when the person presses, and a fence between the press and the
+          delivery actually starting invalidates it, so an intent formed before
+          a question they have since answered cannot go out afterwards.
+        -->
+        <button
+          type="button"
+          data-test="inbox-send-start"
+          disabled={!send.ready || sendGate.fenced}
+          onclick={() => sendGate.start(() => void send.send())}
+        >
+          {t("inboxSendStart")}
+        </button>
+        <button type="button" data-test="inbox-send-clear" onclick={() => send.clear()}>
+          {t("inboxSendClear")}
+        </button>
+      {/if}
+    </div>
+  </Card>
+
+  <!--
     What has arrived.
 
-    Counts and outcomes, never names: the delivery record carries none by
-    design, and the page says so rather than leaving the absence looking like a
-    bug. Opening the folder is what shows the user their files.
+    Counts and outcomes from the delivery journal, and the NAMES beside them
+    when this delivery has them — captured while it was received, from the
+    manifest, because the journal carries no names by design and re-reading the
+    folder would report whatever is in it now rather than what arrived.
+
+    A delivery with no names says so. An empty row would read as an empty
+    delivery, which is the one thing it must never be mistaken for.
   -->
   <Card title={t("inboxReceiptsHeading")}>
     {#if inbox.receiptsUnavailable}
@@ -449,8 +760,15 @@
     {:else if inbox.receipts.length === 0}
       <p class="dim" data-test="inbox-receipts-empty">{t("inboxReceiptsEmpty")}</p>
     {:else}
+      {#if inbox.namesUnavailable}
+        <!-- The counts below are still exact. Only the names are missing, and
+             saying which is missing is the difference between "we lost your
+             deliveries" and "we could not read one file". -->
+        <p class="problem" data-test="inbox-names-unavailable">{t("inboxHistoryNamesUnavailable")}</p>
+      {/if}
       <ul class="list" data-test="inbox-receipts">
         {#each inbox.receipts as receipt (receipt.taskID)}
+          {@const named = inbox.named[receipt.taskID] ?? null}
           <li>
             <div class="who">
               <span>
@@ -461,10 +779,49 @@
               <span class="dim small">{when(receipt.updatedAt)}</span>
             </div>
             <p class="dim small" data-test="inbox-receipt-phase">{phaseOf(receipt.phase)}</p>
+            <!--
+              The names, when this delivery has them.
+
+              Only what was CONFIRMED PUBLISHED is listed, and `declared` is
+              shown beside it when they differ — "3 of 7 saved" is the truth
+              about a partial, and a list of three shown alone is not.
+            -->
+            {#if named !== null && named.items.length > 0}
+              <ul class="names" data-test="inbox-history-items">
+                {#each named.items.slice(0, 8) as item (item.name)}
+                  <li>
+                    <span data-test="inbox-history-name">{item.name}</span>
+                    <span class="dim small">{size(item.size)}</span>
+                  </li>
+                {/each}
+              </ul>
+              {#if named.items.length > 8}
+                <p class="dim small" data-test="inbox-history-more">
+                  {t("inboxHistoryMore", { count: named.items.length - 8 })}
+                </p>
+              {/if}
+              {#if named.items.length < named.declared}
+                <p class="dim small" data-test="inbox-history-partial">
+                  {t("inboxHistoryPartial", { saved: named.items.length, declared: named.declared })}
+                </p>
+              {/if}
+              <button
+                type="button"
+                data-test="inbox-history-forget"
+                disabled={inbox.working.includes(receipt.taskID)}
+                onclick={() => void inbox.forget(receipt.taskID)}
+                title={t("inboxHistoryForgetHint")}
+              >
+                {t("inboxHistoryForget")}
+              </button>
+            {:else if !receipt.text && !inbox.namesUnavailable}
+              <!-- A real delivery with nothing to name. Said out loud, because
+                   an empty row otherwise reads as an empty delivery. -->
+              <p class="dim small" data-test="inbox-receipt-unnamed">{t("inboxReceiptUnnamed")}</p>
+            {/if}
           </li>
         {/each}
       </ul>
-      <p class="dim small" data-test="inbox-receipt-no-names">{t("inboxReceiptNoNames")}</p>
       {#if inbox.view.hasDestination}
         <button type="button" data-test="inbox-receipts-reveal" onclick={() => void inbox.reveal()}>
           {t("inboxRevealFolder")}
@@ -573,6 +930,30 @@
   .policy legend { padding: 0 var(--space-tight); font-weight: 600; }
   .choice { display: flex; gap: var(--space-tight); align-items: flex-start; padding: var(--space-tight) 0; }
   .choice input { margin-top: 3px; }
+  /* The user's own file names. They wrap rather than overflowing: a long
+     relative path is ordinary, and a row that clipped it would hide which file
+     the size beside it belongs to. */
+  .names { list-style: none; margin: var(--space-tight) 0 0; padding: 0; }
+  .names li {
+    display: flex;
+    gap: var(--space-inner);
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 2px 0;
+  }
+  .names li span:first-child { overflow-wrap: anywhere; }
+  .message {
+    width: 100%;
+    min-height: 96px;
+    margin-top: var(--space-tight);
+    padding: var(--space-inner);
+    border: 1px solid var(--border);
+    border-radius: var(--corner);
+    background: var(--surface);
+    color: inherit;
+    font: inherit;
+    resize: vertical;
+  }
   .sr-only {
     position: absolute;
     width: 1px;

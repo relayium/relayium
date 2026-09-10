@@ -27,7 +27,7 @@ import { InboxFiles } from "./files.js";
 import { TaskJournal, type Reconciliation, type TaskRecord } from "./journal.js";
 import { InboxKeyStore, type SecretSlot } from "./keys.js";
 import { MessageVault, type VaultRecordMeta } from "./vault.js";
-import { Receiver, type ReceiveDestination, type RetainedHandle } from "./receiver.js";
+import { Receiver, type DeliveredItems, type ReceiveDestination, type RetainedHandle } from "./receiver.js";
 import { SourceLeaseRegistry } from "./source.js";
 import {
   IMPLEMENTED,
@@ -120,6 +120,22 @@ export interface InboxFacadeOptions {
   /** The at-rest key for this account's local stores. */
   atRestKeyFor(context: AccountContext): Promise<Uint8Array>;
   destinationFor(manifest: RuntimeManifest, context: AccountContext): Promise<ReceiveDestination>;
+  /**
+   * What a delivery saved, by name, for the account it saved it under.
+   *
+   * ## Why the context is a parameter and not something the host looks up
+   *
+   * The same rule `destinationFor` follows. A delivery belongs to the account
+   * it began under, and by the time this is called that may no longer be the
+   * account signed in — a sign-out during a long download is exactly the case.
+   * Handing the CAPTURED context through means the host writes this delivery's
+   * names into the store of the account that received them, and structurally
+   * cannot write them into the account that replaced it.
+   *
+   * Optional, awaited, and never load-bearing: the receiver swallows a failure
+   * here because the files are already on disk. See `DeliveredItems`.
+   */
+  onDelivered?(delivered: DeliveredItems, context: AccountContext): Promise<void>;
   readonly features?: ImplementedFeatures;
   readonly now?: () => number;
 }
@@ -409,6 +425,9 @@ export class InboxFacade {
   }
 
   private bind(context: AccountContext): Bound {
+    const hook = this.options.onDelivered;
+    const delivered =
+      hook === undefined ? undefined : (items: DeliveredItems): Promise<void> => hook(items, context);
     const files = new InboxFiles(context);
     const atRest = () => this.options.atRestKeyFor(context);
     const journal = new TaskJournal(context, files, atRest);
@@ -423,6 +442,15 @@ export class InboxFacade {
       journal,
       vault,
       destinationFor: (manifest) => this.options.destinationFor(manifest, context),
+      // Bound to THIS binding's context, captured when the binding was built.
+      // A hook installed by the host receives the account the delivery ran
+      // under, whatever is signed in by the time it fires.
+      //
+      // Spread rather than assigned, because `exactOptionalPropertyTypes` makes
+      // an explicit `undefined` a different thing from an absent member — and
+      // the receiver's own contract is that ABSENT means "behaviour is
+      // identical", not "a hook that is undefined".
+      ...(delivered === undefined ? {} : { onDelivered: delivered }),
       // Only while THIS binding is still the live, alive one. Anything else is
       // revoked authority, and the receiver fences on it.
       currentAccount: () => {

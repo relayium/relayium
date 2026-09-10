@@ -102,7 +102,24 @@ function finish(code, message) {
   process.exit(code);
 }
 
-const child = spawn(String(electronPath), [smokeMain, ...owned], {
+/**
+ * The run is TWO processes over the same directories.
+ *
+ * `first` drives every scenario and leaves durable state behind — an enrolled
+ * account, a received delivery, a named history. `restart` is a second Electron
+ * over the SAME profile, secrets and Inbox root, and it exists to prove the one
+ * thing the first cannot: that what the user was shown survives the app being
+ * closed and opened again. Reloading the page in the first process would not
+ * have proved it, because the store that answers is the one that wrote it.
+ *
+ * The directories are removed only after BOTH have exited, for the reason this
+ * file's header gives: only then are the handles certainly closed.
+ */
+const PHASES = ["first", "restart"];
+let phaseIndex = 0;
+
+function spawnPhase(phase) {
+  return spawn(String(electronPath), [smokeMain, ...owned, phase], {
   cwd,
   stdio: ["ignore", "pipe", "pipe"],
   env: {
@@ -120,34 +137,46 @@ const child = spawn(String(electronPath), [smokeMain, ...owned], {
     RELAYIUM_WINDOWS_DATA_ROOT: undefined,
     RELAYIUM_WINDOWS_ORIGIN: undefined,
   },
-});
+  });
+}
 
 let out = "";
 let err = "";
 let timedOut = false;
-child.stdout.on("data", (d) => {
-  out += d;
-});
-child.stderr.on("data", (d) => {
-  err += d;
-});
+let child = null;
+let timer = null;
 
-const timer = setTimeout(() => {
-  timedOut = true;
-  child.kill("SIGKILL");
-}, TIMEOUT_MS);
+function runPhase(phase) {
+  // Each phase's transcript starts clean, so a failure names the process it
+  // actually came from rather than the one before it.
+  out = "";
+  err = "";
+  timedOut = false;
+  child = spawnPhase(phase);
+  child.stdout.on("data", (d) => {
+    out += d;
+  });
+  child.stderr.on("data", (d) => {
+    err += d;
+  });
+  timer = setTimeout(() => {
+    timedOut = true;
+    child.kill("SIGKILL");
+  }, TIMEOUT_MS);
+  child.on("exit", (code) => onExit(phase, code));
+}
 
-// Cleanup happens here and only here, because only here are the child's handles
-// on those directories certainly closed.
-child.on("exit", (code) => {
+// Cleanup happens after the LAST phase and only there, because only then are the
+// children's handles on those directories certainly closed.
+function onExit(phase, code) {
   clearTimeout(timer);
   if (timedOut) {
-    finish(1, `smoke: no result within ${TIMEOUT_MS}ms\n${out}\n${err}\n`);
+    finish(1, `smoke [${phase}]: no result within ${TIMEOUT_MS}ms\n${out}\n${err}\n`);
     return;
   }
   const line = out.split("\n").find((l) => l.startsWith("RELAYIUM_SMOKE "));
   if (!line) {
-    finish(1, `smoke: produced no result line (exit ${code})\n${out}\n${err}\n`);
+    finish(1, `smoke [${phase}]: produced no result line (exit ${code})\n${out}\n${err}\n`);
     return;
   }
   const { failures } = JSON.parse(line.slice("RELAYIUM_SMOKE ".length));
@@ -162,18 +191,26 @@ child.on("exit", (code) => {
     // actually fires on a broken assertion did not.
     //
     // Bounded rather than unbounded: this is a diagnostic tail, not a log.
-    finish(1, `smoke: ${failures.length} failed\n${failures.join("\n")}\n${diagnostics()}${transcript()}`);
+    finish(1, `smoke [${phase}]: ${failures.length} failed\n${failures.join("\n")}\n${diagnostics()}${transcript()}`);
     return;
   }
   if (code !== 0) {
-    finish(1, `smoke: assertions passed but the app exited ${code}\n${err}\n`);
+    finish(1, `smoke [${phase}]: assertions passed but the app exited ${code}\n${err}\n`);
+    return;
+  }
+  process.stdout.write(diagnostics());
+  process.stdout.write(`smoke [${phase}]: assertions passed\n`);
+  phaseIndex += 1;
+  if (phaseIndex < PHASES.length) {
+    runPhase(PHASES[phaseIndex]);
     return;
   }
   // Diagnostics surface on BOTH paths. They were only ever printed when the run
   // failed, which is precisely backwards for a measurement: the passing run is
   // the baseline a failing one is compared against, and on a Windows CI failure
   // there was nothing green to compare with.
-  process.stdout.write(diagnostics());
-  process.stdout.write(`smoke: all resident lifecycle assertions passed\n`);
+  process.stdout.write(`smoke: all resident lifecycle assertions passed, across ${String(PHASES.length)} processes\n`);
   finish(0, null);
-});
+}
+
+runPhase(PHASES[phaseIndex]);

@@ -224,6 +224,57 @@ export const IPC = {
   inboxRevealFolder: "relayium:inbox-reveal-folder",
   /** What this account has received. Counts and outcomes; never a name. */
   inboxReceipts: "relayium:inbox-receipts",
+  /**
+   * What this account has received, BY NAME.
+   *
+   * The one Inbox channel that carries the user's own file names, and it
+   * carries them for the reason they were received: so a person can see what
+   * arrived. Names are relative and the receiving directory is not among them —
+   * `inboxRevealFolder` is what opens that, from a path only main holds.
+   */
+  inboxHistory: "relayium:inbox-history",
+  /**
+   * Forget one delivery's names, because the user asked.
+   *
+   * The ONLY thing that deletes from that record. Turning receiving off,
+   * signing out and changing accounts all leave it alone, exactly as they leave
+   * the message vault alone: a history that vanished as a side effect of a
+   * settings toggle would be a product destroying the user's own record.
+   */
+  inboxForgetDelivery: "relayium:inbox-forget-delivery",
+
+  // -------------------------------------------------------------------------
+  // Inbox SEND — to this account's own devices
+  // -------------------------------------------------------------------------
+  //
+  // The same split as stored send, and for the same reasons. The renderer holds
+  // the user's `File` objects and runs the production shared `encryptFiles`, so
+  // ciphertext flows renderer→main and the ONE secret that flows the other way
+  // is the content key for the job that document owns. No path crosses in
+  // either direction, and for a TEXT delivery main is told a byte LENGTH rather
+  // than the message.
+  //
+  // A target is named by central's DEVICE ID. The device's public key, its key
+  // id and its algorithm all stay in main: a renderer holding a target's key
+  // could seal to it, which is the whole thing this boundary prevents.
+
+  /** This account's other devices, as the picker may see them. */
+  inboxSendTargets: "relayium:inbox-send-targets",
+  /** Plan one delivery to one target. Returns the job's content key. */
+  inboxSendStart: "relayium:inbox-send-start",
+  /** One ciphertext frame, bounded. Answers with what is owed next. */
+  inboxSendFeed: "relayium:inbox-send-feed",
+  /** The producer is done. Finalize, create the task, report the outcome. */
+  inboxSendEnd: "relayium:inbox-send-end",
+  inboxSendCancel: "relayium:inbox-send-cancel",
+  /**
+   * Try again to establish what an UNKNOWN send did.
+   *
+   * Convergence, never a fresh send: an unknown outcome retains its plan and
+   * its idempotency key precisely so the SAME attempt can be replayed. Sending
+   * again would be a second delivery of one thing.
+   */
+  inboxSendConverge: "relayium:inbox-send-converge",
 
   // -------------------------------------------------------------------------
   // Stored SEND and history
@@ -328,6 +379,16 @@ export const IPC_EVENTS = {
    * closed codes only.
    */
   inboxState: "relayium:inbox-state-changed",
+  /** Committed ciphertext bytes for one inbox send, as the SERVER took them. */
+  inboxSendProgress: "relayium:inbox-send-progress",
+  /**
+   * How one inbox send ended.
+   *
+   * Pushed as well as returned, because a send outlives the call that started
+   * it: a page that navigated away, a sign-out that revoked the job, or a quit
+   * drain all settle a delivery with nobody awaiting `end`.
+   */
+  inboxSendOutcome: "relayium:inbox-send-outcome",
 } as const;
 
 export const IPC_EVENT_NAMES: readonly string[] = Object.values(IPC_EVENTS);
@@ -994,6 +1055,42 @@ export interface InboxReceiptView {
   readonly serverTerminal: boolean;
 }
 
+/**
+ * One item a delivery actually saved. A relative name and its size.
+ *
+ * The user's own content, and treated as such: it crosses this boundary because
+ * showing people what arrived is the point of receiving it, and it goes nowhere
+ * else — no log, no failure string, no telemetry.
+ */
+export interface InboxNamedItemView {
+  /** Manifest-relative. Never absolute, and never the receiving directory. */
+  readonly name: string;
+  readonly size: number;
+}
+
+/**
+ * What one delivery saved, by name.
+ *
+ * Returned BESIDE `InboxReceiptView` rather than merged into it. The journal is
+ * the authoritative list of deliveries — written before anything irreversible,
+ * and still there when a name capture failed — and this is the presentation
+ * metadata for the ones that have it. A page joins the two by task id, so a
+ * delivery whose names were not recorded renders as exactly that rather than as
+ * a delivery that arrived empty.
+ *
+ * `items` is only what was CONFIRMED PUBLISHED. `declared` is what the manifest
+ * asked for, kept beside it so "3 of 7" is sayable and a partial is never
+ * presented as a whole.
+ */
+export interface InboxNamedDeliveryView {
+  readonly taskID: string;
+  readonly receivedAt: number;
+  /** True for a message, which lands in the vault and has no named items. */
+  readonly text: boolean;
+  readonly declared: number;
+  readonly items: readonly InboxNamedItemView[];
+}
+
 /** One delivery central is holding for this device. Never its contents. */
 export interface InboxPendingView {
   readonly taskID: string;
@@ -1095,8 +1192,24 @@ export const MAX_INBOX_PENDING = 50;
  */
 import type { ManifestRefusal } from "../main/stored/manifest.js";
 import type { FrameExpectation } from "../main/stored/upload/service.js";
+import type {
+  AccountExternalTarget,
+  AccountMutationOutcome,
+  AccountSectionName,
+  AccountSummaryView,
+} from "./account-summary.js";
 
 export type { ManifestRefusal, FrameExpectation };
+
+/**
+ * The account contract, re-exported rather than restated.
+ *
+ * `src/shared/account-summary.ts` is the authority for these shapes and is
+ * reviewed as its own module. A second copy here would be free to drift from it
+ * invisibly — the same reason `ManifestRefusal` and `DeliveryReceipt` are
+ * imported above rather than mirrored.
+ */
+export type { AccountExternalTarget, AccountMutationOutcome, AccountSectionName, AccountSummaryView };
 
 /**
  * What one upload ended as.
@@ -1167,6 +1280,66 @@ export interface StoredSendProgress {
   readonly committed: number;
   readonly total: number;
 }
+
+// ---------------------------------------------------------------------------
+// Inbox SEND — the shapes the delivery channels carry
+// ---------------------------------------------------------------------------
+
+/**
+ * What `inboxSendStart` answers.
+ *
+ * The refusals are this feature's own vocabulary rather than stored send's, and
+ * `no-target` is the one that is genuinely new: a delivery is addressed to a
+ * DEVICE, so "nothing picked" and "nobody to send it to" are different failures
+ * and a page has different things to say about them.
+ */
+export type InboxSendStart =
+  | {
+      readonly ok: true;
+      readonly jobId: string;
+      /**
+       * The content key for THIS delivery, base64url.
+       *
+       * The one secret in this contract that travels main→renderer on the Inbox
+       * path, and it exists for the same reason the stored one does: the
+       * renderer is what encrypts. It belongs to ONE immutable selection — a
+       * re-pick is a new job with a new key, because AES-GCM under a repeated
+       * nonce over different plaintext is a break rather than a bug.
+       *
+       * Never logged, never echoed into a refusal, never persisted by the page.
+       */
+      readonly contentKey: string;
+      /** The first frame the producer owes, or null for an empty object. */
+      readonly expects: FrameExpectation | null;
+      readonly cipherBytes: number;
+      readonly fileCount: number;
+    }
+  | {
+      readonly ok: false;
+      readonly refusal:
+        | "unavailable"
+        | "at-capacity"
+        | "signed-out"
+        | "nothing-picked"
+        /** No device was named. A delivery is addressed, not broadcast. */
+        | "no-target"
+        | "internal"
+        | "refused";
+      /** The planner's or the manifest builder's closed code. */
+      readonly code?: string;
+      /** Which manifest SHAPE was refused. Never a filename. */
+      readonly manifest?: ManifestRefusal | null;
+    };
+
+/** Committed ciphertext bytes for one inbox send, as the SERVER took them. */
+export interface InboxSendProgress {
+  readonly jobId: string;
+  readonly committed: number;
+  readonly total: number;
+}
+
+/** The most devices one target list will carry. */
+export const MAX_INBOX_SEND_TARGETS = 100;
 
 /** The longest relative path this boundary will forward for one entry. */
 export const MAX_SEND_PATH_LENGTH = 4096;

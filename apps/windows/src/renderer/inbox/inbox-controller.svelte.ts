@@ -29,6 +29,7 @@
 
 import type {
   InboxAcceptOutcome,
+  InboxNamedDeliveryView,
   InboxReceiptView,
   InboxDisableOutcome,
   InboxEnableOutcome,
@@ -61,6 +62,8 @@ export interface InboxBridge {
   setPolicy(payload: { policy: InboxPolicy }): Promise<InboxEnableOutcome>;
   reveal(): Promise<InboxSimpleOutcome>;
   receipts(): Promise<{ entries: readonly InboxReceiptView[] | null }>;
+  history(): Promise<{ entries: readonly InboxNamedDeliveryView[] | null }>;
+  forget(payload: { id: string }): Promise<InboxSimpleOutcome>;
   onState(cb: (payload: unknown) => void): () => void;
 }
 
@@ -127,6 +130,26 @@ export class InboxController {
    * the user their deliveries never happened.
    */
   receiptsUnavailable = $state(false);
+  /**
+   * What arrived, BY NAME, keyed by task id.
+   *
+   * Read beside the receipts rather than instead of them. The journal is the
+   * authoritative list of deliveries — it is written before anything
+   * irreversible and it survives a name capture that failed — so a row exists
+   * for every delivery either way, and this is what fills in the names for the
+   * ones that have them. A delivery with no record renders as "the names were
+   * not recorded", never as a delivery that arrived empty.
+   */
+  named = $state<Readonly<Record<string, InboxNamedDeliveryView>>>({});
+  /**
+   * The NAMES could not be read.
+   *
+   * Separate from `receiptsUnavailable`, because they are separate records with
+   * separate failures: the counts can be perfectly readable while the names are
+   * not, and telling the user their deliveries are gone because a second file
+   * would not open would be false.
+   */
+  namesUnavailable = $state(false);
   /** What the last reveal did, so a refused one is never silent. */
   revealFailed = $state(false);
 
@@ -211,6 +234,10 @@ export class InboxController {
     this.messages = [];
     this.receipts = [];
     this.receiptsUnavailable = false;
+    // The user's own file names, dropped SYNCHRONOUSLY with everything else
+    // that belonged to the account that is leaving.
+    this.named = {};
+    this.namesUnavailable = false;
     this.notice = null;
   }
 
@@ -230,13 +257,25 @@ export class InboxController {
     this.#adopt(view);
   }
 
-  private async refreshLists(): Promise<void> {
+  /**
+   * Re-read the lists this page renders.
+   *
+   * PUBLIC, and called from three places: the shell at startup, every state
+   * push, and the page when it MOUNTS. The third is not redundant. A push
+   * happens when main's state changes, and the last thing to change after a
+   * delivery is the scheduler going back to idle — which can land before the
+   * names have been written. Without a read on mount, opening the Inbox page
+   * showed lists gathered at some earlier moment and looked, for a delivery
+   * that had definitely arrived, exactly like one that had not.
+   */
+  async refreshLists(): Promise<void> {
     const epoch = this.#epoch;
     const seq = ++this.#listSeq;
-    const [pending, messages, receipts] = await Promise.all([
+    const [pending, messages, receipts, named] = await Promise.all([
       this.bridge.pending().catch(() => this.pending),
       this.bridge.messages().catch(() => this.messages),
       this.bridge.receipts().catch(() => ({ entries: null })),
+      this.bridge.history().catch(() => ({ entries: null })),
     ]);
     // An older read must not overwrite a newer one's answer, and a read issued
     // before an account change must not restore the previous account's rows.
@@ -248,6 +287,16 @@ export class InboxController {
     } else {
       this.receiptsUnavailable = false;
       this.receipts = receipts.entries;
+    }
+    if (named.entries === null) {
+      // Unavailable, NOT empty. The counts above still render, so a delivery is
+      // never presented as having arrived with nothing in it.
+      this.namesUnavailable = true;
+    } else {
+      this.namesUnavailable = false;
+      const byTask: Record<string, InboxNamedDeliveryView> = {};
+      for (const entry of named.entries) byTask[entry.taskID] = entry;
+      this.named = byTask;
     }
     // A message that was deleted — or that belongs to an account that has gone
     // away — must not stay on screen as though it were still there.
@@ -449,6 +498,29 @@ export class InboxController {
       this.openText = "";
     }
     await this.refreshLists();
+  }
+
+  /**
+   * Forget one delivery's names, because the user asked for that.
+   *
+   * The only thing that deletes from that record. Turning receiving off and
+   * signing out leave it alone, exactly as they leave the message vault alone.
+   * The files themselves are untouched: this is the record of what arrived, not
+   * what arrived.
+   */
+  async forget(taskID: string): Promise<void> {
+    if (this.working.includes(taskID)) return;
+    this.working = [...this.working, taskID];
+    try {
+      const outcome = await this.bridge.forget({ id: taskID }).catch(() => ({
+        kind: "failed" as const,
+        reason: "internal",
+      }));
+      if (outcome.kind === "failed") this.notice = { kind: "failed", reason: outcome.reason };
+      await this.refreshLists();
+    } finally {
+      this.working = this.working.filter((entry) => entry !== taskID);
+    }
   }
 
   async rename(): Promise<void> {

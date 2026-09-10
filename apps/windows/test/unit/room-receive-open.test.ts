@@ -194,6 +194,88 @@ describe("a destination that cannot be opened", () => {
     expect(controller.lastReceipt).toEqual({ kind: "cancelled" });
   });
 
+  // ## The regression the fix above created, and had to close
+  //
+  // Recording a receipt on the failure path turned a previously SILENT late
+  // failure into one that can RELABEL a fresher outcome. These drive real
+  // callback composition: two actual `#pickSaveTarget` invocations, each with
+  // its own real `ReceiveCoordinator`, overlapped the way a slow destination
+  // overlaps the batch after it.
+  describe("a late answer must not speak for a fresher one", () => {
+    it("does not overwrite the receipt of the batch that replaced it", async () => {
+      let releaseOld: ((err: Error) => void) | undefined;
+      let failNew = false;
+      const controller = roomThatFailsToOpen(async () => {
+        if (failNew) throw new Error("the SECOND batch failed");
+        // The first call hangs, exactly as a destination whose open never
+        // returns does.
+        return new Promise<never>((_, reject) => {
+          releaseOld = reject;
+        });
+      });
+
+      // Batch one is admitted and its open is still pending.
+      const old = wired!(FILES);
+      await Promise.resolve();
+      expect(controller.lastReceipt).toBeNull();
+
+      // Batch two is admitted through the same real callback, and settles.
+      failNew = true;
+      await expect(wired!(FILES)).rejects.toThrow("the SECOND batch failed");
+      const fresh = controller.lastReceipt;
+      expect(fresh).not.toBeNull();
+
+      // Now the old one finally fails. It is no longer the newest batch.
+      releaseOld!(new Error("the FIRST batch failed, much later"));
+      await expect(old).rejects.toThrow("the FIRST batch failed, much later");
+
+      // The surface still shows the batch the user was actually watching.
+      expect(controller.lastReceipt).toBe(fresh);
+    });
+
+    it("still rethrows and still settles the lease it no longer speaks for", async () => {
+      let releaseOld: ((err: Error) => void) | undefined;
+      let failNew = false;
+      const controller = roomThatFailsToOpen(async () => {
+        if (failNew) throw new Error("the SECOND batch failed");
+        return new Promise<never>((_, reject) => {
+          releaseOld = reject;
+        });
+      });
+
+      const old = wired!(FILES);
+      await Promise.resolve();
+      failNew = true;
+      await expect(wired!(FILES)).rejects.toThrow();
+
+      releaseOld!(new Error("late"));
+      // Fencing the SURFACE must not fence the protocol: the session still
+      // needs this rejection to reject the batch and retire the lane.
+      await expect(old).rejects.toThrow("late");
+      expect(controller.lastReceipt).not.toBeNull();
+    });
+
+    it("publishes nothing once the room has stopped", async () => {
+      let release: ((err: Error) => void) | undefined;
+      const controller = roomThatFailsToOpen(
+        async () =>
+          new Promise<never>((_, reject) => {
+            release = reject;
+          }),
+      );
+
+      const pending = wired!(FILES);
+      await Promise.resolve();
+      controller.stop();
+
+      release!(new Error("answered after the room went away"));
+      await expect(pending).rejects.toThrow();
+      // Nothing to tell, and nobody to tell: a stopped room has no surface, and
+      // writing one would resurrect a pane the user has already left.
+      expect(controller.lastReceipt).toBeNull();
+    });
+  });
+
   it("rethrows, so the session still rejects the batch", async () => {
     const controller = roomThatFailsToOpen(async () => {
       throw new Error(SECRET_MESSAGE);

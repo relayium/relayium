@@ -36,6 +36,7 @@ import {
   MAX_RETAINED_HANDLES,
   Receiver,
   describeManifest,
+  type DeliveredItems,
   type PublishReport,
   type ReceiveDestination,
 } from "../../src/main/inbox/receiver.js";
@@ -607,6 +608,10 @@ function receiverFor(
     readonly park?: Promise<void>;
     readonly context?: AccountContext;
     readonly currentAccount?: () => AccountContext;
+    /** The presentation hook, when a case is about what it is handed. */
+    readonly onDelivered?: (delivered: DeliveredItems) => Promise<void>;
+    /** Shortens the hook's deadline, for the held-hook case. */
+    readonly deliveredTimeoutMs?: number;
   },
 ): { receiver: Receiver; journal: TaskJournal; vault: MessageVault } {
   const files = options.files ?? new FakeFiles();
@@ -701,6 +706,8 @@ function receiverFor(
     now: () => 1_000,
     idleTimeoutMs: 5_000,
     ...(options.leaseSeconds !== undefined ? { leaseSeconds: options.leaseSeconds } : {}),
+    ...(options.onDelivered !== undefined ? { onDelivered: options.onDelivered } : {}),
+    ...(options.deliveredTimeoutMs !== undefined ? { deliveredTimeoutMs: options.deliveredTimeoutMs } : {}),
   });
   if (options.failJournalPhase !== undefined) {
     const real = journal.advance.bind(journal);
@@ -1603,5 +1610,287 @@ describe("receiver — live adapter bound", () => {
     // failing attempt, so that check is defence in depth and this test does NOT
     // discriminate it. Recorded rather than implied — a mutation that removes
     // the identity check still passes here.
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The delivered-names hook
+// ---------------------------------------------------------------------------
+//
+// The ONE seam that carries file names out of the receive path, and the only
+// place those names exist: the journal keeps none by design, `DeliveryReceipt`
+// may hold no path, and re-reading the folder afterwards would report what is
+// in it NOW rather than what this delivery wrote.
+//
+// Every case below is about a claim the foreground history would otherwise make
+// falsely — a manifest presented as though it had all been saved, a delivery
+// reported as failed because a metadata write failed, or a name reaching a
+// diagnostic.
+
+describe("the delivered-names hook", () => {
+  it("hands over the manifest's own relative names and sizes", async () => {
+    const runtime = await realRuntime();
+    const payload = new Uint8Array(12).fill(3);
+    const { delivery, ciphertext, contentKey } = await buildDelivery(
+      runtime,
+      [
+        { kind: "file", name: "report.pdf", size: 4 },
+        { kind: "file", name: "photos/one.jpg", size: 8 },
+      ],
+      payload,
+    );
+    const seen: DeliveredItems[] = [];
+    const calls: ApiCall[] = [];
+    const { receiver } = receiverFor(runtime, contentKey, ciphertext, new FakeDestination(2), {
+      calls,
+      onDelivered: async (delivered) => {
+        seen.push(delivered);
+      },
+    });
+
+    const receipt = await receiver.receive(delivery, new AbortController().signal);
+    expect(receipt.kind).toBe("saved");
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ taskID: "task-1", text: false, declared: 2 });
+    expect(seen[0]?.items).toEqual([
+      { name: "report.pdf", size: 4 },
+      { name: "photos/one.jpg", size: 8 },
+    ]);
+  });
+
+  it("reports only the prefix a PARTIAL publish actually landed", async () => {
+    // The reassuring lie the whole receive path avoids: three files declared,
+    // one written, and a history that names all three.
+    const runtime = await realRuntime();
+    const payload = new Uint8Array(12).fill(1);
+    const { delivery, ciphertext, contentKey } = await buildDelivery(
+      runtime,
+      [
+        { kind: "file", name: "one.bin", size: 4 },
+        { kind: "file", name: "two.bin", size: 4 },
+        { kind: "file", name: "three.bin", size: 4 },
+      ],
+      payload,
+    );
+    const destination = new FakeDestination(3, {
+      status: "partial",
+      publishedCount: 1,
+      total: 3,
+      failedIndex: 1,
+      reason: "E_IO",
+    });
+    const seen: DeliveredItems[] = [];
+    const { receiver } = receiverFor(runtime, contentKey, ciphertext, destination, {
+      calls: [],
+      onDelivered: async (delivered) => {
+        seen.push(delivered);
+      },
+    });
+
+    const receipt = await receiver.receive(delivery, new AbortController().signal);
+    expect(receipt).toMatchObject({ kind: "partial", savedCount: 1 });
+    // One name, and the DECLARED count beside it so "1 of 3" is sayable.
+    expect(seen[0]?.items).toEqual([{ name: "one.bin", size: 4 }]);
+    expect(seen[0]?.declared).toBe(3);
+  });
+
+  it("reports a count mismatch as the prefix too, never as a whole delivery", async () => {
+    const runtime = await realRuntime();
+    const payload = new Uint8Array(8).fill(2);
+    const { delivery, ciphertext, contentKey } = await buildDelivery(
+      runtime,
+      [
+        { kind: "file", name: "a.bin", size: 4 },
+        { kind: "file", name: "b.bin", size: 4 },
+      ],
+      payload,
+    );
+    // The helper claims a complete publish of ONE file where the manifest
+    // declared two: the three numbers disagree, and the prefix is what is real.
+    const destination = new FakeDestination(2, { status: "complete", publishedCount: 1, total: 1 });
+    const seen: DeliveredItems[] = [];
+    const { receiver } = receiverFor(runtime, contentKey, ciphertext, destination, {
+      calls: [],
+      onDelivered: async (delivered) => {
+        seen.push(delivered);
+      },
+    });
+
+    const receipt = await receiver.receive(delivery, new AbortController().signal);
+    expect(receipt).toMatchObject({ kind: "partial", savedCount: 1, total: 2 });
+    expect(seen[0]?.items).toEqual([{ name: "a.bin", size: 4 }]);
+    expect(seen[0]?.declared).toBe(2);
+  });
+
+  it("names nothing for a message, and still records that one arrived", async () => {
+    const runtime = await realRuntime();
+    const payload = new TextEncoder().encode("hello");
+    const { delivery, ciphertext, contentKey } = await buildDelivery(
+      runtime,
+      [{ kind: "text", size: payload.byteLength }],
+      payload,
+    );
+    const seen: DeliveredItems[] = [];
+    const { receiver } = receiverFor(runtime, contentKey, ciphertext, null, {
+      calls: [],
+      onDelivered: async (delivered) => {
+        seen.push(delivered);
+      },
+    });
+
+    const receipt = await receiver.receive(delivery, new AbortController().signal);
+    expect(receipt.kind).toBe("saved-message");
+    // A text item carries no name by protocol — `describeManifest` refuses one
+    // — so there is nothing to list, and `text` is what says so.
+    expect(seen[0]).toMatchObject({ taskID: "task-1", text: true, declared: 1, items: [] });
+  });
+
+  it("does NOT turn a failed capture into a failed delivery", async () => {
+    // The files are on disk by the time this runs. Reporting a refusal here
+    // would tell the user nothing was saved while their files exist — the same
+    // mistake as discarding a publish receipt, one step later.
+    const runtime = await realRuntime();
+    const payload = new Uint8Array(4).fill(9);
+    const { delivery, ciphertext, contentKey } = await buildDelivery(
+      runtime,
+      [{ kind: "file", name: "a.bin", size: 4 }],
+      payload,
+    );
+    const destination = new FakeDestination(1);
+    const calls: ApiCall[] = [];
+    const { receiver, journal } = receiverFor(runtime, contentKey, ciphertext, destination, {
+      calls,
+      onDelivered: () => Promise.reject(Object.assign(new Error("disk full"), { code: "unreadable" })),
+    });
+
+    const receipt = await receiver.receive(delivery, new AbortController().signal);
+    expect(receipt).toMatchObject({ kind: "saved", total: 1, ackPending: false });
+    expect(destination.published).toBe(true);
+    // And the delivery is still ACKed and still journalled: a lost NAME is not
+    // a lost delivery, and central must not redeliver a task that landed.
+    expect(calls.filter((c) => c.state === "saved" && c.committed === true)).toHaveLength(1);
+    expect((await journal.find("task-1"))?.phase).toBe("acked");
+  });
+
+  it("is not called at all when the publish did not happen", async () => {
+    const runtime = await realRuntime();
+    const payload = new Uint8Array(4).fill(5);
+    const { delivery, ciphertext, contentKey } = await buildDelivery(
+      runtime,
+      [{ kind: "file", name: "a.bin", size: 4 }],
+      payload,
+    );
+    const destination = new FakeDestination(1);
+    destination.publishThrows = Object.assign(new Error("publish failed"), { code: "publish-failed" });
+    const seen: DeliveredItems[] = [];
+    const { receiver } = receiverFor(runtime, contentKey, ciphertext, destination, {
+      calls: [],
+      onDelivered: async (delivered) => {
+        seen.push(delivered);
+      },
+    });
+
+    const receipt = await receiver.receive(delivery, new AbortController().signal);
+    expect(receipt.kind).toBe("refused");
+    // Nothing landed, so there is nothing to name. A record written here would
+    // be a history entry for a delivery that never happened.
+    expect(seen).toEqual([]);
+  });
+
+  it("is absent by default, and the delivery is byte-identical without it", async () => {
+    const runtime = await realRuntime();
+    const payload = new Uint8Array(4).fill(6);
+    const { delivery, ciphertext, contentKey } = await buildDelivery(
+      runtime,
+      [{ kind: "file", name: "a.bin", size: 4 }],
+      payload,
+    );
+    const destination = new FakeDestination(1);
+    const { receiver } = receiverFor(runtime, contentKey, ciphertext, destination, { calls: [] });
+    const receipt = await receiver.receive(delivery, new AbortController().signal);
+    expect(receipt).toMatchObject({ kind: "saved", total: 1 });
+    expect([...destination.written.get(0)!]).toEqual([...payload]);
+  });
+
+  it("carries names in the PLAN and in nothing else", async () => {
+    // `describeManifest` is what puts them there, and the journal record for
+    // the same delivery must still be counts only. A name in a diagnostic is
+    // the failure this seam exists to avoid.
+    const runtime = await realRuntime();
+    const plan = describeManifest(
+      runtime.fileManifest([
+        { name: "secret-plans.pdf", size: 3 },
+        { name: "nested/deep/thing.bin", size: 5 },
+      ]),
+    );
+    expect(plan.names).toEqual(["secret-plans.pdf", "nested/deep/thing.bin"]);
+
+    const payload = new Uint8Array(8).fill(4);
+    const { delivery, ciphertext, contentKey } = await buildDelivery(
+      runtime,
+      [
+        { kind: "file", name: "secret-plans.pdf", size: 3 },
+        { kind: "file", name: "nested/deep/thing.bin", size: 5 },
+      ],
+      payload,
+    );
+    const { receiver, journal } = receiverFor(runtime, contentKey, ciphertext, new FakeDestination(2), {
+      calls: [],
+    });
+    await receiver.receive(delivery, new AbortController().signal);
+    const record = await journal.find("task-1");
+    expect(JSON.stringify(record)).not.toContain("secret-plans");
+    expect(JSON.stringify(record)).not.toContain("thing.bin");
+  });
+
+  it("names a text manifest as nothing at all", () => {
+    expect(describeManifest(inboxTextManifest()).names).toEqual([]);
+  });
+});
+
+/** A minimal v3 text manifest, without needing the runtime bundle. */
+function inboxTextManifest(): { v: number; items: readonly { kind: "text"; size: number }[] } {
+  return { v: 3, items: [{ kind: "text", size: 5 }] };
+}
+
+describe("a delivered-names hook that never settles", () => {
+  it("does not hold the ACK for a delivery whose files are already on disk", async () => {
+    // The hazard this bound exists for. By the time the hook runs the bytes are
+    // committed and the ACK has NOT been sent — and the ACK is what stops
+    // central redelivering a task that already landed. Presentation metadata
+    // may not have that power over a delivery.
+    const runtime = await realRuntime();
+    const payload = new Uint8Array(4).fill(8);
+    const { delivery, ciphertext, contentKey } = await buildDelivery(
+      runtime,
+      [{ kind: "file", name: "a.bin", size: 4 }],
+      payload,
+    );
+    const destination = new FakeDestination(1);
+    const calls: ApiCall[] = [];
+    let releaseHook!: () => void;
+    const held = new Promise<void>((resolve) => {
+      releaseHook = resolve;
+    });
+    const { receiver, journal } = receiverFor(runtime, contentKey, ciphertext, destination, {
+      calls,
+      // Never settles until this test says so.
+      onDelivered: () => held,
+      deliveredTimeoutMs: 50,
+    });
+
+    const receipt = await receiver.receive(delivery, new AbortController().signal);
+    // Saved, acknowledged, journalled — none of it waiting on the metadata.
+    expect(receipt).toMatchObject({ kind: "saved", total: 1, ackPending: false });
+    expect(calls.filter((c) => c.state === "saved" && c.committed === true)).toHaveLength(1);
+    expect((await journal.find("task-1"))?.phase).toBe("acked");
+
+    // ## What the timeout did NOT do
+    //
+    // It did not cancel the hook and it does not claim the hook finished. The
+    // promise belongs to the host that supplied it — here, this test — and it
+    // is still pending. Released so nothing outlives the case.
+    releaseHook();
+    await held;
   });
 });

@@ -265,6 +265,14 @@ export class RoomController {
    *  same reason `AppService` does not keep one. */
   #cleanupFailure: { count: number; firstReason: string } | null = null;
   #lastReceipt = $state<ReceiveOutcome | null>(null);
+  /**
+   * Which batch is allowed to speak for the receipt surface.
+   *
+   * Incremented once per batch this room admits. A batch that is no longer the
+   * newest has nothing to say about what the user is currently looking at, and
+   * an answer that arrives late must not be able to relabel a fresher outcome.
+   */
+  #receiptEpoch = 0;
   /** Torn down with the room. Watches the link this room's batches belong to. */
   #disposeEffects: (() => void) | null = null;
   #stopping: Promise<void> | null = null;
@@ -615,11 +623,49 @@ export class RoomController {
     const bridge = this.#deps.receive;
     if (!bridge) throw new Error("this room has no receive destination");
     this.#sweep();
-    const coordinator = new ReceiveCoordinator(
-      bridge,
-      this.workspace.linkPeerId,
-      this.workspace.linkGeneration,
-    );
+    const generation = this.workspace.linkGeneration;
+    const coordinator = new ReceiveCoordinator(bridge, this.workspace.linkPeerId, generation);
+
+    /**
+     * Record an outcome, but only if this batch still speaks for the surface.
+     *
+     * ## Why this exists, and why it guards BOTH endings
+     *
+     * Recording a receipt from the failure path — which is new, and correct —
+     * turned a previously SILENT late failure into one that can relabel a
+     * fresher outcome. A destination whose `open` is still pending when the
+     * link is replaced, or when the next batch has already been admitted and
+     * settled, would reject afterwards and overwrite what the user is
+     * currently being shown with the older batch's failure.
+     *
+     * The same is true of `done()`, which was never fenced either. So the fence
+     * is on the identity BOTH endings captured when the batch was admitted,
+     * rather than on the failure path alone — a rule that applied to one of two
+     * ways of finishing would just move the race.
+     *
+     * Three things have to still hold:
+     *
+     *   * this is still the newest batch — a later one owns the surface;
+     *   * the link is the one this batch was admitted for — a replaced link is
+     *     a different conversation, and this batch's outcome is not about it;
+     *   * the room is still running — nothing after `stop()` may publish.
+     *
+     * It guards the SURFACE and nothing else. Cleanup still joins and the
+     * failure still rethrows on every path, fenced or not: the session needs
+     * that throw to send REJECT and retire the lane, and a lease still has to
+     * be settled whether or not anybody is going to be told about it.
+     */
+    const epoch = ++this.#receiptEpoch;
+    const speaksForSurface = (): boolean =>
+      epoch === this.#receiptEpoch
+      && generation === this.workspace.linkGeneration
+      && !this.#stopped;
+    const recordReceipt = (outcome: ReceiveOutcome): void => {
+      if (!speaksForSurface()) return;
+      this.#lastReceipt = outcome;
+      this.#changed();
+    };
+
     this.#receives.add(coordinator);
     if (this.#stopped) {
       // The room went away between the batch being accepted and the picker
@@ -638,11 +684,12 @@ export class RoomController {
         done: async () => {
           try {
             await done?.();
-            this.#lastReceipt = { kind: "saved", total };
-            this.#changed();
+            recordReceipt({ kind: "saved", total });
           } catch (err) {
-            this.#lastReceipt = describeReceipt(err, total);
-            this.#changed();
+            recordReceipt(describeReceipt(err, total));
+            // Rethrown whether or not the receipt was recorded: the session
+            // owns this rejection, and fencing the SURFACE must never fence the
+            // protocol.
             throw err;
           }
         },
@@ -672,8 +719,10 @@ export class RoomController {
       // case where the folder cannot be described as clean. `saved` is 0
       // because publication never began — a fact about the phase this
       // coordinator reached, not a claim about what is on the disk.
-      this.#lastReceipt = describeReceipt(err, files.length);
-      this.#changed();
+      recordReceipt(describeReceipt(err, files.length));
+      // Both of these run whether or not the receipt was recorded. A lease that
+      // opened has to be settled even when its batch no longer owns the screen,
+      // and the session needs the throw to reject the batch.
       // A picker the user cancelled is terminal and drops out; one that failed
       // mid-cleanup is retained by `#settle` until it settles.
       void this.#settle(coordinator);

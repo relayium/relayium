@@ -537,7 +537,24 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
   // follows it, because the two APIs can disagree.
   resident = new ResidentRuntime({
     service: control.service,
-    storedActive: () => control.storedReceive.active + control.inbox.active,
+    // ## Everything main holds, INCLUDING what it is sending
+    //
+    // This is the pre-quit question — "is anything happening?" — and it is asked
+    // BEFORE any fence or abort. It counted only the two RECEIVING features, so
+    // an upload or a device delivery in flight made the app look idle at exactly
+    // the moment the user was deciding whether to end it. The counts that
+    // `quiesce` reports come after work has been aborted and are far too late to
+    // inform a consent.
+    //
+    // `inventory().active` on each sender includes an admission that has not
+    // registered a job yet: a send one await from opening an upload is work a
+    // person would be surprised to lose, and reporting zero for it would be the
+    // same omission one step earlier.
+    storedActive: () =>
+      control.storedReceive.active +
+      control.inbox.active +
+      control.storedSend.inventory().active +
+      control.inboxSend.inventory().active,
     resident: control.resident,
     fence: control.fence,
     quiesce: control.quiesce,

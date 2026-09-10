@@ -198,12 +198,15 @@ async function harness(
     apiOptions?: Parameters<typeof fakeApi>[0];
     authority?: InboxAuthority;
     start?: boolean;
+    /** A root and a secret store from an EARLIER service: what a restart is. */
+    root?: string;
+    secrets?: Map<string, string>;
   } = {},
 ): Promise<Harness> {
-  const root = await tempRoot();
+  const root = over.root ?? (await tempRoot());
   const runtime = await realRuntime();
   const built = fakeApi(over.apiOptions ?? {});
-  const secrets = new Map<string, string>();
+  const secrets = over.secrets ?? new Map<string, string>();
   const states: InboxView[] = [];
   let dialogs = 0;
   let destinations = 0;
@@ -1217,11 +1220,20 @@ describe("a policy that changes while a pass is mid-flight", () => {
     // Hold the NEXT pass inside the folder probe. The baseline is captured:
     // `> 0` was already true from the pass that just ran, so the wait returned
     // immediately and the scenario was not actually held anywhere.
+    //
+    // The wake is POLLED, not fired once: a `wake()` landing while a pass is
+    // still running finds no nap to end, and the pass then sleeps out its full
+    // interval afterwards. Firing once made this flaky — it timed out on a
+    // slower run — which is the same premature-barrier mistake as the fixture
+    // ones, in a unit test.
     const probesBefore = h.probeEntered;
     holdingProbe = true;
     h.probeHold = probe;
-    h.service.wake();
-    await waitFor("a NEW pass to reach the folder probe", () => h.probeEntered > probesBefore);
+    const reached = await waitForValue(() => {
+      h.service.wake();
+      return h.probeEntered > probesBefore;
+    });
+    expect(reached).toBe(true);
 
     // The user chooses Off while it is held.
     expect((await h.service.setPolicy("off")).kind).toBe("enabled");
@@ -1420,5 +1432,215 @@ describe("Off that arrives during the held FOLDER probe", () => {
     // Positive control: the barrier stops Off, not everything.
     expect((await h.service.setPolicy("ask")).kind).toBe("enabled");
     await waitFor("a claim after the explicit re-enable", () => h.calls.claim > afterOff);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The named history: what arrived, by name
+// ---------------------------------------------------------------------------
+//
+// The presentation record is written by the receiver's delivered hook, which
+// this feature composes and which the facade binds to the account the delivery
+// RAN under. What these cases are about is the joins and the refusals: a name
+// captured under one account never appearing under another, a failed capture
+// costing the names and nothing else, and an unreadable record staying distinct
+// from an empty one — because "you have received nothing" over a file this app
+// failed to open is the one sentence it must never say.
+
+describe("the named history", () => {
+  /** The hook the facade would call, reached the way the receiver reaches it. */
+  async function capture(
+    h: Awaited<ReturnType<typeof harness>>,
+    delivered: { taskID: string; text: boolean; declared: number; items: { name: string; size: number }[] },
+  ): Promise<void> {
+    const identity = h.service.composition().identity();
+    if (identity === null) throw new Error("no bound account");
+    const context = identity.context;
+    // `captureDelivered` is private and is REACHED as the facade reaches it:
+    // under the account context the facade captured when it bound, which is
+    // the whole reason that context is a parameter rather than a lookup.
+    const hook = (h.service as unknown as {
+      captureDelivered(d: typeof delivered, c: typeof context): Promise<void>;
+    }).captureDelivered.bind(h.service);
+    await hook(delivered, context);
+  }
+
+  it("keeps names for one delivery and returns them, newest first", async () => {
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
+    });
+    await waitFor("the enrolment", () => h.calls.enrol > 0);
+    expect(await h.service.history()).toEqual([]);
+
+    await capture(h, {
+      taskID: "task-1",
+      text: false,
+      declared: 2,
+      items: [
+        { name: "report.pdf", size: 10 },
+        { name: "photos/one.jpg", size: 20 },
+      ],
+    });
+    await capture(h, { taskID: "task-2", text: true, declared: 1, items: [] });
+
+    const history = await h.service.history();
+    expect(history?.map((entry) => entry.taskID)).toEqual(["task-2", "task-1"]);
+    expect(history?.[1]?.items.map((item) => item.name)).toEqual(["report.pdf", "photos/one.jpg"]);
+    expect(history?.[0]).toMatchObject({ text: true, declared: 1, items: [] });
+  });
+
+  it("records a partial as a partial", async () => {
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
+    });
+    await waitFor("the enrolment", () => h.calls.enrol > 0);
+    await capture(h, { taskID: "task-1", text: false, declared: 7, items: [{ name: "one.bin", size: 1 }] });
+    const history = await h.service.history();
+    // "1 of 7" is sayable. A list of one presented alone is not the same claim.
+    expect(history?.[0]).toMatchObject({ declared: 7 });
+    expect(history?.[0]?.items).toHaveLength(1);
+  });
+
+  it("never fails a delivery because its names could not be kept", async () => {
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
+    });
+    await waitFor("the enrolment", () => h.calls.enrol > 0);
+    // A record the store refuses: the name is past the protocol's own ceiling,
+    // so it cannot have come from a validated manifest.
+    await expect(
+      capture(h, { taskID: "task-1", text: false, declared: 1, items: [{ name: "a".repeat(2000), size: 1 }] }),
+    ).resolves.toBeUndefined();
+    // Nothing was written, and nothing threw into the receive path — which is
+    // the point: the files are already on disk by the time this runs.
+    expect(await h.service.history()).toEqual([]);
+  });
+
+  it("does not hand one account's names to the next", async () => {
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
+    });
+    await waitFor("the enrolment", () => h.calls.enrol > 0);
+    await capture(h, { taskID: "task-1", text: false, declared: 1, items: [{ name: "private.pdf", size: 1 }] });
+    expect((await h.service.history())?.[0]?.items[0]?.name).toBe("private.pdf");
+
+    // Signed out. There is no account whose record to read — and emphatically
+    // not the rows of the one that just left.
+    h.authority = { kind: "signed-out" };
+    h.epoch = 4;
+    h.service.onAuthorityChanged();
+    await waitFor("the account guard", () => status(h) === "needs-account");
+    expect(await h.service.history()).toEqual([]);
+  });
+
+  it("forgets one delivery, and only when asked", async () => {
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
+    });
+    await waitFor("the enrolment", () => h.calls.enrol > 0);
+    await capture(h, { taskID: "task-1", text: false, declared: 1, items: [{ name: "a.bin", size: 1 }] });
+    await capture(h, { taskID: "task-2", text: false, declared: 1, items: [{ name: "b.bin", size: 1 }] });
+
+    expect(await h.service.forgetDelivery("task-1")).toEqual({ kind: "ok" });
+    expect((await h.service.history())?.map((entry) => entry.taskID)).toEqual(["task-2"]);
+  });
+
+  it("is NOT emptied by turning receiving off", async () => {
+    // The vault's rule and for the vault's reason: a history that vanished as a
+    // side effect of a settings toggle would be the product destroying the
+    // user's own record of what they received.
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
+    });
+    await waitFor("the enrolment", () => h.calls.enrol > 0);
+    await capture(h, { taskID: "task-1", text: false, declared: 1, items: [{ name: "a.bin", size: 1 }] });
+    await h.service.disable();
+    expect((await h.service.history())?.map((entry) => entry.taskID)).toEqual(["task-1"]);
+  });
+
+  it("bounds the delivery's wait on the write, and JOINS the write on teardown", async () => {
+    // Root's question, answered on both halves. The delivery must not wait
+    // indefinitely for metadata — the files are committed and the ACK is next —
+    // and the write must not become untracked work as the price of that.
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
+    });
+    await waitFor("the enrolment", () => h.calls.enrol > 0);
+    const identity = h.service.composition().identity();
+    if (identity === null) throw new Error("no bound account");
+    const context = identity.context;
+
+    // Hold the store's write open.
+    let releaseWrite!: () => void;
+    let entered!: () => void;
+    const arrived = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    let finished = false;
+    const store = (h.service as unknown as {
+      presentationFor(c: typeof context): { record(entry: unknown): Promise<void> };
+    }).presentationFor.call(h.service, context);
+    const realRecord = store.record.bind(store);
+    store.record = async (entry: unknown) => {
+      entered();
+      await held;
+      await realRecord(entry);
+      finished = true;
+    };
+
+    const hook = (h.service as unknown as {
+      captureDelivered(d: unknown, c: typeof context): Promise<void>;
+    }).captureDelivered.bind(h.service);
+    const capture = hook(
+      { taskID: "task-held", text: false, declared: 1, items: [{ name: "a.bin", size: 1 }] },
+      context,
+    );
+    await arrived;
+
+    // The DELIVERY's wait ends on the deadline: this resolves while the write
+    // is still held. A receiver awaiting it is free to acknowledge.
+    await capture;
+    expect(finished).toBe(false);
+
+    // The write is still OWNED. A teardown joins it rather than walking away
+    // from a write into an account it is about to release.
+    const disposing = h.service.dispose();
+    let disposed = false;
+    void disposing.then(() => {
+      disposed = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(disposed).toBe(false);
+    releaseWrite();
+    await disposing;
+    expect(finished).toBe(true);
+  });
+
+  it("survives a restart, because it is on disk under the account key", async () => {
+    const h = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
+    });
+    await waitFor("the enrolment", () => h.calls.enrol > 0);
+    await capture(h, {
+      taskID: "task-1",
+      text: false,
+      declared: 1,
+      items: [{ name: "keeps/its/name.bin", size: 3 }],
+    });
+    await h.service.dispose();
+
+    // A SECOND service over the same root and the same account: this is what a
+    // restart is, and the record has to open with the same at-rest key.
+    const second = await harness({
+      grant: { directory: "/chosen", enabled: true, policy: "ask", withdrawalPending: false },
+      root: h.dataRoot,
+      secrets: h.secrets,
+    });
+    await waitFor("the second enrolment", () => second.calls.enrol > 0);
+    const history = await second.service.history();
+    expect(history?.[0]?.items[0]?.name).toBe("keeps/its/name.bin");
   });
 });

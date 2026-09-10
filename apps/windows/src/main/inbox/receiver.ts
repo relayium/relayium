@@ -211,6 +211,32 @@ export interface ReceiverKeys {
   openSealedContentKey(keyID: string, sealed: Uint8Array): Promise<Uint8Array>;
 }
 
+/**
+ * Presentation metadata for one delivered object. Never a path, never a key.
+ *
+ * ## Why the receiver hands this out at all
+ *
+ * The foreground history names files, and this is the only place the names
+ * exist: `TaskJournal` is a diagnostic record and carries none by design,
+ * `DeliveryReceipt` may not hold a path, and re-reading the receiving folder
+ * would report what is there NOW rather than what this delivery wrote. So the
+ * names are captured here, from the manifest that has already been decoded and
+ * validated, and handed to a store whose whole purpose is presentation.
+ *
+ * `items` is what was CONFIRMED PUBLISHED — the prefix a partial actually
+ * landed, never the whole manifest — and `declared` is kept beside it so a
+ * partial is describable as a partial rather than presented as everything.
+ */
+export interface DeliveredItems {
+  readonly taskID: string;
+  /** True for a message, which lands in the vault and has no names at all. */
+  readonly text: boolean;
+  /** How many items the manifest declared. */
+  readonly declared: number;
+  /** Relative names and sizes, exactly as the validated manifest declared. */
+  readonly items: readonly { readonly name: string; readonly size: number }[];
+}
+
 export interface ReceiverOptions {
   readonly context: AccountContext;
   readonly runtime: InboxRuntime;
@@ -229,6 +255,38 @@ export interface ReceiverOptions {
   currentAccount(): AccountContext;
   readonly now?: () => number;
   readonly onProgress?: (progress: DeliveryProgress) => void;
+  /**
+   * What this delivery saved, by name. OPTIONAL, and never load-bearing.
+   *
+   * Called once per delivery, after the publish is DURABLE and before the
+   * receipt is returned — the same position as the post-commit journal markers
+   * and for the same reason: the files are on disk by then, so nothing this
+   * hook does may change what the receipt says. A failure in it is swallowed
+   * exactly as `tryJournal` swallows a failed marker; a presentation record
+   * that could not be written is a worse history, not a lost delivery.
+   *
+   * ## It is awaited, and the wait is BOUNDED
+   *
+   * Awaited, because a write fired and forgotten is a write no teardown can
+   * join. Bounded, because by the time this runs the files are on disk and the
+   * ACK has not been sent: a metadata store that never settles would hold a
+   * committed delivery unacknowledged, and central would eventually redeliver a
+   * task that had already landed. Presentation metadata may not have that
+   * power over a delivery, so `DELIVERED_HOOK_TIMEOUT_MS` ends the wait.
+   *
+   * **What the timeout does NOT mean.** This side stops waiting; it does not
+   * cancel the hook and it does not claim the hook has finished. The promise
+   * belongs to the HOST that supplied it, and the host is what must own and
+   * join it — `features/inbox.ts` registers the write as one of its tracked
+   * operations, so `quiesce` and `dispose` join it there. A host that installs
+   * a hook it does not track is leaving untracked work behind, and this
+   * receiver cannot fix that for it.
+   *
+   * Absent, behaviour is identical: nothing here is consulted again.
+   */
+  onDelivered?(delivered: DeliveredItems): Promise<void>;
+  /** Overrides `DELIVERED_HOOK_TIMEOUT_MS`, for a test that holds the hook. */
+  readonly deliveredTimeoutMs?: number;
   readonly idleTimeoutMs?: number;
   /** What central advertised for this claim. Followed, never assumed. */
   readonly leaseSeconds?: number;
@@ -415,11 +473,33 @@ interface ManifestPlan {
   readonly totalBytes: number;
   readonly text: boolean;
   readonly sizes: readonly number[];
+  /**
+   * The manifest's own RELATIVE names, in manifest order. Empty for text.
+   *
+   * Carried so `onDelivered` can report what actually landed WITHOUT any
+   * caller re-deriving it: the names are already decoded and already validated
+   * at this point, and the alternative — reading the receiving folder
+   * afterwards — reports whatever is there now rather than what this delivery
+   * wrote. They are user content: they go to the presentation hook and nowhere
+   * else, and in particular into no journal record, receipt or diagnostic.
+   */
+  readonly names: readonly string[];
 }
+
+/**
+ * How long a delivery waits for the presentation hook before proceeding.
+ *
+ * Short on purpose. The only thing after this point is the ACK, and the ACK is
+ * what stops central redelivering a task whose files are already on the user's
+ * disk. Naming the files is worth a few seconds of that; it is not worth the
+ * delivery.
+ */
+export const DELIVERED_HOOK_TIMEOUT_MS = 5_000;
 
 export class Receiver {
   private readonly now: () => number;
   private readonly idleTimeoutMs: number;
+  private readonly deliveredTimeoutMs: number;
   private readonly leaseIntervalMs: number;
   /** Destinations whose teardown did not conclude. Owned until released. */
   private readonly retained = new Map<string, RetainedHandle>();
@@ -437,6 +517,7 @@ export class Receiver {
   constructor(private readonly options: ReceiverOptions) {
     this.now = options.now ?? (() => Date.now());
     this.idleTimeoutMs = options.idleTimeoutMs ?? IDLE_BODY_TIMEOUT_MS;
+    this.deliveredTimeoutMs = options.deliveredTimeoutMs ?? DELIVERED_HOOK_TIMEOUT_MS;
     // A third of the lease, like Go: two renewals may be lost before the lease
     // is at risk.
     this.leaseIntervalMs = Math.floor(((options.leaseSeconds ?? DEFAULT_LEASE_SECONDS) * 1000) / 3);
@@ -770,6 +851,8 @@ export class Receiver {
       const recorded = await this.tryJournal(() =>
         this.options.journal.advance(delivery.ID, "partial", report.publishedCount, this.now()),
       );
+      // Only the prefix that actually landed. See `DeliveredItems`.
+      await this.tryDelivered(delivery, plan, report.publishedCount);
       return {
         kind: "partial",
         savedCount: report.publishedCount,
@@ -787,6 +870,7 @@ export class Receiver {
       const recorded = await this.tryJournal(() =>
         this.options.journal.advance(delivery.ID, "partial", report.publishedCount, this.now()),
       );
+      await this.tryDelivered(delivery, plan, report.publishedCount);
       return {
         kind: "partial",
         savedCount: report.publishedCount,
@@ -801,6 +885,7 @@ export class Receiver {
     const recorded = await this.tryJournal(() =>
       this.options.journal.advance(delivery.ID, "published", report.publishedCount, this.now()),
     );
+    await this.tryDelivered(delivery, plan, report.publishedCount);
     // Acknowledged even when the marker did not land: the files ARE saved, so
     // the report is truthful, and it is what stops central redelivering a task
     // this side can no longer prove it completed.
@@ -812,6 +897,51 @@ export class Receiver {
       ackPending: !acked,
       journalRecorded: recorded,
     };
+  }
+
+  /**
+   * Hand the published names to the presentation hook, if there is one.
+   *
+   * Runs at the same point as the post-commit journal markers, and fails the
+   * same way they do: never. The files are on disk by the time this is called,
+   * so a hook that throws must not turn a real delivery into a refusal — the
+   * user would be told nothing was saved while their files exist. What is lost
+   * is the NAMES for this delivery, and the history reports that gap rather
+   * than presenting the delivery as though it had arrived empty.
+   *
+   * `publishedCount` bounds the slice: a partial reports the prefix that landed
+   * and never the whole manifest.
+   */
+  private async tryDelivered(delivery: WireDelivery, plan: ManifestPlan, publishedCount: number): Promise<void> {
+    const hook = this.options.onDelivered;
+    if (hook === undefined) return;
+    const count = Math.max(0, Math.min(publishedCount, plan.names.length));
+    const items: { readonly name: string; readonly size: number }[] = [];
+    for (let i = 0; i < count; i += 1) {
+      items.push({ name: plan.names[i] ?? "", size: plan.sizes[i] ?? 0 });
+    }
+    let running: Promise<void>;
+    try {
+      running = hook({ taskID: delivery.ID, text: plan.text, declared: plan.total, items });
+    } catch {
+      // A hook that threw SYNCHRONOUSLY. Nothing is running and nothing is owed.
+      return;
+    }
+    // Never unhandled, whichever way the race below goes. An unhandled
+    // rejection is fatal in this process.
+    const settled = running.then(
+      () => undefined,
+      () => undefined,
+    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<"timeout">((resolve) => {
+      timer = setTimeout(() => resolve("timeout"), this.deliveredTimeoutMs);
+    });
+    try {
+      await Promise.race([settled, deadline]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**
@@ -948,6 +1078,9 @@ export class Receiver {
       const recorded = await this.tryJournal(() =>
         this.options.journal.advance(delivery.ID, "published", 1, this.now()),
       );
+      // A message has no names: `describeManifest` refuses a text item that
+      // carries one, so this records THAT a message arrived and nothing else.
+      await this.tryDelivered(delivery, plan, 0);
       const acked = await this.tryAck(delivery, signal);
       return {
         kind: "saved-message",
@@ -1130,6 +1263,7 @@ export function describeManifest(manifest: RuntimeManifest): ManifestPlan {
   }
   let totalBytes = 0;
   const sizes: number[] = [];
+  const names: string[] = [];
   for (const item of manifest.items) {
     if (!Number.isSafeInteger(item.size) || item.size < 0) {
       throw fatal(
@@ -1149,6 +1283,9 @@ export function describeManifest(manifest: RuntimeManifest): ManifestPlan {
       );
     }
     sizes.push(item.size);
+    // `undefined` only for text, which is refused a name above and reports an
+    // empty list. A file item without one has already thrown.
+    if (!text) names.push(item.name ?? "");
     totalBytes += item.size;
     if (!Number.isSafeInteger(totalBytes)) {
       throw fatal(
@@ -1158,5 +1295,5 @@ export function describeManifest(manifest: RuntimeManifest): ManifestPlan {
       );
     }
   }
-  return { total: manifest.items.length, totalBytes, text, sizes };
+  return { total: manifest.items.length, totalBytes, text, sizes, names };
 }

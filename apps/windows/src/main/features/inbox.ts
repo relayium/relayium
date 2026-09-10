@@ -58,7 +58,7 @@ import { InboxApi } from "../inbox/api.js";
 import type { AccountContext } from "../inbox/account.js";
 import { InboxFacade, facadeFailure, type FacadeApi } from "../inbox/facade.js";
 import type { AutoAcceptPolicy, ImplementedFeatures } from "../inbox/capabilities.js";
-import type { ReceiveDestination } from "../inbox/receiver.js";
+import type { DeliveredItems, ReceiveDestination } from "../inbox/receiver.js";
 import type { InboxRuntime, RuntimeManifest } from "../inbox/runtime-contract.js";
 import { inboxRuntime } from "../inbox/runtime.js";
 import type { InboxFailureCode } from "../inbox/receipts.js";
@@ -77,12 +77,16 @@ import type {
   InboxRetainedView,
   InboxSimpleOutcome,
   InboxReceiptView,
+  InboxNamedDeliveryView,
   InboxStatus,
   InboxView,
 } from "../../shared/ipc-contract.js";
 import { MAX_INBOX_PENDING } from "../../shared/ipc-contract.js";
 import { resolveCurrentDevice, DeviceLookupError, type CurrentDevice } from "./inbox-device.js";
 import { InboxGrantStore, type GrantSlot, type InboxGrant } from "./inbox-grant.js";
+import { InboxFiles } from "../inbox/files.js";
+import { importAtRestKey } from "../inbox/atrest.js";
+import { InboxPresentationStore, PresentationError } from "./inbox-presentation.js";
 
 /**
  * What this build actually implements, and therefore what it may advertise.
@@ -96,22 +100,13 @@ import { InboxGrantStore, type GrantSlot, type InboxGrant } from "./inbox-grant.
  *  - `text`: a message delivery never reaches the helper at all — the receiver
  *    commits it to the encrypted vault and this file exposes list/open/delete
  *    for it, so the whole path exists end to end.
- *  - `autoAccept`: false FOR THIS CHECKPOINT, because this client has no
- *    auto-accept control yet. Advertising the capability would tell central
- *    this device may take deliveries without asking when nobody has been asked.
- *
- * ## `autoAccept` is unfinished, not out of scope
- *
- * The shipped Mac offers all three policies — `DeviceInboxSurface.swift:689`
- * exposes off/ask/auto and `setPolicy` writes the user's choice — and the
- * backend half here already supports it: `autoAcceptFor(features, consent)`
- * takes an explicit `consent.autoAccept` and only asks for `auto` when the
- * build implements it. What is missing is the Windows half: a user-visible
- * off/ask/auto control, that choice persisted per account in the same durable
- * grant as consent and the destination, the folder guard applied to an
- * unattended save, and a test that actually receives without a person. Full
- * parity owes all four; this checkpoint delivers the manual path and leaves
- * them explicitly outstanding rather than silently narrowing the product.
+ *  - `autoAccept`: the scheduler's own drain saves an auto-accepted delivery
+ *    with no renderer involved, the off/ask/auto choice is persisted per
+ *    account in the same durable grant as consent and the destination, and the
+ *    folder guard applies to an unattended save exactly as it does to an asked
+ *    one. The CAPABILITY is gated here on the build; the POLICY is gated on the
+ *    user's own choice by `autoAcceptFor(features, consent)`, so advertising it
+ *    never means this device takes deliveries nobody consented to.
  *
  * `capabilities()` computes the advertised set from these; nothing anywhere
  * writes the capability strings by hand.
@@ -125,6 +120,25 @@ export const COMPOSED_FEATURES: ImplementedFeatures = Object.freeze({
   // POLICY on consent, and this gates the CAPABILITY on the build.
   autoAccept: true,
 });
+
+/**
+ * How many accounts' presentation stores stay cached.
+ *
+ * An instance is a cache over a file, so evicting one loses nothing durable.
+ * Two is the ordinary maximum — the account that is signed in, plus one still
+ * being torn down — and four leaves room for a machine somebody switches
+ * accounts on without letting the map grow for the life of the process.
+ */
+const MAX_CACHED_PRESENTATION_STORES = 4;
+
+/**
+ * How long a delivery waits for its names to be written.
+ *
+ * Shorter than the receiver's own bound on the hook, so the deadline that fires
+ * in practice is this one — the host's, where the work is registered and can be
+ * joined — rather than the receiver's, which only stops waiting.
+ */
+const CAPTURE_DEADLINE_MS = 3_000;
 
 /** Seconds between passes. The Mac's `InboxBackoff`, value for value. */
 export interface InboxBackoff {
@@ -288,6 +302,15 @@ interface Binding {
   readonly id: number;
   readonly epoch: number;
   readonly accountKey: string;
+  /**
+   * The account identity every per-account store is opened under.
+   *
+   * Captured here rather than re-derived, for the reason `bind` states about
+   * `accountKey`: the digest the grant, the journal, the vault and the named
+   * history live under must be the SAME string the facade's own stores used,
+   * and deriving it a second time would be a second implementation of that rule.
+   */
+  readonly context: AccountContext;
   readonly deviceID: string;
   deviceName: string;
   grant: InboxGrant;
@@ -344,6 +367,8 @@ function codeOf(error: unknown): InboxFailureCode {
 
 export class InboxService {
   #facade: InboxFacade | null = null;
+  /** One presentation store per account digest. See `presentationFor`. */
+  readonly #presentations = new Map<string, InboxPresentationStore>();
   #grants: InboxGrantStore | null = null;
   #bound: Binding | null = null;
   #nextBindingID = 1;
@@ -924,6 +949,7 @@ export class InboxService {
       id: this.#nextBindingID++,
       epoch: authority.epoch,
       accountKey: context.accountKey,
+      context,
       deviceID: device.id,
       deviceName: device.name,
       grant,
@@ -1126,6 +1152,7 @@ export class InboxService {
       secretsFor: () => this.keySlotProxy(),
       atRestKeyFor: (context) => this.atRestKeyFor(context),
       destinationFor: (manifest, context) => this.destinationFor(manifest, context),
+      onDelivered: (delivered, context) => this.captureDelivered(delivered, context),
       now: () => this.now(),
     });
     return this.#facade;
@@ -1193,6 +1220,197 @@ export class InboxService {
 
   private async atRestKeyFor(context: AccountContext): Promise<Uint8Array> {
     return (await this.ensureGrants()).atRestKey(context.accountKey);
+  }
+
+  /**
+   * The seam a sibling Inbox feature composes against.
+   *
+   * ## Why this exists rather than three public getters
+   *
+   * SEND needs three things this feature already resolves: the bound account
+   * identity, that account's at-rest key, and the protocol runtime. Re-deriving
+   * any of them elsewhere would be a second implementation of a rule this file
+   * documents at length — the account DIGEST in particular, which names the
+   * directory and the AEAD associated data every per-account store uses. A send
+   * plan written under a second derivation of it would be a plan the account's
+   * own key cannot open.
+   *
+   * Returned as one object so the seam is a single reviewable surface rather
+   * than three members that drift apart, and so it reads as what it is: the
+   * composition point, not an invitation to reach into this feature.
+   */
+  composition(): {
+    identity(): { readonly context: AccountContext; readonly deviceID: string; readonly epoch: number } | null;
+    atRestKeyFor(context: AccountContext): Promise<Uint8Array>;
+    runtime(): Promise<InboxRuntime>;
+  } {
+    return {
+      identity: () => {
+        const bound = this.#bound;
+        // Only while the binding is ALIVE. A retired one names an account this
+        // process is no longer entitled to act for.
+        if (bound === null || !bound.alive) return null;
+        return { context: bound.context, deviceID: bound.deviceID, epoch: bound.epoch };
+      },
+      atRestKeyFor: (context) => this.atRestKeyFor(context),
+      runtime: () => (this.deps.runtime ?? inboxRuntime)(),
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // The named history: what arrived, by name
+  // -------------------------------------------------------------------------
+
+  /**
+   * One presentation store per account, memoised.
+   *
+   * Keyed by the account digest, because that is what the store's directory and
+   * its AEAD associated data are keyed by: two contexts with the same digest
+   * ARE the same account's store, and giving them separate instances would give
+   * one file two caches that could disagree about what is in it.
+   *
+   * Bounded, and the bound is safe to enforce by eviction — unlike a record,
+   * an instance holds no state of its own that is not on disk. Evicting one
+   * drops a cache and nothing else.
+   */
+  private presentationFor(context: AccountContext): InboxPresentationStore {
+    const held = this.#presentations.get(context.accountKey);
+    if (held !== undefined) return held;
+    const store = new InboxPresentationStore(context, new InboxFiles(context), async () =>
+      importAtRestKey(await this.atRestKeyFor(context)),
+    );
+    this.#presentations.set(context.accountKey, store);
+    while (this.#presentations.size > MAX_CACHED_PRESENTATION_STORES) {
+      const oldest = this.#presentations.keys().next().value;
+      if (oldest === undefined) break;
+      this.#presentations.delete(oldest);
+    }
+    return store;
+  }
+
+  /**
+   * Record what one delivery saved, by name.
+   *
+   * Called by the receiver after the publish is durable, under the account the
+   * delivery RAN under — which the facade captured and handed through, so a
+   * sign-out during a long download cannot land this account's file names in
+   * the next account's history. That is the whole reason the context is a
+   * parameter here rather than something this method looks up.
+   *
+   * Never throws. The files are on disk by the time this runs, so a failure
+   * here costs the NAMES for one delivery and nothing else: the journal still
+   * has the delivery, the history still lists it, and the row says its names
+   * were not recorded rather than presenting it as an empty success.
+   */
+  private async captureDelivered(delivered: DeliveredItems, context: AccountContext): Promise<void> {
+    // ## The write is OWNED, and the wait on it is bounded
+    //
+    // Two separate properties, and the delivery needs both.
+    //
+    // Owned: `own()` registers this in the same operation set every other
+    // renderer-driven call uses, so `quiesce` and `dispose` abort and JOIN it.
+    // A metadata write left running past a teardown would be a write into a
+    // store whose account has gone away, and nothing would be waiting for it.
+    //
+    // Bounded: the receiver awaits this hook, and at that point the files are
+    // on disk and the ACK has NOT been sent. A store that never settled would
+    // hold a committed delivery unacknowledged and central would redeliver a
+    // task that had already landed — so the delivery stops waiting on the
+    // deadline below while the write itself stays registered and joinable. The
+    // caller is told nothing either way: a name that has not been written yet
+    // is a history that is briefly incomplete, which the page renders as such.
+    const write = this.own(async () => {
+      await this.presentationFor(context).record({
+        taskID: delivered.taskID,
+        receivedAt: this.now(),
+        text: delivered.text,
+        declared: delivered.declared,
+        items: delivered.items,
+      });
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, CAPTURE_DEADLINE_MS);
+    });
+    try {
+      await Promise.race([write, deadline]);
+    } catch (err) {
+      // Reported to the host's diagnostics sink, which is where a capture
+      // failure belongs — never to the receipt, and never as a delivery
+      // failure. `PresentationError` carries a closed code and a reason that
+      // names a FIELD; a name never reaches it.
+      this.deps.reportFailure?.(
+        err instanceof PresentationError ? Object.assign(new Error(`presentation: ${err.code}`), { code: err.code }) : err,
+      );
+    } finally {
+      clearTimeout(timer);
+      // The registered write may still be running. Its rejection is observed
+      // HERE rather than left unhandled — an unhandled rejection is fatal in
+      // this process — and it is reported once, not twice.
+      void write.catch(() => undefined);
+    }
+  }
+
+  /**
+   * What arrived, by name.
+   *
+   * Returned BESIDE `receipts()` rather than merged into it. The journal is the
+   * authoritative list of deliveries — it is written before anything
+   * irreversible and it survives a capture that failed — and this is the
+   * presentation metadata for the ones that have it. A page joins them by task
+   * id, so a delivery with no record is rendered as a delivery whose names were
+   * not recorded rather than being dropped or shown as empty.
+   *
+   * `null` means the record could not be READ, which is not the same as having
+   * received nothing and is rendered differently.
+   */
+  history(): Promise<readonly InboxNamedDeliveryView[] | null> {
+    if (this.#disposed) return Promise.resolve(null);
+    const bound = this.live();
+    if (bound === "needs-account") return Promise.resolve([]);
+    return this.own(async () => {
+      try {
+        const records = await this.presentationFor(bound.context).list();
+        // The account that was live when this was issued must still be the one
+        // live now, or these are the previous account's file names.
+        if (!bound.alive || this.#bound !== bound) return null;
+        return records.map((record) => ({
+          taskID: record.taskID,
+          receivedAt: record.receivedAt,
+          text: record.text,
+          declared: record.declared,
+          items: record.items.map((item) => ({ name: item.name, size: item.size })),
+        }));
+      } catch (err) {
+        this.deps.reportFailure?.(err);
+        return null;
+      }
+    });
+  }
+
+  /**
+   * Forget one delivery's names, because the user asked for that.
+   *
+   * The ONLY caller. Nothing else deletes from this store: not disabling, not
+   * signing out, not an account change — the same rule the message vault
+   * follows, and for the same reason. A history that quietly disappeared when
+   * the feature was turned off would be a product that destroys the user's
+   * record of what they received as a side effect of a settings toggle.
+   */
+  forgetDelivery(taskID: string): Promise<InboxSimpleOutcome> {
+    if (this.#disposed || this.#fenced) return Promise.resolve({ kind: "refused" });
+    const bound = this.live();
+    if (bound === "needs-account") return Promise.resolve({ kind: "failed", reason: "account-changed" });
+    return this.own(async () => {
+      try {
+        await this.presentationFor(bound.context).remove(taskID);
+        if (!bound.alive || this.#bound !== bound) return { kind: "refused" } as const;
+        return { kind: "ok" } as const;
+      } catch (err) {
+        this.deps.reportFailure?.(err);
+        return { kind: "failed", reason: "storage-unreadable" } as const;
+      }
+    });
   }
 
   /**

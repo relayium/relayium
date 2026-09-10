@@ -39,6 +39,7 @@
   import StoredPage from "./pages/StoredPage.svelte";
   import { StoredController, type StoredBridge } from "./stored/stored-controller.svelte.js";
   import { InboxController, type InboxBridge } from "./inbox/inbox-controller.svelte.js";
+  import { InboxSendController, type InboxSendBridge } from "./inbox/inbox-send-controller.svelte.js";
   import { StoredSendController, type StoredSendBridge } from "./send/stored-send-controller.svelte.js";
   import { goTo, page } from "./shell/navigation.svelte.js";
   import { lang, t } from "./i18n/index.svelte.js";
@@ -74,6 +75,7 @@
       stored: StoredBridge;
       inbox: InboxBridge;
       send: StoredSendBridge;
+      inboxSend: InboxSendBridge;
     };
 
   const bridge = (globalThis as unknown as { relayium: Bridge }).relayium;
@@ -201,6 +203,15 @@
    * again, mid-upload.
    */
   const send = new StoredSendController(bridge.send);
+  /**
+   * App-lived for BOTH of the reasons above.
+   *
+   * It holds the picked `File` objects, which a page cannot recover on its own,
+   * and it subscribes to main's Inbox state for the ACCOUNT generation — which
+   * is how a sign-out drops the previous account's device list before the
+   * picker can offer a machine this account does not have.
+   */
+  const inboxSend = new InboxSendController(bridge.inboxSend, bridge.inbox.onState);
 
   /** What Windows says about starting at sign-in. Null until it has answered. */
   let startup = $state<LoginItemOutcome | null>(null);
@@ -393,19 +404,51 @@
   /**
    * What quitting would cost, from the page's side.
    *
-   * The two facts main cannot see: an outgoing WebRTC send, and text that has
-   * been typed and not sent. `workspace.send`/`recv` are the transfer halves;
-   * the drafts are the two variables above, which survive page changes exactly
-   * so a quit prompt can be honest about them.
+   * The facts main cannot see: an outgoing WebRTC send, and everything that has
+   * been CHOSEN and not yet sent. `workspace.send`/`recv` are the transfer
+   * halves; the drafts are the selections and the typed text, which survive page
+   * changes exactly so a quit prompt can be honest about them.
+   *
+   * ## Both send features count, in both halves
+   *
+   * This reported only the WebRTC rooms, and both omissions were real. A stored
+   * upload or a device delivery in flight is outgoing bytes the user would lose,
+   * and it is not visible to main's receive counters at all. And files a person
+   * has picked but not sent — or a message they have typed into the Inbox
+   * composer — is unfinished work in exactly the sense `drafts` exists to name;
+   * a quit that called it nothing would be wrong in the direction that costs
+   * somebody their evening.
+   *
+   * The main-side counterpart is `storedActive` in `main.ts`, which now counts
+   * the outgoing inventories too. Both halves are needed: main cannot see a
+   * selection, and the page cannot see a job main has admitted.
    */
   function residentSnapshot() {
     const rooms = [lanRoom, pairRoom].filter((room) => room !== null);
     // A pasted link nobody has opened yet is unfinished work too, and a quit
     // that called it nothing would be wrong.
+    //
+    // A COUNT, never the content: the contract says so, and the point of
+    // reporting it is that main can say "you have unsent work" without ever
+    // being told what the work is.
     const drafts =
-      (messageDraft.trim() ? 1 : 0) + (codeDraft.trim() ? 1 : 0) + (stored.link.trim() ? 1 : 0);
+      (messageDraft.trim() ? 1 : 0) +
+      (codeDraft.trim() ? 1 : 0) +
+      (stored.link.trim() ? 1 : 0) +
+      // Files chosen for a link and not uploaded yet.
+      (stored.busy ? 0 : send.files.length > 0 ? 1 : 0) +
+      // Files chosen for one of the user's own devices, and the Inbox composer's
+      // text. Counted while idle for the same reason as the others: once it is
+      // sending, `sending` is what says so.
+      (inboxSend.busy ? 0 : inboxSend.files.length > 0 ? 1 : 0) +
+      (inboxSend.message.trim() ? 1 : 0);
     return {
-      sending: rooms.some((room) => room.workspace.send),
+      sending:
+        rooms.some((room) => room.workspace.send) ||
+        // An upload and a device delivery are outgoing bytes like any other,
+        // and neither is visible to main's receive counters.
+        send.busy ||
+        inboxSend.busy,
       // A stored receive is incoming bytes like any other.
       receiving: stored.busy || rooms.some((room) => room.workspace.recv || room.openReceiveCount > 0),
       drafts,
@@ -524,6 +567,7 @@
     stored.dispose();
     inbox.destroy();
     send.dispose();
+    inboxSend.dispose();
     detachResident();
     controller.dispose();
     lanRoom?.stop();
@@ -537,6 +581,10 @@
   // running, and a page that only learned its state on arrival would show
   // "starting" for a scheduler that has been receiving for an hour.
   void inbox.refresh().catch(() => undefined);
+  // The device list, read once at startup like everything else the shell owns.
+  // A page that read it on mount would ask again on every navigation and would
+  // have nothing at all the first time it opened.
+  void inboxSend.refreshTargets().catch(() => undefined);
   void send.refreshHistory().catch(() => undefined);
   void bridge.loginItem
     .read()
@@ -620,7 +668,7 @@
       }}
     />
   {:else if page() === "inbox"}
-    <InboxPage {inbox} onSignIn={() => goTo("account")} />
+    <InboxPage {inbox} send={inboxSend} onSignIn={() => goTo("account")} />
   {:else}
     <AccountPage
       {controller}

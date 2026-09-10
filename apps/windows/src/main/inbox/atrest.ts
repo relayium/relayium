@@ -33,7 +33,22 @@ const IV_BYTES = 12;
  * authentication under another, which is what stops a journal being opened as a
  * send plan even though both live in the same account directory.
  */
-export type AtRestKind = "vault-record" | "vault-index" | "journal" | "send-plan";
+export type AtRestKind =
+  | "vault-record"
+  | "vault-index"
+  | "journal"
+  | "send-plan"
+  /**
+   * Presentation metadata for a delivery: what arrived, by name.
+   *
+   * ADDITIVE. `AT_REST_VERSION` is unchanged and the associated data still
+   * binds `accountKey`, `kind` and the version exactly as before, so every
+   * record already on disk opens with the bytes it was sealed with. A
+   * presentation record cannot be read as a vault record, a journal record or a
+   * send plan: the kind is in the AAD, so a substitution fails authentication
+   * rather than decrypting into something plausible.
+   */
+  | "presentation";
 
 export class AtRestError extends Error {
   constructor(

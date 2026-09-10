@@ -40,6 +40,19 @@ const RECEIPT = {
   serverTerminal: true,
 };
 
+/** The names for `RECEIPT`, as the presentation record carries them. */
+const NAMED = {
+  taskID: "task-9",
+  receivedAt: 1_700_000_000,
+  text: false,
+  declared: 3,
+  items: [
+    { name: "report.pdf", size: 10 },
+    { name: "photos/one.jpg", size: 20 },
+    { name: "photos/two.jpg", size: 30 },
+  ],
+};
+
 const MESSAGE: InboxMessageView = {
   id: "msg-1",
   taskID: "task-9",
@@ -59,6 +72,8 @@ function bridge(over: Partial<InboxBridge> = {}) {
     copy: 0,
     reveal: 0,
     receipts: 0,
+    history: 0,
+    forget: 0,
     setPolicy: [] as string[],
   };
   const base: InboxBridge = {
@@ -108,6 +123,14 @@ function bridge(over: Partial<InboxBridge> = {}) {
     async receipts() {
       calls.receipts += 1;
       return { entries: [RECEIPT] };
+    },
+    async history() {
+      calls.history += 1;
+      return { entries: [NAMED] };
+    },
+    async forget() {
+      calls.forget += 1;
+      return { kind: "ok" };
     },
     async remove() {
       return { kind: "ok" };
@@ -733,5 +756,73 @@ describe("one adoption path, whatever observed the change", () => {
     slow.resolve({ text: "too late" });
     await opening;
     expect(controller.openText).toBe("");
+  });
+});
+
+describe("the named history", () => {
+  it("reads names beside the counts and keys them by task", async () => {
+    const h = bridge();
+    const controller = new InboxController(h.bridge);
+    await controller.refresh();
+    // The journal is the authoritative list; the names fill it in.
+    expect(controller.receipts.map((r) => r.taskID)).toEqual(["task-9"]);
+    expect(controller.named["task-9"]?.items.map((i) => i.name)).toEqual([
+      "report.pdf",
+      "photos/one.jpg",
+      "photos/two.jpg",
+    ]);
+    expect(controller.namesUnavailable).toBe(false);
+  });
+
+  it("keeps unreadable NAMES distinct from unreadable counts", async () => {
+    const h = bridge({
+      async history() {
+        return { entries: null };
+      },
+    });
+    const controller = new InboxController(h.bridge);
+    await controller.refresh();
+    // The counts are still exact. Saying which record failed is the difference
+    // between "we lost your deliveries" and "we could not read one file".
+    expect(controller.namesUnavailable).toBe(true);
+    expect(controller.receiptsUnavailable).toBe(false);
+    expect(controller.receipts).toHaveLength(1);
+    expect(controller.named).toEqual({});
+  });
+
+  it("drops one account's names before another's are rendered", async () => {
+    const h = bridge();
+    const controller = new InboxController(h.bridge);
+    await controller.refresh();
+    expect(Object.keys(controller.named)).toHaveLength(1);
+
+    // A different account. These are the previous user's file names.
+    h.push({ ...IDLE, epoch: 4 });
+    expect(controller.named).toEqual({});
+    expect(controller.namesUnavailable).toBe(false);
+  });
+
+  it("forgets one delivery, and re-reads afterwards", async () => {
+    const h = bridge();
+    const controller = new InboxController(h.bridge);
+    await controller.refresh();
+    const before = h.calls.history;
+    await controller.forget("task-9");
+    expect(h.calls.forget).toBe(1);
+    // Re-read, so the row leaves the list rather than lingering until the next
+    // push happens to arrive.
+    expect(h.calls.history).toBeGreaterThan(before);
+  });
+
+  it("reports a failed forget rather than pretending it worked", async () => {
+    const h = bridge({
+      async forget() {
+        return { kind: "failed", reason: "storage-unreadable" };
+      },
+    });
+    const controller = new InboxController(h.bridge);
+    await controller.refresh();
+    await controller.forget("task-9");
+    expect(controller.notice).toMatchObject({ kind: "failed", reason: "storage-unreadable" });
   });
 });

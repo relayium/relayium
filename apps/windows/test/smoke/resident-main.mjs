@@ -31,13 +31,25 @@ import { InboxFiles } from "../../dist/main/inbox/files.js";
 import { MessageVault } from "../../dist/main/inbox/vault.js";
 import { InboxGrantStore } from "../../dist/main/features/inbox-grant.js";
 import path from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 const failures = [];
 const check = (name, ok, detail) => {
   if (!ok) failures.push(detail ? `${name}: ${detail}` : name);
 };
 
-const [userDataDir, secretsDir, destinationDir, inboxRootDir, sendJournalDir] = process.argv.slice(2);
+const [userDataDir, secretsDir, destinationDir, inboxRootDir, sendJournalDir, phase] = process.argv.slice(2);
+/**
+ * Which half of the run this is.
+ *
+ * `first` drives everything and leaves durable state behind — an enrolled
+ * account, a received delivery, a named history. `restart` is a SECOND
+ * Electron process over the SAME task-owned directories, and it exists to prove
+ * one thing the first cannot: that what the user was shown survives the app
+ * being closed and reopened. A reload would not have proved it — the cache is
+ * warm in the process that wrote it.
+ */
+const RESTART_PHASE = phase === "restart";
 if (!userDataDir || !secretsDir || !destinationDir || !inboxRootDir || !sendJournalDir) {
   process.stdout.write(
     `RELAYIUM_SMOKE ${JSON.stringify({ failures: ["missing task-owned directory arguments"] })}\n`,
@@ -200,6 +212,20 @@ const inbox = {
   tasks: [],
   /** Every directory a reveal actually opened, in order. */
   revealed: [],
+  // ---- the real-delivery half ---------------------------------------------
+  /** THIS device's advertised public key, captured as main registers it. */
+  publicKey: "",
+  keyID: "key-1",
+  /** Deliveries `claim()` will hand back, once each. */
+  deliveries: [],
+  /** Ciphertext bodies by task id, for `blob`. */
+  bodies: new Map(),
+  /** Every `report` central was sent, so an ACK can be asserted on. */
+  reports: [],
+  /** When set, the injected destination writes real files here. */
+  writeTo: null,
+  /** Files the injected destination actually wrote, by relative name. */
+  written: [],
 };
 
 const inboxApi = {
@@ -216,8 +242,12 @@ const inboxApi = {
   async deleteInbox() {
     inbox.withdrawn += 1;
   },
-  async registerKey() {
-    return { ID: "key-1" };
+  async registerKey(algorithm, publicKey) {
+    // Captured so this run can seal a REAL delivery to the key main actually
+    // generated. Nothing here invents a keypair: the private half never leaves
+    // the key store, which is the property the seal exercises.
+    inbox.publicKey = publicKey;
+    return { ID: inbox.keyID };
   },
   async listKeys() {
     return [];
@@ -235,16 +265,32 @@ const inboxApi = {
   },
   async claim() {
     inbox.claims += 1;
-    return { deliveries: [], leaseSeconds: 60 };
+    // Handed back ONCE. A claim that kept re-offering the same delivery would
+    // make the scheduler receive it forever.
+    const deliveries = inbox.deliveries;
+    inbox.deliveries = [];
+    return { deliveries, leaseSeconds: 60 };
   },
-  async report() {
-    return { State: "saved", Terminal: true, SavedAt: 1 };
+  async report(taskID, claimToken, state, committed) {
+    inbox.reports.push({ taskID, state, committed });
+    return { State: state, Terminal: state === "saved", SavedAt: 1 };
   },
   async currentDevice() {
     return { ID: inbox.device.id, Name: inbox.device.name };
   },
-  async blob() {
-    throw new Error("no delivery in this run");
+  async blob(taskID, claimToken, offset) {
+    const body = inbox.bodies.get(taskID);
+    if (body === undefined) throw new Error("no delivery in this run");
+    const slice = body.subarray(offset);
+    return {
+      partial: offset > 0,
+      body: new ReadableStream({
+        pull(controller) {
+          controller.enqueue(slice);
+          controller.close();
+        },
+      }),
+    };
   },
   async renameDevice(name) {
     inbox.device = { ...inbox.device, name };
@@ -253,6 +299,233 @@ const inboxApi = {
   async heartbeat() {
     inbox.heartbeats += 1;
     return { presence: "online", intervalSeconds: 30 };
+  },
+};
+
+/**
+ * Build a REAL encrypted delivery, with the real protocol runtime.
+ *
+ * Nothing about the delivery is faked: the manifest is the canonical v3
+ * document sealed at frame 0, the body is the SAME `encryptFiles` the renderer
+ * produces, and the content key is sealed to the public key MAIN registered —
+ * so opening it exercises the real key store, the real manifest decoder and the
+ * real frame decryptor. What is injected is the transport that carries it and,
+ * separately, the destination that writes the bytes down.
+ */
+async function buildRealDelivery(id, files) {
+  const runtime = await protocolRuntime();
+  const contentKey = crypto.getRandomValues(new Uint8Array(runtime.constants.contentKeyBytes));
+  const storeKey = await runtime.importStoreKey(contentKey);
+  const manifest = runtime.fileManifest(files.map((file) => ({ name: file.name, size: file.bytes.length })));
+  const encManifest = await runtime.sealManifestBytes(storeKey, runtime.encodeInboxManifest(manifest));
+
+  const frames = [];
+  let total = 0;
+  for await (const frame of runtime.encryptFiles(
+    files.map((file) => new File([file.bytes], file.name)),
+    storeKey,
+  )) {
+    const copy = new Uint8Array(frame.byteLength);
+    copy.set(frame);
+    frames.push(copy);
+    total += copy.byteLength;
+  }
+  const body = new Uint8Array(total);
+  let at = 0;
+  for (const frame of frames) {
+    body.set(frame, at);
+    at += frame.byteLength;
+  }
+  inbox.bodies.set(id, body);
+
+  return {
+    ID: id,
+    SourceDeviceID: "another-device",
+    IdempotencyKey: `idem-${id}`,
+    State: "claimed",
+    ErrorCode: "",
+    CiphertextBytes: body.byteLength,
+    WrapAlgorithm: runtime.constants.keyAlgorithm,
+    TargetKeyID: inbox.keyID,
+    TargetKeyGeneration: 1,
+    CreatedAt: 1,
+    ExpiresAt: 9_999_999,
+    SavedAt: 0,
+    Terminal: false,
+    EncManifest: Buffer.from(encManifest).toString("base64"),
+    // Sealed to the key main registered. A wrong key here fails to open, which
+    // is what makes this a real exercise of the key store rather than a fixture
+    // handing itself its own plaintext.
+    WrappedKey: await runtime.sealContentKey(contentKey, runtime.constants.keyAlgorithm, inbox.publicKey),
+    ClaimToken: `claim-${id}`,
+  };
+}
+
+/** The protocol runtime, loaded from the SAME artifact main loads. */
+let protocolRuntimeCache = null;
+async function protocolRuntime() {
+  if (protocolRuntimeCache !== null) return protocolRuntimeCache;
+  const { pathToFileURL } = await import("node:url");
+  const artifact = pathToFileURL(path.resolve(process.cwd(), "dist/main/inbox-runtime.js")).href;
+  const loaded = await import(artifact);
+  protocolRuntimeCache = loaded.default ?? loaded;
+  return protocolRuntimeCache;
+}
+
+/**
+ * A destination that actually writes the files.
+ *
+ * ## What this is and is not
+ *
+ * The shipped destination is the packaged Windows native helper, and it is NOT
+ * what runs here: this smoke executes on the host the developer is on, and the
+ * helper is a Windows binary with its own owning tests and its own acceptance
+ * gate. So the bytes are written by this injected destination instead.
+ *
+ * Everything BEFORE it is the real path — the claim, the key unseal, the
+ * manifest decode, the frame decryptor, the item cursor, the journal, the ACK
+ * and the presentation capture. What "bytes on disk" proves here is that the
+ * decrypted plaintext reaching the destination is the sender's own; it does not
+ * prove the helper writes it, and nothing in this file claims otherwise.
+ */
+function makeWritingDestination(options) {
+  const names = options.manifest.map((entry) => entry.name);
+  const staged = new Map();
+  return {
+    fileCount: options.manifest.length,
+    assertAuthority() {},
+    async begin(index) {
+      staged.set(index, []);
+    },
+    async write(index, chunk) {
+      staged.get(index).push(Buffer.from(chunk));
+    },
+    async finish() {},
+    async publish() {
+      for (const [index, parts] of staged) {
+        const name = names[index];
+        const target = path.join(options.rootPath, name);
+        await mkdir(path.dirname(target), { recursive: true });
+        await writeFile(target, Buffer.concat(parts));
+        inbox.written.push(name);
+      }
+      return { status: "complete", publishedCount: staged.size, total: options.manifest.length };
+    },
+    async cancel() {},
+  };
+}
+
+/**
+ * The server the SEND half talks to, as an in-memory sink.
+ *
+ * A CONTROLLED FIXTURE, and named as one. It answers the five routes a
+ * delivery touches and records every request, so what this run asserts about
+ * the `device_task` object and the sealed key is what the client actually
+ * composed rather than what it was assumed to.
+ */
+const sendSink = {
+  requests: [],
+  received: new Map(),
+  tasks: new Map(),
+  /**
+   * Holds the ciphertext append open, so a delivery is GENUINELY in flight.
+   *
+   * It has to be read by the handler to mean anything. It was not: an earlier
+   * version assigned it and nulled it and nothing ever awaited it, so the
+   * upload completed at full speed and every assertion about a "held" send was
+   * sampling a state that lasted microseconds. A barrier nobody waits on is not
+   * a barrier, and a green run over one proves nothing at all.
+   */
+  holdAppend: null,
+  /** Resolved when the handler has ENTERED the held append. */
+  onAppendEntered: null,
+  async fetch(input, init) {
+    const url = new URL(String(input));
+    const method = init?.method ?? "GET";
+    const entry = { method, url: `${url.pathname}${url.search}` };
+    sendSink.requests.push(entry);
+    const runtime = await protocolRuntime();
+    const reply = (status, body) =>
+      new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+    if (url.pathname === "/api/devices") {
+      return reply(200, {
+        devices: [
+          { ID: inbox.device.id, Name: inbox.device.name, Inbox: { Capabilities: ["inbox.receive.v3"], AutoAccept: "auto" } },
+          {
+            ID: "target-device",
+            Name: "Study desktop",
+            Inbox: {
+              Capabilities: ["inbox.receive.v3", "inbox.text.v1"],
+              AutoAccept: "auto",
+              ProtocolVersion: 3,
+              Revoked: false,
+            },
+          },
+          { ID: "old-laptop", Name: "Old laptop", Inbox: { Capabilities: [], AutoAccept: "off" } },
+        ],
+      });
+    }
+    if (url.pathname.endsWith("/inbox/keys") && method === "GET") {
+      const pair = await runtime.generateKeyPair();
+      return reply(200, {
+        keys: [
+          {
+            ID: "target-key-1",
+            Generation: 3,
+            PublicKey: runtime.encodeKey(pair.publicKey),
+            Algorithm: runtime.constants.keyAlgorithm,
+          },
+        ],
+      });
+    }
+    if (url.pathname === "/api/uploads" && method === "POST") {
+      const id = `send-up-${String(sendSink.received.size + 1)}`;
+      sendSink.received.set(id, 0);
+      return reply(200, { uploadId: id, chunkSize: 64 * 1024 });
+    }
+    const append = /^\/api\/uploads\/([A-Za-z0-9_-]+)$/.exec(url.pathname);
+    if (append !== null) {
+      const id = append[1];
+      if (method === "GET") return reply(200, { received: sendSink.received.get(id) ?? 0 });
+      // AWAITED. See `holdAppend`. The entered-signal fires first, so a
+      // scenario can wait for the request to be in the handler rather than
+      // guessing that it is.
+      if (sendSink.holdAppend !== null) {
+        sendSink.onAppendEntered?.();
+        sendSink.onAppendEntered = null;
+        await sendSink.holdAppend;
+      }
+      const range = new Headers(init?.headers ?? {}).get("content-range");
+      const parsed = range === null ? null : /bytes (\d+)-(\d+)\//.exec(range);
+      if (parsed !== null) sendSink.received.set(id, Number(parsed[2]) + 1);
+      return reply(200, { received: sendSink.received.get(id) ?? 0 });
+    }
+    const finalize = /^\/api\/uploads\/([A-Za-z0-9_-]+)\/finalize$/.exec(url.pathname);
+    if (finalize !== null) return reply(200, { id: `obj-${finalize[1]}`, expiresAt: 9_999_999 });
+    if (url.pathname.endsWith("/inbox/tasks") && method === "POST") {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      entry.body = body;
+      const task = {
+        ID: `sent-task-${String(sendSink.tasks.size + 1)}`,
+        SourceDeviceID: inbox.device.id,
+        IdempotencyKey: String(body.idempotencyKey),
+        StoredFileID: String(body.storedFileId),
+        State: "queued",
+        ErrorCode: "",
+        CiphertextBytes: 0,
+        WrapAlgorithm: String(body.wrapAlgorithm),
+        TargetKeyID: String(body.targetKeyId),
+        TargetKeyGeneration: Number(body.targetKeyGeneration),
+        CreatedAt: 1,
+        ExpiresAt: 9_999_999,
+        SavedAt: 0,
+        Terminal: false,
+      };
+      sendSink.tasks.set(task.IdempotencyKey, task);
+      return reply(201, { task });
+    }
+    return reply(404, { error: "no route" });
   },
 };
 
@@ -363,6 +636,8 @@ const answers = {
   firstClose: 0, // 0 hide, 1 quit, 2 cancel
   confirm: [], // consumed in order; `true` is Quit, `false` is Stay
   confirmCalls: 0,
+  /** The last quit prompt main composed. Risk-specific; see `confirm`. */
+  lastPrompt: null,
   firstCloseCalls: 0,
   exited: false,
   stopped: [],
@@ -419,10 +694,21 @@ async function main() {
           inbox.revealed.push(directory);
         },
         makeApi: () => inboxApi,
+        // The Inbox's OWN destination factory, distinct from the stored one
+        // below. Off by default: only the automatic-receive scenario turns it
+        // on, and only for the delivery it built.
+        makeDestination: async (request) =>
+          inbox.writeTo === null
+            ? makeDestination({ manifest: request.manifest })
+            : makeWritingDestination({ ...request, rootPath: inbox.writeTo }),
         resolveDevice: async () => inbox.device,
         directoryUsable: async () => inbox.folderUsable,
         backoff: { idle: 3600, afterWork: 3600, first: 3600, cap: 3600, blocked: 3600 },
       },
+      // Device Inbox SEND. Only the HTTP is injected: the coordinator, the plan
+      // store, the `device_task` adapter and the upload engine are the shipped
+      // ones, and the ciphertext comes from the renderer's own producer.
+      inboxSend: { fetchImpl: (input, init) => sendSink.fetch(input, init) },
       storedReceive: { receive: streamingReceive },
       // Never the real Windows startup programs: this run must not add itself
       // to whatever machine it happens to be on.
@@ -441,8 +727,14 @@ async function main() {
         answers.firstCloseCalls += 1;
         return answers.firstClose;
       },
-      confirm: async () => {
+      confirm: async (prompt) => {
         answers.confirmCalls += 1;
+        // The prompt is RISK-SPECIFIC — `quitPrompt` picks a different title
+        // for a transfer, for unsent text, and for an unknown answer — so it is
+        // the only thing here that can tell those apart. Captured because
+        // "was the user asked" does not discriminate: this app has several
+        // reasons to ask.
+        answers.lastPrompt = prompt ?? null;
         const next = answers.confirm.shift();
         const hook = answers.onConfirm;
         if (hook) {
@@ -475,6 +767,20 @@ async function main() {
   }
 
   await waitForShell(win);
+
+  // ## The restart half
+  //
+  // A SECOND process over the same task-owned directories. It drives nothing
+  // and asserts one thing: that the history the first half produced is still
+  // there and still names the same files. Everything else in this file would
+  // only re-prove what the first half proved.
+  if (RESTART_PHASE) {
+    await scenarioRestartedHistory(win, runtime);
+    report();
+    app.exit(failures.length === 0 ? 0 : 1);
+    return;
+  }
+
   await scenarioHideKeepsEverything(win, runtime);
   await scenarioQuitCancelled(win, runtime);
   await scenarioResidueThenStay(win, runtime);
@@ -492,6 +798,13 @@ async function main() {
   await scenarioInboxMessages(win);
   await scenarioInboxPolicy(win);
   await scenarioInboxReceiptsAndReveal(win);
+  // The delivery that arrives with nobody looking, and the history that names
+  // it. Ordered here because it needs consent, a key and a chosen folder, and
+  // because everything after it may navigate away.
+  await scenarioInboxAutomaticReceive(win, runtime);
+  await scenarioInboxSend(win);
+  // The pre-quit answer, with a delivery genuinely held open by the server.
+  await scenarioSendQuitRisk(win, runtime);
   // Stored send, while the smoke is signed in and BEFORE any quit scenario.
   // A quit fences admissions and a Stay clears them; running the whole send
   // flow through that would be testing the fence, which has its own coverage,
@@ -935,11 +1248,11 @@ async function setClipboard(value) {
  * dialog. The objects are genuine `File`s, so what the controller hands to the
  * shared `encryptFiles` below is what a user's pick produces.
  */
-async function pickFiles(win, files) {
+async function pickFiles(win, files, testId = "send-files") {
   return js(
     win,
     `(() => {
-      const input = document.querySelector('[data-test="send-files"]');
+      const input = document.querySelector('[data-test="${testId}"]');
       const dt = new DataTransfer();
       ${files
         .map(
@@ -1270,6 +1583,481 @@ async function scenarioInboxReceiptsAndReveal(win) {
     inbox.revealed[inbox.revealed.length - 1] === destinationDir,
     String(inbox.revealed[inbox.revealed.length - 1]),
   );
+}
+
+/**
+ * A delivery that arrives with NOBODY looking, and a history that names it.
+ *
+ * This is the scenario the earlier checkpoint owed and could not produce. Every
+ * clause is a claim the product makes and a user can check:
+ *
+ *  * the window is HIDDEN and the page is on another row while it happens;
+ *  * nothing is clicked — `accept` is never called for this task;
+ *  * the bytes that land are the sender's own, compared byte for byte;
+ *  * the foreground history then NAMES what arrived, from metadata captured
+ *    during the receive rather than by reading the folder afterwards.
+ *
+ * The transport is this run's in-memory fixture and the writer is the injected
+ * destination — see `makeWritingDestination`. Everything between them is the
+ * shipped path.
+ */
+async function scenarioInboxAutomaticReceive(win, runtime) {
+  await openInbox(win);
+  // Unattended saving is the user's choice, made here as a person makes it.
+  check("auto was chosen for the delivery", await clickTest(win, "inbox-policy-auto"));
+  const announced = await waitForValue(() => inbox.lastAutoAccept === "auto", 8000);
+  check("auto reached the transport", announced === true, inbox.lastAutoAccept);
+
+  const payload = Buffer.from("the actual bytes of the actual file", "utf8");
+  const nested = Buffer.from("nested content", "utf8");
+  inbox.writeTo = destinationDir;
+  inbox.written = [];
+  const acceptedBefore = inbox.accepted.length;
+  const delivery = await buildRealDelivery("task-auto-1", [
+    { name: "report.pdf", bytes: payload },
+    { name: "photos/one.jpg", bytes: nested },
+  ]);
+
+  // ---- nobody is looking --------------------------------------------------
+  await js(win, `(() => { document.querySelector('[data-test="nav-lan"] button')?.click(); return true; })()`);
+  await waitInbox(win, "another page", `document.querySelector('[data-test="inbox-policy"]') === null`);
+  // The REAL close path, which is what a person does. By now it has already
+  // been acknowledged by an earlier scenario, so this hides silently.
+  const closed = await runtime.onWindowClose();
+  check("closing hides rather than ending anything", closed.action === "hide" || closed.kind === "already-acknowledged", JSON.stringify(closed));
+  check("the window is hidden while it arrives", win.isVisible() === false, String(win.isVisible()));
+
+  inbox.deliveries = [delivery];
+  handlerControlWake();
+
+  const landed = await waitForValue(() => inbox.written.length === 2, 30_000);
+  process.stdout.write(
+    `RELAYIUM_INBOX_AUTO_DIAG ${JSON.stringify({
+      written: inbox.written,
+      reports: inbox.reports,
+      claims: inbox.claims,
+    })}\n`,
+  );
+  check("the delivery was received with no window and no page", landed === true, inbox.written.join(","));
+  // Nothing was clicked, and nothing asked central to accept it.
+  check("no accept was issued for it", inbox.accepted.length === acceptedBefore, String(inbox.accepted.length));
+
+  // ---- the bytes are the sender's own -------------------------------------
+  const wrote = await readFile(path.join(destinationDir, "report.pdf")).catch(() => null);
+  check("the file exists on disk", wrote !== null);
+  check("and its bytes are exactly what was sent", wrote !== null && wrote.equals(payload), String(wrote?.length));
+  const nestedWrote = await readFile(path.join(destinationDir, "photos", "one.jpg")).catch(() => null);
+  check("a nested name kept its folder", nestedWrote !== null && nestedWrote.equals(nested));
+
+  // ---- central was told, once it was true ---------------------------------
+  //
+  // WAITED FOR, not asserted the instant the bytes appear. The ACK is issued
+  // after the publish and after the journal marker, so a check that ran when
+  // the files landed was a barrier in the wrong place — it passed on a fast
+  // machine and reported `0` on a slower one, which is a fixture defect
+  // wearing a product failure's clothes.
+  const ackedNow = await waitForValue(
+    () => inbox.reports.some((r) => r.taskID === "task-auto-1" && r.state === "saved" && r.committed),
+    20_000,
+  );
+  check("central was told it was saved", ackedNow === true, JSON.stringify(inbox.reports));
+  const acked = inbox.reports.filter((r) => r.taskID === "task-auto-1" && r.state === "saved" && r.committed);
+  check("and told exactly once", acked.length === 1, String(acked.length));
+
+  // ---- and the history NAMES it -------------------------------------------
+  win.show();
+  await openInbox(win);
+  const records = await js(
+    win,
+    `Promise.all([
+       globalThis.relayium.inbox.receipts().catch((e) => ({ threw: String(e) })),
+       globalThis.relayium.inbox.history().catch((e) => ({ threw: String(e) })),
+     ]).then(([r, h]) => JSON.stringify({
+       receipts: r.entries === null ? "unreadable" : r.entries.length,
+       phases: (r.entries ?? []).map((e) => e.phase),
+       names: h.entries === null ? "unreadable" : h.entries.map((e) => e.items.length),
+       taskIDs: (h.entries ?? []).map((e) => e.taskID),
+     }))`,
+  );
+  process.stdout.write(`RELAYIUM_INBOX_HISTORY_DIAG ${records}\n`);
+  const named = await waitInbox(
+    win,
+    "the named history",
+    `document.querySelector('[data-test="inbox-history-name"]') !== null`,
+  );
+  check("the history names what arrived", named === true);
+  const names = await js(
+    win,
+    `[...document.querySelectorAll('[data-test="inbox-history-name"]')].map((n) => n.textContent).join("|")`,
+  );
+  check("both names are rendered, relative", names === "report.pdf|photos/one.jpg", names);
+  check("and no unnamed notice is shown for it", (await present(win, "inbox-receipt-unnamed")) === false);
+  check("the names record was readable", (await present(win, "inbox-names-unavailable")) === false);
+  // The receiving directory is main's and stays there.
+  const body = await js(win, `document.body.innerText`);
+  check("the destination never reaches the page", !body.includes(destinationDir), "path on screen");
+  inbox.writeTo = null;
+}
+
+/**
+ * Sending to another of the user's own devices, driven as a person drives it.
+ *
+ * The producer here is the REAL renderer path: the page's own `<input>`, the
+ * shared `encryptFiles`, and ciphertext over the real IPC. The server is this
+ * run's in-memory sink, which records what was actually asked of it — so the
+ * `purpose=device_task` object and the sealed key in the create are observed
+ * evidence rather than an assumption.
+ */
+async function scenarioInboxSend(win) {
+  // Where this scenario's requests begin. See the note at `mine` below.
+  const sendFrom = sendSink.requests.length;
+  await openInbox(win);
+  // The list is read once at startup, before an account is bound, so the page
+  // offers the refresh a person would use.
+  const refreshable = await waitInbox(
+    win,
+    "the device picker",
+    `document.querySelector('[data-test="inbox-send-refresh"]') !== null
+      || document.querySelector('[data-test="inbox-send-target"]') !== null`,
+  );
+  check("the send section is offered", refreshable === true);
+  if (await present(win, "inbox-send-refresh")) await clickTest(win, "inbox-send-refresh");
+
+  const listed = await waitInbox(
+    win,
+    "this account's other devices",
+    `document.querySelectorAll('[data-test="inbox-send-target"]').length === 2`,
+  );
+  check("the account's other devices are listed", listed === true);
+  // The device that cannot take a delivery says so, in central's own verdict.
+  const refusal = await shown(win, "inbox-send-target-refusal");
+  check("an ineligible device says why", refusal.length > 0, refusal);
+  const checkboxes = await js(
+    win,
+    `[...document.querySelectorAll('[data-test="inbox-send-target"]')].map((el) => el.disabled).join(",")`,
+  );
+  check("and cannot be selected", checkboxes === "false,true", checkboxes);
+
+  // ---- pick, choose, send -------------------------------------------------
+  const picked = await pickFiles(win, [{ name: "holiday.txt", bytes: Buffer.from("sun and rain") }], "inbox-send-files");
+  check("files were picked through the real input", picked === 1, String(picked));
+  const shownName = await shown(win, "inbox-send-names");
+  check("the page shows the actual name it will send", shownName.includes("holiday.txt"), shownName);
+
+  await js(
+    win,
+    `(() => { const el = document.querySelector('[data-test="inbox-send-target"]:not([disabled])');
+      el.click(); return true; })()`,
+  );
+  const ready = await waitInbox(
+    win,
+    "the send button to become usable",
+    `document.querySelector('[data-test="inbox-send-start"]')?.disabled === false`,
+  );
+  check("choosing a device and a file is enough to send", ready === true);
+  check("send was clicked", await clickTest(win, "inbox-send-start"));
+
+  const pageState = await js(
+    win,
+    `JSON.stringify({
+       checked: document.querySelectorAll('[data-test="inbox-send-target"]:checked').length,
+       statuses: [...document.querySelectorAll('[data-test="inbox-send-status"]')].map((n) => n.textContent.trim()),
+       rows: document.querySelectorAll('[data-test="inbox-send-target"]').length,
+     })`,
+  );
+  process.stdout.write(
+    `RELAYIUM_INBOX_SEND_DIAG ${JSON.stringify({
+      page: pageState,
+      requests: sendSink.requests.map((r) => `${r.method} ${r.url}`),
+    })}\n`,
+  );
+  // ## Waited on the PHASE, not on the sentence
+  //
+  // The first version of this waited for a status with no "%" in it — and
+  // "Waiting" has no "%", so the barrier passed while the delivery was still
+  // queued. It held on one run and failed on the next, which is a fixture
+  // defect wearing a product failure's clothes. The phase is carried as data
+  // for exactly this reason.
+  const settled = await waitFor(
+    win,
+    "the delivery to settle",
+    `document.querySelector('[data-test="inbox-send-status"][data-phase="settled"]') !== null`,
+    30_000,
+  );
+  check("the delivery settled", settled === true);
+  const status = await js(
+    win,
+    `document.querySelector('[data-test="inbox-send-status"][data-phase="settled"]')?.textContent?.trim() ?? ""`,
+  );
+  process.stdout.write(
+    `RELAYIUM_INBOX_SEND_SETTLED ${JSON.stringify({
+      status,
+      requests: sendSink.requests.map((r) => `${r.method} ${r.url}`),
+    })}\n`,
+  );
+  check("and it is reported as delivered", /Delivered|已送达/.test(status), status);
+
+  // ---- what the server was actually asked ---------------------------------
+  // Scoped to THIS scenario's requests. Nothing here can be satisfied by an
+  // upload some earlier scenario made — the trap the held-send gate fell into.
+  const mine = sendSink.requests.slice(sendFrom);
+  const init = mine.find((r) => r.url.startsWith("/api/uploads?"));
+  check("the object was opened as a device task", init?.url.includes("purpose=device_task") === true, init?.url);
+  const created = mine.find((r) => r.url.endsWith("/inbox/tasks"));
+  check("a task was created", created !== undefined);
+  check("with a key sealed to the target", String(created?.body?.wrappedKey ?? "").length > 0);
+  check("and the target's own key id", created?.body?.targetKeyId === "target-key-1", String(created?.body?.targetKeyId));
+  // The one thing that must never appear anywhere the server can see it.
+  const seen = JSON.stringify(sendSink.requests);
+  check("the file name never reached the server", !seen.includes("holiday.txt"), "name on the wire");
+}
+
+/**
+ * What the user was shown, after the app was closed and opened again.
+ *
+ * The only assertion this half exists for. A reload in the first process would
+ * not have proved it: the store's cache is warm there, so a second read tells
+ * you nothing about the bytes on disk. Here the process is new, the cache is
+ * cold, and the record has to be opened with the account's at-rest key from the
+ * persisted secret store.
+ */
+async function scenarioRestartedHistory(win, runtime) {
+  // The session may or may not have survived; this half does not care which,
+  // only that the account can be reached again.
+  await openInbox(win);
+  if (await present(win, "inbox-sign-in")) {
+    pollAnswer = { status: "ok", accessToken: "smoke-bearer", accountEmail: "smoke@example.invalid" };
+    const nonce = "restart-smoke-nonce";
+    await js(win, `globalThis.relayium.auth.start({ nonce: ${JSON.stringify(nonce)} })`);
+    await js(win, `globalThis.relayium.auth.poll({ nonce: ${JSON.stringify(nonce)} }).then((r) => r.status, () => "threw")`);
+    await openInbox(win);
+  }
+
+  const named = await waitFor(
+    win,
+    "the named history after a restart",
+    `document.querySelector('[data-test="inbox-history-name"]') !== null`,
+    20_000,
+  );
+  check("the named history survived the restart", named === true);
+  const names = await js(
+    win,
+    `[...document.querySelectorAll('[data-test="inbox-history-name"]')].map((n) => n.textContent).join("|")`,
+  );
+  check("with the same names, from disk", names === "report.pdf|photos/one.jpg", names);
+  check("and it is not reported as unavailable", (await present(win, "inbox-names-unavailable")) === false);
+  // Consent survived too, which is what makes the history's survival meaningful
+  // rather than an artefact of a fresh profile.
+  check("receiving is still on", (await present(win, "inbox-disable")) === true);
+
+  // ---- unsent work, in a process that is holding nothing else -------------
+  //
+  // The drafts half of the quit-risk fix, proven where it can be proven: this
+  // process has received nothing and sent nothing, so the ONLY thing that can
+  // put something at stake is the selection. If picked files did not reach the
+  // snapshot the risk would be `none`, `quitPrompt` would return null, and the
+  // app would quit without asking at all — which is exactly what it did before.
+  const picked = await pickFiles(
+    win,
+    [{ name: "unsent-after-restart.txt", bytes: Buffer.from("still here") }],
+    "inbox-send-files",
+  );
+  check("files were picked in the restarted process", picked === 1, String(picked));
+  answers.lastPrompt = null;
+  answers.confirm = [false]; // Stay
+  const asked = answers.confirmCalls;
+  const decision = await runtime.requestQuit();
+  process.stdout.write(
+    `RELAYIUM_QUIT_PROMPT_RESTART ${JSON.stringify({
+      title: answers.lastPrompt?.title ?? null,
+      decision,
+      asked: answers.confirmCalls - asked,
+    })}\n`,
+  );
+  check("a quit over unsent files stays", decision === "stay", decision);
+  check("it asked at all", answers.confirmCalls > asked, `${String(asked)} -> ${String(answers.confirmCalls)}`);
+  check(
+    "and it named UNSENT WORK, not a transfer",
+    answers.lastPrompt?.title === "Quit with unsent text?",
+    String(answers.lastPrompt?.title),
+  );
+  check("the process was not ended", answers.exited === false);
+  check("and the selection survived the prompt", (await present(win, "inbox-send-picked")) === true);
+}
+
+/**
+ * What a quit costs while a delivery is actually in flight — and while files
+ * are merely CHOSEN.
+ *
+ * Two facts live on opposite sides of the boundary and both were being lost:
+ *
+ *  * main counted only its receiving features, so an upload or a device
+ *    delivery mid-PATCH made the app look idle at the moment the user was
+ *    deciding whether to end it. The counts `quiesce` reports come after the
+ *    work has been aborted, which is far too late to inform a consent;
+ *  * the page reported drafts from the WebRTC composers only, so files a person
+ *    had picked and not yet sent were "nothing at stake".
+ *
+ * Root's own probe found both against the frozen source. This is the owning
+ * evidence for the fix, and it asserts the pre-quit answer specifically — never
+ * a post-teardown count, which would prove the wrong thing.
+ */
+async function scenarioSendQuitRisk(win, runtime) {
+  try {
+    await sendQuitRisk(win, runtime);
+  } finally {
+    // Whatever happened above, nothing stays parked in the append handler: a
+    // held request outlives this scenario and every later one waits behind it,
+    // which turns one failed assertion into a run that times out somewhere else.
+    const release = sendSink.holdAppend;
+    sendSink.holdAppend = null;
+    sendSink.onAppendEntered = null;
+    if (release !== null) releaseHeldAppend();
+  }
+}
+
+/** Set by the scenario so the `finally` above can always release the gate. */
+let releaseHeldAppend = () => undefined;
+
+async function sendQuitRisk(win, runtime) {
+  await openInbox(win);
+
+  // ---- chosen, not yet sent: a DRAFT ---------------------------------------
+  const picked = await pickFiles(
+    win,
+    [{ name: "unsent-report.txt", bytes: Buffer.from("not sent yet") }],
+    "inbox-send-files",
+  );
+  check("files were picked for a device", picked === 1, String(picked));
+  // Observed through the PUBLIC path, not a private field: a quit reaches a
+  // confirmation only when the risk is something. Files chosen and not sent are
+  // `local-text` risk — before the fix the page reported no drafts for them and
+  // the app quit without asking at all.
+  const askedBefore = answers.confirmCalls;
+  answers.lastPrompt = null;
+  answers.confirm = [false]; // Stay
+  const draftDecision = await runtime.requestQuit();
+  check("a quit over picked-but-unsent files stays", draftDecision === "stay", draftDecision);
+  check(
+    "and it ASKED, because unsent files are something at stake",
+    answers.confirmCalls > askedBefore,
+    `${String(askedBefore)} -> ${String(answers.confirmCalls)}`,
+  );
+  process.stdout.write(
+    `RELAYIUM_QUIT_PROMPT_DRAFT ${JSON.stringify({ title: answers.lastPrompt?.title ?? null })}\n`,
+  );
+  // ## No title assertion HERE, and the reason is worth stating
+  //
+  // By this point in the run main is legitimately holding other things — the
+  // scheduler has worked a delivery, handles have been retained — so the risk
+  // is `transfer` whatever the drafts say, and a title check here would pass
+  // for reasons that have nothing to do with the fix. Measured, not assumed:
+  // the diagnostic above prints what it actually was.
+  //
+  // The drafts half is proven in the RESTART phase instead, where main is
+  // quiet and `local-text` is the only thing the prompt can be.
+  check("the process was not ended over a draft", answers.exited === false);
+  check("and the selection is still there", (await present(win, "inbox-send-picked")) === true);
+
+  // ---- in flight: the delivery is HELD open --------------------------------
+  //
+  // The hold is a real gate: the append handler awaits it, and `entered`
+  // resolves only when a request is actually sitting in that handler. Both
+  // halves are needed — without the await nothing is held, and without the
+  // entered-signal the scenario is guessing when to look.
+  //
+  // Request identity is taken FRESH from here, so nothing below can be
+  // satisfied by an upload the previous scenario made.
+  const firstRequest = sendSink.requests.length;
+  let releaseUpload = () => undefined;
+  const entered = new Promise((resolve) => {
+    sendSink.onAppendEntered = resolve;
+  });
+  sendSink.holdAppend = new Promise((resolve) => {
+    releaseUpload = resolve;
+  });
+  releaseHeldAppend = releaseUpload;
+  await js(
+    win,
+    `(() => { const el = document.querySelector('[data-test="inbox-send-target"]:not([disabled])');
+      if (el && !el.checked) el.click(); return true; })()`,
+  );
+  await waitInbox(
+    win,
+    "the send button to become usable",
+    `document.querySelector('[data-test="inbox-send-start"]')?.disabled === false`,
+  );
+  check("send was pressed", await clickTest(win, "inbox-send-start"));
+
+  // ## The server's gate first, the page's state second
+  //
+  // Waiting on the DOM first was the mistake: `sending` is fleeting when
+  // nothing is actually held, so it passed by luck. Here the run blocks until a
+  // request is sitting inside the append handler — at which point the delivery
+  // is provably in flight and stays that way until this scenario says otherwise.
+  const arrived = await Promise.race([
+    entered.then(() => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), 30_000)),
+  ]);
+  check("a real append reached the server and is held there", arrived === true);
+  // FRESH identity: an upload from the previous scenario cannot satisfy this.
+  const appends = sendSink.requests
+    .slice(firstRequest)
+    .filter((r) => r.method === "PATCH" && r.url.startsWith("/api/uploads/"));
+  check("and it belongs to THIS send", appends.length >= 1, String(appends.length));
+  // Only now is the page's own state meaningful — and it must still say so.
+  const inFlight = await waitFor(
+    win,
+    "the page to report the delivery as running",
+    `document.querySelector('[data-test="inbox-send-status"][data-phase="sending"]') !== null`,
+    30_000,
+  );
+  check("the delivery is running", inFlight === true);
+
+  // ---- the quit question, asked while it is held ---------------------------
+  answers.confirm = [false]; // Stay
+  answers.lastPrompt = null;
+  const decision = await runtime.requestQuit();
+  check("a refused quit stays", decision === "stay", decision);
+  check("the process was not ended", answers.exited === false);
+  // The user was ASKED — which only happens when something is at stake. A quit
+  // over an app believed idle does not reach a confirmation at all.
+  check("the quit asked before ending anything", answers.confirmCalls > 0, String(answers.confirmCalls));
+  process.stdout.write(
+    `RELAYIUM_QUIT_PROMPT_HELD ${JSON.stringify({ title: answers.lastPrompt?.title ?? null })}\n`,
+  );
+  // A held delivery is a TRANSFER, and it must be named as one. Before the fix
+  // main counted no outgoing work and the page reported `sending: false`, so
+  // the strongest thing this could have been was the unsent-work prompt.
+  check(
+    "and the prompt names a running transfer",
+    answers.lastPrompt?.title === "Quit while a transfer is running?",
+    String(answers.lastPrompt?.title),
+  );
+
+  // ---- Stay leaves the delivery alone, and the selection with it -----------
+  //
+  // Released in a `finally` below as well, so an assertion that throws above
+  // cannot leave a request parked in the handler and every later scenario
+  // waiting behind it.
+  releaseUpload();
+  sendSink.holdAppend = null;
+  sendSink.onAppendEntered = null;
+  const settled = await waitFor(
+    win,
+    "the held delivery to finish after Stay",
+    `document.querySelector('[data-test="inbox-send-status"][data-phase="settled"]') !== null`,
+    30_000,
+  );
+  check("staying did not cancel the delivery", settled === true);
+  const status = await js(
+    win,
+    `document.querySelector('[data-test="inbox-send-status"][data-phase="settled"]')?.textContent?.trim() ?? ""`,
+  );
+  check("and it completed", /Delivered|已送达/.test(status), status);
+  // The picked files survive a Stay: a person who chose to keep working must
+  // not find their selection gone.
+  check("the selection survived the quit prompt", (await present(win, "inbox-send-picked")) === true);
 }
 
 /** Poll a main-process fact the scheduler produces. */

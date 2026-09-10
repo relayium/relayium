@@ -38,6 +38,7 @@ import { StoredReceiveService, type StoredReceiveDeps } from "./features/stored-
 import { InboxService, type InboxServiceDeps } from "./features/inbox.js";
 import { AccountIdentity } from "./features/account-identity.js";
 import { StoredSendService, type StoredSendDeps } from "./features/stored-send.js";
+import { InboxSendService, type InboxSendDeps } from "./features/inbox-send-service.js";
 import { DeviceAuthClient } from "./account/device-auth.js";
 import { ENGINEERING_BANNER, engineeringOverride, isEngineeringBuild } from "./build-mode.js";
 import { IceControl, IceRequestRegistry } from "./net/ice-control.js";
@@ -143,6 +144,16 @@ export interface HandlerComposition {
    * which is the only way to prove the frames are the shared format.
    */
   storedSend?: NonNullable<StoredSendDeps["upload"]>;
+  /**
+   * Device Inbox SEND seams: the two protocol runtimes and the HTTP.
+   *
+   * The same injection discipline, for the same acceptance need: a run has to
+   * drive the REAL producer — the renderer's own `encryptFiles` — and the real
+   * task/upload requests against a controlled sink, without a live account. The
+   * origin, the authority and the account identity are NOT in this `Pick` and
+   * cannot be replaced from here.
+   */
+  inboxSend?: Pick<InboxSendDeps, "runtime" | "storedRuntime" | "fetchImpl" | "requestTimeoutMs" | "now">;
   /** A task-owned journal directory, so a run does not write into the user's
    *  profile — and so send is drivable on a host that is not Windows. */
   storedSendJournalDirectory?: string;
@@ -224,6 +235,8 @@ export interface HandlerControl {
   readonly inbox: InboxService;
   /** Stored send, for the same risk snapshot and teardown. */
   readonly storedSend: StoredSendService;
+  /** Device Inbox send, for the same risk snapshot and teardown. */
+  readonly inboxSend: InboxSendService;
   readonly resident: ResidentBridge;
   /**
    * Stop main's own outgoing work, recoverably.
@@ -763,9 +776,77 @@ export function registerHandlers(
   // — or at any page. A signed-out or unconsented profile parks at a guard.
   if (composition.startInbox !== false) inbox.start();
 
+  // -------------------------------------------------------------------------
+  // Device Inbox — send
+  // -------------------------------------------------------------------------
+  //
+  // Composed against the RECEIVE feature's own account seam rather than against
+  // a second derivation of the account identity: a send plan lives in the same
+  // per-account directory as the journal and the vault, under the same digest.
+  const inboxComposition = inbox.composition();
+  const inboxSend = new InboxSendService({
+    origin,
+    authority: () => service.captureAccountAuthority(),
+    accountEpoch: () => service.accountEpoch,
+    identity: () => inboxComposition.identity(),
+    atRestKeyFor: (context) => inboxComposition.atRestKeyFor(context),
+    runtime: () => inboxComposition.runtime(),
+    // The document that ASKED owns the job. One document, one job.
+    currentDocument: () => router.generation,
+    onProgress: (job, committed, total) => {
+      // Emitted on the document that asked, never whichever is current: a
+      // reload replaces the page rather than inheriting the delivery it began.
+      router.emit(IPC_EVENTS.inboxSendProgress, job.document, { jobId: job.id, committed, total });
+    },
+    onOutcome: (job, view) => {
+      router.emit(IPC_EVENTS.inboxSendOutcome, job.document, { jobId: job.id, outcome: view });
+    },
+    reportFailure: (err) => events.reportFailure?.(err),
+    ...(composition.inboxSend ?? {}),
+  });
+
+  /** One target device. Central's id; never a key and never a name. */
+  const inboxTarget = (payload: unknown): string =>
+    expectString(expectObject(payload)["target"], MAX_INBOX_ID_LENGTH);
+  const inboxSendJob = (payload: unknown): string => expectString(expectObject(payload)["jobId"], 64);
+
+  router.handle(IPC.inboxSendTargets, () => inboxSend.targets());
+  router.handle(IPC.inboxSendStart, async (payload) => {
+    const body = expectObject(payload);
+    const kind = body["kind"];
+    // A closed set, checked here: `buildSendManifest` branches on it, and a
+    // third value would reach the manifest builder as an unhandled case.
+    if (kind !== "file" && kind !== "text") throw new IpcRefusal("unknown delivery kind");
+    return inboxSend.start({
+      target: inboxTarget(body),
+      kind,
+      entries: sendDescriptors(body["entries"]),
+      document: router.generation,
+    });
+  });
+  router.handle(IPC.inboxSendFeed, async (payload) => {
+    const body = expectObject(payload);
+    // Bounded before anything is allocated. The engine checks the EXACT length
+    // it expects; this refuses an absurd one at the boundary.
+    return inboxSend.feed(expectString(body["jobId"], 64), {
+      fileIndex: expectIndex(body["fileIndex"]),
+      seq: expectIndex(body["seq"]),
+      bytes: expectChunk(body["bytes"], MAX_SEND_FRAME_BYTES),
+    });
+  });
+  router.handle(IPC.inboxSendEnd, (payload) => inboxSend.end(inboxSendJob(payload)));
+  router.handle(IPC.inboxSendCancel, (payload) => inboxSend.cancel(inboxSendJob(payload)));
+  router.handle(IPC.inboxSendConverge, (payload) => inboxSend.converge(inboxSendJob(payload)));
+
   // The account moved. The service compares the epoch itself, because this also
   // fires for a document change and a reload must not stop receiving.
-  const releaseAccountWatch = service.onAccountChanged(() => inbox.onAuthorityChanged());
+  const releaseAccountWatch = service.onAccountChanged(() => {
+    inbox.onAuthorityChanged();
+    // A delivery in flight under the previous account's bearer is revoked and
+    // JOINED. Not awaited here: this callback is synchronous and the watcher
+    // must not be held by a network drain.
+    void inboxSend.onAccountChanged().catch((err: unknown) => events.reportFailure?.(err));
+  });
 
   /** A task or vault id the renderer named. It names; it authorises nothing. */
   const inboxId = (payload: unknown): string =>
@@ -808,6 +889,11 @@ export function registerHandlers(
   // The generation is read HERE, so the reveal carries the document that asked.
   router.handle(IPC.inboxRevealFolder, () => inbox.revealFolder(router.generation));
   router.handle(IPC.inboxReceipts, async () => ({ entries: await inbox.receipts() }));
+  // `null` is "could not be read", not "empty" — carried across as such so the
+  // page can say the names are unavailable rather than claiming nothing has
+  // ever arrived. The counts in `inboxReceipts` are unaffected by it.
+  router.handle(IPC.inboxHistory, async () => ({ entries: await inbox.history() }));
+  router.handle(IPC.inboxForgetDelivery, (payload) => inbox.forgetDelivery(inboxId(payload)));
 
   router.handle(IPC.inboxReleaseRetained, (payload) => {
     const body = expectObject(payload);
@@ -1155,6 +1241,11 @@ export function registerHandlers(
     // and produces the ciphertext, so a document that is gone cannot finish
     // what it started. Receiving is the opposite and is deliberately untouched.
     revocations.add(storedSend.revokeDocument(generation));
+    // The same rule for an Inbox delivery, and for the same reason: the page
+    // holds the `File` objects and produces the ciphertext, so a document that
+    // is gone cannot finish what it started. RECEIVING is deliberately
+    // untouched — it is main's, and surviving a reload is the point of it.
+    revocations.add(inboxSend.revokeDocument(generation));
     volunteered = null;
     for (const [requestId, resolve] of [...outstanding]) {
       outstanding.delete(requestId);
@@ -1174,6 +1265,7 @@ export function registerHandlers(
     storedReceive.fence();
     inbox.fence();
     storedSend.fence();
+    inboxSend.fence();
   };
 
   const quiesce = async (): Promise<CleanupOutcome> => {
@@ -1203,17 +1295,22 @@ export function registerHandlers(
     // Revokes every job's fence before its own first await, so starting it here
     // and joining it below stops the uploads NOW.
     const sendStopping = storedSend.quiesce();
+    // The same, for a delivery to one of the user's own devices: the producers
+    // are abandoned before the drain, so a page that has been told to stop
+    // cannot leave the join waiting for frames nobody will send.
+    const inboxSendStopping = inboxSend.quiesce();
     // The leases, the sign-in, the queued transitions and the secret work. It
     // retires the in-flight sign-in before ITS first await too, so this is a
     // request as much as a join.
     const serviceStopping = service.quiesce();
 
-    const [sockets, reads, storedHeld, inboxHeld, sendHeld, outcome] = await Promise.all([
+    const [sockets, reads, storedHeld, inboxHeld, sendHeld, inboxSendHeld, outcome] = await Promise.all([
       hub.drainClosing(NETWORK_DRAIN_MS),
       iceRequests.drain(NETWORK_DRAIN_MS),
       storedStopping,
       inboxStopping,
       sendStopping,
+      inboxSendStopping,
       serviceStopping,
     ]);
 
@@ -1229,7 +1326,8 @@ export function registerHandlers(
       // A delivery still being received is an open transfer, and a retained
       // Inbox destination is one this process could not close — the same two
       // facts the stored counts carry, from the other receiving feature.
-      openLeases: outcome.openLeases + storedHeld.active + inboxHeld.active + sendHeld.active,
+      openLeases:
+        outcome.openLeases + storedHeld.active + inboxHeld.active + sendHeld.active + inboxSendHeld.active,
       unresolved:
         outcome.unresolved +
         storedHeld.retained.length +
@@ -1237,6 +1335,10 @@ export function registerHandlers(
         // An upload whose outcome could not be established is exactly the kind
         // of thing a quit prompt exists to mention.
         sendHeld.unresolved +
+        // And a DELIVERY whose outcome could not be established: it may or may
+        // not be waiting on the user's other device, and quitting over it
+        // without saying so is the same omission one line up.
+        inboxSendHeld.unresolved +
         (revocation !== null ? 1 : 0),
       networkUnsettled: sockets + reads,
       firstReason: outcome.firstReason ?? revocation,
@@ -1257,6 +1359,7 @@ export function registerHandlers(
     releaseAccountWatch();
     releaseSendAccountWatch();
     await storedSend.dispose();
+    await inboxSend.dispose();
     await inbox.dispose();
     await storedReceive.dispose();
     await service.dispose();
@@ -1274,6 +1377,7 @@ export function registerHandlers(
     service.admitReceives();
     storedReceive.resume();
     storedSend.resume();
+    inboxSend.resume();
     // The scheduler too: it was stopped by the same quiesce, and a Stay that
     // left it stopped would be an app that quietly never receives again.
     inbox.resume();
@@ -1284,6 +1388,7 @@ export function registerHandlers(
     storedReceive,
     inbox,
     storedSend,
+    inboxSend,
     resident,
     fence,
     quiesce,

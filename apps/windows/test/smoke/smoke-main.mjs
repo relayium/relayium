@@ -245,13 +245,16 @@ async function main() {
   // EXACT set, not a superset: a `contains` check would pass while the preload
   // quietly grew a surface nobody reviewed.
   //
-  // Pinned to the reviewed surface as it stands — `send` and `inbox` joined
-  // `stored`, `resident` and `loginItem` — rather than to whatever this tree happens to
-  // expose, which would accept a stale or an unreviewed bridge silently.
+  // Pinned to the reviewed surface as it stands — `inboxSend` joined `send`,
+  // `inbox`, `stored`, `resident` and `loginItem` — rather than to whatever this
+  // tree happens to expose, which would accept a stale or an unreviewed bridge
+  // silently. `inboxSend` is its own namespace rather than a member of `inbox`
+  // because it is the only Inbox surface that returns a KEY, and a reader
+  // auditing this line should see that without opening another file.
   check(
     "bridge exposed",
     parsed.keys.sort().join(",") ===
-      "appInfo,auth,ice,inbox,loginItem,pair,prefs,receive,resident,send,signaling,stored",
+      "appInfo,auth,ice,inbox,inboxSend,loginItem,pair,prefs,receive,resident,send,signaling,stored",
     parsed.keys.join(","),
   );
   check("no raw ipcRenderer in the page", parsed.hasIpc === false);
@@ -276,7 +279,7 @@ async function main() {
     "relayium:stored-receive-start", "relayium:stored-receive-cancel",
     "relayium:stored-receive-result", "relayium:stored-inventory",
     "relayium:stored-cleanup-retry",
-    // Device Inbox receive. Fourteen names, every one of which takes an id or
+    // Device Inbox receive. Every one of these takes an id or
     // nothing: none of them can carry a path, a claim token or a key, and
     // enabling opens a native dialog in main rather than accepting a
     // destination from the page.
@@ -289,6 +292,26 @@ async function main() {
     "relayium:inbox-copy-message",
     // Off / ask / auto, the main-owned folder reveal, and the receipt listing.
     "relayium:inbox-set-policy", "relayium:inbox-reveal-folder", "relayium:inbox-receipts",
+    // What arrived, BY NAME, and the one act that forgets it.
+    //
+    // `inbox-history` is the only Inbox channel that carries the user's own
+    // file names, and it carries them for the reason they were received: so a
+    // person can see what arrived. They are relative names — the receiving
+    // directory is not among them, and `inbox-reveal-folder` is what opens it
+    // from a path only main holds. `inbox-forget-delivery` is the ONLY thing
+    // that deletes that record: turning receiving off and signing out leave it
+    // alone, exactly as they leave the message vault alone.
+    "relayium:inbox-history", "relayium:inbox-forget-delivery",
+    // Device Inbox SEND. A target is named by central's DEVICE ID and nothing
+    // else: the device's public key, its key id and its algorithm all stay in
+    // main, because a renderer holding a target's key could seal to it. The
+    // ciphertext flows renderer→main, and the one secret flowing the other way
+    // is the content key for the delivery that document owns.
+    "relayium:inbox-send-targets", "relayium:inbox-send-start", "relayium:inbox-send-feed",
+    "relayium:inbox-send-end", "relayium:inbox-send-cancel",
+    // Convergence, never a fresh send: an unknown outcome retains its plan and
+    // its idempotency key so the SAME attempt can be replayed.
+    "relayium:inbox-send-converge",
     // Stored send and history. The renderer produces the ciphertext, so frames
     // flow renderer→main here; the one secret flowing the other way is the
     // content key `start` answers with, for the job that document owns.

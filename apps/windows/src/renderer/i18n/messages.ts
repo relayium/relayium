@@ -353,8 +353,72 @@ export const en = {
   inboxReceiptBlocked: "Needs a decision",
   inboxReceiptWorking: "In progress",
   inboxReceiptFailed: "Did not finish",
-  inboxReceiptNoNames:
-    "Relayium's delivery record keeps counts and outcomes, not file names. Open the folder to see what arrived.",
+  // Per row, and only when this delivery has no names of its own. The record
+  // that carries them is written after the files are on disk, so a delivery can
+  // be perfectly real and still have nothing to name — that is what this says,
+  // rather than leaving a delivery looking as though it arrived empty.
+  inboxReceiptUnnamed: "The file names for this delivery were not recorded. Open the folder to see what arrived.",
+  inboxHistoryNamesUnavailable:
+    "The file names could not be read just now. Nothing has been deleted — the deliveries below are still counted correctly, only their names are missing.",
+  inboxHistoryItems: "What arrived",
+  // "3 of 7" is the truth about a partial. Never the manifest presented whole.
+  inboxHistoryPartial: "{saved} of {declared} saved",
+  inboxHistoryMore: "and {count} more",
+  inboxHistoryForget: "Remove from this list",
+  inboxHistoryForgetHint: "Removes the record of what arrived. Your files are not touched.",
+
+  // --- Device Inbox: send -------------------------------------------------
+  inboxSendHeading: "Send to your devices",
+  inboxSendBody:
+    "Choose files, a folder or a message, then pick which of your devices to send to. Everything is encrypted on this PC and sealed to the device you chose, so the server never sees it.",
+  inboxSendTargetsHeading: "Your devices",
+  inboxSendNoTargets:
+    "No other device on this account can receive right now. Turn Device Inbox on there and it will appear here.",
+  inboxSendTargetsUnavailable:
+    "Your devices could not be read just now. This is a problem reading the list, not a sign you have none.",
+  inboxSendSignedOut: "Sign in to send to your devices.",
+  inboxSendRefresh: "Refresh",
+  inboxSendPickFiles: "Choose files",
+  inboxSendPickFolder: "Choose folder",
+  inboxSendPicked: "{count} file(s), {size}",
+  inboxSendClear: "Clear",
+  inboxSendModeFiles: "Files",
+  inboxSendModeText: "Message",
+  inboxSendMessagePlaceholder: "Type a message to send to your device",
+  inboxSendStart: "Encrypt and send",
+  inboxSendCancel: "Cancel",
+  inboxSendSending: "Sending… {percent}%",
+  inboxSendQueued: "Waiting",
+  // Central's own refusals, each as the sentence it actually means.
+  inboxSendTargetOff: "Receiving is off on that device",
+  inboxSendTargetCannotReceive: "That device cannot receive deliveries",
+  inboxSendTargetRevoked: "That device's inbox was withdrawn",
+  inboxSendTargetNoKey: "That device has no usable key yet",
+  inboxSendTargetNoText: "That device cannot receive messages",
+  inboxSendDelivered: "Delivered",
+  inboxSendDeliveredWaiting: "Delivered — waiting for that device to collect it",
+  inboxSendCancelled: "Cancelled. Nothing was delivered.",
+  // The distinction the whole outcome union exists for. Never softened.
+  inboxSendUnknown: "Relayium could not confirm what happened",
+  inboxSendUnknownBody:
+    "The delivery may or may not have been created. Nothing has been discarded, so checking again is safe — it will settle the same delivery rather than sending a second one.",
+  inboxSendCheckAgain: "Check again",
+  inboxSendRefused: "That device did not take it",
+  inboxSendRetry: "Try again",
+  inboxSendOrphan:
+    "Some encrypted data was left on the server and will be cleared automatically. There is nothing for you to do.",
+  inboxSendRefusedUnavailable: "Not right now. Nothing was sent.",
+  inboxSendRefusedCapacity: "Too many deliveries are already running. Wait for one to finish.",
+  inboxSendRefusedNothing: "Choose something to send first.",
+  inboxSendRefusedNoTarget: "Choose a device to send to first.",
+  inboxSendRefusedManifest: "Those files cannot be sent together. Try choosing them again.",
+  inboxSendRefusedGeneric: "That could not be started.",
+  inboxSendRefusedUnresolvedFull:
+    "Too many earlier deliveries are still unconfirmed. Check those first — Relayium will not start another until it can account for them, because forgetting one would lose the only way to find out what happened to it.",
+  inboxSendUnresolvedHeading: "Deliveries Relayium could not confirm",
+  inboxSendUnresolvedBody:
+    "These may or may not have reached the device. Nothing has been discarded, so checking again is safe — it settles the same delivery rather than sending a second one. They stay here until they are settled.",
+  inboxSendUnresolvedTo: "To {device}",
 
   // --- Send a link -------------------------------------------------------
   sendHeading: "Send a link",
@@ -718,8 +782,62 @@ export const zh: Record<MessageKey, string> = {
   inboxReceiptBlocked: "需要你决定",
   inboxReceiptWorking: "进行中",
   inboxReceiptFailed: "未完成",
-  inboxReceiptNoNames:
-    "Relayium 的投递记录只保存数量和结果，不保存文件名。打开文件夹即可查看收到的内容。",
+  inboxReceiptUnnamed: "这次投递的文件名没有记录下来。打开文件夹即可查看收到的内容。",
+  inboxHistoryNamesUnavailable:
+    "暂时读不到文件名。没有任何内容被删除——下面的投递数量仍然是准确的，只是缺少名称。",
+  inboxHistoryItems: "收到的内容",
+  inboxHistoryPartial: "已保存 {saved}／共 {declared}",
+  inboxHistoryMore: "还有 {count} 项",
+  inboxHistoryForget: "从列表中移除",
+  inboxHistoryForgetHint: "只移除“收到了什么”的记录，不会动你的文件。",
+
+  // --- 设备收件箱：发送 ---------------------------------------------------
+  inboxSendHeading: "发送到你的设备",
+  inboxSendBody:
+    "选择文件、文件夹或一段文字，再选择要发送到哪台设备。内容会先在这台电脑上加密，并只对你选中的设备封装，服务器无法看到。",
+  inboxSendTargetsHeading: "你的设备",
+  inboxSendNoTargets: "这个账号下暂时没有其他设备可以接收。在那台设备上打开设备收件箱后就会出现在这里。",
+  inboxSendTargetsUnavailable: "暂时读不到你的设备列表。这是读取列表出了问题，并不表示你没有其他设备。",
+  inboxSendSignedOut: "登录后即可发送到你的设备。",
+  inboxSendRefresh: "刷新",
+  inboxSendPickFiles: "选择文件",
+  inboxSendPickFolder: "选择文件夹",
+  inboxSendPicked: "{count} 个文件，{size}",
+  inboxSendClear: "清除",
+  inboxSendModeFiles: "文件",
+  inboxSendModeText: "文字",
+  inboxSendMessagePlaceholder: "输入要发送到设备的文字",
+  inboxSendStart: "加密并发送",
+  inboxSendCancel: "取消",
+  inboxSendSending: "发送中… {percent}%",
+  inboxSendQueued: "等待中",
+  inboxSendTargetOff: "该设备已关闭接收",
+  inboxSendTargetCannotReceive: "该设备无法接收投递",
+  inboxSendTargetRevoked: "该设备的收件箱已被撤销",
+  inboxSendTargetNoKey: "该设备还没有可用的密钥",
+  inboxSendTargetNoText: "该设备无法接收文字",
+  inboxSendDelivered: "已送达",
+  inboxSendDeliveredWaiting: "已送达——等待该设备接收",
+  inboxSendCancelled: "已取消，未发送任何内容。",
+  inboxSendUnknown: "Relayium 无法确认这次发送的结果",
+  inboxSendUnknownBody:
+    "这次投递可能已经创建，也可能没有。相关数据都已保留，因此再检查一次是安全的——它会确认同一次投递，而不会重复发送。",
+  inboxSendCheckAgain: "再检查一次",
+  inboxSendRefused: "该设备没有接收",
+  inboxSendRetry: "重试",
+  inboxSendOrphan: "服务器上残留了一些加密数据，会被自动清理，你不需要做任何事。",
+  inboxSendRefusedUnavailable: "暂时无法发送，未发送任何内容。",
+  inboxSendRefusedCapacity: "同时进行的发送太多了，请等待其中一个完成。",
+  inboxSendRefusedNothing: "请先选择要发送的内容。",
+  inboxSendRefusedNoTarget: "请先选择要发送到哪台设备。",
+  inboxSendRefusedManifest: "这些文件无法一起发送，请重新选择。",
+  inboxSendRefusedGeneric: "无法开始发送。",
+  inboxSendRefusedUnresolvedFull:
+    "还有太多之前的发送没有确认结果。请先检查它们——在能够确认之前，Relayium 不会再开始新的发送，因为丢掉其中一条就等于失去了查明它结果的唯一途径。",
+  inboxSendUnresolvedHeading: "无法确认结果的发送",
+  inboxSendUnresolvedBody:
+    "这些内容可能已经送达，也可能没有。相关数据都已保留，因此再检查一次是安全的——它会确认同一次投递，而不会重复发送。在确认之前，它们会一直留在这里。",
+  inboxSendUnresolvedTo: "发送到 {device}",
 
   sendHeading: "发送链接",
   sendBody:
