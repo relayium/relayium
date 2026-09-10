@@ -104,6 +104,38 @@ export interface InboxRuntime {
 
   /** Import a raw 32-byte AEAD key for the framed store format. */
   importStoreKey(raw: Uint8Array): Promise<CryptoKey>;
+
+  /**
+   * The PRODUCTION ciphertext frame producer, exposed, not reimplemented.
+   *
+   * This is `web/src/lib/store-crypto.ts`'s own `encryptFiles` — the single
+   * function the Web sender runs and the one whose frames the Mac
+   * (`StoreFrame.encryptChunks`) and Web receivers already decrypt. It is
+   * declared here so main-side code can drive it directly; a second
+   * implementation of the nonce schedule would be a fork of the one thing in
+   * this product that must never fork, because AES-GCM under a repeated nonce
+   * with different plaintext is a break rather than a bug.
+   *
+   * `File` is a Node global; the function touches only `.size` and
+   * `.slice(a, b).arrayBuffer()`, so it is `File`-typed and `Blob`-generic and
+   * needs no change to run outside a renderer.
+   *
+   * **The renderer remains the producer in the product.** Main receives
+   * ciphertext frames over IPC precisely so no arbitrary-path read channel
+   * exists here. This member is what lets a main-side harness produce REAL
+   * frames without a renderer, and what a future main-side producer would use
+   * rather than writing its own.
+   */
+  encryptFiles(files: readonly File[], key: CryptoKey): AsyncGenerator<Uint8Array>;
+
+  /**
+   * The exact ciphertext total those frames will come to.
+   *
+   * The value `?size=` declares. Shared rather than re-derived: `plan.ts`
+   * computes the same number from sizes alone, and having both lets a caller
+   * cross-check its schedule against the encryptor that will actually run.
+   */
+  cipherSizeFor(files: readonly File[]): number;
   /** Decrypt frame 0 into the STORED-WIRE manifest. Not the Inbox document. */
   decryptManifest(key: CryptoKey, ciphertext: Uint8Array): Promise<RuntimeStoredManifest>;
   /** Seal an already-canonical manifest document at frame 0. */
@@ -121,6 +153,14 @@ export interface InboxRuntime {
   openManifestBytes(key: CryptoKey, ciphertext: Uint8Array): Promise<Uint8Array>;
   /** The strict canonical v3 decoder. Re-encodes and requires equality. */
   decodeInboxManifest(raw: Uint8Array): RuntimeManifest;
+  /**
+   * The canonical v3 encoder — the bytes frame 0 carries.
+   *
+   * The send half needs it for the same reason the receive half needs the
+   * decoder: there is exactly ONE byte sequence per manifest, and re-deriving
+   * it here would be a second encoder to disagree with the frozen vectors.
+   */
+  encodeInboxManifest(manifest: RuntimeManifest): Uint8Array;
   /** A decryptor for the data frames that follow frame 0. */
   createStoreDecryptor(key: CryptoKey): RuntimeStoreDecryptor;
 

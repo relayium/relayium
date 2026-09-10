@@ -23,7 +23,17 @@ export const AT_REST_VERSION = 1;
 export const AT_REST_KEY_BYTES = 32;
 const IV_BYTES = 12;
 
-export type AtRestKind = "vault-record" | "vault-index" | "journal";
+/**
+ * The record kinds, each binding its own associated data.
+ *
+ * `send-plan` is additive. `associatedData` interpolates the kind, so a new
+ * member gives a distinct AAD for free while the existing three keep
+ * byte-identical associated data — `AT_REST_VERSION` does not move and no
+ * stored record is reinterpreted. A document sealed under one purpose fails
+ * authentication under another, which is what stops a journal being opened as a
+ * send plan even though both live in the same account directory.
+ */
+export type AtRestKind = "vault-record" | "vault-index" | "journal" | "send-plan";
 
 export class AtRestError extends Error {
   constructor(

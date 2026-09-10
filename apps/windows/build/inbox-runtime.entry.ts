@@ -46,6 +46,7 @@ import {
   INBOX_MANIFEST_MIN_TEXT_BYTES,
   INBOX_MANIFEST_VERSION,
   decodeInboxManifest,
+  encodeInboxManifestBytes,
   fileManifest,
   textManifest,
 } from "../../../web/src/lib/inbox-manifest";
@@ -53,6 +54,8 @@ import {
   FRAME_OVERHEAD,
   MAX_FRAME_CT,
   STORE_CHUNK_SIZE,
+  cipherSizeFor,
+  encryptFiles,
   StoreDecryptor,
   decodeKey,
   decryptManifest,
@@ -164,11 +167,26 @@ const runtime = {
   decodeKey: (encoded: string) => decodeKey(encoded),
 
   importStoreKey: (raw: Uint8Array) => importStoreKey(raw),
+  // The shared producer itself, passed straight through. `readonly File[]` is
+  // widened to the shared signature's `File[]` at this one boundary rather than
+  // by changing shared code; nothing here copies, wraps or re-derives a frame.
+  encryptFiles: (files: readonly File[], key: CryptoKey) => encryptFiles([...files], key),
+  cipherSizeFor: (files: readonly File[]) => cipherSizeFor([...files]),
   decryptManifest: (key: CryptoKey, ciphertext: Uint8Array) => decryptManifest(key, ciphertext),
   sealManifestBytes: (key: CryptoKey, plaintext: Uint8Array) => sealManifestBytes(key, plaintext),
 
   openManifestBytes: (key: CryptoKey, ciphertext: Uint8Array) => openManifestBytes(key, ciphertext),
   decodeInboxManifest: (raw: Uint8Array) => decodeInboxManifest(raw),
+  encodeInboxManifest: (manifest: { v: number; items: readonly { kind: "file" | "text"; name?: string; size: number }[] }) => {
+    // The contract's manifest carries `v: number`; the shared encoder takes the
+    // literal v3 type. This is a CHECK rather than a cast: a manifest at any
+    // other version is not one this encoder may canonicalise, and asserting it
+    // through would produce bytes the receiver's strict decoder refuses.
+    if (manifest.v !== INBOX_MANIFEST_VERSION) {
+      throw new Error(`inbox runtime: manifest version ${String(manifest.v)} is not v${String(INBOX_MANIFEST_VERSION)}`);
+    }
+    return encodeInboxManifestBytes({ ...manifest, v: INBOX_MANIFEST_VERSION, items: [...manifest.items] });
+  },
   createStoreDecryptor: (key: CryptoKey) => new StoreDecryptor(key),
 
   normalizeDeviceName: (name: string) => normalizeDeviceName(name),
