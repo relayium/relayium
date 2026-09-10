@@ -71,13 +71,14 @@
 //                            unjoined child, retain the temporary root, and
 //                            exit non-zero rather than claiming a clean pass
 //   INTEROP_KEEP=1           keep the temporary root for inspection
-import { spawn, execFileSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createServer } from "node:http";
 import { randomBytes, createHash } from "node:crypto";
+import { buildServerForFixture, testDiskUsageWithOverlay } from "./server-platform.mjs";
 
 const WINDOWS = process.platform === "win32";
 
@@ -308,6 +309,8 @@ class MemorySecrets {
 }
 
 const logFdRef = { handle: null };
+/** How this run's server binary was produced. Reported, never inferred. */
+let serverProvenance = null;
 
 /**
  * Build the server this run drives.
@@ -317,26 +320,56 @@ const logFdRef = { handle: null };
  * reported failure and a non-zero exit with the completeness count intact, so
  * nothing is silently skipped by it.
  */
-function buildServer(bin) {
-  try {
-    execFileSync(GO, ["build", "-o", bin, "."], {
-      cwd: SERVER_SRC,
-      stdio: "pipe",
-      timeout: BUILD_BUDGET_MS,
-      killSignal: "SIGKILL",
-    });
-  } catch (error) {
-    const said = String(error?.stderr ?? "").trim() || String(error?.message ?? error);
+async function buildServer(bin, taskRoot) {
+  const built = await buildServerForFixture({
+    repoRoot: REPO, taskRoot, outPath: bin, timeoutMs: BUILD_BUDGET_MS,
+    // The build's child belongs to THIS run's registry, so it is listed and
+    // joined by the same `stopChildren` every other child goes through.
+    register: (child, label) => track(child, label),
+  });
+  if (built.unjoined) {
+    // Never removed under a live child: an unjoined build process is a cleanup
+    // finding, and the caller retains its task root.
+    cleanupFindings.push(`${built.ledger.label} (pid ${built.ledger.pid ?? "-"}) did not close`);
+  }
+  if (!built.ok) {
+    const said = (built.stderr || built.stdout || `exit ${built.code}`).trim();
     throw new Error(`SETUP: building the server from ${SERVER_SRC} failed: ${said.slice(0, 4000)}`);
   }
+  // Named in the run's own output: a Windows run compiles the real handlers
+  // with ONE file overlaid, and a reader must not have to infer that.
+  console.log(`-- server build: ${JSON.stringify(built.provenance)}`);
+  return built.provenance;
 }
 
 async function main() {
   const root = await mkdtemp(join(tmpdir(), "inbox-sender-"));
   let keepRoot = false;
   try {
+    // ---- the platform positive, BEFORE the build depends on it -----------
+    //
+    // On Windows the server is compiled with one file overlaid, so the overlay's
+    // own correctness is a precondition of everything below. The package's real
+    // `TestDiskUsage` runs first, against the replacement, as an owned and
+    // joined child. On a host that needs no overlay this reports SKIPPED — the
+    // product file is what runs there and the package's own tests cover it.
+    const platform = await testDiskUsageWithOverlay({
+      repoRoot: REPO, taskRoot: root, register: (child, label) => track(child, label),
+    });
+    if (platform.unjoined) {
+      cleanupFindings.push(`${platform.ledger?.label ?? "diskusage-probe"} (pid ${platform.ledger?.pid ?? "-"}) did not close`);
+    }
+    if (platform.skipped) {
+      console.log(`-- storage platform positive: SKIPPED (${platform.why})`);
+    } else if (!platform.ok) {
+      throw new Error(`SETUP: the storage platform positive failed at the ${platform.stage} stage: `
+        + `${(platform.stderr || platform.stdout || platform.spawnError || `exit ${platform.code}`).trim().slice(0, 4000)}`);
+    } else {
+      console.log(`-- storage platform positive: PASSED (${JSON.stringify(platform.ledger)})`);
+    }
+
     const bin = join(root, SERVER_BIN);
-    buildServer(bin);
+    serverProvenance = await buildServer(bin, root);
     const port = await freePort();
     const origin = `http://127.0.0.1:${port}`;
     await mkdir(join(root, "blobs"), { recursive: true });
@@ -868,6 +901,7 @@ const complete = steps.length >= EXPECTED_CHECKS;
 step("harness completeness", complete, `ran ${steps.length} of ${EXPECTED_CHECKS}`);
 console.log(JSON.stringify({
   platform: process.platform,
+  serverBuild: serverProvenance,
   expected: EXPECTED_CHECKS,
   ran: steps.length,
   failures,
