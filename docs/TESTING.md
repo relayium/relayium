@@ -2242,7 +2242,7 @@ no message at all.
 
 ## Android client `[AUTOMATED + MANUAL]`
 
-The native Android client (`apps/android/`, public preview at 0.1.1) has its
+The native Android client (`apps/android/`, public preview at 0.2.2) has its
 own gates and they are not duplicated here:
 
 ```bash

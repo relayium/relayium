@@ -3,14 +3,14 @@
   "android": {
     "available": true,
     "applicationId": "com.relayium.android",
-    "versionCode": 4,
-    "versionName": "0.2.1",
-    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.2.1/Relayium-0.2.1-4.apk",
-    "sha256": "46ba61e141335011c00516fb5dc4086a806452ea675031c210964e4e0d3606d9",
+    "versionCode": 5,
+    "versionName": "0.2.2",
+    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.2.2/Relayium-0.2.2-5.apk",
+    "sha256": "ca2ef785e8d5ce27aa008a747ec39d8716c780ffe678b6d69369d68374a1f788",
     "size": 45865546,
     "notes": {
-      "en": "Public preview 0.2.1. A polish release for the five screens: clearer hierarchy, cards, typography and navigation, with brief, purposeful motion for navigation, selection and state changes that steps aside when the system's animations are turned off. No new capabilities. Everything still runs while the app is open, so there is no background transfer and no resident session. Direct APK only, not on Google Play, and it contains no Play Services and no Play Billing.",
-      "zh": "公开预览版 0.2.1。这是一次界面打磨：五个页面的层级、卡片、字体与导航更清晰，并为页面切换、选择与状态变化加入了简短而克制的动效；系统关闭动画时动效会自动让位。没有新增能力。所有功能仍然只在应用打开时运行，没有后台传输，也没有常驻会话。仅以 APK 直接分发，不在 Google Play 上架，不含 Play 服务与 Play 结算。"
+      "en": "Public preview 0.2.2. A compatibility fix for relayed connections: when the server issues this room's TURN relay inside its node pool — the shape you get when the pairing code's owner restricts transfers to their own nodes — Android now uses that relay instead of falling back to STUN only, matching what the Mac, iPhone and web clients already do. On a network that needs a relay, Android now has the one it was issued. No other changes. Everything still runs while the app is open, so there is no background transfer and no resident session. Direct APK only, not on Google Play, and it contains no Play Services and no Play Billing.",
+      "zh": "公开预览版 0.2.2。这是一次中继连接的兼容性修复：当服务器把本房间的 TURN 中继放在节点池中下发（配对码所有者限定「仅使用我的节点」时就是这种形态），Android 现在会使用该中继，而不再退回为仅 STUN，与 Mac、iPhone 和网页端的既有行为一致。在必须经由中继的网络下，Android 现在能用上服务器下发给它的中继。没有其他改动。所有功能仍然只在应用打开时运行，没有后台传输，也没有常驻会话。仅以 APK 直接分发，不在 Google Play 上架，不含 Play 服务与 Play 结算。"
     }
   }
 }
