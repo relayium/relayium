@@ -2,70 +2,60 @@
 
 The Windows client is in development toward parity with released macOS 1.3.10.
 It is intended for direct distribution as an EXE outside the Microsoft Store.
-It is **not feature complete, not signed, and not publicly distributed.**
+It is **not feature complete, not signed, and has no public release.**
 
-The latest Windows-verified candidate is `22b4fb3f1c31871f807554ecad570142c59688de`,
-workflow run `34512312628`. Both jobs — `native` and `build` — succeeded, covering
-`npm run check`, the Go helper tests, **1380 unit tests across 62 files with 1
-skip**, `npm run build`, the Electron bootstrap smoke, the resident lifecycle
-smoke, the secret durability matrix, an unsigned packaged installer, and
-installed-artifact acceptance with no failures.
+## Current status
 
-The preceding candidate `c8381a0853d6a28f23e11525c3d8c39be2050b30`
-(run `34511025161`, 1286 tests / 1 skip) was the **first Windows run to invoke
-the resident lifecycle smoke**.
+The Windows lane is green at integration `1753c3192`
+([run 34538825772](https://github.com/relayium/relayium/actions/runs/34538825772)):
+all three jobs, `npm run check`, the Go helper suites, **1724 unit tests with 125
+skips**, `npm run build`, the Electron bootstrap and resident lifecycle smokes,
+the secret durability matrix, an unsigned packaged installer, installed-artifact
+acceptance, the native update runtime, the owned-process guardian (**36 cases,
+including 10 Windows job-object cases**) and the realtime pairing acceptance
+(**25 assertions, no skips**).
 
-`22b4` adds exactly the Device Inbox **sender**: 89 tests across its three owning
-suites, plus five contract cases that drive the **shared production encryptor**
-through the built runtime artifact and back through the shared decryptor. That
-accounts for the whole 94-test increase. The sender is therefore unit-tested on
-Windows — but its **real-server evidence remains a macOS-hosted loopback run**,
-and it has **no user interface**.
+A later integration `df1934f6c`
+([run 34541106051](https://github.com/relayium/relayium/actions/runs/34541106051))
+makes a refused receive end visibly and raises realtime to **26 assertions**. Its
+`native` and `realtime` jobs are green, including the new check that the
+interface reports the refusal. Its `build` job, which also runs the resident
+smoke, failed on a Stored copy-history race over an empty job id; that is under
+repair and is not covered by any claim below.
+
+The most recent work sits at integration `98af8a235` — the Device Inbox send,
+named-history and recovery batch — and passes **1967 tests**, a 13-case probe and
+a real two-process smoke on the development host. It has not yet run in the
+Windows lane. Where an area below is partly in that state, the table says so.
 
 ## Status by area
 
-| Area | Verified on Windows in run 34512312628 | Still owed |
+| Area | Proven on Windows | Owed |
 |---|---|---|
-| Installation and storage | Per-user x64 NSIS installer packaged and installed to a path containing a space; forced-kill relaunch, reinstall, and profile continuity across both; junction and `subst` alias destinations refused (exit 2) while ordinary paths install and uninstall; scheme ownership removed on uninstall with a foreign association preserved | Code signing, distribution, upgrade acceptance, uninstall/data-removal policy |
-| Secrets | Direct DPAPI writes with read-only migration from legacy Electron `safeStorage`; a 7-cell durability matrix across forced kills; the helper's tamper oracle over 310 positions — **620 single-byte mutations: 588 refused with no output, 32 opened byte-for-byte unchanged, 0 altered** — plus refusal of DPAPI-valid blobs whose inner record does not verify | — |
-| Account | Native device-code sign-in, cancellation, expiry and installation identity; the bearer never leaves main | Account, usage and device information; management links |
-| Device Inbox — receive | Backend ran on Windows: encrypted journal, vault and key storage, account lifecycle, and the Windows native-destination acceptance suite | Receive **UI is in progress**; background scheduling |
-| Device Inbox — send | Backend accepted and **unit-tested on Windows** (89 suite tests; the shared production encryptor round-trips through the built artifact in 5 further cases). A separate real-server harness drives the compiled coordinator through 40 checks | That harness is **macOS-hosted loopback**, not Windows; **no send UI exists**; renderer/IPC composition not written |
-| Stored links | Receive backend, manifest validation, native destination, cancellation, retained cleanup and the upload engine all ran on Windows; the stored Windows acceptance suite passed 4 of 5 with 1 skip. CP14 makes stored **receive reachable in the app** | Stored **send and history composition**; Windows save-path acceptance beyond the suite |
-| Realtime transfer | LAN and pairing pages drive the real main/renderer bridge; suites for signalling, ICE control, room control and receive lifecycle ran on Windows | **Windows-hosted transfer and receive flows; real NAT and TURN** |
-| Desktop behaviour | Resident close/quit, tray, notifications, deep-link handling, login-item and first-run all ran on Windows, and the resident lifecycle smoke passed against a real Electron process | Startup and picker behaviour is exercised **by injection**, so no real OS startup toggle is proven; combined desktop acceptance |
-| Presentation | Five-row navigation; English and Chinese catalogues with compile-enforced key parity; light/dark, focus and reduced-motion support | Inbox and stored send surfaces; Windows scaling, keyboard and motion validation |
-| Updates | **Nothing shipped.** The inert TypeScript core is accepted and integrated: `npm run check`, `build:main` and its 136 owning tests pass | The native Windows helper is **under implementation and unaccepted**; the production publisher pin is **missing and fail-closed**; no updater is delivered, and the core has had no Windows run |
+| Installation and storage | Per-user x64 NSIS installer packaged and installed to a path containing a space; forced-kill relaunch, reinstall and profile continuity; junction and `subst` alias destinations refused while ordinary paths install and uninstall; scheme ownership removed on uninstall with a foreign association preserved | Signing, distribution, upgrade acceptance, uninstall/data-removal policy |
+| Secrets | Direct DPAPI writes with read-only migration from legacy `safeStorage`; a 7-cell durability matrix across forced kills; the helper's tamper oracle over 310 positions — **620 single-byte mutations: 588 refused with no output, 32 opened byte-for-byte unchanged, 0 altered** — plus refusal of DPAPI-valid blobs whose inner record does not verify | — |
+| Realtime transfer | The real Windows client and a real browser in one room over a real server: both link roles and both code roles, an agreed verification code, UTF-8 both ways, and byte-exact nested Unicode, empty and chunk-boundary files landing on the **real Windows destination** through the real lease and path guards. A Windows-illegal name is refused for that reason, nothing is written, and the interface reports it. Both browser and Electron process trees proven empty afterwards by job-object census | Real-network transfer; NAT and TURN remain undemonstrated |
+| Stored links | Receive backend, manifest validation, native destination, cancellation, retained cleanup and the upload engine. Stored **send and history run in the resident client on Windows**, from `77c` through `1753` | 12 further real-Go checks are development-host only; interface polish and the copy-history race |
+| Account | Native device-code sign-in, cancellation, expiry and installation identity; the bearer never leaves main. **13 modules and their 109 owning tests executed on Windows** at `1753` | Host wiring awaits acceptance |
+| Device Inbox | Backend, encrypted journal, vault and key storage, account lifecycle, the Windows native-destination acceptance suite, a 39-case real-Go server run, and the manual receive and policy slices | The `98af8a235` send, named-history and recovery batch has not run on Windows |
+| Updates | The update core has run on Windows | No publisher pin, no expected publisher and no feed configured — all fail-closed. An interface covering 18 states (12 modules) is under review and not wired |
+| Desktop behaviour | Resident close/quit, tray, notifications, deep-link handling, login-item and first-run, against a real Electron process | The OS startup toggle and the native file picker are supplied by injection, so neither is proven |
+| Presentation | Five-row navigation; English and Chinese catalogues with compile-enforced key parity; light/dark, focus and reduced-motion support | Windows scaling, keyboard and motion validation |
 
-## What the evidence does and does not cover
+## What the evidence does not cover
 
-**The realtime interoperability runs used Electron hosted on macOS against a
-loopback server.** They establish protocol and page behaviour — both pairing
-creator roles interoperated with macOS 1.3.10, a 262 144-byte file and nested
-Unicode and empty-file batches matched the receiver's bytes and paths — but they
-are **not Windows operating-system behaviour and not TURN traversal.** No NAT
-traversal of any kind has been demonstrated.
+**No network traversal is proven.** The realtime acceptance puts a real Windows
+Electron client and a real Chrome in one room over a loopback server on a single
+runner. That establishes the client's own behaviour on Windows — real files, real
+code and link roles, the real destination and its guards — and establishes
+nothing about a Windows machine reaching a Mac across a real network.
 
-**The sender's real-server evidence is a loopback Go server on one macOS host.** It
-drives the compiled coordinator against real handlers with a synthetic account:
-a nested folder, a file crossing the chunk boundary by one byte and a UTF-8
-message are encrypted by the shared production encryptor and decrypted back with
-their bytes, paths and text asserted. It proves the protocol and the backend. The
-sender's unit and encryptor-contract suites did run on Windows in `22b4`; that
-harness did not, and neither proves a device or a user flow.
+**Injected operating-system behaviour is not operating-system behaviour.** The
+resident smoke drives a real Electron process, but startup registration and the
+file dialog are supplied by the test.
 
-**Resident startup and picker cases are injected.** The smoke drives a real
-Electron process, but the startup registration and the file dialog are supplied
-by the test rather than by Windows, so nothing here proves the OS startup toggle.
-
-**The send-pane DOM checks ran in a browser**, not on Windows. They discriminate:
-the same unchanged fixture reports six failures against the previous source and
-ten passes against current source, with positive controls passing in both.
-
-One native experiment is recorded as unsupported rather than passed:
-`FILE_DISPOSITION_INFORMATION_EX` with `DELETE|ON_CLOSE|IGNORE_READONLY` returns
-`E_IO` on the CI host. No shipped path calls it; it is neither a failure nor
-evidence the capability works.
+**A backend that passes its own acceptance is not a user flow**, and a suite that
+is green on the development host is not Windows evidence.
 
 ## Standing guarantees
 
@@ -74,17 +64,24 @@ evidence the capability works.
   arguments.
 * File and message content is encrypted on the network. Device Inbox ciphertext
   is uploaded under `purpose=device_task`, which is invisible in the account's
-  own file list; reclaiming an unbound object is the server's, not this client's.
+  own file list.
 * Secret keys are persisted only through the protected store. A signed-out or
   disabled state does not erase local messages or recovery keys.
+* A receive that cannot be completed ends visibly: the destination's own typed
+  refusal stays in the privileged process, and the interface reports a terminal
+  outcome with a reason.
+
+## Gates that remain separate
+
+Code signing, the update feed and any public release surface are each their own
+decision, and none is authorised by a green run. The same applies to the native
+picker, the OS startup toggle, manual scaling behaviour and upgrade acceptance.
 
 ## Completion
 
 Parity requires reachable user flows for files, folders, text, stored links and
-the Device Inbox; the sender and update work proven on Windows; account and
-update completion; signing, installer and upgrade acceptance; and an accurate
-public download surface.
+the Device Inbox; the Inbox send, history and recovery batch proven on Windows;
+account wiring accepted; update delivery completed and configured; real-network
+transfer demonstrated; and signing, installer and upgrade acceptance.
 
-A backend that passes its own acceptance is not a user flow, and a green local
-suite is not Windows evidence. Passing a subsystem checkpoint does not establish
-platform parity, and nothing here should be read as a launch.
+Passing a subsystem checkpoint does not establish platform parity.
