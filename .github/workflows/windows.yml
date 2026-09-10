@@ -102,10 +102,35 @@ jobs:
         with:
           go-version-file: apps/windows/native/go.mod
           cache-dependency-path: apps/windows/native/go.sum
+      # The signed fixture the update helper's trust matrix verifies against.
+      #
+      # Resolved deterministically from the Node the workflow already pins, and
+      # asserted VALID here — independently of the code under test — before any
+      # Go test runs. Without it the signer-chain walk never executes, so the
+      # tests treat its absence as a failure rather than skipping; this step
+      # exists so that failure never happens for an avoidable reason and its
+      # cause is visible at the top of the log.
+      #
+      # Nothing is signed, imported or installed: this is a binary already on the
+      # runner, and the tests only ever COPY it into a temporary directory.
+      - name: Resolve the signed acceptance fixture
+        shell: pwsh
+        run: |
+          $node = (Get-Command node.exe).Source
+          if (-not $node) { throw "node.exe not found; the update trust matrix needs a signed fixture" }
+          $signature = Get-AuthenticodeSignature -LiteralPath $node
+          if ($signature.Status -ne "Valid") {
+            throw "the acceptance fixture $node is not validly signed (status $($signature.Status)); the update trust matrix cannot run"
+          }
+          Write-Host "signed fixture: $node"
+          Write-Host "signer: $($signature.SignerCertificate.Subject)"
+          "RELAYIUM_SIGNED_FIXTURE=$node" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
       - name: Build the native helpers
         run: |
           go build -o build/relayium-io-helper.exe ./cmd/relayium-io-helper
           go build -o build/relayium-secret-helper.exe ./cmd/relayium-secret-helper
+          go build -o build/relayium-update-helper.exe ./cmd/relayium-update-helper
         working-directory: apps/windows/native
 
       # Loudly, before anything depends on it. A missing helper would otherwise
@@ -114,7 +139,7 @@ jobs:
       - name: Assert the helper binary exists
         shell: pwsh
         run: |
-          foreach ($helper in @("native/build/relayium-io-helper.exe", "native/build/relayium-secret-helper.exe")) {
+          foreach ($helper in @("native/build/relayium-io-helper.exe", "native/build/relayium-secret-helper.exe", "native/build/relayium-update-helper.exe")) {
             if (-not (Test-Path -LiteralPath $helper)) {
               throw "native helper missing at $helper; the client tests and extraResources both require it"
             }
@@ -136,6 +161,14 @@ jobs:
       # none of that.
       - name: Electron bootstrap smoke
         run: npm run test:smoke
+
+      # The Device Inbox against a REAL server, on Windows.
+      #
+      # The script is owned by the acceptance writer and integrated separately;
+      # this workflow only runs it. It needs Go — installed earlier in this job —
+      # and the built main/renderer from `npm run build` above.
+      - name: Device Inbox real-server acceptance
+        run: node test/smoke/inbox-server-acceptance.mjs
 
       # The resident lifecycle, on Windows, for the first time.
       #
@@ -188,7 +221,7 @@ jobs:
           # a resource left by an earlier run would satisfy a presence check
           # while the binary built this run never reached the package. Equality
           # is the assertion; presence is only its precondition.
-          foreach ($name in @("relayium-io-helper.exe", "relayium-secret-helper.exe")) {
+          foreach ($name in @("relayium-io-helper.exe", "relayium-secret-helper.exe", "relayium-update-helper.exe")) {
             $shippedPath = "release/win-unpacked/resources/$name"
             if (-not (Test-Path -LiteralPath $shippedPath)) {
               throw "helper missing from the packaged app at $shippedPath"
@@ -301,6 +334,28 @@ jobs:
           # declares.
           go-version-file: apps/windows/native/go.mod
           cache-dependency-path: apps/windows/native/go.sum
+
+      # The update helper's trust matrix needs a validly signed binary, and its
+      # absence is a FAILURE rather than a skip — the signer-chain walk is the
+      # one path no unsigned fixture reaches. Resolved and asserted here,
+      # independently of the code under test, so a bad fixture is reported as a
+      # bad fixture instead of surfacing later as a verification error.
+      #
+      # `setup-node` is not used in this job, so the runner's preinstalled Node
+      # is the deterministic source. Nothing is signed, imported or installed.
+      - name: Resolve the signed acceptance fixture
+        shell: pwsh
+        working-directory: .
+        run: |
+          $node = (Get-Command node.exe -ErrorAction SilentlyContinue).Source
+          if (-not $node) { throw "node.exe not found; the update trust matrix needs a signed fixture" }
+          $signature = Get-AuthenticodeSignature -LiteralPath $node
+          if ($signature.Status -ne "Valid") {
+            throw "the acceptance fixture $node is not validly signed (status $($signature.Status)); the update trust matrix cannot run"
+          }
+          Write-Host "signed fixture: $node"
+          Write-Host "signer: $($signature.SignerCertificate.Subject)"
+          "RELAYIUM_SIGNED_FIXTURE=$node" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       # `-count=1` defeats the test cache: a cached PASS from a previous commit
       # is not evidence that this commit's NT filesystem behaviour is correct,

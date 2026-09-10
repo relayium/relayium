@@ -39,6 +39,7 @@
   import StoredPage from "./pages/StoredPage.svelte";
   import { StoredController, type StoredBridge } from "./stored/stored-controller.svelte.js";
   import { InboxController, type InboxBridge } from "./inbox/inbox-controller.svelte.js";
+  import { StoredSendController, type StoredSendBridge } from "./send/stored-send-controller.svelte.js";
   import { goTo, page } from "./shell/navigation.svelte.js";
   import { lang, t } from "./i18n/index.svelte.js";
   import { RoomController } from "./rooms/room-controller.svelte.js";
@@ -72,6 +73,7 @@
       };
       stored: StoredBridge;
       inbox: InboxBridge;
+      send: StoredSendBridge;
     };
 
   const bridge = (globalThis as unknown as { relayium: Bridge }).relayium;
@@ -191,6 +193,14 @@
    * here, its subscription spans the life of the window.
    */
   const inbox = new InboxController(bridge.inbox);
+  /**
+   * App-lived, and for a stronger reason than the others.
+   *
+   * The picked `File` objects are the one thing a page cannot recover on its
+   * own: losing them on an unmount means asking the user to choose their files
+   * again, mid-upload.
+   */
+  const send = new StoredSendController(bridge.send);
 
   /** What Windows says about starting at sign-in. Null until it has answered. */
   let startup = $state<LoginItemOutcome | null>(null);
@@ -513,6 +523,7 @@
     torndown = true;
     stored.dispose();
     inbox.destroy();
+    send.dispose();
     detachResident();
     controller.dispose();
     lanRoom?.stop();
@@ -526,6 +537,7 @@
   // running, and a page that only learned its state on arrival would show
   // "starting" for a scheduler that has been receiving for an hour.
   void inbox.refresh().catch(() => undefined);
+  void send.refreshHistory().catch(() => undefined);
   void bridge.loginItem
     .read()
     .then((outcome) => {
@@ -599,6 +611,7 @@
   {:else if page() === "stored"}
     <StoredPage
       {stored}
+      {send}
       offered={storedLinkOffer}
       onConsumed={() => {
         // Consumed by the box, not by a transfer: the link is on screen and the

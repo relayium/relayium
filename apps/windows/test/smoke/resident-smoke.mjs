@@ -54,6 +54,9 @@ const owned = [
   // `currentDataRoot()` refuses to invent one on a host that is not Windows,
   // which is where this smoke actually executes.
   mkdtempSync(path.join(tmpdir(), "relayium-resident-inbox-")),
+  // The stored-send journal. Task-owned for the same reasons: this run writes a
+  // real upload journal and real key custody into it.
+  mkdtempSync(path.join(tmpdir(), "relayium-resident-send-")),
 ];
 
 /** The last of what the child said, for a failure that needs explaining. */

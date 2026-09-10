@@ -207,6 +207,45 @@ export const IPC = {
   inboxWake: "relayium:inbox-wake",
   /** Ask a retained destination to tear down again. A key, never a path. */
   inboxReleaseRetained: "relayium:inbox-release-retained",
+
+  // -------------------------------------------------------------------------
+  // Stored SEND and history
+  // -------------------------------------------------------------------------
+  //
+  // The renderer holds the user's `File` objects — from the native `<input>`,
+  // `webkitdirectory` and drag-drop pickers, none of which give it an
+  // arbitrary-path read channel — and runs the production shared `encryptFiles`.
+  // So the ciphertext flows renderer→main here, and the ONE secret that flows
+  // the other way is the content key for the job that document owns. Both
+  // directions are stated on the members below rather than glossed.
+
+  /** Plan and open one upload. Returns the job's content key. */
+  storedSendStart: "relayium:stored-send-start",
+  /** One ciphertext frame, bounded. Answers with what is owed next. */
+  storedSendFeed: "relayium:stored-send-feed",
+  /** Finalize. The outcome is durable before it is reported. */
+  storedSendEnd: "relayium:stored-send-end",
+  storedSendCancel: "relayium:stored-send-cancel",
+  /** This account's past sends. Counts and closed codes; no key, no link. */
+  storedSendHistory: "relayium:stored-send-history",
+  /** Compose the link for one published send, for exactly as long as it is
+   *  shown. A link IS the key, so it is never stored. */
+  storedSendLink: "relayium:stored-send-link",
+  /** Delete one published object. The key is retired only after the server
+   *  confirms it is gone. */
+  storedSendDelete: "relayium:stored-send-delete",
+  /** Try again to name the object an ambiguous send may have produced. */
+  storedSendReconcile: "relayium:stored-send-reconcile",
+  /**
+   * Put one send's link on the clipboard, from MAIN.
+   *
+   * `window.ts` denies every renderer permission, the browser clipboard
+   * included, so a Copy built on `navigator.clipboard` does not fail
+   * occasionally — it never works. The page names a JOB; main composes the link
+   * under the live account and writes it. There is deliberately no channel that
+   * takes a string and puts it on the clipboard.
+   */
+  storedSendCopyLink: "relayium:stored-send-copy-link",
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];
@@ -242,6 +281,19 @@ export const IPC_EVENTS = {
   storedProgress: "relayium:stored-progress",
   /** How one stored receive ended. */
   storedOutcome: "relayium:stored-outcome",
+  /** Committed ciphertext bytes for one send, as the SERVER acknowledged them
+   *  — never bytes merely handed to `feed`. */
+  storedSendProgress: "relayium:stored-send-progress",
+  /** How one send ended, pushed as soon as it does. */
+  storedSendOutcome: "relayium:stored-send-outcome",
+  /**
+   * The account authority moved.
+   *
+   * Pushed so a page holding one account's links and history can drop them
+   * SYNCHRONOUSLY rather than on its next read. A link is a key; leaving one on
+   * screen across a sign-out is the failure this exists to prevent.
+   */
+  storedSendAccount: "relayium:stored-send-account",
   /**
    * The Inbox state changed.
    *
@@ -978,3 +1030,103 @@ export const MAX_INBOX_DEVICE_NAME_LENGTH = 64;
 export const MAX_INBOX_ID_LENGTH = 256;
 /** The most pending deliveries one request will ask central for. */
 export const MAX_INBOX_PENDING = 50;
+
+// ---------------------------------------------------------------------------
+// Stored SEND — the shapes the send and history channels carry
+// ---------------------------------------------------------------------------
+
+/**
+ * The manifest refusal vocabulary is the send planner's own.
+ *
+ * Imported rather than restated for the same reason `DeliveryReceipt` is: it is
+ * the type that decides what a refusal may say, and it says a SHAPE — a count,
+ * a bound, a rule that was broken — never a filename. A second copy here would
+ * be free to drift from that rule invisibly.
+ */
+import type { ManifestRefusal } from "../main/stored/manifest.js";
+import type { FrameExpectation } from "../main/stored/upload/service.js";
+
+export type { ManifestRefusal, FrameExpectation };
+
+/**
+ * What one upload ended as.
+ *
+ * `ambiguous` is a first-class member and is never collapsed into a neighbour.
+ * A finalize whose answer was lost may or may not have created an object:
+ * calling it published invents an id, and calling it failed asserts nothing was
+ * created. Neither is a claim this process is entitled to make, so the page is
+ * told the truth and offered a re-check.
+ */
+export type StoredSendOutcome =
+  | { readonly status: "published"; readonly objectId: string; readonly expiresAt: number }
+  | { readonly status: "ambiguous"; readonly code: string }
+  | { readonly status: "failed"; readonly code: string }
+  | { readonly status: "cancelled" };
+
+export type StoredSendStart =
+  | {
+      readonly ok: true;
+      readonly jobId: string;
+      /**
+       * The content key for THIS job, base64url.
+       *
+       * The one secret in this contract that travels main→renderer, and the
+       * mirror of the one that travels renderer→main on the receive side. The
+       * renderer is what encrypts — it holds the user's `File` objects, which
+       * is what keeps an arbitrary-path reader out of main — so it needs the
+       * key. It is released to one document for one job and revoked when the
+       * job settles or that document goes away.
+       *
+       * What follows from it: it is never logged, never echoed into a refusal
+       * or a diagnostic, and never persisted by the page.
+       */
+      readonly contentKey: string;
+      /** The first frame the producer owes, or null for an empty object. */
+      readonly expects: FrameExpectation | null;
+      readonly cipherBytes: number;
+      readonly fileCount: number;
+    }
+  | {
+      readonly ok: false;
+      readonly refusal: "unavailable" | "at-capacity" | "signed-out" | "nothing-picked" | "internal" | "refused";
+      /** The engine's closed code, when the refusal came from it. */
+      readonly code?: string;
+      /** Which manifest SHAPE was refused. Never a filename. */
+      readonly manifest?: ManifestRefusal | null;
+    };
+
+/** One past send, as the history list renders it. No key, no link, no path. */
+export interface StoredSendHistoryEntry {
+  readonly jobId: string;
+  readonly state: string;
+  readonly fileCount: number;
+  readonly totalBytes: number;
+  readonly burnAfterRead: boolean;
+  readonly expiresAt: number;
+  readonly createdAt: number;
+  /** A closed code this process wrote, or nothing. */
+  readonly note: string | null;
+  /** Whether a link can be composed at all. The link itself is asked for
+   *  separately, so it exists for exactly as long as it is being shown. */
+  readonly linkable: boolean;
+}
+
+/** Committed ciphertext bytes for one send, as the SERVER acknowledged them. */
+export interface StoredSendProgress {
+  readonly jobId: string;
+  readonly committed: number;
+  readonly total: number;
+}
+
+/** The longest relative path this boundary will forward for one entry. */
+export const MAX_SEND_PATH_LENGTH = 4096;
+/** The most entries one send may declare. Mirrors the manifest planner. */
+export const MAX_SEND_ENTRIES = 1000;
+/**
+ * The largest ciphertext frame this boundary will accept.
+ *
+ * `STORE_CHUNK_SIZE` (192 KiB) plus the GCM tag, the length prefix and slack —
+ * the shared `MAX_FRAME_CT` bound, restated here so an absurd allocation is
+ * refused at the boundary rather than inside the engine.
+ */
+export const MAX_SEND_FRAME_BYTES = 192 * 1024 + 16 + 256 + 4;

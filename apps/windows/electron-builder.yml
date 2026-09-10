@@ -49,6 +49,17 @@ extraResources:
   # `secrets.ts` resolves it at exactly this name under `process.resourcesPath`.
   - from: native/build/relayium-secret-helper.exe
     to: relayium-secret-helper.exe
+  # The update custody helper. A THIRD distinct binary, and distinct for the
+  # same reason as the second: it holds the app-owned staging root by handle and
+  # is the only thing that may create, delete, rename or launch a staged
+  # installer. `src/main/update/native-scope.ts` resolves it at exactly this
+  # name under `process.resourcesPath` and refuses to spawn anything else.
+  #
+  # Its absence is not a build failure either — see the note above — so the
+  # guarantee lives in `.github/workflows/windows.yml`, which asserts the binary
+  # before the tests and compares the packaged bytes after.
+  - from: native/build/relayium-update-helper.exe
+    to: relayium-update-helper.exe
 
 win:
   target:

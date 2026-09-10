@@ -22,10 +22,14 @@
   import { t } from "../i18n/index.svelte.js";
   import Card from "../shell/Card.svelte";
   import type { StoredController, StoredFailure } from "../stored/stored-controller.svelte.js";
+  import { TTL_CHOICES, type StoredSendController } from "../send/stored-send-controller.svelte.js";
 
-  let { stored, offered = "", onConsumed }: {
+  let { stored, send, offered = "", onConsumed }: {
     /** App-lived: a transfer, its progress and the draft all outlive this page. */
     stored: StoredController;
+    /** App-lived for the same reasons, plus one that is stronger: the picked
+     *  `File` objects cannot be recovered without asking the user again. */
+    send: StoredSendController;
     /** A link Windows handed this window. Shown, never acted on by itself. */
     offered?: string;
     onConsumed?: () => void;
@@ -50,6 +54,67 @@
     if (failure.code === "network" || failure.code === "timeout") return t("storedFailedNetwork");
     if (failure.code === "runtime-unavailable") return t("storedFailedRuntime");
     return t("storedFailedGeneric");
+  }
+
+  /** Bytes as a person reads them. */
+  function bytes(count: number): string {
+    if (count < 1024) return `${String(count)} B`;
+    if (count < 1024 * 1024) return `${(count / 1024).toFixed(1)} KB`;
+    if (count < 1024 * 1024 * 1024) return `${(count / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(count / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  }
+
+  function when(seconds: number): string {
+    return seconds > 0 ? new Date(seconds * 1000).toLocaleDateString() : "";
+  }
+
+  function rowNoticeOf(kind: string): string {
+    if (kind === "deleted") return t("sendDeleted");
+    if (kind === "delete-failed") return t("sendDeleteFailed");
+    if (kind === "rechecked") return t("sendRecheckedPublished");
+    return t("sendRecheckedUnknown");
+  }
+
+  function stateOf(state: string): string {
+    if (state === "published") return t("sendHistoryPublished");
+    if (state === "ambiguous") return t("sendHistoryAmbiguous");
+    if (state === "closed") return t("sendHistoryClosed");
+    return state;
+  }
+
+  /** One sentence per closed refusal. Never a file name. */
+  function refusalOf(refusal: NonNullable<StoredSendController["refusal"]>): string {
+    if (refusal.kind === "unavailable") return t("sendRefusedUnavailable");
+    if (refusal.kind === "at-capacity") return t("sendRefusedCapacity");
+    if (refusal.kind === "signed-out") return t("sendRefusedSignedOut");
+    if (refusal.kind === "nothing-picked") return t("sendRefusedNothing");
+    if (refusal.kind === "refused" && refusal.manifest !== null) return t("sendRefusedManifest");
+    return t("sendRefusedGeneric");
+  }
+
+  /**
+   * The job the shown link belongs to.
+   *
+   * The COPY names a job rather than carrying the string: main composes the
+   * link itself, so there is no channel that puts arbitrary text on the
+   * clipboard.
+   */
+  const lastJobId = $derived(
+    send.outcome?.status === "published" ? (send.history[0]?.jobId ?? null) : null,
+  );
+
+  /** A past send's link, held only while its row is showing it. */
+  let shownLink = $state<string | null>(null);
+  let shownLinkValue = $state<string | null>(null);
+  async function toggleLink(jobId: string): Promise<void> {
+    if (shownLink === jobId) {
+      shownLink = null;
+      shownLinkValue = null;
+      return;
+    }
+    const link = await send.linkFor(jobId);
+    shownLink = jobId;
+    shownLinkValue = link;
   }
 
   function refusalText(code: string): string {
@@ -144,10 +209,188 @@
   {/if}
 </Card>
 
-<!-- The two modes this build does not have. Named, not mocked up. -->
-<Card title={t("soonTitle")}>
-  <p class="dim" data-test="stored-send-soon">{t("storedSendSoon")}</p>
-  <p class="dim" data-test="stored-history-soon">{t("storedHistorySoon")}</p>
+<!--
+  Send.
+
+  The files are encrypted HERE, by the shared `encryptFiles` the Web client
+  runs, before a byte is uploaded. The key travels in the link's fragment and
+  never to the server — which is why the link is shown once, next to a Copy
+  button, and is not stored anywhere.
+-->
+<Card title={t("sendHeading")}>
+  <p class="dim">{t("sendBody")}</p>
+
+  <!-- The native pickers. `webkitdirectory` opens the Windows folder dialog;
+       neither gives this page a path it can name to main. -->
+  <div class="row">
+    <input
+      id="send-files"
+      class="sr-only"
+      type="file"
+      multiple
+      data-test="send-files"
+      onchange={(e) => send.pick([...((e.currentTarget as HTMLInputElement).files ?? [])])}
+    />
+    <label class="button" for="send-files">{t("sendPickFiles")}</label>
+    <input
+      id="send-folder"
+      class="sr-only"
+      type="file"
+      webkitdirectory
+      data-test="send-folder"
+      onchange={(e) => send.pick([...((e.currentTarget as HTMLInputElement).files ?? [])])}
+    />
+    <label class="button" for="send-folder">{t("sendPickFolder")}</label>
+  </div>
+
+  {#if send.files.length > 0}
+    <p class="dim" data-test="send-picked">
+      {t("sendPicked", { count: send.files.length, size: bytes(send.totalBytes) })}
+    </p>
+    <div class="row">
+      <label class="check">
+        <input type="checkbox" data-test="send-burn" bind:checked={send.burnAfterRead} disabled={send.busy} />
+        <span>{t("sendBurn")}</span>
+      </label>
+    </div>
+    <div class="row">
+      <label for="send-ttl">{t("sendExpiry")}</label>
+      <select id="send-ttl" data-test="send-ttl" bind:value={send.ttlDays} disabled={send.busy}>
+        {#each TTL_CHOICES as days (days)}
+          <option value={days}>{t("sendExpiryDays", { days })}</option>
+        {/each}
+      </select>
+    </div>
+  {/if}
+
+  {#if send.busy}
+    <p class="dim" data-test="send-progress">
+      {t("sendUploading", { percent: send.total > 0 ? Math.min(100, Math.round((send.committed / send.total) * 100)) : 0 })}
+    </p>
+    <progress value={send.committed} max={Math.max(1, send.total)}></progress>
+    <button type="button" data-test="send-cancel" onclick={() => void send.cancel()}>{t("sendCancel")}</button>
+  {:else}
+    <div class="row">
+      <button
+        class="primary"
+        type="button"
+        data-test="send-start"
+        disabled={send.files.length === 0}
+        onclick={() => void send.send()}
+      >
+        {t("sendStart")}
+      </button>
+      {#if send.files.length > 0}
+        <button type="button" data-test="send-clear" onclick={() => send.clear()}>{t("sendClear")}</button>
+      {/if}
+    </div>
+  {/if}
+
+  {#if send.refusal}
+    <p class="problem" data-test="send-refusal">{refusalOf(send.refusal)}</p>
+  {/if}
+
+  {#if send.outcome}
+    {#if send.outcome.status === "published"}
+      <p data-test="send-published">{t("sendPublished")}</p>
+      {#if send.link}
+        <div class="row">
+          <label class="sr-only" for="send-link">{t("sendLinkLabel")}</label>
+          <input id="send-link" data-test="send-link" readonly value={send.link} />
+          <button type="button" data-test="send-copy" onclick={() => void send.copyLink(lastJobId ?? "")}>
+            {send.copied === "copied" ? t("sendCopied") : send.copied === "failed" ? t("sendCopyFailed") : t("sendCopy")}
+          </button>
+        </div>
+      {/if}
+    {:else if send.outcome.status === "ambiguous"}
+      <!-- Never softened into either neighbour: no object id exists to put in a
+           link, and asserting nothing was created is a claim this app cannot
+           make. The key is retained, so checking again is real. -->
+      <p class="problem" data-test="send-ambiguous">
+        <strong>{t("sendAmbiguous")}</strong><br />{t("sendAmbiguousBody")}
+      </p>
+    {:else if send.outcome.status === "failed"}
+      <p class="problem" data-test="send-failed">
+        <strong>{t("sendFailed")}</strong><br />{t("sendFailedBody")}
+      </p>
+    {:else}
+      <p class="dim" data-test="send-cancelled">{t("sendCancelled")}</p>
+    {/if}
+  {/if}
+</Card>
+
+<Card title={t("sendHistoryHeading")}>
+  {#if send.historyUnavailable}
+    <!-- NOT "you have not sent anything": the record could not be read, and
+         claiming an empty history over it would be the reassuring lie. -->
+    <p class="problem" data-test="send-history-unavailable">{t("sendHistoryUnavailable")}</p>
+  {:else if send.history.length === 0}
+    <p class="dim" data-test="send-history-empty">{t("sendHistoryEmpty")}</p>
+  {:else}
+    <ul class="list" data-test="send-history">
+      {#each send.history as entry (entry.jobId)}
+        <li>
+          <div class="who">
+            <span>{t("sendHistoryItem", { count: entry.fileCount, size: bytes(entry.totalBytes) })}</span>
+            <span class="dim small">{stateOf(entry.state)}</span>
+          </div>
+          <div class="who">
+            <span class="dim small">
+              {entry.burnAfterRead ? t("sendHistoryBurn") : ""}
+              {entry.expiresAt > 0 ? t("sendHistoryExpires", { when: when(entry.expiresAt) }) : ""}
+            </span>
+          </div>
+          <div class="row">
+            {#if entry.linkable}
+              <button
+                type="button"
+                data-test="send-history-link"
+                disabled={send.working.includes(entry.jobId)}
+                onclick={() => void toggleLink(entry.jobId)}
+              >
+                {shownLink === entry.jobId ? t("sendHideLink") : t("sendShowLink")}
+              </button>
+              <button
+                type="button"
+                data-test="send-history-copy"
+                disabled={send.working.includes(entry.jobId)}
+                onclick={() => void send.copyLink(entry.jobId)}
+              >
+                {t("sendCopy")}
+              </button>
+              <button
+                class="danger"
+                type="button"
+                data-test="send-history-delete"
+                disabled={send.working.includes(entry.jobId)}
+                onclick={() => void send.remove(entry.jobId)}
+              >
+                {t("sendDelete")}
+              </button>
+            {:else if entry.state === "ambiguous"}
+              <button
+                type="button"
+                data-test="send-history-recheck"
+                disabled={send.working.includes(entry.jobId)}
+                onclick={() => void send.reconcile(entry.jobId)}
+              >
+                {t("sendCheckAgain")}
+              </button>
+            {/if}
+          </div>
+          {#if shownLink === entry.jobId && shownLinkValue}
+            <input class="full" data-test="send-history-link-value" readonly value={shownLinkValue} />
+          {/if}
+          {#if send.rowNotice?.jobId === entry.jobId}
+            <!-- A delete or a re-check ALWAYS says what it did. A failed delete
+                 that said nothing left the user believing an object was gone
+                 when it is still there. -->
+            <p class="dim small" data-test="send-row-notice">{rowNoticeOf(send.rowNotice.kind)}</p>
+          {/if}
+        </li>
+      {/each}
+    </ul>
+  {/if}
 </Card>
 
 <style>
@@ -159,6 +402,27 @@
   .row { display: flex; gap: var(--space-tight); margin-bottom: var(--space-inner); }
   .row input { flex: 1; }
   progress { width: 100%; }
+  .list { list-style: none; margin: 0; padding: 0; }
+  .list li { padding: var(--space-inner) 0; border-top: 1px solid var(--border); }
+  .list li:first-child { border-top: none; }
+  .who { display: flex; gap: var(--space-inner); justify-content: space-between; align-items: baseline; }
+  .check { display: flex; gap: var(--space-tight); align-items: center; }
+  .full { width: 100%; margin-top: var(--space-tight); }
+  progress { width: 100%; margin-bottom: var(--space-tight); }
+  /* A `<label>` driving a hidden file input IS the control, so it wears the
+     shared button vocabulary rather than a second set of rules. */
+  .button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 6px var(--space-section);
+    border-radius: var(--corner);
+    border: 1px solid var(--border);
+    background: var(--bg);
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .button:hover { background: var(--surface); }
   .sr-only {
     position: absolute;
     width: 1px;

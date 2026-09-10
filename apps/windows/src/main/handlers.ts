@@ -14,6 +14,9 @@ import {
   MAX_REQUEST_ID_LENGTH,
   MAX_INBOX_DEVICE_NAME_LENGTH,
   MAX_INBOX_ID_LENGTH,
+  MAX_SEND_ENTRIES,
+  MAX_SEND_FRAME_BYTES,
+  MAX_SEND_PATH_LENGTH,
   MAX_RESIDENT_DRAFTS,
   MAX_STORED_LINK_LENGTH,
   MAX_IPC_MANIFEST_ENTRIES,
@@ -33,6 +36,8 @@ import {
 import { AppService, type AppServiceDeps, type CleanupOutcome } from "./app-service.js";
 import { StoredReceiveService, type StoredReceiveDeps } from "./features/stored-receive.js";
 import { InboxService, type InboxServiceDeps } from "./features/inbox.js";
+import { AccountIdentity } from "./features/account-identity.js";
+import { StoredSendService, type StoredSendDeps } from "./features/stored-send.js";
 import { DeviceAuthClient } from "./account/device-auth.js";
 import { ENGINEERING_BANNER, engineeringOverride, isEngineeringBuild } from "./build-mode.js";
 import { IceControl, IceRequestRegistry } from "./net/ice-control.js";
@@ -127,6 +132,19 @@ export interface HandlerComposition {
     | "dataRoot"
   >;
   /**
+   * Stored send seams: the upload transport, the metadata reader and the
+   * shared-protocol runtime.
+   *
+   * The same injection discipline as everything else here. What it exists for
+   * is an acceptance run that drives the REAL producer — the renderer's own
+   * `encryptFiles` — against a loopback server and reads the ciphertext back,
+   * which is the only way to prove the frames are the shared format.
+   */
+  storedSend?: NonNullable<StoredSendDeps["upload"]>;
+  /** A task-owned journal directory, so a run does not write into the user's
+   *  profile — and so send is drivable on a host that is not Windows. */
+  storedSendJournalDirectory?: string;
+  /**
    * Whether the Inbox scheduler starts with the process.
    *
    * Present so a test that composes no Inbox seams does not have a scheduler
@@ -202,6 +220,8 @@ export interface HandlerControl {
   readonly storedReceive: StoredReceiveService;
   /** The Device Inbox scheduler, for the same risk snapshot and teardown. */
   readonly inbox: InboxService;
+  /** Stored send, for the same risk snapshot and teardown. */
+  readonly storedSend: StoredSendService;
   readonly resident: ResidentBridge;
   /**
    * Stop main's own outgoing work, recoverably.
@@ -776,6 +796,190 @@ export function registerHandlers(
   });
 
   // -------------------------------------------------------------------------
+  // Stored send and history
+  // -------------------------------------------------------------------------
+
+  /**
+   * ONE device identity for both account-owned features.
+   *
+   * The Inbox is ADDRESSED by it and stored send SCOPES ITS JOURNAL by it, so
+   * two independent resolutions would be two values that merely usually agree —
+   * and the day they did not, a user's send history would be filed under an
+   * account their inbox was not. Resolved once per epoch, shared here.
+   */
+  const identity = new AccountIdentity({
+    origin,
+    // The SAME injected lookup the Inbox uses, when one is supplied. Two
+    // resolvers would be two identities, and a run that injected one for the
+    // Inbox while stored send reached the real network is a run where send
+    // refuses for a reason that has nothing to do with sending.
+    ...(composition.inbox?.resolveDevice ? { resolve: composition.inbox.resolveDevice } : {}),
+  });
+
+  /**
+   * The account authority a send is admitted under.
+   *
+   * Reads the credential and resolves the device row, both under the epoch that
+   * was current when it started. The BEARER goes to the engine and nowhere
+   * else; nothing here publishes it, and no channel returns it.
+   */
+  const sendAuthority: StoredSendDeps["authority"] = async () => {
+    const captured = await service.captureAccountAuthority();
+    if (captured.kind !== "ok") return { kind: captured.kind };
+    try {
+      const device = await identity.resolve(
+        captured.bearer,
+        captured.epoch,
+        AbortSignal.timeout(20_000),
+      );
+      // Re-checked after the lookup: an answer that arrived after an account
+      // change describes an account that has gone away.
+      if (service.accountEpoch !== captured.epoch) return { kind: "unavailable" };
+      return {
+        kind: "ok",
+        authority: {
+          // The same scoping value the Inbox uses. See `AccountIdentity`.
+          accountId: device.id,
+          deviceId: device.id,
+          bearer: captured.bearer,
+          epoch: captured.epoch,
+        },
+      };
+    } catch {
+      return { kind: "unavailable" };
+    }
+  };
+
+  const storedSend = new StoredSendService({
+    origin,
+    authority: sendAuthority,
+    accountEpoch: () => service.accountEpoch,
+    async options() {
+      // The injected directory is consulted FIRST, and the host root is
+      // resolved only when there is none. Resolving it unconditionally threw on
+      // every host that is not Windows — so an injected, task-owned journal was
+      // accepted and then never reached, and every send refused as `internal`
+      // for a reason that had nothing to do with the send.
+      const journalDirectory =
+        composition.storedSendJournalDirectory ??
+        (() => {
+          const root = currentDataRoot();
+          if (!root.ok) throw new IpcRefusal(`data root unavailable: ${root.reason}`);
+          return `${root.path}/uploads`;
+        })();
+      return {
+        secrets: await service.secretStore(),
+        journalDirectory,
+        ...(composition.storedSend ?? {}),
+      };
+    },
+    onProgress: (job, committed, total) => {
+      // The document that ASKED, never whichever one is current: a reload
+      // replaces the page rather than inheriting the upload it started.
+      router.emit(IPC_EVENTS.storedSendProgress, job.document, {
+        jobId: job.id,
+        committed,
+        total,
+      });
+    },
+    onOutcome: (job, outcome) => {
+      router.emit(IPC_EVENTS.storedSendOutcome, job.document, { jobId: job.id, outcome });
+    },
+    reportFailure: (err) => events.reportFailure?.(err),
+    // The clipboard, written by MAIN. See the contract's note: there is no
+    // channel that takes a string and puts it there.
+    writeClipboard: (text) => clipboard.writeText(text),
+    currentDocument: () => router.generation,
+  });
+
+  // The Inbox resolves the SAME identity, through the same cache.
+  /**
+   * What the page was last told about the account.
+   *
+   * BOTH the epoch and whether a credential is actually held, because a
+   * sign-in changes the second without changing the first. `AppService.adopt`
+   * notifies watchers twice under one epoch — once at the start, before the
+   * bearer is written, and again once it is durable — and only the second
+   * notification means "there is an account to read history for". Comparing the
+   * epoch alone discarded it, so a page that signed in kept showing an empty
+   * history until something else happened to refresh it.
+   */
+  let lastSendAccount = { epoch: service.accountEpoch, signedIn: false };
+  const releaseSendAccountWatch = service.onAccountChanged(() => {
+    const epoch = service.accountEpoch;
+    if (identity.known(epoch) === null) identity.invalidate();
+    void storedSend.onAccountChanged().catch((err: unknown) => events.reportFailure?.(err));
+    void (async () => {
+      const captured = await service.captureAccountAuthority();
+      const signedIn = captured.kind === "ok";
+      if (epoch === lastSendAccount.epoch && signedIn === lastSendAccount.signedIn) return;
+      lastSendAccount = { epoch, signedIn };
+      // The page decides what to do with it: a DIFFERENT epoch means drop the
+      // previous account's links and history, and the same epoch newly signed
+      // in means read the history that is now available. A document change
+      // reaches neither, which is why receiving and an in-flight send survive
+      // a reload.
+      router.emit(IPC_EVENTS.storedSendAccount, router.generation, { epoch, signedIn });
+    })().catch((err: unknown) => events.reportFailure?.(err));
+  });
+
+  /** One entry the user picked. A relative path the RENDERER already holds —
+   *  it names a file inside what the user chose, and grants nothing. */
+  const sendDescriptors = (value: unknown): { path: string; size: number }[] => {
+    if (!Array.isArray(value) || value.length === 0) throw new IpcRefusal("expected entries");
+    if (value.length > MAX_SEND_ENTRIES) throw new IpcRefusal("too many entries");
+    return value.map((entry) => {
+      const e = expectObject(entry);
+      return {
+        path: expectString(e["path"], MAX_SEND_PATH_LENGTH),
+        size: expectIndex(e["size"]),
+      };
+    });
+  };
+
+  router.handle(IPC.storedSendStart, async (payload) => {
+    const body = expectObject(payload);
+    const retention = expectObject(body["retention"]);
+    const burn = retention["burnAfterRead"];
+    if (typeof burn !== "boolean") throw new IpcRefusal("expected a boolean");
+    return storedSend.start(
+      sendDescriptors(body["entries"]),
+      { burnAfterRead: burn, ttlSeconds: expectIndex(retention["ttlSeconds"]) },
+      router.generation,
+    );
+  });
+
+  router.handle(IPC.storedSendFeed, async (payload) => {
+    const body = expectObject(payload);
+    // Bounded before anything is allocated. The engine checks the exact length
+    // it expects; this refuses an absurd one at the boundary.
+    return storedSend.feed(expectString(body["jobId"], 64), {
+      fileIndex: expectIndex(body["fileIndex"]),
+      seq: expectIndex(body["seq"]),
+      bytes: expectChunk(body["bytes"], MAX_SEND_FRAME_BYTES),
+    });
+  });
+
+  const sendJob = (payload: unknown): string => expectString(expectObject(payload)["jobId"], 64);
+
+  router.handle(IPC.storedSendEnd, (payload) => storedSend.end(sendJob(payload)));
+  router.handle(IPC.storedSendCancel, (payload) => storedSend.cancel(sendJob(payload)));
+  // `null` is "could not be read", not "empty". Carried across as such so the
+  // page can say so rather than claiming the user has never sent anything.
+  router.handle(IPC.storedSendHistory, async () => ({ entries: await storedSend.history() }));
+  router.handle(IPC.storedSendLink, async (payload) => ({ link: await storedSend.link(sendJob(payload)) }));
+  router.handle(IPC.storedSendDelete, async (payload) => ({
+    result: await storedSend.remove(sendJob(payload)),
+  }));
+  router.handle(IPC.storedSendReconcile, (payload) => storedSend.reconcile(sendJob(payload)));
+  // The generation is read HERE, where the request arrives, so the copy carries
+  // the document that asked rather than whichever one is current when the link
+  // has been composed.
+  router.handle(IPC.storedSendCopyLink, async (payload) => ({
+    result: await storedSend.copyLink(sendJob(payload), router.generation),
+  }));
+
+  // -------------------------------------------------------------------------
   // Resident commands, acknowledgements and snapshots
   // -------------------------------------------------------------------------
 
@@ -927,6 +1131,10 @@ export function registerHandlers(
     // The document that asked is gone: its receives are aborted synchronously
     // and joined, exactly as its leases and sockets are.
     revocations.add(storedReceive.revokeDocument(generation));
+    // A send genuinely belongs to its page: the page holds the `File` objects
+    // and produces the ciphertext, so a document that is gone cannot finish
+    // what it started. Receiving is the opposite and is deliberately untouched.
+    revocations.add(storedSend.revokeDocument(generation));
     volunteered = null;
     for (const [requestId, resolve] of [...outstanding]) {
       outstanding.delete(requestId);
@@ -945,6 +1153,7 @@ export function registerHandlers(
     service.fenceReceives();
     storedReceive.fence();
     inbox.fence();
+    storedSend.fence();
   };
 
   const quiesce = async (): Promise<CleanupOutcome> => {
@@ -971,16 +1180,20 @@ export function registerHandlers(
     // starting it here and joining it below stops the scheduler NOW rather
     // than after the network drains.
     const inboxStopping = inbox.quiesce();
+    // Revokes every job's fence before its own first await, so starting it here
+    // and joining it below stops the uploads NOW.
+    const sendStopping = storedSend.quiesce();
     // The leases, the sign-in, the queued transitions and the secret work. It
     // retires the in-flight sign-in before ITS first await too, so this is a
     // request as much as a join.
     const serviceStopping = service.quiesce();
 
-    const [sockets, reads, storedHeld, inboxHeld, outcome] = await Promise.all([
+    const [sockets, reads, storedHeld, inboxHeld, sendHeld, outcome] = await Promise.all([
       hub.drainClosing(NETWORK_DRAIN_MS),
       iceRequests.drain(NETWORK_DRAIN_MS),
       storedStopping,
       inboxStopping,
+      sendStopping,
       serviceStopping,
     ]);
 
@@ -996,11 +1209,14 @@ export function registerHandlers(
       // A delivery still being received is an open transfer, and a retained
       // Inbox destination is one this process could not close — the same two
       // facts the stored counts carry, from the other receiving feature.
-      openLeases: outcome.openLeases + storedHeld.active + inboxHeld.active,
+      openLeases: outcome.openLeases + storedHeld.active + inboxHeld.active + sendHeld.active,
       unresolved:
         outcome.unresolved +
         storedHeld.retained.length +
         inboxHeld.retained.length +
+        // An upload whose outcome could not be established is exactly the kind
+        // of thing a quit prompt exists to mention.
+        sendHeld.unresolved +
         (revocation !== null ? 1 : 0),
       networkUnsettled: sockets + reads,
       firstReason: outcome.firstReason ?? revocation,
@@ -1019,6 +1235,8 @@ export function registerHandlers(
     // the last place it could have been reported.
     await Promise.allSettled([...revocations]);
     releaseAccountWatch();
+    releaseSendAccountWatch();
+    await storedSend.dispose();
     await inbox.dispose();
     await storedReceive.dispose();
     await service.dispose();
@@ -1035,10 +1253,22 @@ export function registerHandlers(
     service.resume();
     service.admitReceives();
     storedReceive.resume();
+    storedSend.resume();
     // The scheduler too: it was stopped by the same quiesce, and a Stay that
     // left it stopped would be an app that quietly never receives again.
     inbox.resume();
   };
 
-  return { service, storedReceive, inbox, resident, fence, quiesce, resume, preferences: prefs, dispose: teardown };
+  return {
+    service,
+    storedReceive,
+    inbox,
+    storedSend,
+    resident,
+    fence,
+    quiesce,
+    resume,
+    preferences: prefs,
+    dispose: teardown,
+  };
 }

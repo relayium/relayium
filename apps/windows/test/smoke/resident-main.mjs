@@ -37,8 +37,8 @@ const check = (name, ok, detail) => {
   if (!ok) failures.push(detail ? `${name}: ${detail}` : name);
 };
 
-const [userDataDir, secretsDir, destinationDir, inboxRootDir] = process.argv.slice(2);
-if (!userDataDir || !secretsDir || !destinationDir || !inboxRootDir) {
+const [userDataDir, secretsDir, destinationDir, inboxRootDir, sendJournalDir] = process.argv.slice(2);
+if (!userDataDir || !secretsDir || !destinationDir || !inboxRootDir || !sendJournalDir) {
   process.stdout.write(
     `RELAYIUM_SMOKE ${JSON.stringify({ failures: ["missing task-owned directory arguments"] })}\n`,
   );
@@ -265,6 +265,78 @@ function pendingTask(id) {
   };
 }
 
+/**
+ * Where this run's uploads go.
+ *
+ * A CONTROLLED IN-MEMORY transport — an object implementing the transport
+ * interface, keeping bytes in a variable. There is no `createServer`, no
+ * `listen` and no HTTP anywhere in this file, so nothing below is evidence
+ * about the remote handler or about the protocol as a server answers it. What
+ * it does prove is the whole client path: the page's own production
+ * `encryptFiles`, the accepted upload engine, and the bytes that come out.
+ *
+ * It is not a mock that records calls — the assertions are about the BYTES, so
+ * it has to hold them — and it follows the endpoint's OFFSET RULE because that
+ * is what makes the engine's offset algebra observable here.
+ */
+const sendHeld = {
+  manifest: new Uint8Array(0),
+  body: new Uint8Array(0),
+  finalized: false,
+  removed: [],
+  /** Set to make finalize answer 409, which is the AMBIGUOUS case. */
+  ambiguous: false,
+  /** Held while set, so a transfer can be observed mid-flight. */
+  hold: null,
+  reset() {
+    sendHeld.manifest = new Uint8Array(0);
+    sendHeld.body = new Uint8Array(0);
+    sendHeld.finalized = false;
+  },
+};
+
+const sendTransport = {
+  async init(sealedManifest) {
+    sendHeld.reset();
+    sendHeld.manifest = new Uint8Array(sealedManifest);
+    return { uploadId: `upload-${String(Date.now())}`, chunkSize: 1 << 20 };
+  },
+  async append(_id, from, _total, bytes) {
+    if (sendHeld.hold) await sendHeld.hold;
+    if (from !== sendHeld.body.byteLength) {
+      return { outcome: "offset", received: sendHeld.body.byteLength };
+    }
+    const next = new Uint8Array(sendHeld.body.byteLength + bytes.byteLength);
+    next.set(sendHeld.body);
+    next.set(bytes, sendHeld.body.byteLength);
+    sendHeld.body = next;
+    return { outcome: "committed", received: sendHeld.body.byteLength };
+  },
+  async status() {
+    return { received: sendHeld.body.byteLength };
+  },
+  async finalize() {
+    if (sendHeld.ambiguous) return { outcome: "already-finalized" };
+    sendHeld.finalized = true;
+    return { outcome: "finalized", id: "object-1", expiresAt: 4_000_000_000 };
+  },
+  async remove(id) {
+    sendHeld.removed.push(id);
+    return "deleted";
+  },
+  /** The account's object list, for reconciliation. Empty: nothing matches. */
+  async list() {
+    return [];
+  },
+};
+
+/** The unauthenticated metadata reader reconciliation uses. In memory too. */
+const sendSource = {
+  async meta() {
+    throw new Error("no candidate in this run");
+  },
+};
+
 /** What the injected device-auth poll answers. Flipped to sign in for real. */
 let pollAnswer = { status: "pending" };
 
@@ -322,6 +394,13 @@ async function main() {
       // network, the device row central would issue, the folder probe, and a
       // task-owned data root. The backoff is an hour on every arm so nothing
       // fires on its own and each pass is stepped deliberately.
+      // The stored-send engine is the REAL one; only the server it talks to is
+      // this run's. The producer is the renderer's own shared `encryptFiles`.
+      storedSendJournalDirectory: sendJournalDir,
+      storedSend: {
+        transportFactory: () => sendTransport,
+        sourceFactory: () => sendSource,
+      },
       inbox: {
         dataRoot: () => inboxRootDir,
         makeApi: () => inboxApi,
@@ -396,6 +475,14 @@ async function main() {
   await scenarioInboxKeepsReceiving(win, runtime);
   await scenarioInboxPending(win);
   await scenarioInboxMessages(win);
+  // Stored send, while the smoke is signed in and BEFORE any quit scenario.
+  // A quit fences admissions and a Stay clears them; running the whole send
+  // flow through that would be testing the fence, which has its own coverage,
+  // rather than the send.
+  await scenarioStoredSendFlow(win);
+  await scenarioStoredSendHistory(win);
+  await scenarioStoredSendAmbiguous(win);
+  await scenarioStoredSendCancelAndNavigation(win);
   await scenarioInboxQuitStay(win, runtime);
   await scenarioControlMetrics(win);
   await scenarioInboxAccountChange(win);
@@ -640,6 +727,9 @@ async function scenarioInboxMessages(win) {
  * that Stay leaves a scheduler that still receives.
  */
 async function scenarioInboxQuitStay(win, runtime) {
+  // The Inbox page, named rather than inherited: the stored-send scenarios ran
+  // in between and left the shell on another row.
+  await openInbox(win);
   let refusedDuringPrompt = null;
   answers.confirm = [false]; // Stay
   answers.onConfirm = async () => {
@@ -770,11 +860,223 @@ async function setClipboard(value) {
   await clipboard.writeText(value);
 }
 
+
+// ---------------------------------------------------------------------------
+// Stored send and history — the whole user flow, in the real DOM
+// ---------------------------------------------------------------------------
+
+/**
+ * Put real `File` objects on the real `<input type="file">`.
+ *
+ * `DataTransfer` is how a page's file input is populated without a person at a
+ * dialog. The objects are genuine `File`s, so what the controller hands to the
+ * shared `encryptFiles` below is what a user's pick produces.
+ */
+async function pickFiles(win, files) {
+  return js(
+    win,
+    `(() => {
+      const input = document.querySelector('[data-test="send-files"]');
+      const dt = new DataTransfer();
+      ${files
+        .map(
+          (file) =>
+            `dt.items.add(new File([new Uint8Array(${JSON.stringify([...file.bytes])})], ${JSON.stringify(file.name)}));`,
+        )
+        .join("\n      ")}
+      input.files = dt.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      return input.files.length;
+    })()`,
+  );
+}
+
+async function goToStored(win) {
+  await js(win, `(() => { document.querySelector('[data-test="nav-stored"] button')?.click(); return true; })()`);
+  // EITHER control: a send that is running replaces Start with Cancel, and
+  // waiting only for Start would time out on exactly the case this scenario
+  // exists to check — coming back to a page mid-upload.
+  return waitInbox(
+    win,
+    "the stored page",
+    `document.querySelector('[data-test="send-start"]') !== null
+      || document.querySelector('[data-test="send-cancel"]') !== null`,
+  );
+}
+
+/**
+ * A complete send, from the picker to the clipboard.
+ *
+ * The producer is the renderer's own shared `encryptFiles`; the engine is the
+ * accepted one; the server is this run's loopback. What is asserted is what
+ * actually happened: the bytes the server holds, the link on screen, and the
+ * bytes on the SYSTEM clipboard.
+ */
+async function scenarioStoredSendFlow(win) {
+  if (!(await goToStored(win))) return;
+
+  // A file spanning more than one chunk, so the frame sequence is exercised.
+  const big = new Uint8Array(200 * 1024);
+  for (let i = 0; i < big.length; i += 1) big[i] = (i * 13) % 251;
+  const small = new TextEncoder().encode("second file");
+  const picked = await pickFiles(win, [
+    { name: "big.bin", bytes: big },
+    { name: "second.txt", bytes: small },
+  ]);
+  check("two files were picked through the real input", picked === 2, String(picked));
+  const shownPick = await waitInbox(win, "the picked summary", `document.querySelector('[data-test="send-picked"]') !== null`);
+  check("the page reports what was picked", shownPick === true);
+
+  check("send was clicked", await clickTest(win, "send-start"));
+
+  const published = await waitFor(
+    win,
+    "the send to publish",
+    `document.querySelector('[data-test="send-published"]') !== null`,
+    30_000,
+  );
+  check("the send published", published === true);
+
+  // The transport holds real ciphertext, and as much as was declared.
+  check(
+    "the whole object was handed over",
+    sendHeld.body.byteLength > big.length,
+    String(sendHeld.body.byteLength),
+  );
+  check("the manifest frame was handed over", sendHeld.manifest.byteLength > 0);
+  check("finalize actually happened", sendHeld.finalized === true);
+
+  // The link is on screen and carries its key fragment.
+  const link = await js(win, `document.querySelector('[data-test="send-link"]')?.value ?? ""`);
+  check("a link is shown", link.includes("#k="), link.slice(0, 40));
+  check("the link names the id finalize returned", link.includes("object-1"), link.slice(0, 60));
+
+  // ## The clipboard, by its BYTES
+  //
+  // Copying happens in main because `window.ts` denies the renderer clipboard
+  // permission. This asserts the system clipboard holds exactly the link the
+  // user is looking at.
+  await setClipboard("not-the-link");
+  check("copy was clicked", await clickTest(win, "send-copy"));
+  const copiedLabel = await waitInbox(
+    win,
+    "the copy control to answer",
+    `document.querySelector('[data-test="send-copy"]')?.textContent?.trim() !== "Copy link"`,
+  );
+  check("copying answered", copiedLabel === true);
+  const pasted = await readClipboard();
+  check("the link itself reached the clipboard", pasted === link, JSON.stringify(pasted).slice(0, 80));
+}
+
+/** The history row for that send: its own copy, and a delete that reports. */
+async function scenarioStoredSendHistory(win) {
+  const listed = await waitInbox(win, "the history row", `document.querySelector('[data-test="send-history"]') !== null`);
+  check("the send appears in history", listed === true);
+
+  await setClipboard("not-the-link");
+  check("the history copy was clicked", await clickTest(win, "send-history-copy"));
+  const fromHistory = await waitForValue(async () => (await readClipboard()).includes("#k="), 8000);
+  check("a history row copies the link too", fromHistory === true, await readClipboard());
+
+  const before = sendHeld.removed.length;
+  check("delete was clicked", await clickTest(win, "send-history-delete"));
+  const reported = await waitInbox(
+    win,
+    "the delete to report",
+    `document.querySelector('[data-test="send-row-notice"]') !== null`,
+  );
+  // The point: a delete ALWAYS says what it did. A silent one left the user
+  // believing an object was gone when it may still be there.
+  check("the delete reports its outcome", reported === true);
+  check("the delete reached the transport", sendHeld.removed.length > before, String(sendHeld.removed.length));
+}
+
+/**
+ * A finalize whose answer was lost.
+ *
+ * The page must say so and offer a re-check — never a link, because there is no
+ * object id to put in one, and never "failed", because nothing here establishes
+ * that no object was created.
+ */
+async function scenarioStoredSendAmbiguous(win) {
+  sendHeld.ambiguous = true;
+  await pickFiles(win, [{ name: "ambiguous.bin", bytes: new Uint8Array([1, 2, 3, 4]) }]);
+  check("send was clicked for the ambiguous case", await clickTest(win, "send-start"));
+  const unknown = await waitFor(
+    win,
+    "the ambiguous outcome",
+    `document.querySelector('[data-test="send-ambiguous"]') !== null`,
+    30_000,
+  );
+  check("an unconfirmed finalize is shown as unconfirmed", unknown === true);
+  check(
+    "and no link is offered for it",
+    (await js(win, `document.querySelector('[data-test="send-link"]') === null`)) === true,
+  );
+
+  // The re-check is real: it asks again and reports truthfully that nothing
+  // could be confirmed, rather than quietly succeeding.
+  const hasRecheck = await waitInbox(
+    win,
+    "the re-check control",
+    `document.querySelector('[data-test="send-history-recheck"]') !== null`,
+  );
+  check("an unconfirmed send offers a re-check", hasRecheck === true);
+  check("re-check was clicked", await clickTest(win, "send-history-recheck"));
+  const answered = await waitInbox(
+    win,
+    "the re-check to report",
+    `document.querySelector('[data-test="send-row-notice"]') !== null`,
+  );
+  check("the re-check reports what it found", answered === true);
+  sendHeld.ambiguous = false;
+}
+
+/** Cancel mid-transfer, and a navigation that must not lose the send. */
+async function scenarioStoredSendCancelAndNavigation(win) {
+  let release;
+  sendHeld.hold = new Promise((resolve) => {
+    release = resolve;
+  });
+
+  await pickFiles(win, [{ name: "held.bin", bytes: new Uint8Array(120 * 1024) }]);
+  check("a held send was started", await clickTest(win, "send-start"));
+  const running = await waitInbox(win, "the transfer to be running", `document.querySelector('[data-test="send-progress"]') !== null`);
+  check("progress is shown while it runs", running === true);
+
+  // ## Navigating away does not lose the send
+  //
+  // The controller is shell-lived, so the job, its progress and the picked
+  // files survive the page unmounting — which is what a user does when they
+  // check something on another row mid-upload.
+  await js(win, `(() => { document.querySelector('[data-test="nav-lan"] button')?.click(); return true; })()`);
+  await waitInbox(
+    win,
+    "another page",
+    `document.querySelector('[data-test="send-start"]') === null
+      && document.querySelector('[data-test="send-cancel"]') === null`,
+  );
+  await goToStored(win);
+  const stillRunning = await js(win, `document.querySelector('[data-test="send-progress"]') !== null`);
+  check("the send survived a page navigation", stillRunning === true);
+
+  check("cancel was clicked", await clickTest(win, "send-cancel"));
+  const cancelled = await waitInbox(
+    win,
+    "the cancelled outcome",
+    `document.querySelector('[data-test="send-cancelled"]') !== null`,
+  );
+  check("cancelling reports it as cancelled", cancelled === true);
+
+  sendHeld.hold = null;
+  release?.();
+}
+
 /** Poll a main-process fact the scheduler produces. */
 async function waitForValue(predicate, timeoutMs = 8000) {
   const started = Date.now();
   for (;;) {
-    if (predicate()) return true;
+    if (await predicate()) return true;
     if (Date.now() - started > timeoutMs) return false;
     await new Promise((r) => setTimeout(r, 25));
   }
@@ -1039,11 +1341,45 @@ async function scenarioStoredReceive(win, runtime) {
   const onPage = await waitFor(win, "the stored page", `document.querySelector('[data-test="stored-link"]') !== null`);
   if (!onPage) return;
 
-  // The page offers no working control for what this build cannot do, and says
-  // so in words.
+  // Send and history are BUILT now, so the page offers their real controls
+  // rather than naming them as absent. Asserted as structure — the pickers, the
+  // start control and the history section are present — because driving a full
+  // upload needs a signed-in account and an injected upload transport, which
+  // this scenario does not compose.
+  check("the send pickers are offered", (await present(win, "send-files")) === true);
+  check("the folder picker is offered", (await present(win, "send-folder")) === true);
+  check("the send action is offered", (await present(win, "send-start")) === true);
   check(
-    "the unbuilt modes are named, not mocked up",
-    (await js(win, `document.querySelector('[data-test="stored-send-soon"]') !== null`)) === true,
+    "nothing is sendable until something is picked",
+    (await js(win, `document.querySelector('[data-test="send-start"]').disabled`)) === true,
+  );
+  check("the history section is present", (await present(win, "send-history-empty")) === true);
+  // The shared control vocabulary reaches the new section too.
+  const sendMetrics = await js(
+    win,
+    `JSON.stringify({ start: Math.round(document.querySelector('[data-test="send-start"]').getBoundingClientRect().height) })`,
+  );
+  process.stdout.write(`RELAYIUM_SEND_METRICS ${sendMetrics}\n`);
+  check("the send control is a real control", JSON.parse(sendMetrics).start >= 32, sendMetrics);
+
+  // ## The link copy reaches the SYSTEM clipboard, or refuses visibly
+  //
+  // `window.ts` denies every renderer permission, so a Copy built on
+  // `navigator.clipboard` would never work. This drives the real channel for a
+  // job that does not exist and asserts the two properties that matter: the
+  // clipboard is NOT written, and the answer is a definite refusal rather than
+  // silence. A published-link copy needs a signed-in account and an injected
+  // upload transport, which this scenario does not compose.
+  await setClipboard("untouched-by-send");
+  const refusedCopy = await js(
+    win,
+    `globalThis.relayium.send.copyLink({ jobId: "no-such-job" }).then((r) => r.result, () => "threw")`,
+  );
+  check("a copy for an unknown send refuses", refusedCopy === "unavailable", String(refusedCopy));
+  check(
+    "and nothing reached the clipboard",
+    (await readClipboard()) === "untouched-by-send",
+    JSON.stringify(await readClipboard()),
   );
 
   // A link this build will not act on. The page must show a CODE's sentence,

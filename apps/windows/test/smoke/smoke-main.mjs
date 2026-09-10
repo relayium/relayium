@@ -245,13 +245,13 @@ async function main() {
   // EXACT set, not a superset: a `contains` check would pass while the preload
   // quietly grew a surface nobody reviewed.
   //
-  // Pinned to the reviewed surface as it stands — `inbox` joined `stored`,
-  // `resident` and `loginItem` — rather than to whatever this tree happens to
+  // Pinned to the reviewed surface as it stands — `send` and `inbox` joined
+  // `stored`, `resident` and `loginItem` — rather than to whatever this tree happens to
   // expose, which would accept a stale or an unreviewed bridge silently.
   check(
     "bridge exposed",
     parsed.keys.sort().join(",") ===
-      "appInfo,auth,ice,inbox,loginItem,pair,prefs,receive,resident,signaling,stored",
+      "appInfo,auth,ice,inbox,loginItem,pair,prefs,receive,resident,send,signaling,stored",
     parsed.keys.join(","),
   );
   check("no raw ipcRenderer in the page", parsed.hasIpc === false);
@@ -287,6 +287,15 @@ async function main() {
     // permission including the browser clipboard. It names a message this
     // account has received; there is no channel that takes a string.
     "relayium:inbox-copy-message",
+    // Stored send and history. The renderer produces the ciphertext, so frames
+    // flow renderer→main here; the one secret flowing the other way is the
+    // content key `start` answers with, for the job that document owns.
+    "relayium:stored-send-start", "relayium:stored-send-feed", "relayium:stored-send-end",
+    "relayium:stored-send-cancel", "relayium:stored-send-history", "relayium:stored-send-link",
+    "relayium:stored-send-delete", "relayium:stored-send-reconcile",
+    // Copying a link happens in MAIN, for the same reason the Inbox message
+    // copy does: `window.ts` denies the renderer clipboard permission.
+    "relayium:stored-send-copy-link",
     "relayium:inbox-delete-message", "relayium:inbox-rename", "relayium:inbox-wake",
     "relayium:inbox-release-retained",
   ];

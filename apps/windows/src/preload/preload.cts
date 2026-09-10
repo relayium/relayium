@@ -99,6 +99,23 @@ contextBridge.exposeInMainWorld("relayium", {
     onProgress: subscribe("relayium:stored-progress"),
     onOutcome: subscribe("relayium:stored-outcome"),
   },
+  // Stored send. `start` answers with this job's content key — the one secret
+  // that travels main→renderer, because the renderer is what encrypts. `feed`
+  // carries ciphertext the other way; neither ever carries a path.
+  send: {
+    start: invoke("relayium:stored-send-start"),
+    feed: invoke("relayium:stored-send-feed"),
+    end: invoke("relayium:stored-send-end"),
+    cancel: invoke("relayium:stored-send-cancel"),
+    history: invoke("relayium:stored-send-history"),
+    link: invoke("relayium:stored-send-link"),
+    remove: invoke("relayium:stored-send-delete"),
+    reconcile: invoke("relayium:stored-send-reconcile"),
+    copyLink: invoke("relayium:stored-send-copy-link"),
+    onProgress: subscribe("relayium:stored-send-progress"),
+    onOutcome: subscribe("relayium:stored-send-outcome"),
+    onAccount: subscribe("relayium:stored-send-account"),
+  },
   loginItem: {
     read: invoke("relayium:login-item-read"),
     write: invoke("relayium:login-item-write"),
