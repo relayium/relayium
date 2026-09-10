@@ -162,12 +162,27 @@ interface VerifiedCandidate {
   readonly nonce: string | null;
 }
 
+/** What an observer is handed. Frozen, so a listener cannot edit the record. */
+export type UpdateListener = (state: UpdateState) => void;
+
 export class UpdateService {
   private state: UpdateState;
+  /**
+   * Observers of every state transition.
+   *
+   * A `Set`, so unsubscribing is one delete and calling it twice is harmless.
+   * Registration is impossible before the constructor returns, which is why the
+   * constructor assigns `state` directly instead of going through `set`: there
+   * is no listener yet, and a notification from a half-built object is the
+   * classic way one arrives with fields still undefined.
+   */
+  private readonly listeners = new Set<UpdateListener>();
   private readonly journal: UpdateJournal;
   private busy: Slot | null = null;
   private aborter: AbortController | null = null;
   private inFlight: Promise<unknown> | null = null;
+  /** Settles the admission's promise when its job finishes. */
+  private admitted: (() => void) | null = null;
   private stopping = false;
   /** The candidate the last successful check verified. Never persisted as
    *  authority; re-verified from stored bytes on restart. */
@@ -178,12 +193,56 @@ export class UpdateService {
 
   constructor(private readonly options: UpdateServiceOptions) {
     this.journal = new UpdateJournal(options.dataDirectory, options.scope ?? defaultScopeProvider());
-    this.state = updatesEnabled(options.trust, options.engineering)
-      ? { kind: "idle", lastCheckedAt: null }
-      : { kind: "disabled", reason: options.engineering ? "engineering-build" : "no-pin" };
+    // Frozen like every later state, but assigned rather than `set`: no listener
+    // can exist yet, and notifying from a half-built object is how a callback
+    // arrives with fields still undefined.
+    this.state = freezeState(
+      updatesEnabled(options.trust, options.engineering)
+        ? { kind: "idle", lastCheckedAt: null }
+        : { kind: "disabled", reason: options.engineering ? "engineering-build" : "no-pin" },
+    );
   }
 
   get current(): UpdateState {
+    return this.state;
+  }
+
+  /**
+   * Watch every state transition, so a caller never has to poll.
+   *
+   * The listener receives the SAME closed union `current` returns, frozen: a UI
+   * that mutated what it was handed would otherwise be editing this service's
+   * record of what happened. It receives nothing else — no service reference, no
+   * candidate authority, no way to answer a consent request — because an
+   * observer that could act would be a second decision-maker on a path whose
+   * whole design is that exactly one thing decides.
+   *
+   * Returns an unsubscribe that removes exactly this listener and is safe to
+   * call more than once.
+   */
+  subscribe(listener: UpdateListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  /**
+   * Assign and announce. The ONE place `state` changes after construction.
+   *
+   * Funnelled so that "every transition is observed" is a property of the code
+   * rather than a promise about remembering to call something.
+   */
+  private set(next: UpdateState): UpdateState {
+    this.state = freezeState(next);
+    for (const listener of [...this.listeners]) {
+      try {
+        listener(this.state);
+      } catch {
+        // An observer's failure is the observer's. It must not abort a
+        // download, skip a cleanup, or stop the next listener being told.
+      }
+    }
     return this.state;
   }
 
@@ -195,13 +254,24 @@ export class UpdateService {
     return this.options.scope ?? defaultScopeProvider();
   }
 
-  /** Take the single slot, synchronously. Null means refused. */
+  /**
+   * Take the single slot, synchronously. Null means refused.
+   *
+   * The admission REGISTERS ITSELF: `inFlight` becomes a promise that settles
+   * when the job finishes, before the caller publishes anything. Without that,
+   * a state published between admission and `run` — and any listener reacting
+   * to it — would find `inFlight` null and be told by `quiesce` that there was
+   * nothing to join, while the job then went on to do its work.
+   */
   private admit(slot: Slot): AbortController | null {
     if (this.stopping) return null;
     if (this.busy !== null) return null;
     if (this.state.kind === "disabled") return null;
     this.busy = slot;
     this.aborter = new AbortController();
+    this.inFlight = new Promise<void>((resolve) => {
+      this.admitted = resolve;
+    });
     return this.aborter;
   }
 
@@ -209,6 +279,7 @@ export class UpdateService {
     this.busy = null;
     this.aborter = null;
     this.inFlight = null;
+    this.admitted = null;
   }
 
   /**
@@ -225,23 +296,34 @@ export class UpdateService {
    */
   private publish(next: UpdateState, aborter: AbortController): UpdateState {
     if (this.stopping || aborter.signal.aborted) {
-      return REFUSAL_KINDS.has(next.kind) ? ((this.state = next), next) : this.state;
+      return REFUSAL_KINDS.has(next.kind) ? this.set(next) : this.state;
     }
-    this.state = next;
-    return next;
+    return this.set(next);
   }
 
-  /** Run an admitted job, recording it so `quiesce` can join it. */
+  /**
+   * Run an admitted job, recording it BEFORE a line of it executes.
+   *
+   * The gate is the point. Without it the body runs synchronously up to its
+   * first await, so anything it published — and any listener that published
+   * reached — would observe `inFlight` still null and be told by `quiesce` that
+   * there was nothing to join. A listener holding only a state can still call
+   * `quiesce`, and it would have received `joined: true` while this job then
+   * went on to do its work.
+   */
   private run<T>(body: () => Promise<T>): Promise<T> {
-    const work = (async () => {
+    const settle = this.admitted;
+    return (async () => {
       try {
         return await body();
       } finally {
+        // The admission's promise settles first, so anyone already waiting on
+        // it is released by the work finishing rather than by the slot being
+        // cleared underneath them.
+        settle?.();
         this.done();
       }
     })();
-    this.inFlight = work;
-    return work;
   }
 
   /**
@@ -260,7 +342,12 @@ export class UpdateService {
     this.stopping = true;
     this.aborter?.abort();
     const running = this.inFlight;
-    if (running === null) return { joined: true };
+    if (running === null) {
+      // Nothing admitted. Stated as the slot's emptiness rather than assumed
+      // from a null promise: reporting `joined: true` while a slot is taken
+      // would be the untruth this whole arrangement exists to prevent.
+      return { joined: this.busy === null };
+    }
     const joined = await Promise.race([
       running.then(
         () => true,
@@ -320,10 +407,13 @@ export class UpdateService {
    */
   async residue(): Promise<readonly JournalResidue[]> {
     const aborter = this.admit("read");
-    if (aborter === null) return this.unrecorded.slice();
+    if (aborter === null) return deepFreeze(this.unrecorded.slice());
     return this.run(async () => {
       const journal = await this.readJournal(aborter);
-      return merged(journal?.residue ?? [], this.unrecorded);
+      // Frozen, entries included: this list contains THIS SERVICE'S own
+      // in-memory records, and handing out live references would let a caller
+      // edit the count of what is still owed cleanup.
+      return deepFreeze(merged(journal?.residue ?? [], this.unrecorded));
     });
   }
 
@@ -355,7 +445,7 @@ export class UpdateService {
     if (trigger === "automatic" && !(await this.automaticCheckDue())) return this.state;
     const aborter = this.admit("check");
     if (aborter === null) return this.state;
-    this.state = { kind: "checking" };
+    this.set({ kind: "checking" });
     return this.run(async () => {
       try {
         const manifest = await readFeed(trust, this.options.feed, aborter.signal);
@@ -416,7 +506,7 @@ export class UpdateService {
     }
     const aborter = this.admit("download");
     if (aborter === null) return this.state;
-    this.state = { kind: "downloading", candidate: candidate.facts, receivedBytes: 0 };
+    this.set({ kind: "downloading", candidate: candidate.facts, receivedBytes: 0 });
     return this.run(async () => {
       const journal = await this.readJournal(aborter);
       if (journal === null) return this.state;
@@ -512,7 +602,10 @@ export class UpdateService {
             pending: { ...identity, receipt },
           }));
         },
-        this.options.artifact,
+        {
+          ...this.options.artifact,
+          onProgress: (written) => this.progressed(candidate.facts, written, aborter),
+        },
         aborter.signal,
       );
     } catch (error) {
@@ -591,6 +684,34 @@ export class UpdateService {
       stateForVerdict(verdict, { ...candidate.facts, sha256: staged.sha256 }),
       aborter,
     );
+  }
+
+  /**
+   * Publish a byte count, or drop it.
+   *
+   * Every reason to drop one is a reason a UI would otherwise show something
+   * false:
+   *
+   *   * the fence is set or this job was cancelled — a stopped download must not
+   *     appear to still be moving;
+   *   * a different job holds the slot now — a late report from an abandoned
+   *     download would overwrite the current one's;
+   *   * the published state is no longer `downloading` — verification has begun
+   *     or the download already failed, and a count is not either;
+   *   * the number did not grow, or would exceed the SIGNED length — progress is
+   *     monotonic and bounded by the manifest, not by what arrived.
+   *
+   * Nothing here interpolates. A count only changes when bytes were written —
+   * written, not flushed: `sync()` happens once, after the digest, so these are
+   * not bytes that have survived anything yet.
+   */
+  private progressed(facts: CandidateFacts, written: number, aborter: AbortController): void {
+    if (this.stopping || aborter.signal.aborted) return;
+    if (this.aborter !== aborter) return;
+    const current = this.state;
+    if (current.kind !== "downloading") return;
+    if (written <= current.receivedBytes || written > facts.sizeBytes) return;
+    this.set({ kind: "downloading", candidate: facts, receivedBytes: written });
   }
 
   /**
@@ -989,8 +1110,7 @@ export class UpdateService {
             // The app is going away; the lease is deliberately NOT released,
             // and this state is published even under the fence.
             lease = null;
-            this.state = { kind: "installing", candidate: facts };
-            return this.state;
+            return this.set({ kind: "installing", candidate: facts });
           }
           result =
             outcome.verdict !== undefined && outcome.verdict !== "signed-by-expected-publisher"
@@ -1148,6 +1268,27 @@ const identityOf = (manifest: UpdateManifest, stored: StagedIdentity): StagedIde
   build: manifest.build,
   nonce: stored.nonce,
 });
+
+/**
+ * Freeze a state, and everything reachable through it, before anyone sees it.
+ *
+ * `readonly` is a compile-time promise and the observer may not be TypeScript at
+ * all. Freezing only the top level would leave every nested object editable —
+ * the candidate today, and whatever a future member of this union carries. So
+ * this walks the own values rather than naming one field, which is also what
+ * keeps it correct when the union grows.
+ */
+function freezeState(state: UpdateState): UpdateState {
+  return deepFreeze(state) as UpdateState;
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
+  Object.freeze(value);
+  for (const nested of Object.values(value as Record<string, unknown>)) deepFreeze(nested);
+  if (Array.isArray(value)) for (const entry of value) deepFreeze(entry);
+  return value;
+}
 
 function factsOf(manifest: UpdateManifest): CandidateFacts {
   return {

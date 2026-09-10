@@ -157,6 +157,46 @@ export class ArtifactDownloadFailed extends Error {
 export interface ArtifactOptions {
   readonly fetchImpl?: typeof fetch;
   readonly stallMs?: number;
+  /**
+   * How many bytes have been SUCCESSFULLY WRITTEN, so far.
+   *
+   * Called only after a `custody.write` has returned, never on receipt from the
+   * network: a chunk that arrived and was not written is not progress, and
+   * reporting it would let a stalled disk look like a moving download.
+   *
+   * "Written" means the write returned — handed to the OS — and NOT that the
+   * bytes survive a power loss. `sync()` runs once, after the final hash, so
+   * every count reported before then describes data that is still only as
+   * durable as the filesystem cache. A caller must not present this as bytes
+   * safely stored.
+   *
+   * It is a count and nothing more. It says nothing about integrity — the hash
+   * is compared at the end — and nothing about completion; a download that
+   * reaches the declared length can still fail on its digest. A caller that
+   * treated the final call as success would be verifying nothing.
+   *
+   * Monotonic and never past `manifest.artifactBytes`, because the ceiling is
+   * checked before the write that a report follows.
+   *
+   * A throw here cannot fail the download. The observer is told what happened;
+   * it does not get a say in whether it happened.
+   */
+  readonly onProgress?: (writtenBytes: number) => void;
+}
+
+/**
+ * Hand the observer a number, and let nothing it does matter.
+ *
+ * A listener that throws must not fail a download, skip the cleanup that owns
+ * the bytes, or change what is verified. Swallowing here is the whole point.
+ */
+function report(observer: ((written: number) => void) | undefined, written: number): void {
+  if (observer === undefined) return;
+  try {
+    observer(written);
+  } catch {
+    /* an observer's failure is the observer's */
+  }
 }
 
 const isAbort = (error: unknown): boolean => {
@@ -319,6 +359,9 @@ export async function downloadArtifact(
         if (received > manifest.artifactBytes) throw new ArtifactError("too-large");
         digest.update(value);
         await custody.write(value);
+        // AFTER the write, and only then. Also after the ceiling check above,
+        // so a report can never exceed the signed length.
+        report(options.onProgress, received);
       }
     } catch (error) {
       await reader.cancel().catch(() => undefined);
