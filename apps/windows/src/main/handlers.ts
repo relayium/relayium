@@ -13,6 +13,7 @@ import {
   MAX_IPC_CHUNK_BYTES,
   MAX_REQUEST_ID_LENGTH,
   MAX_RESIDENT_DRAFTS,
+  MAX_STORED_LINK_LENGTH,
   MAX_IPC_MANIFEST_ENTRIES,
   MAX_SIGNALING_FRAME_BYTES,
   MAX_SOCKET_TOKEN_LENGTH,
@@ -28,10 +29,12 @@ import {
   type SignalingRoom,
 } from "../shared/ipc-contract.js";
 import { AppService, type AppServiceDeps, type CleanupOutcome } from "./app-service.js";
+import { StoredReceiveService, type StoredReceiveDeps } from "./features/stored-receive.js";
 import { DeviceAuthClient } from "./account/device-auth.js";
 import { ENGINEERING_BANNER, engineeringOverride, isEngineeringBuild } from "./build-mode.js";
 import { IceControl, IceRequestRegistry } from "./net/ice-control.js";
 import { PairControl } from "./net/pair-control.js";
+import { catalogFor, counter, type Locale, type Translate, type TranslateCount } from "./l10n.js";
 import { PreferenceStore, isPreferenceKey, preferencesPath } from "./preferences.js";
 import {
   currentState,
@@ -83,6 +86,18 @@ export interface HandlerComposition {
   /** The system that actually starts programs at sign-in. Substituted so an
    *  automated run does not add itself to a developer's startup programs. */
   loginItem?: LoginItemSystem;
+  /**
+   * The language the native dialogs opened here are written in.
+   *
+   * A function, read when a dialog opens rather than captured once: the window
+   * reports its own catalogue after startup, and a value taken at registration
+   * would be the OS guess forever. `main.ts` supplies the resident runtime's
+   * current locale; absent, English — the declared fallback.
+   */
+  locale?: () => Locale;
+  /** Stored receive seams: the object source, the destination factory and the
+   *  shared-protocol runtime. Injection only, like every other one here. */
+  storedReceive?: Pick<StoredReceiveDeps, "receive" | "transport" | "destination" | "runtime" | "hosts" | "cleanups">;
   /**
    * A device-auth client the caller supplies instead of the real one.
    *
@@ -146,6 +161,8 @@ export interface ResidentBridge {
 /** Everything the resident wiring needs from one registration. */
 export interface HandlerControl {
   readonly service: AppService;
+  /** Stored receive, for the resident runtime's risk and teardown. */
+  readonly storedReceive: StoredReceiveService;
   readonly resident: ResidentBridge;
   /**
    * Stop main's own outgoing work, recoverably.
@@ -156,6 +173,26 @@ export interface HandlerControl {
    * half that does not end the process.
    */
   readonly quiesce: () => Promise<CleanupOutcome>;
+  /**
+   * Stop admitting new work, everywhere, without stopping anything.
+   *
+   * The partner of `resume`, and the reason it is one call: a quit fences,
+   * then ASKS — the page for an acknowledgement, then a human, for as long as
+   * they take. A caller that fenced only the lease service left every other
+   * feature admitting through that window, so the risk the prompt described
+   * was not the risk that was quit over. Synchronous, so nothing can be
+   * admitted between the fences.
+   */
+  readonly fence: () => void;
+  /**
+   * The user stayed. Everything that was fenced becomes usable again.
+   *
+   * One place, because there is more than one thing to resume: the lease
+   * service, its admission fence, and stored receive. A caller that resumed
+   * only what it happened to know about left the others refusing forever —
+   * which is exactly what happened to stored receive.
+   */
+  readonly resume: () => void;
   /**
    * The settings file this registration uses.
    *
@@ -199,6 +236,12 @@ export function registerHandlers(
   const router = new IpcRouter(scheme, host);
   router.bind(window.webContents);
 
+  // Looked up per call, so a dialog follows the language the window changed to.
+  const dialogLocale = (): Locale => composition.locale?.() ?? "en";
+  const t: Translate = (key) => catalogFor(dialogLocale())[key];
+  /** The counted keys, formatted by the catalog that owns the word order. */
+  const tc: TranslateCount = (key, count) => counter(dialogLocale())(key, count);
+
   const service = new AppService({
     origin,
     makeStore:
@@ -218,7 +261,8 @@ export function registerHandlers(
       // unable to choose one.
       const picked = await dialog.showOpenDialog(window, {
         properties: ["openDirectory", "createDirectory"],
-        title: "Choose where to save",
+        title: t("native.receive.pickTitle"),
+        buttonLabel: t("native.receive.pickConfirm"),
       });
       return picked.canceled ? null : (picked.filePaths[0] ?? null);
     },
@@ -503,6 +547,90 @@ export function registerHandlers(
   });
 
   // -------------------------------------------------------------------------
+  // Stored receive
+  // -------------------------------------------------------------------------
+
+  const storedReceive = new StoredReceiveService({
+    ...(composition.storedReceive ?? {}),
+    // The native folder picker, asked only after the manifest is judged — so a
+    // dialog never opens for a transfer that is going to be refused, and the
+    // renderer never names a destination.
+    pickDestination: async (facts, job) => {
+      // The job's OWN document names the authority, not whichever document is
+      // current when the dialog closes: a grant is authority the document that
+      // asked gave, and a reload replaces that document rather than inheriting
+      // what it authorised.
+      const authorityId = `stored-${String(job.document)}`;
+      if (composition.pickDirectory) {
+        const chosen = await composition.pickDirectory();
+        return chosen === null ? null : { rootPath: chosen, authorityId };
+      }
+      const picked = await dialog.showOpenDialog(window, {
+        properties: ["openDirectory", "createDirectory"],
+        // The count comes from the VALIDATED manifest, and this dialog is
+        // where the user authorises the write. Windows has no facts surface
+        // before it yet, so the number belongs here rather than nowhere.
+        title: tc("native.download.pickTitle", facts.fileCount),
+        buttonLabel: t("native.download.pickConfirm"),
+      });
+      const rootPath = picked.canceled ? null : (picked.filePaths[0] ?? null);
+      return rootPath === null ? null : { rootPath, authorityId };
+    },
+    // Emitted on the generation the job STARTED under, which `emit` then
+    // compares against the current one. Reading `router.generation` here instead
+    // asked "is there a document?" when the question is "is it still the one
+    // that asked?" — so a reload's replacement received the retired document's
+    // progress and its final outcome. The job-id fence in the controller does
+    // not close it: a freshly mounted controller has no id to mismatch.
+    onProgress: (job, received, total) => {
+      // Counts only, and dropped when the document that asked is gone.
+      router.emit(IPC_EVENTS.storedProgress, job.document, { jobId: job.id, received, total });
+    },
+    onOutcome: (job, outcome) => {
+      router.emit(IPC_EVENTS.storedOutcome, job.document, { jobId: job.id, outcome });
+    },
+  });
+
+  router.handle(IPC.storedReceiveStart, async (payload) => {
+    const body = expectObject(payload);
+    // Shaped and bounded before anything is parsed or fetched. The link is NOT
+    // logged, echoed or retained here.
+    const link = expectString(body["link"], MAX_STORED_LINK_LENGTH);
+    const started = storedReceive.start({
+      link,
+      // Document only. A public link download is anonymous — see
+      // `StoredReceiveAuthority`, and the Mac composition it mirrors.
+      authority: { document: router.generation },
+    });
+    if ("refusal" in started) return { ok: false, refusal: started.refusal };
+    // Returns as soon as the job is ADMITTED, not when it ends. The id is what
+    // progress is matched against and what Cancel names; a page that only got
+    // it at the end could do neither.
+    //
+    // The outcome is handled here rather than awaited: it is pushed as an event
+    // by the service, and remembered for a page that missed it.
+    void started.outcome.catch(() => undefined);
+    return { ok: true, jobId: started.jobId };
+  });
+
+  router.handle(IPC.storedReceiveResult, async (payload) => {
+    const body = expectObject(payload);
+    return { result: storedReceive.result(expectString(body["jobId"], 64)) };
+  });
+
+  router.handle(IPC.storedReceiveCancel, async (payload) => {
+    const body = expectObject(payload);
+    return { cancelled: storedReceive.cancel(expectString(body["jobId"], 64)) };
+  });
+
+  router.handle(IPC.storedInventory, async () => storedReceive.inventory());
+
+  router.handle(IPC.storedCleanupRetry, async (payload) => {
+    const body = expectObject(payload);
+    return storedReceive.retryCleanup(expectString(body["ticket"], 64));
+  });
+
+  // -------------------------------------------------------------------------
   // Resident commands, acknowledgements and snapshots
   // -------------------------------------------------------------------------
 
@@ -650,7 +778,10 @@ export function registerHandlers(
 
   // A document that goes away takes its outstanding questions with it: they are
   // failed, not left to time out into an answer nobody is waiting for.
-  router.onRevoke(() => {
+  router.onRevoke((generation) => {
+    // The document that asked is gone: its receives are aborted synchronously
+    // and joined, exactly as its leases and sockets are.
+    revocations.add(storedReceive.revokeDocument(generation));
     volunteered = null;
     for (const [requestId, resolve] of [...outstanding]) {
       outstanding.delete(requestId);
@@ -658,24 +789,49 @@ export function registerHandlers(
     }
   });
 
+  /**
+   * Every admission fence in this registration, set in one synchronous run.
+   *
+   * Listed here rather than at the call site so a feature added later is
+   * fenced by editing the thing whose job that is. `resume` below is its exact
+   * inverse and has to stay that way.
+   */
+  const fence = (): void => {
+    service.fenceReceives();
+    storedReceive.fence();
+  };
+
   const quiesce = async (): Promise<CleanupOutcome> => {
-    // Main's own network first: a socket left open is a room this app is still
-    // in, and an ICE read in flight is a request still outstanding against the
-    // control plane. Neither is visible to the page.
+    // ## Everything is ASKED to stop before anything is JOINED
     //
-    // ASKED, then JOINED, and the two are different things. `closeAll` and
-    // `abortAll` request; the drains below wait for the close to be observed
-    // and for the aborted reads to settle. Whatever is still outstanding at the
-    // deadline is COUNTED — not waited for forever, and not called finished.
+    // Admission first, and synchronously: a fence set after a 1.5s network
+    // drain is a 1.5s window in which a page could start the very transfer
+    // this is tearing down.
+    //
+    // Then the requests. `closeAll` and `abortAll` ask; `storedReceive.quiesce`
+    // aborts every receive before its own first await, so starting it here and
+    // joining it below stops those transfers now rather than after the drains.
+    // A socket left open is a room this app is still in, and an ICE read in
+    // flight is a request still outstanding against the control plane; neither
+    // is visible to the page.
+    //
+    // Only then the joins. Whatever is still outstanding at the deadline is
+    // COUNTED — not waited for forever, and not called finished.
+    fence();
     hub.closeAll();
     iceRequests.abortAll();
-    const [sockets, reads] = await Promise.all([
+    const storedStopping = storedReceive.quiesce();
+    // The leases, the sign-in, the queued transitions and the secret work. It
+    // retires the in-flight sign-in before ITS first await too, so this is a
+    // request as much as a join.
+    const serviceStopping = service.quiesce();
+
+    const [sockets, reads, storedHeld, outcome] = await Promise.all([
       hub.drainClosing(NETWORK_DRAIN_MS),
       iceRequests.drain(NETWORK_DRAIN_MS),
+      storedStopping,
+      serviceStopping,
     ]);
-
-    // Then the leases, the sign-in, the queued transitions and the secret work.
-    const outcome = await service.quiesce();
 
     // And the revocation failure the teardown remembers: it is rethrown by
     // `dispose`, so a quiesce that did not mention it would let a "nothing left
@@ -683,9 +839,14 @@ export function registerHandlers(
     const revocation = revocationFailure === null ? null : reasonOf(revocationFailure);
     return {
       ...outcome,
+      // A stored receive still running is an open transfer, and a retained
+      // cleanup ticket is a destination this process could not close — both
+      // belong in the same counts the leases use.
+      openLeases: outcome.openLeases + storedHeld.active,
+      unresolved:
+        outcome.unresolved + storedHeld.retained.length + (revocation !== null ? 1 : 0),
       networkUnsettled: sockets + reads,
       firstReason: outcome.firstReason ?? revocation,
-      unresolved: outcome.unresolved + (revocation !== null ? 1 : 0),
     };
   };
 
@@ -700,6 +861,7 @@ export function registerHandlers(
     // failure with no renderer left to hear it, and swallowing it here would be
     // the last place it could have been reported.
     await Promise.allSettled([...revocations]);
+    await storedReceive.dispose();
     await service.dispose();
     if (revocationFailure !== null) throw revocationFailure;
   };
@@ -710,5 +872,11 @@ export function registerHandlers(
     void teardown().catch(() => undefined);
   });
 
-  return { service, resident, quiesce, preferences: prefs, dispose: teardown };
+  const resume = (): void => {
+    service.resume();
+    service.admitReceives();
+    storedReceive.resume();
+  };
+
+  return { service, storedReceive, resident, fence, quiesce, resume, preferences: prefs, dispose: teardown };
 }

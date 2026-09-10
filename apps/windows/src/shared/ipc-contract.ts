@@ -88,6 +88,36 @@ export const IPC = {
    * Main decides whether to show anything and writes every word of it.
    */
   residentNotify: "relayium:resident-notify",
+  /**
+   * Receive a stored object from a link the user pasted or opened.
+   *
+   * ## The one payload in this contract that carries a secret
+   *
+   * A stored link's fragment IS the decryption key. It travels renderer→main
+   * here because the user pasted it — their own clipboard, not a widening of
+   * main's custody — and that direction is the mirror of the one exception on
+   * the send side, where a per-job content key travels main→renderer because
+   * the renderer is what encrypts. Both are stated rather than glossed.
+   *
+   * What follows from it: the link is never echoed back, never included in a
+   * refusal, a log line or a diagnostic, and never stored. The page renders
+   * closed rejection codes, not the input it gave.
+   */
+  storedReceiveStart: "relayium:stored-receive-start",
+  storedReceiveCancel: "relayium:stored-receive-cancel",
+  /**
+   * The outcome of a receive whose start was already acknowledged.
+   *
+   * Start returns a job id as soon as the job is ADMITTED, because a page that
+   * only learns the id when the transfer ends cannot show progress for it or
+   * cancel it. The outcome arrives as an event; this is the fallback for a page
+   * that was not listening when it did.
+   */
+  storedReceiveResult: "relayium:stored-receive-result",
+  /** What this process is holding: live receives and retained cleanup tickets. */
+  storedInventory: "relayium:stored-inventory",
+  /** Ask a retained destination to tear down again. Ticket, never a path. */
+  storedCleanupRetry: "relayium:stored-cleanup-retry",
   /** Whether Relayium starts at sign-in, read back from the system. */
   loginItemRead: "relayium:login-item-read",
   /** Turn it on or off. Enabling requires the user's explicit confirmation,
@@ -124,6 +154,10 @@ export const IPC_EVENTS = {
   signalingEvent: "relayium:signaling-event",
   /** Main asking the page to do one of a closed set of things. */
   residentCommand: "relayium:resident-command",
+  /** Cumulative decrypted bytes for one stored receive. Counts, nothing else. */
+  storedProgress: "relayium:stored-progress",
+  /** How one stored receive ended. */
+  storedOutcome: "relayium:stored-outcome",
 } as const;
 
 export const IPC_EVENT_NAMES: readonly string[] = Object.values(IPC_EVENTS);
@@ -583,7 +617,16 @@ export type ResidentCommand =
    * The code stays a STRING end to end, so `004291` keeps its leading zeros; a
    * number would deliver `4291` and join the wrong room.
    */
-  | { readonly kind: "pair-code"; readonly code: string; readonly mode?: "text" | "files" };
+  | { readonly kind: "pair-code"; readonly code: string; readonly mode?: "text" | "files" }
+  /**
+   * A stored link that arrived from outside the app.
+   *
+   * Carries the whole link, fragment included, because the fragment IS the key
+   * and the page is what offers it back to be received. Showing it is not
+   * receiving it: the page puts it on the Stored page for the user to confirm,
+   * and the folder picker is what authorises writing files.
+   */
+  | { readonly kind: "stored-link"; readonly link: string };
 
 export type ResidentCommandKind = ResidentCommand["kind"];
 
@@ -639,3 +682,17 @@ export const MAX_REQUEST_ID_LENGTH = 64;
 export function isResidentPage(value: unknown): value is ResidentPage {
   return typeof value === "string" && (RESIDENT_PAGES as readonly string[]).includes(value);
 }
+
+/** Progress for one stored receive. A job id and two counts; never a name. */
+export interface StoredProgress {
+  readonly jobId: string;
+  readonly received: number;
+  readonly total: number;
+}
+
+/**
+ * A link the page is offering to main, from a paste or an OS deep link.
+ *
+ * The page may put a code on screen for a refusal, and nothing else about it.
+ */
+export const MAX_STORED_LINK_LENGTH = 2048;

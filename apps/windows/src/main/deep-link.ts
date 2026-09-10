@@ -126,8 +126,17 @@ export function parseDeepLink(raw: string): DeepLinkResult {
   const route = head.toLowerCase();
 
   if (route === "d" || route === "download") {
-    // Recognised and honestly refused until stored receive exists here.
-    return { ok: false, reason: "not-yet-supported" };
+    // Recognised, and handed on WHOLE.
+    //
+    // Deliberately not parsed here. `stored/link.ts` decides what a stored link
+    // is — hosts, credentials, query, length, fragment — and two parsers over
+    // one attacker-supplied string diverge, with the one nearest the key being
+    // the one that matters. So this returns the original text and the stored
+    // path stays the single authority.
+    //
+    // `url` is the ORIGINAL string, not a re-serialised one: a fragment is a
+    // key, and normalising it through `URL` is a way to change it.
+    return { ok: true, route: { kind: "download", url: raw } };
   }
   if (route !== PAIRING_PATH) return { ok: false, reason: "unknown-route" };
   // Exactly one path element. A trailing segment is not a link this product

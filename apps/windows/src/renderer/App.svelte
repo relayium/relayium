@@ -36,6 +36,8 @@
   import LanPage from "./pages/LanPage.svelte";
   import PairPage from "./pages/PairPage.svelte";
   import PlaceholderPage from "./pages/PlaceholderPage.svelte";
+  import StoredPage from "./pages/StoredPage.svelte";
+  import { StoredController, type StoredBridge } from "./stored/stored-controller.svelte.js";
   import { goTo, page } from "./shell/navigation.svelte.js";
   import { lang, t } from "./i18n/index.svelte.js";
   import { RoomController } from "./rooms/room-controller.svelte.js";
@@ -67,6 +69,7 @@
         read(): Promise<LoginItemOutcome>;
         write(payload: { enabled: boolean }): Promise<LoginItemOutcome>;
       };
+      stored: StoredBridge;
     };
 
   const bridge = (globalThis as unknown as { relayium: Bridge }).relayium;
@@ -160,6 +163,24 @@
    * about to switch away to check. Keeping them here costs two variables and
    * removes a whole class of "it cleared itself".
    */
+  /**
+   * A stored link the OS handed us, waiting for the user to act on it.
+   *
+   * Held, not acted on: opening a link authorises nothing, and the folder
+   * picker is what authorises writing files. It is a SECRET — the fragment is
+   * the key — so it lives here and is never logged or echoed.
+   */
+  let storedLinkOffer = $state("");
+
+  /**
+   * The stored receive, owned here rather than by its page.
+   *
+   * A page unmounts when the user looks at another row; a running transfer, its
+   * progress and a half-pasted link must not. Same reason the message and code
+   * drafts live up here.
+   */
+  const stored = new StoredController(bridge.stored);
+
   /** What Windows says about starting at sign-in. Null until it has answered. */
   let startup = $state<LoginItemOutcome | null>(null);
 
@@ -358,10 +379,14 @@
    */
   function residentSnapshot() {
     const rooms = [lanRoom, pairRoom].filter((room) => room !== null);
-    const drafts = (messageDraft.trim() ? 1 : 0) + (codeDraft.trim() ? 1 : 0);
+    // A pasted link nobody has opened yet is unfinished work too, and a quit
+    // that called it nothing would be wrong.
+    const drafts =
+      (messageDraft.trim() ? 1 : 0) + (codeDraft.trim() ? 1 : 0) + (stored.link.trim() ? 1 : 0);
     return {
       sending: rooms.some((room) => room.workspace.send),
-      receiving: rooms.some((room) => room.workspace.recv || room.openReceiveCount > 0),
+      // A stored receive is incoming bytes like any other.
+      receiving: stored.busy || rooms.some((room) => room.workspace.recv || room.openReceiveCount > 0),
       drafts,
       // So main's dialogs, tray and notifications are in the language this
       // window is actually showing, whatever the OS APIs each side reads.
@@ -412,6 +437,11 @@
     // The user stayed. Nothing reopens: the rooms were told to stop, and a
     // resumed app is one that CAN start them again, not one that already has.
     resume: () => {},
+    storedLink: (link) => {
+      goTo("stored");
+      storedLinkOffer = link;
+      return true;
+    },
     pairCode: (code) => {
       if (!isWellFormedPairCode(code)) return false;
       // Offered, never merged: the code lands in the join field on the pairing
@@ -470,6 +500,7 @@
   // Quit and window destruction reach here. Hiding does not.
   onDestroy(() => {
     torndown = true;
+    stored.dispose();
     detachResident();
     controller.dispose();
     lanRoom?.stop();
@@ -549,7 +580,15 @@
       verifyPeers={effectiveVerifyPeers}
     />
   {:else if page() === "stored"}
-    <PlaceholderPage title={t("navStored")} body="soonStored" />
+    <StoredPage
+      {stored}
+      offered={storedLinkOffer}
+      onConsumed={() => {
+        // Consumed by the box, not by a transfer: the link is on screen and the
+        // user still has to ask for it.
+        storedLinkOffer = "";
+      }}
+    />
   {:else if page() === "inbox"}
     <PlaceholderPage title={t("navInbox")} body="soonInbox" />
   {:else}

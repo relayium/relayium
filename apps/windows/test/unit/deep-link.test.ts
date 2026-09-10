@@ -77,9 +77,18 @@ describe("route and mode grammar", () => {
     expect(why("https://relayium.com/cross-network?mode=text")).toBe("malformed");
   });
 
-  it("still recognises and refuses stored links", () => {
-    expect(why("https://relayium.com/d/abc")).toBe("not-yet-supported");
-    expect(why("relayium://download/abc")).toBe("not-yet-supported");
+  it("hands a stored link on WHOLE, rather than parsing it a second time", () => {
+    // `stored/link.ts` is the authority on what a stored link is; two parsers
+    // over one attacker-supplied string diverge, and the one nearest the key is
+    // the one that matters. What this file decides is only "that is a stored
+    // link", and the ORIGINAL text travels — a fragment is a key, and
+    // re-serialising it through `URL` is a way to change it.
+    const raw = "https://relayium.com/d/abc#k=Zm9v";
+    expect(parseDeepLink(raw)).toEqual({ ok: true, route: { kind: "download", url: raw } });
+    expect(parseDeepLink("relayium://download/abc")).toEqual({
+      ok: true,
+      route: { kind: "download", url: "relayium://download/abc" },
+    });
   });
 });
 
@@ -120,9 +129,10 @@ describe("argv scanning", () => {
     expect(r.ok && r.route).toEqual({ kind: "realtime", code: "004291" });
   });
 
-  it("reports the most specific rejection", () => {
-    expect(routeFromArgv(["Relayium.exe", "relayium://download/x"])).toEqual({
-      ok: false, reason: "not-yet-supported",
+  it("finds a stored link anywhere in an argv", () => {
+    expect(routeFromArgv(["Relayium.exe", "--updated", "relayium://download/x"])).toEqual({
+      ok: true,
+      route: { kind: "download", url: "relayium://download/x" },
     });
   });
 

@@ -47,6 +47,14 @@ const CLEAN: CleanupOutcome = {
   firstReason: null,
 };
 
+function deferred<T = void>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
 function fakeService(outcome: CleanupOutcome = CLEAN, held = 0) {
   const calls: string[] = [];
   return {
@@ -61,9 +69,20 @@ function fakeService(outcome: CleanupOutcome = CLEAN, held = 0) {
         return held;
       },
     } as never,
+    /** What `HandlerControl.fence` composes: every admission fence, in one
+     *  place. The runtime calls THIS, not the lease service's own fence, so a
+     *  feature that is not covered here is a visible omission. */
+    fence: () => {
+      calls.push("fence");
+    },
     quiesce: async () => {
       calls.push("quiesce");
       return outcome;
+    },
+    /** What `HandlerControl.resume` composes: every fence, in one place. */
+    resume: () => {
+      calls.push("resume");
+      calls.push("admit");
     },
   };
 }
@@ -91,7 +110,9 @@ function runtime(
   over: {
     bridge?: ResidentBridge;
     service?: never;
+    fence?: () => void;
     quiesce?: () => Promise<CleanupOutcome>;
+    resume?: () => void;
     platform?: ResidentPlatform;
     dispose?: () => Promise<void>;
     drainAbandoned?: () => Promise<number>;
@@ -104,7 +125,9 @@ function runtime(
     service: over.service ?? fake.service,
     resident: over.bridge ?? bridge,
     platform: over.platform ?? platform,
+    fence: over.fence ?? fake.fence,
     quiesce: over.quiesce ?? fake.quiesce,
+    resume: over.resume ?? fake.resume,
     dispose: over.dispose ?? (async () => undefined),
     ...(over.drainAbandoned ? { drainAbandoned: over.drainAbandoned } : {}),
     locale: "en",
@@ -166,7 +189,7 @@ describe("quitting asks, and believes only an actual answer", () => {
   });
 
   it("fences BOTH halves before it asks, and keeps them fenced through the answer", async () => {
-    const { service, calls, quiesce } = fakeService();
+    const { service, calls, fence, quiesce, resume } = fakeService();
     let asked = false;
     const { platform } = fakePlatform({
       confirm: async () => {
@@ -178,7 +201,7 @@ describe("quitting asks, and believes only an actual answer", () => {
       },
     });
     const { bridge, sent } = fakeBridge({ snapshot: { sending: true, receiving: false, drafts: 0, locale: "en", nearby: false } });
-    const app = runtime({ platform, service: service as never, quiesce, bridge });
+    const app = runtime({ platform, service: service as never, fence, quiesce, bridge });
 
     expect(await app.requestQuit()).toBe("quit");
     expect(asked).toBe(true);
@@ -188,6 +211,43 @@ describe("quitting asks, and believes only an actual answer", () => {
     expect(sent.map((c) => c.kind).slice(0, 2)).toEqual(["admission", "risk-snapshot"]);
     // Never re-admitted on the way out.
     expect(calls).not.toContain("admit");
+  });
+
+  it("fences main BEFORE it awaits the page, and never waits on the page to do it", async () => {
+    // The page is slow — held, not stale, which is the harder case: it answers
+    // eventually, so nothing times out and main simply WAITS. Every await in
+    // `runQuit` is behind this one.
+    const release = deferred<void>();
+    const { service, calls, fence, quiesce, resume } = fakeService();
+    let fencedWhileHeld: readonly string[] = [];
+    const bridge: ResidentBridge = {
+      async send(command) {
+        if (command.kind === "admission" && command.action === "fence") {
+          // Main's own admission must ALREADY be closed at this point: it is a
+          // fact about main, and a renderer acknowledgement is not what makes
+          // it true. A page that never answers must not leave main admitting.
+          fencedWhileHeld = [...calls];
+          await release.promise;
+        }
+        return { requestId: "rq", generation: 0, ok: true };
+      },
+      lastSnapshot: () => null,
+      freshSnapshot: async () => "unknown" as const,
+    };
+    const { platform } = fakePlatform({ confirm: async () => false });
+    const app = runtime({ platform, service: service as never, fence, quiesce, resume, bridge });
+
+    const deciding = app.requestQuit();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(fencedWhileHeld).toEqual(["fence"]);
+    // And nothing was decided while the page was being waited on: a held
+    // renderer is not consent.
+    expect(calls).not.toContain("quiesce");
+
+    release.resolve();
+    expect(await deciding).toBe("stay");
+    // Stay lifts every fence, in one place.
+    expect(calls).toEqual(["fence", "resume", "admit"]);
   });
 
   it("is UNKNOWN when the page would not agree to stop starting things", async () => {
@@ -217,7 +277,7 @@ describe("quitting asks, and believes only an actual answer", () => {
   it("counts what main holds beyond registered leases", async () => {
     // An open still inside the picker, or a destination whose cleanup failed,
     // is work this process is responsible for.
-    const { service, quiesce } = fakeService(CLEAN, 1);
+    const { service, fence, quiesce, resume } = fakeService(CLEAN, 1);
     const prompts: string[] = [];
     const { platform } = fakePlatform({
       confirm: async (prompt) => {
@@ -225,7 +285,7 @@ describe("quitting asks, and believes only an actual answer", () => {
         return false;
       },
     });
-    const app = runtime({ service: service as never, quiesce, platform });
+    const app = runtime({ service: service as never, fence, quiesce, resume, platform });
 
     expect(await app.requestQuit()).toBe("stay");
     expect(prompts).toEqual([EN["resident.quit.transferTitle"]]);
@@ -257,10 +317,10 @@ describe("quitting asks, and believes only an actual answer", () => {
   });
 
   it("stays, and is USABLE again, when the user cancels", async () => {
-    const { service, calls, quiesce } = fakeService();
+    const { service, calls, fence, quiesce, resume } = fakeService();
     const { bridge, sent } = fakeBridge({ snapshot: { sending: false, receiving: false, drafts: 2, locale: "en", nearby: false } });
     const { platform } = fakePlatform({ confirm: async () => false });
-    const app = runtime({ service: service as never, quiesce, bridge, platform });
+    const app = runtime({ service: service as never, fence, quiesce, resume, bridge, platform });
 
     expect(await app.requestQuit()).toBe("stay");
     // Nothing was quiesced — the question was answered before any teardown —
@@ -311,10 +371,10 @@ describe("quitting asks, and believes only an actual answer", () => {
   });
 
   it("resumes ONCE for three concurrent requests that end in Stay", async () => {
-    const { service, calls, quiesce } = fakeService();
+    const { service, calls, fence, quiesce, resume } = fakeService();
     const { bridge } = fakeBridge({ snapshot: { sending: true, receiving: false, drafts: 0, locale: "en", nearby: false } });
     const { platform } = fakePlatform({ confirm: async () => false });
-    const app = runtime({ service: service as never, quiesce, bridge, platform });
+    const app = runtime({ service: service as never, fence, quiesce, resume, bridge, platform });
 
     await Promise.all([app.requestQuit(), app.requestQuit(), app.requestQuit()]);
     expect(calls.filter((c) => c === "resume")).toHaveLength(1);
@@ -357,7 +417,7 @@ describe("cleanup is joined, and its failure is the user's decision", () => {
   });
 
   it("asks again when cleanup left something behind, and Stay leaves the app usable", async () => {
-    const { service, calls, quiesce } = fakeService({ openLeases: 1, opening: 0, unresolved: 2, networkUnsettled: 0, firstReason: "EBUSY" });
+    const { service, calls, fence, quiesce, resume } = fakeService({ openLeases: 1, opening: 0, unresolved: 2, networkUnsettled: 0, firstReason: "EBUSY" });
     const titles: string[] = [];
     const { platform, events } = fakePlatform({
       confirm: async (prompt) => {
@@ -367,7 +427,7 @@ describe("cleanup is joined, and its failure is the user's decision", () => {
       },
     });
     const { bridge } = fakeBridge({ snapshot: { sending: true, receiving: false, drafts: 0, locale: "en", nearby: false } });
-    const app = runtime({ service: service as never, quiesce, bridge, platform });
+    const app = runtime({ service: service as never, fence, quiesce, resume, bridge, platform });
 
     expect(await app.requestQuit()).toBe("stay");
     expect(titles).toEqual([EN["resident.quit.transferTitle"], EN["resident.quit.residueTitle"]]);
@@ -380,7 +440,7 @@ describe("cleanup is joined, and its failure is the user's decision", () => {
   it("never renders the diagnostic reason", async () => {
     // `firstReason` is a filesystem error and routinely names a path. The
     // dialog gets closed copy and counts.
-    const { service, quiesce } = fakeService({
+    const { service, fence, quiesce, resume } = fakeService({
       openLeases: 0,
       opening: 0,
       unresolved: 1,
@@ -395,7 +455,7 @@ describe("cleanup is joined, and its failure is the user's decision", () => {
       },
     });
     const { bridge } = fakeBridge({ snapshot: { sending: true, receiving: false, drafts: 0, locale: "en", nearby: false } });
-    const app = runtime({ service: service as never, quiesce, bridge, platform });
+    const app = runtime({ service: service as never, fence, quiesce, resume, bridge, platform });
 
     await app.requestQuit();
     for (const text of bodies) expect(text).not.toMatch(/EPERM|Users|report\.txt/);
@@ -463,7 +523,9 @@ describe("the native surfaces follow the page's language", () => {
       service: fake.service,
       resident: bridge,
       platform,
+      fence: fake.fence,
       quiesce: fake.quiesce,
+      resume: fake.resume,
       dispose: async () => undefined,
       locale: "en",
       onLocaleChanged: () => {
@@ -524,7 +586,7 @@ describe("what was ASKED to stop is not what was seen to stop", () => {
   it("carries unsettled network work into the decision", async () => {
     // A socket that was told to close and never said it did, or an ICE read
     // still settling, is not "cleaned up". It reaches the user as residue.
-    const { service } = fakeService();
+    const { service, resume } = fakeService();
     const titles: string[] = [];
     const { platform, events } = fakePlatform({
       confirm: async (prompt) => {
@@ -538,6 +600,7 @@ describe("what was ASKED to stop is not what was seen to stop", () => {
     const app = runtime({
       service: service as never,
       quiesce: async () => ({ ...CLEAN, networkUnsettled: 2 }),
+      resume,
       bridge,
       platform,
     });
@@ -658,7 +721,7 @@ describe("what was ASKED to stop is not what was seen to stop", () => {
   });
 
   it("does not ask twice when the residue was already accepted", async () => {
-    const { service } = fakeService();
+    const { service, resume } = fakeService();
     let asks = 0;
     const { platform, events } = fakePlatform({
       confirm: async () => {
@@ -672,6 +735,7 @@ describe("what was ASKED to stop is not what was seen to stop", () => {
     const app = runtime({
       service: service as never,
       quiesce: async () => ({ ...CLEAN, unresolved: 1, firstReason: "EBUSY" }),
+      resume,
       bridge,
       platform,
       dispose: async () => {

@@ -70,6 +70,7 @@ function page() {
       },
       resume: () => undefined,
       pairCode: () => true,
+      storedLink: () => true,
     },
   );
 

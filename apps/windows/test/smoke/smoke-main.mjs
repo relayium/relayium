@@ -245,12 +245,13 @@ async function main() {
   // EXACT set, not a superset: a `contains` check would pass while the preload
   // quietly grew a surface nobody reviewed.
   //
-  // Pinned to the reviewed surface as it stands — `resident` and `loginItem`
-  // joined the realtime five — rather than to whatever this tree happens to
-  // expose, which would accept a stale or an unreviewed bridge silently.
+  // Pinned to the reviewed surface as it stands — `stored` joined `resident`
+  // and `loginItem` — rather than to whatever this tree happens to expose,
+  // which would accept a stale or an unreviewed bridge silently.
   check(
     "bridge exposed",
-    parsed.keys.sort().join(",") === "appInfo,auth,ice,loginItem,pair,prefs,receive,resident,signaling",
+    parsed.keys.sort().join(",") ===
+      "appInfo,auth,ice,loginItem,pair,prefs,receive,resident,signaling,stored",
     parsed.keys.join(","),
   );
   check("no raw ipcRenderer in the page", parsed.hasIpc === false);
@@ -272,6 +273,9 @@ async function main() {
     "relayium:prefs-read", "relayium:prefs-write",
     "relayium:resident-ack", "relayium:resident-snapshot", "relayium:resident-notify",
     "relayium:login-item-read", "relayium:login-item-write",
+    "relayium:stored-receive-start", "relayium:stored-receive-cancel",
+    "relayium:stored-receive-result", "relayium:stored-inventory",
+    "relayium:stored-cleanup-retry",
   ];
   // Restated above rather than derived, so a channel cannot be added to the
   // contract and reach a handler without appearing in a reviewed list — and

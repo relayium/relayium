@@ -5,16 +5,25 @@
 // localization at all: the tray menu was two English string literals.
 //
 // Deliberately plain. A closed key union, two complete catalogs, and a lookup.
-// No interpolation, no plural engine, no runtime loading. Every value a user
-// sees from the main process is one of these strings.
+// No plural engine, no runtime loading. Every value a user sees from the main
+// process is one of these strings.
+//
+// Interpolation is exactly one substitution — `{count}` — reachable only
+// through `counter()`, and only for the keys in `CountedMessageKey`. The
+// ordinary `Translate` cannot name those keys and the counting one cannot name
+// any other, so there is no path that renders a template unsubstituted and no
+// path that puts an arbitrary value into user-facing copy. It exists because
+// the stored-link picker is the only place on Windows that can tell the user
+// how many files they are about to authorise a write for.
 
 /** The maintained product languages. English is the source and the fallback. */
 export type Locale = "en" | "zh-Hans";
 
 /**
- * Every string the resident surfaces can show.
+ * Every string the main process can show — the resident surfaces, and the
+ * native dialogs main opens on the page's behalf.
  *
- * `resident.` prefixed so these do not collide with the renderer's key space
+ * Prefixed by surface so these do not collide with the renderer's key space
  * when the two are eventually reconciled. Some have no Mac counterpart — the
  * first-close notice is Windows-specific, because closing a window on macOS is
  * already understood not to quit.
@@ -67,9 +76,22 @@ export type MessageKey =
   | "resident.notify.attentionTitle"
   | "resident.notify.attentionBody"
   | "resident.notify.failedTitle"
-  | "resident.notify.failedBody";
+  | "resident.notify.failedBody"
+  | "native.receive.pickTitle"
+  | "native.receive.pickConfirm"
+  | "native.download.pickConfirm";
 
-export type Catalog = Readonly<Record<MessageKey, string>>;
+/**
+ * The keys that take a number, and the only ones that may contain `{count}`.
+ *
+ * Deliberately disjoint from `MessageKey`: `Translate` cannot reach these, so a
+ * template cannot be shown to a user unsubstituted, and `TranslateCount` cannot
+ * reach the others, so the substitution cannot be applied where it means
+ * nothing. Widening this union is the whole review surface for interpolation.
+ */
+export type CountedMessageKey = "native.download.pickTitle";
+
+export type Catalog = Readonly<Record<MessageKey | CountedMessageKey, string>>;
 
 /**
  * The notice a user sees the first time closing the window does not quit.
@@ -138,6 +160,20 @@ export const EN: Catalog = {
   "resident.notify.attentionBody": "Open Relayium to continue.",
   "resident.notify.failedTitle": "A transfer did not finish",
   "resident.notify.failedBody": "Open Relayium for details.",
+  // The two folder pickers. The confirm labels and the receive title are the
+  // shipped Mac's own words — `inbox.pickerMessage`, `inbox.pickerPrompt`,
+  // `download.savePanelPrompt`.
+  //
+  // The stored-link title carries the count, where macOS does not, because on
+  // macOS the download pane has already shown the object's facts before the
+  // panel opens. Windows has no such surface yet, so this dialog is the only
+  // place the user learns how many files they are authorising a write for, and
+  // matching a panel that assumes a page that does not exist here would drop
+  // the information rather than move it.
+  "native.receive.pickTitle": "Choose a folder to receive files into",
+  "native.receive.pickConfirm": "Use Folder",
+  "native.download.pickTitle": "Choose where to save {count} file(s)",
+  "native.download.pickConfirm": "Save Here",
 };
 
 export const ZH_HANS: Catalog = {
@@ -196,6 +232,10 @@ export const ZH_HANS: Catalog = {
   "resident.notify.attentionBody": "打开 Relayium 继续。",
   "resident.notify.failedTitle": "传输未完成",
   "resident.notify.failedBody": "打开 Relayium 查看详情。",
+  "native.receive.pickTitle": "选择用于接收文件的文件夹",
+  "native.receive.pickConfirm": "使用此文件夹",
+  "native.download.pickTitle": "选择保存位置（{count} 个文件）",
+  "native.download.pickConfirm": "保存到这里",
 };
 
 /**
@@ -225,6 +265,12 @@ export function catalogFor(locale: Locale): Catalog {
 
 export type Translate = (key: MessageKey) => string;
 
+/** A lookup for the counted keys. The count is a number, never a string. */
+export type TranslateCount = (key: CountedMessageKey, count: number) => string;
+
+/** The one substitution point this catalog has. */
+const COUNT_PLACEHOLDER = "{count}";
+
 /**
  * A lookup bound to one language.
  *
@@ -234,4 +280,30 @@ export type Translate = (key: MessageKey) => string;
 export function translator(locale: Locale): Translate {
   const catalog = catalogFor(locale);
   return (key) => catalog[key];
+}
+
+/**
+ * A counting lookup bound to one language.
+ *
+ * The count is formatted here rather than concatenated by the caller: the two
+ * catalogs put the number in different places, which is the whole reason a
+ * catalog owns its own word order.
+ */
+export function counter(locale: Locale): TranslateCount {
+  const catalog = catalogFor(locale);
+  return (key, count) => catalog[key].replace(COUNT_PLACEHOLDER, wholeCount(count));
+}
+
+/**
+ * A number a person can read, from whatever arrives.
+ *
+ * The count comes from a validated manifest, so nothing here is reachable
+ * today. It exists because this string is the dialog that AUTHORISES a write:
+ * `NaN file(s)` or `-1 file(s)` there is worse than any of the inputs that
+ * would produce it. `Math.max(0, NaN)` is `NaN`, which is how this was wrong
+ * the first time.
+ */
+function wholeCount(count: number): string {
+  if (!Number.isFinite(count)) return "0";
+  return String(Math.max(0, Math.trunc(count)));
 }

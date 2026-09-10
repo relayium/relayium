@@ -1691,6 +1691,21 @@ export class AppService {
   }
 
   /**
+   * The account authority anything started right now belongs to.
+   *
+   * Exposed for the features that are genuinely account-bound — stored SEND,
+   * history and the Device Inbox — so they can stamp their work with the same
+   * epoch and be reconciled by the same account change.
+   *
+   * Anonymous stored RECEIVE deliberately does NOT use this: a public link
+   * carries no bearer, so signing out is not a loss of authority over a
+   * download already running. See `StoredReceiveAuthority`.
+   */
+  get accountEpoch(): number {
+    return this.epoch;
+  }
+
+  /**
    * Everything main holds a receive resource for, or might.
    *
    * Deliberately conservative and deliberately not `openLeaseCount`: an open

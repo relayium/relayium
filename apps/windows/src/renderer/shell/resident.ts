@@ -11,6 +11,7 @@
 
 import {
   MAX_RESIDENT_DRAFTS,
+  MAX_STORED_LINK_LENGTH,
   isResidentPage,
   type ResidentCommand,
   type ResidentNotice,
@@ -49,6 +50,8 @@ export interface ResidentHandlers {
   readonly resume: () => void;
   /** A code from outside. Offered, never merged into what is in progress. */
   readonly pairCode: (code: string, mode?: "text" | "files") => boolean;
+  /** A stored link from outside. Shown, never received without the user. */
+  readonly storedLink: (link: string) => boolean;
 }
 
 /** A pairing code is six digits, as text: `004291` is not `4291`. */
@@ -88,6 +91,15 @@ function narrow(payload: unknown): { requestId: string; generation: number; comm
       return { requestId, generation, command: { kind: "quiesce" } };
     case "resume":
       return { requestId, generation, command: { kind: "resume" } };
+    case "stored-link": {
+      const link = command["link"];
+      // Bounded here too: an oversized string is refused before it reaches any
+      // state the page renders.
+      if (typeof link !== "string" || link.length === 0 || link.length > MAX_STORED_LINK_LENGTH) {
+        return null;
+      }
+      return { requestId, generation, command: { kind: "stored-link", link } };
+    }
     case "pair-code": {
       const code = command["code"];
       const mode = command["mode"];
@@ -149,6 +161,9 @@ export function attachResident(bridge: ResidentBridge, handlers: ResidentHandler
         return;
       case "pair-code":
         reply(handlers.pairCode(command.code, command.mode));
+        return;
+      case "stored-link":
+        reply(handlers.storedLink(command.link));
         return;
     }
   });

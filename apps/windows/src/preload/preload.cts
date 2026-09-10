@@ -88,6 +88,17 @@ contextBridge.exposeInMainWorld("relayium", {
     snapshot: invoke("relayium:resident-snapshot"),
     notify: invoke("relayium:resident-notify"),
   },
+  // Stored receive. `start` carries the pasted link, which is the one payload
+  // in this bridge that contains a key — see the contract's note on it.
+  stored: {
+    receive: invoke("relayium:stored-receive-start"),
+    cancel: invoke("relayium:stored-receive-cancel"),
+    result: invoke("relayium:stored-receive-result"),
+    inventory: invoke("relayium:stored-inventory"),
+    retryCleanup: invoke("relayium:stored-cleanup-retry"),
+    onProgress: subscribe("relayium:stored-progress"),
+    onOutcome: subscribe("relayium:stored-outcome"),
+  },
   loginItem: {
     read: invoke("relayium:login-item-read"),
     write: invoke("relayium:login-item-write"),

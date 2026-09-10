@@ -290,6 +290,13 @@ function handleDeepLink(argv: readonly string[]): void {
   const parsed = routeFromArgv([link]);
   if (!parsed.ok) return;
   const route = parsed.route;
+  if (route.kind === "download") {
+    // Handed to the page as a LINK, which it offers back on the stored channel.
+    // Opening a link does not start a download: the page shows it, the user
+    // asks, and the folder picker is what authorises writing anything.
+    void resident?.offerStoredLink(route.url);
+    return;
+  }
   if (route.kind === "realtime-with-mode") {
     void resident?.offerPairCode(route.code, route.mode === "text" ? "text" : "files");
     return;
@@ -484,7 +491,17 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
     origin,
     APP_SCHEME,
     APP_HOST,
-    options.composition ?? {},
+    {
+      ...(options.composition ?? {}),
+      // The folder pickers this registration opens are native dialogs, so they
+      // need the same language the tray and the quit prompt use. Read per
+      // dialog through the resident runtime, which is created just below and
+      // follows what the PAGE reports; `app.getLocale()` is only the answer
+      // until the window has said otherwise.
+      locale:
+        options.composition?.locale ??
+        (() => resident?.currentLocale ?? resolveLocale(app.getLocale())),
+    },
     {
       // Real transitions, not a method waiting for a caller: a publication that
       // actually completed, a message the page actually received, a failure
@@ -506,8 +523,11 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
   // follows it, because the two APIs can disagree.
   resident = new ResidentRuntime({
     service: control.service,
+    storedActive: () => control.storedReceive.active,
     resident: control.resident,
+    fence: control.fence,
     quiesce: control.quiesce,
+    resume: control.resume,
     dispose: control.dispose,
     drainAbandoned: () => drainAbandoned(),
     locale: resolveLocale(app.getLocale()),

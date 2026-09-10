@@ -74,6 +74,9 @@ export interface StoppedNotice {
 
 export interface ResidentRuntimeDeps {
   readonly service: AppService;
+  /** Live stored receives, for the risk snapshot. Absent in tests that do not
+   *  compose the feature. */
+  readonly storedActive?: () => number;
   readonly resident: ResidentBridge;
   readonly platform: ResidentPlatform;
   /** The language to start in, before the page has said which it is showing. */
@@ -81,10 +84,21 @@ export interface ResidentRuntimeDeps {
   /** Rebuild anything native that is already on screen — the tray menu. */
   readonly onLocaleChanged?: () => void;
   /**
+   * Stop admitting new work in EVERY feature main composes, synchronously and
+   * without stopping anything that is running. See `HandlerControl.fence`.
+   *
+   * Required rather than optional: a runtime built without it would ask the
+   * user to decide about a risk that could still grow while they were reading,
+   * and the omission would be invisible.
+   */
+  readonly fence: () => void;
+  /**
    * Stop main's own outgoing work, recoverably: sockets, ICE reads, leases,
    * sign-in, queued transitions and secret writes. Never ends the process.
    */
   readonly quiesce: () => Promise<CleanupOutcome>;
+  /** The user stayed: undo every fence, in one place. See `HandlerControl`. */
+  readonly resume: () => void;
   /** The final, unrecoverable teardown. Only after a decision of `quit`. */
   readonly dispose: () => Promise<void>;
   /** Helper processes abandoned by a cancelled operation. Joined AFTER the
@@ -236,12 +250,19 @@ export class ResidentRuntime {
 
   private async runQuit(): Promise<QuitDecision> {
     // BOTH halves fenced before the question is asked, and left fenced through
-    // the answer. Main can refuse a new receive by itself; an outgoing send, a
-    // new room and a pairing join all START in the page, so without its
-    // agreement a "nothing at stake" answer is only true for one side.
+    // the answer. Main can refuse new work by itself; an outgoing send, a new
+    // room and a pairing join all START in the page, so without its agreement
+    // a "nothing at stake" answer is only true for one side.
+    //
+    // Main's half is fenced FIRST and synchronously, before the await below.
+    // It was `service.fenceReceives()` — one feature of several — so a stored
+    // receive could still be admitted while the page was being asked and while
+    // a human read the dialog. The page's acknowledgement is not main's
+    // admission authority: it can be slow, stale or never arrive, and main
+    // must already be refusing by then.
     //
     // A fence is not a quiesce: nothing running stops, and Stay clears it.
-    this.deps.service.fenceReceives();
+    this.deps.fence();
     const fenced = await this.deps.resident.send({ kind: "admission", action: "fence" });
     this.rendererFenced = fenced !== "unavailable" && fenced.ok;
 
@@ -405,6 +426,18 @@ export class ResidentRuntime {
   }
 
   /**
+   * A stored link from the OS. Offered to the page, never acted on here.
+   *
+   * The window comes forward because the user just asked for this app; the page
+   * shows the link on its Stored route and waits for them.
+   */
+  async offerStoredLink(link: string): Promise<boolean> {
+    this.deps.platform.show();
+    const ack = await this.deps.resident.send({ kind: "stored-link", link });
+    return ack !== "unavailable" && ack.ok;
+  }
+
+  /**
    * Emit a notification for something that actually happened.
    *
    * Suppressed while the window is focused: the user is looking at the thing
@@ -431,7 +464,8 @@ export class ResidentRuntime {
     // Everything main holds or might: a registered lease, an open still inside
     // the picker, and a destination whose cleanup has not succeeded. Counting
     // only registered leases would call an unfinished open "nothing".
-    const mainTransfer = this.deps.service.heldReceiveCount > 0;
+    const mainTransfer =
+      this.deps.service.heldReceiveCount > 0 || (this.deps.storedActive?.() ?? 0) > 0;
 
     // A page that could not be fenced can start work between this answer and
     // the quit it authorises, so nothing it says can settle the question.
@@ -493,8 +527,9 @@ export class ResidentRuntime {
    * told to stop and the page is told it may operate, not told to reopen them.
    */
   private async stay(): Promise<void> {
-    this.deps.service.resume();
-    this.deps.service.admitReceives();
+    // Everything, not just the lease service: stored receive is fenced by the
+    // same quiesce and has to be un-fenced by the same Stay.
+    this.deps.resume();
     this.rendererFenced = false;
     // Admission first, then the resume. Neither reopens what was stopped: the
     // page becomes able to start things again, and is told the quit is off.
