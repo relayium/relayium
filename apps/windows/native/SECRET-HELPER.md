@@ -1,8 +1,16 @@
 # `relayium-secret-helper` — integrator contract
 
-**Status: implemented, portable gates green, Windows-unverified.**
-Nothing in this document is a claim that DPAPI behaved as described on a real
-host. The Windows tests compile for both architectures and have never run.
+**Status: implemented, portable gates green, partially verified on a real
+Windows host.**
+
+Run `34474334970` executed these suites on a real Windows host. The DPAPI round
+trip and the forced-kill-of-the-sealing-parent case **passed** there. The tamper
+oracle **failed**: it demanded an error at every mutated blob position, which is
+not a property this helper implements or needs. That test has since been
+corrected to the refuse-or-identical property described under *What a tampered
+blob must do* below, and **the corrected oracle awaits the next Windows run** —
+until that run completes, nothing here claims it has executed on a real host.
+**Cross-user protection and power-loss behaviour remain UNPROVEN.**
 
 ## Why it exists
 
@@ -120,6 +128,46 @@ not our record, including one written by Electron, is refused rather than
 interpreted. This adds no key and no entropy: it is storage-integrity framing,
 not wire crypto. The digest lives only inside the protected blob and is never
 logged.
+
+### What a tampered blob must do — and what it must not be asked to do
+
+The blob is an opaque platform structure whose format this side does not
+interpret. That format may permit a mutation that does not change the protected
+payload, in which case the unprotect legitimately succeeds and returns the
+record that was sealed. **Requiring an error for every mutated position is
+therefore an assertion about blob byte-canonicality** — the platform's business,
+not a property this helper implements, promises or needs. An earlier version of
+the tamper test made that assertion and failed on a real Windows host at one
+position; the only thing observed there was that 43 bytes came back, and whether
+those bytes were the secret that was sealed was never measured. No field of the
+blob is credited with that outcome here.
+
+The property that must hold is that no mutation yields **altered plaintext**.
+Every mutated blob lands in exactly one of:
+
+- **refused** — an error and no output at all, or
+- **unchanged** — no error and a byte-for-byte identical secret.
+
+A different secret, a shorter one, a partial one, or any output alongside an
+error is a failure. Equal length is not equality, so the comparison is over the
+bytes. `TestTamperedBlobNeverReturnsAlteredPlaintext` walks every byte position
+with two mutations each, tallies refusals against unchanged opens, and requires
+at least one real refusal — a run where the corruption never reached the
+protected bytes must not pass silently. It carries no offset table and assumes
+nothing about the blob's layout.
+
+`TestValidDpapiBlobWithABrokenInnerRecordIsRefused` is the other direction, and
+it is where the integrity claim is actually established: a record is built,
+broken — a payload byte changed **without recomputing the digest**, a truncation
+inside the payload, a byte appended past the declared length, an altered domain
+— and then protected with a raw `CryptProtectData`. The test unprotects each
+blob first to **prove the OS accepts it**, and only then requires the open to be
+refused with no output. A successful unprotect is not a successful open.
+
+Those four mutations are owned portably by `secretframe`'s
+`TestRecordRefusesEveryCorruption`, which establishes the refusal without DPAPI
+at all. The Windows case adds only the part that needs the real API: that the OS
+unprotected the blob successfully and the refusal still happened.
 
 ## Tests
 
