@@ -17,6 +17,12 @@ directories:
 files:
   - dist/**
   - assets/**
+  # A consequence of `nsis.include` below: `assets/` is the build-resources
+  # directory, so it holds an installer script the app itself never runs.
+  # electron-builder excludes build resources by default, but the explicit
+  # `assets/**` above re-includes them — the last matching pattern wins — which
+  # would ship the installer's source inside the application.
+  - "!assets/installer.nsh"
   - package.json
 
 win:
@@ -30,6 +36,11 @@ win:
   # step that must not be inferred from a green build.
 
 nsis:
+  # The destination guard. electron-builder would pick this file up from
+  # `buildResources` by convention; it is named explicitly because a security
+  # control that is wired by a naming convention is one a later reorganisation
+  # can silently unwire. See the file for what it refuses and why.
+  include: assets/installer.nsh
   # Per-user, so installing needs no administrator and an install cannot write
   # outside the user's own profile.
   perMachine: false

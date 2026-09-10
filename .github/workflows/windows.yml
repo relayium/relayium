@@ -57,7 +57,9 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 30
+    # Raised from 30: the lane now installs the artifact, launches it twice,
+    # reinstalls over itself and uninstalls, none of which existed before.
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: apps/windows
@@ -104,15 +106,41 @@ jobs:
       - name: Package unsigned Windows installer
         run: npx electron-builder --win --x64 --publish never
 
+      # Root level only, and exactly one.
+      #
+      # This step used to search with `-Recurse` and take the first result,
+      # which reaches `release\win-unpacked\Relayium.exe` — the unpacked
+      # application binary, not the installer. The artifact upload below globs
+      # `release/*.exe`, so the hash recorded here could describe a different
+      # file from the one published. Dropping `-Recurse` alone would not be
+      # enough: with several candidates, `Select-Object -First 1` would still
+      # pick one silently. The count assertion is the actual fix.
+      #
+      # The resolved path is exported so the acceptance step below installs the
+      # exact byte sequence whose hash is recorded and whose file is uploaded.
       - name: Record installer provenance
         shell: pwsh
         run: |
-          $exe = Get-ChildItem release -Filter *.exe -Recurse | Select-Object -First 1
-          if (-not $exe) { throw "electron-builder produced no .exe" }
-          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+          $found = @(Get-ChildItem -LiteralPath release -Filter *.exe -File)
+          if ($found.Count -ne 1) {
+            throw "expected exactly one root-level installer in release/, found $($found.Count): $($found.Name -join ', ')"
+          }
+          $exe = $found[0]
+          $hash = (Get-FileHash -LiteralPath $exe.FullName -Algorithm SHA256).Hash
           Write-Host "installer: $($exe.Name)"
           Write-Host "sha256: $hash"
           "$hash  $($exe.Name)" | Out-File -FilePath release/SHA256SUMS.txt -Encoding ascii
+          "RELAYIUM_INSTALLER=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      # The artifact a user would actually download: installed, launched and
+      # interrogated. Runs BEFORE the upload, so an installer that cannot be
+      # installed is never published as evidence that it can.
+      #
+      # Invoked directly rather than through an npm script because
+      # `apps/windows/package.json` is outside this task's writable scope.
+      - name: Installed artifact acceptance
+        run: node test/smoke/installed-acceptance.mjs "$env:RELAYIUM_INSTALLER"
+        shell: pwsh
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -122,3 +150,64 @@ jobs:
             apps/windows/release/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 7
+
+  # The native receive helper, on its own.
+  #
+  # ## Why a separate job and not a step in `build`
+  #
+  # These are the only tests in this repository that exercise NT filesystem
+  # primitives and a real helper subprocess, and they are the newest code here.
+  # As a step they would sit behind the npm install, the type check, the unit
+  # tests, the bundle and the packaging — so a helper failure would be reported
+  # late, and a failure anywhere earlier would mean the native tests never ran
+  # at all. Independent jobs mean each lane's result is its own, and the
+  # installer acceptance above still runs when the helper is red.
+  #
+  # No `needs:`, deliberately. Nothing here feeds the build: the helper is not
+  # yet bundled as a package resource and is not a dependency of the installer.
+  # Wiring that is a later, separately reviewed step.
+  #
+  # The native sources are read-only to this workflow's author; this job runs
+  # them, it does not own them.
+  native:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/windows/native
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          # From the module's own `go` directive rather than a version repeated
+          # here, so the toolchain cannot drift away from what the module
+          # declares.
+          go-version-file: apps/windows/native/go.mod
+          cache-dependency-path: apps/windows/native/go.sum
+
+      # `-count=1` defeats the test cache: a cached PASS from a previous commit
+      # is not evidence that this commit's NT filesystem behaviour is correct,
+      # and these tests touch real handles rather than pure functions.
+      # `-timeout` bounds a hung subprocess or a blocked write into a reported
+      # failure instead of a job that runs until the runner is killed.
+      #
+      # `-v` because exit 0 is not the evidence wanted here. Without it the log
+      # shows only `ok`, and a run in which the junction, retarget and real
+      # helper-subprocess tests all SKIPPED — for a missing privilege, an
+      # unsupported filesystem, a build tag — is indistinguishable from one in
+      # which they passed. `-v` puts every `--- PASS/FAIL/SKIP: TestName` line
+      # in the hosted log, so which cases actually executed is a fact that can
+      # be read off the run rather than assumed from a green check.
+      #
+      # No `| Tee-Object` or other capture: the step's exit status is `go test`'s
+      # own, verbatim. A pwsh pipeline would put that exit code behind
+      # `$LASTEXITCODE` handling and `$PSNativeCommandUseErrorActionPreference`
+      # semantics on a lane that cannot be rehearsed locally, which is a poor
+      # trade for a summary the `-v` output already contains.
+      - name: Native helper tests
+        run: go test -v -count=1 -timeout 10m ./...
+
+      # The helper must also link for the target it ships to. Building after the
+      # tests so a compile error in a non-test path is still caught.
+      - name: Build the helper
+        run: go build ./cmd/relayium-io-helper

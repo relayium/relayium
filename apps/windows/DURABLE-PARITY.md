@@ -17,7 +17,8 @@ A secure Electron foundation, the real account authority, a receive path that
 streams bytes into opaque staged names — publication is deliberately
 unimplemented and staging is not containment, see below — the imported protocol
 executing against the frozen cross-language fixtures, and a Windows CI lane that
-builds an unsigned installer but **has never run**.
+has run once (34448645493) and packaged an unsigned installer — **which has
+never been executed, on any machine**.
 
 **There is no transfer UI.** The renderer is a foundation shell that reports
 build state and drives real sign-in. It deliberately does not draw the macOS
@@ -40,9 +41,10 @@ release:
   observed on Windows. Every row in this document currently carries it
   implicitly: see "Verification status".
 
-No row says `done`. Nothing here has been independently reviewed and accepted,
-and the reviewer has already reproduced blocking defects in three of these
-subsystems during this slice.
+No row says `done`. The foundation at `b7d65457d` has been independently
+reviewed and accepted as bounded foundation behaviour; see "Verification status"
+(3) for what that covers. Nothing in the Distribution matrix is included, and
+the installation-destination guard is newer than that review.
 
 ### Transport and protocol
 
@@ -106,8 +108,10 @@ subsystems during this slice.
 
 | Capability | Status | Notes |
 |---|---|---|
-| NSIS per-user installer, x64 | `todo` — **`Windows-pending`** | The workflow step exists and is written; **the Windows lane has never run.** No installer has been produced by CI, and none has been executed anywhere. |
+| NSIS per-user installer, x64 | `todo` — **`Windows-pending`** | Run 34448645493 packaged one, and the reviewer verified its hash and PE header. **No installer has been executed anywhere yet.** The automated installed-artifact acceptance (`test/smoke/installed-acceptance.mjs`) is implemented and has never run: it is Windows-only and fails closed elsewhere. |
+| Installation destination guard | `implemented` — **`Windows-pending`**, newer than the foundation review | `allowToChangeInstallationDirectory: true` otherwise permits a destination whose removal takes the installation identity, account bearer and Inbox private key with it. **Primary guard, `assets/installer.nsh`:** refuses a destination equal to, enclosing, or enclosed by `%LOCALAPPDATA%\Relayium`, before extraction and before the old version is uninstalled. Both sides are resolved through the filesystem with `GetFinalPathNameByHandleW` / `VOLUME_NAME_GUID`, on every call and with no cached verdict, so junctions, symlinks, `subst`, mount points, 8.3 aliases and `..` spellings collapse before comparison; resolution climbs to the nearest existing ancestor and re-appends the tail that does not exist yet, with lengths bounded *before* each concatenation because NSIS `StrCpy` truncates silently. **Fail closed:** no raw-spelling fallback, no GUID-against-DOS compare; unresolvable paths, over-capacity buffers and access-denied on an ancestor are refusals. UNC is rejected syntactically before any filesystem or network call; network installs are **explicitly unsupported**. Exit codes 2 collision, 3 unverifiable. **Second, weaker guard, `storage.ts`:** refuses the matching runtime writes, but `fs.realpathSync.native` resolves with `VOLUME_NAME_DOS` (verified in libuv 1.52.1 `deps/uv/src/win/fs.c` as bundled by Node 24.20.0), **not** volume GUIDs — so it collapses junctions, symlinks, mount points, 8.3 and `subst`, but **cannot reliably compare one volume reached through two DOS mount points**. That gap is asserted by a test rather than left as prose, and the installer guard is what covers it. **Coverage, stated honestly:** `customInit` validates the destination the run starts with including `/D=`; `.onVerifyInstDir` validates every destination chosen on the directory page. There is **no install-section gate** — `customInstall` runs after `uninstallOldVersion` and after extraction, so it could not protect anything; the earliest pre-extraction hook, `customCheckAppRunning`, is deliberately not used: it replaces the running-app check rather than extending it, suppresses the `getProcessInfo.nsh` include and `Var pid` that the replaced macro needs, and is inserted by `uninstaller.nsh` too — so a collision check wired there could refuse an uninstall, which is a worse failure than the one being prevented. **Residual: TOCTOU** between the last check and extraction, same Windows account. Test scope: 31 unit cases, 9 of which fail against the previous lexical guard, plus over-refusal regressions; on Windows, junction and `subst` negatives and positives against task-owned directories with a same-drive control. **The NSIS half has still never executed on Windows** — it now compiles, which it did not before. The enclosing-parent destination is deliberately never executed, because a broken guard would then destroy unowned state. |
 | ARM64 | `todo` | Tracked, not built. |
+| Native receive helper (`apps/windows/native`) | `todo` — **not accepted** | Authored in a separate lane and under independent review; its Windows runtime result is pending. A CI job now runs its tests and build on a real Windows runner, with `go test -v` so that every `--- PASS/FAIL/SKIP` line is in the hosted log: a run whose junction, retarget and real-helper-subprocess cases all SKIPPED still exits 0, and exit 0 with critical skips is not acceptance. That job existing is not acceptance either, and the helper is **not** bundled, wired to the app, or a dependency of the installer. Its sources belong to another lane and are absent from this tree. |
 | Authenticode signing | `todo` | No certificate is provisioned, and no credential action is authorized in this task. Unsigned is expected to cause SmartScreen friction; that has not been measured and is not claimed. An **unsigned private candidate for owner testing is permitted** — signing gates public release, not an internal build. |
 | Public download surface | `todo` — **deliberately not touched** | `web/src/lib/apps-claim-rules.ts` currently bans claiming a Windows app exists, and that ban is correct while none does. The conditions for lifting it are the owner's to set; this document does not invent them. |
 
@@ -180,36 +184,63 @@ semantics, and this app requires the opposite.
 Distinguish four things, and do not let a later reader collapse them:
 
 1. **Implemented** — the code exists.
-2. **Author-tested** — 196 unit/conformance assertions and one real Electron
-   smoke pass, all written by the implementer. Executed on **macOS only**. No
-   Linux run has happened and none is claimed.
-3. **Independently accepted, for the sign-in lifecycle only** — the reviewer has
-   independently re-run `check`, `build`, the 196 unit tests and the real
-   Electron smoke on macOS under Node 24, all exit 0, and separately composed
-   the actual `SignInController` against the actual `AppService` with a real
-   temporary `SecretStore` and test cipher — no mocked lifecycle — obtaining two
-   passes: a success withheld until after cancellation, and the main process's
-   own deadline, each leaving the shell signed out with no bearer stored and no
-   timer left armed. The frozen source hashes matched.
+2. **Author-tested** — 214 unit/conformance assertions and one real Electron
+   smoke pass, all written by the implementer, on **macOS only**. No Linux run
+   has happened and none is claimed. (196 at the foundation commit; the
+   installation-destination guard and its alias closure added the rest.)
 
-   That acceptance is **bounded to the foundation's sign-in cancellation
-   behaviour**. It is not acceptance of the Windows client, of native receive
-   IO, or of any row in the matrices above beyond that behaviour.
+   The NSIS script is now also **compiled** locally: `electron-builder --win`
+   runs makensis on macOS and produces the installer. Until this batch it did
+   not compile at all — two defects (`LogicLib.nsh` not in scope where
+   electron-builder emits the custom include, and duplicate macro labels when
+   the resolver is inserted twice in one function) would each have failed the
+   Windows lane at the packaging step. Compiling is not running: the guard's
+   behaviour is still unobserved.
+3. **Independently reviewed and accepted — the foundation at `b7d65457d`.**
+   Under Node 24 on macOS: `check`, `build`, the 196 unit tests, the real
+   Electron smoke and the eight repository policy gates, all exit 0 against
+   matching frozen hashes. Beyond re-running the author's tests, the reviewer
+   produced independent evidence against separately compiled snapshots of the
+   actual source — receive IO (4), secret store (2), account authority, and the
+   sign-in controller lifecycle composed from the actual controller and service
+   with a real temporary store, no mocked lifecycle.
 
-   Earlier in this slice the reviewer independently reproduced blocking defects
-   in the receive lease, the secret store, the IPC origin check and the account
-   service. Those fixes are covered by tests and were re-run by the reviewer;
-   everything outside the sign-in lifecycle nevertheless remains
-   `author-tested`, not independently accepted.
-4. **Windows runtime** — *nothing*. The `windows` lane has never executed. Cross-
-   building and a macOS-hosted Electron boot prove the artifact compiles and the
-   app starts; they prove nothing about the folder picker, DPAPI, the tray, the
-   deep link, the installer, upgrade behaviour or SmartScreen. No installer has
-   been produced and none has been run anywhere.
+   This is macOS evidence about the foundation's behaviour. It is **not**
+   acceptance of the Windows client, of native receive IO, of the installer or
+   the installed artifact, or of any Distribution row. It says nothing about
+   containment: the staging path's ancestor-swap exposure and the unsupported
+   publication below are unchanged and remain the native helper's to remove.
+
+   Everything added after `b7d65457d` — the installation-destination guard, its
+   `storage.ts` half, the installed-artifact acceptance test and the native CI
+   job — is newer than this review, `author-tested` only, and Windows-pending.
+4. **Windows runtime** — *partial, and not the part that matters most.* The
+   `windows` lane has run once, on the foundation commit, as run
+   **34448645493**: `check`, `build`, the 196 unit tests and the unpackaged
+   Electron smoke passed on a real Windows runner, and the NSIS installer
+   packaged. The reviewer downloaded that installer and confirmed its recorded
+   SHA-256 and PE header. This is the only Windows evidence that exists.
+
+   It is not evidence about the installed artifact. That smoke runs the
+   **unpackaged** app and injects its own `SecretStore` and test cipher, so
+   **real DPAPI has still never executed**; the installer has never been
+   executed and the installed application never launched, anywhere. Nothing
+   added after `b7d65457d` has run on Windows at all.
+
+   Implemented and awaiting its first run: `test/smoke/installed-acceptance.mjs`
+   installs the packaged artifact, launches it, and asserts the app scheme, the
+   production origin under injected engineering overrides, DPAPI health, the
+   `relayium://` registration naming the installed executable, single-instance
+   behaviour, identity survival across a same-version reinstall, the destination
+   guard, and an uninstall that removes the program without removing user data.
+   Until it runs on Windows none of that is evidence — it is a written intention.
+
+   Still unproven either way: the folder picker, the tray, deep-link activation,
+   graceful quit, upgrade across versions, and code signing. This lane produces
+   an unsigned artifact and does not certify download or reputation behaviour.
 
 No row above may move past `author-tested` on macOS evidence, and none may reach
 `done` until it has been both independently accepted and observed on Windows.
-The sign-in acceptance in (3) is macOS evidence about a lifecycle; it does not
-move any row to `done`, and it says nothing about containment — the staging
-path's ancestor-swap exposure and the unsupported publication above are
-unchanged, and remain the native helper's to remove.
+The acceptance in (3) moves no row to `done`; the Windows observation half is
+outstanding for every row in this document. Per-probe review history is the
+reviewer's private evidence ledger, not this document's to reproduce.
