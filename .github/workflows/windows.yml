@@ -125,6 +125,16 @@ jobs:
           Write-Host "signed fixture: $node"
           Write-Host "signer: $($signature.SignerCertificate.Subject)"
           "RELAYIUM_SIGNED_FIXTURE=$node" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # The tests read signatures through the SAME interpreter that just
+          # validated this fixture. Windows PowerShell 5.1 fails here with
+          # `CouldNotAutoloadMatchingModule` for Microsoft.PowerShell.Security,
+          # because the job's inherited PSModulePath is PowerShell 7's — so a
+          # test that reached for `powershell` found no
+          # `Get-AuthenticodeSignature` at all.
+          $pwsh = (Get-Command pwsh).Source
+          if (-not $pwsh) { throw "pwsh not found; the update trust matrix reads signatures through it" }
+          Write-Host "signature interpreter: $pwsh"
+          "RELAYIUM_POWERSHELL=$pwsh" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Build the native helpers
         run: |
@@ -356,6 +366,16 @@ jobs:
           Write-Host "signed fixture: $node"
           Write-Host "signer: $($signature.SignerCertificate.Subject)"
           "RELAYIUM_SIGNED_FIXTURE=$node" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # The tests read signatures through the SAME interpreter that just
+          # validated this fixture. Windows PowerShell 5.1 fails here with
+          # `CouldNotAutoloadMatchingModule` for Microsoft.PowerShell.Security,
+          # because the job's inherited PSModulePath is PowerShell 7's — so a
+          # test that reached for `powershell` found no
+          # `Get-AuthenticodeSignature` at all.
+          $pwsh = (Get-Command pwsh).Source
+          if (-not $pwsh) { throw "pwsh not found; the update trust matrix reads signatures through it" }
+          Write-Host "signature interpreter: $pwsh"
+          "RELAYIUM_POWERSHELL=$pwsh" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       # `-count=1` defeats the test cache: a cached PASS from a previous commit
       # is not evidence that this commit's NT filesystem behaviour is correct,

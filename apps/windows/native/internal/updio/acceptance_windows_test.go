@@ -360,7 +360,29 @@ func TestCommitReplacesAnExistingRecord(t *testing.T) {
 	if err := custody.Commit(handle, "candidate.json"); err != nil {
 		t.Fatalf("commit over an existing record: %v", err)
 	}
-	if data, _ := os.ReadFile(target); string(data) != "new" {
+
+	// The published record is STILL HELD: a staged file is opened with no
+	// sharing at all, and the rename does not change that. So reading it here is
+	// supposed to fail, and the previous version of this test ignored that
+	// error and compared the empty result — reporting `""` and blaming the
+	// commit for something the share mode guarantees.
+	//
+	// Asserted rather than worked around. Relaxing `stagedFileShare` to make a
+	// test readable would hand every other process a window onto a file this one
+	// is still writing.
+	if _, err := os.ReadFile(target); err == nil {
+		t.Fatal("the published record was readable while its handle was still held")
+	}
+
+	// Released, and only now readable — with the exact bytes this session wrote.
+	if err := custody.Release(handle); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("reading the published record: %v", err)
+	}
+	if string(data) != "new" {
 		t.Fatalf("record after commit: %q", data)
 	}
 }
@@ -474,6 +496,7 @@ func authenticodeStatus(t *testing.T, path string) (status string, subject strin
 	// So: a real script file rather than a quoted one-liner, `Stop` on any
 	// error, prefixed lines that cannot be confused with blank output, and
 	// COMBINED output so PowerShell's own message reaches the log.
+	shell := powerShell(t)
 	script := filepath.Join(t.TempDir(), "signature.ps1")
 	body := "$ErrorActionPreference = 'Stop'\r\n" +
 		"$s = Get-AuthenticodeSignature -LiteralPath $args[0]\r\n" +
@@ -483,7 +506,7 @@ func authenticodeStatus(t *testing.T, path string) (status string, subject strin
 		t.Fatalf("signature script: %v", err)
 	}
 	out, err := exec.Command(
-		"powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+		shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
 		"-File", script, path,
 	).CombinedOutput()
 	if err != nil {
@@ -523,6 +546,35 @@ func actualSubject(t *testing.T, path string) string {
 		t.Fatalf("the fixture at %s has no signer subject", path)
 	}
 	return subject
+}
+
+// powerShell resolves the interpreter these checks run under.
+//
+// It must be `pwsh`, the same executable the workflow uses. Windows PowerShell
+// 5.1 failed on the runner with `CouldNotAutoloadMatchingModule` for
+// `Microsoft.PowerShell.Security`: the process inherits a `PSModulePath` set up
+// for PowerShell 7, and 5.1 then cannot find its own modules — so
+// `Get-AuthenticodeSignature` does not exist as far as it is concerned. That is
+// an environment mismatch, not a signature problem, and it took the whole trust
+// matrix with it.
+//
+// A hard precondition, never a fallback: silently dropping back to
+// `powershell` would reintroduce exactly that failure, and skipping would let an
+// unverified Authenticode path report green.
+func powerShell(t *testing.T) string {
+	t.Helper()
+	if explicit := os.Getenv("RELAYIUM_POWERSHELL"); explicit != "" {
+		return explicit
+	}
+	found, err := exec.LookPath("pwsh")
+	if err != nil {
+		t.Fatalf(
+			"pwsh is not on PATH (%v). The trust matrix reads signatures through it, and "+
+				"Windows PowerShell 5.1 cannot load Microsoft.PowerShell.Security under this "+
+				"job's inherited PSModulePath. Set RELAYIUM_POWERSHELL to an interpreter that "+
+				"provides Get-AuthenticodeSignature.", err)
+	}
+	return found
 }
 
 func TestTheSignedFixtureIsAPrecondition(t *testing.T) {
