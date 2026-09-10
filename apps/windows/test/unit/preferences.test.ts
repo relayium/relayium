@@ -222,6 +222,106 @@ describe("an unreadable file is never silently rebuilt", () => {
   });
 });
 
+// Every case above builds a FRESH store, so its cache — when there was one —
+// was always empty and the read always reached disk. These are the cases where
+// a store has already read successfully, which is the state a running app is in
+// approximately always, and which nothing here used to cover.
+describe("a store that has already read is not a store that knows the file", () => {
+  it("REFUSES a write when the file went corrupt after an earlier successful read", async () => {
+    // The store reads a healthy file, so a cache would now hold real values.
+    await writeFile(
+      preferencesPath(dir),
+      JSON.stringify({ verifyPeers: true, firstCloseAcknowledged: false }),
+      "utf8",
+    );
+    const s = store();
+    expect((await s.snapshot()).health).toBe("ok");
+
+    // Something breaks the file — a bad shutdown, a disk error, another tool.
+    await writeFile(preferencesPath(dir), "broken", "utf8");
+
+    // A store answering from that earlier read reports "ok", never sees the
+    // corruption, and rebuilds the file from what it remembers. That defeats
+    // the refusal entirely and destroys a file that may still be recoverable.
+    await expect(s.write("firstCloseAcknowledged", true)).rejects.toBeInstanceOf(PreferenceStoreError);
+    expect(await readFile(preferencesPath(dir), "utf8")).toBe("broken");
+  });
+
+  it("does not answer a READ from an earlier one once another store has written", async () => {
+    await writeFile(preferencesPath(dir), JSON.stringify({ verifyPeers: false }), "utf8");
+    const a = store();
+    const b = store();
+    expect((await a.read()).verifyPeers).toBe(false);
+
+    await b.write("verifyPeers", true);
+    // `a` answered this question before, and the answer has changed. A
+    // remembered one would leave a second window showing "off" for a security
+    // preference the user has just turned on.
+    expect((await a.read()).verifyPeers).toBe(true);
+  });
+
+  it("keeps the choice another store saved, when both had already read", async () => {
+    // Two windows, both showing the settings card, both having read it.
+    await writeFile(
+      preferencesPath(dir),
+      JSON.stringify({ verifyPeers: false, firstCloseAcknowledged: false }),
+      "utf8",
+    );
+    const a = store();
+    const b = store();
+    await a.read();
+    await b.read();
+
+    await a.write("verifyPeers", true);
+    // `b` writes a DIFFERENT field. From a remembered snapshot it would spread
+    // `verifyPeers: false` back over the file and silently revert the security
+    // decision `a` just saved — reporting success for it.
+    await b.write("firstCloseAcknowledged", true);
+
+    expect(JSON.parse(await readFile(preferencesPath(dir), "utf8"))).toEqual({
+      verifyPeers: true,
+      firstCloseAcknowledged: true,
+    });
+  });
+});
+
+// The Windows failure. `MoveFileEx` with replace-existing REFUSES a destination
+// another handle has open, so a read overlapping a rename fails the WRITER with
+// EPERM — where POSIX renames happily under an open reader and this passes for
+// the wrong reason. Serialising writes against each other is not enough; the
+// reads have to be in the same order.
+describe("a read must not collide with another store's rename", () => {
+  it("survives reads interleaved with writes from a second store", async () => {
+    await writeFile(preferencesPath(dir), JSON.stringify({ verifyPeers: false }), "utf8");
+    const reader = store();
+    const writer = store();
+
+    const reads = Array.from({ length: 40 }, () => reader.snapshot());
+    const writes = Array.from({ length: 20 }, (_, i) => writer.write("verifyPeers", i % 2 === 0));
+    const settled = await Promise.allSettled([...reads, ...writes]);
+
+    const failed = settled.filter((r) => r.status === "rejected");
+    expect(failed.map((r) => String((r as PromiseRejectedResult).reason))).toEqual([]);
+    // Not one of them saw a half-written file either: every read is either the
+    // old value or a new one, never a parse failure.
+    for (const outcome of settled.slice(0, reads.length)) {
+      expect((outcome as PromiseFulfilledResult<{ health: string }>).value.health).toBe("ok");
+    }
+  });
+
+  it("leaves no staging file behind after interleaved reads and writes", async () => {
+    const reader = store();
+    const writer = store();
+    await Promise.all([
+      writer.write("verifyPeers", true),
+      reader.snapshot(),
+      writer.write("firstCloseAcknowledged", true),
+      reader.snapshot(),
+    ]);
+    expect(await readdir(dir)).toEqual(["preferences.json"]);
+  });
+});
+
 describe("the key list is closed", () => {
   it("accepts exactly the declared name", () => {
     expect(isPreferenceKey("verifyPeers")).toBe(true);

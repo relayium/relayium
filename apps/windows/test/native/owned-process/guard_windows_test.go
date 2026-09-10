@@ -3,40 +3,17 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"golang.org/x/sys/windows"
 )
-
-// lockedBuffer collects the helper's report while it is being written from the
-// goroutine running the driver.
-type lockedBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (b *lockedBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *lockedBuffer) Bytes() []byte {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return append([]byte(nil), b.buf.Bytes()...)
-}
 
 // The real thing, on the platform where it is the only thing that works.
 //
@@ -92,10 +69,10 @@ func playRole(role, marker string) int {
 			return 1
 		}
 		announce(marker + ".parent")
-		select {}
+		stayAlive()
 	case roleIdle:
 		announce(marker)
-		select {}
+		stayAlive()
 	case roleGuardian:
 		self, err := os.Executable()
 		if err != nil {
@@ -115,12 +92,32 @@ func playRole(role, marker string) int {
 		if err != nil {
 			return 1
 		}
-		// Holds the job handle and never returns. Whoever kills this process is
-		// relying on the OS to close that handle for it.
+		// Holds the job handle for as long as it lives. Whoever kills this
+		// process is relying on the OS to close that handle for it.
 		_ = guarded
-		select {}
+		stayAlive()
 	}
 	return 3
+}
+
+// How long a guarded target stays up when nothing ends it sooner. Comfortably
+// past every budget in these tests and comfortably inside the package timeout,
+// so a child that escapes a failed test still cannot outlive the run.
+const guardedChildLifetime = 10 * time.Minute
+
+// Stay alive, PREDICTABLY, until this process is ended from outside.
+//
+// Not `select {}`. A bare select with no cases blocks the only goroutine there
+// is, and Go's runtime detects that as `all goroutines are asleep - deadlock!`
+// and kills the process immediately — the exact opposite of what a target that
+// is supposed to be held alive by a job object needs to do. Every one of these
+// roles announced itself and then died on the spot.
+//
+// A sleep is a timer, which the runtime does not treat as a deadlock, and a
+// bounded one puts a ceiling on a stray child rather than trusting the test
+// that started it to always clean up.
+func stayAlive() {
+	time.Sleep(guardedChildLifetime)
 }
 
 func announce(path string) {
@@ -545,9 +542,12 @@ func TestAnExecutableThatCannotStartIsAFailure(t *testing.T) {
 }
 
 // ---- harness ---------------------------------------------------------------
+//
+// The driver itself, its bounds and its pipe handling live in
+// `pipe_harness_test.go`, which is not build-tagged: the deadlock it exists to
+// prevent was in the harness rather than in anything Windows-specific, and is
+// therefore provable on any host.
 
-// runGuardian drives Run in a goroutine so a test can observe the live tree
-// before sending the shutdown that ends it.
 func runGuardian(t *testing.T, cfg Config, commands string, whileLive func()) (int, []Record) {
 	t.Helper()
 	return runGuardianLive(t, cfg, commands, whileLive, Launch)
@@ -559,56 +559,4 @@ func runGuardian(t *testing.T, cfg Config, commands string, whileLive func()) (i
 func runGuardianWithLauncher(t *testing.T, cfg Config, commands string, launch Launcher) (int, []Record) {
 	t.Helper()
 	return runGuardianLive(t, cfg, commands, nil, launch)
-}
-
-func runGuardianLive(t *testing.T, cfg Config, commands string, whileLive func(), launch Launcher) (int, []Record) {
-	t.Helper()
-	var out lockedBuffer
-	reader, writer := io.Pipe()
-	done := make(chan int, 1)
-	go func() {
-		done <- Run(cfg, launch, reader, NewReporter(&out), realClock{})
-	}()
-	if whileLive != nil {
-		whileLive()
-	}
-	if _, err := writer.Write([]byte(commands)); err != nil {
-		t.Fatalf("could not send the command: %v", err)
-	}
-	_ = writer.Close()
-
-	select {
-	case code := <-done:
-		return code, parseRecords(t, out.Bytes())
-	case <-time.After(90 * time.Second):
-		t.Fatal("the guardian did not finish within 90s")
-		return 1, nil
-	}
-}
-
-func parseRecords(t *testing.T, raw []byte) []Record {
-	t.Helper()
-	var records []Record
-	for _, line := range bytes.Split(bytes.TrimSpace(raw), []byte("\n")) {
-		if len(line) == 0 {
-			continue
-		}
-		var rec Record
-		if err := json.Unmarshal(line, &rec); err != nil {
-			t.Fatalf("the helper emitted a line that is not a record: %q", line)
-		}
-		records = append(records, rec)
-	}
-	return records
-}
-
-func findClosed(t *testing.T, records []Record) Record {
-	t.Helper()
-	for _, rec := range records {
-		if rec.Kind == "closed" {
-			return rec
-		}
-	}
-	t.Fatalf("no closed record was emitted: %+v", records)
-	return Record{}
 }

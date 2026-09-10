@@ -156,12 +156,23 @@ jobs:
           Write-Host "signature interpreter: $pwsh"
           "RELAYIUM_POWERSHELL=$pwsh" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
+      #
+      # Each build's status is checked immediately. `pwsh` does not stop a
+      # multi-line script when a native command fails, and the step's exit code
+      # is the LAST command's — so a failed io-helper build followed by a
+      # successful update-helper build exited 0, and the failure was invisible.
+      # The existence assertion below does not cover it either: a binary left by
+      # an earlier run satisfies `Test-Path` without having been rebuilt here.
       - name: Build the native helpers
+        shell: pwsh
+        working-directory: apps/windows/native
         run: |
           go build -o build/relayium-io-helper.exe ./cmd/relayium-io-helper
+          if ($LASTEXITCODE -ne 0) { throw "relayium-io-helper.exe failed to build ($LASTEXITCODE)" }
           go build -o build/relayium-secret-helper.exe ./cmd/relayium-secret-helper
+          if ($LASTEXITCODE -ne 0) { throw "relayium-secret-helper.exe failed to build ($LASTEXITCODE)" }
           go build -o build/relayium-update-helper.exe ./cmd/relayium-update-helper
-        working-directory: apps/windows/native
+          if ($LASTEXITCODE -ne 0) { throw "relayium-update-helper.exe failed to build ($LASTEXITCODE)" }
 
       # Loudly, before anything depends on it. A missing helper would otherwise
       # surface as five client tests skipping or an installer packaged without a

@@ -20,7 +20,7 @@
 // The defaults are chosen so that answer is the safe one — see each field.
 
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 /**
  * The user's answers. Every field is optional in the FILE and total here, so a
@@ -132,44 +132,128 @@ const isMissing = (err: unknown): boolean => (err as NodeJS.ErrnoException)?.cod
 let stagingSeq = 0;
 
 /**
+ * One queue per FILE, shared by every store in this process that names it.
+ *
+ * ## Why per-instance serialisation was not enough
+ *
+ * Each store used to hold its own `#tail`, which serialises that store against
+ * itself and against nothing else. Two stores on one file — a second window —
+ * were never ordered against each other at all, and the queue covered writes
+ * only, so a read was never ordered against a write either.
+ *
+ * On POSIX that is survivable: `rename` over a file another handle has open
+ * succeeds, and the reader keeps reading the old inode. **On Windows it is
+ * not.** `MoveFileEx` with replace-existing refuses a destination that is open,
+ * so one store's `readFile` overlapping another's `rename` fails the WRITER
+ * with `EPERM`. That is exactly what the two-store test hit on the Windows
+ * runner, and it is a real defect rather than a test artefact: two windows
+ * saving and reading settings at once is an ordinary thing to do.
+ *
+ * So the queue is keyed on the file and covers reads AND writes. Nothing this
+ * process does can now have a read open while a rename runs.
+ *
+ * ## What this does NOT claim
+ *
+ * This is an in-process queue and nothing more. Another PROCESS renaming onto
+ * the same file can still make a rename here fail, and there is no lock here
+ * that would prevent it — a claim of multi-process safety would need a real
+ * OS-level lock and proof that it holds, neither of which exists. Such a
+ * failure surfaces as the error it is. It is deliberately NOT retried: a retry
+ * would re-run the read-modify-write against a file that changed underneath it,
+ * which is how a lost update is manufactured out of a visible failure.
+ *
+ * The key is the RESOLVED path, so `./preferences.json` and an absolute form of
+ * it share a queue. It is path identity, not file identity: two different paths
+ * that are the same file — a link, or two spellings differing only in case on
+ * Windows — are not coordinated. Every caller in this program builds the path
+ * once through `preferencesPath`, so that case does not arise here.
+ */
+const queues = new Map<string, Promise<unknown>>();
+
+/**
+ * Run `work` after everything already queued for this file.
+ *
+ * The map entry is dropped once nothing is behind it, so a long-lived process
+ * that touches many paths does not accumulate one promise chain per path
+ * forever.
+ *
+ * **Not re-entrant.** Work queued here must not call this again for the same
+ * file: the inner call would wait on a chain that cannot advance until the
+ * outer one returns. `#writeNow` therefore calls `#readNow` directly rather
+ * than `snapshot`.
+ */
+function serialise<T>(filePath: string, work: () => Promise<T>): Promise<T> {
+  const key = resolve(filePath);
+  // Never rejects — see `settled` below — so `work` always runs, and one
+  // failed write cannot wedge every write behind it.
+  const previous = queues.get(key) ?? Promise.resolve();
+  const run = previous.then(work);
+  const settled = run.then(() => undefined, () => undefined);
+  queues.set(key, settled);
+  void settled.then(() => {
+    // Only when this is still the tail: anything queued in the meantime owns
+    // the entry now.
+    if (queues.get(key) === settled) queues.delete(key);
+  });
+  return run;
+}
+
+/**
  * Reads and writes one small JSON file.
  *
- * ## Writes are serialised, and each one re-reads inside its turn
+ * ## Every read is a fresh read
  *
- * Two concurrent writes used to each read the same old snapshot, spread their
- * own field over it and write it back — so toggling both preferences at once
- * lost whichever landed first. They also shared one `.new` sibling, so the
- * second write could rename a file the first had already moved and fail with
- * ENOENT. Both are ordinary: the settings card has two controls next to each
- * other. So writes queue, the read-modify-write happens inside the queue, and
- * the staging file is unique per write.
+ * There is deliberately no cached copy. A store used to keep the last good read
+ * and answer from it, which was wrong in two ways that only look like one:
  *
- * ## An unreadable file is never overwritten from defaults
+ *   * a write consulted that cache instead of the file, so a file that had
+ *     become corrupt since was reported healthy and the write OVERWROTE it —
+ *     defeating the refusal below, and destroying a file that might have been
+ *     recoverable;
+ *   * two stores each held their own cache, so one saving `verifyPeers` and the
+ *     other then saving `firstCloseAcknowledged` wrote the second store's stale
+ *     view back over the first's — silently reverting a security decision the
+ *     user had just made.
+ *
+ * The class comment used to promise that a write "re-reads inside its turn".
+ * With a cache in front of the read, it did not. It does now: the file is the
+ * only source of truth, and it is small enough that this costs nothing worth
+ * measuring.
+ *
+ * ## Writes are serialised per FILE, and each one re-reads inside its turn
+ *
+ * See `queues`. Reads are serialised too, which is what keeps a reader's open
+ * handle away from another store's rename on Windows.
+ *
+ * ## An unreadable file is never overwritten
  *
  * This is the one that mattered. `verifyPeers: true` is a security decision the
- * user made. If the file becomes temporarily unreadable and a write then
- * rebuilds it from defaults, that decision is silently reverted — and the app
- * reports the save as successful. So a write refuses while the file is
+ * user made. If the file becomes unreadable and a write then rebuilds it — from
+ * defaults, or from a stale cache — that decision is silently reverted, and the
+ * app reports the save as successful. So a write refuses while the file is
  * unreadable, and the refusal is surfaced rather than swallowed. A MISSING file
  * is different and is written normally: nobody has chosen anything yet.
  */
 export class PreferenceStore {
-  #cache: Preferences | null = null;
-  /** Writes run one at a time, in order. */
-  #tail: Promise<unknown> = Promise.resolve();
-
   constructor(private readonly filePath: string) {}
 
   /** The values, and whether they are known to be the user's. */
   async snapshot(): Promise<PreferenceSnapshot> {
-    if (this.#cache) return { values: this.#cache, health: "ok" };
+    return serialise(this.filePath, () => this.#readNow());
+  }
+
+  /**
+   * The file, read now. Never queued itself — callers inside the queue use this
+   * directly, and `snapshot` is the queued entry point.
+   */
+  async #readNow(): Promise<PreferenceSnapshot> {
     let raw: string;
     try {
       raw = await readFile(this.filePath, "utf8");
     } catch (err) {
-      // Deliberately NOT cached either way: a transient failure must not become
-      // this session's settled truth, and a missing file may be written at any
-      // moment by another window.
+      // A missing file may be written at any moment by another window, and a
+      // transient failure must not become this session's settled truth. Neither
+      // is remembered.
       return { values: DEFAULT_PREFERENCES, health: isMissing(err) ? "missing" : "unreadable" };
     }
     let parsed: unknown;
@@ -187,7 +271,6 @@ export class PreferenceStore {
       // other way, and reports the answer as theirs.
       return { values: DEFAULT_PREFERENCES, health: "unreadable" };
     }
-    this.#cache = values;
     return { values, health: "ok" };
   }
 
@@ -198,18 +281,19 @@ export class PreferenceStore {
   /**
    * Set one field.
    *
-   * Queued behind every earlier write, and the read happens inside this turn —
-   * so the value written is the current file plus this one field, never a stale
-   * snapshot plus this one field.
+   * Queued behind every earlier read and write of this FILE, from any store in
+   * this process, and the read happens inside this turn — so the value written
+   * is the current file plus this one field, never a remembered one plus this
+   * one field.
    */
   write(key: PreferenceKey, value: boolean): Promise<Preferences> {
-    const run = this.#tail.then(() => this.#writeNow(key, value));
-    this.#tail = run.catch(() => undefined);
-    return run;
+    return serialise(this.filePath, () => this.#writeNow(key, value));
   }
 
   async #writeNow(key: PreferenceKey, value: boolean): Promise<Preferences> {
-    const current = await this.snapshot();
+    // `#readNow`, not `snapshot`: this is already inside the queue, and
+    // re-entering it would wait on a chain this call is itself holding up.
+    const current = await this.#readNow();
     // Refused rather than rebuilt. Overwriting here would quietly revert a
     // preference the user set, and report success for it.
     if (current.health === "unreadable") throw new PreferenceStoreError("unreadable");
@@ -229,7 +313,6 @@ export class PreferenceStore {
       await rm(staging, { force: true }).catch(() => undefined);
       throw err;
     }
-    this.#cache = next;
     return next;
   }
 }
