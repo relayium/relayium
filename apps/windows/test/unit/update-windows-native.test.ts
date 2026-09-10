@@ -13,7 +13,7 @@
 // Windows-only by construction.
 import { spawnSync } from "node:child_process";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,7 +40,19 @@ afterEach(async () => {
   for (const dir of owned.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 
-const PAYLOAD = new Uint8Array(4096).fill(6);
+/**
+ * The artifact these tests download: a REAL unsigned PE.
+ *
+ * A buffer of repeated bytes is not a parseable image, so WinVerifyTrust answers
+ * `TRUST_E_SUBJECT_FORM_UNKNOWN` and the verdict is `unavailable` — "could not
+ * tell", not "carries no signature". With the real preview verifier in place
+ * that made `ready-unsigned` unreachable. The update helper itself is a
+ * Go-built, unsigned Windows executable that this suite already requires to
+ * exist, so its bytes are the fixture.
+ */
+const PAYLOAD = existsSync(helperPath)
+  ? new Uint8Array(readFileSync(helperPath))
+  : new Uint8Array(4096).fill(6);
 const SHA = createHash("sha256").update(PAYLOAD).digest("hex");
 const RELEASE = "https://github.com/relayium/relayium/releases/download/windows-v0.3.0/Setup.exe";
 

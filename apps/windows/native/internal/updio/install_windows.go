@@ -36,6 +36,7 @@ package updio
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"runtime"
 	"strings"
 	"unsafe"
@@ -52,14 +53,21 @@ const (
 )
 
 var (
-	wintrust                              = windows.NewLazySystemDLL("wintrust.dll")
-	crypt32                               = windows.NewLazySystemDLL("crypt32.dll")
-	procWinVerifyTrust                    = wintrust.NewProc("WinVerifyTrust")
-	procWTHelperProvDataFromState         = wintrust.NewProc("WTHelperProvDataFromStateData")
-	procWTHelperGetProvSignerFrom         = wintrust.NewProc("WTHelperGetProvSignerFromChain")
-	procCertGetNameStringW                = crypt32.NewProc("CertGetNameStringW")
-	actionGenericVerifyV2                 = windows.GUID{Data1: 0x00AAC56B, Data2: 0xCD44, Data3: 0x11D0, Data4: [8]byte{0x8C, 0xC2, 0x00, 0xC0, 0x4F, 0xC2, 0x95, 0xEE}}
-	trustERRSuccess               uintptr = 0
+	wintrust                             = windows.NewLazySystemDLL("wintrust.dll")
+	procWinVerifyTrust                   = wintrust.NewProc("WinVerifyTrust")
+	procWTHelperProvDataFromState        = wintrust.NewProc("WTHelperProvDataFromStateData")
+	procWTHelperGetProvSignerFrom        = wintrust.NewProc("WTHelperGetProvSignerFromChain")
+	actionGenericVerifyV2                = windows.GUID{Data1: 0x00AAC56B, Data2: 0xCD44, Data3: 0x11D0, Data4: [8]byte{0x8C, 0xC2, 0x00, 0xC0, 0x4F, 0xC2, 0x95, 0xEE}}
+	trustERRSuccess               uint32 = 0
+)
+
+// WinVerifyTrust statuses this build distinguishes. The function returns LONG,
+// which `Call` widens to a `uintptr`; only the low 32 bits are the status.
+const (
+	trustNoSignature        uint32 = 0x800B0100 // TRUST_E_NOSIGNATURE
+	trustSubjectFormUnknown uint32 = 0x800B0003 // TRUST_E_SUBJECT_FORM_UNKNOWN
+	trustProviderUnknown    uint32 = 0x800B0001 // TRUST_E_PROVIDER_UNKNOWN
+	trustActionUnknown      uint32 = 0x800B0002 // TRUST_E_ACTION_UNKNOWN
 )
 
 const (
@@ -245,14 +253,27 @@ func (c *WindowsCustody) verifyHeld(
 		return fail(VerdictUnavail, CodeIdentity)
 	}
 	verdict, subject, err := authenticode(handle, name)
-	if err != nil {
-		return fail(verdict, CodeUnavail)
+	if err != nil && verdict != VerdictUnsigned {
+		windows.CloseHandle(handle)
+		// The cause is carried so a Windows run reports the actual status
+		// instead of one opaque word.
+		return 0, verdict, Errw(CodeUnavail, err)
 	}
 	switch verdict {
 	case VerdictUnsigned:
 		return fail(VerdictUnsigned, CodeUnsigned)
 	case VerdictUnavail:
 		// A check that could not run is NOT "unsigned", and never ready.
+		return fail(VerdictUnavail, CodeUnavail)
+	}
+	if publisher == "" {
+		// Signed by SOMEONE, with no expectation to compare against.
+		//
+		// Not `expected`, because nothing was expected; and NOT `other`, because
+		// nothing was ruled out — reporting a mismatch against an unconfigured
+		// pin would tell the user their installer came from the wrong publisher
+		// when the truth is that this build has no opinion yet. `unavailable`
+		// claims neither and can never reach `ready`.
 		return fail(VerdictUnavail, CodeUnavail)
 	}
 	if subject != publisher {
@@ -423,9 +444,14 @@ func authenticode(h windows.Handle, name string) (string, string, error) {
 		StateAction:                     wtdStateActionVerify,
 		ProvFlags:                       wtdProvFlagsNone,
 	}
-	status, _, _ := procWinVerifyTrust.Call(
+	raw, _, _ := procWinVerifyTrust.Call(
 		0, uintptr(unsafe.Pointer(&actionGenericVerifyV2)), uintptr(unsafe.Pointer(&data)),
 	)
+	// `WinVerifyTrust` returns LONG (a signed 32-bit value); `Call` widens it to
+	// a `uintptr`, whose upper half on x64 is not something to assume anything
+	// about. The status is the low 32 bits, and the raw value is kept for the
+	// diagnosis.
+	status := uint32(raw)
 	defer func() {
 		data.StateAction = wtdStateActionClose
 		procWinVerifyTrust.Call(
@@ -439,12 +465,20 @@ func authenticode(h windows.Handle, name string) (string, string, error) {
 		runtime.KeepAlive(&data)
 	}()
 	if status != trustERRSuccess {
-		// Everything non-zero is a refusal. Whether it is "no signature" or "bad
-		// signature" only decides which refusal the host shows.
-		if status == uintptr(0x800B0100) { // TRUST_E_NOSIGNATURE
+		// Everything non-zero is a refusal. Which refusal depends on WHY, and
+		// the distinction is not cosmetic: `unsigned` offers the user a reveal,
+		// `unavailable` offers nothing.
+		switch status {
+		case trustNoSignature:
+			// A well-formed image carrying no signature.
 			return VerdictUnsigned, "", nil
+		case trustSubjectFormUnknown, trustProviderUnknown, trustActionUnknown:
+			// Not something this provider can even parse — a text file named
+			// `.exe`, for instance. That is "could not tell", not "not signed".
+			return VerdictUnavail, "", fmt.Errorf("winverifytrust malformed subject: 0x%08x", status)
+		default:
+			return VerdictUnavail, "", fmt.Errorf("winverifytrust: 0x%08x (raw 0x%x)", status, raw)
 		}
-		return VerdictUnavail, "", nil
 	}
 	subject, err := signerSubject(data.StateData)
 	// Read while the state data is still open — the deferred close above runs

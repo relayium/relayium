@@ -125,21 +125,21 @@ const (
 func classify(err error) error {
 	status, ok := err.(windows.NTStatus)
 	if !ok {
-		return Errf(CodeIO)
+		return Errw(CodeIO, err)
 	}
 	switch status {
 	case windows.STATUS_OBJECT_NAME_COLLISION:
-		return Errf(CodeExists)
+		return Errw(CodeExists, err)
 	case windows.STATUS_OBJECT_NAME_NOT_FOUND, windows.STATUS_OBJECT_PATH_NOT_FOUND:
-		return Errf(CodeNotFound)
+		return Errw(CodeNotFound, err)
 	case windows.STATUS_ACCESS_DENIED, windows.STATUS_SHARING_VIOLATION:
-		return Errf(CodeIO)
+		return Errw(CodeIO, err)
 	case windows.STATUS_NOT_A_DIRECTORY:
-		return Errf(CodeNotDir)
+		return Errw(CodeNotDir, err)
 	case windows.STATUS_IO_REPARSE_TAG_NOT_HANDLED:
-		return Errf(CodeRedirected)
+		return Errw(CodeRedirected, err)
 	}
-	return Errf(CodeIO)
+	return Errw(CodeIO, err)
 }
 
 // refuseReparse rejects a handle that names a reparse point.
@@ -157,7 +157,7 @@ func refuseReparse(h windows.Handle) error {
 		uint32(unsafe.Sizeof(info)),
 	)
 	if err != nil {
-		return Errf(CodeIO)
+		return Errw(CodeIO, fmt.Errorf("attribute tag: %w", err))
 	}
 	if info.FileAttributes&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
 		return Errf(CodeRedirected)
@@ -322,29 +322,55 @@ func assertRealVolume(volume string) error {
 // renameHeld publishes the object `file` names as `to`, beneath `parent`.
 //
 // The handle is the subject: no name is re-resolved, so the object published is
-// provably the object written. `FILE_RENAME_REPLACE_IF_EXISTS` is deliberate —
-// see the file header.
+// provably the object written, and `RootDirectory` is the held staging handle.
+//
+// ## What is known, and what is not
+//
+// The first Windows run failed here and reported `updio: io` and nothing more,
+// because the error was discarded. So THE ROOT CAUSE IS UNKNOWN: the original
+// call used the Win32 `SetFileInformationByHandle` with `FileRenameInfoEx`, and
+// whatever Windows said about it was never recorded.
+//
+// What this now does is match `internal/winio.renameNoReplace`, the pattern
+// already green on Windows in this repository: `NtSetInformationFile` with
+// `FileRenameInformation`, a buffer sized `Offsetof(FileName) + nameBytes`, and
+// the held parent as `RootDirectory`. That is the same layer as every other call
+// in this package, which uses `NtCreateFile` throughout; the Win32 call was the
+// anomaly. It is a CANDIDATE FIX pending a Windows run, not a diagnosis.
+//
+// The one deliberate difference from winio: `ReplaceIfExists` is TRUE. Publishing
+// the journal means atomically replacing the previous record, where the receive
+// sink must never overwrite a user's file.
+//
+// There is no second attempt. Adding another mutating path to "see if that one
+// works" would trade the diagnosis for a pass, and could report success while
+// discarding the error that explains the first failure. A failure here returns
+// the exact NTSTATUS instead.
 func renameHeld(file windows.Handle, parent windows.Handle, to string) error {
 	encoded, err := windows.UTF16FromString(to)
 	if err != nil {
-		return Errf(CodeBadName)
+		return Errw(CodeBadName, err)
 	}
-	// Drop the terminating NUL: FileNameLength counts bytes of characters.
-	encoded = encoded[:len(encoded)-1]
-	size := int(unsafe.Sizeof(fileRenameInformation{})) + (len(encoded)-1)*2
+	// `UTF16FromString` appends a NUL; `FileNameLength` counts bytes and
+	// excludes it.
+	nameBytes := (len(encoded) - 1) * 2
+	var proto fileRenameInformation
+	size := int(unsafe.Offsetof(proto.FileName)) + nameBytes
 	buffer := make([]byte, size)
 	info := (*fileRenameInformation)(unsafe.Pointer(&buffer[0]))
+	// The first field is a union: `BOOLEAN ReplaceIfExists` to the NT class.
 	info.Flags = windows.FILE_RENAME_REPLACE_IF_EXISTS
 	info.RootDirectory = parent
-	info.FileNameLength = uint32(len(encoded) * 2)
+	info.FileNameLength = uint32(nameBytes)
 	copy(
-		unsafe.Slice((*uint16)(unsafe.Pointer(&info.FileName[0])), len(encoded)),
-		encoded,
+		unsafe.Slice((*uint16)(unsafe.Pointer(&info.FileName[0])), nameBytes/2),
+		encoded[:len(encoded)-1],
 	)
-	if err := windows.SetFileInformationByHandle(
-		file, windows.FileRenameInfoEx, &buffer[0], uint32(size),
-	); err != nil {
-		return Errf(CodeIO)
+	var iosb windows.IO_STATUS_BLOCK
+	if status := windows.NtSetInformationFile(
+		file, &iosb, &buffer[0], uint32(size), windows.FileRenameInformation,
+	); status != nil {
+		return Errw(CodeIO, fmt.Errorf("rename %q: %w", to, status))
 	}
 	return nil
 }
@@ -358,7 +384,7 @@ func deleteByHandle(h windows.Handle) error {
 		h, windows.FileDispositionInfoEx,
 		(*byte)(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)),
 	); err != nil {
-		return Errf(CodeIO)
+		return Errw(CodeIO, fmt.Errorf("delete by handle: %w", err))
 	}
 	return nil
 }

@@ -14,8 +14,32 @@ import type {
   QuiesceRequest,
   ReleaseOutcome,
 } from "../../src/main/update/contracts.js";
+import {
+  posixScopeProvider,
+  type StagingScopeProvider,
+} from "../../src/main/update/custody.js";
+import {
+  HELPER_FILE_NAME,
+  nativeScopeProvider,
+} from "../../src/main/update/native-scope.js";
 import { UpdateService } from "../../src/main/update/service.js";
 import { PRODUCTION_TRUST_BASE } from "../../src/main/update/trust.js";
+
+/**
+ * The staging capability these tests run against.
+ *
+ * POSIX gets the POSIX one; Windows gets the native helper, because the
+ * fail-closed default would otherwise make every consent assertion a journal
+ * failure. Nothing here changes what a shipped build does.
+ */
+function capabilityForThisPlatform(): StagingScopeProvider {
+  if (process.platform !== "win32") return posixScopeProvider;
+  return nativeScopeProvider({
+    helperPath:
+      process.env["RELAYIUM_UPDATE_HELPER"] ??
+      join(process.cwd(), "native", "build", HELPER_FILE_NAME),
+  });
+}
 
 const owned: string[] = [];
 afterEach(async () => {
@@ -77,6 +101,15 @@ async function ready(options: {
     engineering: false,
     current: { version: "1.0.0", build: 1 },
     dataDirectory: dir,
+    // EXPLICIT, and platform-correct.
+    //
+    // Omitting this left the production default in place, which is fail-closed
+    // on Windows — correct for a shipped build with no adapter wired, and wrong
+    // for a test whose subject is CONSENT. The first Windows run turned all
+    // seven of these into `journal-unavailable`. The default is not weakened;
+    // the capability is injected, and on Windows it is the REAL one, so these
+    // assertions keep their meaning on both platforms.
+    scope: capabilityForThisPlatform(),
     verifier: { verify: async () => "signed-by-expected-publisher" },
     installer: {
       installVerified: async (expectation) => {

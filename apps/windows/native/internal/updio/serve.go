@@ -61,12 +61,31 @@ type Custody interface {
 }
 
 // Fault is an error carrying one closed-set code.
-type Fault struct{ Code string }
+//
+// `Cause` is for DIAGNOSIS ONLY and never crosses the wire: `dispatch` sends
+// `Code` and nothing else, so the host still learns exactly one closed-set word.
+// Inside this package — and in a Go test's failure message — it is the actual OS
+// error, because "updio: io" is not a diagnosis and a run that produces it
+// teaches nothing.
+type Fault struct {
+	Code  string
+	Cause error
+}
 
-func (f *Fault) Error() string { return "updio: " + f.Code }
+func (f *Fault) Error() string {
+	if f.Cause == nil {
+		return "updio: " + f.Code
+	}
+	return "updio: " + f.Code + ": " + f.Cause.Error()
+}
 
-// Errf builds a Fault.
+func (f *Fault) Unwrap() error { return f.Cause }
+
+// Errf builds a Fault with no recorded cause.
 func Errf(code string) error { return &Fault{Code: code} }
+
+// Errw builds a Fault that remembers what the OS actually said.
+func Errw(code string, cause error) error { return &Fault{Code: code, Cause: cause} }
 
 // IsCode reports whether err is a Fault carrying exactly this code.
 func IsCode(err error, code string) bool {

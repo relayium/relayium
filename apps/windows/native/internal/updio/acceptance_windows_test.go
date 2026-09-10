@@ -466,19 +466,41 @@ func signedFixture(t *testing.T, custody *WindowsCustody, name string) (string, 
 // implement, so the precondition is independent of the thing under test.
 func authenticodeStatus(t *testing.T, path string) (status string, subject string) {
 	t.Helper()
+	// The first Windows run got EMPTY output here with a zero exit code, which
+	// is exactly what an inline `-Command` produces when the cmdlet errors:
+	// `$s` is null, both `Write-Output`s print nothing, stderr is discarded by
+	// `.Output()`, and the failure looks like silence.
+	//
+	// So: a real script file rather than a quoted one-liner, `Stop` on any
+	// error, prefixed lines that cannot be confused with blank output, and
+	// COMBINED output so PowerShell's own message reaches the log.
+	script := filepath.Join(t.TempDir(), "signature.ps1")
+	body := "$ErrorActionPreference = 'Stop'\r\n" +
+		"$s = Get-AuthenticodeSignature -LiteralPath $args[0]\r\n" +
+		"Write-Output (\"STATUS=\" + $s.Status)\r\n" +
+		"Write-Output (\"SUBJECT=\" + $s.SignerCertificate.Subject)\r\n"
+	if err := os.WriteFile(script, []byte(body), 0o600); err != nil {
+		t.Fatalf("signature script: %v", err)
+	}
 	out, err := exec.Command(
-		"powershell", "-NoProfile", "-Command",
-		"$s = Get-AuthenticodeSignature -LiteralPath '"+path+"'; "+
-			"Write-Output $s.Status; Write-Output $s.SignerCertificate.Subject",
-	).Output()
+		"powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+		"-File", script, path,
+	).CombinedOutput()
 	if err != nil {
-		t.Fatalf("cannot read the fixture's signature: %v", err)
+		t.Fatalf("reading the signature of %s failed: %v\n%s", path, err, out)
 	}
-	lines := strings.Split(strings.ReplaceAll(string(out), "\r\n", "\n"), "\n")
-	if len(lines) < 2 {
-		t.Fatalf("unexpected signature output: %q", out)
+	for _, line := range strings.Split(strings.ReplaceAll(string(out), "\r\n", "\n"), "\n") {
+		switch {
+		case strings.HasPrefix(line, "STATUS="):
+			status = strings.TrimSpace(strings.TrimPrefix(line, "STATUS="))
+		case strings.HasPrefix(line, "SUBJECT="):
+			subject = strings.TrimSpace(strings.TrimPrefix(line, "SUBJECT="))
+		}
 	}
-	return strings.TrimSpace(lines[0]), strings.TrimSpace(lines[1])
+	if status == "" {
+		t.Fatalf("no signature status for %s; PowerShell said:\n%s", path, out)
+	}
+	return status, subject
 }
 
 // actualSubject is the pin, taken from .NET rather than from the code under
@@ -620,11 +642,31 @@ func TestATamperedFixtureIsRefused(t *testing.T) {
 }
 
 func TestAnUnsignedArtifactIsUnsignedNotUnavailable(t *testing.T) {
-	// Case 18.
+	// Case 18, with a REAL PE.
+	//
+	// The first Windows run used `MZ not really` repeated and got `unavailable`.
+	// The log recorded only that verdict, never a numeric status, so the precise
+	// reason is NOT established — a malformed image is the likely cause, since
+	// it is not a parseable subject, but that is an inference until a run prints
+	// the status. Either way the case needs a well-formed image that simply
+	// carries no signature, and this test binary is exactly that: a Go-built
+	// unsigned PE sitting on disk.
+	source, err := os.Executable()
+	if err != nil {
+		t.Fatalf("locating the test binary: %v", err)
+	}
+	content, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatalf("reading the test binary: %v", err)
+	}
+	// Asserted independently, so this cannot silently become a signed fixture.
+	if status, _ := authenticodeStatus(t, source); status != "NotSigned" {
+		t.Fatalf("the unsigned fixture %s reports %q; it must carry no signature", source, status)
+	}
+
 	root := appRoot(t)
 	custody := newSession(t, root, "updates")
 	name := "relayium-0.3.0-9-0011223344556677.exe"
-	content := bytes.Repeat([]byte("MZ not really"), 64)
 	handle, receipt := staged(t, custody, name, content)
 	if err := custody.Release(handle); err != nil {
 		t.Fatal(err)
@@ -643,12 +685,75 @@ func TestAnUnsignedArtifactIsUnsignedNotUnavailable(t *testing.T) {
 	}
 }
 
-func TestNoPinMeansNoInstallAtAll(t *testing.T) {
-	// Case 19.
+func TestAMalformedImageIsUnavailableNotUnsigned(t *testing.T) {
+	// The other half of the distinction, kept separate on purpose. Something
+	// that is not an image at all cannot be reported as "carries no signature":
+	// the question was never answered.
 	root := appRoot(t)
 	custody := newSession(t, root, "updates")
-	if _, err := custody.VerifyInstaller("a.exe", "win:1:2", strings.Repeat("a", 64), "", 10); !IsCode(err, CodeNoPin) {
-		t.Fatalf("an empty pin was not refused: %v", err)
+	name := "relayium-0.3.0-9-0011223344556677.exe"
+	content := bytes.Repeat([]byte("MZ not really"), 64)
+	handle, receipt := staged(t, custody, name, content)
+	if err := custody.Release(handle); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(content)
+	verdict, err := custody.VerifyInstaller(
+		name, receipt, hex.EncodeToString(sum[:]), "CN=Relayium", int64(len(content)),
+	)
+	if err == nil {
+		t.Fatal("a malformed image verified")
+	}
+	if verdict != VerdictUnavail {
+		t.Fatalf("verdict %q, want %q", verdict, VerdictUnavail)
+	}
+}
+
+func TestNoPinMeansNoInstallAtAll(t *testing.T) {
+	// Case 19, against the operation the rule belongs to.
+	//
+	// The first Windows run asserted this on `VerifyInstaller` and got
+	// `identity-changed`, because verify CLASSIFIES and reaches the file first.
+	// The pin rule guards LAUNCHING, and it must refuse before touching
+	// anything — which is why a name that does not exist still yields
+	// `no-expected-publisher` rather than a missing-file error.
+	root := appRoot(t)
+	custody := newSession(t, root, "updates")
+	if _, err := custody.RunInstaller(
+		"relayium-9.9.9-1-00112233445566aa.exe", "win:1:2", strings.Repeat("a", 64), "", 10,
+	); !IsCode(err, CodeNoPin) {
+		t.Fatalf("an empty pin did not refuse the launch: %v", err)
+	}
+	// Positive control, asserted EXACTLY. With a pin configured the same call
+	// must get past the pin rule and fail on the FILE — that is what proves the
+	// refusal above was the rule and not some earlier fault. A bare "not
+	// CodeNoPin" would also accept nil, or any unrelated early failure, and
+	// would prove nothing about where the call reached.
+	_, err := custody.RunInstaller(
+		"relayium-9.9.9-1-00112233445566aa.exe", "win:1:2", strings.Repeat("a", 64), "CN=X", 10,
+	)
+	if !IsCode(err, CodeIdentity) {
+		t.Fatalf("with a pin configured the call did not reach the missing file: %v", err)
+	}
+}
+
+func TestAPinlessPreviewClassifiesWithoutClaimingAPublisher(t *testing.T) {
+	// A validly signed file with NOTHING configured to compare against.
+	//
+	// Not `expected`, because nothing was expected. Not `other`, because nothing
+	// was ruled out — telling a user their installer came from the wrong
+	// publisher when the build simply has no pin yet would be false. This is the
+	// state a build with no certificate provisioned actually reports.
+	root := appRoot(t)
+	custody := newSession(t, root, "updates")
+	name := "relayium-0.3.0-9-0011223344556677.exe"
+	receipt, size, digest := signedFixture(t, custody, name)
+	verdict, err := custody.VerifyInstaller(name, receipt, digest, "", size)
+	if err == nil {
+		t.Fatal("a pinless preview reported success")
+	}
+	if verdict != VerdictUnavail {
+		t.Fatalf("verdict %q, want %q", verdict, VerdictUnavail)
 	}
 }
 
