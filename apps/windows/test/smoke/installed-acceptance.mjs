@@ -449,12 +449,58 @@ async function main() {
 
   const shellText = await cdp.evaluate("document.body.innerText");
   check("the shell rendered", typeof shellText === "string" && shellText.includes("Relayium"), shellText?.slice(0, 120));
-  // Present, deliberately not clicked: no device code is minted, no browser
-  // opens, no account is touched by this test.
-  check(
-    "sign-in control present but untouched",
-    (await cdp.evaluate("document.querySelector('[data-test=\"sign-in\"]') !== null")) === true,
-  );
+  // ---- The sign-in control, reached the way a user reaches it -----------
+  //
+  // ## Why this navigates instead of querying the page it landed on
+  //
+  // The previous revision asked for `sign-in` on whatever page was showing.
+  // That was a foundation-UI assumption: a fresh process lands on LAN and
+  // starts a room by itself — the product behaviour — so the control is not on
+  // that page at all, and the assertion reported it missing. Run
+  // 34500018599 failed on exactly that and on nothing else.
+  //
+  // So the account page is reached through the sidebar, which is what a user
+  // does. NOTHING beyond that row is clicked: no device code is minted, no
+  // browser opens, no request is made and no account is touched by this test.
+  //
+  // The crypto gate comes first. Until libsodium has loaded, the main pane
+  // shows the starting card and every page's controls are absent — so without
+  // this wait a pending gate would be reported as a missing button.
+  const present = (name) =>
+    cdp.evaluate(`document.querySelector('[data-test="${name}"]') !== null`);
+  if (
+    (await waitFor(
+      "the encryption library to load",
+      async () => (await present("crypto-pending")) === false,
+      DEADLINE.launch,
+    )) &&
+    (await waitFor(
+      "the sidebar account row",
+      async () => (await present("nav-account")) === true,
+      DEADLINE.launch,
+    ))
+  ) {
+    // A sidebar row carries its `data-test` on the `li` and its handler on the
+    // `button` inside, so clicking the marked element itself would dispatch an
+    // event nothing listens to and then report success.
+    const clicked = await cdp.evaluate(
+      '(() => { const el = document.querySelector(\'[data-test="nav-account"]\');' +
+        " if (!el) return false;" +
+        ' const target = el.tagName === "BUTTON" ? el : el.querySelector("button") ?? el;' +
+        " target.click(); return true; })()",
+    );
+    check("sidebar account row clicked", clicked === true);
+    if (
+      await waitFor(
+        "the signed-out account page",
+        async () => (await present("sign-in")) === true,
+        DEADLINE.launch,
+      )
+    ) {
+      // Present, and deliberately not clicked.
+      check("sign-in control present but untouched", (await present("sign-in")) === true);
+    }
+  }
 
   // ---- Profile BEFORE any second instance exists ------------------------
   //
