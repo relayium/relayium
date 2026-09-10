@@ -49,9 +49,26 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 
-/** `server/internal/storage/usage.go` as reviewed. See the guard above. */
+/**
+ * `server/internal/storage/usage.go` as reviewed, in BOTH line-ending forms.
+ *
+ * The Windows lane checked the file out with CRLF endings, so a byte hash of the
+ * reviewed content did not match and the guard correctly refused — the first
+ * Windows run never reached the probe. That is newline conversion by the
+ * checkout, not a change to the server source: the CRLF digest below is exactly
+ * `sha256(reviewedLF.replaceAll("\n", "\r\n"))`, verified on both sides.
+ *
+ * Two EXACT digests, deliberately, rather than normalising before hashing.
+ * Accepting "the reviewed bytes, or the reviewed bytes with LF->CRLF applied"
+ * still refuses everything else — a changed body, a stray bare CR, a trimmed
+ * trailing newline — whereas a whitespace-normalising guard would wave those
+ * through. The guard's whole job is to refuse a production change it cannot see.
+ */
 export const ORIGINAL_USAGE_SHA256 =
   "fddcb1225dd71d369a48fc9fcf0009003ba63683a35b9b3f7dbeb3f975b7c8a4";
+/** The same reviewed content, LF->CRLF, as a Windows checkout produces it. */
+export const ORIGINAL_USAGE_SHA256_CRLF =
+  "ae2932d5caa6c81064c509bc5f17306e707cd8acaa6e9b03f64769b06933ee25";
 
 /** The signature the replacement must keep answering. */
 const REQUIRED_SIGNATURE = "func DiskUsage(path string) (used, total uint64, err error)";
@@ -111,24 +128,30 @@ const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 export async function prepareServerOverlay({ repoRoot, taskRoot, goos = process.platform }) {
   const windowsTarget = goos === "win32" || goos === "windows";
   const targetPath = join(repoRoot, "server", RELATIVE_TARGET);
-  const original = await readFile(targetPath, "utf8");
-  const digest = sha256(Buffer.from(original, "utf8"));
+  // Raw bytes: the line-ending form is exactly what is being judged here, so it
+  // must not be lost to a decode.
+  const rawBytes = await readFile(targetPath);
+  const digest = sha256(rawBytes);
+  const original = rawBytes.toString("utf8");
+  const form = digest === ORIGINAL_USAGE_SHA256 ? "lf"
+    : digest === ORIGINAL_USAGE_SHA256_CRLF ? "crlf" : null;
 
   // Checked on EVERY platform, including the ones that need no overlay: a
   // production change to this file must be noticed where it happens, not only
   // on the runner that would have overlaid it.
-  if (digest !== ORIGINAL_USAGE_SHA256) {
+  if (form === null) {
     throw new Error(
-      `SETUP: ${RELATIVE_TARGET} is not the reviewed file (sha256 ${digest}, expected ` +
-      `${ORIGINAL_USAGE_SHA256}). The fixture overlay refuses to hide a production change: ` +
-      `review the new implementation and update ORIGINAL_USAGE_SHA256 deliberately.`);
+      `SETUP: ${RELATIVE_TARGET} is not the reviewed file (sha256 ${digest}; expected ` +
+      `${ORIGINAL_USAGE_SHA256} as checked out with LF, or ${ORIGINAL_USAGE_SHA256_CRLF} with CRLF). ` +
+      `The fixture overlay refuses to hide a production change: review the new implementation and ` +
+      `update the constants deliberately.`);
   }
   if (!original.includes(REQUIRED_SIGNATURE)) {
     throw new Error(`SETUP: ${RELATIVE_TARGET} no longer declares \`${REQUIRED_SIGNATURE}\``);
   }
 
   if (!windowsTarget) {
-    return { args: [], provenance: { overlaid: false, target: goos, original: digest } };
+    return { args: [], provenance: { overlaid: false, target: goos, original: digest, form } };
   }
 
   const dir = join(taskRoot, "server-overlay");
@@ -145,6 +168,7 @@ export async function prepareServerOverlay({ repoRoot, taskRoot, goos = process.
       target: "windows",
       replaced: RELATIVE_TARGET,
       original: digest,
+      form,
       replacement: sha256(Buffer.from(WINDOWS_USAGE_GO, "utf8")),
       overlayJSON,
       note: "real Go HTTP handlers, unmodified, plus a test-only Windows disk-probe adapter; "
