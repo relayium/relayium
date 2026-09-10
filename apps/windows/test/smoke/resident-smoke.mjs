@@ -37,7 +37,11 @@ import electronPath from "electron";
 
 const smokeMain = fileURLToPath(new URL("./resident-main.mjs", import.meta.url));
 const cwd = fileURLToPath(new URL("../..", import.meta.url));
-const TIMEOUT_MS = 90_000;
+// Raised with the Device Inbox scenarios, which add a sign-in, a consent
+// refusal and acceptance, a hide, a page navigation, a message opened from a
+// real encrypted vault, a refused quit and an account change. The budget is a
+// backstop against a hung Electron, not a performance target.
+const TIMEOUT_MS = 180_000;
 
 const owned = [
   mkdtempSync(path.join(tmpdir(), "relayium-resident-profile-")),
@@ -45,7 +49,20 @@ const owned = [
   // Where the injected picker points. A real lease writes real staging bytes
   // here, so the cleanup this smoke exercises has something to clean up.
   mkdtempSync(path.join(tmpdir(), "relayium-resident-dest-")),
+  // The Device Inbox's own data root. Task-owned, because this run writes a
+  // real encrypted vault and a real journal into it — and because
+  // `currentDataRoot()` refuses to invent one on a host that is not Windows,
+  // which is where this smoke actually executes.
+  mkdtempSync(path.join(tmpdir(), "relayium-resident-inbox-")),
 ];
+
+/** The last of what the child said, for a failure that needs explaining. */
+const TRANSCRIPT_BYTES = 8000;
+function transcript() {
+  const tail = (label, text) =>
+    text.length === 0 ? "" : `--- child ${label} (last ${String(TRANSCRIPT_BYTES)} bytes) ---\n${text.slice(-TRANSCRIPT_BYTES)}\n`;
+  return `${tail("stdout", out)}${tail("stderr", err)}`;
+}
 
 /** Returns the paths that could NOT be removed, so nothing is claimed falsely. */
 function removeOwned() {
@@ -120,7 +137,17 @@ child.on("exit", (code) => {
   }
   const { failures } = JSON.parse(line.slice("RELAYIUM_SMOKE ".length));
   if (failures.length > 0) {
-    finish(1, `smoke: ${failures.length} failed\n${failures.join("\n")}\n`);
+    // ## The child's transcript survives a failure
+    //
+    // It did not, and that cost a diagnosis: this branch printed the failure
+    // list and dropped everything the child had written, so a scenario that
+    // threw reported "Script failed to execute" with the renderer error, the
+    // failing expression and every progress line already captured in `err` and
+    // discarded here. The timeout branch above kept them; the branch that
+    // actually fires on a broken assertion did not.
+    //
+    // Bounded rather than unbounded: this is a diagnostic tail, not a log.
+    finish(1, `smoke: ${failures.length} failed\n${failures.join("\n")}\n${transcript()}`);
     return;
   }
   if (code !== 0) {

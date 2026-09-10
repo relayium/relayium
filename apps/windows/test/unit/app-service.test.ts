@@ -825,3 +825,74 @@ describe("privileged request admission", () => {
     expect(started.expiresIn).toBe(START_RESPONSE.expiresIn - 120);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The account-change watcher, and the credential a main feature captures
+// ---------------------------------------------------------------------------
+
+describe("the account authority a resident feature subscribes to", () => {
+  it("wakes its watchers exactly once for one sign-out", async () => {
+    // `signOut` used to call `notifyAuthorityChange()` twice — once where it
+    // belongs, immediately after the epoch bump, and once more a few lines
+    // later at a misleading indentation. Nothing between the two calls changes
+    // what a watcher observes, so the second was pure duplication.
+    //
+    // It matters because a watcher is a callback of unknown cost. The Device
+    // Inbox scheduler tears a binding down from one: invalidate, abort, and
+    // queue a join. Firing it twice for a single transition runs that teardown
+    // a second time against state the first pass already retired.
+    const { service } = harness();
+    const nonce = nextNonce();
+    await service.startSignIn(nonce);
+    await service.pollSignIn(nonce);
+
+    let woken = 0;
+    const release = service.onAccountChanged(() => {
+      woken += 1;
+    });
+    await service.signOut();
+    release();
+
+    expect(woken).toBe(1);
+  });
+
+  it("stops waking a watcher that released itself", async () => {
+    const { service } = harness();
+    let woken = 0;
+    service.onAccountChanged(() => {
+      woken += 1;
+    })();
+    const nonce = nextNonce();
+    await service.startSignIn(nonce);
+    await service.pollSignIn(nonce);
+    await service.signOut();
+    expect(woken).toBe(0);
+  });
+
+  it("hands a main feature the bearer and the epoch it was read under", async () => {
+    const { service } = harness();
+    expect(await service.captureAccountAuthority()).toEqual({ kind: "signed-out" });
+
+    const nonce = nextNonce();
+    await service.startSignIn(nonce);
+    await service.pollSignIn(nonce);
+
+    const captured = await service.captureAccountAuthority();
+    expect(captured).toEqual({ kind: "ok", bearer: "tok", epoch: service.accountEpoch });
+
+    await service.signOut();
+    expect(await service.captureAccountAuthority()).toEqual({ kind: "signed-out" });
+  });
+
+  it("reports an unusable store as unavailable rather than as signed out", async () => {
+    // The distinction the Inbox depends on: an enrolment may still be live on
+    // the server, so "could not read this PC's storage" must not be rendered as
+    // an invitation to switch a feature on that is already on.
+    const { service } = harness({
+      makeStore: async () => {
+        throw new SecretStoreError("encryption-unavailable");
+      },
+    });
+    expect(await service.captureAccountAuthority()).toEqual({ kind: "unavailable" });
+  });
+});

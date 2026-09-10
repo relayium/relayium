@@ -12,13 +12,24 @@
 // else is the shipping path: the real `ResidentRuntime`, the real
 // `QuitCoordinator`, the real `AppService`.
 
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, clipboard } from "electron";
 import { SecretStore } from "../../dist/main/secrets.js";
 import { IceControl } from "../../dist/main/net/ice-control.js";
 import { PairControl } from "../../dist/main/net/pair-control.js";
 import { PreferenceStore } from "../../dist/main/preferences.js";
-import { bootstrap, ownedReceives, residentRuntime } from "../../dist/main/main.js";
+import { bootstrap, ownedReceives, residentRuntime, wakeInbox } from "../../dist/main/main.js";
 import { receiveStoredLink } from "../../dist/main/stored/receive.js";
+// The REAL vault and the REAL grant store, used to seed one message before the
+// account is adopted. Not a fake: the record this writes is sealed with the
+// same at-rest key the receiver would use, into the same directory, and the
+// page reads it back through the shipped facade. What it does NOT prove is the
+// receive path that normally puts it there — that has its own owning tests
+// (`inbox-facade.test.ts`, `inbox-receive.test.ts`), and a smoke that forged a
+// delivery would need a second manifest encoder to do it.
+import { captureAccount } from "../../dist/main/inbox/account.js";
+import { InboxFiles } from "../../dist/main/inbox/files.js";
+import { MessageVault } from "../../dist/main/inbox/vault.js";
+import { InboxGrantStore } from "../../dist/main/features/inbox-grant.js";
 import path from "node:path";
 
 const failures = [];
@@ -26,8 +37,8 @@ const check = (name, ok, detail) => {
   if (!ok) failures.push(detail ? `${name}: ${detail}` : name);
 };
 
-const [userDataDir, secretsDir, destinationDir] = process.argv.slice(2);
-if (!userDataDir || !secretsDir || !destinationDir) {
+const [userDataDir, secretsDir, destinationDir, inboxRootDir] = process.argv.slice(2);
+if (!userDataDir || !secretsDir || !destinationDir || !inboxRootDir) {
   process.stdout.write(
     `RELAYIUM_SMOKE ${JSON.stringify({ failures: ["missing task-owned directory arguments"] })}\n`,
   );
@@ -164,6 +175,108 @@ async function streamingReceive(options) {
 }
 
 /** How the injected dialogs answer, changed per scenario. */
+/**
+ * The Device Inbox's side of this run.
+ *
+ * A stand-in for `InboxApi` that records what was actually SENT — an enrolment
+ * with a capability set, a withdrawal, an accept with the flag central reads —
+ * so every assertion below is a side effect rather than an acknowledgement.
+ */
+const inbox = {
+  device: { id: "smoke-device", name: "Smoke PC" },
+  folderUsable: true,
+  /** What the injected folder dialog answers. `null` is a person closing it. */
+  pick: () => destinationDir,
+  enrolled: 0,
+  withdrawn: 0,
+  heartbeats: 0,
+  lastCapabilities: [],
+  lastAutoAccept: "",
+  accepted: [],
+  /** What `pending` hands back, so a delivery can be offered on demand. */
+  tasks: [],
+};
+
+const inboxApi = {
+  async enrol(request) {
+    inbox.enrolled += 1;
+    inbox.lastCapabilities = [...request.capabilities];
+    inbox.lastAutoAccept = request.autoAccept;
+    return { protocolVersion: 3, receiveCapability: "inbox.receive.v3", keyAlgorithm: "x25519" };
+  },
+  async deleteInbox() {
+    inbox.withdrawn += 1;
+  },
+  async registerKey() {
+    return { ID: "key-1" };
+  },
+  async listKeys() {
+    return [];
+  },
+  async pending() {
+    return { tasks: inbox.tasks, leaseSeconds: 60, heartbeatIntervalSecs: 30 };
+  },
+  async accept(taskID, accept) {
+    inbox.accepted.push({ taskID, accept });
+    // Central acknowledges the accept; the delivery is then leased by a claim,
+    // and this run has none to hand back — which is exactly the `queued`
+    // outcome the page must render truthfully rather than as a save.
+    inbox.tasks = inbox.tasks.filter((task) => task.ID !== taskID);
+    return { ID: taskID, State: "queued", Terminal: false };
+  },
+  async claim() {
+    return { deliveries: [], leaseSeconds: 60 };
+  },
+  async report() {
+    return { State: "saved", Terminal: true, SavedAt: 1 };
+  },
+  async currentDevice() {
+    return { ID: inbox.device.id, Name: inbox.device.name };
+  },
+  async blob() {
+    throw new Error("no delivery in this run");
+  },
+  async renameDevice(name) {
+    inbox.device = { ...inbox.device, name };
+    return name;
+  },
+  async heartbeat() {
+    inbox.heartbeats += 1;
+    return { presence: "online", intervalSeconds: 30 };
+  },
+};
+
+/** One pending delivery, as central would list it. No token, no key. */
+function pendingTask(id) {
+  return {
+    ID: id,
+    SourceDeviceID: "another-device",
+    IdempotencyKey: `idem-${id}`,
+    State: "notified",
+    ErrorCode: "",
+    CiphertextBytes: 4096,
+    WrapAlgorithm: "x25519",
+    TargetKeyID: "key-1",
+    TargetKeyGeneration: 1,
+    CreatedAt: 1_700_000_000,
+    ExpiresAt: 1_900_000_000,
+    SavedAt: 0,
+    Terminal: false,
+  };
+}
+
+/** What the injected device-auth poll answers. Flipped to sign in for real. */
+let pollAnswer = { status: "pending" };
+
+/**
+ * ONE store instance for this run.
+ *
+ * `SecretStore` serialises per key WITHIN an instance, and `putIfAbsent`'s
+ * create-once guarantee holds nowhere else — so a factory that built a fresh
+ * store per call would be testing a composition the app does not use.
+ */
+const smokeSecretStore = new SecretStore(secretsDir, testCipher);
+
 const answers = {
   firstClose: 0, // 0 hide, 1 quit, 2 cancel
   confirm: [], // consumed in order; `true` is Quit, `false` is Stay
@@ -183,7 +296,7 @@ async function main() {
   await bootstrap({
     showOnLaunch: false,
     composition: {
-      makeStore: async () => new SecretStore(secretsDir, testCipher),
+      makeStore: async () => smokeSecretStore,
       makeAuthClient: () => ({
         start: async () => ({
           userCode: "SMOKE-CODE",
@@ -192,7 +305,7 @@ async function main() {
           interval: 1,
           expiresIn: 600,
         }),
-        poll: async () => ({ status: "pending" }),
+        poll: async () => pollAnswer,
       }),
       openApproval: async () => true,
       makeSignalingSocket: makeSyntheticSocket,
@@ -201,7 +314,21 @@ async function main() {
       makePreferences: () => new PreferenceStore(path.join(secretsDir, "preferences.json")),
       // A lease can be opened without a person. The renderer still cannot name
       // this path: it names a room and a manifest, exactly as it always does.
-      pickDirectory: async () => destinationDir,
+      // A variable rather than a constant, so the Inbox scenario can answer it
+      // the way a person closing the dialog does.
+      pickDirectory: async () => inbox.pick(),
+      // The Device Inbox's seams. The runtime, the facade, the stores, the
+      // scheduler and every guard are the shipped ones; what is injected is the
+      // network, the device row central would issue, the folder probe, and a
+      // task-owned data root. The backoff is an hour on every arm so nothing
+      // fires on its own and each pass is stepped deliberately.
+      inbox: {
+        dataRoot: () => inboxRootDir,
+        makeApi: () => inboxApi,
+        resolveDevice: async () => inbox.device,
+        directoryUsable: async () => inbox.folderUsable,
+        backoff: { idle: 3600, afterWork: 3600, first: 3600, cap: 3600, blocked: 3600 },
+      },
       storedReceive: { receive: streamingReceive },
       // Never the real Windows startup programs: this run must not add itself
       // to whatever machine it happens to be on.
@@ -260,6 +387,18 @@ async function main() {
   await scenarioRepeatedQuitJoins(runtime);
   await scenarioResidentSurfaces(win, runtime);
   await scenarioStoredReceive(win, runtime);
+  // The Device Inbox vertical, in order: consent, the resident promise, the
+  // held deliveries, the message history, a refused quit, and an account
+  // change. It signs in for real and signs out at the end, so the anonymous
+  // stored-download scenario below still starts from a signed-out app.
+  await seedOneMessage(smokeSecretStore);
+  await scenarioInboxConsent(win);
+  await scenarioInboxKeepsReceiving(win, runtime);
+  await scenarioInboxPending(win);
+  await scenarioInboxMessages(win);
+  await scenarioInboxQuitStay(win, runtime);
+  await scenarioControlMetrics(win);
+  await scenarioInboxAccountChange(win);
   await scenarioAnonymousAcrossSignOut(win);
   await scenarioNoLateStartWhileQuitting(win, runtime);
   // Last: it replaces the document every earlier scenario was driving.
@@ -267,6 +406,383 @@ async function main() {
 
   report();
   app.exit(failures.length === 0 ? 0 : 1);
+}
+
+
+// ---------------------------------------------------------------------------
+// Device Inbox — receive
+// ---------------------------------------------------------------------------
+
+/** Click what a person clicks: the row's own button, not its marked wrapper. */
+const clickTest = (win, name) =>
+  js(
+    win,
+    `(() => { const el = document.querySelector('[data-test="${name}"]'); if (!el) return false;` +
+      ` const target = el.tagName === "BUTTON" ? el : el.querySelector("button") ?? el;` +
+      ` target.click(); return true; })()`,
+  );
+
+const present = (win, name) => js(win, `document.querySelector('[data-test="${name}"]') !== null`);
+
+const shown = (win, name) => js(win, `document.querySelector('[data-test="${name}"]')?.textContent ?? ""`);
+
+/** A wait the Inbox scenarios use: this run steps the scheduler itself, so a
+ *  condition that is not met quickly is a failure rather than a slow success. */
+const waitInbox = (win, what, expr) => waitFor(win, what, expr, 8000);
+
+async function openInbox(win) {
+  await js(win, `(() => { document.querySelector('[data-test="nav-inbox"] button')?.click(); return true; })()`);
+  return waitInbox(win, "the Inbox page", `document.querySelector('[data-test="inbox-enable"]') !== null
+    || document.querySelector('[data-test="inbox-disable"]') !== null
+    || document.querySelector('[data-test="inbox-sign-in"]') !== null`);
+}
+
+/**
+ * Seed ONE real message before the account is adopted.
+ *
+ * Written through the shipped `MessageVault` with the at-rest key the shipped
+ * grant store mints, into the directory the shipped context derives — so the
+ * page below reads it back through the real facade, the real decryption and the
+ * real IPC. Done BEFORE sign-in because the vault caches its index once bound:
+ * seeding afterwards would be invisible for a reason that has nothing to do
+ * with the product.
+ */
+async function seedOneMessage(store) {
+  const context = captureAccount({
+    // The service scopes an account by the DEVICE ROW central issues, which is
+    // what this run's `resolveDevice` answers.
+    accountID: inbox.device.id,
+    deviceID: inbox.device.id,
+    epoch: 1,
+    inboxRoot: `${inboxRootDir}/inbox`,
+  });
+  const grants = new InboxGrantStore(store);
+  const vault = new MessageVault(context, new InboxFiles(context), () => grants.atRestKey(context.accountKey));
+  await vault.saveText({
+    id: "seeded-message",
+    taskID: "seeded-task",
+    sourceDeviceID: "another-device",
+    plaintext: new TextEncoder().encode("hello from the phone"),
+    now: 1_700_000_000,
+  });
+}
+
+/**
+ * The consent order, in the real DOM: refused first, then given.
+ *
+ * The assertion that matters is `inbox.enrolled`. A page that showed an "on"
+ * state without an enrolment would be lying; a page that enrolled without a
+ * folder would advertise a device with nowhere to put what arrives.
+ */
+async function scenarioInboxConsent(win) {
+  const onPage = await openInbox(win);
+  check("the Inbox page opens", onPage === true);
+
+  // Signed out: the page says which of the four ways to be off this is.
+  check("a signed-out Inbox says to sign in", (await present(win, "inbox-sign-in")) === true);
+  check("nothing enrolled while signed out", inbox.enrolled === 0, String(inbox.enrolled));
+
+  // Sign in for real, through the real IPC and the injected device flow.
+  pollAnswer = { status: "ok", accessToken: "smoke-bearer", accountEmail: "smoke@example.invalid" };
+  const nonce = "inbox-smoke-nonce";
+  await js(win, `globalThis.relayium.auth.start({ nonce: ${JSON.stringify(nonce)} })`);
+  const polled = await js(
+    win,
+    `globalThis.relayium.auth.poll({ nonce: ${JSON.stringify(nonce)} }).then((r) => r.status, () => "threw")`,
+  );
+  check("the smoke signed in over real IPC", polled === "ok", String(polled));
+
+  // The scheduler binds on its own — nothing on this page started it.
+  await openInbox(win);
+  const offered = await waitInbox(win, "the off state for a signed-in account", `document.querySelector('[data-test="inbox-enable"]') !== null`);
+  check("a signed-in Inbox starts DISABLED", offered === true);
+  check("binding an account does not enrol it", inbox.enrolled === 0, String(inbox.enrolled));
+
+  // ---- refusal ------------------------------------------------------------
+  inbox.pick = () => null; // the person closes the dialog
+  check("turn on was clicked", await clickTest(win, "inbox-enable"));
+  const declined = await waitInbox(win, "the refusal notice", `document.querySelector('[data-test="inbox-notice"]') !== null`);
+  check("closing the folder dialog is reported as its own outcome", declined === true);
+  check("a closed dialog enrols nothing", inbox.enrolled === 0, String(inbox.enrolled));
+  check(
+    "and the page still offers to turn it on",
+    (await present(win, "inbox-enable")) === true,
+  );
+
+  // ---- consent ------------------------------------------------------------
+  inbox.pick = () => destinationDir;
+  await clickTest(win, "inbox-notice-dismiss");
+  check("turn on was clicked again", await clickTest(win, "inbox-enable"));
+  const on = await waitInbox(win, "the on state", `document.querySelector('[data-test="inbox-disable"]') !== null`);
+  check("choosing a folder turns receiving on", on === true);
+  check("it enrolled exactly once", inbox.enrolled === 1, String(inbox.enrolled));
+  check(
+    "it advertised only what this build composes",
+    inbox.lastCapabilities.join(",") === "inbox.receive.v3,inbox.text.v1",
+    inbox.lastCapabilities.join(","),
+  );
+  check("it did not claim auto-accept", inbox.lastAutoAccept === "ask", inbox.lastAutoAccept);
+
+  // The page says the resident promise, and never the folder.
+  check("the page states that receiving continues in the background", (await present(win, "inbox-resident-note")) === true);
+  check("the page says a folder is chosen", (await present(win, "inbox-has-folder")) === true);
+  const text = await js(win, `document.body.innerText`);
+  check("the destination never reaches the page", !text.includes(destinationDir), "path on screen");
+}
+
+/**
+ * The invariant this whole feature is arranged around.
+ *
+ * Hiding the window and navigating away are the two things a person does that
+ * a page-owned scheduler would silently stop. Both are driven here, and the
+ * proof is a COUNT in the main process that keeps going up.
+ */
+async function scenarioInboxKeepsReceiving(win, runtime) {
+  const before = inbox.heartbeats;
+
+  // Navigate away from the Inbox page entirely.
+  await js(win, `(() => { document.querySelector('[data-test="nav-lan"] button')?.click(); return true; })()`);
+  await waitInbox(win, "another page", `document.querySelector('[data-test="inbox-disable"]') === null`);
+  handlerControlWake();
+  const afterNavigation = await waitForValue(() => inbox.heartbeats > before);
+  check("navigating away does not stop receiving", afterNavigation === true, `${String(before)} -> ${String(inbox.heartbeats)}`);
+
+  // And hide the window, which is what closing it does on this platform.
+  const hidden = inbox.heartbeats;
+  // The real close path, which by now has already been acknowledged once by an
+  // earlier scenario — so this hides silently, which is what a person's second
+  // close does.
+  const outcome = await runtime.onWindowClose();
+  check(
+    "closing hides rather than quits",
+    outcome.action === "hide" || outcome.kind === "already-acknowledged",
+    JSON.stringify(outcome),
+  );
+  check("the window is hidden", win.isVisible() === false, String(win.isVisible()));
+  handlerControlWake();
+  const afterHide = await waitForValue(() => inbox.heartbeats > hidden);
+  check("a hidden window keeps receiving", afterHide === true, `${String(hidden)} -> ${String(inbox.heartbeats)}`);
+
+  win.show();
+  await openInbox(win);
+  check("the page shows the state it missed", (await present(win, "inbox-disable")) === true);
+}
+
+/** Accepting and declining one held delivery, from the real list. */
+async function scenarioInboxPending(win) {
+  inbox.tasks = [pendingTask("task-a"), pendingTask("task-b")];
+  handlerControlWake();
+  const listed = await waitInbox(win, "the pending list", `document.querySelectorAll('[data-test="inbox-accept"]').length === 2`);
+  check("central's held deliveries are listed", listed === true);
+  const body = await js(win, `document.querySelector('[data-test="inbox-pending"]')?.textContent ?? ""`);
+  check("a held delivery is described by size, not by name", body.includes("4.0 KB"), body);
+
+  check("accept was clicked", await clickTest(win, "inbox-accept"));
+  await waitForValue(() => inbox.accepted.length > 0);
+  check("the accept reached central as an accept", inbox.accepted[0]?.accept === true, JSON.stringify(inbox.accepted[0]));
+  const outcome = await waitInbox(win, "the accept outcome", `document.querySelector('[data-test="inbox-notice"]') !== null`);
+  check("the page reports the outcome", outcome === true);
+  const notice = await shown(win, "inbox-notice");
+  // Truthful: central took the accept and no delivery was leased in this run,
+  // so this is "it will be received shortly" and emphatically not "saved".
+  check("a queued acceptance is not reported as a save", !notice.toLowerCase().includes("saved"), notice);
+
+  await clickTest(win, "inbox-notice-dismiss");
+  check("decline was clicked", await clickTest(win, "inbox-reject"));
+  await waitForValue(() => inbox.accepted.some((entry) => entry.accept === false));
+  check(
+    "a decline reaches central as a decline",
+    inbox.accepted.some((entry) => entry.accept === false),
+    JSON.stringify(inbox.accepted),
+  );
+}
+
+/** The message history: list, open, copy, delete — through the real vault. */
+async function scenarioInboxMessages(win) {
+  const listed = await waitInbox(win, "the seeded message", `document.querySelector('[data-test="inbox-open"]') !== null`);
+  check("a saved message is listed", listed === true);
+  check("its body is not on screen until it is opened", !(await js(win, `document.body.innerText`)).includes("hello from the phone"));
+
+  check("open was clicked", await clickTest(win, "inbox-open"));
+  const opened = await waitInbox(win, "the message body", `document.querySelector('[data-test="inbox-message-body"]') !== null`);
+  check("opening it shows the text that was actually stored", opened === true);
+  const body = await shown(win, "inbox-message-body");
+  check("the decrypted message is the one that was saved", body.includes("hello from the phone"), body);
+
+  // ## The clipboard is asserted by its BYTES, not by a label
+  //
+  // Copying happens in main, because `window.ts` denies every renderer
+  // permission — including the browser clipboard — and that policy is not
+  // relaxed for a button. So this reads back what the system clipboard
+  // actually holds, which is the only thing that proves the copy happened.
+  await setClipboard("something else entirely");
+  check("copy was clicked", await clickTest(win, "inbox-copy"));
+  const answered = await waitInbox(
+    win,
+    "the copy control to answer",
+    `document.querySelector('[data-test="inbox-copy"]')?.textContent?.trim() !== "Copy"`,
+  );
+  check("copying is never silently inert", answered === true);
+  const pasted = await readClipboard();
+  check("the message's own bytes reached the clipboard", pasted === "hello from the phone", JSON.stringify(pasted));
+  check("and the control says it worked", (await shown(win, "inbox-copy")).trim() === "Copied");
+
+  check("delete was clicked", await clickTest(win, "inbox-delete"));
+  const gone = await waitInbox(win, "the empty message list", `document.querySelector('[data-test="inbox-messages-empty"]') !== null`);
+  check("deleting a message removes it", gone === true);
+}
+
+/**
+ * A quit the user refuses, with receiving on.
+ *
+ * Two things are asserted: that main refuses to turn anything on WHILE the
+ * dialog is up — a fence set before the question, not after the answer — and
+ * that Stay leaves a scheduler that still receives.
+ */
+async function scenarioInboxQuitStay(win, runtime) {
+  let refusedDuringPrompt = null;
+  answers.confirm = [false]; // Stay
+  answers.onConfirm = async () => {
+    refusedDuringPrompt = await js(
+      win,
+      `globalThis.relayium.inbox.enable().then((r) => r.kind, () => "threw")`,
+    );
+  };
+
+  const decision = await runtime.requestQuit();
+  check("a refused quit stays", decision === "stay", decision);
+  check("the process was not ended", answers.exited === false);
+  check(
+    "nothing could be turned on while the quit was being decided",
+    refusedDuringPrompt === "refused",
+    String(refusedDuringPrompt),
+  );
+
+  // Stay means the app works: the scheduler is admitted and running again.
+  const before = inbox.heartbeats;
+  handlerControlWake();
+  const resumed = await waitForValue(() => inbox.heartbeats > before);
+  check("staying resumes receiving", resumed === true, `${String(before)} -> ${String(inbox.heartbeats)}`);
+  check("and receiving is still on", (await present(win, "inbox-disable")) === true);
+}
+
+/** Signing out fences the account's Inbox and says so on the page. */
+async function scenarioInboxAccountChange(win) {
+  const enrolledBefore = inbox.enrolled;
+  const out = await js(win, `globalThis.relayium.auth.signOut().then((r) => JSON.stringify(r), () => "threw")`);
+  check("the account transition ran", out === JSON.stringify({ signedIn: false }), String(out));
+
+  await openInbox(win);
+  const needsAccount = await waitInbox(win, "the signed-out Inbox", `document.querySelector('[data-test="inbox-sign-in"]') !== null`);
+  check("signing out returns the Inbox to needs-account", needsAccount === true);
+
+  // A copy naming a message from the account that has gone away must refuse,
+  // and must leave the clipboard exactly as it was. Driven over the real
+  // channel, because the page no longer offers the control at all here.
+  await setClipboard("untouched");
+  const refusedCopy = await js(
+    win,
+    `globalThis.relayium.inbox.copy({ id: "seeded-message" }).then((r) => r.kind, () => "threw")`,
+  );
+  check("a copy under a retired account is refused", refusedCopy === "failed", String(refusedCopy));
+  const after = await readClipboard();
+  check("and nothing reached the clipboard", after === "untouched", JSON.stringify(after));
+
+  // And nothing is enrolled again under an account that has gone away.
+  const heartbeats = inbox.heartbeats;
+  handlerControlWake();
+  await new Promise((r) => setTimeout(r, 300));
+  check("no work continues under the old account", inbox.heartbeats === heartbeats, String(inbox.heartbeats));
+  check("nothing re-enrolled across the change", inbox.enrolled === enrolledBefore, String(inbox.enrolled));
+}
+
+/**
+ * The controls the user actually presses are one size.
+ *
+ * Measured rather than eyeballed. The Stored page's input and button rendered
+ * at the browser default while the Account page's button used the Mac's 32px
+ * metric, because control styling lived in one component's scoped block and
+ * Svelte scoping kept it there.
+ */
+async function scenarioControlMetrics(win) {
+  const heights = await js(
+    win,
+    `(() => {
+      const measured = {};
+      const record = (name) => {
+        const el = document.querySelector('[data-test="' + name + '"]');
+        measured[name] = el ? Math.round(el.getBoundingClientRect().height) : null;
+      };
+      document.querySelector('[data-test="nav-stored"] button')?.click();
+      return new Promise((resolve) => setTimeout(() => {
+        record("stored-link");
+        record("stored-open");
+        document.querySelector('[data-test="nav-account"] button')?.click();
+        setTimeout(() => { record("sign-in"); resolve(JSON.stringify(measured)); }, 60);
+      }, 60));
+    })()`,
+  );
+  const measured = JSON.parse(heights);
+  process.stdout.write(`RELAYIUM_CONTROL_METRICS ${heights}\n`);
+  check(
+    "the stored input is a real control, not a browser default",
+    measured["stored-link"] >= 32,
+    JSON.stringify(measured),
+  );
+  check(
+    "the stored button matches the account button",
+    measured["stored-open"] === measured["sign-in"],
+    JSON.stringify(measured),
+  );
+
+  // Root observed a clipped heading after navigating from Stored to Account and
+  // could not reproduce it on a fresh capture. Measured here rather than fixed
+  // blind: a scroll reset nobody can reproduce is a change with no defect
+  // behind it.
+  const layout = await js(
+    win,
+    `(() => {
+      const main = document.querySelector("main");
+      const h1 = document.querySelector("h1");
+      return JSON.stringify({
+        scrollTop: main ? Math.round(main.scrollTop) : null,
+        headingTop: h1 ? Math.round(h1.getBoundingClientRect().top - main.getBoundingClientRect().top) : null,
+      });
+    })()`,
+  );
+  process.stdout.write(`RELAYIUM_LAYOUT_AFTER_NAV ${layout}\n`);
+  const { scrollTop, headingTop } = JSON.parse(layout);
+  check("the page title is visible after navigating between pages", scrollTop === 0 && headingTop >= 0, layout);
+}
+
+/**
+ * The system clipboard, read and written by THIS process.
+ *
+ * Awaited rather than used directly: the value is what actually proves a copy
+ * happened, and comparing a promise against a string silently passes for the
+ * wrong reason — which is exactly what it did first time round.
+ */
+async function readClipboard() {
+  return await clipboard.readText();
+}
+
+async function setClipboard(value) {
+  await clipboard.writeText(value);
+}
+
+/** Poll a main-process fact the scheduler produces. */
+async function waitForValue(predicate, timeoutMs = 8000) {
+  const started = Date.now();
+  for (;;) {
+    if (predicate()) return true;
+    if (Date.now() - started > timeoutMs) return false;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}
+
+/** Step the scheduler: end its nap now instead of waiting out an hour. */
+function handlerControlWake() {
+  wakeInbox();
 }
 
 function report() {
@@ -318,6 +834,14 @@ async function waitFor(win, what, expr, timeoutMs = 20_000) {
  * happens, which is a test that proves nothing rather than a failure.
  */
 async function startFromPage(win, value) {
+  // The Stored page, named rather than inherited. Every earlier caller happened
+  // to be left on it by the scenario before; the Inbox scenarios navigate, and
+  // a driver that assumed the previous scenario's page threw an unhelpful
+  // "Script failed to execute" from inside a setter on a null element.
+  await js(win, `(() => { document.querySelector('[data-test="nav-stored"] button')?.click(); return true; })()`);
+  if (!(await waitFor(win, "the stored page", `document.querySelector('[data-test="stored-link"]') !== null`))) {
+    return "no-page";
+  }
   await js(
     win,
     `(() => {
@@ -780,6 +1304,15 @@ async function scenarioOutcomeDoesNotCrossDocuments(win) {
 }
 
 main().catch((err) => {
-  process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures: [`threw: ${String(err)}`] })}\n`);
+  // The accumulated failures are KEPT, with the exception appended.
+  //
+  // This used to replace them, and the replacement was actively misleading: a
+  // scenario that threw reported one failure — "threw: …" — over however many
+  // real assertions had already failed, so a run with thirty broken checks and
+  // a late exception read as a single navigation problem. `failures` is the
+  // record of what was actually observed; an exception is one more thing that
+  // happened, not a reason to discard it.
+  failures.push(`threw: ${String(err)}`);
+  process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures })}\n`);
   app.exit(1);
 });

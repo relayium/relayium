@@ -105,3 +105,110 @@ body {
     transition-duration: var(--motion-fast) !important;
   }
 }
+
+/*
+ * Controls.
+ *
+ * ## Why these are global rather than per page
+ *
+ * They were per page, and that is exactly how the Stored page ended up with
+ * browser-default controls: Svelte scopes a component's styles to that
+ * component, so `App.svelte`'s `button` rule never reached a button inside
+ * `StoredPage.svelte`. A page that happened to declare its own got the Mac's
+ * 32px control; a page that did not got a 21px system default next to it. That
+ * is not a small inconsistency — two controls of different heights in one
+ * window read as one of them being broken.
+ *
+ * Copying the block into each page would fix the symptom and keep the cause: a
+ * page added later starts with default controls again, and the sizes drift
+ * independently. So the vocabulary lives here with the rest of the tokens, once,
+ * and a page overrides only what is genuinely local to it.
+ *
+ * The numbers are the ones already shipped on the Account screen, which is the
+ * Mac's own control metric: 32px minimum height, the 10pt corner, a hairline
+ * border, and a 2px accent focus ring at a 2px offset. `--hit-target` still
+ * governs rows a finger or a cursor has to land on; a button inside a form row
+ * is sized to sit next to text.
+ */
+button,
+input[type="text"],
+input:not([type]),
+input[type="search"],
+select,
+textarea {
+  min-height: 32px;
+  padding: 6px var(--space-section);
+  border-radius: var(--corner);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+input[type="text"],
+input:not([type]),
+input[type="search"],
+textarea {
+  /* Text entry reads as a field rather than as a button: the surface tint is
+     what distinguishes "type here" from "press this" without a second border. */
+  background: var(--surface);
+  padding-inline: var(--space-inner);
+}
+
+textarea {
+  padding-block: var(--space-tight);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+button {
+  cursor: pointer;
+  font-weight: 500;
+  transition:
+    background-color var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease),
+    transform var(--motion-fast) var(--ease);
+}
+
+button:hover:not(:disabled) { background: var(--surface); }
+/* Small, and only on press. Nothing here moves that the user did not cause. */
+button:active:not(:disabled) { transform: scale(0.98); }
+button:disabled { opacity: 0.5; cursor: default; }
+
+/* The one emphasised action per surface. */
+.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+
+/*
+ * A destructive action, worded rather than coloured red by default.
+ *
+ * The border and the text carry the meaning on hover and focus; a permanently
+ * red button in a list of messages would make deleting look like the primary
+ * thing to do with them.
+ */
+.danger { color: #b3261e; }
+.danger:hover:not(:disabled) { background: #b3261e; border-color: #b3261e; color: #fff; }
+
+@media (prefers-color-scheme: dark) {
+  .danger { color: #f2b8b5; }
+  .danger:hover:not(:disabled) { background: #8c1d18; border-color: #8c1d18; color: #fff; }
+}
+
+/* One focus ring for every control, including checkboxes and links. */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Checkboxes keep the platform control; only the accent is ours. */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
+  min-height: 0;
+  padding: 0;
+}

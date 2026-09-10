@@ -442,6 +442,20 @@ export function ownedReceives(): number | null {
   return handlerControl?.service.openLeaseCount ?? null;
 }
 
+/**
+ * Test/diagnostic only: end the Device Inbox's current backoff.
+ *
+ * The same thing the page's "Try again now" reaches, exposed so a driven run
+ * can step the scheduler deliberately rather than sleeping through a real
+ * interval. It STARTS nothing and enables nothing — a fenced or disabled
+ * scheduler wakes into the same guard it was parked at.
+ */
+export function wakeInbox(): boolean {
+  if (!handlerControl) return false;
+  handlerControl.inbox.wake();
+  return true;
+}
+
 export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
   if (!app.requestSingleInstanceLock()) {
     app.quit();
@@ -523,7 +537,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
   // follows it, because the two APIs can disagree.
   resident = new ResidentRuntime({
     service: control.service,
-    storedActive: () => control.storedReceive.active,
+    storedActive: () => control.storedReceive.active + control.inbox.active,
     resident: control.resident,
     fence: control.fence,
     quiesce: control.quiesce,

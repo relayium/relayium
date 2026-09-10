@@ -15,6 +15,22 @@
 // dialog and afterwards refers to files by index. That is the whole reason a
 // compromised renderer cannot write outside the chosen folder.
 
+/**
+ * The terminal outcome and failure vocabulary are the Inbox's OWN.
+ *
+ * Imported as types rather than restated here. `receipts.ts` is the module that
+ * decides what may cross out of the Inbox at all — its comment is explicit that
+ * every member carries codes, counts and booleans and that no member can hold a
+ * path, a key or a server string. Re-declaring that union in this file would
+ * create a second copy free to drift from the rule it exists to enforce, and
+ * the drift would be invisible: two structurally similar unions compile.
+ *
+ * Type-only, so nothing from `src/main/**` is bundled into the renderer.
+ */
+import type { DeliveryReceipt, InboxFailureCode, ResidueState } from "../main/inbox/receipts.js";
+
+export type { DeliveryReceipt, InboxFailureCode, ResidueState };
+
 export const IPC = {
   /** Build/runtime facts the shell renders. No secrets. */
   appInfo: "relayium:app-info",
@@ -123,6 +139,74 @@ export const IPC = {
   /** Turn it on or off. Enabling requires the user's explicit confirmation,
    *  which main asks for natively. */
   loginItemWrite: "relayium:login-item-write",
+
+  // -------------------------------------------------------------------------
+  // Device Inbox — receive
+  // -------------------------------------------------------------------------
+  //
+  // ## What is deliberately absent from every channel below
+  //
+  // No claim token, no wrapped key, no manifest, no destination path, and no
+  // way for the renderer to name one. Enabling opens a NATIVE folder dialog in
+  // main; the page asks for the feature and main asks the person. A delivery is
+  // named by its server task id, a message by its vault id, and a retained
+  // cleanup by an opaque key. What comes back is closed codes and counts.
+  //
+  // The one payload here that is the user's own content is the body of a
+  // message THEY received, returned by `inboxOpenMessage` because showing it is
+  // the entire point of receiving it.
+
+  /** Everything the Inbox page renders about state. Counts and closed codes. */
+  inboxState: "relayium:inbox-state",
+  /**
+   * Turn receiving on, with explicit consent.
+   *
+   * Main opens the native folder dialog as part of this call, so there is no
+   * window in which the app is "enabled" without a destination the user chose.
+   * A declined dialog enrols nothing.
+   */
+  inboxEnable: "relayium:inbox-enable",
+  /** Turn receiving off and withdraw the enrolment. Erases nothing local. */
+  inboxDisable: "relayium:inbox-disable",
+  /** Choose a different destination, natively. Does not change consent. */
+  inboxChooseFolder: "relayium:inbox-choose-folder",
+  /** What central says is waiting. Claims nothing and takes no lease. */
+  inboxPending: "relayium:inbox-pending",
+  /** Accept one held delivery and receive it. */
+  inboxAccept: "relayium:inbox-accept",
+  /** Decline one held delivery. */
+  inboxReject: "relayium:inbox-reject",
+  /** Messages already saved. Metadata only; no message bytes. */
+  inboxMessages: "relayium:inbox-messages",
+  /** One message's text, because reading it is why it was received. */
+  inboxOpenMessage: "relayium:inbox-open-message",
+  /**
+   * Put one saved message on the clipboard, from MAIN.
+   *
+   * ## Why this is a channel rather than `navigator.clipboard`
+   *
+   * `window.ts` denies every permission request and every permission check, on
+   * purpose — a renderer that never asks for a capability must not be granted
+   * one by a default-allow policy. `navigator.clipboard.writeText` is subject
+   * to exactly that guard, so a Copy button built on it does not sometimes
+   * fail: it never works, and relaxing the session policy to make one button
+   * work would open the same door for everything else the page could ask for.
+   *
+   * So the page names a MESSAGE — an id it could already open through
+   * `inboxOpenMessage` — and main reads that message under the live account and
+   * writes it. There is deliberately no channel that takes a string and puts it
+   * on the clipboard: this can copy the user's own received messages and
+   * nothing else, and an account that has gone away refuses.
+   */
+  inboxCopyMessage: "relayium:inbox-copy-message",
+  /** Delete one message. Never rides along with disabling or signing out. */
+  inboxDeleteMessage: "relayium:inbox-delete-message",
+  /** Rename this device. The server judges the name. */
+  inboxRename: "relayium:inbox-rename",
+  /** "Try again now" — end the current backoff instead of waiting it out. */
+  inboxWake: "relayium:inbox-wake",
+  /** Ask a retained destination to tear down again. A key, never a path. */
+  inboxReleaseRetained: "relayium:inbox-release-retained",
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];
@@ -158,6 +242,23 @@ export const IPC_EVENTS = {
   storedProgress: "relayium:stored-progress",
   /** How one stored receive ended. */
   storedOutcome: "relayium:stored-outcome",
+  /**
+   * The Inbox state changed.
+   *
+   * Pushed because the scheduler that owns it runs in MAIN and is not driven by
+   * the page: deliveries arrive, a backoff elapses, an account changes. A page
+   * that polled would either be slow or would be asking a privileged process a
+   * question sixty times a minute for the life of the app.
+   *
+   * Unlike `storedProgress`, this is emitted on the CURRENT document rather
+   * than an originating one, and the difference is deliberate. A stored
+   * progress frame answers a request some document made, so a replacement
+   * document must not receive it. This is a fact about main — is receiving on,
+   * is a folder missing, is something waiting — and the document looking at the
+   * screen now is exactly who needs it. It carries no authority: counts and
+   * closed codes only.
+   */
+  inboxState: "relayium:inbox-state-changed",
 } as const;
 
 export const IPC_EVENT_NAMES: readonly string[] = Object.values(IPC_EVENTS);
@@ -696,3 +797,184 @@ export interface StoredProgress {
  * The page may put a code on screen for a refusal, and nothing else about it.
  */
 export const MAX_STORED_LINK_LENGTH = 2048;
+
+// ---------------------------------------------------------------------------
+// Device Inbox — the shapes the receive channels carry
+// ---------------------------------------------------------------------------
+
+/**
+ * What the Inbox is doing, as a page may render it.
+ *
+ * Wider than `InboxRuntimeState` on purpose, and the extra members are the ones
+ * that belong to the HOST rather than to the facade: whether an account is
+ * signed in, whether its secret store could be read, whether a destination is
+ * still there, and how long a failed pass is waiting before it tries again.
+ * The facade cannot answer any of those — it is handed an account and a
+ * destination — so a page shown only its state would have to say "disabled"
+ * for four different situations with four different remedies.
+ */
+export type InboxStatus =
+  /** This build cannot receive, so there is nothing to switch on. */
+  | { readonly kind: "unavailable"; readonly reason: InboxFailureCode }
+  /** Nobody is signed in. The Inbox belongs to an account. */
+  | { readonly kind: "needs-account" }
+  /**
+   * Signed in, and this PC's encrypted store could not be read.
+   *
+   * Its own state rather than "disabled": the enrolment may well still be live
+   * on the server, and showing an off switch over it would be false.
+   */
+  | { readonly kind: "account-unreadable" }
+  /** The user has not asked to receive. */
+  | { readonly kind: "disabled" }
+  /**
+   * Receiving is on and the chosen folder is not there.
+   *
+   * Never `disabled` and never `idle`: the user's answer is still their answer,
+   * and this names what is missing.
+   */
+  | { readonly kind: "folder-missing" }
+  /** Adopting the account or enrolling. Nothing has failed. */
+  | { readonly kind: "starting" }
+  | { readonly kind: "idle"; readonly pending: number }
+  /** A delivery is being received right now. */
+  | { readonly kind: "receiving" }
+  /** Stopped on something only a decision can clear. */
+  | {
+      readonly kind: "blocked";
+      readonly reason: InboxFailureCode;
+      readonly residue: ResidueState;
+      readonly pending: number;
+    }
+  /**
+   * The last pass failed and the next one is waiting.
+   *
+   * Carries the delay so the page can say "trying again in a moment" instead of
+   * looking stuck, and so "Try again now" is visibly a shortcut rather than the
+   * only thing that will ever happen.
+   */
+  | {
+      readonly kind: "offline";
+      readonly reason: InboxFailureCode;
+      readonly retryInSeconds: number;
+    };
+
+/** A destination whose teardown did not conclude. A key and closed codes. */
+export interface InboxRetainedView {
+  /** Opaque. `inboxReleaseRetained` takes this; it is not a path. */
+  readonly key: string;
+  readonly taskID: string;
+  readonly residue: ResidueState;
+  /** The stable code the teardown failed with. */
+  readonly reason: string;
+}
+
+/** Everything the Inbox page renders. No path, no token, no key. */
+export interface InboxView {
+  readonly status: InboxStatus;
+  /**
+   * What this build advertises to central.
+   *
+   * Rendered so the page cannot claim a capability the build does not have:
+   * it is computed from the composed feature switches in main, never written
+   * as a literal on either side.
+   */
+  readonly capabilities: readonly string[];
+  /** Whether the user has consented. Distinct from `status`, which says what
+   *  is happening about it. */
+  readonly enabled: boolean;
+  /** THAT a destination is recorded. Never which one. */
+  readonly hasDestination: boolean;
+  /** Central's name for this device, empty until it is known. */
+  readonly deviceName: string;
+  /** A withdrawal central has not confirmed, retried on later ticks. */
+  readonly withdrawalPending: boolean;
+  readonly retained: readonly InboxRetainedView[];
+}
+
+/** One delivery central is holding for this device. Never its contents. */
+export interface InboxPendingView {
+  readonly taskID: string;
+  /** Central's device id for the sender. Not a name. */
+  readonly sourceDeviceID: string;
+  /** Ciphertext bytes central declared for the whole body. */
+  readonly bytes: number;
+  readonly createdAt: number;
+  readonly expiresAt: number;
+  /** The server's own state token. */
+  readonly state: string;
+}
+
+/** One saved message, as the list renders it. The body is fetched separately. */
+export interface InboxMessageView {
+  readonly id: string;
+  readonly taskID: string;
+  readonly sourceDeviceID: string;
+  /** Plaintext length. */
+  readonly bytes: number;
+  readonly receivedAt: number;
+}
+
+export type InboxEnableOutcome =
+  | { readonly kind: "enabled" }
+  /** The user closed the folder dialog. Not an error, and nothing enrolled. */
+  | { readonly kind: "declined" }
+  | { readonly kind: "needs-account" }
+  | { readonly kind: "unavailable"; readonly reason: InboxFailureCode }
+  /** Not admitting: a quit is being decided, or the process is going away. */
+  | { readonly kind: "refused" }
+  /**
+   * A newer change owns the state now.
+   *
+   * Its own answer rather than a failure or a refusal, because neither is true
+   * and both would mislead. The commonest way to reach it is a folder dialog
+   * left open while the user turned receiving off somewhere else: nothing went
+   * wrong, nothing was refused, and the state on screen is the one they last
+   * asked for rather than the one this call was about.
+   */
+  | { readonly kind: "superseded" }
+  | { readonly kind: "failed"; readonly reason: InboxFailureCode };
+
+export type InboxDisableOutcome =
+  | { readonly kind: "disabled" }
+  /**
+   * Local receiving stopped and central still lists this device.
+   *
+   * Reported rather than swallowed: a device central still holds keeps being
+   * offered to senders, and deliveries queued against it will never be worked.
+   * The withdrawal is retried by the scheduler.
+   */
+  | { readonly kind: "still-enrolled"; readonly reason: InboxFailureCode }
+  | { readonly kind: "needs-account" }
+  | { readonly kind: "refused" }
+  | { readonly kind: "failed"; readonly reason: InboxFailureCode };
+
+export type InboxAcceptOutcome =
+  | { readonly kind: "received"; readonly receipt: DeliveryReceipt }
+  /** Accepted on the server and not reached in this pass. Not a failure. */
+  | { readonly kind: "queued" }
+  | { readonly kind: "not-enabled" }
+  | { readonly kind: "blocked"; readonly reason: string }
+  | { readonly kind: "already-settled" }
+  | { readonly kind: "busy" }
+  | { readonly kind: "refused" }
+  | { readonly kind: "failed"; readonly reason: InboxFailureCode };
+
+export type InboxSimpleOutcome =
+  | { readonly kind: "ok" }
+  | { readonly kind: "refused" }
+  /** A newer change owns the state. See `InboxEnableOutcome`. */
+  | { readonly kind: "superseded" }
+  | { readonly kind: "failed"; readonly reason: InboxFailureCode };
+
+export type InboxRenameOutcome =
+  | { readonly kind: "renamed"; readonly name: string }
+  | { readonly kind: "refused" }
+  | { readonly kind: "failed"; readonly reason: InboxFailureCode };
+
+/** The longest device name this boundary will forward. Matches the server. */
+export const MAX_INBOX_DEVICE_NAME_LENGTH = 64;
+/** The longest vault or task id this boundary will forward. */
+export const MAX_INBOX_ID_LENGTH = 256;
+/** The most pending deliveries one request will ask central for. */
+export const MAX_INBOX_PENDING = 50;

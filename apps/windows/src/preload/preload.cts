@@ -103,4 +103,24 @@ contextBridge.exposeInMainWorld("relayium", {
     read: invoke("relayium:login-item-read"),
     write: invoke("relayium:login-item-write"),
   },
+  // The Device Inbox. Every name here takes an id or nothing at all: there is
+  // no path, no token and no key on this surface, and `enable` opens a NATIVE
+  // folder dialog in main rather than accepting a destination from here.
+  inbox: {
+    state: invoke("relayium:inbox-state"),
+    enable: invoke("relayium:inbox-enable"),
+    disable: invoke("relayium:inbox-disable"),
+    chooseFolder: invoke("relayium:inbox-choose-folder"),
+    pending: invoke("relayium:inbox-pending"),
+    accept: invoke("relayium:inbox-accept"),
+    reject: invoke("relayium:inbox-reject"),
+    messages: invoke("relayium:inbox-messages"),
+    open: invoke("relayium:inbox-open-message"),
+    copy: invoke("relayium:inbox-copy-message"),
+    remove: invoke("relayium:inbox-delete-message"),
+    rename: invoke("relayium:inbox-rename"),
+    wake: invoke("relayium:inbox-wake"),
+    release: invoke("relayium:inbox-release-retained"),
+    onState: subscribe("relayium:inbox-state-changed"),
+  },
 });

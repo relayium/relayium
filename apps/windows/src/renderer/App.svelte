@@ -35,9 +35,10 @@
   import AccountPage from "./pages/AccountPage.svelte";
   import LanPage from "./pages/LanPage.svelte";
   import PairPage from "./pages/PairPage.svelte";
-  import PlaceholderPage from "./pages/PlaceholderPage.svelte";
+  import InboxPage from "./pages/InboxPage.svelte";
   import StoredPage from "./pages/StoredPage.svelte";
   import { StoredController, type StoredBridge } from "./stored/stored-controller.svelte.js";
+  import { InboxController, type InboxBridge } from "./inbox/inbox-controller.svelte.js";
   import { goTo, page } from "./shell/navigation.svelte.js";
   import { lang, t } from "./i18n/index.svelte.js";
   import { RoomController } from "./rooms/room-controller.svelte.js";
@@ -70,6 +71,7 @@
         write(payload: { enabled: boolean }): Promise<LoginItemOutcome>;
       };
       stored: StoredBridge;
+      inbox: InboxBridge;
     };
 
   const bridge = (globalThis as unknown as { relayium: Bridge }).relayium;
@@ -180,6 +182,15 @@
    * drafts live up here.
    */
   const stored = new StoredController(bridge.stored);
+  /**
+   * App-lived, exactly like `stored` and for a stronger reason.
+   *
+   * The Inbox scheduler runs in MAIN whether or not this page is mounted, so a
+   * controller built by the page would miss every state push sent while the
+   * user was on another row — including the one saying a delivery arrived. Held
+   * here, its subscription spans the life of the window.
+   */
+  const inbox = new InboxController(bridge.inbox);
 
   /** What Windows says about starting at sign-in. Null until it has answered. */
   let startup = $state<LoginItemOutcome | null>(null);
@@ -501,6 +512,7 @@
   onDestroy(() => {
     torndown = true;
     stored.dispose();
+    inbox.destroy();
     detachResident();
     controller.dispose();
     lanRoom?.stop();
@@ -509,6 +521,11 @@
 
   void initCrypto();
   void controller.refresh();
+  // Read once at startup rather than when the Inbox row is first clicked: the
+  // sidebar and the resident surfaces describe a feature that is already
+  // running, and a page that only learned its state on arrival would show
+  // "starting" for a scheduler that has been receiving for an hour.
+  void inbox.refresh().catch(() => undefined);
   void bridge.loginItem
     .read()
     .then((outcome) => {
@@ -590,7 +607,7 @@
       }}
     />
   {:else if page() === "inbox"}
-    <PlaceholderPage title={t("navInbox")} body="soonInbox" />
+    <InboxPage {inbox} onSignIn={() => goTo("account")} />
   {:else}
     <AccountPage
       {controller}
@@ -623,16 +640,5 @@
     background: var(--accent);
     animation: indeterminate 1.4s var(--ease) infinite;
   }
-  button {
-    min-height: 32px;
-    padding: 6px var(--space-section);
-    border-radius: var(--corner);
-    border: 1px solid var(--border);
-    background: var(--bg);
-    color: var(--text);
-    font: inherit;
-    cursor: pointer;
-  }
-  .primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* Controls come from `tokens.css`; this file styles only the crypto gate. */
 </style>

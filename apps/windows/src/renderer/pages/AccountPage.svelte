@@ -157,24 +157,7 @@
   }
   .check { display: flex; gap: var(--space-inner); align-items: flex-start; min-height: var(--hit-target); }
   .check input { margin-top: 3px; }
-  button {
-    min-height: 32px;
-    padding: 6px var(--space-section);
-    border-radius: var(--corner);
-    border: 1px solid var(--border);
-    background: var(--bg);
-    color: var(--text);
-    font: inherit;
-    cursor: pointer;
-  }
-  button:disabled { opacity: 0.5; cursor: default; }
-  button {
-    transition:
-      background-color var(--motion-base) var(--ease),
-      border-color var(--motion-base) var(--ease),
-      transform var(--motion-fast) var(--ease);
-  }
-  button:active:not(:disabled) { transform: scale(0.98); }
-  .primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* Controls come from `tokens.css`. This block was the ONLY page that had
+     them, which is precisely why every page that did not looked broken next to
+     it — see the note there. */
 </style>

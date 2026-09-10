@@ -4,7 +4,7 @@
 // The split is deliberate: rules that only exist inside an `ipcMain.handle`
 // closure cannot be tested, and the rules here are the ones a race would break.
 
-import { app, dialog, type BrowserWindow } from "electron";
+import { app, clipboard, dialog, type BrowserWindow } from "electron";
 import { randomUUID } from "node:crypto";
 import {
   IPC,
@@ -12,6 +12,8 @@ import {
   MAX_ATTEMPT_NONCE_LENGTH,
   MAX_IPC_CHUNK_BYTES,
   MAX_REQUEST_ID_LENGTH,
+  MAX_INBOX_DEVICE_NAME_LENGTH,
+  MAX_INBOX_ID_LENGTH,
   MAX_RESIDENT_DRAFTS,
   MAX_STORED_LINK_LENGTH,
   MAX_IPC_MANIFEST_ENTRIES,
@@ -30,6 +32,7 @@ import {
 } from "../shared/ipc-contract.js";
 import { AppService, type AppServiceDeps, type CleanupOutcome } from "./app-service.js";
 import { StoredReceiveService, type StoredReceiveDeps } from "./features/stored-receive.js";
+import { InboxService, type InboxServiceDeps } from "./features/inbox.js";
 import { DeviceAuthClient } from "./account/device-auth.js";
 import { ENGINEERING_BANNER, engineeringOverride, isEngineeringBuild } from "./build-mode.js";
 import { IceControl, IceRequestRegistry } from "./net/ice-control.js";
@@ -99,6 +102,40 @@ export interface HandlerComposition {
    *  shared-protocol runtime. Injection only, like every other one here. */
   storedReceive?: Pick<StoredReceiveDeps, "receive" | "transport" | "destination" | "runtime" | "hosts" | "cleanups">;
   /**
+   * Device Inbox seams: the shared-protocol runtime, the authenticated client,
+   * the device-row lookup, the folder probe and the receive destination.
+   *
+   * The same kind of injection as every other entry here and for the same
+   * reason: an automated run has to be able to drive consent, enrolment,
+   * a pending delivery and an account change without a live server or a person
+   * at a folder dialog. Nothing here is reachable from the renderer or from the
+   * environment, and none of it widens what the shipped path does.
+   */
+  inbox?: Pick<
+    InboxServiceDeps,
+    | "runtime"
+    | "makeApi"
+    | "makeDestination"
+    | "resolveDevice"
+    | "directoryUsable"
+    | "backoff"
+    | "now"
+    /** Substituted so a run can read back the bytes a copy actually wrote. */
+    | "writeClipboard"
+    /** A task-owned root, so a run does not write into the user's profile —
+     *  and so this feature is drivable on a host that is not Windows. */
+    | "dataRoot"
+  >;
+  /**
+   * Whether the Inbox scheduler starts with the process.
+   *
+   * Present so a test that composes no Inbox seams does not have a scheduler
+   * making real requests behind it. A shipped build always starts: the loop is
+   * what makes receiving resident, and its first act on a signed-out or
+   * unconsented profile is to park at a guard.
+   */
+  startInbox?: boolean;
+  /**
    * A device-auth client the caller supplies instead of the real one.
    *
    * Exists so the Electron smoke can drive the ACTUAL renderer — click Sign in,
@@ -163,6 +200,8 @@ export interface HandlerControl {
   readonly service: AppService;
   /** Stored receive, for the resident runtime's risk and teardown. */
   readonly storedReceive: StoredReceiveService;
+  /** The Device Inbox scheduler, for the same risk snapshot and teardown. */
+  readonly inbox: InboxService;
   readonly resident: ResidentBridge;
   /**
    * Stop main's own outgoing work, recoverably.
@@ -631,6 +670,112 @@ export function registerHandlers(
   });
 
   // -------------------------------------------------------------------------
+  // Device Inbox — receive
+  // -------------------------------------------------------------------------
+
+  const inbox = new InboxService({
+    origin,
+    // The host's OWN data root. There is no payload, argument or environment
+    // value on any path below that can move it — and it is resolved on first
+    // use, because it can fail and a registration that threw here would take
+    // the whole app down rather than one feature.
+    dataRoot: () => {
+      const root = currentDataRoot();
+      if (!root.ok) throw new IpcRefusal(`data root unavailable: ${root.reason}`);
+      return root.path;
+    },
+    platform: "windows",
+    appVersion: process.env["npm_package_version"] ?? "0.0.1",
+    authority: () => service.captureAccountAuthority(),
+    accountEpoch: () => service.accountEpoch,
+    // Read at the moment a copy is admitted and re-checked before it writes.
+    // Nothing else in this feature consults it: a reload must not stop
+    // receiving, which is the whole point of the scheduler being main's.
+    currentDocument: () => router.generation,
+    grantSlot: () => service.secretStore(),
+    keySlot: () => service.secretStore(),
+    // The user names the destination, in a native dialog, and the dialog is the
+    // consent. There is no IPC channel in this app that carries a path.
+    async pickDirectory() {
+      if (composition.pickDirectory) return composition.pickDirectory();
+      const picked = await dialog.showOpenDialog(window, {
+        properties: ["openDirectory", "createDirectory"],
+        title: t("native.inbox.pickTitle"),
+        buttonLabel: t("native.inbox.pickConfirm"),
+      });
+      return picked.canceled ? null : (picked.filePaths[0] ?? null);
+    },
+    // ## Emitted on the CURRENT document, unlike stored progress
+    //
+    // A stored progress frame answers a request some document made, so it is
+    // emitted on the generation that asked and a replacement never sees it.
+    // This is a fact about MAIN — receiving is on, a folder is missing,
+    // something is waiting — that no document requested and every document
+    // needs. It carries no authority: counts and closed codes only, and
+    // `hasDestination` rather than a destination.
+    onState: (view) => {
+      router.emit(IPC_EVENTS.inboxState, router.generation, view);
+    },
+    reportFailure: (err) => events.reportFailure?.(err),
+    // The system clipboard, written by MAIN. There is no channel that takes a
+    // string and puts it there: the only caller reads a message this account
+    // has already received. `window.ts` denies every renderer permission —
+    // including the clipboard — and that policy stays exactly as it is.
+    writeClipboard: (text) => clipboard.writeText(text),
+    // LAST, so an injected seam actually wins. Spread first — the shape the
+    // stored-receive composition uses, where the keys are disjoint — the
+    // defaults above would silently override every one of them, and a run that
+    // thought it was driving its own data root and its own device lookup would
+    // be driving the shipped ones. The `Pick` on `HandlerComposition["inbox"]`
+    // is what keeps this narrow: `origin`, the authority and the folder dialog
+    // are not in it and cannot be replaced from here.
+    ...(composition.inbox ?? {}),
+  });
+  // Started here rather than lazily on the page's first request, because the
+  // whole point of it is that it runs when nobody is looking at the Inbox page
+  // — or at any page. A signed-out or unconsented profile parks at a guard.
+  if (composition.startInbox !== false) inbox.start();
+
+  // The account moved. The service compares the epoch itself, because this also
+  // fires for a document change and a reload must not stop receiving.
+  const releaseAccountWatch = service.onAccountChanged(() => inbox.onAuthorityChanged());
+
+  /** A task or vault id the renderer named. It names; it authorises nothing. */
+  const inboxId = (payload: unknown): string =>
+    expectString(expectObject(payload)["id"], MAX_INBOX_ID_LENGTH);
+
+  router.handle(IPC.inboxState, async () => inbox.view());
+  router.handle(IPC.inboxEnable, () => inbox.enable());
+  router.handle(IPC.inboxDisable, () => inbox.disable());
+  router.handle(IPC.inboxChooseFolder, () => inbox.chooseFolder());
+  router.handle(IPC.inboxPending, () => inbox.refreshPending());
+  router.handle(IPC.inboxAccept, (payload) => inbox.accept(inboxId(payload)));
+  router.handle(IPC.inboxReject, (payload) => inbox.reject(inboxId(payload)));
+  router.handle(IPC.inboxMessages, () => inbox.messages());
+  router.handle(IPC.inboxOpenMessage, (payload) => inbox.openMessage(inboxId(payload)));
+  // The generation is read HERE, where the request arrives, so the copy carries
+  // the document that asked rather than whichever one is current when the vault
+  // read comes back.
+  router.handle(IPC.inboxCopyMessage, (payload) => inbox.copyMessage(inboxId(payload), router.generation));
+  router.handle(IPC.inboxDeleteMessage, (payload) => inbox.deleteMessage(inboxId(payload)));
+  router.handle(IPC.inboxRename, (payload) => {
+    const body = expectObject(payload);
+    // Bounded here and normalised by the shared runtime inside the facade; the
+    // SERVER judges whether the name is acceptable, and its refusal is what the
+    // page renders. This boundary only refuses an absurd allocation.
+    return inbox.rename(expectString(body["name"], MAX_INBOX_DEVICE_NAME_LENGTH));
+  });
+  router.handle(IPC.inboxWake, async () => {
+    inbox.wake();
+    return { ok: true };
+  });
+  router.handle(IPC.inboxReleaseRetained, (payload) => {
+    const body = expectObject(payload);
+    // An opaque key the service issued, never a path.
+    return inbox.releaseRetained(expectString(body["key"], MAX_INBOX_ID_LENGTH));
+  });
+
+  // -------------------------------------------------------------------------
   // Resident commands, acknowledgements and snapshots
   // -------------------------------------------------------------------------
 
@@ -799,6 +944,7 @@ export function registerHandlers(
   const fence = (): void => {
     service.fenceReceives();
     storedReceive.fence();
+    inbox.fence();
   };
 
   const quiesce = async (): Promise<CleanupOutcome> => {
@@ -821,15 +967,20 @@ export function registerHandlers(
     hub.closeAll();
     iceRequests.abortAll();
     const storedStopping = storedReceive.quiesce();
+    // Aborts its pass and every operation before its own first await, so
+    // starting it here and joining it below stops the scheduler NOW rather
+    // than after the network drains.
+    const inboxStopping = inbox.quiesce();
     // The leases, the sign-in, the queued transitions and the secret work. It
     // retires the in-flight sign-in before ITS first await too, so this is a
     // request as much as a join.
     const serviceStopping = service.quiesce();
 
-    const [sockets, reads, storedHeld, outcome] = await Promise.all([
+    const [sockets, reads, storedHeld, inboxHeld, outcome] = await Promise.all([
       hub.drainClosing(NETWORK_DRAIN_MS),
       iceRequests.drain(NETWORK_DRAIN_MS),
       storedStopping,
+      inboxStopping,
       serviceStopping,
     ]);
 
@@ -842,9 +993,15 @@ export function registerHandlers(
       // A stored receive still running is an open transfer, and a retained
       // cleanup ticket is a destination this process could not close — both
       // belong in the same counts the leases use.
-      openLeases: outcome.openLeases + storedHeld.active,
+      // A delivery still being received is an open transfer, and a retained
+      // Inbox destination is one this process could not close — the same two
+      // facts the stored counts carry, from the other receiving feature.
+      openLeases: outcome.openLeases + storedHeld.active + inboxHeld.active,
       unresolved:
-        outcome.unresolved + storedHeld.retained.length + (revocation !== null ? 1 : 0),
+        outcome.unresolved +
+        storedHeld.retained.length +
+        inboxHeld.retained.length +
+        (revocation !== null ? 1 : 0),
       networkUnsettled: sockets + reads,
       firstReason: outcome.firstReason ?? revocation,
     };
@@ -861,6 +1018,8 @@ export function registerHandlers(
     // failure with no renderer left to hear it, and swallowing it here would be
     // the last place it could have been reported.
     await Promise.allSettled([...revocations]);
+    releaseAccountWatch();
+    await inbox.dispose();
     await storedReceive.dispose();
     await service.dispose();
     if (revocationFailure !== null) throw revocationFailure;
@@ -876,7 +1035,10 @@ export function registerHandlers(
     service.resume();
     service.admitReceives();
     storedReceive.resume();
+    // The scheduler too: it was stopped by the same quiesce, and a Stay that
+    // left it stopped would be an app that quietly never receives again.
+    inbox.resume();
   };
 
-  return { service, storedReceive, resident, fence, quiesce, resume, preferences: prefs, dispose: teardown };
+  return { service, storedReceive, inbox, resident, fence, quiesce, resume, preferences: prefs, dispose: teardown };
 }

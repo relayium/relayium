@@ -245,13 +245,13 @@ async function main() {
   // EXACT set, not a superset: a `contains` check would pass while the preload
   // quietly grew a surface nobody reviewed.
   //
-  // Pinned to the reviewed surface as it stands — `stored` joined `resident`
-  // and `loginItem` — rather than to whatever this tree happens to expose,
-  // which would accept a stale or an unreviewed bridge silently.
+  // Pinned to the reviewed surface as it stands — `inbox` joined `stored`,
+  // `resident` and `loginItem` — rather than to whatever this tree happens to
+  // expose, which would accept a stale or an unreviewed bridge silently.
   check(
     "bridge exposed",
     parsed.keys.sort().join(",") ===
-      "appInfo,auth,ice,loginItem,pair,prefs,receive,resident,signaling,stored",
+      "appInfo,auth,ice,inbox,loginItem,pair,prefs,receive,resident,signaling,stored",
     parsed.keys.join(","),
   );
   check("no raw ipcRenderer in the page", parsed.hasIpc === false);
@@ -276,6 +276,19 @@ async function main() {
     "relayium:stored-receive-start", "relayium:stored-receive-cancel",
     "relayium:stored-receive-result", "relayium:stored-inventory",
     "relayium:stored-cleanup-retry",
+    // Device Inbox receive. Fourteen names, every one of which takes an id or
+    // nothing: none of them can carry a path, a claim token or a key, and
+    // enabling opens a native dialog in main rather than accepting a
+    // destination from the page.
+    "relayium:inbox-state", "relayium:inbox-enable", "relayium:inbox-disable",
+    "relayium:inbox-choose-folder", "relayium:inbox-pending", "relayium:inbox-accept",
+    "relayium:inbox-reject", "relayium:inbox-messages", "relayium:inbox-open-message",
+    // Copying happens in MAIN, because `window.ts` denies every renderer
+    // permission including the browser clipboard. It names a message this
+    // account has received; there is no channel that takes a string.
+    "relayium:inbox-copy-message",
+    "relayium:inbox-delete-message", "relayium:inbox-rename", "relayium:inbox-wake",
+    "relayium:inbox-release-retained",
   ];
   // Restated above rather than derived, so a channel cannot be added to the
   // contract and reach a handler without appearing in a reviewed list — and

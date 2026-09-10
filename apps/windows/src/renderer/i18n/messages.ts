@@ -219,10 +219,107 @@ export const en = {
   storedSendSoon: "Sending a link is not part of this build yet.",
   storedHistorySoon: "Your sent links will be listed here.",
 
+
+  // --- Device Inbox -------------------------------------------------------
+  inboxTitle: "Device Inbox",
+  inboxSubtitle: "Receive files and messages from your own devices, even when this window is closed.",
+
+  // The switch, and what turning it on actually does. Said in full because it
+  // is consent: enabling tells Relayium's server this PC can be sent to, and
+  // picking the folder is the same act.
+  inboxOffTitle: "Receiving is off",
+  inboxOffBody:
+    "Turn this on to let your other Relayium devices send files and messages to this PC. You choose the folder they arrive in, and you are asked before anything is saved.",
+  inboxTurnOn: "Turn on receiving",
+  inboxTurnOff: "Turn off receiving",
+  inboxOnTitle: "Receiving is on",
+  // The resident promise, stated where it can be checked. This is the reason
+  // the feature exists on a desktop client rather than in a browser tab.
+  inboxBackgroundNote: "Deliveries keep arriving while this window is closed or while you are on another page.",
+  inboxCanReceive: "This PC can receive files and messages.",
+  inboxCanReceiveFiles: "This PC can receive files.",
+  inboxCanReceiveText: "This PC can receive messages.",
+
+  inboxNeedsAccountTitle: "Sign in to use the Device Inbox",
+  inboxNeedsAccountBody: "The Device Inbox delivers to your own devices, so it needs the account they share.",
+  inboxAccountUnreadableTitle: "This PC's secure storage could not be read",
+  // Truthful about the consequence rather than reassuring: the enrolment may
+  // well still be live, so this does not say receiving has stopped.
+  inboxAccountUnreadableBody:
+    "Relayium could not open the encrypted storage that holds this device's keys. Receiving cannot continue until it can, and your messages have not been deleted.",
+
+  inboxFolderMissingTitle: "The receiving folder is not there",
+  inboxFolderMissingBody:
+    "Receiving is still on, but the folder you chose cannot be found — it may have been moved, renamed, or be on a drive that is disconnected. Choose it again to continue.",
+  inboxChooseFolder: "Choose folder",
+  inboxChangeFolder: "Change folder",
+  inboxFolderChosen: "Files will arrive in the folder you chose.",
+
+  inboxStartingTitle: "Starting…",
+  inboxStartingBody: "Registering this PC with your account.",
+  inboxIdleTitle: "Waiting for deliveries",
+  inboxIdleBody: "Nothing is waiting right now.",
+  inboxReceivingTitle: "Receiving…",
+  inboxReceivingBody: "A delivery is being saved.",
+  inboxBlockedTitle: "Something needs a decision",
+  inboxBlockedBody:
+    "A delivery stopped in a way Relayium cannot resolve on its own. It has not been discarded and it will not be retried automatically.",
+  inboxOfflineTitle: "Cannot reach Relayium",
+  inboxOfflineBody: "Trying again in {seconds}s.",
+  inboxRetryNow: "Try again now",
+  inboxUnavailableTitle: "Not available in this build",
+  inboxUnavailableBody: "This build cannot receive deliveries yet, so there is nothing to switch on.",
+  inboxWithdrawalPending:
+    "Relayium could not tell the server this PC has stopped receiving. It will keep trying; until it succeeds, your other devices may still offer to send here.",
+
+  inboxPendingHeading: "Waiting for you",
+  inboxPendingEmpty: "Nothing is waiting.",
+  inboxPendingItem: "{bytes} from one of your devices",
+  inboxAccept: "Accept",
+  inboxReject: "Decline",
+  inboxAcceptedSaved: "Saved.",
+  inboxAcceptedSavedMessage: "Message saved.",
+  inboxAcceptedPartial: "Partly saved: {saved} of {total} files.",
+  inboxAcceptedQueued: "Accepted. It will be received shortly.",
+  inboxAcceptedBlocked: "This delivery needs a decision and was not received.",
+  inboxAcceptedSettled: "That delivery is no longer waiting.",
+  inboxAcceptedBusy: "Another delivery is being received. Try again in a moment.",
+  inboxAcceptedRefused: "Not accepted — Relayium is closing.",
+  inboxAckPending: "Saved. The server has not confirmed yet.",
+
+  inboxMessagesHeading: "Messages",
+  inboxMessagesEmpty: "No messages yet.",
+  inboxMessageItem: "From one of your devices",
+  inboxOpen: "Open",
+  inboxClose: "Close",
+  inboxCopy: "Copy",
+  inboxCopied: "Copied",
+  inboxCopyFailed: "Could not copy",
+  inboxCopyFailedBody: "The message could not be read just now. Select the text above and copy it.",
+  inboxDelete: "Delete",
+  inboxMessageKept: "Messages stay on this PC until you delete them. Turning receiving off does not remove them.",
+
+  inboxDeviceHeading: "This device",
+  inboxDeviceUnnamed: "Not named yet",
+  inboxRenameLabel: "Device name",
+  inboxRename: "Rename",
+  inboxRenamed: "Renamed.",
+
+  inboxRetainedHeading: "Could not be cleaned up",
+  inboxRetainedBody:
+    "A delivery was stopped and Relayium could not confirm that the partly-written files were removed. You can ask it to try again.",
+  inboxRetainedRetry: "Try cleanup again",
+
+  inboxDeclined: "No folder was chosen, so nothing was turned on.",
+  inboxEnabledNotice: "Receiving is on.",
+  inboxDisabledNotice: "Receiving is off. Your messages and keys are untouched.",
+  inboxRefused: "Not done — Relayium is closing.",
+  inboxSuperseded: "That was replaced by a newer change, so nothing was altered.",
+  inboxFailed: "That did not work. Relayium will try again on its own.",
+
   // --- Placeholders -------------------------------------------------------
   soonTitle: "Not in this build yet",
   soonStored: "Sending a download link is not part of this build yet.",
-  soonInbox: "Device Inbox is not part of this build yet.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -410,9 +507,98 @@ export const zh: Record<MessageKey, string> = {
   storedSendSoon: "此版本尚未包含「发送链接」。",
   storedHistorySoon: "你发送过的链接会显示在这里。",
 
+
+  inboxTitle: "设备收件箱",
+  inboxSubtitle: "接收来自你自己设备的文件和消息，即使此窗口已关闭。",
+
+  inboxOffTitle: "接收已关闭",
+  inboxOffBody:
+    "打开后，你的其他 Relayium 设备就可以向这台电脑发送文件和消息。你来选择接收文件夹，保存任何内容前都会先征得你的同意。",
+  inboxTurnOn: "打开接收",
+  inboxTurnOff: "关闭接收",
+  inboxOnTitle: "接收已打开",
+  inboxBackgroundNote: "即使此窗口已关闭，或你正在其他页面，也会继续接收。",
+  inboxCanReceive: "这台电脑可以接收文件和消息。",
+  inboxCanReceiveFiles: "这台电脑可以接收文件。",
+  inboxCanReceiveText: "这台电脑可以接收消息。",
+
+  inboxNeedsAccountTitle: "登录后才能使用设备收件箱",
+  inboxNeedsAccountBody: "设备收件箱只在你自己的设备之间投递，因此需要它们共用的账号。",
+  inboxAccountUnreadableTitle: "无法读取这台电脑的加密存储",
+  inboxAccountUnreadableBody:
+    "Relayium 无法打开保存本设备密钥的加密存储。在此之前无法继续接收，你的消息不会被删除。",
+
+  inboxFolderMissingTitle: "接收文件夹不存在",
+  inboxFolderMissingBody:
+    "接收仍处于打开状态，但找不到你选择的文件夹——它可能已被移动、重命名，或所在的磁盘已断开。重新选择即可继续。",
+  inboxChooseFolder: "选择文件夹",
+  inboxChangeFolder: "更换文件夹",
+  inboxFolderChosen: "文件会保存到你选择的文件夹。",
+
+  inboxStartingTitle: "正在启动…",
+  inboxStartingBody: "正在将这台电脑注册到你的账号。",
+  inboxIdleTitle: "等待投递",
+  inboxIdleBody: "当前没有待处理的内容。",
+  inboxReceivingTitle: "正在接收…",
+  inboxReceivingBody: "正在保存一次投递。",
+  inboxBlockedTitle: "有内容需要你决定",
+  inboxBlockedBody:
+    "一次投递以 Relayium 无法自行解决的方式中断了。它没有被丢弃，也不会自动重试。",
+  inboxOfflineTitle: "无法连接 Relayium",
+  inboxOfflineBody: "将在 {seconds} 秒后重试。",
+  inboxRetryNow: "立即重试",
+  inboxUnavailableTitle: "此版本尚未包含",
+  inboxUnavailableBody: "此版本还不能接收投递，因此没有可开启的开关。",
+  inboxWithdrawalPending:
+    "Relayium 未能告知服务器这台电脑已停止接收。它会继续尝试；在此之前，你的其他设备可能仍会显示可以发送到这里。",
+
+  inboxPendingHeading: "等待你处理",
+  inboxPendingEmpty: "没有等待处理的内容。",
+  inboxPendingItem: "来自你的某台设备，{bytes}",
+  inboxAccept: "接受",
+  inboxReject: "拒绝",
+  inboxAcceptedSaved: "已保存。",
+  inboxAcceptedSavedMessage: "消息已保存。",
+  inboxAcceptedPartial: "部分保存：{total} 个文件中已保存 {saved} 个。",
+  inboxAcceptedQueued: "已接受，稍后开始接收。",
+  inboxAcceptedBlocked: "这次投递需要你的决定，尚未接收。",
+  inboxAcceptedSettled: "该投递已不在等待中。",
+  inboxAcceptedBusy: "正在接收另一次投递，请稍后再试。",
+  inboxAcceptedRefused: "未接受：Relayium 正在关闭。",
+  inboxAckPending: "已保存。服务器尚未确认。",
+
+  inboxMessagesHeading: "消息",
+  inboxMessagesEmpty: "还没有消息。",
+  inboxMessageItem: "来自你的某台设备",
+  inboxOpen: "打开",
+  inboxClose: "关闭",
+  inboxCopy: "复制",
+  inboxCopied: "已复制",
+  inboxCopyFailed: "无法复制",
+  inboxCopyFailedBody: "此刻无法读取该消息。请选中上面的文本自行复制。",
+  inboxDelete: "删除",
+  inboxMessageKept: "消息会保留在这台电脑上，直到你删除它们。关闭接收不会删除消息。",
+
+  inboxDeviceHeading: "本设备",
+  inboxDeviceUnnamed: "尚未命名",
+  inboxRenameLabel: "设备名称",
+  inboxRename: "重命名",
+  inboxRenamed: "已重命名。",
+
+  inboxRetainedHeading: "未能清理",
+  inboxRetainedBody:
+    "一次投递被中断，Relayium 无法确认已写入的部分文件是否已被清除。你可以让它再试一次。",
+  inboxRetainedRetry: "重试清理",
+
+  inboxDeclined: "未选择文件夹，因此没有打开任何功能。",
+  inboxEnabledNotice: "接收已打开。",
+  inboxDisabledNotice: "接收已关闭。你的消息和密钥不受影响。",
+  inboxRefused: "未执行：Relayium 正在关闭。",
+  inboxSuperseded: "该操作已被更新的更改取代，因此未做任何改动。",
+  inboxFailed: "操作未成功。Relayium 会自行重试。",
+
   soonTitle: "此版本尚未包含",
   soonStored: "此版本尚未包含「发送链接」。",
-  soonInbox: "此版本尚未包含「设备收件箱」。",
 };
 
 export const CATALOGUES = { en, zh } as const;

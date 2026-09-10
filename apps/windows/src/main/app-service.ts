@@ -1118,6 +1118,23 @@ export class AppService {
       }
       this.attempt = null;
       this.accountEmail = accountEmail;
+      // ## Told again, now that the credential is actually held
+      //
+      // The notification at the top of this transition fires BEFORE the bearer
+      // is written, because its job there is to stop work that captured the old
+      // authority. A watcher that is waiting for a NEW one — the Device Inbox
+      // scheduler, which reads the credential and adopts an account with it —
+      // sees only that first wake, reads a store that has no bearer in it yet,
+      // and concludes the user is signed out. It then waits out its whole
+      // backoff before looking again: the real one is thirty seconds, so
+      // signing in left the Inbox dead for half a minute for no reason a person
+      // could see.
+      //
+      // This is not the duplicate that was removed from `signOut`. That one was
+      // two wakes for one transition with nothing in between; this is a second
+      // transition — "an account is now signed in" — and it is the only moment
+      // at which that becomes true.
+      this.notifyAuthorityChange();
       return { status: "ok", accountEmail };
     });
   }
@@ -1214,8 +1231,15 @@ export class AppService {
       this.notifyAuthorityChange();
       this.accountEmail = "";
       // Any sign-in in flight belongs to the session being ended.
+      //
+      // No second `notifyAuthorityChange()` here. There was one, and it woke
+      // every watcher a second time for one account change: `retire` above
+      // aborts the attempt directly, so nothing between the two calls could
+      // change what a watcher observes. A watcher is a callback of unknown
+      // cost — the Inbox scheduler tears a binding down from one — and firing
+      // it twice for a single transition is how a teardown gets run against
+      // state the first pass already retired.
       if (this.attempt !== null) this.retire(this.attempt);
-    this.notifyAuthorityChange();
       await this.cancelLeases();
       // Only the bearer. The installation identity is a different key and is
       // never cleared, or signing back in would mint a third device row.
@@ -1703,6 +1727,87 @@ export class AppService {
    */
   get accountEpoch(): number {
     return this.epoch;
+  }
+
+  /**
+   * Be told when the account authority moves. Returns its own release.
+   *
+   * The same wake `onAuthorityChange` gives an in-flight operation, exposed for
+   * a feature that is not one call but a LIFETIME — the Device Inbox scheduler
+   * owns a binding for as long as an account is signed in, and polling the
+   * epoch would give it a window in which it is still working under an account
+   * that has gone away.
+   *
+   * Fired for a DOCUMENT change too, because `revokeDocument` wakes the same
+   * watchers. That is not a bug to paper over here: some listeners genuinely
+   * care about both, and one that only cares about the account compares
+   * `accountEpoch` itself. Making this account-only would need a second
+   * watcher set whose only difference is which of two facts it hides.
+   */
+  /**
+   * The encrypted-at-rest store, for a main feature that keeps its own values.
+   *
+   * MAIN-ONLY, and deliberately the whole store rather than a per-feature
+   * handle: this class does not own the Device Inbox's key names and inventing
+   * a namespace for them here would put half of that decision in the wrong
+   * file. The caller narrows — `InboxService` hands its key store a proxy that
+   * refuses every name outside its own slot, so the bearer and the
+   * installation identity are not reachable from it.
+   *
+   * Sharing ONE store instance is the point, not an accident. `SecretStore`
+   * serialises per key inside the instance; a second store over the same
+   * directory would serialise its own writes only, and `putIfAbsent`'s
+   * create-once guarantee — the thing that stops a second at-rest key being
+   * minted over a readable history — holds within an instance and nowhere else.
+   */
+  secretStore(): Promise<SecretStore> {
+    return this.session().then((session) => session.store);
+  }
+
+  onAccountChanged(listener: () => void): () => void {
+    this.authorityWatchers.add(listener);
+    return () => this.authorityWatchers.delete(listener);
+  }
+
+  /**
+   * The credential an account-owned main feature needs, and nothing else.
+   *
+   * MAIN-ONLY. There is no IPC channel that reaches this and there must never
+   * be one: the bearer staying in this process is what makes a renderer
+   * foothold survivable, and the Device Inbox composes an authenticated client
+   * in main precisely so the page never holds one.
+   *
+   * Three answers rather than two. An unreadable or unavailable store is NOT
+   * "signed out": the enrolment it belongs to may still be live on the server,
+   * and a caller that treated the two the same would offer to switch a feature
+   * on over a device central already lists.
+   */
+  async captureAccountAuthority(): Promise<
+    | { readonly kind: "signed-out" }
+    | { readonly kind: "unavailable" }
+    | { readonly kind: "ok"; readonly bearer: string; readonly epoch: number }
+  > {
+    if (this.disposed) return { kind: "unavailable" };
+    // Captured BEFORE the reads, so a bearer returned here is one this account
+    // held: a caller re-checks the epoch after its own awaits, and an epoch
+    // read afterwards would be the new account's.
+    const captured = this.currentEpoch();
+    let session: Session;
+    try {
+      session = await this.session();
+    } catch {
+      return { kind: "unavailable" };
+    }
+    let bearer: string;
+    try {
+      bearer = await session.store.get(BEARER_KEY);
+    } catch (err) {
+      if (err instanceof SecretStoreError && err.code === "not-found") return { kind: "signed-out" };
+      return { kind: "unavailable" };
+    }
+    if (bearer.length === 0) return { kind: "signed-out" };
+    if (captured !== this.epoch || this.disposed) return { kind: "unavailable" };
+    return { kind: "ok", bearer, epoch: captured };
   }
 
   /**

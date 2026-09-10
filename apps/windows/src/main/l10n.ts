@@ -79,7 +79,20 @@ export type MessageKey =
   | "resident.notify.failedBody"
   | "native.receive.pickTitle"
   | "native.receive.pickConfirm"
-  | "native.download.pickConfirm";
+  | "native.download.pickConfirm"
+  /**
+   * The Device Inbox destination.
+   *
+   * Its own pair rather than reusing the LAN receive strings, because the
+   * question is a different one and the answer lasts. `native.receive.pickTitle`
+   * asks where to put THIS transfer, once, with the sender already on screen;
+   * this asks for a standing destination for deliveries that will arrive later,
+   * from any of the user's own devices, while they are doing something else. A
+   * shared string would have to be vague enough to mean both, and the folder a
+   * person picks for "a transfer" is not the one they pick for "from now on".
+   */
+  | "native.inbox.pickTitle"
+  | "native.inbox.pickConfirm";
 
 /**
  * The keys that take a number, and the only ones that may contain `{count}`.
@@ -174,6 +187,8 @@ export const EN: Catalog = {
   "native.receive.pickConfirm": "Use Folder",
   "native.download.pickTitle": "Choose where to save {count} file(s)",
   "native.download.pickConfirm": "Save Here",
+  "native.inbox.pickTitle": "Choose where your devices send files",
+  "native.inbox.pickConfirm": "Receive Here",
 };
 
 export const ZH_HANS: Catalog = {
@@ -236,6 +251,8 @@ export const ZH_HANS: Catalog = {
   "native.receive.pickConfirm": "使用此文件夹",
   "native.download.pickTitle": "选择保存位置（{count} 个文件）",
   "native.download.pickConfirm": "保存到这里",
+  "native.inbox.pickTitle": "选择你的设备发来的文件的保存位置",
+  "native.inbox.pickConfirm": "接收到这里",
 };
 
 /**
