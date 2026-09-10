@@ -1252,6 +1252,22 @@ async function main() {
         + `entries=${JSON.stringify(entries)} `
         + `[panel, reported only: outcome=${outcome || "(none)"} notice=${JSON.stringify(notice)}]`);
 
+      // A SEPARATE oracle, and deliberately separate.
+      //
+      // The check above proves the refusal happened FOR THE RIGHT REASON, read
+      // from the destination seam where the typed cause still exists. This one
+      // proves the USER WAS TOLD, read from the shipped pane. They are
+      // different claims and one must never stand in for the other: the Windows
+      // runner reported a correct `E_MANIFEST` refusal alongside
+      // `outcome=(none) notice=""`, which is a receiver that did the right
+      // thing and said nothing about it.
+      //
+      // `recv-saved` cannot satisfy this, and neither can an empty notice — the
+      // two readings that made the old single check pass for the wrong reason.
+      step("the refusal is VISIBLE: the shipped pane reaches a terminal receipt with a reason",
+        (outcome === "recv-failed" || outcome === "recv-cancelled") && notice !== "",
+        `outcome=${outcome || "(none)"} notice=${JSON.stringify(notice)}`);
+
       // ---- controls on the refusal evidence itself -------------------------
       //
       // Each runs the SAME `refusalOf` predicate the assertion above used, over

@@ -648,10 +648,32 @@ export class RoomController {
         },
       };
     } catch (err) {
-      if (err instanceof ReceiveCancelledError) {
-        this.#lastReceipt = { kind: "cancelled" };
-        this.#changed();
-      }
+      // EVERY failure gets a receipt, not only a cancellation.
+      //
+      // This recorded one solely for `ReceiveCancelledError` and rethrew
+      // everything else in silence. A destination that cannot be OPENED — which
+      // is exactly what a manifest refused by the Windows path guards produces —
+      // therefore left `lastReceipt` null, and every branch of `LinkPane`'s
+      // receipt card is gated on `receipt?.kind`. So the transfer ended and the
+      // pane showed NOTHING: no outcome, no reason, no notice. Observed on the
+      // Windows runner as `outcome=(none) notice=""` for a refused `NUL.txt`,
+      // against a helper that had correctly refused it.
+      //
+      // `describeReceipt` leaves the cancellation case byte-identical and gives
+      // everything else a terminal `failed` receipt, so the surface gains an
+      // honest ending without gaining anything private: `reason` is the fixed
+      // string `internal`, never the error's message, the manifest, a path, or
+      // the helper's typed code. What actually went wrong stays in the log and
+      // in main.
+      //
+      // The classification really is unknown here and is not dressed up as
+      // known. `residue` is TRUE because `#settle` has not run yet, a lease may
+      // already have created a staging directory, and this is precisely the
+      // case where the folder cannot be described as clean. `saved` is 0
+      // because publication never began — a fact about the phase this
+      // coordinator reached, not a claim about what is on the disk.
+      this.#lastReceipt = describeReceipt(err, files.length);
+      this.#changed();
       // A picker the user cancelled is terminal and drops out; one that failed
       // mid-cleanup is retained by `#settle` until it settles.
       void this.#settle(coordinator);
