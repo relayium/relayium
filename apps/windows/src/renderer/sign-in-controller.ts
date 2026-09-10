@@ -48,6 +48,9 @@ export interface AppInfoView {
   readonly origin: string;
   readonly version: string;
   readonly banner: string | null;
+  /** Whether same-network discovery starts on its own. False only in an
+   *  engineering build told to stay out of the room. */
+  readonly lanAutoStart?: boolean;
 }
 
 export interface CancelResult {

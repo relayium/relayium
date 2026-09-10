@@ -1,86 +1,157 @@
 // The boundary between "bytes arrived" and "the file is saved".
 //
-// ## Why this is an interface and not an implementation
+// ## Two implementations, and which one ships
 //
-// `apps/windows/native/**` belongs to the native-core lane, and its wire schema
-// is live but not accepted. Nothing here reads, imports or edits it. What this
-// file does is fix the SHAPE of the boundary — deliberately the same five
-// operations the helper already speaks (`open`/`begin`/`finish`/`publish`/
-// `cancel`, plus chunk frames) — so root can swap the accepted helper in behind
-// it without reshaping either side.
+// `NativeHelperDestination` wraps the accepted `NativeHelperClient` and is the
+// PRODUCTION path: a real child process with Win32 no-replace primitives behind
+// it. `LeaseReceiveAdapter` wraps `ReceiveLease`, whose `publish()` refuses — it
+// stages bytes and cannot move them to their final names.
+//
+// The lease adapter is deliberately NOT a fallback. A build that quietly used it
+// when the helper failed to spawn would stage a whole transfer and then report a
+// save it never performed. It is reachable only by explicit injection (tests)
+// and on the non-Windows path, where it exists to REFUSE truthfully rather than
+// to substitute.
 //
 // ## The one thing this boundary exists to make unlie-able
 //
 // Publication is a separate, terminal, explicitly-reported step. Every other
-// arrangement makes the same mistake in a different place: a `close()` that
-// resolves when the last chunk is written means "ciphertext transferred", and a
-// UI that renders it as "saved" is claiming something no code has done. The
-// user's chosen filenames do not exist until `publish` says they do.
+// arrangement makes the same mistake somewhere else: a `close()` that resolves
+// when the last chunk is written means "ciphertext transferred", and a UI that
+// renders it as "saved" is claiming something no code has done. The user's
+// chosen filenames do not exist until `publish` says they do.
 //
-// `partial` is why the report is a value rather than a boolean. The helper
-// publishes in manifest order and stops at the first conflict, so some files can
-// genuinely exist under their final names while the rest never will. Reporting
-// that as success or as failure is a lie in one direction or the other, so it is
-// neither.
+// ## Errors do not survive IPC, so failures are not sent as errors
+//
+// Electron serialises a rejection by its message and drops every custom
+// property. `NativeHelperError` carries three things a person acts on — a stable
+// code, whether bytes were left on disk, and the receipt when publication
+// succeeded and only cleanup failed — and all three would arrive as prose. So
+// `publish()` RESOLVES with a `PublishReport` that has a `failed` variant, and
+// the mapping happens here, where the typed error still exists.
 
-import type { PublishReport } from "../../shared/ipc-contract.js";
+import type { PublishFailureReason, PublishReport } from "../../shared/ipc-contract.js";
 import { ReceiveLease, ReceiveLeaseError, type LeasePublisher } from "../io/receive-lease.js";
+import {
+  NativeHelperClient,
+  NativeHelperError,
+  type NativeHelperClientOptions,
+  type NativePublishReport,
+  type NativeReceiveDestination,
+} from "../io/native-helper-client.js";
 
 /**
  * The operations a receive destination must be able to perform.
  *
  * Indices, never paths: the caller refers to files by their position in the
- * manifest the lease already validated. That is the property that makes a
- * compromised renderer unable to name a destination, and it is preserved
- * verbatim across this boundary.
+ * manifest already validated. That is what makes a compromised renderer unable
+ * to name a destination, and it is preserved verbatim across this boundary.
  */
 export interface NativeReceiveAdapter {
-  /** How many files this destination is holding open. */
   readonly fileCount: number;
-  /**
-   * Refuse if this destination does not belong to the named authority.
-   *
-   * Belt and braces against the caller's own bookkeeping: the service looks a
-   * lease up in its map and then asks the LEASE whether it agrees. A map that
-   * had drifted — an id reused, an entry re-registered under a rotated epoch —
-   * is caught here rather than silently driving one transfer's handle under
-   * another's identity. Carried across this boundary unchanged from the
-   * accepted foundation.
-   */
+  /** Refuse if this destination does not belong to the named authority. Belt
+   *  and braces against the caller's own bookkeeping. */
   assertAuthority(authorityId: string): void;
   begin(index: number): Promise<void>;
-  /** Returns bytes the OS accepted — never the count the sender declared. */
   write(index: number, chunk: Uint8Array): Promise<void>;
   finish(index: number): Promise<void>;
   /**
    * Move the staged batch to the user's chosen names.
    *
-   * The ONLY operation whose success means "saved". Resolves with a truthful
-   * report; a `partial` is a resolution, not a rejection, because the caller
-   * has to render the count.
+   * The ONLY operation whose success means "saved". Always RESOLVES — with a
+   * receipt, a truthful `partial`, or a typed `failed`.
    */
   publish(): Promise<PublishReport>;
-  /** Terminal, idempotent, and reachable from every abandonment path. */
+  /** Terminal and idempotent. REJECTS when cleanup could not be confirmed, so a
+   *  caller cannot mistake residue for a clean teardown. */
   cancel(): Promise<void>;
 }
 
+/** The helper's codes, narrowed to the sentences this product can show. The
+ *  helper's own message is never forwarded — it can contain a path. */
+const FAILURE_BY_CODE: Record<string, PublishFailureReason> = {
+  "helper-unavailable": "helper-unavailable",
+  "helper-timeout": "timeout",
+  protocol: "internal",
+  busy: "internal",
+  cancelled: "cancelled",
+  "manifest-refused": "internal",
+  "authority-changed": "internal",
+  "length-exceeded": "io-failed",
+  "length-short": "io-failed",
+  "short-write": "io-failed",
+  "publish-failed": "io-failed",
+  "cleanup-uncertain": "cleanup-uncertain",
+  residue: "cleanup-uncertain",
+  "io-failed": "io-failed",
+  internal: "internal",
+};
+
+const toReport = (native: NativePublishReport): PublishReport =>
+  native.status === "complete"
+    ? { status: "complete", publishedCount: native.publishedCount, total: native.total }
+    : {
+        status: "partial",
+        publishedCount: native.publishedCount,
+        total: native.total,
+        failedIndex: native.failedIndex,
+        reason: native.reason,
+      };
+
+/** The production destination. */
+export class NativeHelperDestination implements NativeReceiveAdapter {
+  constructor(private readonly client: NativeReceiveDestination) {}
+
+  static async open(options: NativeHelperClientOptions): Promise<NativeHelperDestination> {
+    return new NativeHelperDestination(await NativeHelperClient.open(options));
+  }
+
+  get fileCount(): number {
+    return this.client.fileCount;
+  }
+
+  assertAuthority(authorityId: string): void {
+    this.client.assertAuthority(authorityId);
+  }
+
+  begin(index: number): Promise<void> {
+    return this.client.begin(index);
+  }
+
+  write(index: number, chunk: Uint8Array): Promise<void> {
+    return this.client.write(index, chunk);
+  }
+
+  finish(index: number): Promise<void> {
+    return this.client.finish(index);
+  }
+
+  async publish(): Promise<PublishReport> {
+    try {
+      return toReport(await this.client.publish());
+    } catch (err) {
+      return describeFailure(err);
+    }
+  }
+
+  cancel(): Promise<void> {
+    // Deliberately propagated. `cancel` rejecting is how the helper reports a
+    // teardown that may have left bytes behind, and swallowing it here would be
+    // the silent loss this whole path exists to prevent.
+    return this.client.cancel();
+  }
+}
+
 /**
- * Today's implementation: staging is real, publication is not.
+ * The portable destination. Stages truthfully; cannot publish.
  *
- * `ReceiveLease.publish()` rejects with `publish-unsupported` unless it is given
- * a publisher backed by real Win32 no-replace primitives, and none ships yet.
- * That refusal is surfaced as a refusal — it is never rendered as a save, and it
- * is never softened into a `partial` (which would claim some files WERE
- * published). An honest "this build cannot complete the save" is the correct
- * interim behaviour and the whole reason the report type is explicit.
- *
- * This is interim. Full native publication remains owed by the wider task; root
- * integrates the accepted helper behind this same interface.
+ * Reachable by explicit injection and on the non-Windows path. Never a fallback
+ * for a helper that failed to start — see the header.
  */
 export class LeaseReceiveAdapter implements NativeReceiveAdapter {
   constructor(
     private readonly lease: ReceiveLease,
-    /** Supplied once the native helper is integrated. Absent today. */
+    /** Only ever supplied by a test exercising publication itself. */
     private readonly publisher?: LeasePublisher,
   ) {}
 
@@ -105,23 +176,30 @@ export class LeaseReceiveAdapter implements NativeReceiveAdapter {
   }
 
   async publish(): Promise<PublishReport> {
-    // `close()` is the completeness check — every planned file staged, none
-    // still open — and it is deliberately separate from publication. A lease
-    // that stopped early fails here rather than publishing a short batch.
-    const staged = await this.lease.close();
-    const published = await this.lease.publish(this.publisher);
-    if (published.length === staged.length) {
-      return { status: "complete", publishedCount: published.length, total: staged.length };
+    try {
+      // `close()` is the completeness check — every planned file staged, none
+      // still open — and it is deliberately separate from publication.
+      const staged = await this.lease.close();
+      const published = await this.lease.publish(this.publisher);
+      if (published.length === staged.length) {
+        return { status: "complete", publishedCount: published.length, total: staged.length };
+      }
+      return {
+        status: "partial",
+        publishedCount: published.length,
+        total: staged.length,
+        failedIndex: published.length,
+        reason: "publish-stopped",
+      };
+    } catch (err) {
+      // `publish-unsupported` is this adapter's honest answer, surfaced as a
+      // named failure and never softened into a `partial` — which would claim
+      // some files WERE written under their final names.
+      if (err instanceof ReceiveLeaseError && err.code === "publish-unsupported") {
+        return { status: "failed", reason: "unsupported", residue: true };
+      }
+      return describeFailure(err);
     }
-    // A publisher that stopped short. The count is what it actually wrote, and
-    // the failing index is the next one in manifest order.
-    return {
-      status: "partial",
-      publishedCount: published.length,
-      total: staged.length,
-      failedIndex: published.length,
-      reason: "publish-stopped",
-    };
   }
 
   async cancel(): Promise<void> {
@@ -129,4 +207,29 @@ export class LeaseReceiveAdapter implements NativeReceiveAdapter {
   }
 }
 
-export { ReceiveLeaseError };
+/**
+ * Turn a thrown failure into something that survives IPC.
+ *
+ * `residue` defaults to TRUE for anything unrecognised. An unknown failure is
+ * precisely the case where this process cannot say the user's folder is clean,
+ * and defaulting to `false` would be a guess dressed as a fact.
+ */
+export function describeFailure(err: unknown): PublishReport {
+  if (err instanceof NativeHelperError) {
+    const published = err.publishReport;
+    return {
+      status: "failed",
+      reason: FAILURE_BY_CODE[err.code] ?? "internal",
+      residue: err.residue,
+      // Preserved: those files exist under their final names, and an error
+      // about cleanup must not report them as unsaved.
+      ...(published
+        ? { published: { publishedCount: published.publishedCount, total: published.total } }
+        : {}),
+    };
+  }
+  return { status: "failed", reason: "internal", residue: true };
+}
+
+export { ReceiveLeaseError, NativeHelperError };
+export type { NativeReceiveDestination };

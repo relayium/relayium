@@ -54,6 +54,15 @@ import { app, BrowserWindow, ipcMain } from "electron";
 // top level and Electron only accepts it before the `ready` event; a dynamic
 // `import()` inside an async function resolves after ready has already fired.
 import { SecretStore } from "../../dist/main/secrets.js";
+// The REAL control-plane readers and the real preference store, constructed
+// here with a synthetic transport and a task-owned file. Substituting the
+// classes wholesale would stop exercising the shipping request building,
+// redirect refusal and body narrowing; substituting only what leaves the
+// machine keeps all of that and still guarantees the run reaches no network.
+import { IceControl } from "../../dist/main/net/ice-control.js";
+import { PairControl } from "../../dist/main/net/pair-control.js";
+import { PreferenceStore } from "../../dist/main/preferences.js";
+import { IPC_CHANNELS } from "../../dist/shared/ipc-contract.js";
 import {
   bootstrap,
   APP_SCHEME,
@@ -61,6 +70,7 @@ import {
   contentSecurityPolicy,
   resolveBundlePath,
 } from "../../dist/main/main.js";
+import path from "node:path";
 
 const failures = [];
 const check = (name, ok, detail) => {
@@ -123,6 +133,52 @@ let pollCalls = 0;
 let approvalURLSeen = null;
 const smokeStore = new SecretStore(secretsDir, testCipher);
 
+// ## Nothing in this run reaches the network, and nothing overrides ambiently
+//
+// The shell opens a LAN room by itself on a fresh process — that is the product
+// behaviour, and suppressing it with `RELAYIUM_WINDOWS_NO_LAN_AUTOSTART` would
+// be an ambient override that also stops the wiring being exercised at all. So
+// the three things that would leave the machine are INJECTED through the same
+// reviewed composition the auth client already uses: the signalling socket, and
+// the `fetch` inside the real ICE and pairing readers.
+/** The origin this build compiles in, restated so the readers above are built
+ *  against the same address the app uses — and asserted below, not assumed. */
+const PRODUCTION_ORIGIN = "https://relayium.com";
+
+const socketURLs = [];
+/** A `SignalingSocketLike` that connects to nothing. */
+function makeSyntheticSocket(url) {
+  socketURLs.push(url);
+  const socket = {
+    send() {},
+    close() {
+      socket.onclose?.();
+    },
+    bufferedAmount: 0,
+    onopen: null,
+    onmessage: null,
+    onclose: null,
+    onerror: null,
+  };
+  // The open is delivered asynchronously, like a real socket's, so the room
+  // sees the same ordering it would in production.
+  setImmediate(() => socket.onopen?.());
+  return socket;
+}
+
+const fetchedURLs = [];
+/** A transport that answers from memory. It never opens a connection. */
+async function syntheticFetch(url, init) {
+  fetchedURLs.push(String(url));
+  if (init?.signal?.aborted) throw init.signal.reason ?? new Error("aborted");
+  // A loopback STUN string, so the shape is real while the address is inert:
+  // this run creates no peer connection, and nothing dials it.
+  return new Response(JSON.stringify({ iceServers: [{ urls: "stun:127.0.0.1:3478" }] }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 async function main() {
   await bootstrap({
     showOnLaunch: false,
@@ -148,6 +204,12 @@ async function main() {
         approvalURLSeen = url;
         return true;
       },
+      makeSignalingSocket: makeSyntheticSocket,
+      makeIceControl: () => new IceControl(PRODUCTION_ORIGIN, syntheticFetch),
+      makePairControl: () => new PairControl(PRODUCTION_ORIGIN, syntheticFetch),
+      // A task-owned file, so the run cannot read or rewrite the preferences of
+      // whoever is running it.
+      makePreferences: () => new PreferenceStore(path.join(secretsDir, "preferences.json")),
     },
   });
 
@@ -183,20 +245,19 @@ async function main() {
   // EXACT set, not a superset: a `contains` check would pass while the preload
   // quietly grew a surface nobody reviewed.
   //
-  // Pinned to the reviewed realtime surface. This tree is at the foundation
-  // commit and exposes `appInfo,auth,receive`, so it fails here until the
-  // realtime lane is integrated — deliberately, because pinning the assertion to
-  // whatever this tree happens to expose would accept a stale bridge silently.
+  // Pinned to the reviewed surface as it stands — `resident` and `loginItem`
+  // joined the realtime five — rather than to whatever this tree happens to
+  // expose, which would accept a stale or an unreviewed bridge silently.
   check(
     "bridge exposed",
-    parsed.keys.sort().join(",") === "appInfo,auth,ice,receive,signaling",
+    parsed.keys.sort().join(",") === "appInfo,auth,ice,loginItem,pair,prefs,receive,resident,signaling",
     parsed.keys.join(","),
   );
   check("no raw ipcRenderer in the page", parsed.hasIpc === false);
 
   const info = await win.webContents.executeJavaScript("globalThis.relayium.appInfo()");
   check("appInfo answered over real IPC", typeof info.origin === "string", JSON.stringify(info));
-  check("production origin by default", info.origin === "https://relayium.com", info.origin);
+  check("production origin by default", info.origin === PRODUCTION_ORIGIN, info.origin);
   check("not an engineering build by default", info.engineering === false, String(info.engineering));
 
   // Every declared channel has a handler. A channel the renderer can call and
@@ -205,8 +266,22 @@ async function main() {
     "relayium:app-info", "relayium:auth-start", "relayium:auth-poll",
     "relayium:auth-cancel", "relayium:auth-sign-out", "relayium:auth-state",
     "relayium:receive-open", "relayium:receive-begin", "relayium:receive-write",
-    "relayium:receive-finish", "relayium:receive-cancel",
+    "relayium:receive-finish", "relayium:receive-cancel", "relayium:receive-publish",
+    "relayium:signaling-open", "relayium:signaling-send", "relayium:signaling-close",
+    "relayium:ice-config", "relayium:pair-create",
+    "relayium:prefs-read", "relayium:prefs-write",
+    "relayium:resident-ack", "relayium:resident-snapshot", "relayium:resident-notify",
+    "relayium:login-item-read", "relayium:login-item-write",
   ];
+  // Restated above rather than derived, so a channel cannot be added to the
+  // contract and reach a handler without appearing in a reviewed list — and
+  // then compared BOTH ways against the contract, so the restatement cannot go
+  // stale in either direction the way the bridge allowlist just had.
+  check(
+    "the reviewed channel list is the contract",
+    [...declared].sort().join(",") === [...IPC_CHANNELS].sort().join(","),
+    `declared=${[...declared].sort().join(",")} contract=${[...IPC_CHANNELS].sort().join(",")}`,
+  );
   for (const channel of declared) {
     // `handle` throws if one is already registered — which is the assertion.
     let already = false;
@@ -238,6 +313,29 @@ async function main() {
   // And the window was never put on screen.
   check("window stayed hidden", win.isVisible() === false, String(win.isVisible()));
 
+  // ## The LAN room the shell opened by itself went to the injected socket
+  //
+  // Evidence rather than assumption: if the composition were not reaching the
+  // signalling layer, this run would be opening a real WebSocket to the
+  // production hub. The address is also the one MAIN built from the compiled
+  // origin — the renderer names a room kind and never a URL — so asserting its
+  // shape here is asserting that rule held.
+  if (!(await waitFor("the automatic LAN room to open its socket", async () => socketURLs.length > 0))) {
+    return;
+  }
+  check(
+    "signalling went to the injected socket, at main's own address",
+    socketURLs.every((u) => u === "wss://relayium.com/ws"),
+    socketURLs.join(","),
+  );
+  // Whatever the ICE and pairing readers fetched, they fetched from memory, and
+  // only from this build's own origin.
+  check(
+    "no request left this build's origin",
+    fetchedURLs.every((u) => u.startsWith(`${PRODUCTION_ORIGIN}/`)),
+    fetchedURLs.join(","),
+  );
+
   await driveSignInCancellation(win);
 
   process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures })}\n`);
@@ -257,11 +355,34 @@ async function main() {
 async function driveSignInCancellation(win) {
   const js = (expr) => win.webContents.executeJavaScript(expr);
   const text = () => js("document.body.innerText");
+  // Clicks what a user clicks. A sidebar row carries its `data-test` on the
+  // `li` and its handler on the `button` inside, so clicking the marked element
+  // itself would dispatch an event nothing listens to and then report success.
   const clickTest = (name) =>
-    js(`(() => { const el = document.querySelector('[data-test="${name}"]'); if (!el) return false; el.click(); return true; })()`);
+    js(
+      `(() => { const el = document.querySelector('[data-test="${name}"]'); if (!el) return false;` +
+        ` const target = el.tagName === "BUTTON" ? el : el.querySelector("button") ?? el;` +
+        ` target.click(); return true; })()`,
+    );
   const present = (name) => js(`document.querySelector('[data-test="${name}"]') !== null`);
 
-  if (!(await waitFor("the signed-out shell", () => present("sign-in")))) return;
+  // ## The shell no longer opens on the sign-in screen
+  //
+  // A fresh process lands on LAN and starts a room by itself — the product
+  // behaviour — so the account screen is reached the way a user reaches it:
+  // through the sidebar. Waiting for `sign-in` on whatever page happens to be
+  // showing would be waiting for something that is never going to appear.
+  //
+  // The crypto gate comes first. Until libsodium has loaded the main pane shows
+  // the starting card and every page's controls are absent, so failing here
+  // reports the gate rather than a missing button.
+  if (!(await waitFor("the encryption library to load", async () => !(await present("crypto-pending"))))) {
+    return;
+  }
+  if (!(await waitFor("the sidebar", () => present("nav-account")))) return;
+  check("account row clicked", await clickTest("nav-account"));
+
+  if (!(await waitFor("the signed-out account page", () => present("sign-in")))) return;
 
   check("sign in clicked", await clickTest("sign-in"));
   // The main process really received the start and really built an approval URL.
@@ -282,7 +403,7 @@ async function driveSignInCancellation(win) {
   if (!polled) return;
 
   check("cancel clicked", await clickTest("cancel"));
-  if (!(await waitFor("the shell to return to signed out", () => present("sign-in")))) return;
+  if (!(await waitFor("the account page to return to signed out", () => present("sign-in")))) return;
 
   // The late success: the response the user's cancel was racing.
   pollRelease.resolve({

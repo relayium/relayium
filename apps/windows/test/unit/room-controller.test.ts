@@ -11,7 +11,7 @@
 // clients and real servers, and are owed by R-LAN/R-PAIR.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { RoomController } from "../../src/renderer/rooms/room-controller.js";
+import { RoomController } from "../../src/renderer/rooms/room-controller.svelte.js";
 import type { SignalingRoom } from "../../src/shared/ipc-contract.js";
 import type { TransportBridge } from "../../src/renderer/transport/bridge.js";
 import {
@@ -214,14 +214,41 @@ describe("one room, end to end through the bridge", () => {
     expect(room.rtcConfig().iceServers).toEqual([]);
   });
 
-  it("reports a code room that was never admitted as refused, not as a drop", async () => {
+  it("reports a code the SERVER refused as refused", async () => {
     const fake = fakeBridge();
     const room = makeRoom(fake.bridge, { kind: "code", code: "424242" }, "windows");
-    // A close before ever joining: the code was wrong, expired, or claimed.
+    // The socket opened — the server saw the code — and then closed before
+    // `welcome`. That is a rejection.
+    fake.emit({ token: fake.tokenOf(0), kind: "open" });
     fake.emit({ token: fake.tokenOf(0), kind: "close", reason: "remote" });
     await settle();
     expect(room.refused).toBe(true);
-    expect(room.joined).toBe(false);
+    expect(room.connection).toBe("refused");
+  });
+
+  it("does NOT blame the code when the socket never opened", async () => {
+    // Reproduced from a real run: joining 123456 with the server unreachable
+    // reported "not valid, or it has expired". The code was never offered to
+    // anybody, so that was a guess — and the wrong one, pointing the user at
+    // their code instead of their connection.
+    const fake = fakeBridge();
+    const room = makeRoom(fake.bridge, { kind: "code", code: "123456" }, "windows");
+    fake.emit({ token: fake.tokenOf(0), kind: "close", reason: "failed" });
+    await settle();
+    expect(room.refused).toBe(false);
+    expect(room.connection).toBe("reconnecting");
+  });
+
+  it("treats a drop AFTER joining a code room as a reconnect, not a bad code", async () => {
+    const fake = fakeBridge();
+    const room = makeRoom(fake.bridge, { kind: "code", code: "424242" }, "windows");
+    fake.join(0, "self-1", []);
+    await settle();
+    fake.emit({ token: fake.tokenOf(0), kind: "close", reason: "remote" });
+    await settle();
+    expect(room.refused).toBe(false);
+    expect(room.everJoined).toBe(true);
+    expect(room.connection).toBe("reconnecting");
   });
 
   it("does not call a LAN drop a refusal", async () => {
@@ -232,6 +259,23 @@ describe("one room, end to end through the bridge", () => {
     await settle();
     expect(room.refused).toBe(false);
     expect(room.joined).toBe(false);
+  });
+
+  it("tells an empty room apart from one it never got into", async () => {
+    // The screen that made this necessary: "No other devices yet" beside a Stop
+    // receiving button, for a socket that had never opened.
+    const fake = fakeBridge();
+    const room = makeRoom(fake.bridge, { kind: "lan" }, "windows");
+    await settle();
+    expect(room.connection).toBe("connecting");
+    expect(room.everJoined).toBe(false);
+
+    fake.join(0, "self-1", []);
+    await settle();
+    // Now — and only now — an empty roster means nobody else is here.
+    expect(room.connection).toBe("joined");
+    expect(room.everJoined).toBe(true);
+    expect(room.peers).toEqual([]);
   });
 
   it("stops listening when the room stops", async () => {

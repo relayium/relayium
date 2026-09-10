@@ -350,6 +350,8 @@ interface RoomGroup {
 export class IceRequestRegistry {
   readonly #documents = new Map<number, Map<string, RoomGroup>>();
   #inFlight = 0;
+  /** Woken when the last in-flight request settles. See `drain`. */
+  readonly #idleWaiters = new Set<() => void>();
 
   /** Unsettled requests, over everything. The number the global bound is on. */
   get inFlight(): number {
@@ -402,6 +404,9 @@ export class IceRequestRegistry {
         if (released) return;
         released = true;
         this.#inFlight -= 1;
+        if (this.#inFlight === 0) {
+          for (const wake of [...this.#idleWaiters]) wake();
+        }
         ownedGroup.controllers.delete(controller);
         if (ownedGroup.controllers.size > 0) return;
         // Only if this group is still the one registered under that name.
@@ -434,8 +439,40 @@ export class IceRequestRegistry {
     }
   }
 
-  /** Teardown. */
+  /** Teardown. Asks; does not wait. `drain` is what waits. */
   abortAll(): void {
     for (const generation of [...this.#documents.keys()]) this.abortDocument(generation);
+  }
+
+  /**
+   * Wait for the requests that were asked to abort to actually settle.
+   *
+   * An `AbortController` makes a request stop being WAITED for; the fetch and
+   * its response body are still being torn down, and the lease is released only
+   * in the caller's `finally`. So aborting and returning is "asked", and this is
+   * the part that can honestly be called joined.
+   *
+   * Bounded, and honest about the bound: whatever is still outstanding at the
+   * deadline is RETURNED as a count rather than waited for forever or quietly
+   * treated as zero.
+   */
+  async drain(deadlineMs: number): Promise<number> {
+    if (this.#inFlight === 0) return 0;
+    let wake!: () => void;
+    const idle = new Promise<void>((resolve) => {
+      wake = resolve;
+    });
+    this.#idleWaiters.add(wake);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, deadlineMs);
+    });
+    try {
+      await Promise.race([idle, deadline]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      this.#idleWaiters.delete(wake);
+    }
+    return this.#inFlight;
   }
 }

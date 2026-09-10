@@ -122,6 +122,36 @@ export class SecretStore {
     return run;
   }
 
+  /**
+   * Resolves once every operation queued on every key has settled.
+   *
+   * Purely observational — nothing is cancelled, reordered, or written
+   * differently because someone is watching. Quit needs it: a teardown that
+   * drained the helper's ABANDONED work while an active `put` was still writing
+   * would return with a temp file mid-rename.
+   *
+   * Joins the tails, then re-checks. A tail settling can be what lets the next
+   * queued operation start, so a single pass could resolve while work it had
+   * already seen was still producing more. It ends when a pass adds nothing new,
+   * which is reachable because this only joins what was queued BEFORE it looked:
+   * the caller fences new users first, so nothing keeps feeding it.
+   *
+   * There is deliberately no `busyKeys` counterpart. The map keeps a settled
+   * tail per key forever — that is what makes the chain cheap — so its size
+   * counts keys ever touched, not work in flight, and a number that looked like
+   * a gauge and was not would be worse than no number. What a test needs is
+   * whether this observably WAITS, and that is what its barrier asserts.
+   */
+  async waitIdle(): Promise<void> {
+    for (;;) {
+      const tails = [...this.chains.values()];
+      if (tails.length === 0) return;
+      await Promise.allSettled(tails);
+      const after = [...this.chains.values()];
+      if (after.length === tails.length && after.every((tail, i) => tail === tails[i])) return;
+    }
+  }
+
   /** Checked before every operation, never cached: availability is session state. */
   private async assertAvailable(): Promise<void> {
     if (!(await this.cipher.isAvailable())) throw new SecretStoreError("encryption-unavailable");

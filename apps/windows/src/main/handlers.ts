@@ -4,26 +4,42 @@
 // The split is deliberate: rules that only exist inside an `ipcMain.handle`
 // closure cannot be tested, and the rules here are the ones a race would break.
 
-import { dialog, type BrowserWindow } from "electron";
+import { app, dialog, type BrowserWindow } from "electron";
 import { randomUUID } from "node:crypto";
 import {
   IPC,
   IPC_EVENTS,
   MAX_ATTEMPT_NONCE_LENGTH,
   MAX_IPC_CHUNK_BYTES,
+  MAX_REQUEST_ID_LENGTH,
+  MAX_RESIDENT_DRAFTS,
   MAX_IPC_MANIFEST_ENTRIES,
   MAX_SIGNALING_FRAME_BYTES,
   MAX_SOCKET_TOKEN_LENGTH,
   type AppInfo,
   type IceReply,
   type ReceiveAuthority,
+  type PublishReport,
+  type ResidentAck,
+  type ResidentCommand,
+  type ResidentNotice,
+  type ResidentSnapshot,
   type SignalingEvent,
   type SignalingRoom,
 } from "../shared/ipc-contract.js";
-import { AppService } from "./app-service.js";
+import { AppService, type AppServiceDeps, type CleanupOutcome } from "./app-service.js";
 import { DeviceAuthClient } from "./account/device-auth.js";
-import { ENGINEERING_BANNER, isEngineeringBuild } from "./build-mode.js";
+import { ENGINEERING_BANNER, engineeringOverride, isEngineeringBuild } from "./build-mode.js";
 import { IceControl, IceRequestRegistry } from "./net/ice-control.js";
+import { PairControl } from "./net/pair-control.js";
+import { PreferenceStore, isPreferenceKey, preferencesPath } from "./preferences.js";
+import {
+  currentState,
+  disable,
+  enable,
+  type LoginItemOutcome,
+  type LoginItemSystem,
+} from "./login-item.js";
 import { SignalingHub, isWellFormedCode, type SignalingSocketFactory } from "./net/signaling-socket.js";
 import { BoundedTransport } from "./net/transport.js";
 import { SecretStore, platformCipher } from "./secrets.js";
@@ -42,11 +58,31 @@ import { openApprovedExternal } from "./window.js";
  */
 export interface HandlerComposition {
   makeStore?: () => Promise<SecretStore>;
+  /** The destination a batch is written into. See `AppServiceDeps`. */
+  makeDestination?: AppServiceDeps["makeDestination"];
   /** The signalling socket constructor, substituted so a test can drive the hub
    *  without a network. Absent means Electron's built-in `WebSocket`. */
   makeSignalingSocket?: SignalingSocketFactory;
   /** The ICE control-plane reader, substituted for the same reason. */
   makeIceControl?: () => IceControl;
+  /** The pairing-code minter. */
+  makePairControl?: () => PairControl;
+  /** Where preferences live. Substituted so a test owns its own file rather
+   *  than the user's real one. */
+  makePreferences?: () => PreferenceStore;
+  /**
+   * The folder picker.
+   *
+   * Substituted so an automated run can open a real lease. There is no channel
+   * that carries a path — the renderer still cannot name a destination — and
+   * this is not reachable from the environment; it is the same reviewed
+   * injection point as the auth client, for the same reason: a smoke that
+   * cannot open a lease cannot exercise quit, cleanup or residue at all.
+   */
+  pickDirectory?: () => Promise<string | null>;
+  /** The system that actually starts programs at sign-in. Substituted so an
+   *  automated run does not add itself to a developer's startup programs. */
+  loginItem?: LoginItemSystem;
   /**
    * A device-auth client the caller supplies instead of the real one.
    *
@@ -69,14 +105,97 @@ export interface HandlerComposition {
   openApproval?: (url: string) => Promise<boolean>;
 }
 
-/** Returns the owned teardown for everything it started. */
+/**
+ * How the resident runtime talks to the page.
+ *
+ * Deliberately narrow: a command goes out, ONE acknowledgement of that command
+ * comes back, and an unsolicited snapshot is a separate thing that can never
+ * settle an outstanding question.
+ */
+/** What main learns about, and may announce. */
+export interface ResidentEvents {
+  /** A publication actually finished. Files saved, or a failure — both are
+   *  facts main observes itself rather than being told. */
+  onPublished?: (report: PublishReport) => void;
+  /** Something the page knows and main cannot see. A closed kind, nothing else. */
+  onNotice?: (notice: ResidentNotice) => void;
+  /** The page told main which language it is showing. */
+  onLocale?: (locale: ResidentSnapshot["locale"]) => void;
+  /** Whether Nearby is running, for the tray item that toggles it. */
+  onNearby?: (active: boolean) => void;
+  /** Enabling start-at-login needs the user's explicit yes, asked natively. */
+  confirmLoginItem?: () => Promise<boolean>;
+  /** Diagnostics sink for failures that must not reach a screen. */
+  reportFailure?: (err: unknown) => void;
+}
+
+export interface ResidentBridge {
+  /** Send one command; resolve with the page's answer to THAT request. */
+  send(command: ResidentCommand, timeoutMs?: number): Promise<ResidentAck | "unavailable">;
+  /** The last state the page volunteered, or `null` if it never has. */
+  lastSnapshot(): ResidentSnapshot | null;
+  /**
+   * Ask, and believe only the answer to this question.
+   *
+   * `"unknown"` when the page is gone, unresponsive, or answered something that
+   * did not describe its state. Never a stale push, and never a default.
+   */
+  freshSnapshot(timeoutMs?: number): Promise<ResidentSnapshot | "unknown">;
+}
+
+/** Everything the resident wiring needs from one registration. */
+export interface HandlerControl {
+  readonly service: AppService;
+  readonly resident: ResidentBridge;
+  /**
+   * Stop main's own outgoing work, recoverably.
+   *
+   * The page acknowledging a quiesce says the UI stopped; it says nothing about
+   * the sockets, the ICE reads and the leases MAIN owns, which is where the
+   * outgoing work actually lives. Both halves have to stop, and this is the
+   * half that does not end the process.
+   */
+  readonly quiesce: () => Promise<CleanupOutcome>;
+  /**
+   * The settings file this registration uses.
+   *
+   * Exposed so the resident surfaces write the SAME file, through the same
+   * store: two stores over one path would each serialise their own writes and
+   * neither would see the other's, and the first-close acknowledgement is
+   * written by main while the page is writing preferences.
+   */
+  readonly preferences: () => PreferenceStore;
+  /** The final, unrecoverable teardown. */
+  readonly dispose: () => Promise<void>;
+}
+
+/** How long the page gets to answer before its state is treated as unknown. */
+const RESIDENT_ACK_TIMEOUT_MS = 2_000;
+
+/**
+ * How long a quiesce waits for asked-to-stop network work to actually stop.
+ *
+ * Bounded because a quit must not hang on a socket the peer is not answering,
+ * and reported because "we asked" is not "it stopped".
+ */
+const NETWORK_DRAIN_MS = 1_500;
+
+/** A failure as a bounded string; never the `Error`, which crosses no boundary
+ *  from here except into a log. */
+function reasonOf(err: unknown): string {
+  const raw = err instanceof Error ? (err.message ?? err.name) : String(err);
+  return raw.slice(0, 200);
+}
+
+/** Returns the owned teardown and the resident bridge for everything it started. */
 export function registerHandlers(
   window: BrowserWindow,
   origin: string,
   scheme: string,
   host: string,
   composition: HandlerComposition = {},
-): () => Promise<void> {
+  events: ResidentEvents = {},
+): HandlerControl {
   const router = new IpcRouter(scheme, host);
   router.bind(window.webContents);
 
@@ -93,6 +212,7 @@ export function registerHandlers(
       composition.makeAuthClient ??
       ((installationID) => new DeviceAuthClient(origin, new BoundedTransport(origin), installationID)),
     async pickDirectory() {
+      if (composition.pickDirectory) return composition.pickDirectory();
       // The user names the destination, in a native dialog. No IPC channel in
       // this app carries a filesystem path, which is what makes the renderer
       // unable to choose one.
@@ -110,6 +230,12 @@ export function registerHandlers(
     // page's transfers would keep an open handle and staged bytes with nobody
     // left to finish or cancel them.
     documentGeneration: () => router.generation,
+    makePairControl:
+      composition.makePairControl ?? (() => new PairControl(origin)),
+    // Forwarded, so an injected destination is actually the one a lease opens.
+    // Without this the composition was accepted and then ignored, and a test
+    // that thought it was driving its own destination was driving the real one.
+    ...(composition.makeDestination ? { makeDestination: composition.makeDestination } : {}),
   });
 
   router.handle(IPC.appInfo, async (): Promise<AppInfo> => ({
@@ -117,6 +243,14 @@ export function registerHandlers(
     engineering: isEngineeringBuild(),
     banner: isEngineeringBuild() ? ENGINEERING_BANNER : null,
     version: process.env["npm_package_version"] ?? "0.0.1",
+    // Same-network discovery starts automatically, exactly as the shipped Mac
+    // does. This is the one way to suppress it, and it is deliberately narrow:
+    // `engineeringOverride` returns nothing in a packaged build, so a shipped
+    // client cannot be told to stay out of the room by anything in its
+    // environment. It exists so an automated UI run does not join a real
+    // production room — which is precisely what Mac's own `UITestMode`
+    // residency gate is for.
+    lanAutoStart: engineeringOverride("RELAYIUM_WINDOWS_NO_LAN_AUTOSTART") === undefined,
   }));
 
   // The attempt nonce is renderer-supplied, so it is bounded and shaped at this
@@ -321,10 +455,239 @@ export function registerHandlers(
   // Receive
   // -------------------------------------------------------------------------
 
+  // -------------------------------------------------------------------------
+  // Pairing code
+  // -------------------------------------------------------------------------
+
+  // No payload. The renderer asks for a code and names nothing.
+  router.handle(IPC.pairCreate, () => service.createPairCode());
+
+  // -------------------------------------------------------------------------
+  // Preferences
+  // -------------------------------------------------------------------------
+
+  const preferences =
+    composition.makePreferences ??
+    (() => {
+      const root = currentDataRoot();
+      if (!root.ok) throw new IpcRefusal(`data root unavailable: ${root.reason}`);
+      return new PreferenceStore(preferencesPath(root.path));
+    });
+  let preferenceStore: PreferenceStore | null = null;
+  const prefs = (): PreferenceStore => (preferenceStore ??= preferences());
+
+  // The snapshot, not just the values: a UI that shows a security preference
+  // has to be able to say "this could not be read" rather than displaying the
+  // default as though the user had chosen it.
+  router.handle(IPC.prefsRead, () => prefs().snapshot());
+
+  router.handle(IPC.prefsWrite, async (payload) => {
+    const body = expectObject(payload);
+    const key = body["key"];
+    // A fixed list of names, not an arbitrary key/value store. A renderer that
+    // could name the key could write anything into a file main later reads.
+    if (!isPreferenceKey(key)) throw new IpcRefusal("unknown preference");
+    const value = body["value"];
+    if (typeof value !== "boolean") throw new IpcRefusal("expected a boolean");
+    return prefs().write(key, value);
+  });
+
   router.handle(IPC.receivePublish, async (payload) => {
     const body = expectObject(payload);
-    return service.publishReceive(leaseId(body));
+    const report = await service.publishReceive(leaseId(body));
+    // Observed here, not reported by the page: "files were saved" is a fact
+    // about what this process wrote, and a renderer that could assert it could
+    // also assert it falsely.
+    events.onPublished?.(report);
+    return report;
   });
+
+  // -------------------------------------------------------------------------
+  // Resident commands, acknowledgements and snapshots
+  // -------------------------------------------------------------------------
+
+  let requestSeq = 0;
+  /** Questions that have been asked and not yet answered or retired. */
+  const outstanding = new Map<string, (ack: ResidentAck) => void>();
+  let volunteered: ResidentSnapshot | null = null;
+
+  /** The page's own numbers, bounded and shaped before anything believes them. */
+  const narrowSnapshot = (value: unknown): ResidentSnapshot | null => {
+    if (typeof value !== "object" || value === null) return null;
+    const raw = value as Record<string, unknown>;
+    const drafts = raw["drafts"];
+    if (typeof raw["sending"] !== "boolean" || typeof raw["receiving"] !== "boolean") return null;
+    if (typeof raw["nearby"] !== "boolean") return null;
+    if (typeof drafts !== "number" || !Number.isInteger(drafts) || drafts < 0) return null;
+    const locale = raw["locale"];
+    return {
+      sending: raw["sending"],
+      receiving: raw["receiving"],
+      // Clamped rather than refused: an implausible count still means "there is
+      // unsent text", and the exact number is only ever used as a boolean.
+      drafts: Math.min(drafts, MAX_RESIDENT_DRAFTS),
+      // English is the fallback for anything else, which is also the product's
+      // fallback everywhere else.
+      locale: locale === "zh-Hans" ? "zh-Hans" : "en",
+      nearby: raw["nearby"],
+    };
+  };
+
+  router.handle(IPC.residentSnapshot, async (payload) => {
+    const snapshot = narrowSnapshot(payload);
+    // A malformed push does not overwrite what was last known to be true.
+    if (snapshot !== null) {
+      volunteered = snapshot;
+      events.onLocale?.(snapshot.locale);
+      events.onNearby?.(snapshot.nearby);
+    }
+    return { accepted: snapshot !== null };
+  });
+
+  router.handle(IPC.residentNotify, async (payload) => {
+    const body = expectObject(payload);
+    const kind = body["kind"];
+    // A closed set. The page cannot supply a title, a body, a name or a count:
+    // it names a KIND, and main writes every word the user sees.
+    if (kind !== "saved-message" && kind !== "attention") {
+      throw new IpcRefusal("unknown notice");
+    }
+    events.onNotice?.(kind);
+    return { accepted: true };
+  });
+
+  // -------------------------------------------------------------------------
+  // Start at sign-in
+  // -------------------------------------------------------------------------
+
+  // The real Windows setting, read fresh every time: the user can change it in
+  // Task Manager while the app runs and nothing tells the app when they do.
+  const loginItem: LoginItemSystem = composition.loginItem ?? {
+    read: () => {
+      const settings = app.getLoginItemSettings();
+      return {
+        openAtLogin: settings.openAtLogin === true,
+        executableWillLaunchAtLogin: settings.executableWillLaunchAtLogin === true,
+      };
+    },
+    write: (openAtLogin) => app.setLoginItemSettings({ openAtLogin }),
+    reportFailure: (err) => events.reportFailure?.(err),
+  };
+
+  router.handle(IPC.loginItemRead, async (): Promise<LoginItemOutcome> => currentState(loginItem));
+
+  router.handle(IPC.loginItemWrite, async (payload): Promise<LoginItemOutcome> => {
+    const body = expectObject(payload);
+    const enabled = body["enabled"];
+    if (typeof enabled !== "boolean") throw new IpcRefusal("enabled must be a boolean");
+    if (!enabled) return disable(loginItem);
+    // Turning it ON changes the user's Windows startup programs, so it is
+    // confirmed NATIVELY before anything is written — a renderer click is a
+    // request, not consent for a system-wide setting.
+    return enable(loginItem, async () =>
+      (await events.confirmLoginItem?.()) === true ? "confirmed" : "declined",
+    );
+  });
+
+  router.handle(IPC.residentAck, async (payload) => {
+    const body = expectObject(payload);
+    const requestId = expectString(body["requestId"], MAX_REQUEST_ID_LENGTH);
+    const generation = body["generation"];
+    // A reply from a document that has since been replaced answers nothing: the
+    // page that asked to be told about is gone.
+    if (typeof generation !== "number" || generation !== router.generation) {
+      return { accepted: false };
+    }
+    const resolve = outstanding.get(requestId);
+    // Unknown or already retired — a late or duplicate answer. Dropped, never
+    // allowed to settle a question that has already been answered another way.
+    if (!resolve) return { accepted: false };
+    outstanding.delete(requestId);
+    const snapshot = narrowSnapshot(body["snapshot"]);
+    resolve({
+      requestId,
+      generation,
+      ok: body["ok"] === true,
+      ...(snapshot ? { snapshot } : {}),
+    });
+    return { accepted: true };
+  });
+
+  const resident: ResidentBridge = {
+    async send(command, timeoutMs = RESIDENT_ACK_TIMEOUT_MS) {
+      const requestId = `rq-${++requestSeq}`;
+      const generation = router.generation;
+      let settle!: (ack: ResidentAck) => void;
+      const answered = new Promise<ResidentAck>((resolve) => {
+        settle = resolve;
+      });
+      outstanding.set(requestId, settle);
+      // A destroyed page, or one whose document already moved on, is unreachable
+      // rather than slow — there is nothing to wait for.
+      if (!router.emit(IPC_EVENTS.residentCommand, generation, { requestId, generation, command })) {
+        outstanding.delete(requestId);
+        return "unavailable";
+      }
+      const timer = setTimeout(() => {
+        // Retired here, so an answer that arrives afterwards cannot turn an
+        // unreachable page into a reassuring one.
+        if (outstanding.delete(requestId)) settle({ requestId, generation, ok: false, failure: "stale" });
+      }, timeoutMs);
+      try {
+        return await answered;
+      } finally {
+        clearTimeout(timer);
+        outstanding.delete(requestId);
+      }
+    },
+    lastSnapshot: () => volunteered,
+    async freshSnapshot(timeoutMs = RESIDENT_ACK_TIMEOUT_MS) {
+      const ack = await resident.send({ kind: "risk-snapshot" }, timeoutMs);
+      if (ack === "unavailable" || !ack.ok || !ack.snapshot) return "unknown";
+      return ack.snapshot;
+    },
+  };
+
+  // A document that goes away takes its outstanding questions with it: they are
+  // failed, not left to time out into an answer nobody is waiting for.
+  router.onRevoke(() => {
+    volunteered = null;
+    for (const [requestId, resolve] of [...outstanding]) {
+      outstanding.delete(requestId);
+      resolve({ requestId, generation: router.generation, ok: false, failure: "stale" });
+    }
+  });
+
+  const quiesce = async (): Promise<CleanupOutcome> => {
+    // Main's own network first: a socket left open is a room this app is still
+    // in, and an ICE read in flight is a request still outstanding against the
+    // control plane. Neither is visible to the page.
+    //
+    // ASKED, then JOINED, and the two are different things. `closeAll` and
+    // `abortAll` request; the drains below wait for the close to be observed
+    // and for the aborted reads to settle. Whatever is still outstanding at the
+    // deadline is COUNTED — not waited for forever, and not called finished.
+    hub.closeAll();
+    iceRequests.abortAll();
+    const [sockets, reads] = await Promise.all([
+      hub.drainClosing(NETWORK_DRAIN_MS),
+      iceRequests.drain(NETWORK_DRAIN_MS),
+    ]);
+
+    // Then the leases, the sign-in, the queued transitions and the secret work.
+    const outcome = await service.quiesce();
+
+    // And the revocation failure the teardown remembers: it is rethrown by
+    // `dispose`, so a quiesce that did not mention it would let a "nothing left
+    // to decide" path walk into a failing final teardown.
+    const revocation = revocationFailure === null ? null : reasonOf(revocationFailure);
+    return {
+      ...outcome,
+      networkUnsettled: sockets + reads,
+      firstReason: outcome.firstReason ?? revocation,
+      unresolved: outcome.unresolved + (revocation !== null ? 1 : 0),
+    };
+  };
 
   const teardown = async (): Promise<void> => {
     // Sockets and requests are main's own resources and are dropped
@@ -347,5 +710,5 @@ export function registerHandlers(
     void teardown().catch(() => undefined);
   });
 
-  return teardown;
+  return { service, resident, quiesce, preferences: prefs, dispose: teardown };
 }

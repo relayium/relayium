@@ -41,6 +41,7 @@
 // for the whole lifetime of two concurrent rooms — which is the regression that
 // catches any future accidental global read.
 
+import { SvelteMap } from "svelte/reactivity";
 import {
   CAP_LINK,
   CAP_PREUPLOAD,
@@ -48,10 +49,26 @@ import {
 } from "../../../../../web/src/lib/peer-caps.svelte";
 
 export class RoomCaps {
-  /** Peer id → exactly what that peer said. A plain `Map`, so an id like
-   *  `"toString"` cannot answer with `Object.prototype`'s member — which would
-   *  read as "already announced" for a peer that never has. */
-  readonly #announced = new Map<string, readonly string[]>();
+  /**
+   * Peer id → exactly what that peer said.
+   *
+   * A `Map` rather than an object, so an id like `"toString"` cannot answer with
+   * `Object.prototype`'s member — which would read as "already announced" for a
+   * peer that never has, and which makes `peerSupportsLink` throw in the shared
+   * module for the same ids.
+   *
+   * A **`SvelteMap`** rather than a plain one, because a plain `Map` is not a
+   * reactive dependency: an `$effect` reading `supportsLink(id)` was never
+   * invalidated when a hello arrived. That is measured, not inferred — a
+   * compiled Vite bundle of this exact file, running in Electron 44, showed the
+   * caps effect at one run before and after `record(link/1)` while a control
+   * effect beside it advanced, with `supportsLink` returning true the whole
+   * time. The value was correct and nothing was told.
+   *
+   * `SvelteMap` changes only that. The registry is still per room, still
+   * private, and still validates exactly what it validated before.
+   */
+  readonly #announced = new SvelteMap<string, readonly string[]>();
 
   /**
    * Record a peer's announcement.

@@ -72,4 +72,24 @@ contextBridge.exposeInMainWorld("relayium", {
   ice: {
     config: invoke("relayium:ice-config"),
   },
+  pair: {
+    create: invoke("relayium:pair-create"),
+  },
+  prefs: {
+    read: invoke("relayium:prefs-read"),
+    write: invoke("relayium:prefs-write"),
+  },
+  // The resident surface: main can ask the page to navigate, pause Nearby, stop
+  // for a quit, or take a pairing code, and the page answers the question it was
+  // asked. Three names, spelled here like the rest.
+  resident: {
+    onCommand: subscribe("relayium:resident-command"),
+    ack: invoke("relayium:resident-ack"),
+    snapshot: invoke("relayium:resident-snapshot"),
+    notify: invoke("relayium:resident-notify"),
+  },
+  loginItem: {
+    read: invoke("relayium:login-item-read"),
+    write: invoke("relayium:login-item-write"),
+  },
 });

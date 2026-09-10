@@ -59,6 +59,10 @@ export class SignalingRefusal extends Error {
 
 const CODE_RE = /^[0-9]{6}$/;
 
+/** `WebSocket.CLOSED`. Spelled out because `SignalingSocketLike` does not carry
+ *  the constants, and this file reads the value defensively. */
+const WEBSOCKET_CLOSED = 3;
+
 /**
  * Whether a string is a well-formed pairing code.
  *
@@ -156,6 +160,22 @@ interface Entry {
 }
 
 /**
+ * A socket that has been asked to close and has not been seen to.
+ *
+ * Retained deliberately. `retire` forgets the entry and stops dispatching from
+ * it — which is right, because nothing further may be delivered under a token
+ * the renderer no longer owns — but "we called close()" is not "the socket is
+ * closed". A quit that treated the first as the second reported a joined
+ * network while a WebSocket was still tearing down.
+ */
+interface Closing {
+  readonly token: string;
+  readonly socket: SignalingSocketLike;
+  settled: boolean;
+  readonly observed: Promise<void>;
+}
+
+/**
  * Every signalling socket this process owns.
  *
  * One hub per window. Sockets are keyed by the token the RENDERER minted before
@@ -164,6 +184,8 @@ interface Entry {
  */
 export class SignalingHub {
   private readonly sockets = new Map<string, Entry>();
+  /** Retired sockets whose close has not been observed. See `Closing`. */
+  private readonly closing = new Map<Closing, () => void>();
 
   constructor(
     private readonly deps: {
@@ -203,7 +225,14 @@ export class SignalingHub {
     for (const open of this.sockets.values()) {
       if (open.kind === room.kind) throw new SignalingRefusal(`a ${room.kind} room is already open`);
     }
-    if (this.sockets.size >= MAX_SIGNALING_SOCKETS) throw new SignalingRefusal("socket ceiling reached");
+    // Sockets that were asked to close and have not are still connections this
+    // process is holding, so they count against the ceiling. Otherwise a peer
+    // that never closes lets a room be reopened repeatedly, each attempt adding
+    // another retained socket — the ceiling would be counting only the ones
+    // that behave.
+    if (this.sockets.size + this.closing.size >= MAX_SIGNALING_SOCKETS) {
+      throw new SignalingRefusal("socket ceiling reached");
+    }
 
     // Throws for a malformed code BEFORE anything is constructed.
     const url = signalingURL(this.deps.origin, room);
@@ -315,14 +344,103 @@ export class SignalingHub {
     for (const entry of [...this.sockets.values()]) this.terminate(entry, "local");
   }
 
+  /**
+   * Wait for the sockets this hub asked to close to actually close.
+   *
+   * Bounded, and honest about the bound: a socket whose close is never observed
+   * is REPORTED as unsettled, not quietly forgotten and not waited for forever.
+   * The handle is kept either way — dropping it to make a number look better is
+   * the failure this exists to avoid.
+   *
+   * Returns how many were still unsettled when the deadline passed.
+   */
+  async drainClosing(deadlineMs: number): Promise<number> {
+    const pending = [...this.closing.keys()];
+    if (pending.length === 0) return 0;
+    // A socket may already be CLOSED without this hub having been told — its
+    // `onclose` fired before the handler was installed, or the runtime does not
+    // dispatch one at all. Asked directly, since it can answer.
+    for (const closing of pending) this.observeClosedState(closing);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, deadlineMs);
+    });
+    await Promise.race([Promise.all(pending.map((entry) => entry.observed)), deadline]);
+    if (timer !== undefined) clearTimeout(timer);
+    for (const closing of pending) this.observeClosedState(closing);
+    return pending.filter((entry) => !entry.settled).length;
+  }
+
+  /** Test/diagnostic only: sockets asked to close and not seen to close. */
+  get closingCount(): number {
+    return this.closing.size;
+  }
+
   private terminate(entry: Entry, reason: SignalingCloseReason): void {
     if (entry.closed) return;
     this.retire(entry, reason);
+    // Registered BEFORE `close()` is called, so a socket that closes
+    // synchronously is already being watched when it does.
+    this.watchClose(entry);
     try {
       entry.socket.close();
     } catch {
-      // Already gone; the retirement above is what callers observe.
+      // A `close()` that THREW proves nothing about the socket. It may be gone;
+      // it may be wedged holding a connection open. Treating the throw as a
+      // clean close is the same mistake as treating the call as a join, so this
+      // one stays watched and is reported unsettled if nothing ever arrives.
     }
+  }
+
+  /**
+   * Keep watching a retired socket until it says it closed.
+   *
+   * `retire` nulls the handlers so no frame can be delivered under a token that
+   * has been given up — that part is unchanged. This installs ONE handler
+   * afterwards whose only effect is to record that the close happened; it
+   * emits nothing and can reach no caller.
+   */
+  private watchClose(entry: Entry): Closing {
+    let resolve!: () => void;
+    const closing: Closing = {
+      token: entry.token,
+      socket: entry.socket,
+      settled: false,
+      observed: new Promise<void>((r) => {
+        resolve = r;
+      }),
+    };
+    this.closing.set(closing, resolve);
+    // `onclose` ONLY. An error is not a close — a WebSocket reports one and then
+    // closes, and the ones that matter here are the sockets where that second
+    // event never comes. Settling on the error would report exactly those as
+    // finished, which is the case this registry exists to catch.
+    entry.socket.onclose = () => this.settle(closing);
+    entry.socket.onerror = null;
+    return closing;
+  }
+
+  /**
+   * A close this hub did not see happen, but that the socket can still prove.
+   *
+   * `SignalingSocketLike` does not require `readyState` — it is the subset this
+   * file uses — so it is read defensively: a socket that exposes the standard
+   * `CLOSED` value is settled by it, and one that does not is left unsettled
+   * rather than assumed.
+   */
+  private observeClosedState(closing: Closing): void {
+    const state = (closing.socket as { readyState?: unknown }).readyState;
+    if (state === WEBSOCKET_CLOSED) this.settle(closing);
+  }
+
+  private settle(closing: Closing): void {
+    if (closing.settled) return;
+    closing.settled = true;
+    closing.socket.onclose = null;
+    closing.socket.onerror = null;
+    const resolve = this.closing.get(closing);
+    this.closing.delete(closing);
+    resolve?.();
   }
 
   /** Emit the one terminal event and forget the socket. Idempotent. */

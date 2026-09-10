@@ -58,6 +58,41 @@ export const IPC = {
   signalingClose: "relayium:signaling-close",
   /** The ICE control plane. Fixed path, no credential, no redirects. */
   iceConfig: "relayium:ice-config",
+  /**
+   * Mint a pairing code.
+   *
+   * Takes NO parameter. The renderer asks for a code; the URL, method, header
+   * and body are fixed in main. This is deliberately not a generic
+   * authenticated-request channel — a renderer-supplied URL plus the bearer is
+   * exactly what that would be.
+   */
+  pairCreate: "relayium:pair-create",
+  /** The user's settings. Booleans only; nothing here is a credential. */
+  prefsRead: "relayium:prefs-read",
+  prefsWrite: "relayium:prefs-write",
+  /**
+   * The page's answer to a resident command, named by the request it answers.
+   *
+   * Separate from the unsolicited snapshot below, and that separation is the
+   * point: a quit asking what is at stake must be answered by THIS question,
+   * not satisfied by a push that happened to arrive first and describes a
+   * moment before the question was asked.
+   */
+  residentAck: "relayium:resident-ack",
+  /** The page volunteering its current state, whenever it changes. */
+  residentSnapshot: "relayium:resident-snapshot",
+  /**
+   * A fact the page knows and main does not, worth a notification.
+   *
+   * A closed KIND and nothing else — no filename, no body, no sender, no path.
+   * Main decides whether to show anything and writes every word of it.
+   */
+  residentNotify: "relayium:resident-notify",
+  /** Whether Relayium starts at sign-in, read back from the system. */
+  loginItemRead: "relayium:login-item-read",
+  /** Turn it on or off. Enabling requires the user's explicit confirmation,
+   *  which main asks for natively. */
+  loginItemWrite: "relayium:login-item-write",
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];
@@ -87,6 +122,8 @@ export const IPC_CHANNELS: readonly string[] = Object.values(IPC);
  */
 export const IPC_EVENTS = {
   signalingEvent: "relayium:signaling-event",
+  /** Main asking the page to do one of a closed set of things. */
+  residentCommand: "relayium:resident-command",
 } as const;
 
 export const IPC_EVENT_NAMES: readonly string[] = Object.values(IPC_EVENTS);
@@ -124,6 +161,14 @@ export interface AppInfo {
   readonly engineering: boolean;
   readonly banner: string | null;
   readonly version: string;
+  /**
+   * Whether same-network discovery should start on its own.
+   *
+   * Always true in a shipped build — matching `RelayiumApp.swift`, which calls
+   * `startResident()` unconditionally. Only an ENGINEERING build can turn it
+   * off, so an automated UI run can avoid joining a real production room.
+   */
+  readonly lanAutoStart: boolean;
 }
 
 /** A write is bounded before it is buffered, so a chunk cannot become an
@@ -359,6 +404,62 @@ export const MAX_ICE_ROOMS_PER_DOCUMENT = MAX_SIGNALING_SOCKETS;
 export const MAX_ICE_REQUESTS_IN_FLIGHT = 8;
 
 // ---------------------------------------------------------------------------
+// Pairing code
+// ---------------------------------------------------------------------------
+
+/**
+ * Exactly how many digits a pairing code has.
+ *
+ * One number, because four independent checks have to agree on it:
+ * `ValidCodeFormat` on the server, `isValidCode` in `web/src/lib/pair-code`,
+ * `isWellFormedCode` in `signaling-socket.ts`, and the mint parser. A build that
+ * accepted a longer code somewhere would put one on screen and then refuse to
+ * open the room with it.
+ */
+export const PAIR_CODE_LENGTH = 6;
+
+/**
+ * What main says about a mint.
+ *
+ * The refusals are separate values because each is a different sentence to the
+ * user and a different next action: sign in, wait, verify your email, upgrade,
+ * try again. Collapsing them into one failure is what makes a product say
+ * "something went wrong" at somebody who could have fixed it in ten seconds.
+ */
+export type PairMintResult =
+  | { readonly ok: true; readonly code: string; readonly expiresAt: number }
+  | {
+      readonly ok: false;
+      readonly refusal: "signed-out" | "quota" | "unverified" | "rate-limited" | "unavailable";
+    };
+
+// ---------------------------------------------------------------------------
+// Preferences
+// ---------------------------------------------------------------------------
+
+/**
+ * The settings the renderer may read and set. Booleans, by name, from a fixed
+ * list — never an arbitrary key/value store.
+ */
+export interface PreferencesValues {
+  /** Ask the user to compare a verification code. Default off, mirroring
+   *  `com.relayium.verifyPeers`. Governs the PROMPT, never the cryptography. */
+  readonly verifyPeers: boolean;
+}
+
+/**
+ * The values, and whether they are known to be the user's.
+ *
+ * `health` exists because the alternative is a lie the user cannot see: a
+ * settings file that has become unreadable would otherwise render as "verify
+ * peers: off", which is indistinguishable from the user having turned it off.
+ */
+export interface PreferencesView {
+  readonly values: PreferencesValues;
+  readonly health: "ok" | "missing" | "unreadable";
+}
+
+// ---------------------------------------------------------------------------
 // Receive
 // ---------------------------------------------------------------------------
 
@@ -396,4 +497,145 @@ export type PublishReport =
       readonly total: number;
       readonly failedIndex: number;
       readonly reason: string;
+    }
+  /**
+   * Publication did not produce a receipt.
+   *
+   * ## Why this is a RESULT and not a thrown error
+   *
+   * Electron serialises a rejection across IPC by its message. Every custom
+   * property is lost — so `NativeHelperError`'s `code`, its `residue` flag and
+   * its `publishReport` would all arrive at the renderer as a string, and the
+   * renderer would have to parse prose to find out whether the user's files
+   * were written or whether bytes were left on their disk. Both of those are
+   * facts a person acts on.
+   *
+   * So the failure is a value with named fields, and the fields are the ones a
+   * user needs: was anything saved, and is anything left behind.
+   */
+  | {
+      readonly status: "failed";
+      /** A stable reason this build understands. Never the helper's raw message,
+       *  which can carry a path. */
+      readonly reason: PublishFailureReason;
+      /**
+       * Bytes may remain in the user's folder. Never a guess dressed as
+       * `false` — it is `true` whenever cleanup could not confirm otherwise.
+       */
+      readonly residue: boolean;
+      /**
+       * The receipt, when publication SUCCEEDED and only the teardown after it
+       * failed. Those files exist under their final names, and an error about
+       * cleanup must not erase that.
+       */
+      readonly published?: { readonly publishedCount: number; readonly total: number };
     };
+
+/**
+ * Why a publication produced no receipt.
+ *
+ * A closed list, mapped from the helper's own codes. The helper's message and
+ * any path it might contain are deliberately NOT forwarded: the renderer needs
+ * to know which sentence to show, not where on disk anything is.
+ */
+export type PublishFailureReason =
+  | "unsupported"
+  | "helper-unavailable"
+  | "timeout"
+  | "cancelled"
+  | "cleanup-uncertain"
+  | "io-failed"
+  | "internal";
+
+/** The five browseable pages, mirrored from the renderer's own navigation. */
+export const RESIDENT_PAGES = ["lan", "pair", "stored", "inbox", "account"] as const;
+export type ResidentPage = (typeof RESIDENT_PAGES)[number];
+
+/**
+ * Everything main may ask the page to do.
+ *
+ * A closed union of verbs with bounded operands — no URL, no path, no script, no
+ * selector. The tray can open a page and pause Nearby; a deep link can carry a
+ * pairing code; a quit can ask what is at stake and, once the user has agreed,
+ * tell the page to stop. Nothing here can name a destination.
+ */
+export type ResidentCommand =
+  | { readonly kind: "navigate"; readonly page: ResidentPage }
+  | { readonly kind: "lan"; readonly action: "pause" | "resume" }
+  /** Answer with a FRESH snapshot in the acknowledgement. */
+  | { readonly kind: "risk-snapshot" }
+  /**
+   * Stop STARTING things, without stopping what is running.
+   *
+   * The renderer half of the quit fence. Main can refuse a new receive by
+   * itself, but an outgoing send, a new room and a pairing join all begin in
+   * the page — so a "nothing at stake" answer is only true if the page has also
+   * agreed to start nothing while the question is being answered.
+   */
+  | { readonly kind: "admission"; readonly action: "fence" | "admit" }
+  /** Stop rooms and transfers. Sent only after the user agreed to quit. */
+  | { readonly kind: "quiesce" }
+  /** The user stayed. Operate again — without resurrecting what was stopped. */
+  | { readonly kind: "resume" }
+  /**
+   * A pairing code that arrived from outside the app.
+   *
+   * The code stays a STRING end to end, so `004291` keeps its leading zeros; a
+   * number would deliver `4291` and join the wrong room.
+   */
+  | { readonly kind: "pair-code"; readonly code: string; readonly mode?: "text" | "files" };
+
+export type ResidentCommandKind = ResidentCommand["kind"];
+
+/** What the page believes is at stake right now. */
+export interface ResidentSnapshot {
+  /** Outgoing bytes in flight — the half main cannot see, because a WebRTC
+   *  send lives in the page. */
+  readonly sending: boolean;
+  /** Incoming bytes in flight. */
+  readonly receiving: boolean;
+  /** Composed-but-unsent text, per room. Bounded; a count, never the text. */
+  readonly drafts: number;
+  /**
+   * The language the PAGE is showing.
+   *
+   * Main's dialogs, tray and notifications follow this rather than reading the
+   * OS themselves: `app.getLocale()` and Chromium's `navigator.language` can
+   * disagree, and a Chinese window with an English quit dialog is one product
+   * speaking two languages.
+   */
+  readonly locale: "en" | "zh-Hans";
+  /** Whether same-network discovery is running right now, so the tray item can
+   *  say which thing it does rather than guessing. */
+  readonly nearby: boolean;
+}
+
+/** What the page may ask main to announce. Facts main cannot observe itself. */
+export type ResidentNotice = "saved-message" | "attention";
+
+/** The largest draft count that will be believed. Beyond it the page is not
+ *  describing a person's unsent messages. */
+export const MAX_RESIDENT_DRAFTS = 64;
+
+export type ResidentAckFailure = "unknown-command" | "stale" | "refused";
+
+/**
+ * One answer to one command.
+ *
+ * `requestId` and `generation` together are what make a late reply harmless: an
+ * answer to a retired question, or one from a document that has since been
+ * replaced, is dropped rather than allowed to settle an outstanding query.
+ */
+export interface ResidentAck {
+  readonly requestId: string;
+  readonly generation: number;
+  readonly ok: boolean;
+  readonly snapshot?: ResidentSnapshot;
+  readonly failure?: ResidentAckFailure;
+}
+
+export const MAX_REQUEST_ID_LENGTH = 64;
+
+export function isResidentPage(value: unknown): value is ResidentPage {
+  return typeof value === "string" && (RESIDENT_PAGES as readonly string[]).includes(value);
+}

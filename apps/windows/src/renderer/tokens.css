@@ -56,6 +56,52 @@ body {
   font-size: 14px;
 }
 
+/*
+ * Motion.
+ *
+ * The Mac app moves, and a Windows client that does not feels broken next to
+ * it — a card that appears fully formed reads as a repaint rather than as
+ * something arriving. So there is real motion here, and it is restrained on
+ * purpose: short, small, and only on entry, state and press. Nothing loops,
+ * nothing slides across the screen, and nothing moves that the user did not
+ * cause.
+ *
+ * Durations are named rather than repeated so "restrained" is one decision.
+ */
+:root {
+  --motion-fast: 90ms;
+  --motion-base: 160ms;
+  --motion-enter: 220ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --enter-rise: 6px;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(var(--enter-rise)); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes indeterminate {
+  from { transform: translateX(-60%); }
+  to { transform: translateX(260%); }
+}
+
+/*
+ * Reduced motion means NO MOVEMENT, not fast movement.
+ *
+ * The usual `transition-duration: 0.01ms` trick still animates — it just does it
+ * quickly — and for a vestibular trigger a 6px jump in 0.01ms is worse than a
+ * slow one, not better. So transforms and keyframes are switched off outright
+ * and opacity is left alone: a fade carries no motion and keeps the interface
+ * from snapping between states.
+ */
 @media (prefers-reduced-motion: reduce) {
-  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  :root { --enter-rise: 0px; }
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition-property: opacity, background-color, border-color, color !important;
+    transition-duration: var(--motion-fast) !important;
+  }
 }

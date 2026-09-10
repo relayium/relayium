@@ -16,7 +16,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AppService, ServiceRefusal, type AppServiceDeps } from "../../src/main/app-service.js";
+import {
+  AppService,
+  MAX_OWNED_RECEIVES,
+  ServiceRefusal,
+  type AppServiceDeps,
+} from "../../src/main/app-service.js";
 import { SecretStore, type SecretCipher } from "../../src/main/secrets.js";
 
 const ORIGIN = "https://relayium.com";
@@ -202,6 +207,59 @@ describe("a lease belongs to the document that asked for it", () => {
   });
 });
 
+describe("an open in flight is owned before it exists", () => {
+  it("quit does NOT hang waiting for a human-held folder dialog", async () => {
+    const picker = deferred<string | null>();
+    const h = harness({ pickDirectory: () => picker.promise });
+    void h.service.openReceive(MANIFEST, "direct").catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 5));
+
+    // A picker on screen has created nothing — no helper, no staging, no
+    // handle. Waiting for it would mean quit blocks until a person clicks.
+    let disposed = false;
+    const disposal = h.service.dispose().then(() => {
+      disposed = true;
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(disposed).toBe(true);
+
+    // And the fence holds: the dialog resolving afterwards creates nothing.
+    picker.resolve(root);
+    await disposal;
+    await new Promise((r) => setTimeout(r, 10));
+    expect(h.service.openLeaseCount).toBe(0);
+    expect(await contents()).toEqual([]);
+  });
+
+  it("a document revocation fences a picker without waiting for it", async () => {
+    const picker = deferred<string | null>();
+    const h = harness({ pickDirectory: () => picker.promise });
+    const opening = h.service.openReceive(MANIFEST, "direct").catch((e: unknown) => e);
+    await new Promise((r) => setTimeout(r, 5));
+
+    let revoked = false;
+    await h.revoke().then(() => {
+      revoked = true;
+    });
+    expect(revoked).toBe(true);
+
+    picker.resolve(root);
+    expect(await opening).toBeInstanceOf(ServiceRefusal);
+    expect(h.service.openLeaseCount).toBe(0);
+    expect(await contents()).toEqual([]);
+  });
+
+  it("leaves nothing behind when the destination is created into a teardown", async () => {
+    // The bounded window the teardown DOES wait for: the picker has returned
+    // and a real destination is being built.
+    const h = harness();
+    const opening = h.service.openReceive(MANIFEST, "direct").catch((e: unknown) => e);
+    await opening;
+    await h.service.dispose();
+    expect(await contents()).toEqual([]);
+  });
+});
+
 describe("a direct transfer has no account in it", () => {
   it("opens with no session at all, so an unusable store cannot stop it", async () => {
     let storeBuilt = false;
@@ -263,6 +321,42 @@ describe("a direct transfer has no account in it", () => {
   });
 });
 
+describe("which destination production actually opens", () => {
+  it("uses the injected one when a caller supplies it", async () => {
+    let asked = 0;
+    const h = harness({
+      makeDestination: async (options) => {
+        asked += 1;
+        expect(options.rootPath).toBe(root);
+        const { ReceiveLease } = await import("../../src/main/io/receive-lease.js");
+        const { LeaseReceiveAdapter } = await import("../../src/main/net/native-receive-adapter.js");
+        return new LeaseReceiveAdapter(await ReceiveLease.open(options));
+      },
+    });
+    await h.service.openReceive(MANIFEST, "direct");
+    expect(asked).toBe(1);
+  });
+
+  it("never opens a ReceiveLease alongside another destination", async () => {
+    // Two destinations for one batch means a staging directory nothing writes
+    // to and nothing cleans up.
+    const h = harness({
+      makeDestination: async () => ({
+        fileCount: 1,
+        assertAuthority: () => {},
+        begin: async () => {},
+        write: async () => {},
+        finish: async () => {},
+        publish: async () => ({ status: "failed" as const, reason: "unsupported" as const, residue: false }),
+        cancel: async () => {},
+      }),
+    });
+    await h.service.openReceive(MANIFEST, "direct");
+    // The chosen folder is untouched: no staging directory was created.
+    expect(await contents()).toEqual([]);
+  });
+});
+
 describe("publication is a barrier, not a fire-and-forget", () => {
   /** A lease with every file staged, ready for its terminal step. */
   async function staged(h: Harness, authority: "account" | "direct" = "direct") {
@@ -278,10 +372,12 @@ describe("publication is a barrier, not a fire-and-forget", () => {
     const h = harness();
     const leaseId = await staged(h);
 
-    // No native publisher ships yet. The refusal is surfaced as a refusal — it
-    // is never softened into a `partial`, which would claim some files WERE
-    // written under their final names.
-    await expect(h.service.publishReceive(leaseId)).rejects.toThrow(/publish-unsupported/);
+    // No native publisher ships yet, and the portable adapter says so as a
+    // NAMED failure — never softened into a `partial`, which would claim some
+    // files were written under their final names, and never thrown, because a
+    // thrown error loses every field crossing Electron IPC.
+    const report = await h.service.publishReceive(leaseId);
+    expect(report).toEqual({ status: "failed", reason: "unsupported", residue: true });
     // And the staged bytes are this app's to remove.
     expect(await contents()).toEqual([]);
     expect(h.service.openLeaseCount).toBe(0);
@@ -525,23 +621,23 @@ describe("publication is a barrier, not a fire-and-forget", () => {
       throw new Error("could not remove staged bytes");
     };
 
-    // The caller is told about the PUBLICATION failure, which is the accurate
+    // The caller is told about the PUBLICATION outcome, which is the accurate
     // one for them.
-    await expect(h.service.publishReceive(leaseId)).rejects.toThrow(/publish-unsupported/);
+    expect(await h.service.publishReceive(leaseId)).toMatchObject({ status: "failed" });
 
     // But the cleanup failure is not lost: bytes are still in the user's folder
     // and the next teardown says so, naming the reason.
     await expect(h.service.dispose()).rejects.toThrow(/could not remove staged bytes/);
   });
 
-  it("keeps the residue BOUNDED across repeated cleanup failures", async () => {
+  it("keeps what it RETAINS bounded, keeps the leases, and refuses to grow", async () => {
     const h = harness();
     const internal = h.service as unknown as {
       leases: Map<string, { adapter: { cancel(): Promise<void> } }>;
-      cleanupResidue: { count: number; firstReason: string } | null;
+      retiring: Set<{ cleanupAttempts: number; lastCleanupReason: string | null }>;
     };
 
-    for (let i = 0; i < 50; i += 1) {
+    for (let i = 0; i < MAX_OWNED_RECEIVES; i += 1) {
       const leaseId = await staged(h, "direct");
       const entry = internal.leases.get(leaseId)!;
       const real = entry.adapter.cancel.bind(entry.adapter);
@@ -552,11 +648,36 @@ describe("publication is a barrier, not a fire-and-forget", () => {
       await h.service.publishReceive(leaseId).catch(() => undefined);
     }
 
-    // A count and the FIRST reason, not fifty retained `Error` objects each
-    // pinning a stack — on a path a failing disk drives repeatedly, in the
-    // privileged process.
-    expect(internal.cleanupResidue).toEqual({ count: 50, firstReason: "failure number 0" });
-    await expect(h.service.dispose()).rejects.toThrow(/could not clean up 50 transfer\(s\)/);
+    // Every one of those failed its first cleanup. Every one is still OWNED —
+    // its adapter is the only thing that could ever close its destination — and
+    // what each retains is a truncated STRING, not an `Error` pinning a stack
+    // and whatever its closure captured, on a path a failing disk drives
+    // repeatedly, in the privileged process.
+    expect(internal.retiring.size).toBe(MAX_OWNED_RECEIVES);
+    for (const entry of internal.retiring) {
+      expect(entry.cleanupAttempts).toBe(1);
+      expect(entry.lastCleanupReason).toMatch(/^failure number \d+$/);
+    }
+
+    // Growth stops at the ADMISSION boundary rather than by evicting one of
+    // them: refusing a new transfer costs a truthful error, releasing an owned
+    // destination to keep a number small costs a handle nothing can close.
+    await expect(h.service.openReceive(MANIFEST, "direct")).rejects.toThrow(
+      /too many transfers are still open/,
+    );
+
+    // Each teardown is one more attempt each, and is honest about what is still
+    // open rather than reporting a clean sweep over it.
+    await expect(h.service.revokeDocument(0)).rejects.toThrow(
+      new RegExp(`could not clean up ${MAX_OWNED_RECEIVES} transfer\\(s\\)`),
+    );
+    for (const entry of internal.retiring) expect(entry.cleanupAttempts).toBe(2);
+
+    // And they are still owned afterwards. Dropping them because two attempts
+    // is "enough" would put back exactly the failure this closes, and would do
+    // it to the destinations most likely to still be open.
+    expect(internal.retiring.size).toBe(MAX_OWNED_RECEIVES);
+    await expect(h.service.dispose()).rejects.toThrow(/could not clean up transfers on shutdown/);
   });
 
   it("a revocation joins a publication rather than racing it for the same files", async () => {

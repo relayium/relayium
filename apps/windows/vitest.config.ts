@@ -15,6 +15,16 @@ export default defineConfig({
   // not run, which is worse than not having them.
   plugins: [svelte()],
   resolve: {
+    // Svelte's CLIENT build, not its server one.
+    //
+    // Without this, `environment: "node"` resolves Svelte's `node`/`ssr`
+    // condition and `$effect` compiles to a server no-op — so an effect that
+    // never fires here says nothing about the packaged renderer. That is not
+    // hypothetical: it produced a confident wrong diagnosis of a real bug, and
+    // the fix belongs in this harness rather than in product code written
+    // around it. `effect-conditions.test.ts` asserts the condition is actually
+    // in force, so this cannot regress silently.
+    conditions: ["browser"],
     // `web/src/lib/*` is imported directly rather than vendored — a copied
     // protocol is silent divergence with a green board on both sides, which is
     // what the frozen cross-language fixtures exist to prevent.

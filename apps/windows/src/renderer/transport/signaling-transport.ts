@@ -45,6 +45,8 @@ class BridgeSocket implements WebSocketLike {
   /** The terminal event is delivered exactly once, whichever path produces it:
    *  a close from main, a refused open, or this side calling `close()`. */
   #closeDelivered = false;
+  /** Whether this socket ever reached OPEN. See `SignalingTransport.everOpened`. */
+  #everOpened = false;
 
   constructor(bridge: SignalingBridge, room: SignalingRoom, owner: string) {
     this.#bridge = bridge;
@@ -71,6 +73,10 @@ class BridgeSocket implements WebSocketLike {
     return this.#state;
   }
 
+  get everOpened(): boolean {
+    return this.#everOpened;
+  }
+
   send(data: string): void {
     if (this.#state !== OPEN) return;
     // Fire-and-forget, like the browser's own `send`. A refusal from main — a
@@ -92,6 +98,7 @@ class BridgeSocket implements WebSocketLike {
   #deliver(event: SignalingEvent): void {
     if (event.kind === "open") {
       this.#state = OPEN;
+      this.#everOpened = true;
       if (!this.onopen) return this.#buffer(event);
       this.onopen();
       return;
@@ -157,6 +164,17 @@ export interface SignalingTransport {
   readonly factory: (url: string) => WebSocketLike;
   /** Close whichever socket the client currently holds. Idempotent. */
   close(): void;
+  /**
+   * Whether the current socket ever reached OPEN.
+   *
+   * The difference between two failures that look identical from the room's
+   * side and mean opposite things to a user. A code room whose socket NEVER
+   * opened could not reach the server at all — the code was never even offered,
+   * so calling it invalid or expired is a guess, and a wrong one. A socket that
+   * opened and was then closed before `welcome` is the server having looked at
+   * the code and said no.
+   */
+  everOpened(): boolean;
 }
 
 export function createSignalingTransport(
@@ -174,5 +192,6 @@ export function createSignalingTransport(
       return current;
     },
     close: () => current?.close(),
+    everOpened: () => current?.everOpened ?? false,
   };
 }
