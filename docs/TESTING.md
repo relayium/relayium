@@ -2269,6 +2269,21 @@ node scripts/test/android-publish-order-test.mjs
 node scripts/test/android-publish-behavior-test.mjs
 ```
 
+**The relay pool is host-JVM coverage, not device evidence.** `IceConfigTest`
+runs in `:app:testDebugUnitTest` and pins what 0.2.2 changed in `IceConfig`: a
+room whose TURN endpoint, username and credential are issued ONLY in `relays`
+— the shape `server/account/turn.go` returns when the code's owner is
+restricted to their own nodes — keeps that credential instead of resolving
+STUN-only; a mixed room still offers the legacy top-level entry first; the pool
+is capped at the first eight entries POSITIONALLY, so malformed padding cannot
+promote a ninth into view; an exact duplicate tuple folds once with the
+top-level occurrence kept; and unreadable pool data is skipped entry by entry,
+so it never costs the caller a valid top-level credential and never invents a
+STUN server the response did not carry. That is a conformance test against the
+same document `RelaySelection` (Swift) and `web/src/lib/ice.ts` read. It proves
+the parse and nothing about any particular user's network: no allocation is
+made, no relay is reached, and no physical device pairing is observed by it.
+
 The interop acceptance drives the real `MainActivity`/`TransferViewModel`
 through its own `TransferController`, real OkHttp signalling, real native
 WebRTC and the real SAF stack against a real headless Chrome on the real Web

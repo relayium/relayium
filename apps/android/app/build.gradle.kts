@@ -18,14 +18,17 @@ android {
         applicationId = "com.relayium.android"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        // 0.2.1 (4), the UI and motion polish release over the 0.2.0 public
-        // preview. `versionCode` is the only ordering the update
-        // check ever uses — `versionName` is a display string and "0.1.10" sorts
-        // before "0.1.9" as text — so it must increase monotonically for every
-        // published APK, forever. `scripts/test/android-policy-test.mjs` asserts
-        // the two move together.
-        versionCode = 4
-        versionName = "0.2.1"
+        // 0.2.2 (5), the relay-pool compatibility fix over the 0.2.1 UI and
+        // motion polish release: a room whose TURN credential is issued only in
+        // the `relays` pool is no longer read as STUN-only, so this client sees
+        // the same relay its Apple and Web peers already fold in (`IceConfig`).
+        // No UI or capability change. `versionCode` is the only ordering the
+        // update check ever uses — `versionName` is a display string and
+        // "0.1.10" sorts before "0.1.9" as text — so it must increase
+        // monotonically for every published APK, forever.
+        // `scripts/test/android-policy-test.mjs` asserts the two move together.
+        versionCode = 5
+        versionName = "0.2.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
