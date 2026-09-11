@@ -15,8 +15,18 @@
 // history instead. Copying those would have made the help wrong, and wrong help
 // is worse than none.
 
+import type { HelpSurface } from "../../shared/help-guides.js";
 import type { MessageKey } from "../i18n/messages.js";
 import type { Page } from "./navigation.svelte.js";
+
+/**
+ * The screens this table describes and the screens `HELP_GUIDES` decides a
+ * link for are the same set, so the two tables cannot drift apart into a
+ * screen with answers and no decision about its document, or the reverse.
+ * A compile error, rather than a third list to keep in step.
+ */
+const _surfacesAgree: Page extends HelpSurface ? (HelpSurface extends Page ? true : never) : never = true;
+void _surfacesAgree;
 
 export interface HelpContent {
   readonly purpose: MessageKey;

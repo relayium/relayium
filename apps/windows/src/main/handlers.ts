@@ -78,6 +78,8 @@ import { ReceivedDragService } from "./features/received-drag.js";
 import { isReceivedAction } from "../shared/received-drag.js";
 import { isResidentNotice } from "../shared/ipc-contract.js";
 import { isPairHandoffAction } from "../shared/pair-handoff.js";
+import { resolveGuideRequest } from "../shared/help-guides.js";
+import { PRODUCTION_SITE_ORIGIN } from "../shared/origin-constants.js";
 import { openApprovedExternal } from "./window.js";
 
 /**
@@ -1261,6 +1263,25 @@ export function registerHandlers(
     const url = accountSummary.externalUrl(target);
     if (url === null) return { ok: false };
     return { ok: await openApprovedExternal(url, origin) };
+  });
+
+  // A SCREEN, never an address, and never this build's API origin.
+  //
+  // Documentation is published by the product site. `origin` above is the
+  // server this build dials, which an engineering build points at loopback —
+  // composing a guide URL there would open a page that has never existed. So
+  // both the address and the origin it is checked against are the site's.
+  router.handle(IPC.helpOpenGuide, async (payload) => {
+    const body = expectObject(payload);
+    const resolved = resolveGuideRequest({ surface: body["surface"], language: body["language"] });
+    // A token this build does not know is a page sending something it was never
+    // given, which is refused rather than answered. A screen that deliberately
+    // promises no document is not that, and reports an honest failure to open.
+    if (!resolved.ok) {
+      if (resolved.why === "no-guide") return { ok: false };
+      throw new IpcRefusal(`unknown help ${resolved.why === "unknown-surface" ? "surface" : "language"}`);
+    }
+    return { ok: await openApprovedExternal(resolved.url, PRODUCTION_SITE_ORIGIN) };
   });
 
   // -------------------------------------------------------------------------

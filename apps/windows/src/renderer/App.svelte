@@ -52,6 +52,7 @@
   import type { ReceiveBridge } from "./receive/receive-coordinator.js";
   import { RevealController, type RevealBridge } from "./receive/reveal-controller.svelte.js";
   import { ReceivedController, type ReceivedBridge } from "./receive/received-controller.svelte.js";
+  import type { HelpBridge } from "./shell/guide-link.js";
   import { OfferAnnouncer } from "./receive/offer-announcer.js";
   import PendingSelection from "./pages/PendingSelection.svelte";
   import PairHandoff from "./pages/PairHandoff.svelte";
@@ -96,6 +97,7 @@
       pairHandoff: PairHandoffBridge;
       account: { onAuthority(cb: (payload: unknown) => void): () => void };
       receivedDrag: ReceivedBridge;
+      help: HelpBridge;
     };
 
   const bridge = (globalThis as unknown as { relayium: Bridge }).relayium;

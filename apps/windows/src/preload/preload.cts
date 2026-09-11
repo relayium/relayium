@@ -188,6 +188,10 @@ contextBridge.exposeInMainWorld("relayium", {
     manage: invoke("relayium:account-manage"),
     onState: subscribe("relayium:account-summary"),
   },
+  help: {
+    // A screen name, never an address. Main owns the slug table.
+    openGuide: invoke("relayium:help-open-guide"),
+  },
   // Updates. Four names, none of which carries an address, a key or a version
   // the page chose. `notes` names a DESTINATION with a closed token and main
   // resolves it from the signed manifest; a build with no pinned key answers

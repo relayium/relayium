@@ -14,14 +14,39 @@
   not have to leave the app to find out.
 -->
 <script lang="ts">
-  import { t } from "../i18n/index.svelte.js";
+  import { lang, t } from "../i18n/index.svelte.js";
+  import { HELP_GUIDES } from "../../shared/help-guides.js";
   import { HELP } from "./help-content.js";
+  import { openGuide } from "./guide-link.js";
   import type { Page } from "./navigation.svelte.js";
 
   let { page }: { page: Page } = $props();
 
   const content = $derived(HELP[page]);
+  // Only where a maintained document exists. An invented "learn more" pointing
+  // at a page that does not answer the question is worse than no link at all,
+  // so the Account screen renders nothing here rather than something generic.
+  const guide = $derived(HELP_GUIDES[page]);
   let open = $state(false);
+  /**
+   * WHICH screen could not be opened, rather than whether one could.
+   *
+   * The component is reused as the reader moves between screens, so a plain
+   * boolean would leave "could not open your browser" sitting under the help of
+   * a screen whose link was never touched. A failure belongs to the screen it
+   * happened on, and stops being true the moment that is no longer the screen.
+   */
+  let failedFor = $state<Page | null>(null);
+  const failed = $derived(failedFor === page);
+
+  async function readGuide(): Promise<void> {
+    const asked = page;
+    failedFor = null;
+    const ok = await openGuide(asked, lang());
+    // A slow refusal must not land on a screen the reader has since left.
+    if (asked !== page) return;
+    failedFor = ok ? null : asked;
+  }
 </script>
 
 <section class="help" data-test="help" data-page={page}>
@@ -58,6 +83,20 @@
     <h3>{t("helpTroubleHeading")}</h3>
     <p data-test="help-failure">{t(content.failure)}</p>
     <p data-test="help-recovery">{t(content.recovery)}</p>
+
+    {#if guide !== null}
+      <!-- A button, not an anchor: there is no address in this document to put
+           in an href, and a renderer that could navigate is the thing the main
+           process refuses. -->
+      <button type="button" class="guide" data-test="help-guide" onclick={readGuide}>
+        {t("helpGuideLink")}
+      </button>
+      {#if failed}
+        <p class="guide-failed" data-test="help-guide-failed" role="status">
+          {t("helpGuideLinkFailed")}
+        </p>
+      {/if}
+    {/if}
   </div>
 </section>
 
@@ -90,5 +129,20 @@
   #help-body ol {
     margin: 0;
     padding-inline-start: 1.4em;
+  }
+  .guide {
+    margin-top: var(--gap, 12px);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent, inherit);
+    font: inherit;
+    font-size: 0.95em;
+    text-align: start;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .guide-failed {
+    margin: 4px 0 0;
   }
 </style>

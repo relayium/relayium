@@ -362,6 +362,19 @@ export const IPC = {
   accountManage: "relayium:account-manage",
 
   // -------------------------------------------------------------------------
+  // Help
+  // -------------------------------------------------------------------------
+  //
+  // One channel, and it carries no address either. The page names a SCREEN and
+  // a language; main owns the table of slugs and composes the address on the
+  // product SITE's origin — which is not this build's API origin, because an
+  // engineering build dials loopback and no documentation was ever published
+  // there. See `shared/help-guides.ts`.
+
+  /** Open this screen's guide on the product site, from MAIN. */
+  helpOpenGuide: "relayium:help-open-guide",
+
+  // -------------------------------------------------------------------------
   // Updates
   // -------------------------------------------------------------------------
   //

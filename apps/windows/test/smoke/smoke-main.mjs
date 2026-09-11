@@ -266,10 +266,13 @@ async function main() {
   // silently. `inboxSend` is its own namespace rather than a member of `inbox`
   // because it is the only Inbox surface that returns a KEY, and a reader
   // auditing this line should see that without opening another file.
+  //
+  // `help` is one method and it carries no address: the page names a SCREEN and
+  // a language, and main composes the URL from its own table.
   check(
     "bridge exposed",
     parsed.keys.sort().join(",") ===
-      "account,accountSummary,appInfo,auth,ice,inbox,inboxSend,loginItem,osEntry,pair,pairHandoff,prefs,receive,receivedDrag,resident,send,signaling,stored,update",
+      "account,accountSummary,appInfo,auth,help,ice,inbox,inboxSend,loginItem,osEntry,pair,pairHandoff,prefs,receive,receivedDrag,resident,send,signaling,stored,update",
     parsed.keys.join(","),
   );
   check("no raw ipcRenderer in the page", parsed.hasIpc === false);
@@ -367,6 +370,11 @@ async function main() {
     "relayium:update-residue", "relayium:update-notes",
     "relayium:inbox-delete-message", "relayium:inbox-rename", "relayium:inbox-wake",
     "relayium:inbox-release-retained",
+    // The help's one journey out. A SCREEN and a language, never an address:
+    // main owns the slug table and composes the URL on the product SITE's
+    // origin, which is not this build's API origin — an engineering build
+    // dials loopback and no documentation was ever published there.
+    "relayium:help-open-guide",
   ];
   // Restated above rather than derived, so a channel cannot be added to the
   // contract and reach a handler without appearing in a reviewed list — and
@@ -537,6 +545,31 @@ async function assertEveryScreenExplainsItself(win) {
     for (const answer of ["purpose", "boundary", "where", "failure", "recovery"]) {
       check(`${page} help answers ${answer}`, opened[answer] > 0, JSON.stringify(opened));
     }
+
+    // The link to a maintained document, where one exists — and NOTHING on the
+    // screen that has none. The absence is the half worth executing: an
+    // invented "learn more" pointing at a page that does not answer the
+    // question is worse than no link, and it is exactly the kind of thing a
+    // table edit adds without anyone noticing on screen.
+    const guide = await js(
+      `(() => { const s = document.querySelector('[data-test="help"]');` +
+        ` const link = s.querySelector('[data-test="help-guide"]');` +
+        ` return link === null ? null : { label: link.textContent.trim(),` +
+        ` tag: link.tagName, href: link.getAttribute("href") }; })()`,
+    );
+    if (page === "account") {
+      check("the account screen promises no document", guide === null, JSON.stringify(guide));
+    } else {
+      check(`${page} offers its guide`, guide !== null, String(guide));
+      if (guide !== null) {
+        check(`${page} guide link is labelled`, guide.label.length > 0, JSON.stringify(guide));
+        // A button, not an anchor. There is no address in this document to put
+        // in an href: the page names a SCREEN and main composes the URL, so a
+        // foothold here has nothing to read and nothing to navigate.
+        check(`${page} guide link carries no address`, guide.tag === "BUTTON" && guide.href === null, JSON.stringify(guide));
+      }
+    }
+
     check(`${page} help closes again`, await clickTest("help-toggle"));
   }
 }
