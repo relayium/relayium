@@ -13,32 +13,27 @@
 // device, inode and size still match what staging saw. Every read re-checks the
 // cached handle identity before it moves a byte.
 //
-// **This narrows a race; it does not close one on Windows.** Node offers no
-// `O_NOFOLLOW` there and no way to open a path with reparse traversal disabled,
-// so between `lstat` and `open` a path component can in principle be replaced.
-// What this build can say is that the bytes it reads come from a regular file
-// whose identity has not changed since it was opened, and that a symlink Node
-// can see is refused. It cannot say the open itself was reparse-proof.
+// **On Windows the open is now reparse-proof; off Windows it is not.**
 //
-// Closing that gap needs a native open, and NOT the shape this comment used to
-// prescribe. `FILE_FLAG_OPEN_REPARSE_POINT` on the final component plus a
-// `GetFinalPathNameByHandleW` string comparison does not exclude an ANCESTOR
-// reparse: the traversal that reached the final component already followed
-// whatever the parent directories pointed at, and a final path that looks right
-// can be reached through a junction that was swapped in on the way.
+// Node offers no `O_NOFOLLOW` on Windows and no way to open a path with reparse
+// traversal disabled, so between `lstat` and `open` a path component can in
+// principle be replaced. That gap is why `relayium-io-helper --source-mode`
+// exists: it opens the staged root and then each component relative to the
+// handle above it with `FILE_OPEN_REPARSE_POINT`, refusing a reparse point
+// everywhere including the root the user picked, and holds every ancestor
+// without `FILE_SHARE_DELETE` so none can be renamed away under an open read.
+// A final-path comparison would NOT have been enough: the traversal that
+// reached the final component has already followed whatever the parents pointed
+// at, and a path that looks right can be reached through a junction swapped in
+// on the way.
 //
-// The guard has to be a PARENT-HANDLE WALK — open the staged root, then open
-// each component relative to the handle above it with reparse traversal
-// disabled, so no component is ever resolved by the OS on this build's behalf.
-//
-// WHICH binary should do that is NOT decided here, and this module does not
-// assume it. `relayium-update-helper.exe` exists for the update lane and the
-// realtime receiver uses a separate receive helper; asserting that either one
-// should grow a source-read verb would be claiming ownership this batch has not
-// been granted. The handoff states the required invariants and leaves the
-// binary, the verb and the ownership to root.
-//
-// Until such a command exists, nothing here claims reparse-proof opening.
+// A provider is supplied by the caller. When there is one, bytes come from the
+// helper and the reads are bound to an exact, nonzero `FILE_ID_INFO` that is
+// replayed on every reopen. When there is none — every platform but Windows,
+// and the tests — Node opens the file and this module claims only what the old
+// comment claimed: the bytes come from a regular file whose device, inode, size
+// and mtime have not changed since it was opened, and a symlink Node can see is
+// refused. It does not claim the open itself was reparse-proof.
 //
 // ## Memory
 //
@@ -47,6 +42,11 @@
 // at once regardless of how many are staged.
 
 import { open, lstat, stat, type FileHandle } from "node:fs/promises";
+import type {
+  NativeSourceHandle,
+  NativeSourceProvider,
+  SourceIdentity,
+} from "./native-source.js";
 import { MAX_SELECTION_CHUNK } from "../../shared/os-entry.js";
 
 /**
@@ -175,6 +175,29 @@ export function sameIdentity(a: FileIdentity, b: FileIdentity): boolean {
   return a.mtimeMs === b.mtimeMs;
 }
 
+/**
+ * One opened file, however it was opened.
+ *
+ * The seam exists because the two strategies establish the SAME guarantee by
+ * different means and neither can be described in the other's terms. Node binds
+ * by device, inode, size and mtime re-read from the descriptor; the helper binds
+ * by an exact, nonzero `FILE_ID_INFO` and by having walked every path component
+ * relative to a handle it already held. Collapsing them into one shape would
+ * mean one of the two claiming a check it does not perform.
+ */
+interface OpenSource {
+  /**
+   * At most `length` bytes from `position`.
+   *
+   * Fewer than asked for means the file is no longer what was staged; the
+   * caller reports that rather than padding or calling it the end.
+   */
+  read(length: number, position: number): Promise<Uint8Array>;
+  /** Whether this still refers to the file staging saw. */
+  verify(expected: FileIdentity): Promise<boolean>;
+  close(): Promise<void>;
+}
+
 export type ReadOutcome =
   | { readonly kind: "bytes"; readonly bytes: Uint8Array }
   | { readonly kind: "changed" }
@@ -209,7 +232,7 @@ type OwnedState = "acquiring" | "open" | "closing" | "failed-close";
 
 interface Owned {
   /** Null only while `acquiring`. Retained through a failed close. */
-  handle: FileHandle | null;
+  source: OpenSource | null;
   identity: FileIdentity | null;
   /** Reads in flight on this handle. A close waits for them. */
   inFlight: number;
@@ -224,6 +247,119 @@ interface Owned {
    * explicitly finished with, held for the life of the process.
    */
   releaseRequested: boolean;
+}
+
+/** What one open attempt achieved, so ownership is never ambiguous. */
+type OpenAttempt =
+  /** Opened, and it is what staging saw. */
+  | { readonly kind: "opened"; readonly source: OpenSource; readonly identity: FileIdentity }
+  /**
+   * Opened, and it is NOT what staging saw.
+   *
+   * The source is handed back rather than closed here, so the caller closes it
+   * through `#shut` — which is what retains a descriptor whose close FAILS and
+   * keeps it counted. A strategy that tidied up after itself would make exactly
+   * that case invisible.
+   */
+  | { readonly kind: "rejected"; readonly source: OpenSource }
+  /** Nothing was opened; there is no descriptor to account for. */
+  | { readonly kind: "none" };
+
+/** Node's own descriptor. The portable path, and the only one off Windows. */
+class NodeSource implements OpenSource {
+  readonly #handle: FileHandle;
+  constructor(handle: FileHandle) {
+    this.#handle = handle;
+  }
+  async read(length: number, position: number): Promise<Uint8Array> {
+    const buffer = Buffer.allocUnsafe(length);
+    const { bytesRead } = await this.#handle.read(buffer, 0, length, position);
+    return new Uint8Array(buffer.buffer, buffer.byteOffset, bytesRead);
+  }
+  /** `fstat` on the descriptor itself: no name is resolved to answer this. */
+  async verify(expected: FileIdentity): Promise<boolean> {
+    let now;
+    try {
+      now = await this.#handle.stat();
+    } catch {
+      return false;
+    }
+    if (!now.isFile()) return false;
+    return sameIdentity(expected, { size: now.size, dev: now.dev, ino: now.ino, mtimeMs: now.mtimeMs });
+  }
+  close(): Promise<void> {
+    return this.#handle.close();
+  }
+}
+
+/**
+ * A handle the helper opened by walking every component itself.
+ *
+ * ## Bytes and the change check come from different places, deliberately
+ *
+ * The BYTES come from the helper's handle, which no name resolution can
+ * redirect: every component was opened relative to a handle already held, with
+ * reparse traversal disabled, and the ancestors stay pinned for the life of the
+ * source.
+ *
+ * The CHANGE check is still Node's `examine` on the path, because the helper
+ * protocol has no stat verb and inventing one would mean re-proving a protocol
+ * on Windows to answer a question this already answers safely. It is safe
+ * because of which way it can fail: if a component were redirected between two
+ * checks, `examine` describes a DIFFERENT file, the identity does not match, and
+ * the read is refused. A redirected check can cost a spurious refusal; it cannot
+ * cause the wrong bytes to be served, because the bytes never come from it.
+ */
+class HelperSource implements OpenSource {
+  readonly #handle: NativeSourceHandle;
+  readonly #path: string;
+  constructor(handle: NativeSourceHandle, path: string) {
+    this.#handle = handle;
+    this.#path = path;
+  }
+  async read(length: number, position: number): Promise<Uint8Array> {
+    const { bytes } = await this.#handle.read(position, length);
+    return bytes;
+  }
+  async verify(expected: FileIdentity): Promise<boolean> {
+    const now = await examine(this.#path);
+    return now.kind === "file" && sameIdentity(expected, now.identity);
+  }
+  async close(): Promise<void> {
+    // `failed-close` is the helper still HOLDING the handle, which is exactly
+    // what the caller's retained-entry accounting exists to record.
+    if ((await this.#handle.close()) === "failed-close") {
+      throw new Error("the helper did not release the handle");
+    }
+  }
+}
+
+/**
+ * Open through Node, and establish what was opened from the descriptor.
+ *
+ * `lstat` again immediately before the open. It does not close the race — see
+ * the header — but it refuses a path that has BECOME a symlink since staging,
+ * which is the cheap half of the protection.
+ */
+async function openThroughNode(path: string, expected: FileIdentity): Promise<OpenAttempt> {
+  const before = await examine(path);
+  if (before.kind !== "file" || !sameIdentity(expected, before.identity)) return { kind: "none" };
+  let handle: FileHandle;
+  try {
+    handle = await open(path, "r");
+  } catch {
+    return { kind: "none" };
+  }
+  const source = new NodeSource(handle);
+  let opened;
+  try {
+    opened = await handle.stat();
+  } catch {
+    return { kind: "rejected", source };
+  }
+  const identity = { size: opened.size, dev: opened.dev, ino: opened.ino, mtimeMs: opened.mtimeMs };
+  if (!opened.isFile() || !sameIdentity(expected, identity)) return { kind: "rejected", source };
+  return { kind: "opened", source, identity };
 }
 
 /**
@@ -251,6 +387,28 @@ export class SelectionReader {
    */
   #reserved = 0;
   #disposed = false;
+  /**
+   * The helper, when this platform has one. Null means Node opens the files.
+   *
+   * Supplied rather than constructed here so this module stays testable off
+   * Windows and so the decision about whether a native guarantee exists is made
+   * in ONE place — `createNativeSourceProvider`, which answers null off Windows
+   * and fails closed on it.
+   */
+  readonly #native: NativeSourceProvider | null;
+  /**
+   * What the helper said each file WAS, the first time it opened it.
+   *
+   * A file may be reopened after an eviction, and between the two opens the
+   * name can come to mean something else. The first identity is replayed as the
+   * expected one, so a reopen that lands on a different object is refused
+   * terminally rather than read.
+   */
+  readonly #bound = new Map<string, SourceIdentity>();
+
+  constructor(native: NativeSourceProvider | null = null) {
+    this.#native = native;
+  }
 
   /**
    * Files this process still holds, in ANY state.
@@ -287,23 +445,22 @@ export class SelectionReader {
     try {
       const entry = await this.#acquire(id, path, expected);
       if (entry === "at-capacity") return { kind: "at-capacity" };
-      if (entry === null || entry.handle === null) return { kind: "changed" };
+      if (entry === null || entry.source === null) return { kind: "changed" };
       if (this.#disposed) return { kind: "failed" };
 
       // Clamped to the size staging measured. A file that grew is not read past
       // what was declared; one that shrank fails the identity check.
       const want = Math.min(length, expected.size - offset);
-      const buffer = Buffer.allocUnsafe(want);
       entry.inFlight += 1;
       try {
-        const { bytesRead } = await entry.handle.read(buffer, 0, want, offset);
-        if (bytesRead !== want) {
+        const bytes = await entry.source.read(want, offset);
+        if (bytes.length !== want) {
           // Short of what the size says is available. Reported, never padded
           // and never passed off as the end: a truncated send that calls itself
           // complete is the failure this refuses.
           return { kind: "changed" };
         }
-        return { kind: "bytes", bytes: new Uint8Array(buffer.buffer, buffer.byteOffset, bytesRead) };
+        return { kind: "bytes", bytes };
       } catch {
         return { kind: "failed" };
       } finally {
@@ -325,20 +482,8 @@ export class SelectionReader {
     const pending = this.#acquiring.get(id);
     if (pending !== undefined) return pending;
     const held = this.#owned.get(id);
-    if (held !== undefined && held.state === "open" && held.handle !== null) {
-      let now;
-      try {
-        now = await held.handle.stat();
-      } catch {
-        await this.#release(id);
-        return null;
-      }
-      if (!now.isFile()) {
-        await this.#release(id);
-        return null;
-      }
-      const identity = { size: now.size, dev: now.dev, ino: now.ino, mtimeMs: now.mtimeMs };
-      if (!sameIdentity(expected, identity)) {
+    if (held !== undefined && held.state === "open" && held.source !== null) {
+      if (!(await held.source.verify(expected))) {
         await this.#release(id);
         return null;
       }
@@ -396,7 +541,7 @@ export class SelectionReader {
     // The entry exists from the moment an open is ATTEMPTED, so a teardown
     // during the open counts it rather than seeing an empty registry.
     const entry: Owned = {
-      handle: null,
+      source: null,
       identity: null,
       inFlight: 0,
       state: "acquiring",
@@ -406,39 +551,23 @@ export class SelectionReader {
     this.#owned.set(id, entry);
     this.#order.push(id);
     try {
-      // `lstat` again immediately before the open. It does not close the race —
-      // see the header — but it refuses a path that has BECOME a symlink since
-      // staging, which is the cheap half of the protection.
-      const before = await examine(path);
-      if (before.kind !== "file" || !sameIdentity(expected, before.identity)) {
+      const attempt =
+        this.#native === null
+          ? await openThroughNode(path, expected)
+          : await this.#openThroughHelper(id, path, expected);
+      if (attempt.kind === "none") {
         this.#forget(id, entry);
         return null;
       }
-      let handle: FileHandle;
-      try {
-        handle = await open(path, "r");
-      } catch {
-        this.#forget(id, entry);
-        return null;
-      }
-      let opened;
-      try {
-        opened = await handle.stat();
-      } catch {
-        entry.handle = handle;
-        await this.#shut(id, entry);
-        return null;
-      }
-      const identity = { size: opened.size, dev: opened.dev, ino: opened.ino, mtimeMs: opened.mtimeMs };
-      if (!opened.isFile() || !sameIdentity(expected, identity) || this.#disposed) {
+      if (attempt.kind === "rejected") {
         // Owned from here: closing is what releases it, and a failed close is
         // retained rather than dropped.
-        entry.handle = handle;
+        entry.source = attempt.source;
         await this.#shut(id, entry);
         return null;
       }
-      entry.handle = handle;
-      entry.identity = identity;
+      entry.source = attempt.source;
+      entry.identity = attempt.identity;
       entry.state = "open";
       // A release asked for while this was acquiring is honoured now, rather
       // than leaving the handle open until a global teardown.
@@ -453,10 +582,38 @@ export class SelectionReader {
     }
   }
 
+  /**
+   * Open through the helper, binding the result to what it first was.
+   *
+   * The cheap half runs first and unchanged: `examine` refuses a path that has
+   * BECOME a symlink since staging without spending a subprocess round trip on
+   * it. What the helper adds is the half Node cannot do — every component opened
+   * relative to a handle already held, so no ancestor can redirect the open.
+   */
+  async #openThroughHelper(id: string, path: string, expected: FileIdentity): Promise<OpenAttempt> {
+    const native = this.#native;
+    if (native === null) return { kind: "none" };
+    const before = await examine(path);
+    if (before.kind !== "file" || !sameIdentity(expected, before.identity)) return { kind: "none" };
+    let handle: NativeSourceHandle;
+    try {
+      // The bound identity is replayed on every reopen. A mismatch rejects the
+      // open inside the provider and never yields a handle, which is why this
+      // returns `none` rather than `rejected`.
+      handle = await native.open(path, this.#bound.get(id));
+    } catch {
+      return { kind: "none" };
+    }
+    const source = new HelperSource(handle, path);
+    if (handle.size !== expected.size) return { kind: "rejected", source };
+    this.#bound.set(id, handle.identity);
+    return { kind: "opened", source, identity: before.identity };
+  }
+
   /** Drop an entry that never came to own a descriptor. */
   #forget(id: string, entry: Owned): void {
     if (this.#owned.get(id) !== entry) return;
-    if (entry.handle !== null) return; // owned; only a close may remove it
+    if (entry.source !== null) return; // owned; only a close may remove it
     this.#owned.delete(id);
     const at = this.#order.indexOf(id);
     if (at >= 0) this.#order.splice(at, 1);
@@ -491,8 +648,8 @@ export class SelectionReader {
    */
   async #shut(id: string, entry: Owned): Promise<void> {
     if (this.#owned.get(id) !== entry) return;
-    const handle = entry.handle;
-    if (handle === null) {
+    const source = entry.source;
+    if (source === null) {
       this.#forget(id, entry);
       return;
     }
@@ -501,7 +658,7 @@ export class SelectionReader {
       return;
     }
     entry.state = "closing";
-    const run = handle.close().then(
+    const run = source.close().then(
       () => {
         // Released. Only now is the entry gone.
         if (this.#owned.get(id) === entry) {

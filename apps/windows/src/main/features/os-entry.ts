@@ -47,6 +47,7 @@ import {
   isReservedDevicePath,
   type FileIdentity,
 } from "../io/selection-reader.js";
+import { createNativeSourceProvider } from "../io/native-source.js";
 
 export interface OsEntryDeps {
   currentDocument(): number;
@@ -134,7 +135,12 @@ export class OsEntryService {
   #disposed = false;
 
   constructor(private readonly deps: OsEntryDeps) {
-    this.#reader = deps.reader ?? new SelectionReader();
+    // The provider decides for itself whether this platform has a native
+    // guarantee: null off Windows, and on Windows a provider that REFUSES every
+    // open when the helper is missing rather than quietly handing back a Node
+    // reader. A staged file is read through the helper's component-by-component
+    // walk, so no ancestor can redirect the open.
+    this.#reader = deps.reader ?? new SelectionReader(createNativeSourceProvider());
   }
 
   private now(): number {
