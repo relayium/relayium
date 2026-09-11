@@ -140,6 +140,8 @@ export const en = {
   recvReveal: "Show in Explorer",
   /** The per-file list a finished receive announces. */
   recvFilesTitle: "Received files",
+  /** The one action that ends being signed out. Used beside a refusal that said so. */
+  gateSignIn: "Sign in",
   /** Shows ONE file rather than the folder the batch went to. */
   recvShowFile: "Show",
   recvDragHint: "Drag a file out to copy it somewhere else.",
@@ -625,6 +627,7 @@ export const zh: Record<MessageKey, string> = {
   recvSavedCount: "已保存 {done} / {total}",
   recvReveal: "在文件资源管理器中显示",
   recvFilesTitle: "已接收的文件",
+  gateSignIn: "登录",
   recvShowFile: "显示",
   recvDragHint: "将文件拖出即可复制到其他位置。",
   recvActionMissing: "该文件已不存在，可能在接收后被移动、重命名或删除。",

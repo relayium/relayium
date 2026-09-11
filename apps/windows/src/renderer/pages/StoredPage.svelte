@@ -34,7 +34,7 @@
   import type { PickedFile } from "../../../../../web/src/lib/drag";
   import { sendGate } from "../send/send-gate.svelte.js";
 
-  let { stored, send, account, offered = "", onConsumed }: {
+  let { stored, send, account, offered = "", onConsumed, onSignIn }: {
     /** App-lived: a transfer, its progress and the draft all outlive this page. */
     stored: StoredController;
     /** App-lived for the same reasons, plus one that is stronger: the picked
@@ -51,6 +51,8 @@
     /** A link Windows handed this window. Shown, never acted on by itself. */
     offered?: string;
     onConsumed?: () => void;
+    /** Takes the reader to the account screen, for a refusal that needs one. */
+    onSignIn?: () => void;
   } = $props();
 
   // A link that arrived from outside lands in the box, and only there. The user
@@ -425,6 +427,14 @@
 
   {#if send.refusal}
     <p class="problem" data-test="send-refusal">{refusalOf(send.refusal)}</p>
+    <!-- The action has to be the one that RESOLVES what was just said. Main's
+         own verdict is what named this refusal, so it cannot be stale the way a
+         page-local guess at sign-in state would be. -->
+    {#if send.refusal.kind === "signed-out" && onSignIn}
+      <button class="primary" type="button" data-test="send-sign-in" onclick={onSignIn}>
+        {t("gateSignIn")}
+      </button>
+    {/if}
   {/if}
 
   {#if send.outcome}

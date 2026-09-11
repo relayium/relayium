@@ -433,6 +433,7 @@ async function main() {
 
   await assertSendFilesReachedThePane(win);
   await assertPairHandoffRefusesWithoutACode(win);
+  await assertSignedOutGatesRatherThanGreys(win);
   await driveSignInCancellation(win);
 
   process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures })}\n`);
@@ -476,6 +477,34 @@ async function main() {
  * The clipboard is read, never written. A smoke that stamped a sentinel over
  * whatever the developer had copied would be a rude test.
  */
+/**
+ * A feature that needs an account NAMES that, and offers the way in.
+ *
+ * The rule macOS states in `CapabilityGateView`: no dead controls. The Device
+ * Inbox is gated entire when signed out, and this run is signed out, so the
+ * gate is what the page should be.
+ *
+ * Pinned here because it is easy to regress into a greyed screen that states
+ * no reason, and because the only surface that can assert it is a real one.
+ */
+async function assertSignedOutGatesRatherThanGreys(win) {
+  const js = (expr) => win.webContents.executeJavaScript(expr);
+  const present = (name) => js(`document.querySelector('[data-test="${name}"]') !== null`);
+  const clickTest = (name) =>
+    js(
+      `(() => { const el = document.querySelector('[data-test="${name}"]'); if (!el) return false;` +
+        ` const target = el.tagName === "BUTTON" ? el : el.querySelector("button") ?? el;` +
+        ` target.click(); return true; })()`,
+    );
+
+  if (!(await waitFor("the sidebar", () => present("nav-inbox")))) return;
+  check("the inbox row clicked", await clickTest("nav-inbox"));
+  if (!(await waitFor("the account gate", () => present("inbox-sign-in")))) return;
+  // The gate REPLACES the surface rather than disabling it: a greyed Enable
+  // states no reason and leaves the reader guessing whether it is broken.
+  check("the gated surface is not also offered", (await present("inbox-enable")) === false);
+}
+
 async function assertPairHandoffRefusesWithoutACode(win) {
   const js = (expr) => win.webContents.executeJavaScript(expr);
   const call = async (expr) => JSON.parse(await js(`${expr}.then((v) => JSON.stringify(v))`));

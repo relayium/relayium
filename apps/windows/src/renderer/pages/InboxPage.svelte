@@ -615,9 +615,19 @@
             ? t("inboxSendSignedOut")
             : t("inboxSendTargetsUnavailable")}
         </p>
-        <button type="button" data-test="inbox-send-refresh" onclick={() => void send.refreshTargets()}>
-          {t("inboxSendRefresh")}
-        </button>
+        <!-- The action has to be the one that RESOLVES what was just said.
+             This branch is reachable when the account goes away mid-session,
+             while the page is already open, and Refresh cannot end being
+             signed out however many times it is pressed. -->
+        {#if send.targetsRefusal === "signed-out" && onSignIn}
+          <button class="primary" type="button" data-test="inbox-send-sign-in" onclick={onSignIn}>
+            {t("gateSignIn")}
+          </button>
+        {:else}
+          <button type="button" data-test="inbox-send-refresh" onclick={() => void send.refreshTargets()}>
+            {t("inboxSendRefresh")}
+          </button>
+        {/if}
       {:else if send.targets.length === 0}
         <p class="dim" data-test="inbox-send-no-targets">{t("inboxSendNoTargets")}</p>
         <button type="button" data-test="inbox-send-refresh" onclick={() => void send.refreshTargets()}>
