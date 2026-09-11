@@ -34,6 +34,7 @@ The table below is current as of `321d131be`.
 | Updates | The update core has run on Windows, including the native signer, custody and verified-byte launch checks. The interface covering 18 states is wired into the resident host in `a654041` and its host acceptance passed | No publisher pin, no expected publisher and no feed configured — all fail-closed, so no update can actually be delivered. No real installer has been launched |
 | Desktop behaviour | Resident close/quit, tray, notifications, deep-link handling, login-item and first-run, against a real Electron process. Staged files are read through `relayium-io-helper --source-mode`, whose component-by-component walk is proven on Windows, so no ancestor can redirect the open; a Windows build without the helper refuses every staged read rather than substituting Node. The installer's Explorer verbs and SendTo shortcut now reach the app: `321d131be` stages `--send-files` at launch and on `second-instance`, and the bootstrap smoke drives the real listener and asserts the pane names the file while the directory appears in neither the text nor the markup | The OS startup toggle and the native file picker are supplied by injection, so neither is proven. Staging has not been driven from a real Explorer right-click on Windows |
 | Received files | A finished receive announces its files as per-file capability tokens on the originating document. Dragging is main's — it re-checks that the file is still the one it registered before the OS is told — and the drag image is the build's icon rather than anything derived from the file. The page is given relative paths only, and an announcement carrying an absolute path is dropped rather than rendered | No drag has been performed by a person on Windows; the OS drag itself is only reachable through a real cursor |
+| Account gating | Main pushes an authority change carrying no identity, and the shell re-reads its state from a settled phase only, so a sign-out made anywhere reaches the screen. Signed out, the Device Inbox and the send half are gated ENTIRE: each names what it needs and offers the one action that ends it, and the controls are absent rather than greyed. Anonymous link opening is deliberately ungated | Gating is proven for the two account-bound surfaces only; no audit has walked every control for a dead one |
 | Pairing handoff | The live code is reachable as a join link and a QR built from the compiled origin. Copy names an action and carries no text, so main writes only what main retained; an unknown action is refused and the clipboard is left alone, asserted in a real Electron process | No code has been minted end to end on Windows: the smoke is signed out, so only the refusal path is covered. Scanning the QR with a phone is unproven |
 | Presentation | Five-row navigation; English and Chinese catalogues with compile-enforced key parity; light/dark, focus and reduced-motion support | Windows scaling, keyboard and motion validation |
 
@@ -90,15 +91,6 @@ Still required for parity:
 * **Real-network transfer demonstrated.** Everything proven so far is one
   runner and a loopback server.
 * **Signing, installer and upgrade acceptance**, each its own gate.
-* **Authoritative sign-in state in the renderer.** macOS gates a feature that
-  needs an account BEFORE the user acts: signed out, the gate is the surface.
-  The Device Inbox does that on Windows because its status comes from main. The
-  send half cannot yet: the only sign-in state the renderer has is the sign-in
-  controller's `phase`, which updates when the user acts through the UI and can
-  therefore be stale in both directions — hiding a working feature, or offering
-  one that will refuse. A refusal now carries the action that resolves it, which
-  is truthful because main produced the verdict; a whole-surface gate needs a
-  pushed account state first.
 * **A supported-version gate, before the first public release.** macOS refuses
   to build its content at all when the served policy says the build is below
   minimum, so a stale binary opens no socket. Windows has no equivalent and
