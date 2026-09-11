@@ -22,6 +22,7 @@ import { join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ENGINEERING_BANNER, isEngineeringBuild } from "./build-mode.js";
 import { apiOrigin } from "./origin.js";
+import { applicationMenuTemplate } from "./app-menu.js";
 import { fitToWorkArea } from "./window-sizing.js";
 import { registerHandlers } from "./handlers.js";
 import { parseSendFiles } from "./features/os-entry.js";
@@ -270,6 +271,23 @@ async function confirmLoginItem(): Promise<boolean> {
     ? await dialog.showMessageBox(win, options)
     : await dialog.showMessageBox(options);
   return response === 0;
+}
+
+/**
+ * Install the application menu, in the language the app is rendering.
+ *
+ * Called at start-up and again whenever the locale changes, for the same reason
+ * the tray is: a menu built once in the wrong language stays wrong for the life
+ * of the process. See `app-menu.ts` for what is in it and what is deliberately
+ * not.
+ */
+function installApplicationMenu(): void {
+  const t = translator(resident ? resident.currentLocale : "en");
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate(
+      applicationMenuTemplate(t, isEngineeringBuild()) as Electron.MenuItemConstructorOptions[],
+    ),
+  );
 }
 
 /** Rebuild the menu in place, for a language or a Nearby change. */
@@ -597,6 +615,10 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
   if (process.platform === "win32") app.setAppUserModelId("com.relayium.windows");
 
   await app.whenReady();
+  // Before any window exists, so no build of this app ever shows Electron's
+  // default developer menu — not even for the moment between ready and the
+  // first paint.
+  installApplicationMenu();
   const origin = apiOrigin();
   registerAppScheme(origin);
 
@@ -717,7 +739,11 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
     // exactly as the renderer's own reveal passes it.
     revealInbox: async () => (await control.inbox.revealFolder(control.generation())).kind === "ok",
     accountIdentity: () => control.service.accountIdentity,
-    onLocaleChanged: () => refreshTray(),
+    onLocaleChanged: () => {
+      refreshTray();
+      // The menu bar is rendered in the same language as everything else.
+      installApplicationMenu();
+    },
     platform: options.residentPlatform
       ? options.residentPlatform(residentPlatform(control.preferences))
       : residentPlatform(control.preferences),

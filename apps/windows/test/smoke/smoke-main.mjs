@@ -49,7 +49,7 @@
 // the device poll inside the main process, releases a late success, and requires
 // the page AND the authoritative auth state to still say signed out.
 
-import { app, BrowserWindow, clipboard, ipcMain, screen } from "electron";
+import { app, BrowserWindow, clipboard, ipcMain, Menu, screen } from "electron";
 // STATIC, not dynamic. `registerSchemesAsPrivileged` runs at this module's
 // top level and Electron only accepts it before the `ready` event; a dynamic
 // `import()` inside an async function resolves after ready has already fired.
@@ -79,6 +79,16 @@ const execFileAsync = promisify(execFile);
 const failures = [];
 const check = (name, ok, detail) => {
   if (!ok) failures.push(detail ? `${name}: ${detail}` : name);
+  // RETURNED, so `if (!check(...)) return;` means what it reads as.
+  //
+  // It used to return undefined while `installed-acceptance.mjs`'s returned the
+  // boolean, and the two files are read the same way by anyone writing a new
+  // scenario. That difference cost a whole assertion in this file: a guard
+  // written in the other file's idiom made its function return on its first
+  // line, and the run stayed green because a scenario that never executes
+  // reports nothing. No existing caller here reads the result, so making the
+  // two agree changes only what a future one can rely on.
+  return ok;
 };
 
 /**
@@ -337,6 +347,43 @@ async function assertTheWindowFitsTheScreen(win) {
     `asked 200x200 got ${clamped.width}x${clamped.height} floor ${minWidth}x${minHeight}`,
   );
   win.setSize(before.width, before.height);
+}
+
+/**
+ * **The menu bar this build actually installed.**
+ *
+ * The template is covered by unit tests. This is the other half: that it was
+ * INSTALLED, and that Electron's default — which offers Reload, Force Reload
+ * and Toggle Developer Tools to every user — was replaced rather than left in
+ * place. A template that is never set is a menu that is perfect in a test and
+ * absent on screen, and the default it leaves behind looks deliberate.
+ */
+function assertTheMenuIsThisAppsAndNotElectrons(win) {
+  const menu = Menu.getApplicationMenu();
+  if (!check("an application menu is installed", menu !== null)) return;
+
+  const roles = [];
+  const walk = (items) => {
+    for (const item of items) {
+      if (item.role) roles.push(String(item.role).toLowerCase());
+      if (item.submenu) walk(item.submenu.items);
+    }
+  };
+  walk(menu.items);
+
+  // The three the default menu offers and this one must not.
+  for (const role of ["reload", "forcereload", "toggledevtools"]) {
+    check(`the menu offers no ${role}`, !roles.includes(role), roles.join(","));
+  }
+  // And the ones that are accelerators before they are menu items: without
+  // these, Ctrl+C and Ctrl+V do not exist in this app's text fields.
+  for (const role of ["copy", "paste", "cut", "selectall", "undo", "redo"]) {
+    check(`the menu binds ${role}`, roles.includes(role), roles.join(","));
+  }
+
+  // A real window is open; the menu belongs to the application, so this is the
+  // menu that window is showing.
+  check("the window this menu belongs to is real", win.isDestroyed() === false);
 }
 
 async function main() {
@@ -608,6 +655,7 @@ async function main() {
   await driveSignInCancellation(win);
   await assertStartupTogglesAgainstWindowsItself(win);
   await assertTheWindowFitsTheScreen(win);
+  assertTheMenuIsThisAppsAndNotElectrons(win);
 
   process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures, skipped })}\n`);
   // `quit`, not `exit`: it runs the app's real `before-quit` teardown, which

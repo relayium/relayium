@@ -29,6 +29,27 @@ export type Locale = "en" | "zh-Hans";
  * already understood not to quit.
  */
 export type MessageKey =
+  | "menu.file"
+  | "menu.edit"
+  | "menu.view"
+  | "menu.window"
+  | "menu.quit"
+  | "menu.undo"
+  | "menu.redo"
+  | "menu.cut"
+  | "menu.copy"
+  | "menu.paste"
+  | "menu.selectAll"
+  | "menu.actualSize"
+  | "menu.zoomIn"
+  | "menu.zoomOut"
+  | "menu.fullScreen"
+  | "menu.minimize"
+  | "menu.close"
+  | "menu.developer"
+  | "menu.reload"
+  | "menu.forceReload"
+  | "menu.devTools"
   | "resident.tray.tooltip"
   | "resident.tray.show"
   | "resident.tray.quit"
@@ -142,6 +163,29 @@ export type Catalog = Readonly<Record<MessageKey | CountedMessageKey, string>>;
  * on a surface that knows the actual state.
  */
 export const EN: Catalog = {
+  // The application menu. `&` marks the Windows access key: Alt+F, Alt+E and so
+  // on, which is how a menu bar is reached without a mouse on this platform.
+  "menu.file": "&File",
+  "menu.edit": "&Edit",
+  "menu.view": "&View",
+  "menu.window": "&Window",
+  "menu.quit": "Quit Relayium",
+  "menu.undo": "Undo",
+  "menu.redo": "Redo",
+  "menu.cut": "Cut",
+  "menu.copy": "Copy",
+  "menu.paste": "Paste",
+  "menu.selectAll": "Select All",
+  "menu.actualSize": "Actual Size",
+  "menu.zoomIn": "Zoom In",
+  "menu.zoomOut": "Zoom Out",
+  "menu.fullScreen": "Full Screen",
+  "menu.minimize": "Minimize",
+  "menu.close": "Close Window",
+  "menu.developer": "&Developer",
+  "menu.reload": "Reload",
+  "menu.forceReload": "Force Reload",
+  "menu.devTools": "Toggle Developer Tools",
   "resident.tray.tooltip": "Relayium",
   "resident.tray.show": "Open Relayium",
   "resident.tray.quit": "Quit Relayium",
@@ -247,6 +291,27 @@ export const EN: Catalog = {
 };
 
 export const ZH_HANS: Catalog = {
+  "menu.file": "文件(&F)",
+  "menu.edit": "编辑(&E)",
+  "menu.view": "视图(&V)",
+  "menu.window": "窗口(&W)",
+  "menu.quit": "退出 Relayium",
+  "menu.undo": "撤销",
+  "menu.redo": "重做",
+  "menu.cut": "剪切",
+  "menu.copy": "复制",
+  "menu.paste": "粘贴",
+  "menu.selectAll": "全选",
+  "menu.actualSize": "实际大小",
+  "menu.zoomIn": "放大",
+  "menu.zoomOut": "缩小",
+  "menu.fullScreen": "全屏",
+  "menu.minimize": "最小化",
+  "menu.close": "关闭窗口",
+  "menu.developer": "开发者(&D)",
+  "menu.reload": "重新加载",
+  "menu.forceReload": "强制重新加载",
+  "menu.devTools": "切换开发者工具",
   "resident.tray.tooltip": "Relayium",
   "resident.tray.show": "打开 Relayium",
   "resident.tray.quit": "退出 Relayium",
