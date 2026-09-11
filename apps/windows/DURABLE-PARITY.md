@@ -90,7 +90,11 @@ and how it will be verified:
   half is built and strict, and `manifest.ts` already pins what a manifest must
   contain, so the generator's contract is fixed by its consumer. The pin itself
   is the subject of the certificate and does not exist until that does.
-* **OA-031** a transfer across a real network, which needs two machines.
+* **OA-031** a transfer across a real network, which needs two machines. Note
+  that a successful one does NOT prove relay traversal: the client knows which
+  relays were issued and does not surface which candidate pair was selected, so
+  whether TURN carried it is a server-side observation rather than anything the
+  app can report.
 * **OA-032** hands-on acceptance: no Explorer right-click has started this app,
   no phone has scanned its QR, no notification has been seen on a desktop.
 
