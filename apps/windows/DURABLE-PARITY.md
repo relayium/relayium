@@ -33,6 +33,7 @@ The table below is current as of `321d131be`.
 | Device Inbox | Backend, encrypted journal, vault and key storage, account lifecycle, the Windows native-destination acceptance suite, a 39-case real-Go server run, the manual receive and policy slices, and the `98af8a235` send, named-history and recovery batch, which has run on Windows in every lane since | Delivery to a second real device across a network |
 | Updates | The update core has run on Windows, including the native signer, custody and verified-byte launch checks. The interface covering 18 states is wired into the resident host in `a654041` and its host acceptance passed | No publisher pin, no expected publisher and no feed configured — all fail-closed, so no update can actually be delivered. No real installer has been launched |
 | Desktop behaviour | Resident close/quit, tray, notifications, deep-link handling, login-item and first-run, against a real Electron process. Staged files are read through `relayium-io-helper --source-mode`, whose component-by-component walk is proven on Windows, so no ancestor can redirect the open; a Windows build without the helper refuses every staged read rather than substituting Node. The installer's Explorer verbs and SendTo shortcut now reach the app: `321d131be` stages `--send-files` at launch and on `second-instance`, and the bootstrap smoke drives the real listener and asserts the pane names the file while the directory appears in neither the text nor the markup | The OS startup toggle and the native file picker are supplied by injection, so neither is proven. Staging has not been driven from a real Explorer right-click on Windows |
+| Pairing handoff | The live code is reachable as a join link and a QR built from the compiled origin. Copy names an action and carries no text, so main writes only what main retained; an unknown action is refused and the clipboard is left alone, asserted in a real Electron process | No code has been minted end to end on Windows: the smoke is signed out, so only the refusal path is covered. Scanning the QR with a phone is unproven |
 | Presentation | Five-row navigation; English and Chinese catalogues with compile-enforced key parity; light/dark, focus and reduced-motion support | Windows scaling, keyboard and motion validation |
 
 ## What the evidence does not cover
@@ -76,6 +77,13 @@ Closed since this list was written: the Device Inbox send, history and recovery
 batch is proven on Windows, and account wiring is accepted and reachable.
 
 Still required for parity:
+
+* **Dragging and revealing a received file.** `features/received-drag.ts` and
+  its 16 owning cases are complete and unreachable — no channel, no preload
+  surface, no caller — which is what macOS offers through `FileDropZone` and the
+  received-result actions. Wiring it is not glue: `register` needs the absolute
+  and relative path of each published file and `PublishReport` carries only
+  counts, so the published paths have to come out of the receive adapter first.
 
 * **Reachable user flows** for files, folders, text, stored links and the Device
   Inbox. Explorer and SendTo now reach the app; the flows themselves are
