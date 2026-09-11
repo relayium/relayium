@@ -70,12 +70,27 @@ import {
   contentSecurityPolicy,
   resolveBundlePath,
 } from "../../dist/main/main.js";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import path from "node:path";
+
+const execFileAsync = promisify(execFile);
 
 const failures = [];
 const check = (name, ok, detail) => {
   if (!ok) failures.push(detail ? `${name}: ${detail}` : name);
 };
+
+/**
+ * A scenario that could not run HERE, reported rather than passed over.
+ *
+ * A platform-specific scenario that vanishes on the platforms it does not apply
+ * to reads exactly like one that ran and was satisfied. The run's own output has
+ * to be able to say "this was not covered", or the suite quietly overstates
+ * itself every time it is run somewhere else.
+ */
+const skipped = [];
+const skip = (name, why) => skipped.push(`${name}: ${why}`);
 
 // Isolated directories, created and removed by the WRAPPER and passed in here.
 // Without the first, the run would write into the developer's real Electron
@@ -133,6 +148,15 @@ let pollCalls = 0;
 let approvalURLSeen = null;
 const smokeStore = new SecretStore(secretsDir, testCipher);
 
+/**
+ * The answer to the native startup consent, chosen per scenario below.
+ *
+ * Only the ANSWER is injected: a run with nobody in front of it cannot press a
+ * button in a modal dialog. The registry write, the deliberate re-read after it
+ * and the classification of what Windows reports back are the shipped path.
+ */
+let loginItemConsent = false;
+
 // ## Nothing in this run reaches the network, and nothing overrides ambiently
 //
 // The shell opens a LAN room by itself on a fresh process — that is the product
@@ -179,9 +203,101 @@ async function syntheticFetch(url, init) {
   });
 }
 
+/**
+ * **The OS startup toggle, against Windows itself rather than a stand-in.**
+ *
+ * This was the last purely-injected desktop capability. Every assertion about
+ * it ran through a substituted `LoginItemSystem`, which proves the module's
+ * decisions and says nothing about whether Windows does what the module asks.
+ * The thing a user would report — "I turned it on and it did not start" — lives
+ * entirely in the part that was never executed.
+ *
+ * So this drives the real IPC, with the real adapter, and then asks WINDOWS.
+ *
+ * ## Why the registry and not `getLoginItemSettings`
+ *
+ * Reading the state back through Electron would be the same library answering a
+ * question about its own write. The Run key is where Windows actually looks at
+ * sign-in, and it is the only place that can contradict the app. An entry is
+ * matched by its DATA rather than by a value NAME: the name Electron chooses
+ * varies between a packaged app and this unpackaged run, and pinning it here
+ * would assert a detail of the harness instead of the behaviour.
+ *
+ * ## Why consent is answered but nothing else is
+ *
+ * Enabling opens a modal dialog, and a run with nobody in front of it cannot
+ * answer one. The DECLINED case is asserted first and is the one that matters
+ * most: a decline must write nothing at all, rather than write and undo — a
+ * process that died between those two would leave a startup entry behind that
+ * the user never agreed to.
+ */
+async function assertStartupTogglesAgainstWindowsItself(win) {
+  // Strictly Windows. On any other machine this would register a login item
+  // belonging to whoever is running the suite, which no test may do to the
+  // person running it.
+  if (process.platform !== "win32") {
+    skip("the OS startup toggle", `not Windows (${process.platform})`);
+    return;
+  }
+
+  const js = (expr) => win.webContents.executeJavaScript(expr);
+  const read = () => js("globalThis.relayium.loginItem.read()");
+  const write = (enabled) => js(`globalThis.relayium.loginItem.write({ enabled: ${enabled} })`);
+
+  /** Every Run-key entry whose command names THIS executable. */
+  const runKeyEntries = async () => {
+    const { stdout } = await execFileAsync(
+      "reg",
+      ["query", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"],
+      { windowsHide: true },
+    ).catch((err) => ({ stdout: String(err?.stdout ?? "") }));
+    const exe = process.execPath.toLowerCase();
+    return stdout
+      .split(/\r?\n/)
+      .filter((line) => line.toLowerCase().includes(exe))
+      .map((line) => line.trim());
+  };
+
+  const before = await runKeyEntries();
+  check("no startup entry before this run", before.length === 0, before.join(" | "));
+
+  const initial = await read();
+  check("the startup state reads", initial.ok === true, JSON.stringify(initial));
+  check("nothing starts Relayium yet", initial.state === "off", JSON.stringify(initial));
+
+  // Declined FIRST, while there is still nothing to undo: if a decline wrote
+  // and then reverted, this is the only point at which the difference is
+  // visible in the registry rather than in the answer.
+  loginItemConsent = false;
+  const declined = await write(true);
+  check("a declined consent still answers", declined.ok === true, JSON.stringify(declined));
+  check("a declined consent leaves it off", declined.state === "off", JSON.stringify(declined));
+  const afterDecline = await runKeyEntries();
+  check("a declined consent wrote NOTHING to the registry", afterDecline.length === 0, afterDecline.join(" | "));
+
+  loginItemConsent = true;
+  const enabled = await write(true);
+  check("consent enables startup", enabled.ok === true && enabled.state === "on", JSON.stringify(enabled));
+
+  // Windows' own answer, not Electron's.
+  const afterEnable = await runKeyEntries();
+  check("Windows now launches THIS executable at sign-in", afterEnable.length === 1, afterEnable.join(" | "));
+
+  const reread = await read();
+  check("and the app reports what the registry says", reread.ok === true && reread.state === "on", JSON.stringify(reread));
+
+  // Off again, and the entry is GONE rather than emptied. A run that left the
+  // runner registered would also be a run that lied about cleaning up.
+  const disabled = await write(false);
+  check("it turns off", disabled.ok === true && disabled.state === "off", JSON.stringify(disabled));
+  const afterDisable = await runKeyEntries();
+  check("and the registry entry is removed", afterDisable.length === 0, afterDisable.join(" | "));
+}
+
 async function main() {
   await bootstrap({
     showOnLaunch: false,
+    confirmLoginItem: async () => loginItemConsent,
     composition: {
       makeStore: async () => smokeStore,
       // ## The account reads are injected even though this run never signs in
@@ -445,8 +561,9 @@ async function main() {
   await assertKeyboardAndMotion(win);
   await assertEveryScreenExplainsItself(win);
   await driveSignInCancellation(win);
+  await assertStartupTogglesAgainstWindowsItself(win);
 
-  process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures })}\n`);
+  process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures, skipped })}\n`);
   // `quit`, not `exit`: it runs the app's real `before-quit` teardown, which
   // cancels in-flight sign-ins and leases. `exit` would skip it, and a smoke
   // that never exercises the shutdown path cannot claim it works.

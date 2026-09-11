@@ -121,7 +121,10 @@ child.on("exit", (code) => {
     finish(1, `smoke: produced no result line (exit ${code})\n${out}\n${err}\n`);
     return;
   }
-  const { failures } = JSON.parse(line.slice("RELAYIUM_SMOKE ".length));
+  const { failures, skipped = [] } = JSON.parse(line.slice("RELAYIUM_SMOKE ".length));
+  // Printed whatever the outcome. A scenario that did not run here must not be
+  // indistinguishable from one that ran and was satisfied.
+  for (const note of skipped) process.stdout.write(`smoke SKIPPED ${note}\n`);
   if (failures.length > 0) {
     finish(1, `smoke: ${failures.length} failed\n${failures.join("\n")}\n`);
     return;

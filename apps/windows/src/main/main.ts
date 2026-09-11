@@ -502,6 +502,20 @@ export interface BootstrapOptions {
    */
   readonly confirmUpdateInstall?: () => Promise<boolean>;
   /**
+   * Answer the native startup consent, in process.
+   *
+   * Injection only, and for exactly the reason the update consent above gives:
+   * the shipped hook opens a modal dialog, and a run with nobody in front of it
+   * cannot answer one. Without this the ENABLE half of the startup toggle
+   * cannot be exercised at all, which is why that toggle was proven only
+   * through a substituted system and never against Windows itself.
+   *
+   * It replaces only the ANSWER. The registry write, the deliberate re-read
+   * afterwards, and the classification of what Windows reports back are all the
+   * shipped path. Not reachable from a renderer, a flag or the environment.
+   */
+  readonly confirmLoginItem?: () => Promise<boolean>;
+  /**
    * Record the post-install exit instead of performing it.
    *
    * Injection only, and for the same reason as the consent above: the shipped
@@ -612,7 +626,8 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
       onLinkReady: () => void resident?.notify({ kind: "link-ready" }),
       onLocale: (locale) => resident?.setLocale(locale),
       onNearby: (active) => resident?.setNearbyActive(active),
-      confirmLoginItem: async () => confirmLoginItem(),
+      confirmLoginItem: async () =>
+        options.confirmLoginItem ? options.confirmLoginItem() : confirmLoginItem(),
       confirmUpdateInstall: async () =>
         options.confirmUpdateInstall ? options.confirmUpdateInstall() : confirmUpdateInstall(),
       // The installer is running; this process is what it is replacing. The
