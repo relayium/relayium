@@ -72,6 +72,7 @@
 //                            exit non-zero rather than claiming a clean pass
 //   INTEROP_KEEP=1           keep the temporary root for inspection
 import { spawn } from "node:child_process";
+import { register } from "node:module";
 import { mkdtemp, mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -112,7 +113,7 @@ const SERVER_BIN = WINDOWS ? "relayium-server.exe" : "relayium-server";
  * It is the accepted harness's count, unchanged: this port adds no assertion and
  * removes none, so a divergence here is a real divergence in what was proven.
  */
-const EXPECTED_CHECKS = 39;
+const EXPECTED_CHECKS = 43;
 
 const RUN_BUDGET_MS = 10 * 60 * 1000;
 const OP_BUDGET_MS = 60 * 1000;
@@ -869,6 +870,144 @@ async function main() {
     step("quiesce returned actually quiet", coordinator.quiet === true);
     await coordinator.dispose();
     step("the coordinator disposed with nothing left running", coordinator.isLive(folderJob) === false);
+
+    // ---- a STORED LINK, minted here and opened by the shipping receiver ----
+    //
+    // The Device Inbox above proves the shared upload engine, its transport,
+    // its fence and its planner against this server. What it does not touch is
+    // the stored-LINK lifecycle: a key that lives in a URL fragment, a manifest
+    // in the stored shape rather than the inbox one, and the download-and-
+    // decrypt path a person reaches by opening a link somebody sent them.
+    //
+    // Everything below is the shipping code. The key comes from the stored
+    // runtime's own `generateKey`, so the fragment is encoded the way the
+    // product encodes it; the manifest is sealed by `sealManifest`; the link is
+    // assembled from `downloadPrefix`; and it is opened by `receiveStoredLink`,
+    // which parses it with the shipping parser rather than a split here.
+    //
+    // `hosts` is the one override, and the receive module documents it as
+    // tests-only: without it a loopback origin is not a trusted link host, which
+    // is the correct production rule and would refuse this harness's own server.
+    {
+      // `build-mode.ts` reads `app.isPackaged` at module scope and `origin.ts`
+      // imports it, so every module under `stored/**` needs an `electron`
+      // specifier to resolve before it loads. Registered HERE, immediately
+      // before those imports, and scoped to that one specifier — see
+      // `electron-host-loader.mjs`. No product module is replaced.
+      register("./electron-host-loader.mjs", import.meta.url);
+      const storedRt = await (await load("stored/runtime.js")).storedRuntime();
+      const { receiveStoredLink } = await load("stored/receive.js");
+      const { StoredTransport } = await load("stored/transport.js");
+
+      const storedRoot = join(root, "stored-landing");
+      await mkdir(storedRoot, { recursive: true });
+      const payload = Buffer.from("stored-link round trip \u2014 \u4e2d\u6587 \u2014 " + randomBytes(48).toString("hex"));
+      const { key: storeKey, encoded: fragment } = await storedRt.generateKey();
+      const manifest = { files: [{ name: "round-trip.txt", size: payload.length }] };
+      const sealedManifest = await storedRt.sealManifest(storeKey, manifest);
+      const planned = planUpload([{ path: "round-trip.txt", size: payload.length }], geometry);
+      if (!planned.ok) throw new Error(`stored plan refused: ${JSON.stringify(planned.refusal)}`);
+
+      // The renderer's own encoder over the same key. Main never encrypts for a
+      // stored send — the page does — so this is where that side is stood in
+      // for, and it is the SAME shared implementation, not a second one.
+      const engine = await UploadEngine.open({
+        runtime, key: storeKey, sealedManifest, plan: planned.plan,
+        retention: { burnAfterRead: false, ttlSeconds: 3600 },
+        transport: new UploadTransport(origin, sendToken), fence: new Fence(),
+      });
+      for await (const frame of runtime.encryptFiles([new File([payload], "round-trip.txt")], storeKey)) {
+        // The engine is fed a FRAME, not bytes: it checks the sequence and the
+        // file index it derived from sizes alone against what the encryptor
+        // actually produced, and the two agreeing is the point.
+        const owed = engine.expects;
+        if (owed === null) throw new Error("the stored encryptor produced a frame the schedule did not owe");
+        await engine.feed({ fileIndex: owed.fileIndex, seq: owed.seq, bytes: frame });
+      }
+      if (engine.expects !== null) throw new Error("the stored encryptor owed more frames than it produced");
+      const published = await engine.end();
+      step("a stored object publishes against the real server",
+        published.status === "published" && typeof published.objectId === "string" && published.objectId.length > 0,
+        JSON.stringify(published).slice(0, 200));
+      if (published.status !== "published") throw new Error("stored upload did not publish");
+
+      // ## The `relayium://` form, and why it is the right one here
+      //
+      // A stored link is `https://<trusted host>/d/<id>#k=…` or
+      // `relayium://d/<id>#k=…`, and the parser accepts no other scheme and no
+      // https port but 443 — correctly, since anything on the machine can hand
+      // this app a link. A loopback `http://127.0.0.1:PORT/...` therefore cannot
+      // parse and MUST not: loosening that to reach this server would be testing
+      // a rule the product does not have.
+      //
+      // The custom-scheme form carries no host at all, so it needs no override:
+      // it is a genuine product link, and the TRANSPORT is what points at this
+      // run's server. Nothing tests-only remains in this round trip.
+      const link = `relayium://d/${published.objectId}#k=${fragment}`;
+
+      // The destination is a plain writer: what is under test here is the LINK
+      // and the decryption, and the native writer has its own Windows proof.
+      // The host is asked for a destination and answers with a root it owns.
+      // Anonymous: a public link carries no bearer, which is the whole reason
+      // opening one needs no account.
+      const storedAuthority = {
+        grant: async () => ({ rootPath: storedRoot, authorityId: "harness-stored" }),
+      };
+      const landed = new Map();
+      const destination = async (request) => {
+        const files = request.manifest.map((entry) => entry.name ?? entry.relativePath);
+        const open = new Map();
+        return {
+          fileCount: files.length,
+          assertAuthority: () => undefined,
+          begin: async (index) => { open.set(index, []); },
+          write: async (index, chunk) => { open.get(index).push(Buffer.from(chunk)); },
+          finish: async (index) => { landed.set(files[index], Buffer.concat(open.get(index))); },
+          publish: async () => ({ status: "complete", publishedCount: files.length, total: files.length }),
+          cancel: async () => undefined,
+        };
+      };
+
+      const report = await receiveStoredLink({
+        link,
+        authority: storedAuthority,
+        transport: new StoredTransport(origin),
+        destination,
+        runtime: async () => storedRt,
+      });
+      step("the shipping receiver opens a link minted in this run",
+        report.status === "saved" || report.status === "complete",
+        JSON.stringify(report).slice(0, 240));
+
+      // The whole point: the bytes that come back are the bytes that went in,
+      // through a key that never left the fragment.
+      const got = landed.get("round-trip.txt");
+      step("the plaintext survives the round trip byte for byte",
+        got !== undefined && Buffer.compare(got, payload) === 0,
+        got === undefined ? "nothing landed" : `${got.length} vs ${payload.length}`);
+
+      // A link whose fragment has been altered must NOT open. Without this the
+      // case above would pass for a transport that ignored the key entirely.
+      // A DIFFERENT key, minted the same way, rather than a mutated string: a
+      // corrupted encoding is refused by the parser, which would prove nothing
+      // about whether the receiver actually uses the key.
+      const { encoded: wrongFragment } = await storedRt.generateKey();
+      const refused = await receiveStoredLink({
+        link: `relayium://d/${published.objectId}#k=${wrongFragment}`,
+        authority: storedAuthority,
+        transport: new StoredTransport(origin),
+        destination,
+        runtime: async () => storedRt,
+      }).catch((e) => ({ status: "threw", reason: String(e?.message ?? e) }));
+      // It must fail for the RIGHT reason. `link-invalid` here would mean the
+      // link was rejected before the key mattered, and the case would pass for
+      // a receiver that never decrypted anything.
+      const tamperCode = refused?.failure?.code ?? refused?.status;
+      step("a link with a tampered key does not open, and fails on the KEY",
+        refused.status !== "saved" && refused.status !== "complete"
+          && tamperCode !== "link-invalid",
+        JSON.stringify(refused).slice(0, 220));
+    }
   } finally {
     clearTimeout(runTimer);
     const allClosed = await stopChildren();
