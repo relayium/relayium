@@ -224,6 +224,30 @@ function readShortcut(linkPath) {
   return { target: target.trim(), args: args.trim() };
 }
 
+/**
+ * The identity Windows will attribute this app's notifications to.
+ *
+ * Read from the shortcut's property store rather than from anything the app
+ * says about itself: a toast is attributed to an AppUserModelID, and the one
+ * that exists on the machine is the SHORTCUT's. When the running process claims
+ * a different string nothing errors — the notification is attributed to an
+ * identity no shortcut owns, and it either shows unattributed or never appears.
+ */
+function shortcutAppUserModelId(linkPath) {
+  const ps = [
+    "$shell = New-Object -ComObject Shell.Application",
+    "$folder = $shell.Namespace((Split-Path $env:RELAYIUM_LNK))",
+    "$item = $folder.ParseName((Split-Path $env:RELAYIUM_LNK -Leaf))",
+    "Write-Output $item.ExtendedProperty('System.AppUserModel.ID')",
+  ].join("; ");
+  const r = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], {
+    encoding: "utf8",
+    env: { ...process.env, RELAYIUM_LNK: linkPath },
+  });
+  if (r.status !== 0) return null;
+  return r.stdout.trim();
+}
+
 /** One NAMED value under a key. `MultiSelectModel` is not a default value. */
 function regQueryValue(key, name) {
   const r = spawnSync("reg.exe", ["query", key, "/v", name], { encoding: "utf8" });
@@ -651,6 +675,11 @@ async function main() {
   // the machine. The fragment is deliberately not a real key.
   const ACCEPTANCE_LINK = "relayium://d/acceptance-object#k=not-a-real-key";
 
+  // The identity `main.ts` claims and `electron-builder.yml` stamps. Spelled
+  // here as the literal both must equal, so a mismatch shows up as three
+  // strings that disagree rather than two that were never compared.
+  const APP_USER_MODEL_ID = "com.relayium.windows";
+
   // ---- Scheme registration names the installed binary, exactly ----------
   const command = regQueryDefault("HKCU\\Software\\Classes\\relayium\\shell\\open\\command");
   if (check("relayium scheme registered under HKCU", command !== null)) {
@@ -732,6 +761,38 @@ async function main() {
       // these arguments, which is what makes this the bulk path.
       check("SendTo shortcut carries only the flag", link.args === "--send-files", link.args);
     }
+  }
+
+  // ---- The shortcuts, and the identity a toast is attributed to ---------
+  //
+  // Neither shortcut had ever been asserted. They are how a person launches
+  // this app, and on Windows the Start Menu one is also what a NOTIFICATION is
+  // attributed to: `main.ts` claims `com.relayium.windows` and
+  // `electron-builder.yml` stamps the same string here. A unit test pins those
+  // two files to each other; this pins them to what the installer actually
+  // wrote on a real machine, which is the only one of the three that Windows
+  // reads.
+  for (const [what, link] of [
+    ["Start Menu", path.join(process.env.APPDATA ?? "", "Microsoft", "Windows", "Start Menu", "Programs", "Relayium.lnk")],
+    ["Desktop", path.join(process.env.USERPROFILE ?? "", "Desktop", "Relayium.lnk")],
+  ]) {
+    if (!check(`${what} shortcut created`, existsSync(link), link)) continue;
+    const shortcut = readShortcut(link);
+    if (check(`${what} shortcut is readable`, shortcut !== null)) {
+      check(
+        `${what} shortcut targets exactly the installed executable`,
+        samePath(shortcut.target, installedExe),
+        `${shortcut.target} vs ${installedExe}`,
+      );
+      // A launcher, not a sender: these carry no arguments at all.
+      check(`${what} shortcut carries no arguments`, shortcut.args === "", shortcut.args);
+    }
+    const identity = shortcutAppUserModelId(link);
+    check(
+      `${what} shortcut carries the identity the app claims`,
+      identity === APP_USER_MODEL_ID,
+      `${identity} vs ${APP_USER_MODEL_ID}`,
+    );
   }
 
   // ---- Launch, with overrides that must be ignored ----------------------
