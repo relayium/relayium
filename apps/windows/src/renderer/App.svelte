@@ -50,6 +50,7 @@
   import { RoomController } from "./rooms/room-controller.svelte.js";
   import { SignInController, type Phase, type SignInBridge } from "./sign-in-controller.js";
   import type { ReceiveBridge } from "./receive/receive-coordinator.js";
+  import { RevealController, type RevealBridge } from "./receive/reveal-controller.svelte.js";
   import type { TransportBridge } from "./transport/bridge.js";
   import type {
     PairMintResult,
@@ -65,7 +66,7 @@
   /** The whole preload surface this app uses. Declared, not inferred. */
   type Bridge = SignInBridge &
     TransportBridge & {
-      receive: ReceiveBridge;
+      receive: ReceiveBridge & RevealBridge;
       pair: { create(): Promise<PairMintResult> };
       prefs: {
         read(): Promise<PreferencesView>;
@@ -289,6 +290,17 @@
       // stays manual: its roster is devices the user did not choose.
       autoConnect: room.kind === "code",
     });
+
+  /**
+   * The "open the folder" button, for a receive that already saved.
+   *
+   * Owned by the shell rather than by a room, because the receipt arrives as a
+   * PUSH from main and a room that had been left would not be there to take it.
+   * One instance for the life of the window: only the latest receipt is held,
+   * and main holds the folder.
+   */
+  const reveal = new RevealController(bridge.receive);
+  const detachReveal = reveal.start();
 
   async function setPref(key: "verifyPeers", value: boolean) {
     try {
@@ -592,6 +604,7 @@
     accountSummary.destroy();
     update.destroy();
     detachResident();
+    detachReveal();
     controller.dispose();
     lanRoom?.stop();
     pairRoom?.stop();
@@ -665,6 +678,7 @@
   {:else if page() === "lan"}
     <LanPage
       room={lanRoom}
+      {reveal}
       receiving={lanRoom !== null}
       busy={lanBusy}
       onStart={() => void startLan()}
@@ -674,6 +688,7 @@
   {:else if page() === "pair"}
     <PairPage
       room={pairRoom}
+      {reveal}
       {minted}
       {minting}
       refusal={mintRefusal}

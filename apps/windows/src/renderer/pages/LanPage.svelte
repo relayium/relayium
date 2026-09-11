@@ -23,9 +23,11 @@
   import Icon from "../shell/Icon.svelte";
   import LinkPane from "./LinkPane.svelte";
   import type { RoomController } from "../rooms/room-controller.svelte.js";
+  import type { RevealController } from "../receive/reveal-controller.svelte.js";
 
   let {
     room,
+    reveal,
     receiving,
     busy,
     onStart,
@@ -34,6 +36,10 @@
     messageDraft = $bindable(""),
   }: {
     room: RoomController | null;
+    /** "Open the folder", for a receive that already saved. Passed through
+     *  rather than reached for globally: the pane renders it, this page does
+     *  not use it. */
+    reveal: RevealController;
     receiving: boolean;
     busy: boolean;
     onStart: () => void;
@@ -64,7 +70,7 @@
     </button>
   </Card>
 {:else if room && linkPeerId}
-  <LinkPane {room} {verifyPeers} bind:messageDraft />
+  <LinkPane {room} {reveal} {verifyPeers} bind:messageDraft />
 {:else}
   <Card>
     <!-- The roster is only meaningful once this PC is actually in the room.

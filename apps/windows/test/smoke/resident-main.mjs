@@ -1038,6 +1038,14 @@ async function main() {
         reportFailure: () => {},
       },
       makeDestination: async (options) => makeDestination(options),
+      // The real registry, the real adapter contract, and no Finder window on
+      // whatever machine this runs on. It THROWS on refusal exactly like the
+      // shipped `shell.openPath` wrapper — a seam that resolved on failure
+      // would make this green for the very bug it exists to catch.
+      revealReceiveFolder: async (directory) => {
+        receives.revealed.push(directory);
+        if (receives.revealRefuses) throw Object.assign(new Error("reveal was refused"), { code: "internal" });
+      },
     },
     // The REAL platform, with the two questions and the exit answered by this
     // script. Show, hide, focus and notifications stay the shipped ones.
@@ -1110,6 +1118,10 @@ async function main() {
   await scenarioRepeatedQuitJoins(runtime);
   await scenarioResidentSurfaces(win, runtime);
   await scenarioStoredReceive(win, runtime);
+  // The receipt a finished receive earns, and the reveal it authorises. Early,
+  // while the app is still on its first document and signed out: the receipt is
+  // bound to the document that asked, and a later scenario replaces it.
+  await scenarioReceiveReceipt(win);
   // The Device Inbox vertical, in order: consent, the resident promise, the
   // held deliveries, the message history, a refused quit, and an account
   // change. It signs in for real and signs out at the end, so the anonymous
@@ -2975,6 +2987,144 @@ async function scenarioUpdateSignedTransition(win) {
   check("and without a quit confirmation", answers.confirmCalls === confirmsBeforeUpdate, String(answers.confirmCalls));
 }
 
+/**
+ * "Open the folder", end to end, through the REAL channels.
+ *
+ * Every part of this is the shipped one: the lease, the publication, the
+ * receipt registry, the push to the originating document, the reveal channel
+ * and its adapter contract. What is substituted is the publication's verdict —
+ * this host has no native helper, so without that no publication would ever
+ * complete — and the shell call, so an automated run does not open a window on
+ * whatever machine it is on.
+ *
+ * ## What this does NOT drive, and why
+ *
+ * The BUTTON in `LinkPane` is not clicked here. It renders inside a finished
+ * receive card on a verified `link/1`, and this smoke composes no peer: there
+ * is no second device to transfer from, so no such card exists to click. The
+ * page's own controller and its gating are covered by
+ * `test/unit/reveal-controller.test.ts` against the real rune module, and the
+ * markup is asserted as source below. Driving the real click needs a peer,
+ * which is a separate piece of work and is owed.
+ */
+async function scenarioReceiveReceipt(win) {
+  // Subscribed on the page, through the real preload bridge — not a main-side
+  // spy. If the push does not cross the boundary, nothing arrives here.
+  await js(
+    win,
+    `(() => {
+      globalThis.__receipts = [];
+      globalThis.__releaseReceipts = globalThis.relayium.receive.onReceipt((p) => globalThis.__receipts.push(p));
+      return true;
+    })()`,
+  );
+
+  /** One whole receive, driven through the bridge the renderer actually has. */
+  const receiveOnce = async (names) =>
+    JSON.parse(
+      await js(
+        win,
+        `(async () => {
+          const manifest = ${JSON.stringify(names.map((name, i) => ({ name, size: 3 + i })))};
+          const opened = await globalThis.relayium.receive.open({ manifest, authority: "direct" });
+          if (opened.cancelled) return JSON.stringify({ status: "cancelled" });
+          for (let i = 0; i < manifest.length; i += 1) {
+            await globalThis.relayium.receive.begin({ leaseId: opened.leaseId, index: i });
+            await globalThis.relayium.receive.write({
+              leaseId: opened.leaseId,
+              index: i,
+              chunk: new Uint8Array(manifest[i].size),
+            });
+            await globalThis.relayium.receive.finish({ leaseId: opened.leaseId, index: i });
+          }
+          return JSON.stringify(await globalThis.relayium.receive.publish({ leaseId: opened.leaseId }));
+        })()`,
+      ),
+    );
+
+  // ---- a publication that FAILED earns nothing --------------------------
+  //
+  // The shipped answer on this host. Files may even be on disk — `residue`
+  // says so — and the app is still telling the user it did not work. A reveal
+  // offered beside that sentence would contradict it.
+  const failed = await receiveOnce(["a.txt"]);
+  check("the failed publication reported itself", failed.status === "failed", JSON.stringify(failed));
+  const afterFailure = await js(win, `globalThis.__receipts.length`);
+  check("no receipt was issued for it", afterFailure === 0, String(afterFailure));
+
+  // ---- a publication that COMPLETED does ---------------------------------
+  receives.publish = (count) => ({ status: "complete", publishedCount: count, total: count });
+  const done = await receiveOnce(["one.txt", "two.txt"]);
+  check("the publication completed", done.status === "complete", JSON.stringify(done));
+  const arrived = await waitFor(win, "the receipt push", `globalThis.__receipts.length === 1`, 8000);
+  check("a receipt reached the page that asked", arrived === true);
+
+  const receipt = JSON.parse(await js(win, `JSON.stringify(globalThis.__receipts[0] ?? null)`));
+  check("it names the count that was saved", receipt?.fileCount === 2, JSON.stringify(receipt));
+  check(
+    "it is an opaque token, not a path",
+    typeof receipt?.token === "string" && /^[0-9a-f]{64}$/.test(receipt.token),
+    JSON.stringify(receipt?.token ?? null),
+  );
+  check(
+    "and the destination never crosses to the page",
+    !JSON.stringify(receipt).includes(destinationDir) && !(await js(win, `document.body.innerText`)).includes(destinationDir),
+    "path reached the renderer",
+  );
+
+  // ---- redeeming it opens the folder MAIN holds ---------------------------
+  const beforeReveal = receives.revealed.length;
+  const revealed = JSON.parse(
+    await js(win, `globalThis.relayium.receive.reveal({ token: globalThis.__receipts[0].token }).then((r) => JSON.stringify(r))`),
+  );
+  check("the reveal was granted", revealed.kind === "revealed", JSON.stringify(revealed));
+  check(
+    "and main opened the folder IT kept, not one the page named",
+    receives.revealed.length === beforeReveal + 1 && receives.revealed[receives.revealed.length - 1] === destinationDir,
+    String(receives.revealed[receives.revealed.length - 1]),
+  );
+
+  // ---- a token this process never minted ---------------------------------
+  const openedBefore = receives.revealed.length;
+  const unknown = JSON.parse(
+    await js(win, `globalThis.relayium.receive.reveal({ token: "${"c".repeat(64)}" }).then((r) => JSON.stringify(r))`),
+  );
+  check("an unknown token is refused", unknown.reason === "unknown", JSON.stringify(unknown));
+  const asPath = JSON.parse(
+    await js(
+      win,
+      `globalThis.relayium.receive.reveal({ token: ${JSON.stringify(destinationDir)} }).then((r) => JSON.stringify(r))`,
+    ),
+  );
+  check("and a PATH offered as a token is refused too", asPath.reason === "unknown", JSON.stringify(asPath));
+  check("neither opened anything", receives.revealed.length === openedBefore, String(receives.revealed.length));
+
+  // ---- a refusal is reported as a refusal --------------------------------
+  //
+  // `shell.openPath` reports failure by RETURNING a non-empty string, and an
+  // adapter that awaited and discarded it called every failure a success. The
+  // channel must say `failed`, and must not repeat the OS's own text — which
+  // routinely contains the path.
+  receives.revealRefuses = true;
+  const refused = JSON.parse(
+    await js(win, `globalThis.relayium.receive.reveal({ token: globalThis.__receipts[0].token }).then((r) => JSON.stringify(r))`),
+  );
+  check("a shell refusal is reported as one", refused.kind === "refused" && refused.reason === "failed", JSON.stringify(refused));
+  check("and carries no path", !JSON.stringify(refused).includes(destinationDir), JSON.stringify(refused));
+  receives.revealRefuses = false;
+
+  process.stdout.write(
+    `RELAYIUM_RECEIVE_RECEIPT ${JSON.stringify({
+      pushed: await js(win, `globalThis.__receipts.length`),
+      opened: receives.revealed.length,
+    })}\n`,
+  );
+
+  // Put the host back the way every other scenario expects to find it.
+  receives.publish = () => ({ status: "failed", reason: "unsupported", residue: true });
+  await js(win, `(() => { globalThis.__releaseReceipts?.(); globalThis.__receipts = []; return true; })()`);
+}
+
 /** Poll a main-process fact the scheduler produces. */
 async function waitForValue(predicate, timeoutMs = 8000) {
   const started = Date.now();
@@ -2994,6 +3144,23 @@ function report() {
   process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures })}\n`);
 }
 
+/**
+ * What a publication in this run reports, and every folder a reveal opened.
+ *
+ * `publish` defaults to the shipped host's own answer on a platform with no
+ * native helper — a refusal — so every scenario written before this one sees
+ * exactly what it saw. The receipt scenario switches it, because "a receipt is
+ * issued only for a publication that actually completed" cannot be shown by a
+ * run in which no publication ever completes.
+ */
+const receives = {
+  publish: () => ({ status: "failed", reason: "unsupported", residue: true }),
+  /** Every directory a receive reveal actually opened, in order. */
+  revealed: [],
+  /** Make the shell refuse, the way a deleted folder or a denial does. */
+  revealRefuses: false,
+};
+
 /** A destination that stages nothing but reports honestly, and can be made to
  *  fail its cleanup the way a locked file does. */
 function makeDestination(options) {
@@ -3004,7 +3171,7 @@ function makeDestination(options) {
     async write() {},
     async finish() {},
     async publish() {
-      return { status: "failed", reason: "unsupported", residue: true };
+      return receives.publish(options.manifest.length);
     },
     async cancel() {
       if (breakCleanup) throw new Error("staged bytes are locked");

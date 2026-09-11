@@ -286,6 +286,12 @@ async function main() {
     "relayium:auth-cancel", "relayium:auth-sign-out", "relayium:auth-state",
     "relayium:receive-open", "relayium:receive-begin", "relayium:receive-write",
     "relayium:receive-finish", "relayium:receive-cancel", "relayium:receive-publish",
+    // "Open the folder", for a receive that has already SAVED. It names the
+    // opaque token main minted and pushed, never a path: the page was not given
+    // the directory, so it cannot ask for a different one, and main resolves
+    // the token against what it kept. Every refusal is a closed reason and
+    // carries none of the operating system's own text.
+    "relayium:receive-reveal",
     "relayium:signaling-open", "relayium:signaling-send", "relayium:signaling-close",
     "relayium:ice-config", "relayium:pair-create",
     "relayium:prefs-read", "relayium:prefs-write",
