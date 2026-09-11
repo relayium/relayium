@@ -29,7 +29,16 @@ export type NotificationEvent =
    */
   | { readonly kind: "saved-message" }
   | { readonly kind: "attention" }
-  | { readonly kind: "failed" };
+  | { readonly kind: "failed" }
+  /**
+   * An upload finished and its link is ready.
+   *
+   * Carries nothing. The link itself is the secret — its fragment holds the
+   * key — and a notification is shown on a lock screen, read by whoever is
+   * standing there and retained by the system after it is dismissed. This says
+   * that there is something to collect and where, and nothing about what.
+   */
+  | { readonly kind: "link-ready" };
 
 export interface NotificationContent {
   readonly title: string;
@@ -41,6 +50,7 @@ const TITLE: Readonly<Record<NotificationEvent["kind"], MessageKey>> = {
   "saved-message": "resident.notify.messageSavedTitle",
   attention: "resident.notify.attentionTitle",
   failed: "resident.notify.failedTitle",
+  "link-ready": "resident.notify.linkReadyTitle",
 };
 
 const BODY: Readonly<Record<NotificationEvent["kind"], MessageKey>> = {
@@ -48,6 +58,7 @@ const BODY: Readonly<Record<NotificationEvent["kind"], MessageKey>> = {
   "saved-message": "resident.notify.messageSavedBody",
   attention: "resident.notify.attentionBody",
   failed: "resident.notify.failedBody",
+  "link-ready": "resident.notify.linkReadyBody",
 };
 
 /**

@@ -607,6 +607,9 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
       // that actually happened.
       onPublished: (report) => resident?.onPublished(report),
       onNotice: (notice) => resident?.onNotice(notice),
+      // Suppressed while the window is focused by `notify` itself: somebody
+      // watching the upload finish does not need to be told it finished.
+      onLinkReady: () => void resident?.notify({ kind: "link-ready" }),
       onLocale: (locale) => resident?.setLocale(locale),
       onNearby: (active) => resident?.setNearbyActive(active),
       confirmLoginItem: async () => confirmLoginItem(),

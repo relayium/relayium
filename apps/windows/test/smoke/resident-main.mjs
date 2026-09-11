@@ -867,6 +867,9 @@ let pollAnswer = { status: "pending" };
 const smokeSecretStore = new SecretStore(secretsDir, testCipher);
 
 const answers = {
+  /** Stand in for a user who switched away. Several notifications exist only
+   *  for that person, and a focused test window can never be them. */
+  unfocused: false,
   firstClose: 0, // 0 hide, 1 quit, 2 cancel
   confirm: [], // consumed in order; `true` is Quit, `false` is Stay
   confirmCalls: 0,
@@ -1051,6 +1054,16 @@ async function main() {
     // script. Show, hide, focus and notifications stay the shipped ones.
     residentPlatform: (real) => ({
       ...real,
+      // Recorded AND passed through: the shipped notification still happens, so
+      // fidelity is unchanged and the script can also see what was raised.
+      notify: (title, body) => {
+        notices.push({ title, body });
+        real.notify(title, body);
+      },
+      // The real answer unless a scenario is deliberately standing in for a
+      // user who switched away — which is the only situation several of these
+      // notifications exist for, and one a focused test window cannot reach.
+      isFocused: () => (answers.unfocused ? false : real.isFocused()),
       askFirstClose: async () => {
         answers.firstCloseCalls += 1;
         return answers.firstClose;
@@ -1617,6 +1630,9 @@ async function pickFiles(win, files, testId = "send-files") {
   );
 }
 
+/** Every notification this run raised, in order, with the real one still shown. */
+const notices = [];
+
 async function goToStored(win) {
   await js(win, `(() => { document.querySelector('[data-test="nav-stored"] button')?.click(); return true; })()`);
   // ## Sending a link needs an account, so this establishes one
@@ -1676,6 +1692,16 @@ async function scenarioStoredSendFlow(win) {
   const shownPick = await waitInbox(win, "the picked summary", `document.querySelector('[data-test="send-picked"]') !== null`);
   check("the page reports what was picked", shownPick === true);
 
+  // ## Standing in for the person this notification exists for
+  //
+  // Somebody starts an upload and goes to do something else. `notify`
+  // suppresses while the window is focused — correctly, since a watcher does
+  // not need telling — so a focused test window can never observe the case at
+  // all. The rest of the flow is unchanged and the real notification is still
+  // raised; this only answers the question main asks about focus.
+  answers.unfocused = true;
+  const noticesBefore = notices.length;
+
   check("send was clicked", await clickTest(win, "send-start"));
 
   const published = await waitFor(
@@ -1685,6 +1711,21 @@ async function scenarioStoredSendFlow(win) {
     30_000,
   );
   check("the send published", published === true);
+
+  // ## The upload says so, which is what macOS does and this did not
+  //
+  // Raised from the OUTCOME the upload engine returned, not from the request:
+  // a cancelled or ambiguous end has no link to collect, and announcing one
+  // would send somebody looking for it.
+  const raised = notices.slice(noticesBefore);
+  check("finishing the upload raised a notification", raised.length > 0, String(raised.length));
+  const ready = raised[raised.length - 1] ?? { title: "", body: "" };
+  check("it says the link is ready", ready.title === "Your link is ready", ready.title);
+  // The link IS the secret — its fragment carries the key — and a notification
+  // is shown on a lock screen and kept after it is dismissed.
+  const said = `${ready.title} ${ready.body}`;
+  check("and carries nothing of the link", !/https?:|#/.test(said), said);
+  answers.unfocused = false;
 
   // The transport holds real ciphertext, and as much as was declared.
   check(

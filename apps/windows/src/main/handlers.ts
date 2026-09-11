@@ -273,6 +273,15 @@ export interface ResidentEvents {
   onPublished?: (report: PublishReport) => void;
   /** Something the page knows and main cannot see. A closed kind, nothing else. */
   onNotice?: (notice: ResidentNotice) => void;
+  /**
+   * An upload finished and its link is ready.
+   *
+   * Main's own observation, like `onPublished`: the outcome this reports is the
+   * one the upload engine returned, not a claim the page made about it. It
+   * carries nothing — the link is a secret and a notification is not a private
+   * surface.
+   */
+  onLinkReady?: () => void;
   /** The page told main which language it is showing. */
   onLocale?: (locale: ResidentSnapshot["locale"]) => void;
   /** Whether Nearby is running, for the tray item that toggles it. */
@@ -1858,7 +1867,14 @@ export function registerHandlers(
 
   const sendJob = (payload: unknown): string => expectString(expectObject(payload)["jobId"], 64);
 
-  router.handle(IPC.storedSendEnd, (payload) => storedSend.end(sendJob(payload)));
+  router.handle(IPC.storedSendEnd, async (payload) => {
+    const outcome = await storedSend.end(sendJob(payload));
+    // Announced from the OUTCOME rather than from the request: an end that was
+    // cancelled, refused or ambiguous has no link to collect, and saying there
+    // is one would send somebody looking for it.
+    if (outcome.status === "published") events.onLinkReady?.();
+    return outcome;
+  });
   router.handle(IPC.storedSendCancel, (payload) => storedSend.cancel(sendJob(payload)));
   // `null` is "could not be read", not "empty". Carried across as such so the
   // page can say so rather than claiming the user has never sent anything.
