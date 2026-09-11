@@ -76,11 +76,13 @@ Four things stand between this client and parity, none of them engineering, and
 each is queued in the workspace-only `OWNER-ACTIONS.md` with the exact action
 and how it will be verified:
 
-* **OA-029** a code-signing certificate. There is no pipeline to turn on — when
-  a certificate exists, the CI step, the read-back verification and the secret
-  wiring still have to be built, and they have to be built against the route
-  chosen, because a token-bound key and a service-held key are not
-  interchangeable in CI.
+* **OA-029** a code-signing certificate. The READ-BACK half is built and
+  proven: every run re-reads the signature from the installer it produced and
+  asserts it in both directions — unsigned when no credential is configured,
+  `Valid` when one is, and a failure otherwise, so an artifact can never pass as
+  signed without the file itself saying so. What still needs the route decision
+  is the signing ACTION and its secret wiring, because a token-bound key and a
+  service-held key are not signed with interchangeably.
 * **OA-030** the update publisher pin and feed. The expected publisher is the
   subject of that certificate and does not exist until it does.
 * **OA-031** a transfer across a real network, which needs two machines.
