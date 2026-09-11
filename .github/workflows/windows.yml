@@ -302,6 +302,54 @@ jobs:
           "$hash  $($exe.Name)" | Out-File -FilePath release/SHA256SUMS.txt -Encoding ascii
           "RELAYIUM_INSTALLER=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
+      # ## The signature is READ BACK from the file, in both directions
+      #
+      # This lane has no certificate and produces an unsigned installer on
+      # purpose — `electron-builder.yml` says so, and says it carries no
+      # certificate configuration "rather than appearing to sign". A pipeline
+      # that reports success without reading back what it actually produced is
+      # exactly how appearing to sign happens, so this asserts the truth either
+      # way instead of inferring it from whether a step ran.
+      #
+      # With no credential it REQUIRES the installer to be unsigned. That is not
+      # a formality: the day a signing step is added, a misconfiguration that
+      # silently signs nothing would otherwise look identical to today's green
+      # run. With a credential it requires a valid signature and records the
+      # signer, and anything else fails the job.
+      #
+      # `Get-AuthenticodeSignature` reads the file, not the build log. Status
+      # `NotSigned` is the honest answer for an unsigned artifact; `Valid` is
+      # the only accepted answer for a signed one, so an expired, untrusted or
+      # tampered signature is a failure rather than a warning.
+      - name: Verify what was actually produced
+        shell: pwsh
+        env:
+          # Empty until OA-029 chooses a route and its secret is set. Read here
+          # rather than in a condition so the step runs in BOTH states and
+          # asserts the one it is in.
+          RELAYIUM_WINDOWS_SIGNING: ${{ secrets.RELAYIUM_WINDOWS_SIGNING }}
+        run: |
+          $exe = $env:RELAYIUM_INSTALLER
+          if (-not $exe) { throw "no installer recorded by the provenance step" }
+          $signature = Get-AuthenticodeSignature -LiteralPath $exe
+          $expected = -not [string]::IsNullOrWhiteSpace($env:RELAYIUM_WINDOWS_SIGNING)
+          Write-Host "signing expected: $expected"
+          Write-Host "signature status: $($signature.Status)"
+          if ($expected) {
+            if ($signature.Status -ne "Valid") {
+              throw "signing was configured but the produced installer is $($signature.Status); refusing to publish it as signed"
+            }
+            $subject = $signature.SignerCertificate.Subject
+            Write-Host "signer: $subject"
+            "signer: $subject" | Out-File -FilePath release/SHA256SUMS.txt -Encoding ascii -Append
+          } else {
+            if ($signature.Status -ne "NotSigned") {
+              throw "no signing credential is configured, yet the installer reports $($signature.Status); the lane does not know what it built"
+            }
+            Write-Host "unsigned, as this lane intends"
+            "unsigned: no signing credential configured" | Out-File -FilePath release/SHA256SUMS.txt -Encoding ascii -Append
+          }
+
       # The artifact a user would actually download: installed, launched and
       # interrogated. Runs BEFORE the upload, so an installer that cannot be
       # installed is never published as evidence that it can.
