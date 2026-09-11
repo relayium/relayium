@@ -1007,7 +1007,17 @@ async function main() {
   // product behaviour, and this is the only place either runs on the installed
   // build.
   const sendToForLaunch = readShortcut(sendToLink);
-  if (sendToForLaunch !== null && existsSync(sendToLink)) {
+  // ASSERTED rather than guarded. A scenario that quietly returns because its
+  // precondition is absent reads exactly like one that ran and was satisfied,
+  // which is the reporting failure the bootstrap smoke was fixed for earlier
+  // tonight. The same rule applies here.
+  if (
+    check(
+      "the SendTo shortcut can be read for a launch",
+      sendToForLaunch !== null && existsSync(sendToLink),
+      sendToLink,
+    )
+  ) {
     const cleared = await cdp.evaluate(
       '(() => { const el = document.querySelector(\'[data-test="pending-clear"]\');' +
         ' if (!el) return false; el.click(); return true; })()',
