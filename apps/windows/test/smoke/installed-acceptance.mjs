@@ -867,6 +867,9 @@ async function main() {
   // shell's own half — that Explorer performs that substitution and honours
   // `MultiSelectModel`. That needs Explorer, and it stays documented rather
   // than claimed.
+  // Hoisted: the cold-start half of this runs after the first app is gone.
+  let verbTokens = null;
+  let verbPickedDir = null;
   const verbCommand = regQueryDefault(`${SEND_FILE_KEY}\\command`);
   if (check("the file send command is registered for the launch", verbCommand !== null, SEND_FILE_KEY)) {
     const pickedDir = path.join(runnerTemp, "verb-selection");
@@ -877,6 +880,8 @@ async function main() {
     // The registry's own tokens. Only `%1` is replaced — the executable, the
     // flag and their order are the installer's, not this test's.
     const tokens = tokenizeCommand(verbCommand).map((token) => (token === "%1" ? picked : token));
+    verbTokens = tokens;
+    verbPickedDir = pickedDir;
     check("the registered command still names the installed executable", samePath(tokens[0], installedExe), tokens[0]);
     check("and the file took the place of %1", tokens.includes(picked), tokens.join(" "));
 
@@ -934,7 +939,6 @@ async function main() {
     const afterVerb = (await cdpTargets(port)).filter((t) => t.type === "page");
     check("the verb did not open a second window", afterVerb.length === 1 && afterVerb[0]?.id === target1.id, `saw ${afterVerb.length}`);
 
-    rmSync(pickedDir, { recursive: true, force: true });
   }
 
   const sealedBefore = hashSealed();
@@ -957,6 +961,54 @@ async function main() {
     },
     DEADLINE.exit,
   );
+
+  if (verbTokens !== null) {
+    // ---- The same verb, but with the app NOT already running -----------
+    //
+    // The case above is a right-click while Relayium is open, which Electron
+    // delivers through `second-instance`. This is the other one, and on a
+    // desktop it is the commoner of the two: the app is closed, somebody picks
+    // Send to > Relayium, and the verb starts the process. That argv reaches
+    // the app as its OWN command line rather than through Electron's handoff,
+    // so the two paths can fail independently — and a refusal above with a
+    // success here says the delivery is at fault rather than the parsing.
+    const coldPort = await freeLoopbackPort();
+    const coldTokens = [...verbTokens.slice(1), `--remote-debugging-port=${coldPort}`, "--remote-debugging-address=127.0.0.1"];
+    const cold = spawn(verbTokens[0], coldTokens, { stdio: "ignore" });
+    if (cold.pid) {
+      spawnedPids.add(cold.pid);
+      spawnedChildren.set(cold.pid, cold);
+    }
+    const attachedCold = await attachToApp(coldPort, "the app started BY the verb");
+    if (attachedCold !== null) {
+      const coldCdp = attachedCold.cdp;
+      const coldPresent = (name) =>
+        coldCdp.evaluate(`document.querySelector('[data-test="${name}"]') !== null`);
+      const coldSettled = await waitFor(
+        "the verb-started app to show what it was given",
+        async () => (await coldPresent("pending-selection")) || (await coldPresent("pending-refused")),
+        DEADLINE.launch,
+      );
+      if (coldSettled && (await coldPresent("pending-refused"))) {
+        const why = await coldCdp.evaluate(
+          'document.querySelector(\'[data-test="pending-refused"]\')?.dataset?.refusal ?? "unknown"',
+        );
+        check("the verb-started app staged the file rather than refusing it", false, String(why));
+      }
+      if (coldSettled && (await coldPresent("pending-selection"))) {
+        const coldCount = await coldCdp.evaluate(
+          'document.querySelector(\'[data-test="pending-count"]\')?.innerText ?? ""',
+        );
+        check(
+          "the app started by the verb names the file it was started with",
+          String(coldCount).includes("picked-by-verb.txt"),
+          String(coldCount),
+        );
+      }
+      await killOwned(cold.pid);
+    }
+    rmSync(verbPickedDir, { recursive: true, force: true });
+  }
 
   // ---- Crash durability, BEFORE any reinstall is involved ---------------
   //
