@@ -446,6 +446,20 @@ async function main() {
   check("no node integration", prefs.nodeIntegration !== true, String(prefs.nodeIntegration));
   check("no webview tag", prefs.webviewTag !== true, String(prefs.webviewTag));
   check("web security on", prefs.webSecurity !== false, String(prefs.webSecurity));
+  // Read back from the REAL window, not from the constant a unit test can see.
+  // Electron defaults this to true and downloads hunspell dictionaries from the
+  // Chromium CDN to satisfy it, so a window that lost the flag would reach a
+  // Google-operated server the first time somebody typed — with no page request
+  // to observe, because that fetch belongs to the browser process.
+  // Read from the SESSION, which is the switch that can be observed:
+  // `getLastWebPreferences()` does not report `spellcheck` at all, so asserting
+  // it there passes on `undefined` whatever the window was built with — a check
+  // that cannot fail is worse than no check.
+  check(
+    "no spellchecker, so typing fetches nothing",
+    win.webContents.session.isSpellCheckerEnabled() === false,
+    String(win.webContents.session.isSpellCheckerEnabled()),
+  );
   // Read from the live WebContents rather than the recorded preferences:
   // `getLastWebPreferences()` does not report this one, so asserting it there
   // would be asserting `undefined === false` and passing for the wrong reason.

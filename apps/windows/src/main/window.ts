@@ -28,6 +28,32 @@ export const RENDERER_PREFERENCES = {
   webSecurity: true,
   allowRunningInsecureContent: false,
   experimentalFeatures: false,
+  // ## Off, because on this platform it is a network request
+  //
+  // Electron's default is `true`, and its own documentation says what that
+  // costs here: "By default Electron will download hunspell dictionaries from
+  // the Chromium CDN", and "On macOS, the OS spellchecker is used and therefore
+  // we do not download any dictionary files."
+  //
+  // So the two platforms are not doing the same thing under the same setting.
+  // The Mac spellchecks locally and fetches nothing. Windows would fetch a
+  // dictionary from a Google-operated CDN the first time somebody types into
+  // the composer, the stored-link field or a device name — a request this
+  // product did not ask for, triggered by typing, from an app whose whole claim
+  // is that nothing of the user's leaves their machine.
+  //
+  // Page CSP does not reach it: that request belongs to the browser process,
+  // not to the document, so every header this app sets is irrelevant to it.
+  //
+  // The alternative is to host the dictionaries and point
+  // `setSpellCheckerDictionaryDownloadURL` at them. This project publishes no
+  // such mirror, and adding one to gain red underlines in a transfer utility is
+  // the wrong trade against the priority order this workspace runs on, where
+  // privacy is first and feature breadth is last.
+  //
+  // The parity difference is real and is recorded rather than hidden: macOS
+  // keeps spellcheck because its checker is local.
+  spellcheck: false,
 } as const satisfies WebPreferences;
 
 /**
@@ -101,6 +127,19 @@ export function hardenContents(
   // default-allow policy.
   contents.session.setPermissionRequestHandler((_c, _permission, callback) => callback(false));
   contents.session.setPermissionCheckHandler(() => false);
+
+  // The spellchecker, off at the SESSION as well as in the preferences.
+  //
+  // Two switches because they are two different things and only one of them
+  // can be read back: `webPreferences.spellcheck` is not reported by
+  // `getLastWebPreferences()`, so a window that silently lost it would look
+  // identical to one that kept it. `isSpellCheckerEnabled()` is observable, and
+  // the smoke asserts it against the running window.
+  //
+  // What is being refused is a network request, not a feature: Electron
+  // downloads hunspell dictionaries from the Chromium CDN on every platform
+  // except macOS. See `RENDERER_PREFERENCES` for the whole reasoning.
+  contents.session.setSpellCheckerEnabled(false);
 
   // `<webview>` is disabled in the preferences above; refusing the attach as
   // well means the two halves cannot drift apart.
