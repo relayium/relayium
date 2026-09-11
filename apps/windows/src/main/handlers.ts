@@ -6,6 +6,7 @@
 
 import { app, clipboard, dialog, shell, type BrowserWindow } from "electron";
 import { randomUUID } from "node:crypto";
+import { stat } from "node:fs/promises";
 import {
   IPC,
   IPC_EVENTS,
@@ -69,6 +70,8 @@ import { BoundedTransport } from "./net/transport.js";
 import { SecretStore, platformCipher } from "./secrets.js";
 import { currentDataRoot } from "./storage.js";
 import { IpcRefusal, IpcRouter, expectChunk, expectIndex, expectObject, expectString } from "./ipc.js";
+import { ReceiptRegistry } from "./io/receipt-registry.js";
+import { issueReceipt } from "./features/receive-receipts.js";
 import { openApprovedExternal } from "./window.js";
 
 /**
@@ -104,6 +107,20 @@ export interface HandlerComposition {
    * cannot open a lease cannot exercise quit, cleanup or residue at all.
    */
   pickDirectory?: () => Promise<string | null>;
+  /**
+   * Showing the user the folder a finished receive saved into.
+   *
+   * The same reviewed injection point as the picker above, and for the same
+   * reason: without it an automated run would open a real Explorer or Finder
+   * window on the developer's machine on every pass, and the one property worth
+   * asserting — that MAIN opens the folder it kept, never one a page named —
+   * would be invisible.
+   *
+   * Must THROW when the reveal did not happen, exactly like the default. A seam
+   * that resolved on failure would make the smoke green for the bug this whole
+   * arrangement exists to prevent.
+   */
+  revealReceiveFolder?: (directory: string) => Promise<void>;
   /** The system that actually starts programs at sign-in. Substituted so an
    *  automated run does not add itself to a developer's startup programs. */
   loginItem?: LoginItemSystem;
@@ -692,12 +709,44 @@ export function registerHandlers(
 
   router.handle(IPC.receivePublish, async (payload) => {
     const body = expectObject(payload);
-    const report = await service.publishReceive(leaseId(body));
+    const id = leaseId(body);
+    // Read BEFORE the publish. The entry is retired as the publication settles,
+    // and a receipt must name the folder this receive actually used rather than
+    // whatever is current afterwards.
+    const target = service.receiveTarget(id);
+    const report = await service.publishReceive(id);
     // Observed here, not reported by the page: "files were saved" is a fact
     // about what this process wrote, and a renderer that could assert it could
     // also assert it falsely.
     events.onPublished?.(report);
+    // Only a `complete` publication earns one, and the decision lives in
+    // `issueReceipt` so it can be exercised against the real registry rather
+    // than restated here. The token is opaque and the folder never crosses:
+    // main resolves the token back to the path it kept, which is what stops a
+    // page naming a directory it was never given.
+    issueReceipt(report, target, {
+      register: (directory, owner, fileCount) => receipts.register(directory, owner, fileCount),
+      emit: (document, receipt) => {
+        router.emit(IPC_EVENTS.receiveReceipt, document, receipt);
+      },
+    });
     return report;
+  });
+
+  /**
+   * Show the user the folder one finished receive saved into.
+   *
+   * The payload is the token they were given and nothing else. Every refusal is
+   * a closed reason — `unknown`, `stale`, `fenced`, `missing`, `failed` — and
+   * none of them carries the operating system's text, which routinely contains
+   * the path this channel exists to keep on this side.
+   */
+  router.handle(IPC.receiveReveal, async (payload) => {
+    const body = expectObject(payload);
+    // Deliberately NOT validated here beyond being present: the registry checks
+    // the shape itself and answers `unknown` for anything that is not a token
+    // it minted, which is one place making that judgement instead of two.
+    return receipts.reveal(body["token"]);
   });
 
   // -------------------------------------------------------------------------
@@ -1075,6 +1124,41 @@ export function registerHandlers(
   };
 
   /**
+   * Whether this host is shutting down.
+   *
+   * The receipt registry keeps its own fence and consults this one as well, and
+   * the redundancy is deliberate: its comment names the host's as the
+   * authority, because the app can be ending through a path that never called
+   * its `fence()`. Declaring the dependency and then never answering it
+   * truthfully would be the same as not having it.
+   */
+  let admissionsClosed = false;
+
+  /**
+   * "Open the folder", for a receive that has already finished.
+   *
+   * Held in MAIN with the path, handed out as an opaque token. The renderer
+   * never learns the directory, so a page cannot ask for one it was not given —
+   * which is the same rule the rest of this bridge follows and the reason there
+   * is no channel here that takes a path.
+   */
+  const receipts = new ReceiptRegistry({
+    currentDocument: () => router.generation,
+    currentEpoch: () => service.accountEpoch,
+    admissionClosed: () => admissionsClosed,
+    // A `stat`, so a folder the user has since deleted, unplugged or renamed is
+    // refused as `missing` instead of handed to the shell to fail on.
+    async directoryUsable(directory) {
+      const stats = await stat(directory);
+      return stats.isDirectory();
+    },
+    // `revealPath` already turns `openPath`'s non-empty string into a throw,
+    // which is exactly the contract this dependency requires.
+    openDirectory: (directory) =>
+      composition.revealReceiveFolder ? composition.revealReceiveFolder(directory) : revealPath(directory),
+  });
+
+  /**
    * The packaged helper's adapters, or none at all.
    *
    * One resolution, used for all three: staging custody, the installer and the
@@ -1334,6 +1418,11 @@ export function registerHandlers(
   // fires for a document change and a reload must not stop receiving.
   const releaseAccountWatch = service.onAccountChanged(() => {
     inbox.onAuthorityChanged();
+    // Receipts an account change or a document swap has retired stop being
+    // HELD here, rather than only being refused when someone redeems one. The
+    // answer would be the same either way — `reveal` re-checks the owner — but
+    // a path kept for a page that no longer exists is a path kept for nobody.
+    receipts.invalidateStale();
     // A delivery in flight under the previous account's bearer is revoked and
     // JOINED. Not awaited here: this callback is synchronous and the watcher
     // must not be held by a network drain.
@@ -1753,6 +1842,10 @@ export function registerHandlers(
    * inverse and has to stay that way.
    */
   const fence = (): void => {
+    admissionsClosed = true;
+    // Reveals are admissions like any other: one started now would put a shell
+    // window up over an app that is going away.
+    receipts.fence();
     service.fenceReceives();
     storedReceive.fence();
     inbox.fence();
@@ -1825,6 +1918,18 @@ export function registerHandlers(
     // retires the in-flight sign-in before ITS first await too, so this is a
     // request as much as a join.
     const serviceStopping = service.quiesce();
+    // ## Joined, and deliberately NOT counted
+    //
+    // A reveal in flight is a `stat` and a shell call. It holds no bytes, no
+    // socket and no lease, and nothing a user can lose is waiting on it — so it
+    // is joined within the same budget as everything else, because leaving a
+    // promise outstanding across a dispose is what these joins are for, but its
+    // `unjoined` does NOT enter the counts below.
+    //
+    // The counts drive the quit prompt. Adding this one would put "work is
+    // unsettled" in front of someone because Explorer was slow to come up,
+    // which is a prompt about nothing dressed as a prompt about their files.
+    const revealStopping = receipts.quiesce(NETWORK_DRAIN_MS);
 
     const [sockets, reads, storedHeld, inboxHeld, sendHeld, inboxSendHeld, accountHeld, updateHeld, outcome] = await Promise.all([
       hub.drainClosing(NETWORK_DRAIN_MS),
@@ -1837,6 +1942,7 @@ export function registerHandlers(
       updateStopping,
       serviceStopping,
     ]);
+    await revealStopping;
 
     // And the revocation failure the teardown remembers: it is rethrown by
     // `dispose`, so a quiesce that did not mention it would let a "nothing left
@@ -1898,6 +2004,8 @@ export function registerHandlers(
     await updateSummary.dispose();
     await inbox.dispose();
     await storedReceive.dispose();
+    // Terminal: every held path is dropped and no token can be redeemed again.
+    receipts.dispose();
     await service.dispose();
     if (revocationFailure !== null) throw revocationFailure;
   };
@@ -1909,6 +2017,8 @@ export function registerHandlers(
   });
 
   const resume = (): void => {
+    admissionsClosed = false;
+    receipts.resume();
     service.resume();
     service.admitReceives();
     storedReceive.resume();

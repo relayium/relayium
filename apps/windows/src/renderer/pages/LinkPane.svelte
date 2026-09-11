@@ -42,13 +42,25 @@
   /** An outgoing intent: the quit permission, and the conversation it was for. */
   type Intent = { ticket: Ticket; peerId: string; linkGeneration: number } | null;
   import type { RoomController } from "../rooms/room-controller.svelte.js";
+  import type { RevealController } from "../receive/reveal-controller.svelte.js";
+  import type { RevealRefusal } from "../../shared/receive-receipt.js";
   import type { PickedFile } from "../../../../../web/src/lib/drag";
 
   let {
     room,
+    reveal,
     verifyPeers,
     messageDraft = $bindable(""),
-  }: { room: RoomController; verifyPeers: boolean; messageDraft?: string } = $props();
+  }: {
+    room: RoomController;
+    /** "Open the folder", for a receive that has already saved. Separate from
+     *  `room` on purpose: it is driven by a push from main after the transfer
+     *  is over, and a reveal that fails must not land in the transfer's own
+     *  state where it would read as "the files did not arrive". */
+    reveal: RevealController;
+    verifyPeers: boolean;
+    messageDraft?: string;
+  } = $props();
 
   const workspace = $derived(room.workspace);
   const peerId = $derived(workspace.linkPeerId);
@@ -119,6 +131,20 @@
     if (reason === "timeout") return t("recvFailedTimeout");
     if (reason === "internal" || reason === "helper-unavailable") return t("recvFailedInternal");
     return t("recvFailedPrefix");
+  }
+
+  /**
+   * One sentence per closed refusal, and each one names a different situation.
+   *
+   * A single "could not open the folder" would cover a folder the user deleted,
+   * a quit in progress and a receipt that expired with their account — three
+   * things with three different next actions, only one of which is "look again".
+   */
+  function revealText(reason: RevealRefusal): string {
+    if (reason === "missing") return t("recvRevealMissing");
+    if (reason === "stale" || reason === "unknown") return t("recvRevealExpired");
+    if (reason === "fenced") return t("recvRevealClosing");
+    return t("recvRevealFailed");
   }
 
   const percent = (x: { sent: number; total: number }) =>
@@ -541,6 +567,22 @@
              limitation, and erased files that HAD been written. -->
         {#if receipt?.kind === "saved"}
           <p data-test="recv-saved">{t("recvSavedCount", { done: receipt.total, total: receipt.total })}</p>
+          <!-- The one thing a person wants once a transfer finishes. The button
+               exists only when MAIN has pushed a receipt for a batch of exactly
+               this many files: the folder is main's, the page never learned it,
+               and what is held here is an opaque token main can resolve. -->
+          {#if reveal.receiptFor(receipt.total) !== null}
+            <button data-test="recv-reveal" disabled={reveal.busy} onclick={() => void reveal.reveal()}>
+              {reveal.busy ? t("recvRevealBusy") : t("recvReveal")}
+            </button>
+          {/if}
+          <!-- Visible, and specific. A reveal that silently did nothing is the
+               failure this replaces: the folder may have been moved, deleted or
+               unplugged since, and the user is the only one who can tell which.
+               Never the operating system's own text, which carries the path. -->
+          {#if reveal.refusal !== null}
+            <p class="problem small" data-test="recv-reveal-refused">{revealText(reveal.refusal)}</p>
+          {/if}
         {:else if receipt?.kind === "partial"}
           <p class="problem" data-test="recv-partial">
             {t("recvPartial", { done: receipt.saved, total: receipt.total })}

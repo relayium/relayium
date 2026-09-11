@@ -62,6 +62,10 @@ contextBridge.exposeInMainWorld("relayium", {
     finish: invoke("relayium:receive-finish"),
     cancel: invoke("relayium:receive-cancel"),
     publish: invoke("relayium:receive-publish"),
+    // Show the user where a finished receive saved to, named by the opaque
+    // token that came with the receipt. No path crosses in either direction.
+    reveal: invoke("relayium:receive-reveal"),
+    onReceipt: subscribe("relayium:receive-receipt"),
   },
   signaling: {
     open: invoke("relayium:signaling-open"),

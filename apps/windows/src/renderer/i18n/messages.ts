@@ -137,6 +137,15 @@ export const en = {
   recvFailedInternal: "The save could not be completed.",
   recvResidue: "Some incomplete files may still be in that folder.",
   recvSavedCount: "Saved {done} of {total}",
+  recvReveal: "Show in Explorer",
+  recvRevealBusy: "Opening\u2026",
+  /** Each refusal names a different situation, because each has a different
+   *  next action. Never the operating system's own text, which carries the
+   *  path this app deliberately keeps out of the page. */
+  recvRevealMissing: "That folder is no longer there. It may have been moved, renamed, or on a drive that is now disconnected.",
+  recvRevealExpired: "This no longer applies to the account signed in now.",
+  recvRevealClosing: "Relayium is closing.",
+  recvRevealFailed: "Windows could not open that folder.",
 
   // --- Account ------------------------------------------------------------
   accountTitle: "Account",
@@ -605,6 +614,12 @@ export const zh: Record<MessageKey, string> = {
   recvFailedInternal: "保存未能完成。",
   recvResidue: "该文件夹中可能仍残留未完成的文件。",
   recvSavedCount: "已保存 {done} / {total}",
+  recvReveal: "在文件资源管理器中显示",
+  recvRevealBusy: "正在打开\u2026",
+  recvRevealMissing: "该文件夹已不存在，可能已被移动、重命名，或所在的驱动器已断开。",
+  recvRevealExpired: "该记录不属于当前登录的账户。",
+  recvRevealClosing: "Relayium 正在关闭。",
+  recvRevealFailed: "Windows 无法打开该文件夹。",
 
   accountTitle: "账户",
   accountSignedInAs: "已登录：{email}",

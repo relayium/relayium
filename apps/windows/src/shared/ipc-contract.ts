@@ -63,6 +63,15 @@ export const IPC = {
    */
   receivePublish: "relayium:receive-publish",
   /**
+   * Show the user the folder a FINISHED receive saved into.
+   *
+   * Named by the opaque token the receipt carried, never by a path. The
+   * renderer was never given the directory, so it cannot ask for a different
+   * one; main resolves the token against what it kept and refuses — with a
+   * closed reason — when the receipt is stale, fenced or unknown.
+   */
+  receiveReveal: "relayium:receive-reveal",
+  /**
    * Open the ONE signalling route this build has, for one room.
    *
    * The renderer names a room KIND (and, for a code room, a validated code) —
@@ -463,6 +472,21 @@ export const IPC_EVENTS = {
    * for.
    */
   updateSummary: "relayium:update-summary",
+  /**
+   * A receive SAVED, and here is the token that can show the user where.
+   *
+   * Pushed rather than returned by `receivePublish`, because the page that
+   * displays it is not always the one that published: a receive can settle
+   * while the user is on another screen, and the reply to a call nobody is
+   * awaiting reaches nothing.
+   *
+   * Emitted on the ORIGINATING document, unlike the inbox and account
+   * snapshots. This is not a fact about main that any page may show — it is
+   * authority to reveal one folder, granted to the document that asked for that
+   * receive. A replacement page must not inherit a button for a transfer it did
+   * not make.
+   */
+  receiveReceipt: "relayium:receive-receipt",
 } as const;
 
 export const IPC_EVENT_NAMES: readonly string[] = Object.values(IPC_EVENTS);

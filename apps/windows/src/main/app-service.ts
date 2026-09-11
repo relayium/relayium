@@ -345,6 +345,18 @@ interface PendingOpen extends ReceiveOwner {
 
 interface LeaseEntry extends ReceiveOwner {
   readonly adapter: NativeReceiveAdapter;
+  /**
+   * The folder the USER chose for this receive, carried from the picker.
+   *
+   * Retained so a completed publication can be shown to them afterwards —
+   * "open the folder" is the one thing people want when a transfer finishes,
+   * and by then the picker is long gone.
+   *
+   * It stays HERE and is never returned to a renderer. What crosses instead is
+   * an opaque token; main resolves the token back to this string, which is what
+   * keeps a page from naming a directory it was never given.
+   */
+  readonly directory: string;
   /** Non-null while a terminal publication is running. Never rejects — the
    *  caller gets the real error; this exists only to be JOINED. */
   terminal: Promise<void> | null;
@@ -396,7 +408,9 @@ interface LeaseEntry extends ReceiveOwner {
 }
 
 /** A lease entry that has not been through a cleanup attempt yet. */
-function newLeaseEntry(fields: ReceiveOwner & { readonly adapter: NativeReceiveAdapter }): LeaseEntry {
+function newLeaseEntry(
+  fields: ReceiveOwner & { readonly adapter: NativeReceiveAdapter; readonly directory: string },
+): LeaseEntry {
   return {
     ...fields,
     terminal: null,
@@ -1469,13 +1483,13 @@ export class AppService {
         // Handing it to the retirement registry first means the failure leaves
         // an OWNED entry behind. The teardown that fenced this open rescans
         // after joining it and retries; so does any later one.
-        const stale = newLeaseEntry({ adapter, authority, epoch: captured, document });
+        const stale = newLeaseEntry({ adapter, authority, epoch: captured, document, directory });
         await this.retireEntry(stale).catch(() => undefined);
         throw new ServiceRefusal(
           accountStale ? "account changed" : documentStale ? "document changed" : "service disposed",
         );
       }
-      this.leases.set(id, newLeaseEntry({ adapter, authority, epoch: captured, document }));
+      this.leases.set(id, newLeaseEntry({ adapter, authority, epoch: captured, document, directory }));
       return { leaseId: id, files: adapter.fileCount };
     } finally {
       this.opening.delete(pending);
@@ -1540,6 +1554,23 @@ export class AppService {
 
   async finishFile(leaseId: string, index: number): Promise<void> {
     await this.leaseFor(leaseId).finish(index);
+  }
+
+  /**
+   * The folder one lease is writing into, and who asked for it.
+   *
+   * For the host to register a receipt with AFTER a publication succeeds. It is
+   * read here rather than returned by `publishReceive`, because by the time
+   * that resolves the entry may already have been retired — and a receipt must
+   * name the folder the receive actually used, not whatever is current.
+   */
+  receiveTarget(leaseId: string): { readonly directory: string; readonly owner: ReceiveOwner } | null {
+    const entry = this.leases.get(leaseId);
+    if (entry === undefined) return null;
+    return {
+      directory: entry.directory,
+      owner: { authority: entry.authority, epoch: entry.epoch, document: entry.document },
+    };
   }
 
   /**
