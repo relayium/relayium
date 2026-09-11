@@ -95,6 +95,13 @@ Still required for parity:
 * **Real-network transfer demonstrated.** Everything proven so far is one
   runner and a loopback server.
 * **Signing, installer and upgrade acceptance**, each its own gate.
+* **A supported-version gate, before the first public release.** macOS refuses
+  to build its content at all when the served policy says the build is below
+  minimum, so a stale binary opens no socket. Windows has no equivalent and
+  there is no `/api/client-policy/windows` to read. Deferred deliberately — no
+  Windows build has ever been released, so there is nothing in the field to
+  protect — but it must ship in or before the first version it governs, because
+  a client already out there cannot be told to stop retroactively.
 * **A real Explorer right-click.** Staging is driven in the bootstrap smoke
   through the shipping `second-instance` listener with the argv the installer's
   verbs produce, but no run has started from an actual right-click on Windows.
