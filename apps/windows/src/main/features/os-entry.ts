@@ -84,18 +84,43 @@ export interface OsEntryInventory {
  *
  * Exported so the grammar is testable on its own, and so nothing else has to
  * re-derive what counts as a selection.
+ *
+ * ## Position is not part of the grammar, and assuming it was a real defect
+ *
+ * This used to read the values IMMEDIATELY after the flag and stop at the first
+ * later `--`. That is true of the command line Explorer builds, and it is not
+ * true of the one this process is handed when the app is ALREADY RUNNING:
+ * Electron reconstructs the second instance's command line before delivering
+ * it, and a switch landing between the flag and the path ended the list before
+ * it had collected anything. The app then refused with `no-selection` — "could
+ * not read that" — for a file it had never looked at.
+ *
+ * The installed-artifact acceptance caught it by launching the verb the
+ * installer registered: started COLD the same command line stages the file, and
+ * delivered to a running instance it did not. Right-click send worked exactly
+ * once per app lifetime, which is the shape of bug nobody reports precisely
+ * because the second try is the one that fails.
+ *
+ * So the flag is a MODE and the selection is every ordinary argument: switches
+ * are skipped wherever they appear, and what is left is what the OS handed
+ * over. `handleDeepLink` already reads the same argv this way — it searches all
+ * of it rather than a position — and this is now consistent with it.
  */
 export function parseSendFiles(argv: readonly string[]): readonly string[] | null {
-  const at = argv.indexOf(SEND_FILES_FLAG);
-  if (at < 0) return null;
+  if (!argv.includes(SEND_FILES_FLAG)) return null;
   const out: string[] = [];
-  for (let i = at + 1; i < argv.length; i += 1) {
+  // From 1: argv[0] is this executable, which is not a selection.
+  for (let i = 1; i < argv.length; i += 1) {
     const value = argv[i];
-    if (value === undefined) break;
-    // A later `--flag` ends the list. Without this, a flag appended after the
-    // paths would be opened as though it were one.
-    if (value.startsWith("--")) break;
-    if (value.length === 0) continue;
+    if (value === undefined || value.length === 0) continue;
+    // Any switch, in any of the forms a command line can carry one. Chromium
+    // spells a switch's value as `--name=value`, so a bare argument is never
+    // the value OF a switch — it is a positional argument, which here means a
+    // path.
+    if (value.startsWith("-")) continue;
+    // A deep link travels in this same argv and belongs to another handler.
+    // A selection is a filesystem path; it never contains a scheme.
+    if (value.includes("://")) continue;
     out.push(value);
   }
   return out;

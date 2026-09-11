@@ -55,8 +55,47 @@ const staged = (view: OsEntryView) => {
 describe("the argv grammar is the whole grammar", () => {
   it("takes only what follows --send-files, and stops at the next flag", () => {
     expect(parseSendFiles(["relayium.exe", "--send-files", "a", "b"])).toEqual(["a", "b"]);
-    expect(parseSendFiles(["--send-files", "a", "--other", "b"])).toEqual(["a"]);
     expect(parseSendFiles(["--send-files"])).toEqual([]);
+  });
+
+  // ## The shape that actually broke it
+  //
+  // The parser used to take the values IMMEDIATELY after the flag and stop at
+  // the first later `--`. That matches the command line Explorer builds, and
+  // not the one Electron reconstructs when the app is already running: a switch
+  // between the flag and the path ended the list before it collected anything,
+  // and the app refused with `no-selection` for a file it never looked at. The
+  // installed acceptance found it — cold, the same command line staged the
+  // file; delivered to a running instance, it did not.
+  it("finds the selection wherever the command line puts it", () => {
+    // A switch between the flag and the path. This is the case that failed.
+    expect(parseSendFiles(["relayium.exe", "--send-files", "--enable-x", "C:/a.txt"])).toEqual(["C:/a.txt"]);
+    // Switches hoisted ahead of the positional arguments, which is how a
+    // command line is normally reconstructed.
+    expect(parseSendFiles(["relayium.exe", "--enable-x", "--send-files", "C:/a.txt"])).toEqual(["C:/a.txt"]);
+    // The path BEFORE the flag.
+    expect(parseSendFiles(["relayium.exe", "C:/a.txt", "--send-files"])).toEqual(["C:/a.txt"]);
+    // The bulk path: SendTo appends every selected file.
+    expect(parseSendFiles(["relayium.exe", "--send-files", "C:/a.txt", "C:/b.txt", "C:/c.txt"])).toEqual([
+      "C:/a.txt",
+      "C:/b.txt",
+      "C:/c.txt",
+    ]);
+  });
+
+  it("never opens the executable, a switch, or a deep link as a file", () => {
+    // argv[0] is this program. Opening it would send the app to itself.
+    expect(parseSendFiles(["C:/Program Files/Relayium/Relayium.exe", "--send-files", "C:/a.txt"])).toEqual([
+      "C:/a.txt",
+    ]);
+    // Every form a switch takes.
+    expect(parseSendFiles(["relayium.exe", "--send-files", "--x", "-y", "--z=1", "C:/a.txt"])).toEqual(["C:/a.txt"]);
+    // A deep link rides in this same argv and belongs to another handler. A
+    // selection is a filesystem path and never carries a scheme.
+    expect(parseSendFiles(["relayium.exe", "--send-files", "relayium://pair?code=1", "C:/a.txt"])).toEqual([
+      "C:/a.txt",
+    ]);
+    expect(parseSendFiles(["relayium.exe", "--send-files", "https://relayium.com/x"])).toEqual([]);
   });
 
   it("never treats a bare argument as a file", () => {
