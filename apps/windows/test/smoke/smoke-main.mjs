@@ -49,7 +49,7 @@
 // the device poll inside the main process, releases a late success, and requires
 // the page AND the authoritative auth state to still say signed out.
 
-import { app, BrowserWindow, clipboard, ipcMain } from "electron";
+import { app, BrowserWindow, clipboard, ipcMain, screen } from "electron";
 // STATIC, not dynamic. `registerSchemesAsPrivileged` runs at this module's
 // top level and Electron only accepts it before the `ready` event; a dynamic
 // `import()` inside an async function resolves after ready has already fired.
@@ -292,6 +292,51 @@ async function assertStartupTogglesAgainstWindowsItself(win) {
   check("it turns off", disabled.ok === true && disabled.state === "off", JSON.stringify(disabled));
   const afterDisable = await runKeyEntries();
   check("and the registry entry is removed", afterDisable.length === 0, afterDisable.join(" | "));
+}
+
+/**
+ * **The window fits the screen it opened on, and the floor is real.**
+ *
+ * Windows display scaling shrinks the logical work area rather than enlarging
+ * the window: a 1366x768 laptop at 150% has 910x512 to give. The app used to
+ * ask for a fixed 1040x700 with a fixed 880x560 floor, which on that machine is
+ * a window whose bottom edge — and whatever control is on it — sits below the
+ * desktop with no way to bring it up.
+ *
+ * The arithmetic is covered by `window-sizing.test.ts` across the screens
+ * people actually have. What THIS adds is the half arithmetic cannot reach: the
+ * numbers were handed to a real window manager, and it honours them. A minimum
+ * the app computes but the platform ignores would pass every unit test.
+ */
+async function assertTheWindowFitsTheScreen(win) {
+  const work = screen.getPrimaryDisplay().workAreaSize;
+  const bounds = win.getBounds();
+  check(
+    "the window opened inside the usable screen",
+    bounds.width <= work.width && bounds.height <= work.height,
+    `window ${bounds.width}x${bounds.height} work ${work.width}x${work.height}`,
+  );
+
+  const [minWidth, minHeight] = win.getMinimumSize();
+  check(
+    "and cannot be asked to be larger than the screen before it is resized",
+    minWidth <= work.width && minHeight <= work.height,
+    `min ${minWidth}x${minHeight} work ${work.width}x${work.height}`,
+  );
+
+  // The floor, enforced by the platform rather than by the value we passed it.
+  // Nothing in the app can observe a minimum that the window manager quietly
+  // dropped, so this asks for something far below it and reads back what
+  // actually happened.
+  const before = win.getBounds();
+  win.setSize(200, 200);
+  const clamped = win.getBounds();
+  check(
+    "the window manager enforces the floor it was given",
+    clamped.width === minWidth && clamped.height === minHeight,
+    `asked 200x200 got ${clamped.width}x${clamped.height} floor ${minWidth}x${minHeight}`,
+  );
+  win.setSize(before.width, before.height);
 }
 
 async function main() {
@@ -562,6 +607,7 @@ async function main() {
   await assertEveryScreenExplainsItself(win);
   await driveSignInCancellation(win);
   await assertStartupTogglesAgainstWindowsItself(win);
+  await assertTheWindowFitsTheScreen(win);
 
   process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures, skipped })}\n`);
   // `quit`, not `exit`: it runs the app's real `before-quit` teardown, which

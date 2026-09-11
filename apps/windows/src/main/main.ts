@@ -16,12 +16,13 @@
 // first and exits, which is also how a `relayium://` deep link opened while the
 // app is already running reaches the window that exists.
 
-import { app, BrowserWindow, dialog, Menu, nativeImage, Notification, protocol, Tray } from "electron";
+import { app, BrowserWindow, dialog, Menu, nativeImage, Notification, protocol, screen, Tray } from "electron";
 import { readFile } from "node:fs/promises";
 import { join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ENGINEERING_BANNER, isEngineeringBuild } from "./build-mode.js";
 import { apiOrigin } from "./origin.js";
+import { fitToWorkArea } from "./window-sizing.js";
 import { registerHandlers } from "./handlers.js";
 import { parseSendFiles } from "./features/os-entry.js";
 import { hardenContents, RENDERER_PREFERENCES } from "./window.js";
@@ -151,11 +152,15 @@ function showWindow(): void {
 }
 
 async function createWindow(): Promise<BrowserWindow> {
+  // The USABLE space on the display the window will open on, not the display's
+  // resolution: the taskbar is not available and Windows scaling shrinks what
+  // is left. See `window-sizing.ts` for the failure this prevents.
+  const sizing = fitToWorkArea(screen.getPrimaryDisplay().workAreaSize);
   const window = new BrowserWindow({
-    width: 1040,
-    height: 700,
-    minWidth: 880,
-    minHeight: 560,
+    width: sizing.width,
+    height: sizing.height,
+    minWidth: sizing.minWidth,
+    minHeight: sizing.minHeight,
     show: false,
     title: "Relayium",
     icon: fileURLToPath(new URL("../../assets/app-icon.png", import.meta.url)),
