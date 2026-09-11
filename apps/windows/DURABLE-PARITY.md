@@ -70,6 +70,26 @@ is green on the development host is not Windows evidence.
   refusal stays in the privileged process, and the interface reports a terminal
   outcome with a reason.
 
+## What is waiting on the owner
+
+Four things stand between this client and parity, none of them engineering, and
+each is queued in the workspace-only `OWNER-ACTIONS.md` with the exact action
+and how it will be verified:
+
+* **OA-029** a code-signing certificate. There is no pipeline to turn on — when
+  a certificate exists, the CI step, the read-back verification and the secret
+  wiring still have to be built, and they have to be built against the route
+  chosen, because a token-bound key and a service-held key are not
+  interchangeable in CI.
+* **OA-030** the update publisher pin and feed. The expected publisher is the
+  subject of that certificate and does not exist until it does.
+* **OA-031** a transfer across a real network, which needs two machines.
+* **OA-032** hands-on acceptance: no Explorer right-click has started this app,
+  no phone has scanned its QR, no notification has been seen on a desktop.
+
+They were recorded here from the beginning and never queued, so the one document
+the owner reads when asking "what needs me" did not mention Windows at all.
+
 ## Gates that remain separate
 
 Code signing, the update feed and any public release surface are each their own
