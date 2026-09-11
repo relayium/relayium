@@ -55,6 +55,7 @@
   import { OfferAnnouncer } from "./receive/offer-announcer.js";
   import PendingSelection from "./pages/PendingSelection.svelte";
   import PairHandoff from "./pages/PairHandoff.svelte";
+  import Help from "./shell/Help.svelte";
   import { PairHandoffController } from "./pair/pair-handoff-controller.svelte.js";
   import type { PairHandoffBridge } from "./pair/bridge.js";
   import { OsEntryController } from "./os-entry/os-entry-controller.svelte.js";
@@ -840,6 +841,15 @@
       onVerifyPeers={(value) => void setPref("verifyPeers", value)}
       onStartup={(enabled) => void setStartup(enabled)}
     />
+  {/if}
+
+  <!-- Every browseable screen ends with it, and the shell renders it ONCE
+       rather than five pages pasting it: a screen cannot then be added without
+       its help, and five copies cannot drift apart. Not on the starting card —
+       there is nothing to explain about a screen whose controls do not exist
+       yet. -->
+  {#if cryptoPhase === "ready"}
+    <Help page={page()} />
   {/if}
 </AppShell>
 

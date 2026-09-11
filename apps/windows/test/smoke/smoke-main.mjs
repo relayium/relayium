@@ -435,6 +435,7 @@ async function main() {
   await assertPairHandoffRefusesWithoutACode(win);
   await assertSignedOutGatesRatherThanGreys(win);
   await assertKeyboardAndMotion(win);
+  await assertEveryScreenExplainsItself(win);
   await driveSignInCancellation(win);
 
   process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures })}\n`);
@@ -478,6 +479,68 @@ async function main() {
  * The clipboard is read, never written. A smoke that stamped a sentinel over
  * whatever the developer had copied would be a rude test.
  */
+/**
+ * Every screen ends with help, and it is a real control rather than a triangle.
+ *
+ * A screen says what it is and hands over its controls; somebody who does not
+ * already know what a pairing code is, or where a received file goes, otherwise
+ * has to leave the app to find out. Driven on every screen rather than one,
+ * because the failure this guards against is a screen that was added without
+ * its answers.
+ */
+async function assertEveryScreenExplainsItself(win) {
+  const js = (expr) => win.webContents.executeJavaScript(expr);
+  const clickTest = (name) =>
+    js(
+      `(() => { const el = document.querySelector('[data-test="${name}"]'); if (!el) return false;` +
+        ` const target = el.tagName === "BUTTON" ? el : el.querySelector("button") ?? el;` +
+        ` target.click(); return true; })()`,
+    );
+
+  for (const page of ["lan", "pair", "stored", "inbox", "account"]) {
+    check(`the ${page} row clicked`, await clickTest(`nav-${page}`));
+    const state = await js(
+      `(() => { const section = document.querySelector('[data-test="help"]'); if (!section) return null;` +
+        ` const toggle = section.querySelector('[data-test="help-toggle"]');` +
+        ` const body = section.querySelector('[data-test="help-body"]');` +
+        ` const box = toggle.getBoundingClientRect();` +
+        ` return { page: section.dataset.page, expanded: toggle.getAttribute("aria-expanded"),` +
+        ` hidden: body.hidden, height: Math.round(box.height), width: Math.round(box.width),` +
+        ` controls: toggle.getAttribute("aria-controls") === body.id }; })()`,
+    );
+    check(`${page} ends with help`, state !== null, String(state));
+    if (state === null) continue;
+    check(`the help is this screen's`, state.page === page, JSON.stringify(state));
+    // Closed first: a reader who knows the screen should not scroll past an
+    // essay to reach its controls.
+    check(`${page} help starts closed`, state.expanded === "false" && state.hidden === true, JSON.stringify(state));
+    // A real control, not a triangle in a column of grey text. The whole row is
+    // the target and it is the height every other control here is.
+    check(`${page} help is a real control`, state.height >= 32 && state.width > 200, JSON.stringify(state));
+    check(`${page} help names what it opens`, state.controls === true, JSON.stringify(state));
+
+    check(`${page} help opens`, await clickTest("help-toggle"));
+    const opened = await js(
+      `(() => { const s = document.querySelector('[data-test="help"]');` +
+        ` const body = s.querySelector('[data-test="help-body"]');` +
+        ` const text = (n) => s.querySelector('[data-test="' + n + '"]')?.textContent?.trim() ?? "";` +
+        ` return { expanded: s.querySelector('[data-test="help-toggle"]').getAttribute("aria-expanded"),` +
+        ` hidden: body.hidden, steps: s.querySelectorAll('[data-test="help-steps"] li').length,` +
+        ` purpose: text("help-purpose").length, boundary: text("help-boundary").length,` +
+        ` where: text("help-where").length, failure: text("help-failure").length,` +
+        ` recovery: text("help-recovery").length }; })()`,
+    );
+    check(`${page} help expands`, opened.expanded === "true" && opened.hidden === false, JSON.stringify(opened));
+    check(`${page} help gives three steps`, opened.steps === 3, JSON.stringify(opened));
+    // All six answered. A screen answering five is the state the table exists
+    // to prevent, and it would look fine until somebody needed the sixth.
+    for (const answer of ["purpose", "boundary", "where", "failure", "recovery"]) {
+      check(`${page} help answers ${answer}`, opened[answer] > 0, JSON.stringify(opened));
+    }
+    check(`${page} help closes again`, await clickTest("help-toggle"));
+  }
+}
+
 /**
  * The app can be driven without a mouse, and honours a request for less motion.
  *
