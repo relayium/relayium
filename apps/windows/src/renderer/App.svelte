@@ -52,6 +52,7 @@
   import type { ReceiveBridge } from "./receive/receive-coordinator.js";
   import { RevealController, type RevealBridge } from "./receive/reveal-controller.svelte.js";
   import { ReceivedController, type ReceivedBridge } from "./receive/received-controller.svelte.js";
+  import { OfferAnnouncer } from "./receive/offer-announcer.js";
   import PendingSelection from "./pages/PendingSelection.svelte";
   import PairHandoff from "./pages/PairHandoff.svelte";
   import { PairHandoffController } from "./pair/pair-handoff-controller.svelte.js";
@@ -640,6 +641,8 @@
    */
   let seenInbound = new Map<RoomController, number>();
   let announcedSas = new Set<RoomController>();
+  /** The rule lives in its own module, where it can be tested. */
+  const offers = new OfferAnnouncer<RoomController, object>();
   $effect(() => {
     void revision;
     for (const room of [lanRoom, pairRoom]) {
@@ -663,6 +666,20 @@
         void bridge.resident.notify({ kind: "attention" }).catch(() => undefined);
       }
       if (!waiting) announcedSas.delete(room);
+
+      // ## An offer nobody has answered yet
+      //
+      // The one event a person has no other way to notice: nothing was clicked
+      // to start it, the window may not be in front of them, and until it is
+      // answered the sender is waiting. The card behind the window carries the
+      // peer, the names and the count; this carries none of them, because it is
+      // shown where anyone standing there can read it.
+      //
+      // Suppression while focused is left to main and is right: somebody
+      // looking at the offer card does not need telling about it.
+      if (offers.shouldAnnounce(room, room.workspace.incoming)) {
+        void bridge.resident.notify({ kind: "incoming" }).catch(() => undefined);
+      }
     }
   });
 

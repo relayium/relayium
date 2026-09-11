@@ -6,6 +6,31 @@ import { translator } from "../../src/main/l10n.js";
 
 const t = translator("en");
 
+describe("an offer nobody has answered yet", () => {
+  it("names no peer, no file and no count", () => {
+    // All of that is on the offer card, behind the window. This is shown where
+    // whoever is standing there can read it.
+    for (const locale of ["en", "zh-Hans"] as const) {
+      const content = present({ kind: "incoming" }, translator(locale));
+      const said = `${content.title} ${content.body}`;
+      expect(said).not.toMatch(/\d/);
+      expect(said).not.toMatch(/\.[a-z0-9]{2,4}\b/i);
+      expect(content.title.trim()).not.toBe("");
+      expect(content.body.trim()).not.toBe("");
+    }
+  });
+
+  it("is not the one that says files ARRIVED", () => {
+    // The difference is the whole point: one is a question waiting for an
+    // answer, the other is an outcome. Announcing an offer as an arrival would
+    // tell somebody their files are in when nobody has accepted them.
+    const offered = present({ kind: "incoming" }, t);
+    const landed = present({ kind: "saved", files: 1 }, t);
+    expect(offered.title).not.toBe(landed.title);
+    expect(offered.body).not.toBe(landed.body);
+  });
+});
+
 describe("an upload that finished says so, and says nothing else", () => {
   it("names neither the link nor anything in it", () => {
     // The link IS the secret: its fragment carries the key. A notification is
@@ -41,6 +66,7 @@ describe("notifications say counts and closed codes, nothing else", () => {
       { kind: "attention" },
       { kind: "failed" },
       { kind: "link-ready" },
+      { kind: "incoming" },
     ];
     for (const event of events) {
       for (const locale of ["en", "zh-Hans"] as const) {

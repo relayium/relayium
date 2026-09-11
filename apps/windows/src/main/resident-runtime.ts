@@ -420,9 +420,20 @@ export class ResidentRuntime {
     this.notify({ kind: "failed" });
   }
 
-  /** Something only the page can see. A closed kind; main writes the words. */
+  /**
+   * Something only the page can see. A closed kind; main writes the words.
+   *
+   * Mapped by name rather than by a pair of ternaries, so a kind added to the
+   * closed set is a compile error here instead of quietly arriving as whichever
+   * branch the last `else` happened to be.
+   */
   onNotice(notice: ResidentNotice): void {
-    this.notify(notice === "attention" ? { kind: "attention" } : { kind: "saved-message" });
+    const EVENT: Readonly<Record<ResidentNotice, NotificationEvent>> = {
+      attention: { kind: "attention" },
+      "saved-message": { kind: "saved-message" },
+      incoming: { kind: "incoming" },
+    };
+    this.notify(EVENT[notice]);
   }
 
   /** Open a page, bringing the window forward first — the tray's other job. */

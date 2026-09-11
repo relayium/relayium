@@ -146,6 +146,25 @@ function runtime(
   });
 }
 
+describe("a notice the page raises becomes the right notification", () => {
+  it("maps every kind in the closed set to its own event", () => {
+    // Mapped by NAME in the runtime, so a kind added to the set is a compile
+    // error there rather than arriving as whichever branch an else happened to
+    // be. This is the runtime half of that: each kind produces its own words.
+    const seen = new Set<string>();
+    for (const notice of ["saved-message", "attention", "incoming"] as const) {
+      const { platform, events } = fakePlatform();
+      runtime({ platform }).onNotice(notice);
+      const last = events.at(-1) ?? "";
+      expect(last.startsWith("notify:"), notice).toBe(true);
+      seen.add(last);
+    }
+    // Distinct: announcing an offer with the words for a message that arrived
+    // would tell somebody something landed when nobody has accepted anything.
+    expect(seen.size).toBe(3);
+  });
+});
+
 describe("closing the window is not quitting", () => {
   it("hides, and tears nothing down", async () => {
     const { platform, events } = fakePlatform();

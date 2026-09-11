@@ -76,6 +76,7 @@ import { OsEntryService } from "./features/os-entry.js";
 import { PairHandoffService } from "./features/pair-handoff.js";
 import { ReceivedDragService } from "./features/received-drag.js";
 import { isReceivedAction } from "../shared/received-drag.js";
+import { isResidentNotice } from "../shared/ipc-contract.js";
 import { isPairHandoffAction } from "../shared/pair-handoff.js";
 import { openApprovedExternal } from "./window.js";
 
@@ -1938,9 +1939,7 @@ export function registerHandlers(
     const kind = body["kind"];
     // A closed set. The page cannot supply a title, a body, a name or a count:
     // it names a KIND, and main writes every word the user sees.
-    if (kind !== "saved-message" && kind !== "attention") {
-      throw new IpcRefusal("unknown notice");
-    }
+    if (!isResidentNotice(kind)) throw new IpcRefusal("unknown notice");
     events.onNotice?.(kind);
     return { accepted: true };
   });

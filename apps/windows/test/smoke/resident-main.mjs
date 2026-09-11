@@ -3504,6 +3504,15 @@ async function scenarioResidentSurfaces(win, runtime) {
     win,
     `globalThis.relayium.resident.notify({ kind: "whatever" }).then(() => false, () => true)`,
   );
+
+  // The closed set is defined once and the boundary uses it, so a kind the
+  // product added is accepted HERE without a second edit — and the check above
+  // proves the set is still closed.
+  const offered = await js(
+    win,
+    `globalThis.relayium.resident.notify({ kind: "incoming" }).then(() => true, () => false)`,
+  );
+  check("an incoming offer is a notice the page may raise", offered === true);
   check("an unknown notice is refused", refused === true);
 }
 

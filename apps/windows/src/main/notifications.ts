@@ -38,7 +38,15 @@ export type NotificationEvent =
    * standing there and retained by the system after it is dismissed. This says
    * that there is something to collect and where, and nothing about what.
    */
-  | { readonly kind: "link-ready" };
+  | { readonly kind: "link-ready" }
+  /**
+   * Somebody is offering to send files, and nobody has answered yet.
+   *
+   * No peer, no names, no count. The offer card carries all of that behind the
+   * window; this exists for the person who cannot see it, and a lock screen is
+   * not where any of it belongs.
+   */
+  | { readonly kind: "incoming" };
 
 export interface NotificationContent {
   readonly title: string;
@@ -51,6 +59,7 @@ const TITLE: Readonly<Record<NotificationEvent["kind"], MessageKey>> = {
   attention: "resident.notify.attentionTitle",
   failed: "resident.notify.failedTitle",
   "link-ready": "resident.notify.linkReadyTitle",
+  incoming: "resident.notify.incomingTitle",
 };
 
 const BODY: Readonly<Record<NotificationEvent["kind"], MessageKey>> = {
@@ -59,6 +68,7 @@ const BODY: Readonly<Record<NotificationEvent["kind"], MessageKey>> = {
   attention: "resident.notify.attentionBody",
   failed: "resident.notify.failedBody",
   "link-ready": "resident.notify.linkReadyBody",
+  incoming: "resident.notify.incomingBody",
 };
 
 /**

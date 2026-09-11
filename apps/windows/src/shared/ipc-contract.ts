@@ -1075,7 +1075,26 @@ export interface ResidentSnapshot {
 }
 
 /** What the page may ask main to announce. Facts main cannot observe itself. */
-export type ResidentNotice = "saved-message" | "attention";
+/**
+ * Something the page can see and main cannot.
+ *
+ * `incoming` is an offer waiting on the user. It is the page's to report
+ * because the session lives in the room the page owns, and it is worth
+ * reporting because the window may not be in front of anyone: nothing was
+ * clicked to start it, and until it is answered the sender is waiting.
+ */
+export type ResidentNotice = "saved-message" | "attention" | "incoming";
+
+/**
+ * The closed set, in one place.
+ *
+ * The handler used to restate it as a pair of comparisons, so adding a kind
+ * meant remembering to widen a condition in another file — and forgetting would
+ * refuse the new kind at the boundary while every type checked.
+ */
+export function isResidentNotice(value: unknown): value is ResidentNotice {
+  return value === "saved-message" || value === "attention" || value === "incoming";
+}
 
 /** The largest draft count that will be believed. Beyond it the page is not
  *  describing a person's unsent messages. */
