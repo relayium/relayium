@@ -622,7 +622,7 @@ async function main() {
   if (!check("file send verb absent before the run", !regKeyExists(SEND_FILE_KEY), SEND_FILE_KEY)) return;
   if (!check("folder send verb absent before the run", !regKeyExists(SEND_DIR_KEY), SEND_DIR_KEY)) return;
   {
-    const link = join(process.env.APPDATA ?? "", "Microsoft", "Windows", "SendTo", "Relayium.lnk");
+    const link = path.join(process.env.APPDATA ?? "", "Microsoft", "Windows", "SendTo", "Relayium.lnk");
     if (!check("SendTo shortcut absent before the run", !existsSync(link), link)) return;
   }
   if (!check(
@@ -706,7 +706,7 @@ async function main() {
   );
 
   // ---- the SendTo shortcut, the bulk path --------------------------------
-  const sendToLink = join(process.env.APPDATA ?? "", "Microsoft", "Windows", "SendTo", "Relayium.lnk");
+  const sendToLink = path.join(process.env.APPDATA ?? "", "Microsoft", "Windows", "SendTo", "Relayium.lnk");
   if (check("SendTo shortcut created", existsSync(sendToLink), sendToLink)) {
     const link = readShortcut(sendToLink);
     if (check("SendTo shortcut is readable", link !== null)) {
@@ -1048,7 +1048,7 @@ async function main() {
     check("folder send verb removed", !regKeyExists(SEND_DIR_KEY));
     check(
       "SendTo shortcut removed",
-      !existsSync(join(process.env.APPDATA ?? "", "Microsoft", "Windows", "SendTo", "Relayium.lnk")),
+      !existsSync(path.join(process.env.APPDATA ?? "", "Microsoft", "Windows", "SendTo", "Relayium.lnk")),
     );
     // The point of the whole guard: an uninstall must not take the keys.
     check("private data root PRESERVED by uninstall", existsSync(secretsDir), secretsDir);
@@ -1083,7 +1083,7 @@ async function main() {
  * target case has already spent the previous one.
  */
 async function sendToArgsOwnershipPhase() {
-  const sendToLink = join(process.env.APPDATA ?? "", "Microsoft", "Windows", "SendTo", "Relayium.lnk");
+  const sendToLink = path.join(process.env.APPDATA ?? "", "Microsoft", "Windows", "SendTo", "Relayium.lnk");
   const dir = path.join(runnerTemp, "relayium acceptance", "args", "Relayium");
   owned.argsInstallParent = path.dirname(path.dirname(dir));
 
@@ -1144,7 +1144,7 @@ async function schemeOwnershipPhase() {
   // somewhere else. Our flag is kept deliberately — only the program differs —
   // so an uninstaller that matched on the name, or on the arguments alone,
   // would take it.
-  const sendToLink = join(process.env.APPDATA ?? "", "Microsoft", "Windows", "SendTo", "Relayium.lnk");
+  const sendToLink = path.join(process.env.APPDATA ?? "", "Microsoft", "Windows", "SendTo", "Relayium.lnk");
   const foreignTarget = "C:\\Windows\\System32\\notepad.exe";
   let foreignLinkWritten = false;
   if (existsSync(sendToLink)) {

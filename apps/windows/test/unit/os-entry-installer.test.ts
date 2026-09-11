@@ -11,6 +11,7 @@
 // and all invisible until a user's machine is wrong.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const nsh = readFileSync(
@@ -224,5 +225,68 @@ describe("the template stays honest about what it cannot do", () => {
 
   it("documents that SendTo is still bounded by the command line", () => {
     expect(nsh).toContain("command-line limit");
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// The installed driver's identifiers actually resolve
+// ---------------------------------------------------------------------------
+//
+// A bare `join(...)` shipped to a Windows runner and threw `ReferenceError: join
+// is not defined` at line 625, before the installer had run — the file imports
+// `path` as a default, not `{ join }`. `node --check` passed it, because parsing
+// is grammar: the call is well-formed whether or not the name exists.
+//
+// So the binding is checked here, statically, on every run of this suite. The
+// driver itself cannot run on this host, which is exactly why nothing else would
+// have caught it before CI did.
+const driver = readFileSync(
+  fileURLToPath(new URL("../smoke/installed-acceptance.mjs", import.meta.url)),
+  "utf8",
+);
+
+describe("the installed-acceptance driver resolves every name it uses", () => {
+  it("imports `path` as a default and never calls a bare join", () => {
+    expect(driver).toContain('import path from "node:path"');
+    // The precise defect: `join(` not preceded by a dot or a word character.
+    expect(driver).not.toMatch(/(?<![.\w])join\(/);
+  });
+
+  it("binds every identifier it reads", () => {
+    // Through the TYPESCRIPT COMPILER, not a scope walker written here.
+    //
+    // The first version of this guard was a hand-rolled AST walk, and it was
+    // wrong within minutes: it reported `close` as unbound because it had no
+    // case for a class method's name. Rediscovering JavaScript's scoping rules
+    // in a test is a second implementation to get wrong, and the project
+    // already depends on a compiler that knows them.
+    //
+    // Only the missing-name diagnostics are read — 2304 "Cannot find name" and
+    // 2552 "Cannot find name, did you mean" — so this stays a BINDING check.
+    // Whatever else `checkJs` would say about an untyped driver is a different
+    // question and is not asserted here.
+    const driverPath = fileURLToPath(new URL("../smoke/installed-acceptance.mjs", import.meta.url));
+    const program = ts.createProgram([driverPath], {
+      allowJs: true,
+      checkJs: true,
+      noEmit: true,
+      skipLibCheck: true,
+      module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      target: ts.ScriptTarget.ES2022,
+      typeRoots: [fileURLToPath(new URL("../../node_modules/@types", import.meta.url))],
+    });
+    const source = program.getSourceFile(driverPath);
+    expect(source).toBeDefined();
+
+    const missing = program
+      .getSemanticDiagnostics(source)
+      .filter((d) => d.code === 2304 || d.code === 2552)
+      .map((d) => {
+        const { line } = source!.getLineAndCharacterOfPosition(d.start ?? 0);
+        return `${line + 1}: ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`;
+      });
+    expect(missing).toEqual([]);
   });
 });
