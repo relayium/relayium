@@ -76,6 +76,11 @@ contextBridge.exposeInMainWorld("relayium", {
     clear: invoke("relayium:os-entry-clear"),
     onState: subscribe("relayium:os-entry-state-changed"),
   },
+  // The account authority moved. Carries no identity — a page learns THAT it
+  // changed and re-reads what it may know.
+  account: {
+    onAuthority: subscribe("relayium:account-authority"),
+  },
   // The pairing handoff. `copy` names an action and carries no text, so the
   // page cannot put a URL of its own on the clipboard through it.
   pairHandoff: {

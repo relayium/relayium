@@ -269,7 +269,7 @@ async function main() {
   check(
     "bridge exposed",
     parsed.keys.sort().join(",") ===
-      "accountSummary,appInfo,auth,ice,inbox,inboxSend,loginItem,osEntry,pair,pairHandoff,prefs,receive,receivedDrag,resident,send,signaling,stored,update",
+      "account,accountSummary,appInfo,auth,ice,inbox,inboxSend,loginItem,osEntry,pair,pairHandoff,prefs,receive,receivedDrag,resident,send,signaling,stored,update",
     parsed.keys.join(","),
   );
   check("no raw ipcRenderer in the page", parsed.hasIpc === false);

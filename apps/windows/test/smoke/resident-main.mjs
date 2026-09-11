@@ -1157,6 +1157,13 @@ async function main() {
   await scenarioStoredSendAmbiguous(win);
   await scenarioStoredSendCancelAndNavigation(win);
   await scenarioInboxQuitStay(win, runtime);
+  // The send scenarios sign in, because sending a link needs an account. The
+  // session is put back here, immediately before the scenario that needs it:
+  // `scenarioControlMetrics` measures the account screen's sign-in control, and
+  // everything after it is written against a signed-out session. Not earlier —
+  // the Inbox scenario above needs the account too.
+  await js(win, `globalThis.relayium.auth.signOut().then(() => "ok", () => "threw")`);
+  pollAnswer = { status: "pending" };
   await scenarioControlMetrics(win);
   await scenarioInboxAccountChange(win);
   await scenarioAnonymousAcrossSignOut(win);
@@ -1612,6 +1619,27 @@ async function pickFiles(win, files, testId = "send-files") {
 
 async function goToStored(win) {
   await js(win, `(() => { document.querySelector('[data-test="nav-stored"] button')?.click(); return true; })()`);
+  // ## Sending a link needs an account, so this establishes one
+  //
+  // The send half is gated when signed out, and these scenarios run after a
+  // sign-out earlier in this session. Signing in here makes them match
+  // production rather than driving a form the product does not offer in that
+  // state — the same shape `scenarioRestartedHistory` already uses for the
+  // Inbox. Waited for rather than sampled: the decision is about what the page
+  // shows, and reading it in the same tick as the click reads it too early.
+  await waitFor(
+    win,
+    "the stored page to settle",
+    `document.querySelector('[data-test="send-gate"]') !== null
+      || document.querySelector('[data-test="send-start"]') !== null
+      || document.querySelector('[data-test="send-cancel"]') !== null`,
+  );
+  if (await present(win, "send-gate-sign-in")) {
+    pollAnswer = { status: "ok", accessToken: "smoke-bearer", accountEmail: "smoke@example.invalid" };
+    const nonce = "stored-send-smoke-nonce";
+    await js(win, `globalThis.relayium.auth.start({ nonce: ${JSON.stringify(nonce)} })`);
+    await js(win, `globalThis.relayium.auth.poll({ nonce: ${JSON.stringify(nonce)} }).then((r) => r.status, () => "threw")`);
+  }
   // EITHER control: a send that is running replaces Start with Cancel, and
   // waiting only for Start would time out on exactly the case this scenario
   // exists to check — coming back to a page mid-upload.
@@ -3416,26 +3444,33 @@ async function scenarioStoredReceive(win, runtime) {
   const onPage = await waitFor(win, "the stored page", `document.querySelector('[data-test="stored-link"]') !== null`);
   if (!onPage) return;
 
-  // Send and history are BUILT now, so the page offers their real controls
-  // rather than naming them as absent. Asserted as structure — the pickers, the
-  // start control and the history section are present — because driving a full
-  // upload needs a signed-in account and an injected upload transport, which
-  // this scenario does not compose.
-  check("the send pickers are offered", (await present(win, "send-files")) === true);
-  check("the folder picker is offered", (await present(win, "send-folder")) === true);
-  check("the send action is offered", (await present(win, "send-start")) === true);
-  check(
-    "nothing is sendable until something is picked",
-    (await js(win, `document.querySelector('[data-test="send-start"]').disabled`)) === true,
-  );
-  check("the history section is present", (await present(win, "send-history-empty")) === true);
-  // The shared control vocabulary reaches the new section too.
+  // ## Signed out, the send half is GATED rather than greyed
+  //
+  // This scenario reaches the page after the sign-out earlier in this session,
+  // and sending a link needs an account. The controls are therefore absent and
+  // a gate stands in their place. Asserting that they are "offered but
+  // disabled" is what this used to do, and it pinned the behaviour the gate
+  // replaced: a greyed Start states no reason, and refusing only after somebody
+  // has chosen files spends the one action they took.
+  //
+  // That the page knows it is signed out AT ALL is the push this batch added:
+  // the sign-out was driven through the auth channel, not through the sign-in
+  // screen, so without it the page would still be describing an account that
+  // had gone.
+  check("the send half names what it needs", (await present(win, "send-gate")) === true);
+  check("and offers the way in", (await present(win, "send-gate-sign-in")) === true);
+  check("the pickers are not offered without an account", (await present(win, "send-files")) === false);
+  check("nor is a greyed send action", (await present(win, "send-start")) === false);
+  // Opening a link is anonymous and must survive the gate beside it.
+  check("opening a link is still offered", (await present(win, "stored-open")) === true);
+  // The shared control vocabulary reaches the gate too: its action is a real
+  // control, not a line of text somebody has to go looking for.
   const sendMetrics = await js(
     win,
-    `JSON.stringify({ start: Math.round(document.querySelector('[data-test="send-start"]').getBoundingClientRect().height) })`,
+    `JSON.stringify({ start: Math.round(document.querySelector('[data-test="send-gate-sign-in"]').getBoundingClientRect().height) })`,
   );
   process.stdout.write(`RELAYIUM_SEND_METRICS ${sendMetrics}\n`);
-  check("the send control is a real control", JSON.parse(sendMetrics).start >= 32, sendMetrics);
+  check("the gate's action is a real control", JSON.parse(sendMetrics).start >= 32, sendMetrics);
 
   // ## The link copy reaches the SYSTEM clipboard, or refuses visibly
   //

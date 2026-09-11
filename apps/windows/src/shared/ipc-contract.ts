@@ -565,6 +565,20 @@ export const IPC_EVENTS = {
    * for that receive, not a fact about the build that any page may act on.
    */
   receivedItems: "relayium:received-items",
+  /**
+   * The account authority moved: signed in, signed out, or swapped.
+   *
+   * A fact about this PROCESS that any page may act on, emitted on the current
+   * document like the inbox and account snapshots. It exists because the shell
+   * otherwise has no authoritative account state: the sign-in controller's
+   * phase is updated when the USER acts through the interface, so a change made
+   * anywhere else — a sign-out from another surface, a session that expired —
+   * would leave the screen describing an account that is gone.
+   *
+   * It carries no bearer, no email and no account id. A page learns THAT the
+   * authority moved and re-reads what it is allowed to know.
+   */
+  accountAuthority: "relayium:account-authority",
 } as const;
 
 export const IPC_EVENT_NAMES: readonly string[] = Object.values(IPC_EVENTS);

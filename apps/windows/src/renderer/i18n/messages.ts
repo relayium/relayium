@@ -140,7 +140,10 @@ export const en = {
   recvReveal: "Show in Explorer",
   /** The per-file list a finished receive announces. */
   recvFilesTitle: "Received files",
-  /** The one action that ends being signed out. Used beside a refusal that said so. */
+  /** The gate that stands in for a half this account cannot use. */
+  gateSignedOutSendTitle: "Sending a link needs an account",
+  gateSignedOutSendBody: "Links are hosted under your account, so this half needs you signed in. Opening a link somebody sent you does not.",
+  /** The one action that ends being signed out. */
   gateSignIn: "Sign in",
   /** Shows ONE file rather than the folder the batch went to. */
   recvShowFile: "Show",
@@ -627,6 +630,8 @@ export const zh: Record<MessageKey, string> = {
   recvSavedCount: "已保存 {done} / {total}",
   recvReveal: "在文件资源管理器中显示",
   recvFilesTitle: "已接收的文件",
+  gateSignedOutSendTitle: "发送链接需要账户",
+  gateSignedOutSendBody: "链接托管在你的账户下，因此这一半需要登录。打开别人发来的链接则不需要。",
   gateSignIn: "登录",
   recvShowFile: "显示",
   recvDragHint: "将文件拖出即可复制到其他位置。",

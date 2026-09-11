@@ -34,7 +34,7 @@
   import type { PickedFile } from "../../../../../web/src/lib/drag";
   import { sendGate } from "../send/send-gate.svelte.js";
 
-  let { stored, send, account, offered = "", onConsumed, onSignIn }: {
+  let { stored, send, account, offered = "", onConsumed, signedOut, onSignIn }: {
     /** App-lived: a transfer, its progress and the draft all outlive this page. */
     stored: StoredController;
     /** App-lived for the same reasons, plus one that is stronger: the picked
@@ -51,6 +51,14 @@
     /** A link Windows handed this window. Shown, never acted on by itself. */
     offered?: string;
     onConsumed?: () => void;
+    /**
+     * Definitely signed out, as opposed to not yet known.
+     *
+     * Authoritative because the shell re-reads it whenever main says the
+     * account moved. Gating on a value that only changed when the user acted
+     * would hide this half from somebody who is signed in.
+     */
+    signedOut: boolean;
     /** Takes the reader to the account screen, for a refusal that needs one. */
     onSignIn?: () => void;
   } = $props();
@@ -263,6 +271,19 @@
   button, and is not stored anywhere.
 -->
 <Card title={t("sendHeading")}>
+  {#if signedOut}
+    <!-- Signed out, the gate IS this half. A greyed Send names no reason and
+         offers no way forward, and refusing only AFTER somebody has chosen
+         their files spends the one action they took. Opening a link is
+         anonymous and stays available below, untouched. -->
+    <p data-test="send-gate">{t("gateSignedOutSendTitle")}</p>
+    <p class="dim small">{t("gateSignedOutSendBody")}</p>
+    {#if onSignIn}
+      <button class="primary" type="button" data-test="send-gate-sign-in" onclick={onSignIn}>
+        {t("gateSignIn")}
+      </button>
+    {/if}
+  {:else}
   <p class="dim">{t("sendBody")}</p>
 
   <!-- The native pickers. `webkitdirectory` opens the Windows folder dialog;
@@ -463,6 +484,7 @@
     {:else}
       <p class="dim" data-test="send-cancelled">{t("sendCancelled")}</p>
     {/if}
+  {/if}
   {/if}
 </Card>
 

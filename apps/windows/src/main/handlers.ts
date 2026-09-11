@@ -1812,6 +1812,10 @@ export function registerHandlers(
       // reaches neither, which is why receiving and an in-flight send survive
       // a reload.
       router.emit(IPC_EVENTS.storedSendAccount, router.generation, { epoch, signedIn });
+      // The shell's own signal, from the SAME computed values, so the two can
+      // never disagree about whether there is an account. Stored send keeps its
+      // feature-scoped channel because it acts on the epoch specifically.
+      router.emit(IPC_EVENTS.accountAuthority, router.generation, { epoch, signedIn });
     })().catch((err: unknown) => events.reportFailure?.(err));
   });
 

@@ -92,6 +92,7 @@
       update: UpdateSummaryBridge;
       osEntry: OsEntryBridge;
       pairHandoff: PairHandoffBridge;
+      account: { onAuthority(cb: (payload: unknown) => void): () => void };
       receivedDrag: ReceivedBridge;
     };
 
@@ -309,6 +310,42 @@
    * One instance for the life of the window: only the latest receipt is held,
    * and main holds the folder.
    */
+  /**
+   * Phases in which nothing is being decided, so a re-read cannot interrupt.
+   *
+   * A sign-in in flight publishes its own phases — `starting`, `waiting`,
+   * `cancelling` — and refreshing on top of one would replace a device code the
+   * user is reading with whatever main last settled on.
+   */
+  const SETTLED = ["loading", "signedOut", "signedIn", "storeProblem", "failed"];
+
+  /**
+   * Main says the account authority moved; this page re-reads what it is.
+   *
+   * Without it the only sign-in state here is whatever the controller last set,
+   * which it does when the USER acts — so a sign-out from anywhere else left
+   * the screen describing an account that was gone. The push carries no
+   * identity: it says THAT it changed, and the re-read is the authoritative
+   * answer.
+   */
+  onDestroy(
+    bridge.account.onAuthority(() => {
+      if (!SETTLED.includes(phase.kind)) return;
+      void controller.refresh();
+    }),
+  );
+
+  /**
+   * Definitely signed out, as opposed to not yet known.
+   *
+   * Safe to gate on ONLY because of the subscription above: without it this is
+   * a page-local guess that goes stale, and a gate built on a stale guess hides
+   * a working feature. `loading` never gates — it would flash on every start —
+   * and neither does `storeProblem`, which is a different fault that signing in
+   * does not fix.
+   */
+  const signedOut = $derived(phase.kind === "signedOut");
+
   const reveal = new RevealController(bridge.receive);
 
   /**
@@ -762,6 +799,7 @@
       {stored}
       {send}
       account={accountSummary}
+      {signedOut}
       onSignIn={() => goTo("account")}
       offered={storedLinkOffer}
       onConsumed={() => {
