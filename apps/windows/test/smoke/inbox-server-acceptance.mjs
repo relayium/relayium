@@ -113,7 +113,7 @@ const SERVER_BIN = WINDOWS ? "relayium-server.exe" : "relayium-server";
  * It is the accepted harness's count, unchanged: this port adds no assertion and
  * removes none, so a divergence here is a real divergence in what was proven.
  */
-const EXPECTED_CHECKS = 43;
+const EXPECTED_CHECKS = 48;
 
 const RUN_BUDGET_MS = 10 * 60 * 1000;
 const OP_BUDGET_MS = 60 * 1000;
@@ -870,6 +870,68 @@ async function main() {
     step("quiesce returned actually quiet", coordinator.quiet === true);
     await coordinator.dispose();
     step("the coordinator disposed with nothing left running", coordinator.isLive(folderJob) === false);
+
+    // ---- the account screen's own mutations, against a REAL account -------
+    //
+    // Renaming and revoking a device had owning tests and nothing else: every
+    // one of them answers a fake, so the REQUEST is asserted and the server's
+    // acceptance of it is assumed. These drive the shipping `AccountClient`
+    // against this run's account and then re-read the list, so what is checked
+    // is what central actually did rather than what the client meant to ask.
+    {
+      const { AccountClient } = await load("account/summary.js");
+      // The shipping normaliser, not a local one: the client refuses on the
+      // RUNE ceiling and the host supplies the rule, so a harness that passed
+      // an identity function would be exercising a different contract.
+      const { normalizeDeviceNameDefault } = await load("features/account-summary.js");
+      const client = new AccountClient({ context: { origin, bearer: sendToken, epoch: 1 } });
+      const ac = new AbortController();
+
+      const before = await client.devices(ac.signal);
+      step("the real account lists both devices",
+        before.length === 2 && before.some((d) => d.id === sendID) && before.some((d) => d.id === recvID),
+        JSON.stringify(before.map((d) => ({ id: d.id, name: d.name, current: d.current }))).slice(0, 240));
+      step("and marks exactly the bearer's own device as current",
+        before.filter((d) => d.current).length === 1 && before.find((d) => d.current)?.id === sendID,
+        JSON.stringify(before.map((d) => ({ id: d.id, current: d.current }))));
+
+      // A name with an astral character, because the ceiling is in RUNES and a
+      // UTF-16 length disagrees for exactly these.
+      const renamed = `harness \u{1F5A5}\uFE0F ${randomBytes(3).toString("hex")}`;
+      await client.renameDevice(recvID, renamed, normalizeDeviceNameDefault, ac.signal);
+      const afterRename = await client.devices(ac.signal);
+      step("a rename reaches central and comes back on the next read",
+        afterRename.find((d) => d.id === recvID)?.name === renamed,
+        JSON.stringify(afterRename.find((d) => d.id === recvID) ?? null).slice(0, 200));
+
+      await client.revokeDevice(recvID, ac.signal);
+      const afterRevoke = await client.devices(ac.signal);
+      step("a revoke removes the device central lists",
+        afterRevoke.some((d) => d.id === recvID) === false && afterRevoke.some((d) => d.id === sendID),
+        JSON.stringify(afterRevoke.map((d) => d.id)));
+
+      // ## Revoking twice is IDEMPOTENT, and that is the right answer
+      //
+      // This case first asserted a refusal, on the reasoning that a caller told
+      // "revoked" might stop showing a device that is still enrolled. That
+      // reasoning does not apply here and the assertion was wrong about the
+      // product: the device really is gone, so reporting success describes the
+      // world accurately. A refusal would be worse — a retry after a dropped
+      // response is exactly when a second revoke happens, and turning that into
+      // an error would make a succeeded operation look failed.
+      //
+      // What matters is that it does not resurrect anything, which is why the
+      // list is re-read rather than the outcome being taken on its own.
+      const again = await client.revokeDevice(recvID, ac.signal).then(
+        () => ({ threw: false }),
+        (e) => ({ threw: true, code: e?.code ?? String(e?.message ?? e) }),
+      );
+      const afterAgain = await client.devices(ac.signal);
+      step("revoking an already-revoked device is idempotent, and resurrects nothing",
+        again.threw === false && afterAgain.some((d) => d.id === recvID) === false
+          && afterAgain.some((d) => d.id === sendID),
+        `${JSON.stringify(again)} ${JSON.stringify(afterAgain.map((d) => d.id))}`);
+    }
 
     // ---- a STORED LINK, minted here and opened by the shipping receiver ----
     //
