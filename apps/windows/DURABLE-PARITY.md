@@ -90,6 +90,15 @@ Still required for parity:
 * **Real-network transfer demonstrated.** Everything proven so far is one
   runner and a loopback server.
 * **Signing, installer and upgrade acceptance**, each its own gate.
+* **Authoritative sign-in state in the renderer.** macOS gates a feature that
+  needs an account BEFORE the user acts: signed out, the gate is the surface.
+  The Device Inbox does that on Windows because its status comes from main. The
+  send half cannot yet: the only sign-in state the renderer has is the sign-in
+  controller's `phase`, which updates when the user acts through the UI and can
+  therefore be stale in both directions — hiding a working feature, or offering
+  one that will refuse. A refusal now carries the action that resolves it, which
+  is truthful because main produced the verdict; a whole-surface gate needs a
+  pushed account state first.
 * **A supported-version gate, before the first public release.** macOS refuses
   to build its content at all when the served policy says the build is below
   minimum, so a stale binary opens no socket. Windows has no equivalent and
