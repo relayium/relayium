@@ -196,7 +196,7 @@ describeOnWindows("the update core over the native helper", () => {
     expect(after.candidate?.receipt).toBe(before.candidate?.receipt);
     expect(after.candidate?.nonce).toBe(before.candidate?.nonce);
     expect(await exeCount(first.staging)).toBe(1);
-  });
+  }, 20000);
 
   it("preserves a replacement, and still cleans up what it does own", async () => {
     const first = await world();
@@ -244,7 +244,12 @@ describeOnWindows("the update core over the native helper", () => {
     expect((await superseded.reverifyStaged()).kind).toBe("up-to-date");
     await superseded.quiesce();
     expect(await exeCount(clean.staging)).toBe(0);
-  });
+  // Real filesystem work, several installations deep: two full check/download/
+  // quiesce cycles plus a staged replacement. The 5s default is a development
+  // host's margin, and the Windows runner has less of it — this timed out there
+  // on a case that had been passing, which is a bound that does not fit the
+  // work rather than a hang. The repository's idiom for that is an explicit one.
+  }, 20000);
 
   it("refuses a junction at the staging directory and leaves its target alone", async () => {
     const w = await world();
