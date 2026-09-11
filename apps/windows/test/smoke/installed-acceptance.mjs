@@ -93,6 +93,19 @@ const PROFILE_DIR_CANDIDATES = ["relayium-windows", "Relayium"];
 
 const SCHEME_KEY = "HKCU\\Software\\Classes\\relayium";
 const SEND_VERB = "RelayiumSendFiles";
+/**
+ * The two shortcuts a person launches this app from.
+ *
+ * One definition, used by all three assertions — absent before, created by the
+ * install, gone after the uninstall. Written out twice they could disagree, and
+ * the direction that would silently pass is the one that matters: a residue
+ * check looking at a path the installer never used always finds nothing.
+ */
+const LAUNCH_SHORTCUTS = [
+  ["Start Menu", path.join(process.env.APPDATA ?? "", "Microsoft", "Windows", "Start Menu", "Programs", "Relayium.lnk")],
+  ["Desktop", path.join(process.env.USERPROFILE ?? "", "Desktop", "Relayium.lnk")],
+];
+
 const SEND_FILE_KEY = `HKCU\\Software\\Classes\\*\\shell\\${SEND_VERB}`;
 const SEND_DIR_KEY = `HKCU\\Software\\Classes\\Directory\\shell\\${SEND_VERB}`;
 const SCHEME_CMD_KEY = `${SCHEME_KEY}\\shell\\open\\command`;
@@ -648,6 +661,11 @@ async function main() {
   {
     const link = path.join(process.env.APPDATA ?? "", "Microsoft", "Windows", "SendTo", "Relayium.lnk");
     if (!check("SendTo shortcut absent before the run", !existsSync(link), link)) return;
+    // The same precondition for the launch shortcuts. Without it, "created by
+    // the install" would be satisfied by one a previous run left behind.
+    for (const [what, shortcut] of LAUNCH_SHORTCUTS) {
+      if (!check(`${what} shortcut absent before the run`, !existsSync(shortcut), shortcut)) return;
+    }
   }
   if (!check(
     "relayium class key absent before the run",
@@ -772,10 +790,7 @@ async function main() {
   // two files to each other; this pins them to what the installer actually
   // wrote on a real machine, which is the only one of the three that Windows
   // reads.
-  for (const [what, link] of [
-    ["Start Menu", path.join(process.env.APPDATA ?? "", "Microsoft", "Windows", "Start Menu", "Programs", "Relayium.lnk")],
-    ["Desktop", path.join(process.env.USERPROFILE ?? "", "Desktop", "Relayium.lnk")],
-  ]) {
+  for (const [what, link] of LAUNCH_SHORTCUTS) {
     if (!check(`${what} shortcut created`, existsSync(link), link)) continue;
     const shortcut = readShortcut(link);
     if (check(`${what} shortcut is readable`, shortcut !== null)) {
@@ -1433,6 +1448,12 @@ async function main() {
       "SendTo shortcut removed",
       !existsSync(path.join(process.env.APPDATA ?? "", "Microsoft", "Windows", "SendTo", "Relayium.lnk")),
     );
+    // The launch shortcuts go too. One left in the Start Menu after an
+    // uninstall is the residue a person actually sees: it opens nothing, and
+    // the app it names is gone.
+    for (const [what, shortcut] of LAUNCH_SHORTCUTS) {
+      check(`${what} shortcut removed`, !existsSync(shortcut), shortcut);
+    }
     // The point of the whole guard: an uninstall must not take the keys.
     check("private data root PRESERVED by uninstall", existsSync(secretsDir), secretsDir);
     check("sealed identity preserved by uninstall", hashSealed() === sealedBefore);
