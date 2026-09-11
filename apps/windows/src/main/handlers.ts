@@ -770,8 +770,24 @@ export function registerHandlers(
     writeClipboard: (text) => clipboard.writeText(text),
     // Main performs it, on a path main holds. `openPath` shows the folder;
     // it opens nothing inside it and takes nothing from the page.
+    //
+    // ## `openPath` REPORTS BY RETURN VALUE, not by rejecting
+    //
+    // Electron's own typings say it: the promise fulfils with an empty string
+    // on success and with an error MESSAGE on failure. Awaiting it and
+    // discarding the result therefore reported every refusal as a success —
+    // a missing folder, a permission denial, a path the shell will not open —
+    // and the page showed nothing at all while the user's folder never opened.
+    //
+    // The message itself is thrown away. It is the OS's own text and routinely
+    // contains the full path, which is the one thing this boundary exists to
+    // keep out of a renderer and out of a log; the caller needs to know THAT it
+    // failed, and `revealFolder` turns a throw into a closed code.
     revealDirectory: async (directory) => {
-      await shell.openPath(directory);
+      const failure = await shell.openPath(directory);
+      if (failure.length > 0) {
+        throw Object.assign(new Error("reveal was refused"), { code: "internal" });
+      }
     },
     // LAST, so an injected seam actually wins. Spread first — the shape the
     // stored-receive composition uses, where the keys are disjoint — the

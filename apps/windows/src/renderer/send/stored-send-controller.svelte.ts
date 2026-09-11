@@ -62,6 +62,20 @@ export interface StoredSendBridge {
   onAccount(cb: (payload: unknown) => void): () => void;
 }
 
+/**
+ * One chosen file and the path it will be sent under.
+ *
+ * Structurally `PickedFile` from the shared drag helper, restated here so this
+ * controller's contract does not depend on a module the renderer's drop path
+ * happens to use.
+ */
+export interface PickedEntry {
+  readonly file: File;
+  /** Relative, `/`-separated. `webkitRelativePath` for a picker, the walked
+   *  entry path for a drop, the leaf name when there is no structure. */
+  readonly path: string;
+}
+
 /** Why a send did not start. Closed codes; never the user's file names. */
 export type SendRefusal =
   | { readonly kind: "unavailable" }
@@ -73,7 +87,111 @@ export type SendRefusal =
 
 /** How many days a link may last, offered as the Mac offers them. */
 export const TTL_CHOICES: readonly number[] = [1, 7, 14];
-const DAY_SECONDS = 24 * 60 * 60;
+export const DAY_SECONDS = 24 * 60 * 60;
+
+/**
+ * What this account's plan allows a link to live for.
+ *
+ * Three answers, and the third is the one that matters. `0` from the server
+ * means UNLIMITED — it is not "no retention" and it is not a missing value. A
+ * plan that could not be READ is `unknown`, and unknown is NOT unlimited:
+ * treating a failed or still-loading usage read as "no cap" would offer a
+ * choice the server is about to clamp and tell the user their link lasts
+ * fourteen days when it will last one.
+ */
+export type RetentionCap =
+  | { readonly kind: "unlimited" }
+  | { readonly kind: "limited"; readonly seconds: number }
+  | { readonly kind: "unknown" };
+
+/**
+ * Read the cap out of an account view, without inventing one.
+ *
+ * The usage section owns it. Every state that is not `ready` — loading, failed,
+ * signed out — is `unknown`, because none of them is evidence about the plan.
+ */
+export function retentionCapOf(usage: {
+  readonly kind: string;
+  readonly value?: { readonly plan?: { readonly retentionSecs?: number } };
+}): RetentionCap {
+  if (usage.kind !== "ready") return { kind: "unknown" };
+  const seconds = usage.value?.plan?.retentionSecs;
+  if (typeof seconds !== "number" || !Number.isSafeInteger(seconds) || seconds < 0) {
+    return { kind: "unknown" };
+  }
+  // Zero is the server's word for unlimited. See `RetentionCap`.
+  return seconds === 0 ? { kind: "unlimited" } : { kind: "limited", seconds };
+}
+
+/**
+ * The cap as a duration a person can read — from the CAP, never from a preset.
+ *
+ * ## Why the highest fitting preset is not the cap
+ *
+ * The presets are 1, 7 and 14 days. A three-day plan fits only the first, so
+ * saying "up to {highest preset}" told a three-day account it keeps links for
+ * ONE day — understating what they pay for. And a sub-day cap fits no preset at
+ * all; the picker falls back to one day, and the same sentence then promised
+ * LONGER than the plan allows, which is the direction that actually misleads.
+ *
+ * Both are fixed by taking the number from `cap.seconds`. The unit is chosen so
+ * the figure is exact rather than rounded into a different claim: whole days
+ * where it divides, else whole hours, else minutes.
+ */
+export type CapDuration =
+  | { readonly unit: "day"; readonly count: number }
+  | { readonly unit: "hour"; readonly count: number }
+  | { readonly unit: "minute"; readonly count: number }
+  /** The exact figure, when no larger unit divides it evenly. */
+  | { readonly unit: "second"; readonly count: number };
+
+const HOUR_SECONDS = 60 * 60;
+
+export function capDuration(seconds: number): CapDuration {
+  // Largest unit that divides the cap EXACTLY, and seconds when none does.
+  // Nothing is floored and nothing is rounded, so the figure is never a claim
+  // about a different number: ninety seconds is "90 seconds", not the "1
+  // minute" a floor would have said or the "2 minutes" a ceiling would.
+  if (seconds >= DAY_SECONDS && seconds % DAY_SECONDS === 0) {
+    return { unit: "day", count: seconds / DAY_SECONDS };
+  }
+  if (seconds >= HOUR_SECONDS && seconds % HOUR_SECONDS === 0) {
+    return { unit: "hour", count: seconds / HOUR_SECONDS };
+  }
+  if (seconds >= 60 && seconds % 60 === 0) return { unit: "minute", count: seconds / 60 };
+  return { unit: "second", count: seconds };
+}
+
+/**
+ * Whether the chosen TTL is longer than the plan will actually keep it.
+ *
+ * True only when this side KNOWS the cap. An unknown cap cannot support the
+ * claim in either direction, which is why the page says it could not read the
+ * plan instead of predicting a clamp.
+ */
+export function exceedsCap(cap: RetentionCap, ttlDays: number): boolean {
+  return cap.kind === "limited" && ttlDays * DAY_SECONDS > cap.seconds;
+}
+
+/**
+ * Which day-choices this cap actually permits, and whether any were removed.
+ *
+ * An `unknown` cap offers everything: the server clamps regardless, and hiding
+ * choices on a guess would be inventing an entitlement in the other direction.
+ * What the page owes there is a SENTENCE, not a shorter list.
+ */
+export function allowedTtlChoices(cap: RetentionCap): {
+  readonly days: readonly number[];
+  readonly clamped: boolean;
+} {
+  if (cap.kind !== "limited") return { days: TTL_CHOICES, clamped: false };
+  const days = TTL_CHOICES.filter((choice) => choice * DAY_SECONDS <= cap.seconds);
+  // A cap shorter than every offered choice still leaves the shortest one: the
+  // server will clamp it, and an empty picker would be a control that cannot be
+  // used at all.
+  const usable = days.length > 0 ? days : [TTL_CHOICES[0] ?? 1];
+  return { days: usable, clamped: usable.length < TTL_CHOICES.length };
+}
 
 export class StoredSendController {
   /**
@@ -82,9 +200,48 @@ export class StoredSendController {
    * The SAME array reaches `descriptors` and `encryptFiles`. Replacing it is
    * how a new job begins; mutating it is never done.
    */
-  files = $state<readonly File[]>([]);
+  /**
+   * What the user chose, each with the RELATIVE PATH it will be sent under.
+   *
+   * ## Why the path is carried rather than re-derived from the File
+   *
+   * A `File` from `<input webkitdirectory>` knows its own `webkitRelativePath`.
+   * A `File` from a DROP does not — the structure lives in the
+   * `FileSystemEntry` tree the drop walked, and `picked-files.ts` returns it
+   * alongside each file. Storing only the `File` and re-deriving the name threw
+   * that away: `docs/note.txt` became `note.txt`, a dropped folder arrived
+   * flat, and two siblings called `note.txt` in different folders collided into
+   * one name in the manifest.
+   *
+   * So the pair is the unit, all the way to `entries` and `encryptFiles`. The
+   * File is never mutated — `webkitRelativePath` is read-only and faking it
+   * would be a lie the rest of the platform can see.
+   */
+  picked = $state<readonly PickedEntry[]>([]);
+
+  /** The files alone, in the same order, for the producer and for counts. */
+  get files(): readonly File[] {
+    return this.picked.map((entry) => entry.file);
+  }
   burnAfterRead = $state(false);
   ttlDays = $state(7);
+
+  /**
+   * Hold the choice to what the plan allows.
+   *
+   * Called when the cap becomes known. A selection the plan cannot honour is
+   * corrected HERE rather than left on screen to be silently clamped by the
+   * server — the user would otherwise be told fourteen days and get one, which
+   * is the specific lie this whole path exists to avoid.
+   */
+  applyRetentionCap(cap: RetentionCap): void {
+    if (this.busy) return;
+    const { days } = allowedTtlChoices(cap);
+    if (days.includes(this.ttlDays)) return;
+    // The longest the plan permits, not the shortest: clamping harder than the
+    // cap requires would take away something the account actually has.
+    this.ttlDays = days[days.length - 1] ?? days[0] ?? 1;
+  }
 
   busy = $state(false);
   committed = $state(0);
@@ -238,12 +395,31 @@ export class StoredSendController {
     return this.#attempt === attempt && this.#epoch === epoch;
   }
 
-  /** The user picked files or a folder. A new pick replaces the last one. */
+  /**
+   * The user picked files or a folder, through an `<input>`.
+   *
+   * The path comes from `webkitRelativePath`, which the picker populates for a
+   * folder pick and leaves empty for a file pick. A DROP must use
+   * `pickEntries`: its files carry no relative path at all.
+   */
   pick(files: readonly File[]): void {
+    this.pickEntries(
+      files.map((file) => ({
+        file,
+        // Read defensively: Chromium always defines it, but it is a
+        // `webkit`-prefixed extension and Node's `File` does not have it, which
+        // is where this controller's races are actually testable.
+        path: (file.webkitRelativePath ?? "").length > 0 ? file.webkitRelativePath : file.name,
+      })),
+    );
+  }
+
+  /** The user dropped files or folders, which carry their own paths. */
+  pickEntries(entries: readonly PickedEntry[]): void {
     if (this.busy) return;
     // Frozen here, so the array `encryptFiles` walks is the array the manifest
     // was planned from.
-    this.files = Object.freeze([...files]);
+    this.picked = Object.freeze([...entries]);
     this.outcome = null;
     this.refusal = null;
     this.link = null;
@@ -254,7 +430,7 @@ export class StoredSendController {
 
   clear(): void {
     if (this.busy) return;
-    this.files = [];
+    this.picked = [];
     this.outcome = null;
     this.refusal = null;
     this.link = null;
@@ -284,19 +460,21 @@ export class StoredSendController {
     this.linkJobId = null;
     this.committed = 0;
 
-    // The same array, in the same order, as `encryptFiles` will walk.
-    const picked = this.files;
-    const entries = picked.map((file) => ({
-      // `webkitRelativePath` when the user picked a folder, so the structure
-      // they chose is preserved; the leaf name otherwise.
+    // The same array, in the same order, as `encryptFiles` will walk — and the
+    // PATHS the user's selection actually carries, which a dropped file cannot
+    // be asked for afterwards.
+    const chosen = this.picked;
+    const picked = chosen.map((entry) => entry.file);
+    const entries = chosen.map((entry) => ({
+      // The path the SELECTION carries, not one re-derived from the File.
       //
-      // Read defensively. Chromium always defines it — empty for a file pick —
-      // but it is a `webkit`-prefixed extension rather than part of the File
-      // standard, and Node's `File` does not have it at all. Without this the
-      // controller could not be driven outside a browser, which is where its
-      // cancellation and ordering races are actually testable.
-      path: (file.webkitRelativePath ?? "").length > 0 ? file.webkitRelativePath : file.name,
-      size: file.size,
+      // A dropped file has no `webkitRelativePath` — the structure lived in the
+      // entry tree the drop walked — so deriving it here flattened a dropped
+      // folder and collided two siblings with the same basename into one
+      // manifest name. `pick` populates this from `webkitRelativePath` for the
+      // picker; `pickEntries` from the walked path for a drop.
+      path: entry.path,
+      size: entry.file.size,
     }));
 
     let started: StoredSendStart;

@@ -212,6 +212,8 @@ const inbox = {
   tasks: [],
   /** Every directory a reveal actually opened, in order. */
   revealed: [],
+  /** When set, the reveal adapter refuses the way the OS does. */
+  revealRefuses: false,
   // ---- the real-delivery half ---------------------------------------------
   /** THIS device's advertised public key, captured as main registers it. */
   publicKey: "",
@@ -558,6 +560,8 @@ const accountSink = {
   ],
   /** `0` is UNLIMITED here — the case the UI must never render as a meter. */
   storageCap: 0,
+  /** The plan's retention cap, in seconds. Fourteen days by default. */
+  retentionSecs: 1_209_600,
   async fetch(input, init) {
     const url = new URL(String(input));
     const method = init?.method ?? "GET";
@@ -605,7 +609,7 @@ const accountSink = {
           name: "Pro",
           storageBytes: accountSink.storageCap,
           trafficBytes: 10_737_418_240,
-          retentionSecs: 1_209_600,
+          retentionSecs: accountSink.retentionSecs,
           priceMonthly: 500,
           priceYearly: 5000,
           isTop: false,
@@ -818,6 +822,13 @@ async function main() {
         // machine it happens to be on.
         revealDirectory: async (directory) => {
           inbox.revealed.push(directory);
+          // The production adapter throws when `shell.openPath` answers with a
+          // non-empty string, which is how the OS reports a refusal. Modelled
+          // here so the run can prove the PAGE says so — a refusal that only
+          // main knows about is invisible to the person it happened to.
+          if (inbox.revealRefuses) {
+            throw Object.assign(new Error("reveal was refused"), { code: "internal" });
+          }
         },
         makeApi: () => inboxApi,
         // The Inbox's OWN destination factory, distinct from the stored one
@@ -938,6 +949,9 @@ async function main() {
   // The account screen, composed. After the Inbox scenarios because it signs in
   // through the same account they established.
   await scenarioAccountScreen(win);
+  // The Stored send card. AFTER the account screen, because its retention
+  // gating reads the plan that scenario proves is loaded.
+  await scenarioStoredSendCard(win);
   // Stored send, while the smoke is signed in and BEFORE any quit scenario.
   // A quit fences admissions and a Stay clears them; running the whole send
   // flow through that would be testing the fence, which has its own coverage,
@@ -1716,6 +1730,25 @@ async function scenarioInboxReceiptsAndReveal(win) {
     inbox.revealed[inbox.revealed.length - 1] === destinationDir,
     String(inbox.revealed[inbox.revealed.length - 1]),
   );
+
+  // ---- a refusal is VISIBLE ------------------------------------------------
+  //
+  // `shell.openPath` reports failure by returning a non-empty string, and an
+  // adapter that discarded it reported every refusal as a success. The page
+  // must say so: a folder that never opened, with nothing on screen about it,
+  // is a button that silently does nothing.
+  inbox.revealRefuses = true;
+  const refusedAt = inbox.revealed.length;
+  check("reveal was clicked again", await clickTest(win, "inbox-reveal"));
+  const reached = await waitForValue(() => inbox.revealed.length > refusedAt, 8000);
+  check("the refused reveal still reached main", reached === true);
+  const said = await waitInbox(
+    win,
+    "the reveal failure to be shown",
+    `document.querySelector('[data-test="inbox-reveal-failed"]') !== null`,
+  );
+  check("and the page says the folder could not be opened", said === true);
+  inbox.revealRefuses = false;
 }
 
 /**
@@ -2353,6 +2386,96 @@ async function scenarioAccountScreen(win) {
     await shown(win, "profile-name"),
   );
   accountSink.failUsage = false;
+}
+
+/**
+ * What the Stored send card shows before anything is uploaded.
+ *
+ * Three things a person relies on and none of which the earlier scenarios
+ * asserted: the NAMES they picked, somewhere to drop, and an honest answer
+ * about how long the link will last.
+ *
+ * The retention half is the one with a trap in it. `0` means unlimited, and a
+ * plan that could not be READ is not a plan without a cap — treating a failed
+ * usage read as "no limit" offers fourteen days over a server that will clamp
+ * to one, and nothing on screen ever admits it.
+ */
+async function scenarioStoredSendCard(win) {
+  // ## This scenario establishes its own preconditions
+  //
+  // The account scenario before it leaves the usage section FAILED — that is
+  // the point of its last case — and a plan that could not be read is exactly
+  // the `unknown` state asserted at the end of this one. Inheriting it would
+  // make the first assertions here pass or fail on the previous scenario's
+  // cleanup rather than on anything this one is about.
+  accountSink.failUsage = false;
+  accountSink.retentionSecs = 1_209_600;
+  await js(win, `globalThis.relayium.accountSummary.refresh({ section: "usage" }).then(() => 1, () => 0)`);
+  await goToStored(win);
+  const readable = await waitFor(
+    win,
+    "the plan to be readable again",
+    `document.querySelector('[data-test="send-ttl-unknown"]') === null
+      || document.querySelector('[data-test="send-ttl"]') === null`,
+    20_000,
+  );
+  check("the plan is readable before this scenario asserts on it", readable === true);
+  const picked = await pickFiles(win, [
+    { name: "holiday/beach.jpg", bytes: Buffer.from("one") },
+    { name: "holiday/hills.jpg", bytes: Buffer.from("two") },
+  ]);
+  check("two files were picked", picked === 2, String(picked));
+
+  // ---- the names, as the manifest will declare them ------------------------
+  const names = await js(
+    win,
+    `[...document.querySelectorAll('[data-test="send-name"]')].map((n) => n.textContent.trim()).join("|")`,
+  );
+  check("the page shows what it is about to send", names.includes("beach.jpg") && names.includes("hills.jpg"), names);
+  // A folder pick keeps its shape here exactly as it will at the far end.
+  check("with the folder structure preserved", names.includes("holiday/"), names);
+  check("and somewhere to drop instead", (await present(win, "send-dropzone")) === true);
+
+  // ---- a cap the plan CAN honour: every choice offered ----------------------
+  const all = await js(win, `document.querySelectorAll('[data-test="send-ttl"] option').length`);
+  check("a 14-day plan offers every choice", all === 3, String(all));
+  check("and says nothing about a cap", (await present(win, "send-ttl-capped")) === false);
+  check("nor about an unreadable one", (await present(win, "send-ttl-unknown")) === false);
+
+  // ---- a shorter cap: the picker shrinks, and says why ---------------------
+  accountSink.retentionSecs = 24 * 60 * 60;
+  await js(win, `globalThis.relayium.accountSummary.refresh({ section: "usage" }).then(() => 1, () => 0)`);
+  const shrank = await waitFor(
+    win,
+    "the picker to follow the plan",
+    `document.querySelectorAll('[data-test="send-ttl"] option').length === 1`,
+    20_000,
+  );
+  check("a one-day plan offers only what it can honour", shrank === true);
+  check("and the page says so", (await present(win, "send-ttl-capped")) === true);
+  const chosen = await js(win, `Number(document.querySelector('[data-test="send-ttl"]').value)`);
+  check("the selection was corrected to a legal one", chosen === 1, String(chosen));
+
+  // ---- a cap that could not be READ: NOT unlimited -------------------------
+  accountSink.failUsage = true;
+  await js(win, `globalThis.relayium.accountSummary.refresh({ section: "usage" }).then(() => 1, () => 0)`);
+  const unknown = await waitFor(
+    win,
+    "the unreadable-plan note",
+    `document.querySelector('[data-test="send-ttl-unknown"]') !== null`,
+    20_000,
+  );
+  check("an unreadable plan is said out loud", unknown === true);
+  // NOT shortened: the server clamps whatever is sent, so hiding choices on a
+  // guess would invent a limit. What is owed here is the sentence above.
+  const whenUnknown = await js(win, `document.querySelectorAll('[data-test="send-ttl"] option').length`);
+  check("and the choices are not silently shortened", whenUnknown === 3, String(whenUnknown));
+  check("nor presented as a cap", (await present(win, "send-ttl-capped")) === false);
+
+  accountSink.failUsage = false;
+  accountSink.retentionSecs = 1_209_600;
+  await js(win, `globalThis.relayium.accountSummary.refresh({ section: "usage" }).then(() => 1, () => 0)`);
+  await js(win, `(() => { document.querySelector('[data-test="send-clear"]')?.click(); return true; })()`);
 }
 
 /** Poll a main-process fact the scheduler produces. */

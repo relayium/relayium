@@ -312,3 +312,60 @@ describe("the push direction refuses what the invoke direction refuses", () => {
     expect(router.emit(IPC_EVENT_NAMES[0]!, 0, {})).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// `shell.openPath` reports by RETURN VALUE
+// ---------------------------------------------------------------------------
+//
+// Electron's typings state it explicitly: the promise fulfils with an empty
+// string on success and with an error MESSAGE on failure. An adapter that
+// awaited it and discarded the result reported every OS refusal as a success,
+// and the page showed nothing while the folder never opened.
+//
+// The adapter under test is the one `handlers.ts` composes. It is exercised
+// here as the shape it is — a function over a fake `shell` — because the real
+// one needs an Electron main process, and the property that matters is the
+// branch on the returned string.
+
+describe("the reveal adapter", () => {
+  /** The adapter `handlers.ts` installs, in the same shape. */
+  function revealWith(shell: { openPath(path: string): Promise<string> }) {
+    return async (directory: string): Promise<void> => {
+      const failure = await shell.openPath(directory);
+      if (failure.length > 0) {
+        throw Object.assign(new Error("reveal was refused"), { code: "internal" });
+      }
+    };
+  }
+
+  it("treats an empty string as the success it is", async () => {
+    const opened: string[] = [];
+    const reveal = revealWith({
+      openPath: async (path) => {
+        opened.push(path);
+        return "";
+      },
+    });
+    await expect(reveal("C:/chosen")).resolves.toBeUndefined();
+    expect(opened).toEqual(["C:/chosen"]);
+  });
+
+  it("throws on a non-empty answer, which is what a refusal looks like", async () => {
+    const reveal = revealWith({
+      openPath: async () => "Failed to open path C:\\Users\\somebody\\Secret Folder",
+    });
+    await expect(reveal("C:/chosen")).rejects.toMatchObject({ code: "internal" });
+  });
+
+  it("does not carry the OS message — or the path in it — into the error", async () => {
+    // The returned text is the OS's own and routinely contains the full path,
+    // which is the one thing this boundary exists to keep out of a renderer and
+    // out of a log. The caller needs to know THAT it failed.
+    const secret = "C:\\Users\\somebody\\Tax Returns 2026";
+    const reveal = revealWith({ openPath: async () => `Failed to open path ${secret}` });
+    const error = await reveal("C:/chosen").catch((err: unknown) => err);
+    expect(String(error)).not.toContain(secret);
+    expect(String(error)).not.toContain("Users");
+    expect(JSON.stringify(error)).not.toContain(secret);
+  });
+});

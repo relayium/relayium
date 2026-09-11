@@ -675,6 +675,7 @@
     <StoredPage
       {stored}
       {send}
+      account={accountSummary}
       offered={storedLinkOffer}
       onConsumed={() => {
         // Consumed by the box, not by a transfer: the link is on screen and the

@@ -22,14 +22,32 @@
   import { t } from "../i18n/index.svelte.js";
   import Card from "../shell/Card.svelte";
   import type { StoredController, StoredFailure } from "../stored/stored-controller.svelte.js";
-  import { TTL_CHOICES, type StoredSendController } from "../send/stored-send-controller.svelte.js";
+  import {
+    allowedTtlChoices,
+    capDuration,
+    exceedsCap,
+    retentionCapOf,
+    type StoredSendController,
+  } from "../send/stored-send-controller.svelte.js";
+  import type { AccountSummaryController } from "../account/account-controller.svelte.js";
+  import { pickedFromDrop } from "../send/picked-files.js";
+  import type { PickedFile } from "../../../../../web/src/lib/drag";
+  import { sendGate } from "../send/send-gate.svelte.js";
 
-  let { stored, send, offered = "", onConsumed }: {
+  let { stored, send, account, offered = "", onConsumed }: {
     /** App-lived: a transfer, its progress and the draft all outlive this page. */
     stored: StoredController;
     /** App-lived for the same reasons, plus one that is stronger: the picked
      *  `File` objects cannot be recovered without asking the user again. */
     send: StoredSendController;
+    /**
+     * The account screen's state, read for ONE fact: the plan's retention cap.
+     *
+     * The whole controller rather than a number, because the cap's meaning
+     * depends on the section's STATE — `loading` and `failed` are not caps and
+     * must not be flattened into one by whoever passes it.
+     */
+    account: AccountSummaryController;
     /** A link Windows handed this window. Shown, never acted on by itself. */
     offered?: string;
     onConsumed?: () => void;
@@ -99,6 +117,34 @@
    * link itself, so there is no channel that puts arbitrary text on the
    * clipboard.
    */
+
+  /**
+   * What the plan allows, and which choices survive it.
+   *
+   * `$derived`, so a usage read that lands after this page is open corrects the
+   * picker rather than leaving a stale one. The clamp of the current SELECTION
+   * is an effect below, because it writes.
+   */
+  const cap = $derived(retentionCapOf(account.view.usage));
+  const ttl = $derived(allowedTtlChoices(cap));
+  $effect(() => {
+    send.applyRetentionCap(cap);
+  });
+
+  /** The cap as a sentence fragment, in the unit that states it exactly. */
+  function capText(seconds: number): string {
+    const duration = capDuration(seconds);
+    return duration.unit === "day"
+      ? t("sendExpiryCapDays", { count: duration.count })
+      : duration.unit === "hour"
+        ? t("sendExpiryCapHours", { count: duration.count })
+        : duration.unit === "minute"
+          ? t("sendExpiryCapMinutes", { count: duration.count })
+          : t("sendExpiryCapSeconds", { count: duration.count });
+  }
+
+  /** Whether a drag is over the drop target, so it can say it is. */
+  let dragging = $state(false);
 
   /** A past send's link, held only while its row is showing it. */
   let shownLink = $state<string | null>(null);
@@ -240,10 +286,75 @@
     <label class="button" for="send-folder">{t("sendPickFolder")}</label>
   </div>
 
+  <!--
+    Drop, which is how people actually hand files to a desktop app.
+
+    `webkitGetAsEntry` is the only way to walk a dropped FOLDER — `files`
+    flattens it to nothing useful — and `picked-files.ts` reads it in pages,
+    because `readEntries` returns a batch rather than the whole directory. This
+    grants no new capability: it is the same `File` objects the picker yields,
+    and no path reaches main from either.
+
+    The permission is taken when the DROP happens and checked when the files
+    have finished being read, because reading a dropped tree takes time a quit
+    can begin and end inside.
+  -->
+  <div
+    class="dropzone"
+    class:over={dragging}
+    data-test="send-dropzone"
+    role="group"
+    aria-label={t("sendDropHint")}
+    ondragover={(event) => {
+      event.preventDefault();
+      dragging = true;
+    }}
+    ondragleave={() => (dragging = false)}
+    ondrop={(event) => {
+      event.preventDefault();
+      dragging = false;
+      const transfer = event.dataTransfer;
+      void sendGate.pickThenStart<PickedFile[]>(
+        () => pickedFromDrop(transfer),
+        (picked) => {
+          // The PATHS go with the files. Mapping to `entry.file` here threw the
+          // dropped folder's structure away — `docs/note.txt` arrived as
+          // `note.txt`, and two siblings with the same basename collided.
+          if (picked.length === 0) return;
+          send.pickEntries(picked.map((entry) => ({ file: entry.file, path: entry.path ?? entry.file.name })));
+        },
+      );
+    }}
+  >
+    <p class="dim small">{t("sendDropHint")}</p>
+  </div>
+
   {#if send.files.length > 0}
     <p class="dim" data-test="send-picked">
       {t("sendPicked", { count: send.files.length, size: bytes(send.totalBytes) })}
     </p>
+    <!--
+      The actual names, because "12 files" is not what a person checks before
+      uploading. Relative paths as the manifest will declare them — a folder
+      pick keeps its shape here exactly as it will at the far end — and the page
+      never holds anything else: no absolute path exists on this side to leak.
+    -->
+    <ul class="names" data-test="send-names">
+      <!-- The path the entry CARRIES, which is what will be sent. Reading it
+           back off the File would show a dropped folder as a flat list, and
+           would disagree with the manifest. -->
+      {#each send.picked.slice(0, 8) as entry (entry.path)}
+        <li>
+          <span data-test="send-name">{entry.path}</span>
+          <span class="dim small">{bytes(entry.file.size)}</span>
+        </li>
+      {/each}
+    </ul>
+    {#if send.files.length > 8}
+      <p class="dim small" data-test="send-names-more">
+        {t("sendNamesMore", { count: send.files.length - 8 })}
+      </p>
+    {/if}
     <div class="row">
       <label class="check">
         <input type="checkbox" data-test="send-burn" bind:checked={send.burnAfterRead} disabled={send.busy} />
@@ -252,12 +363,41 @@
     </div>
     <div class="row">
       <label for="send-ttl">{t("sendExpiry")}</label>
+      <!--
+        Only what the plan can actually honour. A choice the server is going to
+        clamp is worse than one that is absent: the user is told fourteen days
+        and gets one, and nothing on screen ever admits it.
+      -->
       <select id="send-ttl" data-test="send-ttl" bind:value={send.ttlDays} disabled={send.busy}>
-        {#each TTL_CHOICES as days (days)}
+        {#each ttl.days as days (days)}
           <option value={days}>{t("sendExpiryDays", { days })}</option>
         {/each}
       </select>
     </div>
+    {#if cap.kind === "unknown"}
+      <!-- NOT treated as unlimited. The choices stay — the server clamps
+           whatever is sent, so hiding them on a guess would invent a limit —
+           but the page says it could not read the plan rather than implying
+           the longest option is available. -->
+      <p class="dim small" data-test="send-ttl-unknown">{t("sendExpiryUnknown")}</p>
+    {:else if cap.kind === "limited"}
+      {#if ttl.clamped}
+        <!-- The TRUE cap, read from the plan. The highest preset that fits is
+             not the limit: a three-day plan fits only the one-day preset, and
+             saying "up to 1 day" understates what the account has. -->
+        <p class="dim small" data-test="send-ttl-capped">
+          {t("sendExpiryCapped", { duration: capText(cap.seconds) })}
+        </p>
+      {/if}
+      {#if exceedsCap(cap, send.ttlDays)}
+        <!-- The sub-day case: every offered choice is longer than the plan
+             keeps a link, so the chosen one WILL be shortened. Silence here
+             would promise longer than the truth. -->
+        <p class="dim small" data-test="send-ttl-clamped">
+          {t("sendExpiryClamped", { duration: capText(cap.seconds) })}
+        </p>
+      {/if}
+    {/if}
   {/if}
 
   {#if send.busy}
@@ -272,8 +412,8 @@
         class="primary"
         type="button"
         data-test="send-start"
-        disabled={send.files.length === 0}
-        onclick={() => void send.send()}
+        disabled={send.files.length === 0 || sendGate.fenced}
+        onclick={() => sendGate.start(() => void send.send())}
       >
         {t("sendStart")}
       </button>
@@ -391,6 +531,31 @@
 </Card>
 
 <style>
+  /* Drop is a peer of the pickers, not a decoration: it is how most people
+     hand files to a desktop app. Dashed rather than solid so it reads as a
+     target rather than a card, and it says what it is for in words — an
+     unlabelled rectangle is only discoverable by trying it. */
+  .dropzone {
+    margin-top: var(--space-tight);
+    padding: var(--space-inner);
+    border: 1px dashed var(--border);
+    border-radius: var(--corner);
+    text-align: center;
+  }
+  .dropzone.over { border-color: var(--accent); background: var(--surface); }
+  .dropzone p { margin: 0; }
+  /* The user's own file names. They wrap rather than overflowing: a long
+     relative path is ordinary, and clipping it hides which file the size
+     beside it belongs to. */
+  .names { list-style: none; margin: var(--space-tight) 0 0; padding: 0; }
+  .names li {
+    display: flex;
+    gap: var(--space-inner);
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 2px 0;
+  }
+  .names li span:first-child { overflow-wrap: anywhere; }
   h1 { margin: 0 0 var(--space-hairline); font-size: 20px; font-weight: 600; }
   .lede { margin: 0 0 var(--space-section); color: var(--text-dim); }
   .dim { color: var(--text-dim); margin: 0 0 var(--space-tight); }

@@ -427,6 +427,22 @@ export const en = {
   sendPickFiles: "Choose files",
   sendPickFolder: "Choose folder",
   sendPicked: "{count} file(s), {size}",
+  sendNamesMore: "and {count} more",
+  sendExpiryUnknown:
+    "Your plan's limit on how long a link lasts could not be read just now, so this may be shortened when it is uploaded.",
+  // The TRUE cap, from the plan — never the highest preset that happens to fit.
+  // A three-day plan told "up to 1 day" understates what somebody pays for.
+  sendExpiryCapped: "Your plan keeps a link for up to {duration}.",
+  sendExpiryCapDays: "{count} day(s)",
+  sendExpiryCapHours: "{count} hour(s)",
+  sendExpiryCapMinutes: "{count} minute(s)",
+  // The exact figure, when no larger unit divides the cap evenly.
+  sendExpiryCapSeconds: "{count} second(s)",
+  // The sub-day case, where the shortest offered choice is already longer than
+  // the plan allows. Saying nothing here would promise longer than the truth.
+  sendExpiryClamped:
+    "This is longer than your plan keeps a link, so it will be shortened to {duration} when it is uploaded.",
+  sendDropHint: "Or drop files and folders here",
   sendClear: "Clear",
   sendStart: "Encrypt and upload",
   sendCancel: "Cancel",
@@ -845,6 +861,15 @@ export const zh: Record<MessageKey, string> = {
   sendPickFiles: "选择文件",
   sendPickFolder: "选择文件夹",
   sendPicked: "{count} 个文件，{size}",
+  sendNamesMore: "还有 {count} 项",
+  sendExpiryUnknown: "暂时读不到你的套餐对链接有效期的限制，因此上传时可能会被缩短。",
+  sendExpiryCapped: "你的套餐最多保留链接 {duration}。",
+  sendExpiryCapDays: "{count} 天",
+  sendExpiryCapHours: "{count} 小时",
+  sendExpiryCapMinutes: "{count} 分钟",
+  sendExpiryCapSeconds: "{count} 秒",
+  sendExpiryClamped: "这比你的套餐保留链接的时间更长，上传时会被缩短为 {duration}。",
+  sendDropHint: "也可以把文件或文件夹拖到这里",
   sendClear: "清除",
   sendStart: "加密并上传",
   sendCancel: "取消",
