@@ -72,6 +72,7 @@ import { currentDataRoot } from "./storage.js";
 import { IpcRefusal, IpcRouter, expectChunk, expectIndex, expectObject, expectString } from "./ipc.js";
 import { ReceiptRegistry } from "./io/receipt-registry.js";
 import { issueReceipt } from "./features/receive-receipts.js";
+import { OsEntryService } from "./features/os-entry.js";
 import { openApprovedExternal } from "./window.js";
 
 /**
@@ -324,6 +325,14 @@ export interface HandlerControl {
   readonly inboxSend: InboxSendService;
   /** The account screen's reader, for the quit risk snapshot and teardown. */
   readonly accountSummary: AccountSummaryService;
+  /**
+   * What the OS handed this process, for the same risk snapshot and teardown.
+   *
+   * Exposed because a staged selection means main holds open file handles: a
+   * quit that did not join it would drop descriptors for files the user is
+   * still looking at.
+   */
+  readonly osEntry: OsEntryService;
   readonly resident: ResidentBridge;
   /**
    * Stop main's own outgoing work, recoverably.
@@ -747,6 +756,51 @@ export function registerHandlers(
     // the shape itself and answers `unknown` for anything that is not a token
     // it minted, which is one place making that judgement instead of two.
     return receipts.reveal(body["token"]);
+  });
+
+  // -------------------------------------------------------------------------
+  // What the OS handed this process
+  // -------------------------------------------------------------------------
+
+  /**
+   * The staged selection, from `--send-files`.
+   *
+   * The installer registers Explorer verbs and a SendTo shortcut that launch
+   * this executable with that flag, so without this construction those entries
+   * start the app and silently drop every file the user picked. Staging is
+   * MAIN's: the renderer has no channel that takes a path and cannot ask for
+   * one to be staged.
+   */
+  const osEntry = new OsEntryService({
+    currentDocument: () => router.generation,
+    accountEpoch: () => service.accountEpoch,
+    // Pushed on the CURRENT document. `emit` refuses a stale generation by
+    // itself, so a view produced for a page that has since been replaced is
+    // dropped rather than delivered to its successor.
+    onView: (view) => {
+      router.emit(IPC_EVENTS.osEntryState, router.generation, view);
+    },
+    reportFailure: (err) => events.reportFailure?.(err),
+  });
+
+  router.handle(IPC.osEntryState, async () => osEntry.view());
+
+  router.handle(IPC.osEntryRead, async (payload) => {
+    const body = expectObject(payload);
+    // The document is taken from the ROUTER, never from the payload. A page
+    // that could name a generation could read a selection staged for a
+    // document it replaced.
+    return osEntry.read(
+      expectString(body["token"], 64),
+      expectIndex(body["offset"]),
+      expectIndex(body["length"]),
+      router.generation,
+    );
+  });
+
+  router.handle(IPC.osEntryClear, async () => {
+    await osEntry.clear();
+    return osEntry.view();
   });
 
   // -------------------------------------------------------------------------
@@ -1427,6 +1481,12 @@ export function registerHandlers(
     // JOINED. Not awaited here: this callback is synchronous and the watcher
     // must not be held by a network drain.
     void inboxSend.onAccountChanged().catch((err: unknown) => events.reportFailure?.(err));
+    // A selection staged under the previous account is released, for the same
+    // reason a receipt is: it was picked by whoever was signed in, and the
+    // handles behind it are this process's to drop rather than to keep for a
+    // person who is no longer here. Not awaited — the watcher is synchronous
+    // and must not be held while handles close.
+    void osEntry.onAccountChanged().catch((err: unknown) => events.reportFailure?.(err));
   });
 
   /** A task or vault id the renderer named. It names; it authorises nothing. */
@@ -1827,6 +1887,10 @@ export function registerHandlers(
     // is gone cannot finish what it started. RECEIVING is deliberately
     // untouched — it is main's, and surviving a reload is the point of it.
     revocations.add(inboxSend.revokeDocument(generation));
+    // The staged selection was handed to ONE document. The tokens are that
+    // document's capability, and the file handles behind them are this
+    // process's to release; a replacement page must inherit neither.
+    revocations.add(osEntry.revokeDocument(generation));
     volunteered = null;
     for (const [requestId, resolve] of [...outstanding]) {
       outstanding.delete(requestId);
@@ -1848,6 +1912,10 @@ export function registerHandlers(
     receipts.fence();
     service.fenceReceives();
     storedReceive.fence();
+    // A staged read started now would move bytes for an app that is going away.
+    // The selection itself is left staged: quiesce joins the reads, and a Stay
+    // must find the user's files where they left them.
+    osEntry.fence();
     inbox.fence();
     storedSend.fence();
     inboxSend.fence();
@@ -1902,6 +1970,10 @@ export function registerHandlers(
     // Stronger than its fence on purpose: this has already reported an
     // inventory, and anything admitted afterwards would make that report untrue.
     const accountStopping = accountSummary.quiesce();
+    // Joins reads in flight and releases every staged handle. Started here and
+    // joined below, so the descriptors are let go while the rest drains rather
+    // than after it.
+    const osEntryStopping = osEntry.quiesce();
     // ## The update facade is quiesced HERE, and NOT on the install path
     //
     // An install asks the resident side to quiesce before it launches, and that
@@ -1931,7 +2003,7 @@ export function registerHandlers(
     // which is a prompt about nothing dressed as a prompt about their files.
     const revealStopping = receipts.quiesce(NETWORK_DRAIN_MS);
 
-    const [sockets, reads, storedHeld, inboxHeld, sendHeld, inboxSendHeld, accountHeld, updateHeld, outcome] = await Promise.all([
+    const [sockets, reads, storedHeld, inboxHeld, sendHeld, inboxSendHeld, accountHeld, osEntryHeld, updateHeld, outcome] = await Promise.all([
       hub.drainClosing(NETWORK_DRAIN_MS),
       iceRequests.drain(NETWORK_DRAIN_MS),
       storedStopping,
@@ -1939,6 +2011,7 @@ export function registerHandlers(
       sendStopping,
       inboxSendStopping,
       accountStopping,
+      osEntryStopping,
       updateStopping,
       serviceStopping,
     ]);
@@ -1973,6 +2046,10 @@ export function registerHandlers(
         // reports this truthfully rather than assuming it away, so a quit that
         // ignored it would be discarding the one honest number it produces.
         accountHeld.unjoined +
+        // A staged file this process could not let go of. It is a descriptor
+        // still held for something the user picked, which is exactly what a
+        // quit prompt exists to mention rather than discover afterwards.
+        osEntryHeld.leftover +
         // What the update facade could not stop inside its bounded wait. It
         // reports `joined` truthfully rather than assuming quiet, and an
         // unjoined check or download is exactly the kind of thing a quit prompt
@@ -2004,6 +2081,9 @@ export function registerHandlers(
     await updateSummary.dispose();
     await inbox.dispose();
     await storedReceive.dispose();
+    // After the receives: this holds only read handles on the user's own files,
+    // and releasing them cannot fail anything else's teardown.
+    await osEntry.dispose();
     // Terminal: every held path is dropped and no token can be redeemed again.
     receipts.dispose();
     await service.dispose();
@@ -2022,6 +2102,7 @@ export function registerHandlers(
     service.resume();
     service.admitReceives();
     storedReceive.resume();
+    osEntry.resume();
     storedSend.resume();
     inboxSend.resume();
     accountSummary.resume();
@@ -2038,6 +2119,7 @@ export function registerHandlers(
     storedSend,
     inboxSend,
     accountSummary,
+    osEntry,
     resident,
     fence,
     quiesce,

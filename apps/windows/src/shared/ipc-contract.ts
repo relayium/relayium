@@ -72,6 +72,30 @@ export const IPC = {
    */
   receiveReveal: "relayium:receive-reveal",
   /**
+   * What the OS handed this process, if anything.
+   *
+   * The pane asks once on mount; everything after that arrives on
+   * `IPC_EVENTS.osEntryState`. A selection is STAGED by main from `--send-files`
+   * — the renderer cannot stage one, because it would have to name paths to do
+   * it, and no channel here takes a path.
+   */
+  osEntryState: "relayium:os-entry-state",
+  /**
+   * One bounded range of one staged file, named by its capability token.
+   *
+   * The token indexes a file main opened at staging; it is not a path and
+   * cannot be turned into one. Ranges are bounded by `MAX_SELECTION_CHUNK` so a
+   * page cannot ask main to materialise a file in memory.
+   */
+  osEntryRead: "relayium:os-entry-read",
+  /**
+   * Dismiss the staged selection.
+   *
+   * Sending belongs to the send lane, not here. This exists so a person who
+   * opened the wrong thing can put it down, and so the tokens stop resolving.
+   */
+  osEntryClear: "relayium:os-entry-clear",
+  /**
    * Open the ONE signalling route this build has, for one room.
    *
    * The renderer names a room KIND (and, for a code room, a validated code) —
@@ -487,6 +511,19 @@ export const IPC_EVENTS = {
    * not make.
    */
   receiveReceipt: "relayium:receive-receipt",
+  /**
+   * The staged selection changed — something arrived, or was put down.
+   *
+   * Pushed because the OS, not the page, decides when this happens: Explorer
+   * launches the app or hands a second instance a new selection while the user
+   * is looking at another screen entirely. A pane that only polled on mount
+   * would show an empty tray for files that are already staged.
+   *
+   * Emitted on the CURRENT document. The staged selection belongs to whichever
+   * page is showing, unlike a receive receipt, which is authority granted to
+   * the one document that asked for it.
+   */
+  osEntryState: "relayium:os-entry-state-changed",
 } as const;
 
 export const IPC_EVENT_NAMES: readonly string[] = Object.values(IPC_EVENTS);

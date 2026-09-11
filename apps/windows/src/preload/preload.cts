@@ -67,6 +67,15 @@ contextBridge.exposeInMainWorld("relayium", {
     reveal: invoke("relayium:receive-reveal"),
     onReceipt: subscribe("relayium:receive-receipt"),
   },
+  // What the OS handed Relayium, and bounded reads of it. Main stages the
+  // selection from `--send-files`; the page can only look at what is there and
+  // put it down. No path crosses, in either direction.
+  osEntry: {
+    state: invoke("relayium:os-entry-state"),
+    read: invoke("relayium:os-entry-read"),
+    clear: invoke("relayium:os-entry-clear"),
+    onState: subscribe("relayium:os-entry-state-changed"),
+  },
   signaling: {
     open: invoke("relayium:signaling-open"),
     send: invoke("relayium:signaling-send"),

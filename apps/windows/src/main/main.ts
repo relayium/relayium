@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import { ENGINEERING_BANNER, isEngineeringBuild } from "./build-mode.js";
 import { apiOrigin } from "./origin.js";
 import { registerHandlers } from "./handlers.js";
+import { parseSendFiles } from "./features/os-entry.js";
 import { hardenContents, RENDERER_PREFERENCES } from "./window.js";
 import type { HandlerComposition, HandlerControl } from "./handlers.js";
 import { routeFromArgv } from "./deep-link.js";
@@ -332,6 +333,31 @@ function handleDeepLink(argv: readonly string[]): void {
 }
 
 /**
+ * Files the OS handed this process, through `--send-files`.
+ *
+ * The installer registers Explorer verbs on files and directories and a SendTo
+ * shortcut, all of which launch this executable with that flag — so without
+ * this the menu entries start the app and silently drop everything the person
+ * picked. Explorer sends one invocation per right-click and ONE invocation
+ * carrying every path for SendTo, which is why staging takes the whole list.
+ *
+ * Handled exactly like a deep link and for the same reason: the OS decides when
+ * it happens, both at launch and at a second instance, and both paths must
+ * reach the same place. Nothing is awaited — argv handling must not hold
+ * startup or the `second-instance` listener while the filesystem is walked.
+ *
+ * Refusals are not reported here. `activate` publishes them into the view the
+ * pane renders, which is the surface a person can actually see.
+ */
+function handleSendFiles(argv: readonly string[]): void {
+  const control = handlerControl;
+  if (!control) return;
+  if (parseSendFiles(argv) === null) return;
+  showWindow();
+  void control.osEntry.activate(argv).catch(() => undefined);
+}
+
+/**
  * The real Electron surfaces the resident behaviour drives.
  *
  * No translator here on purpose: every string is already localized by the pure
@@ -515,6 +541,10 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
   app.on("second-instance", (_event, argv) => {
     showWindow();
     handleDeepLink(argv);
+    // Explorer launches the registered verb again rather than talking to the
+    // running app, so a second right-click arrives HERE. Without this the menu
+    // entry works exactly once per app lifetime.
+    handleSendFiles(argv);
   });
 
   // ## This app never registers `relayium://`. The installer owns it.
@@ -662,6 +692,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
 
   if (options.showOnLaunch !== false) showWindow();
   handleDeepLink(process.argv);
+  handleSendFiles(process.argv);
 
   app.on("before-quit", (event) => {
     // Already agreed, already cleaned up — this is the coordinator's own exit

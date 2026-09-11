@@ -51,6 +51,9 @@
   import { SignInController, type Phase, type SignInBridge } from "./sign-in-controller.js";
   import type { ReceiveBridge } from "./receive/receive-coordinator.js";
   import { RevealController, type RevealBridge } from "./receive/reveal-controller.svelte.js";
+  import PendingSelection from "./pages/PendingSelection.svelte";
+  import { OsEntryController } from "./os-entry/os-entry-controller.svelte.js";
+  import type { OsEntryBridge } from "./os-entry/bridge.js";
   import type { TransportBridge } from "./transport/bridge.js";
   import type {
     PairMintResult,
@@ -83,6 +86,7 @@
       inboxSend: InboxSendBridge;
       accountSummary: AccountSummaryBridge;
       update: UpdateSummaryBridge;
+      osEntry: OsEntryBridge;
     };
 
   const bridge = (globalThis as unknown as { relayium: Bridge }).relayium;
@@ -300,6 +304,19 @@
    * and main holds the folder.
    */
   const reveal = new RevealController(bridge.receive);
+
+  /**
+   * What the OS handed this process, if anything.
+   *
+   * Constructed unconditionally: the selection arrives from Explorer or SendTo
+   * on main's schedule, not this page's, and the subscription has to exist
+   * before the push does. `load` covers the other order — the app was launched
+   * BY the menu entry, so the selection was already staged before this document
+   * existed and no push is coming for it.
+   */
+  const osEntry = new OsEntryController(bridge.osEntry);
+  void osEntry.load();
+  onDestroy(() => osEntry.destroy());
   const detachReveal = reveal.start();
 
   async function setPref(key: "verifyPeers", value: boolean) {
@@ -658,6 +675,11 @@
 </script>
 
 <AppShell current={page()} {banner}>
+  <!-- Above the page chain on purpose. Somebody right-clicked a file in
+       Explorer; what they picked has to be visible from whichever screen
+       happens to be open, not only from one the app chose to navigate to. The
+       pane renders nothing when nothing is staged. -->
+  <PendingSelection controller={osEntry} />
   <!-- Nothing composes a room until the encryption library is loaded, so this
        says which state it is in rather than rendering a pairing screen whose
        buttons cannot work. -->

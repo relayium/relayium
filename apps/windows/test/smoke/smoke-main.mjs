@@ -269,7 +269,7 @@ async function main() {
   check(
     "bridge exposed",
     parsed.keys.sort().join(",") ===
-      "accountSummary,appInfo,auth,ice,inbox,inboxSend,loginItem,pair,prefs,receive,resident,send,signaling,stored,update",
+      "accountSummary,appInfo,auth,ice,inbox,inboxSend,loginItem,osEntry,pair,prefs,receive,resident,send,signaling,stored,update",
     parsed.keys.join(","),
   );
   check("no raw ipcRenderer in the page", parsed.hasIpc === false);
@@ -297,6 +297,10 @@ async function main() {
     "relayium:prefs-read", "relayium:prefs-write",
     "relayium:resident-ack", "relayium:resident-snapshot", "relayium:resident-notify",
     "relayium:login-item-read", "relayium:login-item-write",
+    // What the OS handed Relayium. `state` and `clear` take nothing; `read`
+    // takes a capability token and a bounded range. None of the three accepts a
+    // path, which is what keeps staging main's decision rather than the page's.
+    "relayium:os-entry-state", "relayium:os-entry-read", "relayium:os-entry-clear",
     "relayium:stored-receive-start", "relayium:stored-receive-cancel",
     "relayium:stored-receive-result", "relayium:stored-inventory",
     "relayium:stored-cleanup-retry",
@@ -420,6 +424,7 @@ async function main() {
     fetchedURLs.join(","),
   );
 
+  await assertSendFilesReachedThePane(win);
   await driveSignInCancellation(win);
 
   process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures })}\n`);
@@ -436,6 +441,53 @@ async function main() {
  * neither the page nor the authoritative auth state may say signed in, and no
  * bearer may exist in the injected store.
  */
+/**
+ * The right-click path, end to end, through the shipping argv handler.
+ *
+ * The installer registers `Relayium.exe --send-files "%1"` on files and
+ * directories and a SendTo shortcut carrying the same flag. Every one of those
+ * entries existed while `main.ts` parsed no such flag and `OsEntryService` had
+ * no caller, so they launched the app and dropped the selection in silence.
+ * Nothing caught it: the unit cases prove the staging rules, and the os-entry
+ * smoke drives a SYNTHETIC in-page bridge with no main process at all.
+ *
+ * This asserts the seam those two leave open — real argv, real bootstrap, real
+ * IPC, real pane — and then asserts the property the whole contract exists for:
+ * the directory the file came from must not reach the screen.
+ */
+async function assertSendFilesReachedThePane(win) {
+  const js = (expr) => win.webContents.executeJavaScript(expr);
+  const present = (name) => js(`document.querySelector('[data-test="${name}"]') !== null`);
+
+  const picked = process.argv[4] ?? null;
+  check("the launcher handed over a real file", picked !== null, process.argv.join(" "));
+  if (picked === null) return;
+
+  // The argv an actual right-click produces, delivered the way Explorer
+  // delivers it to an app that is already running. `bootstrap` registered this
+  // listener; emitting here drives THAT handler, not a copy of it.
+  check("the window was hidden before the selection arrived", win.isVisible() === false);
+  app.emit("second-instance", {}, ["C:\\ignored\\Relayium.exe", "--send-files", picked]);
+
+  // The crypto gate first: until libsodium loads the shell shows its starting
+  // card, so failing here would report the gate rather than the pane.
+  if (!(await waitFor("the encryption library to load", async () => !(await present("crypto-pending"))))) return;
+  if (!(await waitFor("the staged selection to reach the pane", () => present("pending-selection")))) return;
+  check("and the window was put on screen for it", win.isVisible() === true);
+
+  const name = picked.split(/[\\/]/).pop();
+  const count = await js(`document.querySelector('[data-test="pending-count"]')?.innerText ?? ""`);
+  check("the pane names what was picked", count.includes(name), count);
+
+  // The property the token contract exists for. The pane is given names and
+  // relative paths; the DIRECTORY is main's and must never be rendered.
+  const directory = picked.slice(0, picked.length - name.length - 1);
+  const body = await js("document.body.innerText");
+  check("no absolute path reached the screen", !body.includes(directory), directory);
+  const html = await js("document.body.innerHTML");
+  check("and none is hidden in an attribute either", !html.includes(directory));
+}
+
 async function driveSignInCancellation(win) {
   const js = (expr) => win.webContents.executeJavaScript(expr);
   const text = () => js("document.body.innerText");

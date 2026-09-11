@@ -20,7 +20,7 @@
 // path it could not remove.
 
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,6 +34,21 @@ const owned = [
   mkdtempSync(path.join(tmpdir(), "relayium-smoke-profile-")),
   mkdtempSync(path.join(tmpdir(), "relayium-smoke-secrets-")),
 ];
+
+/**
+ * A real file, launched the way Explorer launches one.
+ *
+ * The installer registers its verbs as `Relayium.exe --send-files "%1"`. The
+ * path is handed over WITHOUT the flag so the launch itself stages nothing:
+ * the hidden-start assertion has to run first, and a selection arriving at
+ * launch would put the window on screen before it could. The smoke builds the
+ * real argv itself and drives the `second-instance` listener, which is the path
+ * a right-click takes whenever the app is already running.
+ */
+const sendDir = mkdtempSync(path.join(tmpdir(), "relayium-smoke-send-"));
+owned.push(sendDir);
+const sentFile = path.join(sendDir, "picked.txt");
+writeFileSync(sentFile, "picked by right-click\n");
 
 /** Returns the paths that could NOT be removed, so nothing is claimed falsely. */
 function removeOwned() {
@@ -58,7 +73,7 @@ function finish(code, message) {
   process.exit(code);
 }
 
-const child = spawn(String(electronPath), [smokeMain, ...owned], {
+const child = spawn(String(electronPath), [smokeMain, owned[0], owned[1], sentFile], {
   cwd,
   stdio: ["ignore", "pipe", "pipe"],
   env: {
