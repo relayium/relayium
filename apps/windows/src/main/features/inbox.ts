@@ -435,6 +435,28 @@ export class InboxService {
    * only by `resume`.
    */
   #fenced = false;
+  /**
+   * The user asked this device to stop taking deliveries, for now.
+   *
+   * ## Three different "stops", and this is the third
+   *
+   *  * `grant.policy` is the user's STORED answer. Turning it off is a decision
+   *    that persists and that central is told about.
+   *  * `#fenced` is the quit fence. It belongs to the app's shutdown, not to
+   *    the user's intent, and `resume()` clears it when they choose Stay.
+   *  * this is neither. It stops new claims WITHOUT writing the policy, without
+   *    announcing anything to central, and without touching a delivery already
+   *    in flight — the user can pause and unpause all day and their answer,
+   *    their enrolment and their folder are exactly as they left them.
+   *
+   * Sticky within the process: hiding the window, a Stay after a quit prompt
+   * and a refresh of the same account all leave it set, because none of them is
+   * the user changing their mind. It is deliberately NOT persisted — a restart
+   * is a fresh process and starts receiving again, which is the same rule LAN
+   * pause follows and the same one `InboxController.reset()` applies on the Mac
+   * by clearing `isPaused` with the rest of an account's state.
+   */
+  #userPaused = false;
   #disposed = false;
 
   /** The last published view, so an unchanged pass pushes nothing. */
@@ -563,6 +585,47 @@ export class InboxService {
     this.wake();
   }
 
+  /**
+   * Stop claiming new deliveries, at the user's request.
+   *
+   * Deliberately NOT named `pause`, because `resume` above already means the
+   * other thing — the end of a quit fence — and a pair whose halves belong to
+   * different mechanisms is how one gets called for the other.
+   *
+   * Nothing is written and nothing is told to central. A delivery already being
+   * received keeps its lease and finishes; this is a refusal to admit more, not
+   * a cancellation, and there is no path from here to one.
+   */
+  pauseReceiving(): void {
+    if (this.#disposed || this.#userPaused) return;
+    this.#userPaused = true;
+    // Published so a surface can say so immediately rather than after the next
+    // pass. The status itself is unchanged — see `receivingPaused`.
+    this.publish();
+  }
+
+  /** Take deliveries again, and go and look now rather than at the next nap. */
+  resumeReceiving(): void {
+    if (this.#disposed || !this.#userPaused) return;
+    this.#userPaused = false;
+    this.publish();
+    // The loop is parked in `nap` between passes; without this the first
+    // delivery after a resume waits out an idle interval for no reason.
+    this.wake();
+  }
+
+  /**
+   * Whether the user has paused receiving.
+   *
+   * A method rather than a field on the published view: `InboxView` and
+   * `InboxStatus` live in the IPC contract, which this change does not own. The
+   * fact is truthful and readable here now, and the wiring that surfaces it can
+   * add the field without this having guessed at its shape. See the handoff.
+   */
+  get receivingPaused(): boolean {
+    return this.#userPaused;
+  }
+
   /** Terminal. */
   async dispose(): Promise<void> {
     this.#disposed = true;
@@ -645,6 +708,13 @@ export class InboxService {
     const facade = this.#facade;
     this.#bound = null;
     this.#pending = [];
+    // The pause belonged to the account that is going. A sign-out or a switch
+    // hands the app to someone else, and carrying a decision the new account
+    // never made — silently, with no control yet to undo it — would leave them
+    // receiving nothing for a reason they cannot see. This is the same clearing
+    // `InboxController.reset()` performs on the Mac, in the same place: with
+    // the grant, the pending list and the binding, not separately from them.
+    this.#userPaused = false;
     if (facade === null) return;
     try {
       await facade.shutdown();
@@ -1153,6 +1223,10 @@ export class InboxService {
       atRestKeyFor: (context) => this.atRestKeyFor(context),
       destinationFor: (manifest, context) => this.destinationFor(manifest, context),
       onDelivered: (delivered, context) => this.captureDelivered(delivered, context),
+      // Asked between items of a drain, not once before it. Only the user pause
+      // is here: the fence and the policy have their own checks on the pass,
+      // and folding them in would make one answer cover three questions.
+      mayClaim: () => !this.#userPaused,
       now: () => this.now(),
     });
     return this.#facade;

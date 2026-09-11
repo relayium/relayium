@@ -137,6 +137,41 @@ export interface InboxFacadeOptions {
    */
   onDelivered?(delivered: DeliveredItems, context: AccountContext): Promise<void>;
   readonly features?: ImplementedFeatures;
+  /**
+   * May a NEW delivery be claimed right now?
+   *
+   * ## Why this is here and not at the caller
+   *
+   * `drainOwned` claims up to `MAX_DRAIN_ITEMS` in one pass, one at a time. A
+   * caller that decides "not now" before calling `drain` has answered the
+   * question once, for the first item — and the loop then goes on claiming the
+   * rest. Anything that must be able to STOP new work between items therefore
+   * has to be asked between items, which only this class can do.
+   *
+   * Consulted immediately before every claim, with no await in between.
+   *
+   * It governs ADMISSION and nothing else. A delivery already claimed keeps its
+   * lease, finishes its download and publishes; this is not a cancellation and
+   * there is no signal here to abort one. Returning `false` means the drain
+   * stops claiming MORE and reports what it did.
+   *
+   * ## No path is exempt, and `accept` is why
+   *
+   * A user who presses Accept is asking for ONE delivery by name, and the first
+   * version of this let that drain run ungated so the instruction would be
+   * honoured. That was wrong, and not subtly: `claim` takes a COUNT and not a
+   * task id, so central hands back whatever it chooses. "Drain until the named
+   * task appears" is therefore "claim up to `MAX_DRAIN_ITEMS` unrelated
+   * deliveries", which is precisely what the pause exists to prevent — one
+   * Accept would have restarted the whole queue.
+   *
+   * So nothing is exempt here. `accept` instead checks before it drains at all:
+   * it sends the consent, which claims nothing, and answers `queued`.
+   *
+   * Optional: absent means every claim is allowed, which is what every existing
+   * caller gets without changing a line.
+   */
+  mayClaim?(): boolean;
   readonly now?: () => number;
 }
 
@@ -808,6 +843,23 @@ export class InboxFacade {
 
         // Tell central this delivery is wanted, then DRIVE whatever it leases.
         await bound.api.accept(args.taskID, true, both);
+        // The consent is recorded on the server and this device claims nothing.
+        //
+        // `claim` cannot ask for a task by id, so the only way to reach this one
+        // is to take whatever central offers until it turns up — unrelated
+        // deliveries included. While new claims are refused, that is exactly the
+        // thing not to do, so the answer is the one the type already has for
+        // "accepted on the server and not reached in this drain": it stays
+        // accepted, and the next drain after a resume picks it up.
+        //
+        // This is also what the Mac does, rather than a Windows-only
+        // compromise. `InboxController.respond(toAsk:accept:)` records the
+        // answer through the engine and wakes the sleeper — it claims nothing —
+        // and the loop at `run` refuses to do work at all while `isPaused`. The
+        // delivery arrives when the pause ends, on both platforms.
+        if (this.options.mayClaim !== undefined && !this.options.mayClaim()) {
+          return { kind: "queued" } as const;
+        }
         const report = await this.drainOwned(bound, both);
         const mine = report.processed.find((p) => p.taskID === args.taskID);
         if (mine === undefined) return { kind: "queued" } as const;
@@ -852,6 +904,16 @@ export class InboxFacade {
         break;
       }
       this.assertStillLive(bound);
+      // Immediately before the claim, with no await between the answer and the
+      // call. Anything further up is a decision about a different moment: the
+      // journal read, the destination and the download below are all awaits,
+      // and a pass that asked once at the top would keep claiming across every
+      // one of them.
+      //
+      // Breaking here is not `stoppedAtCapacity`: the receiver has room and
+      // central may well have more. It is this process declining to take on new
+      // work, and the loop above decides when to ask again.
+      if (this.options.mayClaim !== undefined && !this.options.mayClaim()) break;
       const claimed = await bound.api.claim(CLAIM_ONE, signal);
       const delivery = claimed.deliveries[0];
       if (delivery === undefined) break;
