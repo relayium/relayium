@@ -47,7 +47,7 @@ import {
   isReservedDevicePath,
   type FileIdentity,
 } from "../io/selection-reader.js";
-import { createNativeSourceProvider } from "../io/native-source.js";
+import { createNativeSourceProvider, type NativeSourceProvider } from "../io/native-source.js";
 
 export interface OsEntryDeps {
   currentDocument(): number;
@@ -55,6 +55,20 @@ export interface OsEntryDeps {
   onView?(view: OsEntryView): void;
   /** Test seam. Production is the real reader. */
   reader?: SelectionReader;
+  /**
+   * Where staged bytes come from, or `null` for Node's own descriptors.
+   *
+   * Defaults to `createNativeSourceProvider()`: null off Windows, and on
+   * Windows a provider that REFUSES every open when the helper binary is
+   * missing rather than quietly substituting a reader that cannot make the
+   * same guarantee.
+   *
+   * Stated as a seam because that default is a hard dependency on a packaged
+   * binary. A caller running outside a packaged app — a unit test, a harness —
+   * has to say `null` and mean it, rather than discovering on Windows only that
+   * every read answers `changed`.
+   */
+  nativeSource?: NativeSourceProvider | null;
   now?(): number;
   reportFailure?(err: unknown): void;
 }
@@ -140,7 +154,10 @@ export class OsEntryService {
     // open when the helper is missing rather than quietly handing back a Node
     // reader. A staged file is read through the helper's component-by-component
     // walk, so no ancestor can redirect the open.
-    this.#reader = deps.reader ?? new SelectionReader(createNativeSourceProvider());
+    // `undefined` means "not stated", which takes the platform default. `null`
+    // is a STATED choice of the portable reader and is honoured as one.
+    const native = deps.nativeSource !== undefined ? deps.nativeSource : createNativeSourceProvider();
+    this.#reader = deps.reader ?? new SelectionReader(native);
   }
 
   private now(): number {

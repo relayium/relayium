@@ -36,6 +36,11 @@ function harness(over: Partial<OsEntryDeps> = {}) {
     onView: (view) => views.push(view),
     reportFailure: (err) => failures.push(err),
     now: () => 1_000,
+    // Stated, not inherited. On Windows the default provider is a real one that
+    // needs the packaged helper, and these cases are about staging rules rather
+    // than about which binary opens the file — without this they pass on macOS
+    // and answer `changed` for every read on the Windows runner.
+    nativeSource: null,
     ...over,
   });
   const activate = (...paths: string[]) => service.activate([SEND_FILES_FLAG, ...paths]);
