@@ -113,7 +113,7 @@ const SERVER_BIN = WINDOWS ? "relayium-server.exe" : "relayium-server";
  * It is the accepted harness's count, unchanged: this port adds no assertion and
  * removes none, so a divergence here is a real divergence in what was proven.
  */
-const EXPECTED_CHECKS = 48;
+const EXPECTED_CHECKS = 52;
 
 const RUN_BUDGET_MS = 10 * 60 * 1000;
 const OP_BUDGET_MS = 60 * 1000;
@@ -870,6 +870,47 @@ async function main() {
     step("quiesce returned actually quiet", coordinator.quiet === true);
     await coordinator.dispose();
     step("the coordinator disposed with nothing left running", coordinator.isLive(folderJob) === false);
+
+    // ---- a PAIRING CODE, minted end to end against the real server --------
+    //
+    // The bootstrap smoke is signed out, so it can only cover the refusal path:
+    // it proves a code cannot be minted without an account and says nothing
+    // about one that can. This run has a real account and a real bearer, and
+    // the server is built from `server/` root, which is where `POST /api/pair`
+    // is served — so the shipping `PairControl` can be driven against it.
+    {
+      const { PairControl } = await load("net/pair-control.js");
+      const pair = new PairControl(origin);
+
+      const minted = await pair.mint(sendToken);
+      step("a pairing code is minted against the real server",
+        minted.ok === true && typeof minted.code === "string" && minted.code.length > 0,
+        JSON.stringify(minted).slice(0, 200));
+
+      if (minted.ok) {
+        // Minutes, not open-ended. The on-screen help tells a reader "a pairing
+        // code lasts only a few minutes", and copy the server does not back up
+        // is worse than no copy at all.
+        const seconds = minted.expiresAt - Math.floor(Date.now() / 1000);
+        step("and it expires in minutes, as the help on screen says",
+          seconds > 30 && seconds <= 30 * 60, `expires in ${seconds}s`);
+
+        // A second mint must be a DIFFERENT code. Reusing one would hand two
+        // conversations the same door.
+        const again = await pair.mint(sendToken);
+        step("a second mint is a different code",
+          again.ok === true && again.code !== minted.code,
+          JSON.stringify({ first: minted.code?.slice(0, 2), second: again.ok ? again.code?.slice(0, 2) : again }));
+      }
+
+      // Creating a code spends an account's allowance, so it must not be
+      // possible without one. This is the same property the signed-out smoke
+      // asserts from the other side — there the UI refuses, here the SERVER
+      // does, and only one of those is the thing that actually protects it.
+      const anonymous = await pair.mint("not-a-real-bearer");
+      step("minting without a real bearer is refused by the server",
+        anonymous.ok === false, JSON.stringify(anonymous).slice(0, 160));
+    }
 
     // ---- the account screen's own mutations, against a REAL account -------
     //

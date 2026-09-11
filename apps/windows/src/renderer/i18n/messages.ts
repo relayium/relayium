@@ -167,7 +167,7 @@ export const en = {
   helpLanWhere: "Files you receive are saved to the folder you choose when you accept them. A conversation lives only on the two devices and is discarded when the connection ends; nothing is kept on a server.",
   helpLanFailure: "The other device is not in the list. Devices are grouped by the network path Relayium's service observes, so a guest network, a VPN, or a router that keeps clients apart can put two devices on the same cable into different groups.",
   helpLanRecovery: "Check that both devices are receiving, turn off any VPN, and join the same network. If they still can't see each other, use a pairing code on the Cross-network screen instead \\u2014 that one needs no shared network.",
-  helpPairPurpose: "Reach a device anywhere by passing on a six-character code. The two devices do not have to be on the same network.",
+  helpPairPurpose: "Reach a device anywhere by passing on a six-digit code. The two devices do not have to be on the same network.",
   helpPairStep1: "Create a pairing code, then pass on the code, the link beside it, or the QR code.",
   helpPairStep2: "The other person enters that code in Relayium, opens the link, or scans the QR code.",
   helpPairStep3: "Check that both screens show the same code, then send messages and files on that one connection.",
