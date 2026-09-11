@@ -83,8 +83,13 @@ and how it will be verified:
   signed without the file itself saying so. What still needs the route decision
   is the signing ACTION and its secret wiring, because a token-bound key and a
   service-held key are not signed with interchangeably.
-* **OA-030** the update publisher pin and feed. The expected publisher is the
-  subject of that certificate and does not exist until it does.
+* **OA-030** the update publisher pin, and whether updates are commissioned at
+  all. Larger than it first looked: there is no Windows publication pipeline —
+  `web/public/apps/` holds `android` and `macos` and no `windows`, nothing
+  produces or signs `updates.json`, and no download surface exists. The CLIENT
+  half is built and strict, and `manifest.ts` already pins what a manifest must
+  contain, so the generator's contract is fixed by its consumer. The pin itself
+  is the subject of the certificate and does not exist until that does.
 * **OA-031** a transfer across a real network, which needs two machines.
 * **OA-032** hands-on acceptance: no Explorer right-click has started this app,
   no phone has scanned its QR, no notification has been seen on a desktop.
