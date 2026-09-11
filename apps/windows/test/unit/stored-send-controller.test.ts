@@ -101,6 +101,27 @@ function bridge(over: Partial<StoredSendBridge> = {}) {
 
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
+/**
+ * Wait for a state the controller reaches through several awaits.
+ *
+ * One `settle()` is one macrotask tick, which is enough on an idle development
+ * host and is NOT a guarantee: the publish path awaits start, feed, end and the
+ * link in turn, and on a loaded Windows runner a single tick can land in the
+ * middle of that chain. A test that read the state at a fixed tick was
+ * asserting the scheduler, not the controller.
+ *
+ * Bounded, and it THROWS on timeout rather than returning quietly, so the two
+ * cases stay distinguishable: a slow chain passes, and a state the controller
+ * never reaches still fails.
+ */
+async function waitUntil(what: string, reached: () => boolean, ticks = 500): Promise<void> {
+  for (let i = 0; i < ticks; i += 1) {
+    if (reached()) return;
+    await settle();
+  }
+  throw new Error(`timed out waiting for ${what}`);
+}
+
 describe("a send the user cancelled before it was acknowledged", () => {
   it("feeds nothing and cancels the job main created", async () => {
     // Root's probe: `feed` was still called once after Cancel, because the
@@ -352,7 +373,10 @@ describe("copying the link that is on screen", () => {
     const controller = new StoredSendController(built.bridge);
     controller.pick([new File([new Uint8Array(4)], "a.bin")]);
     const sending = controller.send();
-    await settle();
+    // The publish has to have produced its link before the cases below can say
+    // anything about WHICH job gets copied. Waited for by name rather than by
+    // tick count: the Windows runner failed here on `link` still being null.
+    await waitUntil("the published link", () => controller.link !== null);
     return {
       controller,
       copied,
