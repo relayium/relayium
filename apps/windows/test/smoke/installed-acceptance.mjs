@@ -27,7 +27,18 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 
 const failures = [];
@@ -235,6 +246,46 @@ function readShortcut(linkPath) {
   if (r.status !== 0) return null;
   const [target = "", args = ""] = r.stdout.split(/\r?\n/);
   return { target: target.trim(), args: args.trim() };
+}
+
+/**
+ * One file out of the packaged `app.asar`, without unpacking it.
+ *
+ * An asar is a header and a blob: a pickle-framed JSON directory listing
+ * followed by every file concatenated. Reading it directly is a dozen lines and
+ * avoids adding a dependency to prove a packaging fact.
+ *
+ * Returns the file's first bytes, or null when the archive does not contain the
+ * path at all — which is the case worth catching. `nativeImage.createFromPath`
+ * does not throw on a missing file; it returns an EMPTY image, so a tray icon
+ * left out of the package is a blank gap in the notification area and nothing
+ * in any log.
+ */
+function bytesInAsar(asarPath, entryPath, length) {
+  const fd = openSync(asarPath, "r");
+  try {
+    const sizes = Buffer.alloc(16);
+    readSync(fd, sizes, 0, 16, 0);
+    const headerSize = sizes.readUInt32LE(12);
+    const header = Buffer.alloc(headerSize);
+    readSync(fd, header, 0, headerSize, 16);
+    const listing = JSON.parse(header.toString("utf8").replace(/\u0000+$/, ""));
+    // The body starts immediately after the pickle prefix plus the header.
+    const base = 8 + sizes.readUInt32LE(4);
+    let node = listing;
+    for (const segment of entryPath.split("/")) {
+      node = node?.files?.[segment];
+      if (node === undefined) return null;
+    }
+    if (typeof node.offset !== "string" || typeof node.size !== "number") return null;
+    const out = Buffer.alloc(Math.min(length, node.size));
+    readSync(fd, out, 0, out.length, base + Number(node.offset));
+    return { bytes: out, size: node.size };
+  } catch {
+    return null;
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /**
@@ -778,6 +829,29 @@ async function main() {
       // The flag and NOTHING else: Explorer appends every selected path after
       // these arguments, which is what makes this the bulk path.
       check("SendTo shortcut carries only the flag", link.args === "--send-files", link.args);
+    }
+  }
+
+  // ---- The icons, which fail silently when they are not there ----------
+  //
+  // `nativeImage.createFromPath` does not throw on a path that is not in the
+  // package. It returns an EMPTY image, and Electron gives the tray a blank gap
+  // and the window the default icon without a word. A unit test proves the
+  // files are in the repository and that `files` claims to ship them; this
+  // proves they came out the other end of electron-builder.
+  const asar = path.join(installDir, "resources", "app.asar");
+  if (check("the packaged archive exists", existsSync(asar), asar)) {
+    for (const asset of ["assets/app-icon.png", "assets/tray.png"]) {
+      const found = bytesInAsar(asar, asset, 8);
+      if (!check(`${asset} is inside the packaged archive`, found !== null, asar)) continue;
+      check(`${asset} is not empty`, found.size > 0, String(found.size));
+      // Real PNG bytes at the offset the listing gives, so a truncated or
+      // zero-length entry cannot pass as a present one.
+      check(
+        `${asset} is a PNG where the archive says it is`,
+        found.bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+        found.bytes.subarray(0, 8).toString("hex"),
+      );
     }
   }
 
