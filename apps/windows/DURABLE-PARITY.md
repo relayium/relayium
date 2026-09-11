@@ -32,7 +32,7 @@ The table below is current as of `321d131be`.
 | Account | Native device-code sign-in, cancellation, expiry and installation identity; the bearer never leaves main. **13 modules and their 109 owning tests executed on Windows**. Host wiring delivered in `6a2ab6b27` and green on Windows since; the account screen and device management are reachable in the shipping shell | Device rename and revoke are exercised by their owning tests only; neither has been driven against a real account on Windows |
 | Device Inbox | Backend, encrypted journal, vault and key storage, account lifecycle, the Windows native-destination acceptance suite, a 39-case real-Go server run, the manual receive and policy slices, and the `98af8a235` send, named-history and recovery batch, which has run on Windows in every lane since | Delivery to a second real device across a network |
 | Updates | The update core has run on Windows, including the native signer, custody and verified-byte launch checks. The interface covering 18 states is wired into the resident host in `a654041` and its host acceptance passed | No publisher pin, no expected publisher and no feed configured — all fail-closed, so no update can actually be delivered. No real installer has been launched |
-| Desktop behaviour | Resident close/quit, tray, notifications, deep-link handling, login-item and first-run, against a real Electron process. The installer's Explorer verbs and SendTo shortcut now reach the app: `321d131be` stages `--send-files` at launch and on `second-instance`, and the bootstrap smoke drives the real listener and asserts the pane names the file while the directory appears in neither the text nor the markup | The OS startup toggle and the native file picker are supplied by injection, so neither is proven. Staging has not been driven from a real Explorer right-click on Windows |
+| Desktop behaviour | Resident close/quit, tray, notifications, deep-link handling, login-item and first-run, against a real Electron process. Staged files are read through `relayium-io-helper --source-mode`, whose component-by-component walk is proven on Windows, so no ancestor can redirect the open; a Windows build without the helper refuses every staged read rather than substituting Node. The installer's Explorer verbs and SendTo shortcut now reach the app: `321d131be` stages `--send-files` at launch and on `second-instance`, and the bootstrap smoke drives the real listener and asserts the pane names the file while the directory appears in neither the text nor the markup | The OS startup toggle and the native file picker are supplied by injection, so neither is proven. Staging has not been driven from a real Explorer right-click on Windows |
 | Presentation | Five-row navigation; English and Chinese catalogues with compile-enforced key parity; light/dark, focus and reduced-motion support | Windows scaling, keyboard and motion validation |
 
 ## What the evidence does not cover
@@ -87,9 +87,8 @@ Still required for parity:
 * **Real-network transfer demonstrated.** Everything proven so far is one
   runner and a loopback server.
 * **Signing, installer and upgrade acceptance**, each its own gate.
-* **A reparse-proof source read.** `relayium-io-helper --source-mode` exists and
-  its walk is proven on Windows, but `SelectionReader` still reads through Node,
-  so the race its own header describes is open on every staged file. The
-  adapter is the remaining half.
+* **A real Explorer right-click.** Staging is driven in the bootstrap smoke
+  through the shipping `second-instance` listener with the argv the installer's
+  verbs produce, but no run has started from an actual right-click on Windows.
 
 Passing a subsystem checkpoint does not establish platform parity.
