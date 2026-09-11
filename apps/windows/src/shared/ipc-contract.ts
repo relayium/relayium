@@ -303,6 +303,35 @@ export const IPC = {
   accountManage: "relayium:account-manage",
 
   // -------------------------------------------------------------------------
+  // Updates
+  // -------------------------------------------------------------------------
+  //
+  // Four names, and none of them carries an address, a key or a version the
+  // page chose. A build with no pinned key answers `disabled` here and offers
+  // nothing — that state is the truth about this build, not a placeholder.
+
+  /** The snapshot main holds. Triggers no check by itself. */
+  updateState: "relayium:update-state",
+  /**
+   * Ask for one of the four actions — check, download, install, reveal.
+   *
+   * Always as a MANUAL trigger: `automatic` is the scheduler's own word for its
+   * timer, and a page that could claim it would be impersonating the thing that
+   * runs when nobody is present.
+   */
+  updateAct: "relayium:update-act",
+  /** Re-read what a previous run could not clean up. */
+  updateResidue: "relayium:update-residue",
+  /**
+   * Open the release notes, from MAIN.
+   *
+   * A closed TOKEN crosses, never a URL. The address is composed here from the
+   * SIGNED manifest and validated before anything opens, so there is no path by
+   * which a page supplies one.
+   */
+  updateNotes: "relayium:update-notes",
+
+  // -------------------------------------------------------------------------
   // Stored SEND and history
   // -------------------------------------------------------------------------
   //
@@ -425,6 +454,15 @@ export const IPC_EVENTS = {
    * none requested.
    */
   accountSummary: "relayium:account-summary",
+  /**
+   * A new update snapshot.
+   *
+   * Pushed because the work is main's: a scheduled check, a download's
+   * progress, a staged artifact re-verified at startup. Emitted on the CURRENT
+   * document — a fact about the build that every page may show and none asked
+   * for.
+   */
+  updateSummary: "relayium:update-summary",
 } as const;
 
 export const IPC_EVENT_NAMES: readonly string[] = Object.values(IPC_EVENTS);

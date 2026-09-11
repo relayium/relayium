@@ -41,6 +41,8 @@
   import { InboxController, type InboxBridge } from "./inbox/inbox-controller.svelte.js";
   import { InboxSendController, type InboxSendBridge } from "./inbox/inbox-send-controller.svelte.js";
   import { AccountSummaryController } from "./account/account-controller.svelte.js";
+  import { UpdateSummaryController } from "./update/update-controller.svelte.js";
+  import type { UpdateSummaryBridge } from "./update/bridge.js";
   import type { AccountSummaryBridge } from "./account/bridge.js";
   import { StoredSendController, type StoredSendBridge } from "./send/stored-send-controller.svelte.js";
   import { goTo, page } from "./shell/navigation.svelte.js";
@@ -79,6 +81,7 @@
       send: StoredSendBridge;
       inboxSend: InboxSendBridge;
       accountSummary: AccountSummaryBridge;
+      update: UpdateSummaryBridge;
     };
 
   const bridge = (globalThis as unknown as { relayium: Bridge }).relayium;
@@ -223,6 +226,13 @@
    * at all.
    */
   const accountSummary = new AccountSummaryController(bridge.accountSummary);
+  /**
+   * App-lived, like the rest, and for the reason the update core makes sharpest:
+   * checking, downloading and verifying happen in MAIN on a schedule no page
+   * asked for. A controller built per page would miss every push sent while the
+   * user was anywhere else — including the one saying an update is ready.
+   */
+  const update = new UpdateSummaryController(bridge.update);
 
   /** What Windows says about starting at sign-in. Null until it has answered. */
   let startup = $state<LoginItemOutcome | null>(null);
@@ -580,6 +590,7 @@
     send.dispose();
     inboxSend.dispose();
     accountSummary.destroy();
+    update.destroy();
     detachResident();
     controller.dispose();
     lanRoom?.stop();
@@ -600,6 +611,10 @@
   // Construction publishes only a loading view; the first real read is asked
   // for here, once, by the shell rather than by the page.
   void accountSummary.load().catch(() => undefined);
+  // Construction publishes a loading view only; the first real read — which is
+  // also the startup re-verification of anything already staged — is asked for
+  // here, once, by the shell.
+  void update.load().catch(() => undefined);
   void send.refreshHistory().catch(() => undefined);
   void bridge.loginItem
     .read()
@@ -689,6 +704,7 @@
     <AccountPage
       {controller}
       account={accountSummary}
+      {update}
       {phase}
       {startup}
       verifyPeers={prefs.verifyPeers}

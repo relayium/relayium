@@ -43,6 +43,11 @@ export type MessageKey =
   | "resident.firstClose.cancel"
   | "resident.login.title"
   | "resident.login.body"
+  | "resident.tray.updates"
+  | "resident.update.confirmTitle"
+  | "resident.update.confirmBody"
+  | "resident.update.confirm"
+  | "resident.update.cancel"
   | "resident.login.confirmTitle"
   | "resident.login.confirmBody"
   | "resident.login.confirm"
@@ -131,6 +136,14 @@ export const EN: Catalog = {
   "resident.firstClose.cancel": "Cancel",
   "resident.login.title": "Open at login",
   "resident.login.body": "Start Relayium when you sign in to Windows.",
+  // Consent to END the running app. Said plainly, including what it costs:
+  // somebody with a transfer running needs to know before they answer.
+  "resident.tray.updates": "Updates",
+  "resident.update.confirmTitle": "Close Relayium to install the update?",
+  "resident.update.confirmBody":
+    "Relayium will close and the installer will open. Anything still transferring will stop. You can install later instead.",
+  "resident.update.confirm": "Close and install",
+  "resident.update.cancel": "Not now",
   "resident.login.confirmTitle": "Start Relayium at login?",
   "resident.login.confirmBody":
     "Relayium will be added to your Windows startup programs. You can remove it here or in Task Manager at any time.",
@@ -207,6 +220,12 @@ export const ZH_HANS: Catalog = {
   "resident.firstClose.cancel": "取消",
   "resident.login.title": "登录时启动",
   "resident.login.body": "登录 Windows 时自动启动 Relayium。",
+  "resident.tray.updates": "更新",
+  "resident.update.confirmTitle": "关闭 Relayium 并安装更新？",
+  "resident.update.confirmBody":
+    "Relayium 将关闭并打开安装程序。正在传输的内容会中断。你也可以稍后再安装。",
+  "resident.update.confirm": "关闭并安装",
+  "resident.update.cancel": "暂不",
   "resident.login.confirmTitle": "登录时启动 Relayium？",
   "resident.login.confirmBody":
     "Relayium 将被添加到 Windows 启动项。你随时可以在这里或任务管理器中移除。",

@@ -16,11 +16,14 @@
   import type { Phase, SignInController } from "../sign-in-controller.js";
   import AccountDetails from "./AccountDetails.svelte";
   import type { AccountSummaryController } from "../account/account-controller.svelte.js";
+  import UpdateDetails from "./UpdateDetails.svelte";
+  import type { UpdateSummaryController } from "../update/update-controller.svelte.js";
   import type { LoginItemOutcome } from "../../main/login-item.js";
 
   let {
     controller,
     account,
+    update,
     phase,
     verifyPeers,
     prefsUnreadable = false,
@@ -32,6 +35,14 @@
     controller: SignInController;
     /** The account screen's own state. ONE prop; the component reads it all. */
     account: AccountSummaryController;
+    /**
+     * The update pane's state.
+     *
+     * On this page rather than a page of its own: it is a setting about the
+     * app, it sits beside "start at sign-in", and a build with no pinned key
+     * has nothing to put on a page of its own.
+     */
+    update: UpdateSummaryController;
     phase: Phase;
     verifyPeers: boolean;
     prefsUnreadable?: boolean;
@@ -162,6 +173,16 @@
   cancels anything.
 -->
 <AccountDetails controller={account} />
+
+<!--
+  Updates, as a setting about the app.
+
+  A build with no pinned key renders a DISABLED state here and offers nothing —
+  that is this build's truth, not a placeholder, and the component says which of
+  the two reasons applies rather than hiding the section and leaving somebody to
+  wonder whether the app updates at all.
+-->
+<UpdateDetails controller={update} />
 
 <style>
   h1 { margin: 0 0 var(--space-section); font-size: 20px; font-weight: 600; }

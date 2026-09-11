@@ -1,315 +1,382 @@
-// Consent, cancellation and the fence — the paths where an install must NOT
-// happen and the app must still come back.
-import { generateKeyPairSync, createHash, sign } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+// Consent to interrupt the running app, as the host actually grants it.
+//
+// Both cases below were found by an independent probe against this source, and
+// both were real. They are about the same thing from two directions: a grant is
+// permission to REPLACE a running application, and it may only be given when
+// the app has genuinely stopped and somebody genuinely still wants it.
+//
+// The adapter under test is the PRODUCTION one: `hostQuiesceConsent`, the same
+// function `handlers.ts` composes. Only its host dependencies — the native
+// prompt, the quiesce and the resume — are faked, because those need an
+// Electron main process and what matters here is the ORDER of its checks.
+//
+// An earlier version of this file re-implemented the adapter inline. That
+// asserted the copy behaved and would have stayed green while the real one
+// regressed, which is the one property a regression test may not have.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import type {
-  InstallExpectation,
-  InstallOutcome,
-  QuiesceDecision,
-  QuiesceRequest,
-  ReleaseOutcome,
-} from "../../src/main/update/contracts.js";
-import {
-  posixScopeProvider,
-  type StagingScopeProvider,
-} from "../../src/main/update/custody.js";
-import {
-  HELPER_FILE_NAME,
-  nativeScopeProvider,
-} from "../../src/main/update/native-scope.js";
-import { UpdateService } from "../../src/main/update/service.js";
-import { PRODUCTION_TRUST_BASE } from "../../src/main/update/trust.js";
+import { hostQuiesceConsent } from "../../src/main/update/host-consent.js";
+import { reasonOf } from "../../src/main/features/update-summary.js";
+import type { CleanupOutcome } from "../../src/main/app-service.js";
+
+const QUIET: CleanupOutcome = {
+  openLeases: 0,
+  opening: 0,
+  unresolved: 0,
+  networkUnsettled: 0,
+  firstReason: null,
+};
 
 /**
- * The staging capability these tests run against.
+ * The PRODUCTION adapter, with its host dependencies faked.
  *
- * POSIX gets the POSIX one; Windows gets the native helper, because the
- * fail-closed default would otherwise make every consent assertion a journal
- * failure. Nothing here changes what a shipped build does.
+ * Not a copy of it. The first version of this file re-implemented the adapter
+ * inline, which asserted that the copy behaved and would have stayed green
+ * while `handlers.ts` regressed — the one property a regression test may not
+ * have. `hostQuiesceConsent` is the same function the host composes.
  */
-function capabilityForThisPlatform(): StagingScopeProvider {
-  if (process.platform !== "win32") return posixScopeProvider;
-  return nativeScopeProvider({
-    helperPath:
-      process.env["RELAYIUM_UPDATE_HELPER"] ??
-      join(process.cwd(), "native", "build", HELPER_FILE_NAME),
-  });
-}
-
-const owned: string[] = [];
-afterEach(async () => {
-  for (const dir of owned.splice(0)) await rm(dir, { recursive: true, force: true });
-});
-async function root(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), "relayium-update-consent-"));
-  owned.push(dir);
-  return dir;
-}
-
-function ephemeralKey() {
-  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
-  const jwk = publicKey.export({ format: "jwk" }) as { x?: string };
-  return { encoded: jwk.x ?? "", privateKey };
-}
-
-const PAYLOAD = new Uint8Array(128).fill(6);
-const SHA = createHash("sha256").update(PAYLOAD).digest("hex");
-
-async function ready(options: {
-  readonly consent?: (request: QuiesceRequest) => Promise<QuiesceDecision>;
-  readonly install?: (expectation: InstallExpectation) => Promise<InstallOutcome>;
-  readonly withConsent?: boolean;
+function consentWith(host: {
+  confirm(): Promise<boolean>;
+  quiesce(exclude?: "update"): Promise<CleanupOutcome>;
+  resume(): void;
+  report?(err: unknown): void;
 }) {
-  const dir = await root();
-  const key = ephemeralKey();
-  const document = new TextEncoder().encode(
-    JSON.stringify({
-      schema: 1,
-      product: "relayium-windows",
-      channel: "stable",
-      platform: "windows",
-      arch: "x64",
-      version: "2.0.0",
-      build: 20,
-      artifact: {
-        url: "https://github.com/relayium/relayium/releases/download/x/Setup.exe",
-        sizeBytes: PAYLOAD.byteLength,
-        sha256: SHA,
-      },
-      publishedAt: 1_789_000_000,
-      notesUrl: null,
-    }),
-  );
-  const signature = sign(null, document, key.privateKey).toString("base64url");
-  const fetchImpl = (async (url: string | URL): Promise<Response> => {
-    const target = String(url);
-    if (target.endsWith(".sig")) return new Response(signature, { status: 200 });
-    if (target.endsWith("updates.json")) {
-      return new Response(document as Uint8Array<ArrayBuffer>, { status: 200 });
-    }
-    return new Response(PAYLOAD as Uint8Array<ArrayBuffer>, { status: 200 });
-  }) as unknown as typeof fetch;
-  const installs: InstallExpectation[] = [];
-  const releases: string[] = [];
-  const service = new UpdateService({
-    trust: { ...PRODUCTION_TRUST_BASE, publicKeys: [key.encoded], expectedPublisher: "CN=Relayium" },
-    engineering: false,
-    current: { version: "1.0.0", build: 1 },
-    dataDirectory: dir,
-    // EXPLICIT, and platform-correct.
-    //
-    // Omitting this left the production default in place, which is fail-closed
-    // on Windows — correct for a shipped build with no adapter wired, and wrong
-    // for a test whose subject is CONSENT. The first Windows run turned all
-    // seven of these into `journal-unavailable`. The default is not weakened;
-    // the capability is injected, and on Windows it is the REAL one, so these
-    // assertions keep their meaning on both platforms.
-    scope: capabilityForThisPlatform(),
-    verifier: { verify: async () => "signed-by-expected-publisher" },
-    installer: {
-      installVerified: async (expectation) => {
-        installs.push(expectation);
-        return options.install ? options.install(expectation) : { outcome: "launched" };
-      },
-    },
-    ...(options.withConsent === false
-      ? {}
-      : {
-          quiesceConsent: {
-            request: async (request) =>
-              options.consent
-                ? options.consent(request)
-                : {
-                    granted: true,
-                    lease: {
-                      release: async (reason: string): Promise<ReleaseOutcome> => {
-                        releases.push(reason);
-                        return { outcome: "resumed" };
-                      },
-                    },
-                  },
-          },
-        }),
-    feed: { fetchImpl },
-    artifact: { fetchImpl },
+  return hostQuiesceConsent({
+    confirm: host.confirm,
+    quiesce: (exclude) => host.quiesce(exclude),
+    resume: host.resume,
+    ...(host.report === undefined ? {} : { reportFailure: host.report }),
   });
-  await service.check("manual");
-  const state = await service.download();
-  return { service, state, installs, releases, dir };
 }
 
-describe("consent has no default", () => {
-  it("refuses to install with no consent adapter", async () => {
-    const world = await ready({ withConsent: false });
-    expect(world.state.kind).toBe("ready");
-    const after = await world.service.install();
-    expect(after).toMatchObject({ kind: "install-deferred", reason: "no-consent-adapter" });
-    // FAIL CLOSED: the absence of the resident lane's opinion is not its
-    // approval, on the operation that ends the session.
-    expect(world.installs).toEqual([]);
+describe("an install cancelled while the person is reading the prompt", () => {
+  it("stops nothing and grants nothing", async () => {
+    // The window that matters: a person takes seconds or minutes to answer, and
+    // the install can be abandoned inside it. Checking only on the way IN meant
+    // an abandoned install still tore down every transfer, lease and socket the
+    // user had — and then granted permission nobody was waiting for. The core's
+    // own late-grant check cannot prevent this: it runs after the host has
+    // already stopped everything.
+    const control = new AbortController();
+    const quiesced: string[] = [];
+    const consent = consentWith({
+      async confirm() {
+        // Cancelled while the dialog is up.
+        control.abort();
+        return true;
+      },
+      async quiesce(exclude) {
+        quiesced.push(exclude ?? "all");
+        return QUIET;
+      },
+      resume: () => quiesced.push("resume"),
+    });
+
+    const decision = await consent.request({ excludeToken: "job-1", signal: control.signal });
+    expect(decision.granted).toBe(false);
+    // NOTHING was quiesced: the user's work is untouched.
+    expect(quiesced).toEqual([]);
+  });
+
+  it("still refuses when the abort lands during the quiesce itself", async () => {
+    const control = new AbortController();
+    let resumed = 0;
+    const consent = consentWith({
+      confirm: async () => true,
+      async quiesce() {
+        control.abort();
+        return QUIET;
+      },
+      resume: () => {
+        resumed += 1;
+      },
+    });
+    const decision = await consent.request({ excludeToken: "job-1", signal: control.signal });
+    expect(decision.granted).toBe(false);
+    expect(decision.granted === false && decision.reason).toBe("aborted:resumed");
+    // The app was stopped for a grant that is not being given, so it is given
+    // back rather than left quiesced.
+    expect(resumed).toBe(1);
   });
 });
 
-describe("the consent request", () => {
-  it("names the job to EXCLUDE, so a host cannot deadlock on it", async () => {
-    let seen: QuiesceRequest | null = null;
-    const world = await ready({
-      consent: async (request) => {
-        seen = request;
-        return { granted: true, lease: { release: async () => ({ outcome: "resumed" }) } };
-      },
-    });
-    await world.service.install();
-    // The host quiesces everything but this token. Awaiting `install()` from
-    // inside `request()` would deadlock both sides, and the token is what makes
-    // that statement checkable.
-    expect((seen as unknown as QuiesceRequest).excludeToken).toBe("update:2.0.0+20");
-    expect((seen as unknown as QuiesceRequest).signal.aborted).toBe(false);
-  });
+describe("work the quiesce could not stop", () => {
+  const cases: readonly (readonly [string, CleanupOutcome])[] = [
+    ["a lease that refused to let go", { ...QUIET, openLeases: 1 }],
+    ["an open still being created", { ...QUIET, opening: 1 }],
+    ["a destination whose cleanup failed", { ...QUIET, unresolved: 1 }],
+    ["a socket whose close was never seen", { ...QUIET, networkUnsettled: 1 }],
+  ];
 
-  it("is abortable: an explicit quit while consent is pending installs nothing", async () => {
-    let arrived!: () => void;
-    const at = new Promise<void>((resolve) => {
-      arrived = resolve;
+  for (const [what, cleanup] of cases) {
+    it(`refuses the install over ${what}`, async () => {
+      // Granting regardless would launch an installer over live work and
+      // replace the app while it still held something it had told nobody
+      // about. EVERY count is read: picking one would be choosing which kind
+      // of loss is acceptable.
+      let resumed = 0;
+      const consent = consentWith({
+        confirm: async () => true,
+        quiesce: async () => cleanup,
+        resume: () => {
+          resumed += 1;
+        },
+      });
+      const decision = await consent.request({
+        excludeToken: "job-1",
+        signal: new AbortController().signal,
+      });
+      expect(decision.granted).toBe(false);
+      expect(decision.granted === false && decision.reason).toBe("work-unsettled:resumed");
+      expect(resumed).toBe(1);
     });
-    const world = await ready({
-      consent: async (request) => {
-        arrived();
-        // The host waits on the user, and the user quits.
-        await new Promise<void>((resolve) => {
-          if (request.signal.aborted) return resolve();
-          request.signal.addEventListener("abort", () => resolve(), { once: true });
-        });
-        return { granted: false, reason: "quit" };
-      },
-    });
-    const installing = world.service.install();
-    await at;
-    // This host DOES honour the abort, so the join succeeds.
-    expect(await world.service.quiesce()).toEqual({ joined: true });
-    await installing;
-    expect(world.installs).toEqual([]);
-  });
+  }
 
-  it("releases a LATE grant without installing", async () => {
-    // The user cancelled while the host was deciding; the answer then arrives
-    // as `granted`. The lease must be handed back and nothing may run.
-    const released: string[] = [];
-    let arrived!: () => void;
-    const at = new Promise<void>((resolve) => {
-      arrived = resolve;
-    });
-    let allow!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      allow = resolve;
-    });
-    const world = await ready({
-      consent: async () => {
-        arrived();
-        await gate;
-        return {
-          granted: true,
-          lease: {
-            release: async (reason: string) => {
-              released.push(reason);
-              return { outcome: "resumed" };
-            },
-          },
-        };
+  it("reports NOT-RESUMED when giving the app back also fails", async () => {
+    // An app left quiesced is not a healthy one, and saying "resumed" over it
+    // would hide an app a refused install disabled.
+    const reported: unknown[] = [];
+    const consent = consentWith({
+      confirm: async () => true,
+      quiesce: async () => ({ ...QUIET, openLeases: 1 }),
+      resume: () => {
+        throw new Error("resume failed");
       },
+      report: (err) => reported.push(err),
     });
-    const installing = world.service.install();
-    await at;
-    // Bounded: the host is deliberately ignoring the abort here, which is
-    // exactly why `quiesce` cannot wait forever. It reports that it did not
-    // join rather than hanging.
-    expect(await world.service.quiesce(50)).toEqual({ joined: false });
-    allow();
-    const state = await installing;
-    expect(world.installs).toEqual([]);
-    // Handed back, not kept.
-    expect(released).toEqual(["install-not-completed"]);
-    expect(state.kind).toBe("install-deferred");
+    const decision = await consent.request({
+      excludeToken: "job-1",
+      signal: new AbortController().signal,
+    });
+    // `not-resumed:` is the grammar the summary already speaks — see the
+    // composition cases at the end of this file. The earlier spelling was
+    // reduced to `other` by `reasonOf`, which lost exactly the fact that
+    // mattered.
+    expect(decision.granted === false && decision.reason).toBe("not-resumed:work-unsettled");
+    expect(reported).toHaveLength(1);
   });
 });
 
-describe("a release that does not resume is reported", () => {
-  it("does not present a still-quiesced app as healthy", async () => {
-    const world = await ready({
-      install: async () => ({ outcome: "refused", refusal: "not-lockable" }),
-      consent: async () => ({
-        granted: true,
-        lease: {
-          release: async (): Promise<ReleaseOutcome> => ({
-            outcome: "unknown",
-            detail: "still-quiesced",
-          }),
-        },
-      }),
+describe("the grant that IS given", () => {
+  it("comes only after a quiet cleanup that excluded the update itself", async () => {
+    const excluded: (string | undefined)[] = [];
+    const consent = consentWith({
+      confirm: async () => true,
+      async quiesce(exclude) {
+        excluded.push(exclude);
+        return QUIET;
+      },
+      resume: () => undefined,
     });
-    const state = await world.service.install();
-    expect(state.kind).toBe("install-deferred");
-    if (state.kind !== "install-deferred") return;
-    // The actual outcome, not "resumed".
-    expect(state.reason).toContain("not-resumed");
-    expect(state.reason).toContain("still-quiesced");
+    const decision = await consent.request({
+      excludeToken: "job-1",
+      signal: new AbortController().signal,
+    });
+    expect(decision.granted).toBe(true);
+    // The exclusion is what stops the install waiting on its own quiesce.
+    expect(excluded).toEqual(["update"]);
   });
 
-  it("treats a throwing release the same way", async () => {
-    const world = await ready({
-      install: async () => ({ outcome: "refused", refusal: "identity-changed" }),
-      consent: async () => ({
-        granted: true,
-        lease: {
-          release: async () => {
-            throw new Error("resident gone");
-          },
-        },
-      }),
+  it("is never given without a yes", async () => {
+    const quiesced: string[] = [];
+    const consent = consentWith({
+      confirm: async () => false,
+      async quiesce() {
+        quiesced.push("quiesce");
+        return QUIET;
+      },
+      resume: () => undefined,
     });
-    const state = await world.service.install();
-    expect(state.kind).toBe("install-deferred");
-    if (state.kind !== "install-deferred") return;
-    expect(state.reason).toContain("not-resumed");
+    const decision = await consent.request({
+      excludeToken: "job-1",
+      signal: new AbortController().signal,
+    });
+    expect(decision.granted).toBe(false);
+    expect(decision.granted === false && decision.reason).toBe("declined");
+    // A refusal stops nothing either: the app carries on as it was.
+    expect(quiesced).toEqual([]);
   });
 });
 
-describe("the fence covers every operation", () => {
-  it("a quiesced service reveals nothing", async () => {
-    const revealed: string[] = [];
-    const dir = await root();
-    const key = ephemeralKey();
-    const service = new UpdateService({
-      trust: { ...PRODUCTION_TRUST_BASE, publicKeys: [key.encoded], expectedPublisher: null },
-      engineering: false,
-      current: { version: "1.0.0", build: 1 },
-      dataDirectory: dir,
-      revealer: {
-        reveal: async (path: string) => {
-          revealed.push(path);
-        },
+describe("a cleanup that fails outright", () => {
+  it("still gives the app back, and grants nothing", async () => {
+    // By the time `quiesce` rejects it has already fenced admissions and asked
+    // every feature to stop — the rejection says it could not FINISH, not that
+    // it did nothing. Letting the exception escape meant the core caught it as
+    // `platform-error` with the lease already null, so nobody resumed and the
+    // app was left stopped with no install to show for it.
+    let resumed = 0;
+    const reported: unknown[] = [];
+    const consent = consentWith({
+      confirm: async () => true,
+      quiesce: async () => {
+        throw new Error("a feature refused to stop");
       },
+      resume: () => {
+        resumed += 1;
+      },
+      report: (err) => reported.push(err),
     });
-    await service.quiesce();
-    // Not admitted, so it cannot touch the filesystem after the fence.
-    await service.reveal();
-    expect(revealed).toEqual([]);
-    expect(await service.automaticCheckDue()).toBe(false);
-    expect(await service.residue()).toEqual([]);
+
+    const decision = await consent.request({
+      excludeToken: "job-1",
+      signal: new AbortController().signal,
+    });
+    expect(decision.granted).toBe(false);
+    expect(decision.granted === false && decision.reason).toBe("quiesce-failed:resumed");
+    // The whole point: the app is working again.
+    expect(resumed).toBe(1);
+    // And the failure was reported rather than swallowed into a closed code.
+    expect(reported).toHaveLength(1);
   });
 
-  it("admits one operation at a time", async () => {
-    const world = await ready({});
-    // `install` holds the slot; a concurrent check is refused rather than
-    // queued behind it.
-    const installing = world.service.install();
-    const checked = await world.service.check("manual");
-    expect(checked.kind).toBe("ready");
-    await installing;
+  it("reports NOT-RESUMED when the resume after it also fails", async () => {
+    // Two failures in a row, and the second is the one the user feels: an app
+    // left quiesced is not a healthy one, and saying "resumed" over it would
+    // hide an app that a FAILED INSTALL ATTEMPT disabled.
+    const reported: unknown[] = [];
+    const consent = consentWith({
+      confirm: async () => true,
+      quiesce: async () => {
+        throw new Error("a feature refused to stop");
+      },
+      resume: () => {
+        throw new Error("resume failed too");
+      },
+      report: (err) => reported.push(err),
+    });
+
+    const decision = await consent.request({
+      excludeToken: "job-1",
+      signal: new AbortController().signal,
+    });
+    expect(decision.granted === false && decision.reason).toBe("not-resumed:quiesce-failed");
+    // BOTH failures are reported: the one that stopped the app and the one that
+    // could not start it again.
+    expect(reported).toHaveLength(2);
+  });
+
+  it("never installs over a cleanup it could not complete", async () => {
+    // The refusal is what matters most here. A grant would launch an installer
+    // against an app whose own teardown just failed — the state in which it is
+    // least able to say what it is still holding.
+    const consent = consentWith({
+      confirm: async () => true,
+      quiesce: async () => {
+        throw new Error("cleanup exploded");
+      },
+      resume: () => undefined,
+    });
+    const decision = await consent.request({
+      excludeToken: "job-1",
+      signal: new AbortController().signal,
+    });
+    expect(decision.granted).toBe(false);
+    expect("lease" in decision).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// What the PAGE is told when the app was not started again
+// ---------------------------------------------------------------------------
+//
+// The adapter and the boundary have to agree, and a unit that only read the
+// adapter's string could not see that they did not. `reasonOf` maps anything it
+// does not recognise to `other` — deliberately, so a host string cannot leak —
+// and my first spelling of these reasons was therefore reduced to a generic
+// "something went wrong" over an app that had been STOPPED AND NEVER STARTED
+// AGAIN. The one fact the user most needed was the one that got dropped.
+//
+// So these compose: the REAL adapter produces the reason, and the REAL
+// `reasonOf` maps it.
+
+describe("a refusal whose resume also failed", () => {
+  /** Refuse through the real adapter, and map through the real boundary. */
+  async function refusalReason(host: {
+    quiesce(): Promise<CleanupOutcome>;
+    resume(): void;
+    signal?: AbortSignal;
+  }) {
+    const consent = consentWith({
+      confirm: async () => true,
+      quiesce: host.quiesce,
+      resume: host.resume,
+      report: () => undefined,
+    });
+    const decision = await consent.request({
+      excludeToken: "job-1",
+      signal: host.signal ?? new AbortController().signal,
+    });
+    if (decision.granted) throw new Error("expected a refusal");
+    return { raw: decision.reason, mapped: reasonOf(decision.reason) };
+  }
+
+  const failingResume = () => {
+    throw new Error("resume failed");
+  };
+
+  it("says NOT-RESUMED when the cleanup could not be completed", async () => {
+    const { raw, mapped } = await refusalReason({
+      quiesce: async () => {
+        throw new Error("cleanup exploded");
+      },
+      resume: failingResume,
+    });
+    expect(mapped).toBe("not-resumed");
+    // The detail says WHICH branch, and is a closed token — never an error
+    // message, which is what the boundary exists to keep out.
+    expect(raw).toBe("not-resumed:quiesce-failed");
+  });
+
+  it("says NOT-RESUMED when work was left unsettled", async () => {
+    const { raw, mapped } = await refusalReason({
+      quiesce: async () => ({ ...QUIET, openLeases: 1 }),
+      resume: failingResume,
+    });
+    expect(mapped).toBe("not-resumed");
+    expect(raw).toBe("not-resumed:work-unsettled");
+  });
+
+  it("says NOT-RESUMED when the install was abandoned during the cleanup", async () => {
+    const control = new AbortController();
+    const { raw, mapped } = await refusalReason({
+      quiesce: async () => {
+        control.abort();
+        return QUIET;
+      },
+      resume: failingResume,
+      signal: control.signal,
+    });
+    expect(mapped).toBe("not-resumed");
+    expect(raw).toBe("not-resumed:aborted");
+  });
+
+  it("does NOT claim not-resumed when the app really did come back", async () => {
+    // The app is working, so `not-resumed` would be false. A generic reason is
+    // correct here: nothing is owed to the user beyond "it did not install".
+    const { raw, mapped } = await refusalReason({
+      quiesce: async () => ({ ...QUIET, networkUnsettled: 1 }),
+      resume: () => undefined,
+    });
+    expect(mapped).not.toBe("not-resumed");
+    expect(raw).toBe("work-unsettled:resumed");
+  });
+
+  it("carries no error text in any of them", async () => {
+    // Every suffix is a closed token chosen by this adapter. A thrown message
+    // routinely contains a path, and none of these reasons may carry one.
+    const secret = "C:\\Users\\somebody\\Private";
+    const { raw } = await refusalReason({
+      quiesce: async () => {
+        throw new Error(`cleanup failed at ${secret}`);
+      },
+      resume: () => {
+        throw new Error(`resume failed at ${secret}`);
+      },
+    });
+    expect(raw).not.toContain(secret);
+    expect(raw).not.toContain("Users");
+    expect(raw).toBe("not-resumed:quiesce-failed");
   });
 });

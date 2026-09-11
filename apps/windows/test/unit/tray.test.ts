@@ -6,6 +6,7 @@ const actions = (nearbyActive = true) => ({
   show: vi.fn(),
   openNearby: vi.fn(),
   openInbox: vi.fn(),
+  openUpdates: vi.fn(),
   setNearby: vi.fn(),
   nearbyActive: () => nearbyActive,
   quit: vi.fn(),
@@ -19,6 +20,7 @@ describe("the tray menu", () => {
       "—",
       "Nearby devices",
       "Device Inbox",
+      "Updates",
       "Pause Nearby",
       "—",
       "Quit Relayium",
@@ -33,9 +35,9 @@ describe("the tray menu", () => {
 
   it("says what the Nearby item will DO, not what is true now", () => {
     const paused = trayMenuTemplate(translator("en"), actions(false));
-    expect("label" in paused[4]! && paused[4].label).toBe("Resume Nearby");
+    expect("label" in paused[5]! && paused[5].label).toBe("Resume Nearby");
     const a = actions(false);
-    const entry = trayMenuTemplate(translator("en"), a)[4]!;
+    const entry = trayMenuTemplate(translator("en"), a)[5]!;
     if ("click" in entry) entry.click();
     expect(a.setNearby).toHaveBeenCalledWith(true);
   });
@@ -63,8 +65,12 @@ describe("the tray menu", () => {
     expect(a.openNearby).toHaveBeenCalledOnce();
     click(3);
     expect(a.openInbox).toHaveBeenCalledOnce();
+    click(4);
+    // Opens the page and acts on NOTHING: a menu item cannot show what it
+    // would do, so nothing about an update may happen from one.
+    expect(a.openUpdates).toHaveBeenCalledOnce();
     expect(a.quit).not.toHaveBeenCalled();
-    click(6);
+    click(7);
     expect(a.quit).toHaveBeenCalledOnce();
   });
 });

@@ -32,13 +32,15 @@ import { MessageVault } from "../../dist/main/inbox/vault.js";
 import { InboxGrantStore } from "../../dist/main/features/inbox-grant.js";
 import path from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import * as nodeCrypto from "node:crypto";
 
 const failures = [];
 const check = (name, ok, detail) => {
   if (!ok) failures.push(detail ? `${name}: ${detail}` : name);
 };
 
-const [userDataDir, secretsDir, destinationDir, inboxRootDir, sendJournalDir, phase] = process.argv.slice(2);
+const [userDataDir, secretsDir, destinationDir, inboxRootDir, firstSendDir, updateDir, restartSendDir, phase] =
+  process.argv.slice(2);
 /**
  * Which half of the run this is.
  *
@@ -50,7 +52,17 @@ const [userDataDir, secretsDir, destinationDir, inboxRootDir, sendJournalDir, ph
  * warm in the process that wrote it.
  */
 const RESTART_PHASE = phase === "restart";
-if (!userDataDir || !secretsDir || !destinationDir || !inboxRootDir || !sendJournalDir) {
+/**
+ * The send journal this phase uses.
+ *
+ * The restart phase gets its OWN. See the wrapper: the first phase leaves a
+ * deliberately unresolvable upload behind, and an unresolved upload is real
+ * unfinished business that the install consent refuses to install over — so
+ * sharing the journal would make the installer unreachable for a reason that
+ * has nothing to do with updates.
+ */
+const sendJournalDir = RESTART_PHASE ? restartSendDir : firstSendDir;
+if (!userDataDir || !secretsDir || !destinationDir || !inboxRootDir || !firstSendDir || !updateDir || !restartSendDir) {
   process.stdout.write(
     `RELAYIUM_SMOKE ${JSON.stringify({ failures: ["missing task-owned directory arguments"] })}\n`,
   );
@@ -659,6 +671,98 @@ const accountSink = {
   },
 };
 
+/**
+ * A signed update feed, generated in this process.
+ *
+ * ## Why a real key and a real signature
+ *
+ * The core fetches the signature, fetches the metadata, and verifies a DETACHED
+ * Ed25519 signature over those EXACT BYTES against a pinned key — before it
+ * parses anything. A fixture that stubbed the verifier would prove the state
+ * machine and nothing about the gate that protects it, so this generates a
+ * keypair, signs the bytes it serves, and pins the public half through the
+ * PRIVATE composition seam.
+ *
+ * That key is a TEST key. It is reachable only through `bootstrap({composition})`
+ * in this process: the shipped `pinnedKeys` stays empty, and no renderer
+ * message, flag or environment variable can reach it. Nothing here provisions
+ * production trust and nothing leaves the machine — both fetches are injected.
+ */
+const updateFeed = (() => {
+  const { generateKeyPairSync, sign, createHash } = nodeCrypto;
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  // `generateKeyPairSync` already returns a KeyObject for the public half;
+  // passing it back through `createPublicKey` asks Node to derive a public key
+  // FROM a public key, which it refuses.
+  const jwk = publicKey.export({ format: "jwk" });
+
+  /** The artifact this feed advertises. Bytes, so its hash is the real one. */
+  const artifact = Buffer.from("relayium-setup-fixture-bytes");
+  const digest = createHash("sha256").update(artifact).digest("hex");
+
+  const manifest = {
+    schema: 1,
+    product: "relayium-windows",
+    channel: "stable",
+    platform: "windows",
+    arch: "x64",
+    // Higher than ANY version this process can report as its own. In an
+    // unpackaged run `app.getVersion()` answers with ELECTRON's version (38.x
+    // today), so a 9.x fixture is a version REGRESSION rather than an update —
+    // which the view normalises to `other`, and which cost a debugging pass.
+    version: "999.9.9",
+    // Strictly greater than this build's, which is the gate the core applies.
+    build: 999_999,
+    // The WIRE shape: `artifact` is nested. The TypeScript `UpdateManifest` is
+    // the parsed OUTPUT and flattens these — writing the fixture from the
+    // interface rather than from the parser produced a document the real feed
+    // would never send, and the core rightly called it malformed.
+    artifact: {
+      url: "https://relayium.com/apps/windows/Relayium-Setup-9.9.9.exe",
+      sizeBytes: artifact.byteLength,
+      sha256: digest,
+    },
+    publishedAt: 1_789_000_000,
+    notesUrl: "https://relayium.com/apps/windows/notes-9.9.9",
+  };
+  // The signature covers these EXACT bytes, so they are what is served — never
+  // a re-serialisation, which would produce something the signature misses.
+  const bytes = Buffer.from(JSON.stringify(manifest), "utf8");
+  const signature = sign(null, bytes, privateKey);
+
+  return {
+    publicKeyBase64Url: String(jwk.x),
+    bytes,
+    signatureText: signature.toString("base64url"),
+    artifact,
+    manifest,
+    /** Every request this fixture answered, so the run can prove none escaped. */
+    requests: [],
+    /** What the person answers when asked to close the app. */
+    consent: false,
+    /** How many times the native consent was actually asked for. */
+    consentCalls: 0,
+    /** Every `installVerified` the core reached, with what it was handed. */
+    installs: [],
+    /** What the synthetic installer answers. Never a real launch. */
+    installOutcome: { outcome: "refused", refusal: "no-expected-publisher" },
+    /** Every host exit the launched-install choreography asked for. */
+    exits: 0,
+    fetchFeed(input) {
+      const url = String(input);
+      updateFeed.requests.push(url);
+      if (url.endsWith(".sig")) {
+        return Promise.resolve(new Response(updateFeed.signatureText, { status: 200 }));
+      }
+      return Promise.resolve(new Response(updateFeed.bytes, { status: 200 }));
+    },
+    fetchArtifact(input) {
+      updateFeed.requests.push(String(input));
+      return Promise.resolve(new Response(updateFeed.artifact, { status: 200 }));
+    },
+  };
+})();
+
 /** One pending delivery, as central would list it. No token, no key. */
 function pendingTask(id) {
   return {
@@ -782,6 +886,22 @@ let breakCleanup = false;
 async function main() {
   await bootstrap({
     showOnLaunch: false,
+    // The native consent, answered in process. The shipped adapter still does
+    // every check around it — the re-check after the prompt, the cleanup
+    // counts, the exclusion — this only supplies the ANSWER a person would.
+    confirmUpdateInstall: async () => {
+      updateFeed.consentCalls += 1;
+      return updateFeed.consent;
+    },
+    // ## The exit is RECORDED, never performed
+    //
+    // The shipped hook sets `quitting` and calls `app.quit()`. Letting that run
+    // here would end the run mid-scenario, so this records the decision
+    // instead — which is the fact under test: that a LAUNCHED install ends the
+    // process exactly once, and that a refusal ends it never.
+    exitAfterInstall: () => {
+      updateFeed.exits += 1;
+    },
     composition: {
       makeStore: async () => smokeSecretStore,
       makeAuthClient: () => ({
@@ -812,6 +932,9 @@ async function main() {
       // The stored-send engine is the REAL one; only the transport it hands
       // this run's. The producer is the renderer's own shared `encryptFiles`.
       storedSendJournalDirectory: sendJournalDir,
+      // Task-owned, so this run never writes into a user profile — and so the
+      // journal states are reachable on a host that is not Windows.
+      updateDataDirectory: updateDir,
       storedSend: {
         transportFactory: () => sendTransport,
         sourceFactory: () => sendSource,
@@ -850,6 +973,62 @@ async function main() {
       // startup under this run's synthetic bearer, and the origin is the
       // PRODUCTION one — see `accountSink`.
       accountSummary: { fetchImpl: (input, init) => accountSink.fetch(input, init) },
+      // ## The update core, injected ONLY in the restart phase
+      //
+      // The first phase runs the SHIPPED defaults so the disabled truth is the
+      // real one — trust null, no pinned key, nothing offered. The restart
+      // phase pins this run's TEST key and serves a signed feed, which is the
+      // only way the transition states are reachable at all. Both fetches are
+      // injected; nothing in either phase reaches the network.
+      ...(RESTART_PHASE
+        ? {
+            updateCore: {
+              trust: {
+                publicKeys: [updateFeed.publicKeyBase64Url],
+                feedUrl: "https://relayium.com/apps/windows/updates.json",
+                signatureUrl: "https://relayium.com/apps/windows/updates.json.sig",
+                artifactHosts: ["relayium.com"],
+                product: "relayium-windows",
+                channel: "stable",
+                platform: "windows",
+                arch: "x64",
+                // A TEST publisher, pinned only in this in-process trust. The
+                // SHIPPED base still has none, so the signed install path stays
+                // unreachable in a real build by construction. Without one here
+                // the core stops at `ready-unsigned` — which is correct product
+                // behaviour, and is why the install path cannot be exercised by
+                // a fixture that leaves this null.
+                expectedPublisher: "CN=Relayium Test Publisher",
+              },
+              feed: { fetchImpl: (input) => updateFeed.fetchFeed(input) },
+              artifact: { fetchImpl: (input) => updateFeed.fetchArtifact(input) },
+              // PREVIEW only: what the user is SHOWN about the publisher.
+              // `unsigned` is the truthful answer for a fixture artifact that
+              // carries no Authenticode signature, and it is what a build with
+              // no provisioned certificate would see in production too.
+              // PREVIEW only — it decides what the user is SHOWN, never what
+              // runs. The installer below is the only thing that could run
+              // anything, and it never does.
+              verifier: { verify: async () => "signed-by-expected-publisher" },
+              // The one thing allowed to run an executable — and this one never
+              // does. It records what it was handed and answers with a closed
+              // refusal, so the composition is exercised end to end without
+              // launching anything on a developer's machine.
+              installer: {
+                async installVerified(expectation) {
+                  updateFeed.installs.push({
+                    name: expectation.name,
+                    sizeBytes: expectation.sizeBytes,
+                    sha256: expectation.sha256,
+                    publisher: expectation.publisher,
+                    receipt: expectation.receipt,
+                  });
+                  return updateFeed.installOutcome;
+                },
+              },
+            },
+          }
+        : {}),
       storedReceive: { receive: streamingReceive },
       // Never the real Windows startup programs: this run must not add itself
       // to whatever machine it happens to be on.
@@ -917,6 +1096,9 @@ async function main() {
   // only re-prove what the first half proved.
   if (RESTART_PHASE) {
     await scenarioRestartedHistory(win, runtime);
+    // The signed transition, with this run's TEST key pinned through the
+    // private seam. Only reachable in this phase — see the injection.
+    await scenarioUpdateSignedTransition(win);
     report();
     app.exit(failures.length === 0 ? 0 : 1);
     return;
@@ -952,6 +1134,8 @@ async function main() {
   // The Stored send card. AFTER the account screen, because its retention
   // gating reads the plan that scenario proves is loaded.
   await scenarioStoredSendCard(win);
+  // The SHIPPED update truth: this phase runs the real defaults.
+  await scenarioUpdateDisabledTruth(win);
   // Stored send, while the smoke is signed in and BEFORE any quit scenario.
   // A quit fences admissions and a Stay clears them; running the whole send
   // flow through that would be testing the fence, which has its own coverage,
@@ -2478,6 +2662,319 @@ async function scenarioStoredSendCard(win) {
   await js(win, `(() => { document.querySelector('[data-test="send-clear"]')?.click(); return true; })()`);
 }
 
+/**
+ * What a build with no pinned key says about updating itself.
+ *
+ * The SHIPPED composition: `pinnedKeys` is empty, so `trust` is null and the
+ * core publishes `disabled/no-pin`. This asserts that truth through the REAL
+ * IPC and the REAL pane — not a unit's view of the state machine — because the
+ * thing that matters is what a person is told, and "no update available" would
+ * be a different and false claim.
+ */
+async function scenarioUpdateDisabledTruth(win) {
+  await js(win, `(() => { document.querySelector('[data-test="nav-account"] button')?.click(); return true; })()`);
+  const mounted = await waitFor(
+    win,
+    "the update pane",
+    `document.querySelector('[data-test="update-details"]') !== null`,
+    20_000,
+  );
+  check("the update pane is on the settings page", mounted === true);
+
+  // Over the real channel, from the real composition.
+  const state = await js(
+    win,
+    `globalThis.relayium.update.state().then((v) => JSON.stringify({ kind: v.state?.kind, reason: v.state?.reason }), (e) => "threw: " + String(e))`,
+  );
+  process.stdout.write(`RELAYIUM_UPDATE_SHIPPED ${state}\n`);
+  const shaped = JSON.parse(state);
+  check("this build reports updates DISABLED", shaped.kind === "disabled", state);
+  // The reason matters: `no-pin` is a fact about provisioning, and an
+  // engineering build is disabled for a different reason entirely.
+  check("and says it is because nothing is pinned", shaped.reason === "no-pin", state);
+
+  // And nothing was fetched to find that out.
+  check("no feed request was made", updateFeed.requests.length === 0, updateFeed.requests.join(","));
+  // The pane offers no action, because there is none to offer.
+  const canCheck = await js(
+    win,
+    `document.querySelector('[data-test="update-check"]')?.disabled ?? "absent"`,
+  );
+  check("and offers no check button that could not work", canCheck === true || canCheck === "absent", String(canCheck));
+}
+
+/**
+ * A signed update, end to end over the real IPC — in the restart process.
+ *
+ * The trust pinned here is a TEST key this run generated, injected through the
+ * private composition seam, and the feed and artifact are served from memory.
+ * No production key is provisioned and nothing reaches the network.
+ *
+ * What this proves that a unit cannot: the host's core construction, the
+ * channel, the controller and the pane agree about a transition the core really
+ * performed — including the detached-signature gate, which runs over the exact
+ * bytes this fixture signed.
+ */
+async function scenarioUpdateSignedTransition(win) {
+  await js(win, `(() => { document.querySelector('[data-test="nav-account"] button')?.click(); return true; })()`);
+  const mounted = await waitFor(
+    win,
+    "the update pane",
+    `document.querySelector('[data-test="update-details"]') !== null`,
+    20_000,
+  );
+  check("the update pane is present in the restarted process", mounted === true);
+
+  const before = await js(
+    win,
+    `globalThis.relayium.update.state().then((v) => JSON.stringify({ kind: v.state?.kind }), (e) => "threw: " + String(e))`,
+  );
+  check("a pinned build is NOT disabled", JSON.parse(before).kind !== "disabled", before);
+
+  // The real action, over the real channel. `manual`, because a page cannot
+  // claim the scheduler's trigger.
+  const after = await js(
+    win,
+    `globalThis.relayium.update.act({ action: "check" })
+       .then((v) => JSON.stringify({ kind: v.state?.kind, version: v.state?.candidate?.version,
+                                     reason: v.state?.reason, detail: v.state?.detail }),
+             (e) => "threw: " + String(e))`,
+  );
+  process.stdout.write(`RELAYIUM_UPDATE_TRANSITION ${after} ${JSON.stringify(updateFeed.requests)}\n`);
+  const shaped = JSON.parse(after);
+  check("the check found the signed update", shaped.kind === "update-available", after);
+  check("and it is the version the feed advertised", shaped.version === "999.9.9", after);
+
+  // The signature gate really ran: both documents were fetched, and from the
+  // pinned URLs rather than anywhere a manifest could have named.
+  check(
+    "the signature was fetched before the metadata",
+    updateFeed.requests[0]?.endsWith(".sig") === true,
+    updateFeed.requests.join(","),
+  );
+  check(
+    "and both came from the pinned feed",
+    updateFeed.requests.every((url) => url.startsWith("https://relayium.com/apps/windows/updates.json")),
+    updateFeed.requests.join(","),
+  );
+
+  // The PAGE says so too — the pane is what a person actually reads.
+  const shown = await waitFor(
+    win,
+    "the pane to offer the update",
+    `(document.querySelector('[data-test="update-details"]')?.textContent ?? "").includes("999.9.9")`,
+    20_000,
+  );
+  check("the pane names the available version", shown === true);
+
+  // Quit confirmations so far, so the launched path can be shown NOT to have
+  // asked for one.
+  const confirmsBeforeUpdate = answers.confirmCalls;
+
+  // ---- download: the real bytes, hashed by the real code ------------------
+  const downloaded = await js(
+    win,
+    `globalThis.relayium.update.act({ action: "download" })
+       .then((v) => JSON.stringify({ kind: v.state?.kind, reason: v.state?.reason }),
+             (e) => "threw: " + String(e))`,
+  );
+  process.stdout.write(`RELAYIUM_UPDATE_DOWNLOAD ${downloaded}\n`);
+  const afterDownload = JSON.parse(downloaded);
+  // `ready` is the ONLY state that may install: verified bytes AND a verified
+  // publisher. `ready-unsigned` is a real and different terminus — the app may
+  // reveal that file and must never execute it — which is why this fixture
+  // pins a test publisher rather than leaving the install path unreachable.
+  check("the download verified and is ready to install", afterDownload.kind === "ready", downloaded);
+  check(
+    "and the artifact really was fetched",
+    updateFeed.requests.some((url) => url.endsWith(".exe")),
+    updateFeed.requests.join(","),
+  );
+
+  // ---- DECLINE: nothing is torn down and nothing is launched --------------
+  updateFeed.consent = false;
+  const askedBeforeDecline = updateFeed.consentCalls;
+  // Captured immediately before the call, so nothing between then and the
+  // assertion can satisfy it on the previous scenario's behalf.
+  const beatsBeforeDecline = inbox.heartbeats;
+  const declined = await js(
+    win,
+    `globalThis.relayium.update.act({ action: "install" })
+       .then((v) => JSON.stringify({ kind: v.state?.kind, reason: v.state?.reason }),
+             (e) => "threw: " + String(e))`,
+  );
+  process.stdout.write(`RELAYIUM_UPDATE_DECLINED ${declined} ${JSON.stringify(updateFeed.installs)}\n`);
+  check(
+    "the person was asked exactly once",
+    updateFeed.consentCalls === askedBeforeDecline + 1,
+    String(updateFeed.consentCalls - askedBeforeDecline),
+  );
+  // NOTHING ran: a refusal is not a deferred launch.
+  check("nothing was installed", updateFeed.installs.length === 0, JSON.stringify(updateFeed.installs));
+  // ## `other`, and that is the accepted contract rather than a loss
+  //
+  // The host's refusal reason is its own string — "declined" — and
+  // `update-summary.ts` reduces anything outside the shared `UpdateReason` set
+  // to `other` on purpose: a newer core, or a host that invents a code, must
+  // render as a generic sentence rather than leak a raw token to a page. So the
+  // CLOSED value is what crosses, and asserting the host's private string was
+  // asserting something the boundary is designed not to carry.
+  //
+  // What still discriminates: the kind is `install-deferred`, the installer was
+  // never reached, and the app kept running.
+  check(
+    "and the app says the install was deferred",
+    declined === JSON.stringify({ kind: "install-deferred", reason: "other" }),
+    declined,
+  );
+
+  // The rest of the app is untouched — a declined install must not have
+  // quiesced anything. The scheduler is the cheapest thing to ask.
+  handlerControlWake();
+  const stillReceiving = await waitForValue(() => inbox.heartbeats > beatsBeforeDecline, 15_000);
+  check("a declined install left the rest of the app running", stillReceiving === true);
+
+  // ---- APPROVE: consent, quiesce, installer, and the app comes back -------
+  //
+  // ## Back to `ready` first, because a deferred install is not a ready one
+  //
+  // The decline left the state at `install-deferred` — a refusal the app
+  // remembers — and `ready` is the ONLY state that may install. The way back is
+  // the way a person would take: check again, then download. `download` alone
+  // is refused from a deferred state, which is correct and is why this is two
+  // calls rather than one.
+  updateFeed.consent = true;
+  const reready = await js(
+    win,
+    `globalThis.relayium.update.act({ action: "check" })
+       .then(() => globalThis.relayium.update.act({ action: "download" }))
+       .then((v) => JSON.stringify({ kind: v.state?.kind }), (e) => "threw: " + String(e))`,
+  );
+  check("the staged artifact re-verifies to ready", JSON.parse(reready).kind === "ready", reready);
+
+  // ## Readiness is EVIDENCED, not retried into existence
+  //
+  // The consent adapter refuses while the cleanup reports work it could not
+  // settle. An earlier version of this scenario simply retried the whole
+  // check/download/install up to eight times until one passed, which mutates
+  // state to reach a green rather than establishing one — and would have hidden
+  // a real inability to ever install.
+  //
+  // So what the app is holding is READ first, and a single attempt follows. If
+  // this run is not quiet, the assertions below fail and say what was held.
+  const readiness = await js(
+    win,
+    `globalThis.relayium.send.history().then(
+       (h) => JSON.stringify({
+         unresolved: (h.entries ?? []).filter((e) => e.state === "ambiguous").length,
+         readable: h.entries !== null,
+       }), () => JSON.stringify({ unresolved: -1, readable: false }))`,
+  );
+  process.stdout.write(
+    `RELAYIUM_UPDATE_READINESS ${readiness} ${JSON.stringify({ leases: ownedReceives() })}\n`,
+  );
+  const held = JSON.parse(readiness);
+  check("no lease is held before the install", ownedReceives() === 0, String(ownedReceives()));
+  check("and no upload is unaccounted for", held.unresolved === 0, readiness);
+
+  const askedBeforeApprove = updateFeed.consentCalls;
+  const approved = await js(
+    win,
+    `globalThis.relayium.update.act({ action: "install" })
+       .then((v) => JSON.stringify({ kind: v.state?.kind, reason: v.state?.reason }),
+             (e) => "threw: " + String(e))`,
+  );
+  // Captured the instant the install returns and BEFORE anything is woken, so
+  // the resume assertion below cannot be satisfied by work that was already in
+  // flight. The previous version compared against a count taken before the
+  // DECLINE, which ordinary traffic had already passed.
+  const beatsAfterInstall = inbox.heartbeats;
+  process.stdout.write(
+    `RELAYIUM_UPDATE_APPROVED ${approved} ${JSON.stringify(updateFeed.installs)} beats=${String(beatsAfterInstall)}\n`,
+  );
+  check(
+    "the person was asked exactly once more",
+    updateFeed.consentCalls === askedBeforeApprove + 1,
+    String(updateFeed.consentCalls - askedBeforeApprove),
+  );
+
+  // ## The self-join, proven rather than reasoned about
+  //
+  // Reaching the installer at all is the proof: the consent adapter quiesces
+  // the app from INSIDE `install()`, and if that quiesce did not exclude the
+  // update facade it would be waiting on the core that is awaiting this answer.
+  // A deadlock here does not fail an assertion — it hangs the run.
+  check("the installer was reached exactly once", updateFeed.installs.length === 1, JSON.stringify(updateFeed.installs));
+  const handed = updateFeed.installs[0] ?? {};
+  check(
+    "with the hash from the SIGNED manifest",
+    handed.sha256 === updateFeed.manifest.artifact.sha256,
+    JSON.stringify(handed),
+  );
+  check("and the size the manifest declared", handed.sizeBytes === updateFeed.artifact.byteLength, JSON.stringify(handed));
+  check("and the publisher the trust pinned", handed.publisher === "CN=Relayium Test Publisher", JSON.stringify(handed));
+  // The EXACT controlled outcome, not merely "not installing": the synthetic
+  // installer answered `no-expected-publisher`, and the core must carry that
+  // refusal through as itself rather than flattening it.
+  check(
+    "the installer's refusal is carried through exactly",
+    approved === JSON.stringify({ kind: "install-deferred", reason: "no-expected-publisher" }),
+    approved,
+  );
+
+  // The lease was released, so the app is working again rather than left
+  // quiesced by an install that did not happen. Measured from AFTER the install.
+  handlerControlWake();
+  const resumed = await waitForValue(() => inbox.heartbeats > beatsAfterInstall, 20_000);
+  check("the app was given back after the refused install", resumed === true, String(inbox.heartbeats));
+  // A refusal must NEVER end the process. The app resumed; exiting now would
+  // close an app that is still working, for an install that did not happen.
+  check("and the process was not ended by a refusal", updateFeed.exits === 0, String(updateFeed.exits));
+
+  // ---- LAUNCHED: the one outcome that ends this process --------------------
+  //
+  // The core sets `installing` and deliberately does not release the lease —
+  // its own comment says the app is going away. Nothing made it go away: the
+  // native installer starts a process and closes its handles, and no host
+  // observed the state. So the app sat quiesced and ALIVE behind a running
+  // installer, after a dialog that had just promised the person it would close.
+  //
+  // The installer here reports `launched` and starts nothing; the exit is
+  // recorded rather than performed, because performing it would end this run.
+  updateFeed.installOutcome = { outcome: "launched" };
+  const readyAgain = await js(
+    win,
+    `globalThis.relayium.update.act({ action: "check" })
+       .then(() => globalThis.relayium.update.act({ action: "download" }))
+       .then((v) => JSON.stringify({ kind: v.state?.kind }), (e) => "threw: " + String(e))`,
+  );
+  check("the artifact is ready again", JSON.parse(readyAgain).kind === "ready", readyAgain);
+
+  const askedBeforeLaunch = updateFeed.consentCalls;
+  const launched = await js(
+    win,
+    `globalThis.relayium.update.act({ action: "install" })
+       .then((v) => JSON.stringify({ kind: v.state?.kind }), (e) => "threw: " + String(e))`,
+  );
+  check("the person was asked once more", updateFeed.consentCalls === askedBeforeLaunch + 1);
+  check("the app reports it is installing", JSON.parse(launched).kind === "installing", launched);
+  check("the installer was reached twice in total", updateFeed.installs.length === 2, String(updateFeed.installs.length));
+
+  // The choreography runs AFTER the operation settles and after the reply, so
+  // it is observed rather than awaited.
+  const exited = await waitForValue(() => updateFeed.exits > 0, 20_000);
+  process.stdout.write(`RELAYIUM_UPDATE_LAUNCHED ${launched} exits=${String(updateFeed.exits)}\n`);
+  check("a launched install ends the process", exited === true, String(updateFeed.exits));
+  // EXACTLY once. A second teardown would dispose services the first disposed,
+  // and a second exit would be a second decision nobody made.
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  check("exactly once", updateFeed.exits === 1, String(updateFeed.exits));
+  // And it did not go through the quit prompt: that would ask somebody who has
+  // already agreed, and would quiesce the update facade that just produced this.
+  check("without asking a second time", updateFeed.consentCalls === askedBeforeLaunch + 1, String(updateFeed.consentCalls));
+  check("and without a quit confirmation", answers.confirmCalls === confirmsBeforeUpdate, String(answers.confirmCalls));
+}
+
 /** Poll a main-process fact the scheduler produces. */
 async function waitForValue(predicate, timeoutMs = 8000) {
   const started = Date.now();
@@ -2690,13 +3187,18 @@ async function scenarioResidentSurfaces(win, runtime) {
   await new Promise((r) => setTimeout(r, 300));
 
   const labels = runtime.trayMenu().map((e) => ("label" in e ? e.label : "—"));
-  check("the tray offers the real surfaces", labels.length === 7, labels.join("|"));
+  // Eight since the Updates item joined: Open, —, Nearby, Inbox, Updates,
+  // Nearby toggle, —, Quit.
+  check("the tray offers the real surfaces", labels.length === 8, labels.join("|"));
   check("the tray is in the page's language", labels[0] === "Open Relayium", labels[0]);
+  // The Updates item opens the settings page and acts on nothing — a menu item
+  // cannot show what it would do, so nothing about an update happens from one.
+  check("the tray offers Updates", labels[4] === "Updates", labels[4]);
 
   // The earlier quit stopped the rooms and the Stay did not reopen them, so the
   // truthful item here is Resume — the tray reports the page's actual state
   // rather than what it assumed at launch.
-  check("the tray reflects the stopped room", labels[4] === "Resume Nearby", labels[4]);
+  check("the tray reflects the stopped room", labels[5] === "Resume Nearby", labels[5]);
 
   // And its action reaches the page: the room really starts again.
   runtime.trayActions().setNearby(true);
@@ -2704,7 +3206,7 @@ async function scenarioResidentSurfaces(win, runtime) {
   check("the tray can resume Nearby", started === true);
   await new Promise((r) => setTimeout(r, 200));
   const afterResume = runtime.trayMenu().map((e) => ("label" in e ? e.label : "—"));
-  check("the tray now offers to pause it", afterResume[4] === "Pause Nearby", afterResume[4]);
+  check("the tray now offers to pause it", afterResume[5] === "Pause Nearby", afterResume[5]);
 
   runtime.trayActions().setNearby(false);
   const stopped = await waitFor(win, "the room to stop", `!document.querySelector('[data-test="lan-stop"]')`);

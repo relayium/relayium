@@ -221,6 +221,32 @@ function trayIcon(): Electron.NativeImage {
  * and it asks BEFORE anything is written: a renderer click is a request, and
  * this is the consent.
  */
+/**
+ * Ask, natively, before closing the app to install an update.
+ *
+ * The same shape as the startup-programs consent above and for a stronger
+ * reason: this one ENDS the running app. It is asked every time — consent to
+ * interrupt somebody's work cannot be remembered — in the language the window
+ * is showing, and the default button is Cancel, because a person pressing
+ * Return on a dialog they did not read must not lose a transfer.
+ */
+async function confirmUpdateInstall(): Promise<boolean> {
+  const t = translator(resident ? resident.currentLocale : "en");
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  const options: Electron.MessageBoxOptions = {
+    type: "question",
+    title: t("resident.update.confirmTitle"),
+    message: t("resident.update.confirmTitle"),
+    detail: t("resident.update.confirmBody"),
+    buttons: [t("resident.update.confirm"), t("resident.update.cancel")],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+  };
+  const answer = win === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(win, options);
+  return answer.response === 0;
+}
+
 async function confirmLoginItem(): Promise<boolean> {
   const t = translator(resident ? resident.currentLocale : "en");
   const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
@@ -430,6 +456,31 @@ export interface BootstrapOptions {
   /** Leave the window hidden. A test drives the renderer through `webContents`
    *  and has no reason to put a window on a developer's screen. */
   readonly showOnLaunch?: boolean;
+  /**
+   * Answer the native install consent, in process.
+   *
+   * Injection only, like `composition` and `residentPlatform`, and for the same
+   * reason: the shipped path opens a modal dialog, and a run with nobody in
+   * front of it cannot answer one. Without this the install half of the update
+   * flow — consent, quiesce, installer, release — cannot be exercised at all.
+   *
+   * It replaces only the ANSWER. Everything the answer is used for — the
+   * re-check after the prompt, the cleanup counts, the exclusion that stops the
+   * install waiting on itself — is the shipped adapter.
+   *
+   * Not reachable from a renderer, a flag or the environment.
+   */
+  readonly confirmUpdateInstall?: () => Promise<boolean>;
+  /**
+   * Record the post-install exit instead of performing it.
+   *
+   * Injection only, and for the same reason as the consent above: the shipped
+   * hook ends the process, which would end an automated run mid-scenario. What
+   * is under test is that the choreography DECIDES to exit — exactly once, and
+   * only after a launched install — so recording the decision is the whole
+   * observation. Not reachable from a renderer, a flag or the environment.
+   */
+  readonly exitAfterInstall?: () => void;
 }
 
 /** Test/diagnostic only: the composed resident behaviour, once bootstrapped. */
@@ -525,6 +576,24 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
       onLocale: (locale) => resident?.setLocale(locale),
       onNearby: (active) => resident?.setNearbyActive(active),
       confirmLoginItem: async () => confirmLoginItem(),
+      confirmUpdateInstall: async () =>
+        options.confirmUpdateInstall ? options.confirmUpdateInstall() : confirmUpdateInstall(),
+      // The installer is running; this process is what it is replacing. The
+      // platform's own exit sets `quitting`, so `before-quit` lets it through
+      // rather than asking a person who has already agreed.
+      // The installer is running; this process is what it is replacing. This
+      // sets `quitting` and calls `app.quit()` directly, so `before-quit` lets
+      // it through rather than asking a person who has already agreed — and so
+      // it never re-enters the quit coordinator, which would quiesce the update
+      // facade that just produced this outcome.
+      exitAfterInstall: () => {
+        if (options.exitAfterInstall) {
+          options.exitAfterInstall();
+          return;
+        }
+        quitting = true;
+        app.quit();
+      },
       reportFailure: (err) =>
         process.stderr.write(`relayium: ${err instanceof Error ? err.message : String(err)}\n`),
     },

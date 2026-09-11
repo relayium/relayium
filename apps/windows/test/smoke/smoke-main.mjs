@@ -269,7 +269,7 @@ async function main() {
   check(
     "bridge exposed",
     parsed.keys.sort().join(",") ===
-      "accountSummary,appInfo,auth,ice,inbox,inboxSend,loginItem,pair,prefs,receive,resident,send,signaling,stored",
+      "accountSummary,appInfo,auth,ice,inbox,inboxSend,loginItem,pair,prefs,receive,resident,send,signaling,stored,update",
     parsed.keys.join(","),
   );
   check("no raw ipcRenderer in the page", parsed.hasIpc === false);
@@ -342,6 +342,12 @@ async function main() {
     "relayium:account-summary-state", "relayium:account-summary-refresh",
     "relayium:account-device-rename", "relayium:account-device-revoke",
     "relayium:account-manage",
+    // Updates. None of these carries an address, a key or a version the page
+    // chose: `update-act` takes one of four closed actions and is always a
+    // MANUAL trigger, and `update-notes` names a destination with a token that
+    // main resolves from the SIGNED manifest.
+    "relayium:update-state", "relayium:update-act",
+    "relayium:update-residue", "relayium:update-notes",
     "relayium:inbox-delete-message", "relayium:inbox-rename", "relayium:inbox-wake",
     "relayium:inbox-release-retained",
   ];

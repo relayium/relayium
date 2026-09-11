@@ -368,6 +368,9 @@ export class ResidentRuntime {
       show: () => this.deps.platform.show(),
       openNearby: () => void this.openPage("lan"),
       openInbox: () => void this.openPage("inbox"),
+      // The settings page, where the update pane is. The menu opens it and
+      // acts on nothing: a menu item cannot show what it would do.
+      openUpdates: () => void this.openPage("account"),
       setNearby: (active) => void this.setLan(active ? "resume" : "pause"),
       nearbyActive: () => this.nearby,
       quit: () => void this.requestQuit(),

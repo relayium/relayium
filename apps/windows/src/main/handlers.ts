@@ -40,6 +40,16 @@ import { AccountIdentity } from "./features/account-identity.js";
 import { StoredSendService, type StoredSendDeps } from "./features/stored-send.js";
 import { InboxSendService, type InboxSendDeps } from "./features/inbox-send-service.js";
 import { AccountSummaryService, type AccountSummaryDeps } from "./features/account-summary.js";
+import { UpdateSummaryService, type UpdateSummaryDeps } from "./features/update-summary.js";
+import { UpdateService, type UpdateServiceOptions } from "./update/service.js";
+import { PRODUCTION_TRUST_BASE } from "./update/trust.js";
+import { defaultScopeProvider } from "./update/custody.js";
+import { hostQuiesceConsent } from "./update/host-consent.js";
+import { nativeInstaller, nativePublisherVerifier, nativeScopeProvider, HELPER_FILE_NAME } from "./update/native-scope.js";
+import { dirname, isAbsolute, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { BUILD_NUMBER, BUILD_NUMBER_PROVISIONED } from "./build-info.js";
+import { isUpdateAction, isUpdateExternalTarget } from "../shared/update-summary.js";
 import { isAccountExternalTarget } from "../shared/account-summary.js";
 import { DeviceAuthClient } from "./account/device-auth.js";
 import { ENGINEERING_BANNER, engineeringOverride, isEngineeringBuild } from "./build-mode.js";
@@ -163,6 +173,36 @@ export interface HandlerComposition {
    * this `Pick` and cannot be replaced from here.
    */
   accountSummary?: Pick<AccountSummaryDeps, "makeClient" | "fetchImpl" | "timeoutMs" | "quiesceTimeoutMs">;
+  /**
+   * Update seams, for a PRIVATE composition test only.
+   *
+   * What they exist for is a run that drives a controlled signed flow over the
+   * real IPC and the real core — the eighteen states are not otherwise
+   * reachable, and a rule that made them untestable would be a rule against
+   * testing rather than against provisioning.
+   *
+   * `trust` is included deliberately and narrowly: a test bootstrap may inject
+   * a KNOWN TEST key so a signed fixture verifies. That is not provisioning
+   * production trust — the shipped constant stays empty, this is reachable only
+   * through `bootstrap({composition})` in-process, and there is no renderer
+   * message, command-line flag or environment variable that can reach it. What
+   * remains impossible from here is redirecting the DATA DIRECTORY, which is
+   * where staging lives.
+   */
+  updateCore?: Pick<
+    UpdateServiceOptions,
+    "feed" | "artifact" | "clock" | "verifier" | "installer" | "revealer" | "quiesceConsent" | "trust" | "scope"
+  >;
+  updateSummary?: Pick<UpdateSummaryDeps, "feedUrl">;
+  /**
+   * A task-owned directory for the update journal and staging.
+   *
+   * Private composition ONLY, for the same reason the test trust is: this
+   * host's `currentDataRoot()` refuses on anything but Windows, and without a
+   * directory the journal states are unreachable. Not on any channel, not in
+   * the environment, and absent in the shipped path.
+   */
+  updateDataDirectory?: string;
   /** A task-owned journal directory, so a run does not write into the user's
    *  profile — and so send is drivable on a host that is not Windows. */
   storedSendJournalDirectory?: string;
@@ -217,6 +257,25 @@ export interface ResidentEvents {
   onNearby?: (active: boolean) => void;
   /** Enabling start-at-login needs the user's explicit yes, asked natively. */
   confirmLoginItem?: () => Promise<boolean>;
+  /**
+   * Interrupting the running app to install an update needs the same yes.
+   *
+   * Asked natively, in the language the window is showing, and asked EVERY
+   * time: consent to close somebody's app has no default and cannot be
+   * remembered. Absent means no install can proceed, which is the correct
+   * posture for a host that cannot ask.
+   */
+  confirmUpdateInstall?: () => Promise<boolean>;
+  /**
+   * End the process after an installer has been launched for it.
+   *
+   * Separate from every other exit in this app: it follows a consent the person
+   * has already given, it must not re-enter the quit prompt, and it happens
+   * ONLY when the installer reported `launched`. A host that does not supply it
+   * leaves the old process running behind a running installer, which is the
+   * defect this exists to close.
+   */
+  exitAfterInstall?: () => void;
   /** Diagnostics sink for failures that must not reach a screen. */
   reportFailure?: (err: unknown) => void;
 }
@@ -257,7 +316,8 @@ export interface HandlerControl {
    * outgoing work actually lives. Both halves have to stop, and this is the
    * half that does not end the process.
    */
-  readonly quiesce: () => Promise<CleanupOutcome>;
+  /** `exclude` names work the caller owns. See the implementation. */
+  readonly quiesce: (exclude?: "update") => Promise<CleanupOutcome>;
   /**
    * Stop admitting new work, everywhere, without stopping anything.
    *
@@ -300,6 +360,15 @@ const RESIDENT_ACK_TIMEOUT_MS = 2_000;
  * Bounded because a quit must not hang on a socket the peer is not answering,
  * and reported because "we asked" is not "it stopped".
  */
+/**
+ * How often the update scheduler ASKS whether a check is due.
+ *
+ * Not how often it checks. `automaticCheckDue` owns the interval that matters —
+ * daily — and this is only the granularity at which the question is put, so a
+ * machine that was asleep for a week wakes to one check rather than seven.
+ */
+const UPDATE_CHECK_TICK_MS = 30 * 60 * 1000;
+
 const NETWORK_DRAIN_MS = 1_500;
 
 /** A failure as a bounded string; never the `Error`, which crosses no boundary
@@ -933,6 +1002,334 @@ export function registerHandlers(
     return { ok: await openApprovedExternal(url, origin) };
   });
 
+  // -------------------------------------------------------------------------
+  // Updates
+  // -------------------------------------------------------------------------
+  //
+  // ## The trust root decides whether this feature exists at all
+  //
+  // `PRODUCTION_TRUST_BASE` is every fixed part of the feed EXCEPT the public
+  // keys, which root provisions. Until it does, `publicKeys` is empty and this
+  // build passes `trust: null` — which is not a degraded update path, it is
+  // NO update path: `updatesEnabled` is false, the core publishes
+  // `disabled/no-pin`, and the UI says so rather than offering a button that
+  // could not verify anything it downloaded. An engineering build is disabled
+  // for its own separate reason and never points at a second feed.
+  //
+  // Nothing here invents a key, a feed, a publisher or a signing authority.
+  /**
+   * This build's identity, from COMPILED metadata.
+   *
+   * `app.getVersion()` reads the packaged `package.json` baked into the bundle.
+   * It is not `process.env.npm_package_version`, which exists only when a
+   * process was started through an npm script, is absent in a packaged app, and
+   * is mutable by whoever launched it — a build that read its own identity from
+   * the environment could be told it was newer than an update by being started
+   * differently.
+   *
+   * The build NUMBER is a source constant for the same reason, and is not
+   * derived from the semver: deriving one invents an ordering the feed never
+   * agreed to. See `build-info.ts` for why it is zero today and what must
+   * happen when the first artifact ships.
+   */
+  const appVersion = app.getVersion();
+  const appBuildNumber = BUILD_NUMBER;
+  /**
+   * The ONE executable this feature may run, or null.
+   *
+   * The two layouts are named and fixed, exactly as the Inbox helper's resolver
+   * names them, and for the reason stated there: `process.resourcesPath` is
+   * also defined in an UNPACKAGED run, so a "use it when present" rule takes
+   * the packaged branch in development and points at Electron's own resources.
+   * `process.defaultApp` is what distinguishes them.
+   *
+   * Never from a renderer, an argument or an environment variable. A path that
+   * cannot be resolved absolutely returns null, and the caller wires nothing.
+   */
+  const resolveUpdateHelperPath = (): string | null => {
+    const unpackaged = process.defaultApp === true;
+    const resourcesPath = typeof process.resourcesPath === "string" ? process.resourcesPath : null;
+    let resolved: string;
+    if (unpackaged) {
+      // The Go build output beside the app, at the same fixed climb the Inbox
+      // helper uses: `dist/main` compiled and `src/main` under the bundler sit
+      // at the same depth.
+      resolved = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "native", "build", HELPER_FILE_NAME);
+    } else {
+      if (resourcesPath === null || resourcesPath.length === 0) return null;
+      resolved = join(resourcesPath, HELPER_FILE_NAME);
+    }
+    return isAbsolute(resolved) ? resolved : null;
+  };
+
+  /**
+   * Open a path with the shell, honouring its return contract.
+   *
+   * The same rule as the Inbox reveal: `openPath` reports failure by RETURNING
+   * a non-empty string, and the message routinely contains the path. A closed
+   * throw is what the caller needs; the text is dropped.
+   */
+  const revealPath = async (target: string): Promise<void> => {
+    const failure = await shell.openPath(target);
+    if (failure.length > 0) throw Object.assign(new Error("reveal was refused"), { code: "internal" });
+  };
+
+  /**
+   * The packaged helper's adapters, or none at all.
+   *
+   * One resolution, used for all three: staging custody, the installer and the
+   * publisher verifier are the same executable answering three questions. If
+   * the layout cannot produce an absolute path to it, NOTHING is wired —
+   * `custody.ts`'s fail-closed provider stands, and an absent installer means
+   * no install can run. That is a refusal, not a degradation, and it is the
+   * correct posture for a build that cannot locate its own helper.
+   */
+  const updateHelperAdapters = (): Partial<UpdateServiceOptions> => {
+    // ## The helper is a WINDOWS executable
+    //
+    // `HELPER_FILE_NAME` ends in `.exe`, and the adapters start it as a
+    // process. On any other platform there is nothing to start, so wiring them
+    // would resolve an absolute path to a file that cannot exist and turn every
+    // journal read into "unreadable" — a failure that looks like corruption and
+    // is really a host mismatch.
+    //
+    // Elsewhere the platform default stands: posix custody where it applies,
+    // and `custody.ts`'s fail-closed provider on a win32 build whose helper
+    // cannot be found. No installer is wired off Windows either, and an absent
+    // installer means no install can run.
+    if (process.platform !== "win32") return { scope: defaultScopeProvider() };
+    const helperPath = resolveUpdateHelperPath();
+    if (helperPath === null) return { scope: defaultScopeProvider() };
+    const options = { helperPath } as const;
+    return {
+      scope: nativeScopeProvider(options),
+      installer: nativeInstaller(options),
+      // `expectedPublisher` is absent until the certificate is provisioned, so
+      // this reports `unsigned` truthfully rather than pretending to match.
+      verifier: nativePublisherVerifier({ ...options, expectedPublisher: null }),
+    };
+  };
+
+  /**
+   * Consent to interrupt the running app, asked of a person every time.
+   *
+   * The adapter itself is `update/host-consent.ts` — one implementation, which
+   * this composes and the tests import. It was a closure here, and its test was
+   * a handwritten copy of that closure: a copy stays green while the thing it
+   * was copied from regresses, which is the one property a regression test may
+   * not have.
+   *
+   * `quiesce("update")` is what stops the install waiting on itself: the
+   * exclusion skips the update facade and therefore the core inside it, which
+   * is the thing awaiting this answer.
+   */
+  const updateConsent = hostQuiesceConsent({
+    // No host hook means no consent, and no consent means no install. A default
+    // of `true` here would be an app that closes itself without asking.
+    confirm: async () => (await events.confirmUpdateInstall?.()) === true,
+    quiesce: (exclude) => quiesce(exclude),
+    resume: () => resume(),
+    reportFailure: (err) => events.reportFailure?.(err),
+  });
+
+  const pinnedKeys: readonly string[] = [];
+  /**
+   * ## An unprovisioned build may not ship an ENABLED updater
+   *
+   * The two halves are provisioned by the same person at the same moment: the
+   * feed keys, and the build number this artifact claims to be. Shipping one
+   * without the other is silently broken in a way nobody would see in review —
+   * an enabled updater on a build still numbered 0 treats every published build
+   * as newer, so it would offer to "update" to the version already running, on
+   * a loop, forever.
+   *
+   * So the interlock is here rather than in a checklist: keys without a
+   * provisioned build number leave `trust` NULL and the feature disabled, and
+   * the reason is reported. It cannot be overridden from anywhere.
+   */
+  /**
+   * Where the update journal and staging live, or null.
+   *
+   * The host's own data root, with ONE private override for a composition test:
+   * this smoke runs on a host where `currentDataRoot()` legitimately refuses,
+   * and without a task-owned directory the journal states — half the state
+   * machine — are unreachable. It is reachable only through
+   * `bootstrap({composition})` in-process; no renderer message, flag or
+   * environment variable touches it, and the shipped path is unchanged.
+   */
+  const updateDataDirectory = ((): string | null => {
+    const injected = composition.updateDataDirectory;
+    if (injected !== undefined) return injected;
+    const root = currentDataRoot();
+    return root.ok ? `${root.path}/updates` : null;
+  })();
+
+  const buildIdentityReady = BUILD_NUMBER_PROVISIONED && appBuildNumber > 0;
+  if (pinnedKeys.length > 0 && !buildIdentityReady) {
+    events.reportFailure?.(
+      Object.assign(new Error("update keys are pinned but this build has no provisioned build number"), {
+        code: "internal",
+      }),
+    );
+  }
+  if (updateDataDirectory === null) {
+    events.reportFailure?.(
+      Object.assign(new Error("updates are disabled: this host has no resolvable data root"), {
+        code: "internal",
+      }),
+    );
+  }
+  const updateTrust =
+    pinnedKeys.length > 0 && buildIdentityReady && updateDataDirectory !== null
+      ? { ...PRODUCTION_TRUST_BASE, publicKeys: pinnedKeys }
+      : null;
+  const updateCore = new UpdateService({
+    trust: updateTrust,
+    engineering: isEngineeringBuild(),
+    current: { version: appVersion, build: appBuildNumber },
+    // The app's OWN data root. There is no path on any channel below that could
+    // move it, and a renderer cannot name one.
+    //
+    // An empty string is NOT a fallback. A core built with nowhere to keep its
+    // journal cannot record what it staged, and the honest posture for a host
+    // that cannot resolve its own data root is the same as one with no key:
+    // disabled, and said so. `updateDataDirectory` is null in that case and the
+    // trust below is withheld.
+    dataDirectory: updateDataDirectory ?? "",
+    // ## The platform capabilities are CONNECTED, not deferred
+    //
+    // A build with no pinned key cannot update — but that is a decision about
+    // TRUST, and wiring the machinery behind it would mean the day a key is
+    // provisioned the feature still does not work. So the real adapters go in
+    // now: the packaged helper owns staging custody, performs the install, and
+    // answers the publisher question.
+    //
+    // The helper path is FIXED, derived from the process layout by the same
+    // resolver the Inbox's helper uses — never from a renderer, an argument or
+    // an environment variable, because this is the one executable this feature
+    // will run. On a layout where it cannot be resolved the scope provider
+    // falls back to the fail-closed one rather than guessing a path: a build
+    // that cannot prove it owns its staging directory must not create one.
+    ...updateHelperAdapters(),
+    // `expectedPublisher` stays absent until root provisions the certificate,
+    // so the verifier can report `unsigned` honestly and the signed install
+    // path stays unreachable by construction rather than by omission.
+    //
+    // Consent has NO default: the adapter below is the only thing that can
+    // grant it, and it asks the resident runtime — a person — every time.
+    quiesceConsent: updateConsent,
+    revealer: { reveal: (path) => revealPath(path) },
+    ...(composition.updateCore ?? {}),
+  });
+  const updateSummary = new UpdateSummaryService({
+    core: updateCore,
+    currentVersion: appVersion,
+    onView: (view) => {
+      router.emit(IPC_EVENTS.updateSummary, router.generation, view);
+    },
+    // Already validated, and built from the SIGNED manifest — there is no path
+    // by which a renderer supplies this string.
+    openExternal: (url) => openApprovedExternal(url, origin),
+    reportFailure: (err) => events.reportFailure?.(err),
+    ...(composition.updateSummary ?? {}),
+  });
+
+  /**
+   * Startup re-verification, and the daily check.
+   *
+   * Both are MAIN's, and neither is a page's to start. Re-verification runs
+   * once because a staged artifact from a previous run has to be proven again
+   * in THIS process before it is offered — a file that was verified yesterday
+   * is a file on disk today. The check is due-driven rather than interval-
+   * driven: `automaticCheckDue` owns what "due" means, so a machine that was
+   * asleep does not get a burst of checks on waking.
+   *
+   * The timer is unref'd — it must never be the reason this process stays
+   * alive — and cleared by the teardown below.
+   */
+  void updateSummary.reverifyStaged().catch((err: unknown) => events.reportFailure?.(err));
+  const updateTick = setInterval(() => {
+    void (async () => {
+      if (!(await updateSummary.automaticCheckDue())) return;
+      // `automatic`, because nobody asked. A page cannot claim this trigger.
+      await updateSummary.act("check", "automatic");
+    })().catch((err: unknown) => events.reportFailure?.(err));
+  }, UPDATE_CHECK_TICK_MS);
+  updateTick.unref?.();
+
+  /**
+   * End this process, because an installer is now running for it.
+   *
+   * ## Exactly once, only on `launched`, and never through the quit prompt
+   *
+   * The person has already consented to precisely this — the native dialog said
+   * the app would close and the installer would open — so asking again would
+   * ask somebody who has answered, and going through `requestQuit` would also
+   * re-enter a path that quiesces the update facade and therefore the operation
+   * that just produced this outcome.
+   *
+   * So this is a TERMINAL teardown followed by the host's own exit, guarded to
+   * run once: a second launched install cannot happen, and a second teardown
+   * would dispose services the first one already disposed.
+   *
+   * Nothing here runs on a refusal or a failure. Those release the lease and
+   * resume the app, and an app that resumed must not then exit.
+   */
+  let launchedExit = false;
+  const queueLaunchedExit = (): void => {
+    if (launchedExit) return;
+    launchedExit = true;
+    // After the current turn, so the IPC reply the renderer is waiting on is
+    // flushed before the process starts going away.
+    setImmediate(() => {
+      void (async () => {
+        try {
+          await teardown();
+        } catch (err) {
+          // Reported, and the exit still happens: an installer is already
+          // running against this installation, and leaving the old process
+          // alive because its own cleanup failed is the worse of the two.
+          events.reportFailure?.(err);
+        }
+        events.exitAfterInstall?.();
+      })();
+    });
+  };
+
+  router.handle(IPC.updateState, async () => updateSummary.view());
+  router.handle(IPC.updateAct, async (payload) => {
+    const body = expectObject(payload);
+    const action = body["action"];
+    if (!isUpdateAction(action)) throw new IpcRefusal("unknown update action");
+    // A page can only ask for a MANUAL action. `automatic` is the scheduler's
+    // word for its own timer, and letting a renderer claim it would let a page
+    // impersonate the thing that runs without anybody present.
+    const view = await updateSummary.act(action, "manual");
+    // ## A launched installer means THIS process must end
+    //
+    // The core sets `installing` and deliberately does NOT release the lease:
+    // its comment says "the app is going away". Nothing made it go away. The
+    // native installer only starts a process and closes its handles, and no
+    // host observed `installing` — so the app sat quiesced and alive while the
+    // consent dialog had just promised the person it would close, with an
+    // installer running behind it against files this process still holds.
+    //
+    // Scheduled AFTER the operation has settled, and after this reply, for two
+    // reasons: tearing down from inside the observer would join the very
+    // operation that is publishing the state, and a renderer that asked is owed
+    // its answer before the process goes.
+    if (action === "install" && view.state.kind === "installing") queueLaunchedExit();
+    return view;
+  });
+  router.handle(IPC.updateResidue, () => updateSummary.refreshResidue());
+  router.handle(IPC.updateNotes, async (payload) => {
+    const target = expectObject(payload)["target"];
+    if (!isUpdateExternalTarget(target)) throw new IpcRefusal("unknown update target");
+    // A closed TOKEN in, a validated URL resolved in MAIN. Nothing here takes
+    // an address from the page.
+    return { ok: await updateSummary.openExternal(target) };
+  });
+
   // The account moved. The service compares the epoch itself, because this also
   // fires for a document change and a reload must not stop receiving.
   const releaseAccountWatch = service.onAccountChanged(() => {
@@ -1364,9 +1761,21 @@ export function registerHandlers(
     // Mutations only. An explicit READ stays open on purpose: a screen frozen
     // mid-question is worse than one still reading.
     accountSummary.fence();
+    updateSummary.fence();
   };
 
-  const quiesce = async (): Promise<CleanupOutcome> => {
+  /**
+   * Stop main's own work, recoverably.
+   *
+   * `exclude` names work the CALLER already owns and must not be made to wait
+   * for itself. Today there is exactly one: an install asks the resident side
+   * to quiesce before it launches, and quiescing the update facade from inside
+   * that request would quiesce the core that is sitting in `install()` waiting
+   * for the answer — a circular wait, which a single-flight guard does not fix
+   * because the call is not re-entrant, it is mutual.
+   */
+  const quiesce = async (exclude?: "update"): Promise<CleanupOutcome> => {
+    const excludeUpdate = exclude === "update";
     // ## Everything is ASKED to stop before anything is JOINED
     //
     // Admission first, and synchronously: a fence set after a 1.5s network
@@ -1400,12 +1809,24 @@ export function registerHandlers(
     // Stronger than its fence on purpose: this has already reported an
     // inventory, and anything admitted afterwards would make that report untrue.
     const accountStopping = accountSummary.quiesce();
+    // ## The update facade is quiesced HERE, and NOT on the install path
+    //
+    // An install asks the resident side to quiesce before it launches, and that
+    // request carries an exclusion token. If this branch ran for the install
+    // CALLER it would call `updateSummary.quiesce()`, which quiesces the core —
+    // the very core that is sitting inside `install()` waiting for this answer.
+    // The install would then be waiting on itself, and a single-flight guard on
+    // the facade does not save it: the wait is circular, not re-entrant.
+    //
+    // So the exclusion is honoured by the caller of `quiesce`, and this path is
+    // the ORDINARY quit only.
+    const updateStopping = excludeUpdate ? Promise.resolve(null) : updateSummary.quiesce();
     // The leases, the sign-in, the queued transitions and the secret work. It
     // retires the in-flight sign-in before ITS first await too, so this is a
     // request as much as a join.
     const serviceStopping = service.quiesce();
 
-    const [sockets, reads, storedHeld, inboxHeld, sendHeld, inboxSendHeld, accountHeld, outcome] = await Promise.all([
+    const [sockets, reads, storedHeld, inboxHeld, sendHeld, inboxSendHeld, accountHeld, updateHeld, outcome] = await Promise.all([
       hub.drainClosing(NETWORK_DRAIN_MS),
       iceRequests.drain(NETWORK_DRAIN_MS),
       storedStopping,
@@ -1413,6 +1834,7 @@ export function registerHandlers(
       sendStopping,
       inboxSendStopping,
       accountStopping,
+      updateStopping,
       serviceStopping,
     ]);
 
@@ -1445,6 +1867,11 @@ export function registerHandlers(
         // reports this truthfully rather than assuming it away, so a quit that
         // ignored it would be discarding the one honest number it produces.
         accountHeld.unjoined +
+        // What the update facade could not stop inside its bounded wait. It
+        // reports `joined` truthfully rather than assuming quiet, and an
+        // unjoined check or download is exactly the kind of thing a quit prompt
+        // should mention rather than discover afterwards.
+        (updateHeld !== null && !updateHeld.joined ? 1 : 0) +
         (revocation !== null ? 1 : 0),
       networkUnsettled: sockets + reads,
       firstReason: outcome.firstReason ?? revocation,
@@ -1467,6 +1894,8 @@ export function registerHandlers(
     await storedSend.dispose();
     await inboxSend.dispose();
     await accountSummary.dispose();
+    clearInterval(updateTick);
+    await updateSummary.dispose();
     await inbox.dispose();
     await storedReceive.dispose();
     await service.dispose();
@@ -1486,6 +1915,7 @@ export function registerHandlers(
     storedSend.resume();
     inboxSend.resume();
     accountSummary.resume();
+    updateSummary.resume();
     // The scheduler too: it was stopped by the same quiesce, and a Stay that
     // left it stopped would be an app that quietly never receives again.
     inbox.resume();

@@ -157,6 +157,18 @@ contextBridge.exposeInMainWorld("relayium", {
     manage: invoke("relayium:account-manage"),
     onState: subscribe("relayium:account-summary"),
   },
+  // Updates. Four names, none of which carries an address, a key or a version
+  // the page chose. `notes` names a DESTINATION with a closed token and main
+  // resolves it from the signed manifest; a build with no pinned key answers
+  // `disabled` to `state` and offers nothing, which is the truth about this
+  // build rather than a placeholder.
+  update: {
+    state: invoke("relayium:update-state"),
+    act: invoke("relayium:update-act"),
+    residue: invoke("relayium:update-residue"),
+    openExternal: invoke("relayium:update-notes"),
+    onState: subscribe("relayium:update-summary"),
+  },
   // Device Inbox SEND. `start` answers with this delivery's content key — the
   // one secret that travels main→renderer here, because the renderer is what
   // encrypts. `feed` carries ciphertext the other way. A target is named by

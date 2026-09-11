@@ -27,6 +27,15 @@ export interface TrayActions {
    *  so it is also the fastest way to the thing the user came back FOR. */
   readonly openNearby: () => void;
   readonly openInbox: () => void;
+  /**
+   * Open the page the update lives on.
+   *
+   * The tray is the only way back to a hidden window, and "is there an update?"
+   * is a question people ask of a tray icon. It opens the SETTINGS page rather
+   * than acting: nothing about an update should happen from a menu, because a
+   * menu cannot show what it is about to do.
+   */
+  readonly openUpdates: () => void;
   /** Pause or resume same-network discovery without opening the window. */
   readonly setNearby: (active: boolean) => void;
   /** Whether Nearby is currently on, so the item can say which it does. */
@@ -48,6 +57,7 @@ export function trayMenuTemplate(t: Translate, actions: TrayActions): readonly T
     { type: "separator" },
     { label: t("resident.tray.nearby"), click: actions.openNearby },
     { label: t("resident.tray.inbox"), click: actions.openInbox },
+    { label: t("resident.tray.updates"), click: actions.openUpdates },
     {
       // Says what it will DO, not what is true now: a menu item labelled with a
       // state is read as a toggle by half of everyone and as a status by the

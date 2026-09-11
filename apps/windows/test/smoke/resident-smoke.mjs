@@ -57,6 +57,19 @@ const owned = [
   // The stored-send journal. Task-owned for the same reasons: this run writes a
   // real upload journal and real key custody into it.
   mkdtempSync(path.join(tmpdir(), "relayium-resident-send-")),
+  // The update journal and staging. Task-owned for the same reason the others
+  // are: this run writes a real journal, and `currentDataRoot()` legitimately
+  // refuses on a host that is not Windows.
+  mkdtempSync(path.join(tmpdir(), "relayium-resident-update-")),
+  // A SECOND send journal, used only by the restart phase.
+  //
+  // The first phase deliberately leaves an upload whose outcome could not be
+  // established — that is what `scenarioStoredSendAmbiguous` is for — and that
+  // record is durable. Sharing the journal would mean the restart phase always
+  // has one unresolved upload, the install consent always refuses (correctly),
+  // and the installer could never be reached. Two journals keep both scenarios
+  // honest instead of weakening either.
+  mkdtempSync(path.join(tmpdir(), "relayium-resident-send-restart-")),
 ];
 
 /** The last of what the child said, for a failure that needs explaining. */
