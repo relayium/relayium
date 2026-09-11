@@ -535,6 +535,58 @@ FunctionEnd
 !define RELAYIUM_SCHEME_KEY "Software\Classes\${RELAYIUM_SCHEME}"
 !define RELAYIUM_SCHEME_CMD_KEY "${RELAYIUM_SCHEME_KEY}\shell\open\command"
 
+; ---------------------------------------------------------------------------
+; Sending from Explorer
+; ---------------------------------------------------------------------------
+;
+; Two entry points, because Windows gives one selection model to each and
+; pretending otherwise is where this goes wrong.
+;
+; ## The context verb takes ONE item, and says so
+;
+; A `shell\...\command` value is expanded per invocation, and `%1` is a single
+; path. For a multiple selection Explorer's default is to invoke the verb once
+; PER ITEM — so a naive verb turns "send these forty files" into forty launches
+; of this application, each handed one path. With a send that holds a pending
+; selection, each launch would replace the last, and the user would end up
+; sending the fortieth file alone with no error anywhere.
+;
+; `MultiSelectModel = Single` is the documented way to say the verb is for one
+; item: Windows then does not offer it for a multiple selection at all. The user
+; sees the entry when it works and does not see it when it would not, which is
+; the honest version of a limitation.
+;
+; ## Bulk is SendTo, which really does get them all
+;
+; A SendTo shortcut is launched ONCE with every selected path appended to its
+; own arguments, which is the mechanism Windows provides for exactly this. So
+; the shortcut carries `--send-files` and Explorer supplies the paths after it.
+;
+; Very large selections are still bounded by the command-line limit, and Windows
+; can split them; that is the operating system's behaviour and is documented
+; rather than papered over.
+;
+; ## Neither is a default association
+;
+; Nothing here writes a `ProgId`, a `DefaultIcon` for a file type, or anything
+; under `OpenWithProgids`. Double-clicking a file is unchanged. These are
+; additional verbs the user chooses, which is what "not default" has to mean.
+!define RELAYIUM_SEND_VERB "RelayiumSendFiles"
+!define RELAYIUM_SEND_FILE_KEY "Software\Classes\*\shell\${RELAYIUM_SEND_VERB}"
+!define RELAYIUM_SEND_DIR_KEY "Software\Classes\Directory\shell\${RELAYIUM_SEND_VERB}"
+!define RELAYIUM_SENDTO_NAME "Relayium.lnk"
+
+; Reading a shortcut back needs COM: the pinned toolchain ships no ShellLink
+; plugin, and the `WinShell.dll` in `nsis-resources-3.4.1` exports only
+; `SetLnkAUMI`, `UninstAppUserModelId` and `UninstShortcut` — none of which can
+; read a target. Literals, so the vtable indices are checkable against the
+; interfaces rather than being magic numbers.
+!define CLSID_SHELLLINK   "{00021401-0000-0000-C000-000000000046}"
+!define IID_ISHELLLINKW   "{000214F9-0000-0000-C000-000000000046}"
+!define IID_IPERSISTFILE  "{0000010B-0000-0000-C000-000000000046}"
+!define CLSCTX_INPROC_SERVER 1
+!define SLGP_RAWPATH 4
+
 !macro customInstall
   !ifndef APP_EXECUTABLE_FILENAME
     !error "APP_EXECUTABLE_FILENAME undefined at customInstall: the registration would write a literal placeholder"
@@ -547,6 +599,55 @@ FunctionEnd
   ; Quoted path, then the URL as ONE quoted argument. Unquoted, a destination
   ; containing a space would hand the app a truncated path as argv[1].
   WriteRegStr HKCU "${RELAYIUM_SCHEME_CMD_KEY}" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"'
+
+  ; ---- Explorer: one file, or one folder ---------------------------------
+  ;
+  ; Written for both `*` (any file) and `Directory`, so a folder offers the same
+  ; entry. The label is the verb's default value; `MultiSelectModel` is what
+  ; keeps it off a multiple selection.
+  ;
+  ; Every path is quoted: an installation under `C:\Program Files` or a user
+  ; folder with a non-ASCII name is ordinary, and an unquoted value would hand
+  ; the application a truncated argv[0] or argv[1]. NSIS writes the registry in
+  ; UTF-16, so a Unicode destination survives verbatim.
+  ;
+  ; The LABEL is the one string here a person reads, so it follows the same rule
+  ; as the refusal messages above: English and Simplified Chinese, Relayium's
+  ; maintained product languages, selected by the installer's own `$LANGUAGE`
+  ; (2052 is zh-Hans). English is the fallback for every other language, which
+  ; is the declared behaviour rather than a gap.
+  ;
+  ; Written once into $R0 and used for both keys, so the two entries cannot
+  ; drift into different words for the same command.
+  Push $R0
+  StrCpy $R0 "Send with Relayium"
+  ${If} $LANGUAGE == 2052
+    StrCpy $R0 "使用 Relayium 发送"
+  ${EndIf}
+  DetailPrint "Adding the Explorer send entry for this user"
+  WriteRegStr HKCU "${RELAYIUM_SEND_FILE_KEY}" "" "$R0"
+  WriteRegStr HKCU "${RELAYIUM_SEND_FILE_KEY}" "MultiSelectModel" "Single"
+  WriteRegStr HKCU "${RELAYIUM_SEND_FILE_KEY}" "Icon" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}",0'
+  WriteRegStr HKCU "${RELAYIUM_SEND_FILE_KEY}\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --send-files "%1"'
+
+  WriteRegStr HKCU "${RELAYIUM_SEND_DIR_KEY}" "" "$R0"
+  WriteRegStr HKCU "${RELAYIUM_SEND_DIR_KEY}" "MultiSelectModel" "Single"
+  WriteRegStr HKCU "${RELAYIUM_SEND_DIR_KEY}" "Icon" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}",0'
+  WriteRegStr HKCU "${RELAYIUM_SEND_DIR_KEY}\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --send-files "%1"'
+
+  ; ---- SendTo: the bulk path ---------------------------------------------
+  ;
+  ; `$SENDTO` is this user's own SendTo folder. Explorer launches the target
+  ; ONCE with every selected path appended after these arguments.
+  ;
+  ; Overwritten rather than skipped if present: a reinstall restores THIS
+  ; installation's entry, which is the same contract the scheme registration
+  ; follows. The uninstaller is what refuses to touch a foreign replacement.
+  DetailPrint "Adding the SendTo entry for this user"
+  CreateShortCut "$SENDTO\${RELAYIUM_SENDTO_NAME}" \
+    "$INSTDIR\${APP_EXECUTABLE_FILENAME}" "--send-files" \
+    "$INSTDIR\${APP_EXECUTABLE_FILENAME}" 0
+  Pop $R0
 !macroend
 
 !macro customUnInstall
@@ -566,11 +667,105 @@ FunctionEnd
   ; the user has since pointed `relayium://` at another program, that
   ; registration is not ours to delete.
   Push $0
+  Push $1
+  Push $2
+  Push $3
+  Push $4
+  Push $5
   ReadRegStr $0 HKCU "${RELAYIUM_SCHEME_CMD_KEY}" ""
   ${If} $0 == '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"'
     DeleteRegKey HKCU "${RELAYIUM_SCHEME_KEY}"
   ${Else}
     DetailPrint "Leaving ${RELAYIUM_SCHEME}:// registered: it does not name this installation"
   ${EndIf}
+
+  ; ---- the Explorer verbs, by the same rule -------------------------------
+  ;
+  ; EXACT match against the one command this installer writes, for each key
+  ; independently. Not a prefix, and not the key's mere existence: a verb of the
+  ; same NAME pointing somewhere else is somebody else's, and a user who
+  ; repointed "Send with Relayium" at another build has made a choice this
+  ; uninstaller does not get to reverse. The name is the cheapest thing to
+  ; collide on, which is exactly why it cannot be the test.
+  ReadRegStr $0 HKCU "${RELAYIUM_SEND_FILE_KEY}\command" ""
+  ${If} $0 == '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --send-files "%1"'
+    DeleteRegKey HKCU "${RELAYIUM_SEND_FILE_KEY}"
+  ${Else}
+    DetailPrint "Leaving the file send entry: it does not name this installation"
+  ${EndIf}
+
+  ReadRegStr $0 HKCU "${RELAYIUM_SEND_DIR_KEY}\command" ""
+  ${If} $0 == '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --send-files "%1"'
+    DeleteRegKey HKCU "${RELAYIUM_SEND_DIR_KEY}"
+  ${Else}
+    DetailPrint "Leaving the folder send entry: it does not name this installation"
+  ${EndIf}
+
+  ; ---- the SendTo shortcut, by DESTINATION and ARGUMENTS -------------------
+  ;
+  ; A shortcut has no registry value to compare, so the link itself is read.
+  ; Both halves must match: a shortcut of this name pointing at another program,
+  ; or at this program with different arguments, is not the one written here.
+  ;
+  ; Through `System` and COM, NOT a plugin. `ShellLink::GetShortCutTarget` does
+  ; not exist in the pinned toolchain, and a macro written against it compiles
+  ; nowhere — it would have failed on the build runner rather than here.
+  ${If} ${FileExists} "$SENDTO\${RELAYIUM_SENDTO_NAME}"
+    ; Fails CLOSED. If COM cannot start, the object cannot be created, the link
+    ; cannot be loaded, or either accessor fails, the shortcut is LEFT ALONE: a
+    ; link this uninstaller could not read is one it cannot claim, and deleting
+    ; on a failed read removes somebody else's entry on the strength of a name.
+    StrCpy $2 ""
+    StrCpy $3 ""
+    ; CoInitialize's OWN result, kept in its own register.
+    ;
+    ; Only `S_OK` (0) and `S_FALSE` (1) mean this call initialised the apartment
+    ; — or joined one already initialised — and therefore owes a matching
+    ; `CoUninitialize`. `RPC_E_CHANGED_MODE` and every other failure mean it did
+    ; not, and uninitialising then would tear down an apartment this uninstaller
+    ; does not own, inside a process it shares.
+    ;
+    ; An earlier version read the result into `$0` and then overwrote `$0` with
+    ; `CoCreateInstance`, so the initialisation was never checked at all and the
+    ; uninitialise ran unconditionally.
+    System::Call "ole32::CoInitialize(i 0) i .r5"
+    ${If} $5 == 0
+    ${OrIf} $5 == 1
+      System::Call "ole32::CoCreateInstance(g '${CLSID_SHELLLINK}', i 0, i ${CLSCTX_INPROC_SERVER}, g '${IID_ISHELLLINKW}', *i .r1) i .r0"
+      ${If} $0 == 0
+        System::Call "$1->0(g '${IID_IPERSISTFILE}', *i .r4) i .r0"
+        ${If} $0 == 0
+          System::Call "$4->5(w '$SENDTO\${RELAYIUM_SENDTO_NAME}', i 0) i .r0"
+          ${If} $0 == 0
+            ; SLGP_RAWPATH: the STORED string, not one the shell resolved for us.
+            System::Call "$1->3(w .r2, i ${NSIS_MAX_STRLEN}, i 0, i ${SLGP_RAWPATH}) i .r0"
+            ${If} $0 != 0
+              StrCpy $2 ""
+            ${EndIf}
+            System::Call "$1->10(w .r3, i ${NSIS_MAX_STRLEN}) i .r0"
+            ${If} $0 != 0
+              StrCpy $3 ""
+            ${EndIf}
+          ${EndIf}
+          System::Call "$4->2() i"
+        ${EndIf}
+        System::Call "$1->2() i"
+      ${EndIf}
+      ; Paired with the successful initialise above, and only with it.
+      System::Call "ole32::CoUninitialize()"
+    ${EndIf}
+
+    ${If} $2 == "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+    ${AndIf} $3 == "--send-files"
+      Delete "$SENDTO\${RELAYIUM_SENDTO_NAME}"
+    ${Else}
+      DetailPrint "Leaving the SendTo entry: it does not name this installation"
+    ${EndIf}
+  ${EndIf}
+  Pop $5
+  Pop $4
+  Pop $3
+  Pop $2
+  Pop $1
   Pop $0
 !macroend

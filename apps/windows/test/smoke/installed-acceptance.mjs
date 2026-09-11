@@ -92,6 +92,9 @@ const APP_DIR_NAME = path.basename(dataRoot);
 const PROFILE_DIR_CANDIDATES = ["relayium-windows", "Relayium"];
 
 const SCHEME_KEY = "HKCU\\Software\\Classes\\relayium";
+const SEND_VERB = "RelayiumSendFiles";
+const SEND_FILE_KEY = `HKCU\\Software\\Classes\\*\\shell\\${SEND_VERB}`;
+const SEND_DIR_KEY = `HKCU\\Software\\Classes\\Directory\\shell\\${SEND_VERB}`;
 const SCHEME_CMD_KEY = `${SCHEME_KEY}\\shell\\open\\command`;
 const secretsDir = path.join(dataRoot, "secrets");
 const uninstaller = path.join(installDir, "Uninstall Relayium.exe");
@@ -179,6 +182,51 @@ async function waitFor(what, predicate, timeoutMs) {
 
 function regQueryDefault(key) {
   const r = spawnSync("reg.exe", ["query", key, "/ve"], { encoding: "utf8" });
+  if (r.status !== 0) return null;
+  const line = r.stdout.split(/\r?\n/).find((l) => /REG_SZ/.test(l));
+  if (!line) return null;
+  return line.slice(line.indexOf("REG_SZ") + "REG_SZ".length).trim();
+}
+
+/**
+ * Write a REAL shortcut, through the same shell interface the uninstaller reads.
+ *
+ * The foreign cases have to be genuine `.lnk` files: a file of the right NAME
+ * full of arbitrary bytes only exercises the uninstaller's fail-closed path,
+ * which is a different assertion from "this link names somebody else".
+ */
+function writeShortcut(linkPath, target, args) {
+  const ps = [
+    "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:RELAYIUM_LNK)",
+    "$s.TargetPath = $env:RELAYIUM_TARGET",
+    "$s.Arguments = $env:RELAYIUM_ARGS",
+    "$s.Save()",
+  ].join("; ");
+  return spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], {
+    stdio: "ignore",
+    env: { ...process.env, RELAYIUM_LNK: linkPath, RELAYIUM_TARGET: target, RELAYIUM_ARGS: args },
+  }).status === 0;
+}
+
+/** What a shortcut actually points at, read the same way. */
+function readShortcut(linkPath) {
+  const ps = [
+    "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:RELAYIUM_LNK)",
+    "Write-Output $s.TargetPath",
+    "Write-Output $s.Arguments",
+  ].join("; ");
+  const r = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], {
+    encoding: "utf8",
+    env: { ...process.env, RELAYIUM_LNK: linkPath },
+  });
+  if (r.status !== 0) return null;
+  const [target = "", args = ""] = r.stdout.split(/\r?\n/);
+  return { target: target.trim(), args: args.trim() };
+}
+
+/** One NAMED value under a key. `MultiSelectModel` is not a default value. */
+function regQueryValue(key, name) {
+  const r = spawnSync("reg.exe", ["query", key, "/v", name], { encoding: "utf8" });
   if (r.status !== 0) return null;
   const line = r.stdout.split(/\r?\n/).find((l) => /REG_SZ/.test(l));
   if (!line) return null;
@@ -564,6 +612,19 @@ async function main() {
   // child of it is how a test destroys something it never owned.
   if (!check("install parent directory absent before the run", !existsSync(installParent), installParent)) return;
   if (!check("private data root absent before the run", !existsSync(dataRoot), dataRoot)) return;
+  // The send entries, for the same reason the directories above are asserted.
+  //
+  // This run OVERWRITES them and its cleanup DELETES them, and the ownership
+  // comments elsewhere describe intent rather than establish fact. If a real
+  // installation of Relayium were already on this machine, every send assertion
+  // below would be reading its registration and the cleanup would take the
+  // user's own entries with it. Absence first, then they are this run's.
+  if (!check("file send verb absent before the run", !regKeyExists(SEND_FILE_KEY), SEND_FILE_KEY)) return;
+  if (!check("folder send verb absent before the run", !regKeyExists(SEND_DIR_KEY), SEND_DIR_KEY)) return;
+  {
+    const link = join(process.env.APPDATA ?? "", "Microsoft", "Windows", "SendTo", "Relayium.lnk");
+    if (!check("SendTo shortcut absent before the run", !existsSync(link), link)) return;
+  }
   if (!check(
     "relayium class key absent before the run",
     !regKeyExists("HKCU\\Software\\Classes\\relayium"),
@@ -599,6 +660,66 @@ async function main() {
     "no machine-wide association was created by a per-user install",
     !regKeyExists("HKLM\\Software\\Classes\\relayium"),
   );
+
+  // ---- the Explorer send entries ----------------------------------------
+  //
+  // Read back from the REAL registry the installer just wrote. What Explorer
+  // then DOES with a verb — whether it honours `MultiSelectModel`, and what
+  // argv it builds — is the shell's behaviour and is not observable here
+  // without driving Explorer itself. These assert the contract; the shell's
+  // half is documented rather than claimed.
+  for (const [what, key] of [
+    ["file", SEND_FILE_KEY],
+    ["folder", SEND_DIR_KEY],
+  ]) {
+    const verb = regQueryDefault(key);
+    check(`${what} send verb registered under HKCU`, verb !== null, key);
+    check(
+      `${what} send verb is SINGLE-selection`,
+      regQueryValue(key, "MultiSelectModel") === "Single",
+      String(regQueryValue(key, "MultiSelectModel")),
+    );
+    const sendCommand = regQueryDefault(`${key}\\command`);
+    if (check(`${what} send command present`, sendCommand !== null)) {
+      const tokens = tokenizeCommand(sendCommand);
+      check(
+        `${what} send command names exactly the installed executable`,
+        tokens.length > 0 && samePath(tokens[0], installedExe),
+        `${sendCommand} (first token: ${tokens[0]})`,
+      );
+      check(
+        `${what} send command passes the flag and ONE quoted path`,
+        tokens.length === 3 && tokens[1] === "--send-files" && tokens[2] === "%1"
+          && sendCommand.includes('"%1"'),
+        sendCommand,
+      );
+    }
+  }
+  check(
+    "no machine-wide send verb was created",
+    !regKeyExists("HKLM\\Software\\Classes\\*\\shell\\RelayiumSendFiles"),
+  );
+  // Not a default association: double-clicking a file is unchanged.
+  check(
+    "no file-type association was claimed",
+    !regKeyExists("HKCU\\Software\\Classes\\.bin"),
+  );
+
+  // ---- the SendTo shortcut, the bulk path --------------------------------
+  const sendToLink = join(process.env.APPDATA ?? "", "Microsoft", "Windows", "SendTo", "Relayium.lnk");
+  if (check("SendTo shortcut created", existsSync(sendToLink), sendToLink)) {
+    const link = readShortcut(sendToLink);
+    if (check("SendTo shortcut is readable", link !== null)) {
+      check(
+        "SendTo shortcut targets exactly the installed executable",
+        samePath(link.target, installedExe),
+        `${link.target} vs ${installedExe}`,
+      );
+      // The flag and NOTHING else: Explorer appends every selected path after
+      // these arguments, which is what makes this the bulk path.
+      check("SendTo shortcut carries only the flag", link.args === "--send-files", link.args);
+    }
+  }
 
   // ---- Launch, with overrides that must be ignored ----------------------
   const port = await freeLoopbackPort();
@@ -923,6 +1044,12 @@ async function main() {
     await waitFor("the program files to be removed", async () => !existsSync(installedExe), DEADLINE.uninstall);
     check("installed executable removed", !existsSync(installedExe));
     check("scheme registration removed", !regKeyExists("HKCU\\Software\\Classes\\relayium"));
+    check("file send verb removed", !regKeyExists(SEND_FILE_KEY));
+    check("folder send verb removed", !regKeyExists(SEND_DIR_KEY));
+    check(
+      "SendTo shortcut removed",
+      !existsSync(join(process.env.APPDATA ?? "", "Microsoft", "Windows", "SendTo", "Relayium.lnk")),
+    );
     // The point of the whole guard: an uninstall must not take the keys.
     check("private data root PRESERVED by uninstall", existsSync(secretsDir), secretsDir);
     check("sealed identity preserved by uninstall", hashSealed() === sealedBefore);
@@ -930,6 +1057,7 @@ async function main() {
 
   await aliasPhase();
   await schemeOwnershipPhase();
+  await sendToArgsOwnershipPhase();
 }
 
 /**
@@ -945,6 +1073,45 @@ async function main() {
  * Runs last, with nothing installed and the scheme key absent. Every piece of
  * state it touches it created itself.
  */
+/**
+ * The other half of shortcut ownership: OUR program, somebody else's arguments.
+ *
+ * The target test alone is not enough. A user who repointed this entry at the
+ * same executable with different arguments — a different flag, an extra switch —
+ * has made a choice, and an uninstaller matching on the target would reverse it.
+ * Its own install/uninstall cycle, because there is one SendTo path and the
+ * target case has already spent the previous one.
+ */
+async function sendToArgsOwnershipPhase() {
+  const sendToLink = join(process.env.APPDATA ?? "", "Microsoft", "Windows", "SendTo", "Relayium.lnk");
+  const dir = path.join(runnerTemp, "relayium acceptance", "args", "Relayium");
+  owned.argsInstallParent = path.dirname(path.dirname(dir));
+
+  const installed = await runInstaller(["/S", `/D=${dir}`], DEADLINE.install, "install for the args case");
+  if (!check("args-case install exited 0", installed.ok && installed.code === 0, `exit ${installed.code}`)) return;
+  if (!check("args-case install created the SendTo entry", existsSync(sendToLink), sendToLink)) return;
+
+  // Same executable this installation wrote. Only the arguments differ.
+  const ourExe = path.join(dir, "Relayium.exe");
+  const foreignArgs = "--send-files --some-other-switch";
+  if (!check("foreign SendTo ARGS written", writeShortcut(sendToLink, ourExe, foreignArgs))) return;
+  owned.sendToLink = sendToLink;
+
+  const un = path.join(dir, "Uninstall Relayium.exe");
+  if (check("args-case uninstaller exists", existsSync(un), un)) {
+    const removed = await runInstaller(["/S", `_?=${dir}`], DEADLINE.uninstall, "args-case uninstall", un);
+    check("args-case uninstall exited 0", removed.ok && removed.code === 0, `exit ${removed.code}`);
+  }
+
+  const after = existsSync(sendToLink) ? readShortcut(sendToLink) : null;
+  check(
+    "a SendTo shortcut with FOREIGN ARGUMENTS survived our uninstall",
+    after !== null && after.args === foreignArgs,
+    after === null ? "(shortcut deleted)" : after.args,
+  );
+  notes.push("send-entry ownership: foreign arguments on our own executable preserved");
+}
+
 async function schemeOwnershipPhase() {
   if (!check("scheme key absent before the ownership case", !regKeyExists(SCHEME_KEY))) return;
 
@@ -960,6 +1127,32 @@ async function schemeOwnershipPhase() {
   if (!check("foreign association written", regSetDefault(SCHEME_CMD_KEY, foreign))) return;
   owned.schemeKey = true;
 
+  // And the send verbs, in the same install. The name is the cheapest thing to
+  // collide on, so the foreign values deliberately keep OUR verb name and our
+  // flag — only the program differs. An uninstaller that matched on the key, on
+  // the name, or on a path prefix would take all three of these with it.
+  const foreignSend = '"C:\\Windows\\System32\\notepad.exe" --send-files "%1"';
+  const sendOwnershipKeys = [SEND_FILE_KEY, SEND_DIR_KEY];
+  let sendForeignWritten = true;
+  for (const key of sendOwnershipKeys) {
+    if (!regSetDefault(`${key}\\command`, foreignSend)) sendForeignWritten = false;
+  }
+  check("foreign send commands written", sendForeignWritten);
+  owned.sendKeys = sendOwnershipKeys;
+
+  // The SendTo shortcut equivalent: a REAL shortcut of our exact name, pointing
+  // somewhere else. Our flag is kept deliberately — only the program differs —
+  // so an uninstaller that matched on the name, or on the arguments alone,
+  // would take it.
+  const sendToLink = join(process.env.APPDATA ?? "", "Microsoft", "Windows", "SendTo", "Relayium.lnk");
+  const foreignTarget = "C:\\Windows\\System32\\notepad.exe";
+  let foreignLinkWritten = false;
+  if (existsSync(sendToLink)) {
+    foreignLinkWritten = writeShortcut(sendToLink, foreignTarget, "--send-files");
+    check("foreign SendTo shortcut written", foreignLinkWritten);
+    owned.sendToLink = sendToLink;
+  }
+
   const un = path.join(dir, "Uninstall Relayium.exe");
   if (check("ownership-case uninstaller exists", existsSync(un), un)) {
     const removed = await runInstaller(["/S", `_?=${dir}`], DEADLINE.uninstall, "ownership-case uninstall", un);
@@ -973,7 +1166,24 @@ async function schemeOwnershipPhase() {
     after === foreign,
     `expected the foreign value to be untouched, got: ${after ?? "(key deleted)"}`,
   );
+  for (const [what, key] of [["file", SEND_FILE_KEY], ["folder", SEND_DIR_KEY]]) {
+    const value = regQueryDefault(`${key}\\command`);
+    check(
+      `a foreign ${what} send verb of the SAME NAME survived our uninstall`,
+      value === foreignSend,
+      `expected the foreign value to be untouched, got: ${value ?? "(key deleted)"}`,
+    );
+  }
+  if (foreignLinkWritten) {
+    const after = existsSync(sendToLink) ? readShortcut(sendToLink) : null;
+    check(
+      "a foreign SendTo TARGET of the same name survived our uninstall",
+      after !== null && samePath(after.target, foreignTarget),
+      after === null ? "(shortcut deleted)" : after.target,
+    );
+  }
   notes.push("scheme ownership: foreign association preserved, own registration removed");
+  notes.push("send-entry ownership: foreign verbs and SendTo entry preserved by name-collision");
 }
 
 /**
@@ -1228,9 +1438,16 @@ async function cleanup() {
   // The foreign value under this key was written by this run; the precondition
   // asserted the key absent before anything started, so nothing here predates it.
   if (owned.schemeKey) spawnSync("reg.exe", ["delete", SCHEME_KEY, "/f"], { stdio: "ignore" });
+  // The foreign values this run WROTE, by the exact keys it recorded writing.
+  // They are deliberately left behind by the uninstaller — that is the whole
+  // assertion — so this run has to take them itself.
+  for (const key of owned.sendKeys ?? []) {
+    spawnSync("reg.exe", ["delete", key, "/f"], { stdio: "ignore" });
+  }
+  if (owned.sendToLink && existsSync(owned.sendToLink)) rmSync(owned.sendToLink, { force: true });
   // Exactly the paths this run created, each recorded at the moment it created
   // it — not derived from a path it merely knows about.
-  for (const dir of [owned.schemeInstallParent, owned.aliasRoot, owned.installParent, owned.dataRoot ? dataRoot : null]) {
+  for (const dir of [owned.schemeInstallParent, owned.argsInstallParent, owned.aliasRoot, owned.installParent, owned.dataRoot ? dataRoot : null]) {
     if (dir === null || !existsSync(dir)) continue;
     // Two things this covers, and it is the only place either is observed:
     // Windows releases a terminated process's handles asynchronously, and the
