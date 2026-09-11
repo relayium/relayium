@@ -434,6 +434,7 @@ async function main() {
   await assertSendFilesReachedThePane(win);
   await assertPairHandoffRefusesWithoutACode(win);
   await assertSignedOutGatesRatherThanGreys(win);
+  await assertKeyboardAndMotion(win);
   await driveSignInCancellation(win);
 
   process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures })}\n`);
@@ -477,6 +478,94 @@ async function main() {
  * The clipboard is read, never written. A smoke that stamped a sentinel over
  * whatever the developer had copied would be a rude test.
  */
+/**
+ * The app can be driven without a mouse, and honours a request for less motion.
+ *
+ * The capability was already there and reasoned — the sidebar is a real ARIA
+ * listbox and the shell moves focus to the content region on every navigation —
+ * but nothing executed any of it, so a regression would have been invisible
+ * until somebody noticed with a keyboard. These are the assertions that were
+ * missing, not the behaviour.
+ *
+ * Keys go through `sendInputEvent`, which is the OS path into the window. A
+ * synthesized DOM event would prove the handler and not the route to it.
+ */
+async function assertKeyboardAndMotion(win) {
+  const js = (expr) => win.webContents.executeJavaScript(expr);
+  const press = async (keyCode) => {
+    win.webContents.sendInputEvent({ type: "keyDown", keyCode });
+    win.webContents.sendInputEvent({ type: "keyUp", keyCode });
+    await new Promise((r) => setTimeout(r, 80));
+  };
+
+  // ## Reachable at all
+  //
+  // Every row's button is `tabindex="-1"` on purpose: the listbox holds focus
+  // and the arrows move within it. That is the correct pattern AND the one that
+  // strands a keyboard user completely if the container ever loses its own
+  // tabindex, because then nothing in the sidebar is reachable.
+  const listbox = await js(
+    `(() => { const el = document.querySelector('[role="listbox"]'); if (!el) return null;` +
+      ` el.focus(); return { focused: document.activeElement === el, tabindex: el.tabIndex,` +
+      ` active: el.getAttribute("aria-activedescendant") }; })()`,
+  );
+  check("the sidebar can be focused from the keyboard", listbox?.focused === true, JSON.stringify(listbox));
+  check("and is in the tab order", listbox?.tabindex === 0, JSON.stringify(listbox));
+  // Without this a screen reader announces the list once and then nothing as
+  // the selection moves.
+  check("and says which option focus is on", typeof listbox?.active === "string" && listbox.active !== "", JSON.stringify(listbox));
+
+  await press("Down");
+  const moved = await js(`document.querySelector('[role="listbox"]').getAttribute("aria-activedescendant")`);
+  check("an arrow key moves the selection", moved !== listbox?.active, `${listbox?.active} -> ${moved}`);
+
+  // ## And the keyboard goes with the eyes
+  //
+  // Focus must land in the new page. Left where it was, it sits on a control
+  // that is no longer rendered, which drops it to the document — and the next
+  // Tab starts from the top of the window again.
+  const focusedRegion = await js(
+    `document.activeElement?.getAttribute?.("data-test") ?? document.activeElement?.tagName ?? "none"`,
+  );
+  check("navigating moves focus into the page", focusedRegion === "page-scroller", String(focusedRegion));
+
+  // ## Less motion means less MOTION, not faster motion
+  //
+  // The usual `0.01ms` trick still animates, and for a vestibular trigger a
+  // jump done quickly is worse than a slow one. Emulated rather than assumed:
+  // the stylesheet declaring the rule is not evidence that it applies.
+  // `attach` is synchronous and THROWS when something is already attached, so
+  // it is guarded rather than awaited.
+  try {
+    win.webContents.debugger.attach("1.3");
+  } catch {
+    // Already attached by something else in this run; the commands below still
+    // work through that session.
+  }
+  try {
+    await win.webContents.debugger.sendCommand("Emulation.setEmulatedMedia", {
+      features: [{ name: "prefers-reduced-motion", value: "reduce" }],
+    });
+    const reduced = await js(
+      `(() => { const el = document.querySelector('[data-test="page-scroller"]');` +
+        ` const s = getComputedStyle(el);` +
+        ` return { rise: getComputedStyle(document.documentElement).getPropertyValue("--enter-rise").trim(),` +
+        ` props: s.transitionProperty, animation: s.animationName }; })()`,
+    );
+    check("reduced motion removes the rise", reduced?.rise === "0px", JSON.stringify(reduced));
+    check(
+      "and animates nothing that moves",
+      !/transform|all/.test(reduced?.props ?? "") && (reduced?.animation ?? "none") === "none",
+      JSON.stringify(reduced),
+    );
+  } finally {
+    await win.webContents.debugger
+      .sendCommand("Emulation.setEmulatedMedia", { features: [] })
+      .catch(() => undefined);
+    win.webContents.debugger.detach();
+  }
+}
+
 /**
  * A feature that needs an account NAMES that, and offers the way in.
  *
