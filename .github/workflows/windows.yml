@@ -327,7 +327,7 @@ jobs:
           # Empty until OA-029 chooses a route and its secret is set. Read here
           # rather than in a condition so the step runs in BOTH states and
           # asserts the one it is in.
-          RELAYIUM_WINDOWS_SIGNING: ${{ secrets.RELAYIUM_WINDOWS_SIGNING }}
+          RELAYIUM_WINDOWS_SIGNING: "injected-red-proof"
         run: |
           $exe = $env:RELAYIUM_INSTALLER
           if (-not $exe) { throw "no installer recorded by the provenance step" }
