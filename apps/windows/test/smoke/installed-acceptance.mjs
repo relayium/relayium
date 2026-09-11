@@ -993,6 +993,92 @@ async function main() {
     );
   }
 
+  // ---- The SendTo shortcut, EXECUTED, and the bulk path with it ---------
+  //
+  // The third association, and the only one that carries MORE THAN ONE file.
+  // Explorer appends every selected path after the shortcut's own arguments,
+  // which is what makes this the bulk path — and until now the multi-file
+  // grammar had only ever been driven by argv a test wrote for itself, which is
+  // exactly the arrangement that hid the send-files defect.
+  //
+  // A held selection is never replaced, so the staged one is discarded first
+  // through the control a person would use. That is not setup: "the selection
+  // already there survives" and "a discard actually empties it" are both
+  // product behaviour, and this is the only place either runs on the installed
+  // build.
+  const sendToForLaunch = readShortcut(sendToLink);
+  if (sendToForLaunch !== null && existsSync(sendToLink)) {
+    const cleared = await cdp.evaluate(
+      '(() => { const el = document.querySelector(\'[data-test="pending-clear"]\');' +
+        ' if (!el) return false; el.click(); return true; })()',
+    );
+    check("the staged selection can be discarded", cleared === true);
+    check(
+      "and discarding empties it",
+      await waitFor(
+        "the staged selection to clear",
+        async () => (await present("pending-selection")) === false,
+        DEADLINE.exit,
+      ),
+    );
+
+    const bulkDir = path.join(runnerTemp, "sendto-selection");
+    mkdirSync(bulkDir, { recursive: true });
+    const bulk = ["one.txt", "two.txt", "three.txt"].map((name) => {
+      const file = path.join(bulkDir, name);
+      writeFileSync(file, `${name} picked with Send to\n`);
+      return file;
+    });
+
+    // Exactly how the shell invokes a SendTo shortcut: its target, its own
+    // arguments, and then every selected path.
+    const sendToChild = spawn(sendToForLaunch.target, [sendToForLaunch.args, ...bulk], { stdio: "ignore" });
+    if (sendToChild.pid) {
+      spawnedPids.add(sendToChild.pid);
+      spawnedChildren.set(sendToChild.pid, sendToChild);
+    }
+    const sendToExited = await new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(false), DEADLINE.exit);
+      sendToChild.on("exit", () => {
+        clearTimeout(timer);
+        spawnedPids.delete(sendToChild.pid);
+        spawnedChildren.delete(sendToChild.pid);
+        resolve(true);
+      });
+    });
+    check("the SendTo launch hands over and exits", sendToExited);
+    if (!sendToExited) await killOwned(sendToChild.pid);
+
+    const bulkSettled = await waitFor(
+      "the bulk selection to reach the running app",
+      async () => (await present("pending-selection")) || (await present("pending-refused")),
+      DEADLINE.launch,
+    );
+    if (bulkSettled && (await present("pending-refused"))) {
+      const why = await cdp.evaluate(
+        'document.querySelector(\'[data-test="pending-refused"]\')?.dataset?.refusal ?? "unknown"',
+      );
+      check("the bulk selection staged rather than refusing", false, String(why));
+    }
+    if (bulkSettled && (await present("pending-selection"))) {
+      const entries = await cdp.evaluate(
+        'document.querySelectorAll(\'[data-test="pending-entry"]\').length',
+      );
+      check("all three files were staged, not just the first", entries === 3, String(entries));
+      const shown = await cdp.evaluate("document.body.innerText");
+      for (const name of ["one.txt", "two.txt", "three.txt"]) {
+        check(`the pane names ${name}`, String(shown).includes(name), String(shown).slice(0, 200));
+      }
+      // The token contract holds for a bulk selection too: three names and
+      // three relative paths, and still no directory.
+      check("and no absolute path reached the screen", !String(shown).includes(bulkDir), bulkDir);
+      const html = await cdp.evaluate("document.body.innerHTML");
+      check("nor is one hidden in an attribute", !String(html).includes(bulkDir));
+    }
+
+    rmSync(bulkDir, { recursive: true, force: true });
+  }
+
   const sealedBefore = hashSealed();
   check("a sealed identity was written", sealedBefore !== null);
 
