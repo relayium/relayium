@@ -641,10 +641,23 @@ async function main() {
   if (!check("silent install exited 0", install.code === 0, `exit ${install.code}`)) return;
   if (!check("installed executable exists", existsSync(installedExe), installedExe)) return;
 
+  // Hoisted: the cold-start halves of these run after the first app is gone.
+  let schemeTokens = null;
+  let verbTokens = null;
+  let verbPickedDir = null;
+
+  // A link this build can parse and will NOT act on. `d/` routes are handed to
+  // the page whole and shown; opening one starts no download, so nothing leaves
+  // the machine. The fragment is deliberately not a real key.
+  const ACCEPTANCE_LINK = "relayium://d/acceptance-object#k=not-a-real-key";
+
   // ---- Scheme registration names the installed binary, exactly ----------
   const command = regQueryDefault("HKCU\\Software\\Classes\\relayium\\shell\\open\\command");
   if (check("relayium scheme registered under HKCU", command !== null)) {
     const tokens = tokenizeCommand(command);
+    // Kept, so the association can be EXECUTED further down rather than only
+    // read. See the verb above for why the difference matters.
+    schemeTokens = tokens;
     check(
       "scheme command names exactly the installed executable",
       tokens.length > 0 && samePath(tokens[0], installedExe),
@@ -867,9 +880,6 @@ async function main() {
   // shell's own half — that Explorer performs that substitution and honours
   // `MultiSelectModel`. That needs Explorer, and it stays documented rather
   // than claimed.
-  // Hoisted: the cold-start half of this runs after the first app is gone.
-  let verbTokens = null;
-  let verbPickedDir = null;
   const verbCommand = regQueryDefault(`${SEND_FILE_KEY}\\command`);
   if (check("the file send command is registered for the launch", verbCommand !== null, SEND_FILE_KEY)) {
     const pickedDir = path.join(runnerTemp, "verb-selection");
@@ -941,6 +951,48 @@ async function main() {
 
   }
 
+  // ---- The relayium:// association, EXECUTED against the running app ----
+  //
+  // Same gap as the verb, one association over: the command was asserted as a
+  // registry string and never run. A `d/` link is handed to the page and shown
+  // — opening one starts no download — so this observes the offer arriving and
+  // touches no network.
+  if (schemeTokens !== null) {
+    const linkTokens = schemeTokens.slice(1).map((token) => (token === "%1" ? ACCEPTANCE_LINK : token));
+    check("the link took the place of %1", linkTokens.includes(ACCEPTANCE_LINK), linkTokens.join(" "));
+    const opened = spawn(schemeTokens[0], linkTokens, { stdio: "ignore" });
+    if (opened.pid) {
+      spawnedPids.add(opened.pid);
+      spawnedChildren.set(opened.pid, opened);
+    }
+    const openedExited = await new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(false), DEADLINE.exit);
+      opened.on("exit", () => {
+        clearTimeout(timer);
+        spawnedPids.delete(opened.pid);
+        spawnedChildren.delete(opened.pid);
+        resolve(true);
+      });
+    });
+    check("the link launch hands over and exits", openedExited);
+    if (!openedExited) await killOwned(opened.pid);
+
+    const carried = await waitFor(
+      "the link to reach the running app",
+      async () =>
+        (await cdp.evaluate('document.querySelector(\'[data-test="stored-link"]\')?.value ?? ""')) ===
+        ACCEPTANCE_LINK,
+      DEADLINE.launch,
+    );
+    check("the running app shows the link it was handed", carried);
+    // Shown, never acted on. A deep link that started a download would be this
+    // app fetching an object because something else asked it to.
+    check(
+      "and started no transfer by itself",
+      (await cdp.evaluate('document.querySelector(\'[data-test="stored-progress"]\') !== null')) === false,
+    );
+  }
+
   const sealedBefore = hashSealed();
   check("a sealed identity was written", sealedBefore !== null);
 
@@ -1008,6 +1060,39 @@ async function main() {
       await killOwned(cold.pid);
     }
     rmSync(verbPickedDir, { recursive: true, force: true });
+  }
+
+  // ---- The same association, with the app NOT already running -----------
+  //
+  // A person clicks a relayium:// link in a browser with Relayium closed. The
+  // link reaches the app as its own command line rather than through Electron's
+  // handoff, which is the split that hid the send-files defect: one path worked
+  // and the other did not, and only running both could tell them apart.
+  if (schemeTokens !== null) {
+    const coldLinkPort = await freeLoopbackPort();
+    const coldLinkTokens = [
+      ...schemeTokens.slice(1).map((token) => (token === "%1" ? ACCEPTANCE_LINK : token)),
+      `--remote-debugging-port=${coldLinkPort}`,
+      "--remote-debugging-address=127.0.0.1",
+    ];
+    const coldLink = spawn(schemeTokens[0], coldLinkTokens, { stdio: "ignore" });
+    if (coldLink.pid) {
+      spawnedPids.add(coldLink.pid);
+      spawnedChildren.set(coldLink.pid, coldLink);
+    }
+    const attachedLink = await attachToApp(coldLinkPort, "the app started BY a relayium:// link");
+    if (attachedLink !== null) {
+      const linkCdp = attachedLink.cdp;
+      const carriedCold = await waitFor(
+        "the link-started app to show what it was opened with",
+        async () =>
+          (await linkCdp.evaluate('document.querySelector(\'[data-test="stored-link"]\')?.value ?? ""')) ===
+          ACCEPTANCE_LINK,
+        DEADLINE.launch,
+      );
+      check("the app started by a link shows that link", carriedCold);
+      await killOwned(coldLink.pid);
+    }
   }
 
   // ---- Crash durability, BEFORE any reinstall is involved ---------------
