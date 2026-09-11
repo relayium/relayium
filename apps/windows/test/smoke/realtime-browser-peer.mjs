@@ -154,8 +154,58 @@ export async function driveBrowserPeer(browser, options) {
   observed.role = ids.self && ids.peer ? (ids.self < ids.peer ? "initiator" : "responder") : "";
 
   // Whichever side the ids made the asker, the workspace has to arrive.
-  await tab.evaluate(`(() => { const b = document.querySelector('${OPEN_WORKSPACE}'); if (!b) return false; b.click(); return true; })()`)
-    .catch(() => false);
+  //
+  // ## Why this polls instead of clicking once
+  //
+  // It used to click exactly once, best-effort, with the failure swallowed —
+  // and then wait ninety seconds for a header that nothing would ever produce
+  // if that click had found no button. The two peers being visible to each
+  // other does not mean the control is rendered yet; it is the next paint.
+  //
+  // Run 34655707714 is what that looks like from outside: round 1 reported
+  // `browserRole=initiator`, which can only be set AFTER both peers were seen,
+  // and then timed out on the header with no notes at all. Round 2 drew
+  // responder — where the other side asks, so a missed click costs nothing —
+  // and round 3 drew initiator with the button already there. Only the round
+  // that had to click, and clicked too early, hung.
+  //
+  // So the ask is retried until the workspace arrives, and what happened is
+  // RECORDED either way: a control that never appears within the budget is a
+  // different fact from one that appeared and did not open anything, and a
+  // ninety-second silence cannot tell them apart.
+  let clicks = 0;
+  let sawControl = false;
+  let opened = false;
+  const openDeadline = Date.now() + joinBudgetMs;
+  for (;;) {
+    opened = await tab.evaluate(`!!document.querySelector('${HEAD}')`).catch(() => false);
+    if (opened) break;
+    const clicked = await tab
+      .evaluate(`(() => { const b = document.querySelector('${OPEN_WORKSPACE}'); if (!b) return false; b.click(); return true; })()`)
+      .catch(() => false);
+    if (clicked) {
+      sawControl = true;
+      clicks += 1;
+    }
+    if (Date.now() >= openDeadline) break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  if (opened) {
+    // Worth seeing in a GREEN run: more than one ask means the first was early,
+    // which is the condition that used to be fatal rather than merely noted.
+    if (clicks > 1) observed.notes.push(`the workspace was asked for ${clicks} times before it opened`);
+  } else {
+    // Only here. On a responder round the other side opens the workspace and
+    // this control is never meant to exist, so its absence is unremarkable
+    // until the header has also failed to arrive.
+    observed.notes.push(
+      sawControl
+        ? `the workspace was asked for ${clicks} times and never opened`
+        : `no open-workspace control appeared, and neither did the workspace :: ${await tab
+            .evaluate("document.body.innerText.slice(0, 300)")
+            .catch(() => "(the page could not be read)")}`,
+    );
+  }
   await tab.waitFor(`!!document.querySelector('${HEAD}')`, "the unified workspace header", joinBudgetMs);
   observed.reachedWorkspace = true;
 
