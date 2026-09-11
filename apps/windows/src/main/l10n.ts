@@ -38,6 +38,20 @@ export type MessageKey =
   | "resident.tray.resumeNearby"
   | "resident.tray.pauseInbox"
   | "resident.tray.resumeInbox"
+  | "resident.tray.statusSignedOut"
+  | "resident.tray.statusNearbyOn"
+  | "resident.tray.statusNearbyOff"
+  | "resident.tray.statusInboxPaused"
+  | "resident.tray.statusInboxUnavailable"
+  | "resident.tray.statusInboxNeedsAccount"
+  | "resident.tray.statusInboxUnreadable"
+  | "resident.tray.statusInboxOff"
+  | "resident.tray.statusInboxFolderMissing"
+  | "resident.tray.statusInboxStarting"
+  | "resident.tray.statusInboxReceiving"
+  | "resident.tray.statusInboxBlocked"
+  | "resident.tray.statusInboxOffline"
+  | "resident.tray.statusInboxOn"
   | "resident.firstClose.title"
   | "resident.firstClose.body"
   | "resident.firstClose.hide"
@@ -132,6 +146,20 @@ export const EN: Catalog = {
   "resident.tray.resumeNearby": "Resume Nearby",
   "resident.tray.pauseInbox": "Pause Device Inbox",
   "resident.tray.resumeInbox": "Resume Device Inbox",
+  "resident.tray.statusSignedOut": "Not signed in",
+  "resident.tray.statusNearbyOn": "Nearby: on",
+  "resident.tray.statusNearbyOff": "Nearby: off",
+  "resident.tray.statusInboxPaused": "Device Inbox: paused",
+  "resident.tray.statusInboxUnavailable": "Device Inbox: not available in this build",
+  "resident.tray.statusInboxNeedsAccount": "Device Inbox: sign in to receive",
+  "resident.tray.statusInboxUnreadable": "Device Inbox: this PC's store cannot be read",
+  "resident.tray.statusInboxOff": "Device Inbox: off",
+  "resident.tray.statusInboxFolderMissing": "Device Inbox: the chosen folder is missing",
+  "resident.tray.statusInboxStarting": "Device Inbox: starting",
+  "resident.tray.statusInboxReceiving": "Device Inbox: receiving now",
+  "resident.tray.statusInboxBlocked": "Device Inbox: stopped, needs you",
+  "resident.tray.statusInboxOffline": "Device Inbox: retrying",
+  "resident.tray.statusInboxOn": "Device Inbox: on",
   "resident.firstClose.title": "Relayium is still running",
   "resident.firstClose.body":
     "Closing this window leaves Relayium running in the notification area, so it is ready when you need it. Open it again from the Relayium icon there, or quit it completely.",
@@ -218,6 +246,20 @@ export const ZH_HANS: Catalog = {
   "resident.tray.resumeNearby": "恢复附近设备",
   "resident.tray.pauseInbox": "暂停设备收件箱",
   "resident.tray.resumeInbox": "恢复设备收件箱",
+  "resident.tray.statusSignedOut": "未登录",
+  "resident.tray.statusNearbyOn": "附近设备：已开启",
+  "resident.tray.statusNearbyOff": "附近设备：已关闭",
+  "resident.tray.statusInboxPaused": "设备收件箱：已暂停",
+  "resident.tray.statusInboxUnavailable": "设备收件箱：此版本不支持",
+  "resident.tray.statusInboxNeedsAccount": "设备收件箱：登录后即可接收",
+  "resident.tray.statusInboxUnreadable": "设备收件箱：无法读取本机存储",
+  "resident.tray.statusInboxOff": "设备收件箱：已关闭",
+  "resident.tray.statusInboxFolderMissing": "设备收件箱：所选文件夹已不存在",
+  "resident.tray.statusInboxStarting": "设备收件箱：正在启动",
+  "resident.tray.statusInboxReceiving": "设备收件箱：正在接收",
+  "resident.tray.statusInboxBlocked": "设备收件箱：已停止，需要你处理",
+  "resident.tray.statusInboxOffline": "设备收件箱：正在重试",
+  "resident.tray.statusInboxOn": "设备收件箱：已开启",
   "resident.firstClose.title": "Relayium 仍在运行",
   "resident.firstClose.body":
     "关闭此窗口后，Relayium 会继续在通知区域运行，随时可用。你可以从那里的 Relayium 图标重新打开，或者完全退出。",

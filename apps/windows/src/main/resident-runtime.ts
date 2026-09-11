@@ -22,7 +22,7 @@ import type { ResidentBridge } from "./handlers.js";
 import { FirstCloseCoordinator, type FirstCloseDialog, type FirstCloseOutcome } from "./first-run.js";
 import { translator, type Locale, type Translate } from "./l10n.js";
 import { present, type NotificationEvent } from "./notifications.js";
-import type { PublishReport, ResidentNotice } from "../shared/ipc-contract.js";
+import type { PublishReport, ResidentNotice, InboxStatus } from "../shared/ipc-contract.js";
 import {
   QuitCoordinator,
   quitRisk,
@@ -91,6 +91,10 @@ export interface ResidentRuntimeDeps {
    */
   readonly setInboxPaused: (paused: boolean) => void;
   readonly inboxPaused: () => boolean;
+  /** What the Device Inbox is doing, for the line that reports it. */
+  readonly inboxStatus: () => InboxStatus;
+  /** The signed-in address, or "" when there is none. */
+  readonly accountIdentity: () => string;
   readonly onLocaleChanged?: () => void;
   /**
    * Stop admitting new work in EVERY feature main composes, synchronously and
@@ -392,6 +396,8 @@ export class ResidentRuntime {
         this.deps.onLocaleChanged?.();
       },
       inboxPaused: () => this.deps.inboxPaused(),
+      inboxStatus: () => this.deps.inboxStatus(),
+      accountIdentity: () => this.deps.accountIdentity(),
       quit: () => void this.requestQuit(),
     };
   }

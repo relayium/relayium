@@ -1,4 +1,5 @@
 // Hiding keeps the app; quitting asks first, and Stay leaves it usable.
+import type { InboxStatus } from "../../src/shared/ipc-contract.js";
 //
 // The pure modules decide (`quit.ts`, `first-run.ts`); this is the composition,
 // so what is asserted here is ORDER and CONSEQUENCE: what is torn down, when,
@@ -118,6 +119,8 @@ function runtime(
     drainAbandoned?: () => Promise<number>;
     setInboxPaused?: (paused: boolean) => void;
     inboxPaused?: () => boolean;
+    inboxStatus?: () => InboxStatus;
+    accountIdentity?: () => string;
   } = {},
 ) {
   const { bridge } = fakeBridge();
@@ -137,6 +140,8 @@ function runtime(
     // would offer a tray item that does nothing.
     setInboxPaused: over.setInboxPaused ?? (() => undefined),
     inboxPaused: over.inboxPaused ?? (() => false),
+    inboxStatus: over.inboxStatus ?? (() => ({ kind: "idle", pending: 0 })),
+    accountIdentity: over.accountIdentity ?? (() => ""),
     locale: "en",
   });
 }
@@ -537,19 +542,27 @@ describe("the native surfaces follow the page's language", () => {
       locale: "en",
       setInboxPaused: () => undefined,
       inboxPaused: () => false,
+      inboxStatus: () => ({ kind: "idle", pending: 0 }),
+      accountIdentity: () => "",
       onLocaleChanged: () => {
         rebuilt += 1;
       },
     });
 
-    expect(app.trayMenu().map((e) => ("label" in e ? e.label : ""))[0]).toBe(EN["resident.tray.show"]);
+    // Index 4: the status block reports above everything that acts, and Open is
+    // the first item a person can press.
+    expect(app.trayMenu().map((e) => ("label" in e ? e.label : ""))[4]).toBe(EN["resident.tray.show"]);
     await app.requestQuit();
 
     app.setLocale("zh-Hans");
     // The tray is already on screen, so a language change has to rebuild it.
     expect(rebuilt).toBe(1);
-    expect(app.trayMenu().map((e) => ("label" in e ? e.label : ""))[0]).toBe(
+    expect(app.trayMenu().map((e) => ("label" in e ? e.label : ""))[4]).toBe(
       ZH_HANS["resident.tray.show"],
+    );
+    // The report is localized by the same rebuild, not left in the old language.
+    expect(app.trayMenu().map((e) => ("label" in e ? e.label : ""))[0]).toBe(
+      ZH_HANS["resident.tray.statusSignedOut"],
     );
 
     await app.requestQuit();

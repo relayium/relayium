@@ -277,9 +277,13 @@ function refreshTray(): void {
 function trayTemplate(runtime: ResidentRuntime): Electron.MenuItemConstructorOptions[] {
   return runtime
     .trayMenu()
-    .map((entry) =>
-      "type" in entry ? { type: "separator" as const } : { label: entry.label, click: entry.click },
-    );
+    .map((entry) => {
+      if ("type" in entry) return { type: "separator" as const };
+      // A status line reports; it has nothing to press. Electron renders that
+      // as a disabled item, which is also what a screen reader announces.
+      if ("enabled" in entry) return { label: entry.label, enabled: false };
+      return { label: entry.label, click: entry.click };
+    });
 }
 
 function createTray(runtime: ResidentRuntime): void {
@@ -683,6 +687,8 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
       else control.inbox.resumeReceiving();
     },
     inboxPaused: () => control.inbox.receivingPaused,
+    inboxStatus: () => control.inbox.view().status,
+    accountIdentity: () => control.service.accountIdentity,
     onLocaleChanged: () => refreshTray(),
     platform: options.residentPlatform
       ? options.residentPlatform(residentPlatform(control.preferences))

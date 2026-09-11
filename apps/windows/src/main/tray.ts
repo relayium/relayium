@@ -13,13 +13,27 @@
 // tray. Nothing in this module imports Electron.
 
 import type { Translate } from "./l10n.js";
+import type { InboxStatus } from "../shared/ipc-contract.js";
 
 export interface TrayMenuItem {
   readonly label: string;
   readonly click: () => void;
 }
 
-export type TrayMenuEntry = TrayMenuItem | { readonly type: "separator" };
+/**
+ * A line that reports rather than acts.
+ *
+ * Not a disabled control: there is nothing here to press and no action being
+ * withheld. It is the answer to the question a person opens a tray menu to ask
+ * — is this thing still doing anything — which on a resident app is the one
+ * question the window cannot answer, because the window is shut.
+ */
+export interface TrayStatusLine {
+  readonly label: string;
+  readonly enabled: false;
+}
+
+export type TrayMenuEntry = TrayMenuItem | TrayStatusLine | { readonly type: "separator" };
 
 export interface TrayActions {
   readonly show: () => void;
@@ -51,6 +65,16 @@ export interface TrayActions {
   readonly setInboxPaused: (paused: boolean) => void;
   /** Whether claiming is currently paused, so the item can say which it does. */
   readonly inboxPaused: () => boolean;
+  /** What the Device Inbox is doing, for the line that reports it. */
+  readonly inboxStatus: () => InboxStatus;
+  /**
+   * The signed-in account, or "" when there is none.
+   *
+   * The address itself, because a tray that said only "signed in" would not
+   * answer the question people actually open it for on a machine with more
+   * than one account. Nothing else about the account crosses.
+   */
+  readonly accountIdentity: () => string;
   readonly quit: () => void;
 }
 
@@ -61,10 +85,73 @@ export interface TrayActions {
  * harmless and one ends the process, and a mis-click between adjacent items
  * should not be able to quit an app the user meant to open.
  */
+/**
+ * What the Device Inbox is doing, in one sentence.
+ *
+ * ## One opinion, in one place
+ *
+ * The page has its own vocabulary for these states and its own catalogue, which
+ * is deliberate — `l10n.ts` exists because a tray is not a page. What must NOT
+ * exist twice is the JUDGEMENT: which state means "it is working" and which
+ * means "it stopped and needs you". So the mapping is here, once, and tested
+ * here rather than inferred from a label somewhere else.
+ *
+ * Paused comes first because it outranks everything the status can say: the
+ * status is deliberately unchanged by a pause — nothing was written and central
+ * was not told — so reporting `idle` while claiming is stopped would be true
+ * about the enrolment and wrong about the machine.
+ */
+export function inboxStatusLabel(t: Translate, status: InboxStatus, paused: boolean): string {
+  if (paused) return t("resident.tray.statusInboxPaused");
+  switch (status.kind) {
+    case "unavailable":
+      return t("resident.tray.statusInboxUnavailable");
+    case "needs-account":
+      return t("resident.tray.statusInboxNeedsAccount");
+    case "account-unreadable":
+      return t("resident.tray.statusInboxUnreadable");
+    case "disabled":
+      return t("resident.tray.statusInboxOff");
+    case "folder-missing":
+      return t("resident.tray.statusInboxFolderMissing");
+    case "starting":
+      return t("resident.tray.statusInboxStarting");
+    case "receiving":
+      return t("resident.tray.statusInboxReceiving");
+    case "blocked":
+      return t("resident.tray.statusInboxBlocked");
+    case "offline":
+      return t("resident.tray.statusInboxOffline");
+    // `idle` is the ordinary on state. Anything unrecognised is reported as ON
+    // rather than as a fault: a state this build does not know about is not
+    // evidence that receiving stopped, and claiming it stopped would be the
+    // more harmful of the two guesses.
+    default:
+      return t("resident.tray.statusInboxOn");
+  }
+}
+
 export function trayMenuTemplate(t: Translate, actions: TrayActions): readonly TrayMenuEntry[] {
   const active = actions.nearbyActive();
   const paused = actions.inboxPaused();
+  const account = actions.accountIdentity();
   return [
+    // ## The status comes FIRST, above everything that acts
+    //
+    // A resident app receives with its window shut, so "is it still doing
+    // anything" is the question the tray is opened to answer and the window
+    // cannot. Reporting it under the actions would put the answer below the
+    // things a person might press by accident on the way to it.
+    {
+      label: account === "" ? t("resident.tray.statusSignedOut") : account,
+      enabled: false,
+    },
+    { label: inboxStatusLabel(t, actions.inboxStatus(), paused), enabled: false },
+    {
+      label: active ? t("resident.tray.statusNearbyOn") : t("resident.tray.statusNearbyOff"),
+      enabled: false,
+    },
+    { type: "separator" },
     { label: t("resident.tray.show"), click: actions.show },
     { type: "separator" },
     { label: t("resident.tray.nearby"), click: actions.openNearby },

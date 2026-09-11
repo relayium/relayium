@@ -3382,18 +3382,31 @@ async function scenarioResidentSurfaces(win, runtime) {
   await new Promise((r) => setTimeout(r, 300));
 
   const labels = runtime.trayMenu().map((e) => ("label" in e ? e.label : "—"));
-  // Nine since the Device Inbox toggle joined: Open, —, Nearby, Inbox,
-  // Updates, Nearby toggle, Inbox toggle, —, Quit.
-  check("the tray offers the real surfaces", labels.length === 9, labels.join("|"));
-  check("the tray is in the page's language", labels[0] === "Open Relayium", labels[0]);
+  // Thirteen since the status block joined: account, Inbox, Nearby, —, Open,
+  // —, Nearby, Inbox, Updates, Nearby toggle, Inbox toggle, —, Quit.
+  check("the tray offers the real surfaces", labels.length === 13, labels.join("|"));
+  check("the tray is in the page's language", labels[4] === "Open Relayium", labels[4]);
+
+  // ## It REPORTS, which is the question a tray is opened to answer
+  //
+  // This app receives with its window shut, so "is it still doing anything" is
+  // the one question the window cannot answer. The report is real state read
+  // from main, not a label fixed at launch: this run is signed out, and it
+  // says so.
+  check("the tray names the account state", labels[0] === "Not signed in", labels[0]);
+  check("the tray reports the Inbox", labels[1].startsWith("Device Inbox: "), labels[1]);
+  check("the tray reports Nearby", labels[2].startsWith("Nearby: "), labels[2]);
   // The Updates item opens the settings page and acts on nothing — a menu item
   // cannot show what it would do, so nothing about an update happens from one.
-  check("the tray offers Updates", labels[4] === "Updates", labels[4]);
+  check("the tray offers Updates", labels[8] === "Updates", labels[8]);
 
   // The earlier quit stopped the rooms and the Stay did not reopen them, so the
   // truthful item here is Resume — the tray reports the page's actual state
   // rather than what it assumed at launch.
-  check("the tray reflects the stopped room", labels[5] === "Resume Nearby", labels[5]);
+  check("the tray reflects the stopped room", labels[9] === "Resume Nearby", labels[9]);
+  // The report agrees with the action beside it. Two lines disagreeing about
+  // the same fact is worse than either one alone.
+  check("and its report agrees", labels[2] === "Nearby: off", labels[2]);
 
   // ## The Device Inbox toggle, and that it reaches MAIN rather than the page
   //
@@ -3401,7 +3414,7 @@ async function scenarioResidentSurfaces(win, runtime) {
   // which is what makes it usable from a tray at all, with the window hidden or
   // closed. Driven here against the real runtime so the label and the effect
   // are the same fact.
-  check("the tray offers the Inbox toggle", labels[6] === "Pause Device Inbox", labels[6]);
+  check("the tray offers the Inbox toggle", labels[10] === "Pause Device Inbox", labels[10]);
   runtime.trayActions().setInboxPaused(true);
   check(
     "and pausing from the tray really pauses claiming",
@@ -3409,7 +3422,9 @@ async function scenarioResidentSurfaces(win, runtime) {
   );
   const pausedLabels = runtime.trayMenu().map((e) => ("label" in e ? e.label : "—"));
   // The label says what it will DO, so it has to have moved with the state.
-  check("the item now offers to resume", pausedLabels[6] === "Resume Device Inbox", pausedLabels[6]);
+  check("the item now offers to resume", pausedLabels[10] === "Resume Device Inbox", pausedLabels[10]);
+  // And the REPORT moved with it, from the same read.
+  check("and the report says paused", pausedLabels[1] === "Device Inbox: paused", pausedLabels[1]);
   runtime.trayActions().setInboxPaused(false);
   check("and resuming puts it back", runtime.trayActions().inboxPaused() === false);
 
@@ -3419,7 +3434,9 @@ async function scenarioResidentSurfaces(win, runtime) {
   check("the tray can resume Nearby", started === true);
   await new Promise((r) => setTimeout(r, 200));
   const afterResume = runtime.trayMenu().map((e) => ("label" in e ? e.label : "—"));
-  check("the tray now offers to pause it", afterResume[5] === "Pause Nearby", afterResume[5]);
+  check("the tray now offers to pause it", afterResume[9] === "Pause Nearby", afterResume[9]);
+  // The report followed the room the action just started.
+  check("and the report followed it", afterResume[2] === "Nearby: on", afterResume[2]);
 
   runtime.trayActions().setNearby(false);
   const stopped = await waitFor(win, "the room to stop", `!document.querySelector('[data-test="lan-stop"]')`);
