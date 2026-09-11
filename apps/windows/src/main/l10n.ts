@@ -36,6 +36,8 @@ export type MessageKey =
   | "resident.tray.inbox"
   | "resident.tray.pauseNearby"
   | "resident.tray.resumeNearby"
+  | "resident.tray.pauseInbox"
+  | "resident.tray.resumeInbox"
   | "resident.firstClose.title"
   | "resident.firstClose.body"
   | "resident.firstClose.hide"
@@ -128,6 +130,8 @@ export const EN: Catalog = {
   "resident.tray.inbox": "Device Inbox",
   "resident.tray.pauseNearby": "Pause Nearby",
   "resident.tray.resumeNearby": "Resume Nearby",
+  "resident.tray.pauseInbox": "Pause Device Inbox",
+  "resident.tray.resumeInbox": "Resume Device Inbox",
   "resident.firstClose.title": "Relayium is still running",
   "resident.firstClose.body":
     "Closing this window leaves Relayium running in the notification area, so it is ready when you need it. Open it again from the Relayium icon there, or quit it completely.",
@@ -212,6 +216,8 @@ export const ZH_HANS: Catalog = {
   "resident.tray.inbox": "设备收件箱",
   "resident.tray.pauseNearby": "暂停附近设备",
   "resident.tray.resumeNearby": "恢复附近设备",
+  "resident.tray.pauseInbox": "暂停设备收件箱",
+  "resident.tray.resumeInbox": "恢复设备收件箱",
   "resident.firstClose.title": "Relayium 仍在运行",
   "resident.firstClose.body":
     "关闭此窗口后，Relayium 会继续在通知区域运行，随时可用。你可以从那里的 Relayium 图标重新打开，或者完全退出。",

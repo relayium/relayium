@@ -116,6 +116,8 @@ function runtime(
     platform?: ResidentPlatform;
     dispose?: () => Promise<void>;
     drainAbandoned?: () => Promise<number>;
+    setInboxPaused?: (paused: boolean) => void;
+    inboxPaused?: () => boolean;
   } = {},
 ) {
   const { bridge } = fakeBridge();
@@ -130,6 +132,11 @@ function runtime(
     resume: over.resume ?? fake.resume,
     dispose: over.dispose ?? (async () => undefined),
     ...(over.drainAbandoned ? { drainAbandoned: over.drainAbandoned } : {}),
+    // Main's own service in production. Inert here: these cases are about the
+    // window's lifecycle, and a runtime that silently had no inbox control
+    // would offer a tray item that does nothing.
+    setInboxPaused: over.setInboxPaused ?? (() => undefined),
+    inboxPaused: over.inboxPaused ?? (() => false),
     locale: "en",
   });
 }
@@ -528,6 +535,8 @@ describe("the native surfaces follow the page's language", () => {
       resume: fake.resume,
       dispose: async () => undefined,
       locale: "en",
+      setInboxPaused: () => undefined,
+      inboxPaused: () => false,
       onLocaleChanged: () => {
         rebuilt += 1;
       },

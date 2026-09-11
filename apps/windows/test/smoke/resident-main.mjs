@@ -3382,9 +3382,9 @@ async function scenarioResidentSurfaces(win, runtime) {
   await new Promise((r) => setTimeout(r, 300));
 
   const labels = runtime.trayMenu().map((e) => ("label" in e ? e.label : "—"));
-  // Eight since the Updates item joined: Open, —, Nearby, Inbox, Updates,
-  // Nearby toggle, —, Quit.
-  check("the tray offers the real surfaces", labels.length === 8, labels.join("|"));
+  // Nine since the Device Inbox toggle joined: Open, —, Nearby, Inbox,
+  // Updates, Nearby toggle, Inbox toggle, —, Quit.
+  check("the tray offers the real surfaces", labels.length === 9, labels.join("|"));
   check("the tray is in the page's language", labels[0] === "Open Relayium", labels[0]);
   // The Updates item opens the settings page and acts on nothing — a menu item
   // cannot show what it would do, so nothing about an update happens from one.
@@ -3394,6 +3394,24 @@ async function scenarioResidentSurfaces(win, runtime) {
   // truthful item here is Resume — the tray reports the page's actual state
   // rather than what it assumed at launch.
   check("the tray reflects the stopped room", labels[5] === "Resume Nearby", labels[5]);
+
+  // ## The Device Inbox toggle, and that it reaches MAIN rather than the page
+  //
+  // Unlike Nearby, whose room the page owns, the Device Inbox runs in main —
+  // which is what makes it usable from a tray at all, with the window hidden or
+  // closed. Driven here against the real runtime so the label and the effect
+  // are the same fact.
+  check("the tray offers the Inbox toggle", labels[6] === "Pause Device Inbox", labels[6]);
+  runtime.trayActions().setInboxPaused(true);
+  check(
+    "and pausing from the tray really pauses claiming",
+    runtime.trayActions().inboxPaused() === true,
+  );
+  const pausedLabels = runtime.trayMenu().map((e) => ("label" in e ? e.label : "—"));
+  // The label says what it will DO, so it has to have moved with the state.
+  check("the item now offers to resume", pausedLabels[6] === "Resume Device Inbox", pausedLabels[6]);
+  runtime.trayActions().setInboxPaused(false);
+  check("and resuming puts it back", runtime.trayActions().inboxPaused() === false);
 
   // And its action reaches the page: the room really starts again.
   runtime.trayActions().setNearby(true);

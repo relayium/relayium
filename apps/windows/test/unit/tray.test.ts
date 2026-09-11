@@ -2,13 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import { trayMenuTemplate, trayTooltip } from "../../src/main/tray.js";
 import { translator } from "../../src/main/l10n.js";
 
-const actions = (nearbyActive = true) => ({
+const actions = (nearbyActive = true, inboxPaused = false) => ({
   show: vi.fn(),
   openNearby: vi.fn(),
   openInbox: vi.fn(),
   openUpdates: vi.fn(),
   setNearby: vi.fn(),
   nearbyActive: () => nearbyActive,
+  setInboxPaused: vi.fn(),
+  inboxPaused: () => inboxPaused,
   quit: vi.fn(),
 });
 
@@ -22,6 +24,7 @@ describe("the tray menu", () => {
       "Device Inbox",
       "Updates",
       "Pause Nearby",
+      "Pause Device Inbox",
       "—",
       "Quit Relayium",
     ]);
@@ -40,6 +43,26 @@ describe("the tray menu", () => {
     const entry = trayMenuTemplate(translator("en"), a)[5]!;
     if ("click" in entry) entry.click();
     expect(a.setNearby).toHaveBeenCalledWith(true);
+  });
+
+  it("says what the Inbox item will DO, and offers it while the window is shut", () => {
+    // The Device Inbox receives with the window hidden, which is the state a
+    // tray exists for: without this the only way to stop it is to open the
+    // window, and macOS has offered it from the menu bar all along.
+    const running = trayMenuTemplate(translator("en"), actions(true, false));
+    expect("label" in running[6]! && running[6].label).toBe("Pause Device Inbox");
+    const stopped = trayMenuTemplate(translator("en"), actions(true, true));
+    expect("label" in stopped[6]! && stopped[6].label).toBe("Resume Device Inbox");
+  });
+
+  it("asks for the state it does not already have", () => {
+    const a = actions(true, false);
+    const entry = trayMenuTemplate(translator("en"), a)[6]!;
+    if ("click" in entry) entry.click();
+    expect(a.setInboxPaused).toHaveBeenCalledWith(true);
+    // Pausing is NOT disabling: the page's enable/disable writes the policy and
+    // tells central, and a menu must not be able to un-enrol a device.
+    expect(a.openInbox).not.toHaveBeenCalled();
   });
 
   it("is localized, not hard-coded", () => {
@@ -70,7 +93,7 @@ describe("the tray menu", () => {
     // would do, so nothing about an update may happen from one.
     expect(a.openUpdates).toHaveBeenCalledOnce();
     expect(a.quit).not.toHaveBeenCalled();
-    click(7);
+    click(8);
     expect(a.quit).toHaveBeenCalledOnce();
   });
 });

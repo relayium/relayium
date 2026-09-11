@@ -675,6 +675,14 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
     dispose: control.dispose,
     drainAbandoned: () => drainAbandoned(),
     locale: resolveLocale(app.getLocale()),
+    // Pausing from the tray stops new claims WITHOUT writing the user's policy
+    // or telling central — the page's enable/disable is what does that, and a
+    // menu is the wrong place to un-enrol a device from.
+    setInboxPaused: (paused) => {
+      if (paused) control.inbox.pauseReceiving();
+      else control.inbox.resumeReceiving();
+    },
+    inboxPaused: () => control.inbox.receivingPaused,
     onLocaleChanged: () => refreshTray(),
     platform: options.residentPlatform
       ? options.residentPlatform(residentPlatform(control.preferences))

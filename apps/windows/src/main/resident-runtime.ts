@@ -82,6 +82,15 @@ export interface ResidentRuntimeDeps {
   /** The language to start in, before the page has said which it is showing. */
   readonly locale?: Locale;
   /** Rebuild anything native that is already on screen — the tray menu. */
+  /**
+   * Stop or resume CLAIMING deliveries. Main's own service, not the page's.
+   *
+   * Required rather than optional: a tray that offers the item and then does
+   * nothing is worse than one that does not offer it, and an optional
+   * dependency is how that happens quietly.
+   */
+  readonly setInboxPaused: (paused: boolean) => void;
+  readonly inboxPaused: () => boolean;
   readonly onLocaleChanged?: () => void;
   /**
    * Stop admitting new work in EVERY feature main composes, synchronously and
@@ -373,6 +382,16 @@ export class ResidentRuntime {
       openUpdates: () => void this.openPage("account"),
       setNearby: (active) => void this.setLan(active ? "resume" : "pause"),
       nearbyActive: () => this.nearby,
+      // Straight to main's own service: unlike Nearby, whose room the PAGE
+      // owns, the Device Inbox runs here. It therefore works with the window
+      // hidden or closed, which is the state a tray item exists for.
+      setInboxPaused: (paused) => {
+        this.deps.setInboxPaused(paused);
+        // The label says what it will DO, so it has to be rebuilt once the
+        // state has moved. The same refresh a locale change uses.
+        this.deps.onLocaleChanged?.();
+      },
+      inboxPaused: () => this.deps.inboxPaused(),
       quit: () => void this.requestQuit(),
     };
   }

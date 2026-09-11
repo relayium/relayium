@@ -40,6 +40,17 @@ export interface TrayActions {
   readonly setNearby: (active: boolean) => void;
   /** Whether Nearby is currently on, so the item can say which it does. */
   readonly nearbyActive: () => boolean;
+  /**
+   * Stop or resume CLAIMING deliveries, without changing the stored answer.
+   *
+   * Deliberately not the enable/disable the page offers. That writes the user's
+   * policy and tells central; this stops taking new deliveries and touches
+   * neither, so pausing from a menu cannot un-enrol a device by accident. A
+   * delivery already running is unaffected.
+   */
+  readonly setInboxPaused: (paused: boolean) => void;
+  /** Whether claiming is currently paused, so the item can say which it does. */
+  readonly inboxPaused: () => boolean;
   readonly quit: () => void;
 }
 
@@ -52,6 +63,7 @@ export interface TrayActions {
  */
 export function trayMenuTemplate(t: Translate, actions: TrayActions): readonly TrayMenuEntry[] {
   const active = actions.nearbyActive();
+  const paused = actions.inboxPaused();
   return [
     { label: t("resident.tray.show"), click: actions.show },
     { type: "separator" },
@@ -64,6 +76,14 @@ export function trayMenuTemplate(t: Translate, actions: TrayActions): readonly T
       // other half.
       label: t(active ? "resident.tray.pauseNearby" : "resident.tray.resumeNearby"),
       click: () => actions.setNearby(!active),
+    },
+    {
+      // The Device Inbox has the same pair, for the same reason: this app
+      // receives while its window is hidden, so the tray has to be able to stop
+      // it. Pausing here does NOT write the policy or tell central — a menu is
+      // the wrong place to un-enrol a device from.
+      label: t(paused ? "resident.tray.resumeInbox" : "resident.tray.pauseInbox"),
+      click: () => actions.setInboxPaused(!paused),
     },
     { type: "separator" },
     { label: t("resident.tray.quit"), click: actions.quit },
