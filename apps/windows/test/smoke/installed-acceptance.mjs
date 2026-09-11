@@ -897,13 +897,26 @@ async function main() {
     check("the verb launch hands over and exits", verbExited);
     if (!verbExited) await killOwned(verbChild.pid);
 
-    if (
-      await waitFor(
-        "the selection to reach the running app",
-        async () => (await present("pending-selection")) === true,
-        DEADLINE.launch,
-      )
-    ) {
+    // EITHER outcome ends the wait. The pane renders `pending-selection` when a
+    // selection was staged and `pending-refused` when it was not, so waiting
+    // only for the first turns a refusal — which is an answer, with a named
+    // cause the app is holding right there — into a bare timeout that says
+    // nothing about why.
+    const settled = await waitFor(
+      "the selection to reach the running app",
+      async () => (await present("pending-selection")) || (await present("pending-refused")),
+      DEADLINE.launch,
+    );
+    if (settled && (await present("pending-refused"))) {
+      const why = await cdp.evaluate(
+        'document.querySelector(\'[data-test="pending-refused"]\')?.dataset?.refusal ?? "unknown"',
+      );
+      const said = await cdp.evaluate(
+        'document.querySelector(\'[data-test="pending-refusal"]\')?.innerText ?? ""',
+      );
+      check(`the installed build staged the file rather than refusing it`, false, `${why}: ${said}`);
+    }
+    if (settled && (await present("pending-selection"))) {
       const count = await cdp.evaluate('document.querySelector(\'[data-test="pending-count"]\')?.innerText ?? ""');
       check("the pane names the file the verb passed", String(count).includes("picked-by-verb.txt"), String(count));
 
