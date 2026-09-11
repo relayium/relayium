@@ -269,7 +269,7 @@ async function main() {
   check(
     "bridge exposed",
     parsed.keys.sort().join(",") ===
-      "accountSummary,appInfo,auth,ice,inbox,inboxSend,loginItem,osEntry,pair,pairHandoff,prefs,receive,resident,send,signaling,stored,update",
+      "accountSummary,appInfo,auth,ice,inbox,inboxSend,loginItem,osEntry,pair,pairHandoff,prefs,receive,receivedDrag,resident,send,signaling,stored,update",
     parsed.keys.join(","),
   );
   check("no raw ipcRenderer in the page", parsed.hasIpc === false);
@@ -305,6 +305,9 @@ async function main() {
     // channel cannot be used to put a URL of the page's choosing on the
     // clipboard.
     "relayium:pair-handoff-state", "relayium:pair-handoff-copy",
+    // Dragging or revealing ONE received file, named by its capability token.
+    // No path crosses in either direction.
+    "relayium:received-act",
     "relayium:stored-receive-start", "relayium:stored-receive-cancel",
     "relayium:stored-receive-result", "relayium:stored-inventory",
     "relayium:stored-cleanup-retry",

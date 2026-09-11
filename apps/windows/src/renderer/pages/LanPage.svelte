@@ -24,10 +24,12 @@
   import LinkPane from "./LinkPane.svelte";
   import type { RoomController } from "../rooms/room-controller.svelte.js";
   import type { RevealController } from "../receive/reveal-controller.svelte.js";
+  import type { ReceivedController } from "../receive/received-controller.svelte.js";
 
   let {
     room,
     reveal,
+    received,
     receiving,
     busy,
     onStart,
@@ -40,6 +42,8 @@
      *  rather than reached for globally: the pane renders it, this page does
      *  not use it. */
     reveal: RevealController;
+    /** The files a finished receive wrote, passed through to the pane. */
+    received: ReceivedController;
     receiving: boolean;
     busy: boolean;
     onStart: () => void;
@@ -70,7 +74,7 @@
     </button>
   </Card>
 {:else if room && linkPeerId}
-  <LinkPane {room} {reveal} {verifyPeers} bind:messageDraft />
+  <LinkPane {room} {reveal} {received} {verifyPeers} bind:messageDraft />
 {:else}
   <Card>
     <!-- The roster is only meaningful once this PC is actually in the room.

@@ -16,11 +16,13 @@
   import LinkPane from "./LinkPane.svelte";
   import type { RoomController } from "../rooms/room-controller.svelte.js";
   import type { RevealController } from "../receive/reveal-controller.svelte.js";
+  import type { ReceivedController } from "../receive/received-controller.svelte.js";
   import type { PairMintResult } from "../../shared/ipc-contract.js";
 
   let {
     room,
     reveal,
+    received,
     minted,
     minting,
     refusal,
@@ -36,6 +38,8 @@
     room: RoomController | null;
     /** Same pass-through as the LAN page: the pane renders it. */
     reveal: RevealController;
+    /** The files a finished receive wrote, passed through to the pane. */
+    received: ReceivedController;
     minted: Extract<PairMintResult, { ok: true }> | null;
     minting: boolean;
     refusal: string | null;
@@ -75,7 +79,7 @@
 <p class="lede">{t("pairSubtitle")}</p>
 
 {#if room && linkPeerId}
-  <LinkPane {room} {reveal} {verifyPeers} bind:messageDraft />
+  <LinkPane {room} {reveal} {received} {verifyPeers} bind:messageDraft />
 {:else if disconnected}
   <Card>
     <h2 data-test="pair-disconnected">{t("pairDisconnected")}</h2>

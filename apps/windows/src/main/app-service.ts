@@ -67,7 +67,7 @@ import {
 } from "./net/native-receive-adapter.js";
 import type { PairControl } from "./net/pair-control.js";
 import { SecretStoreError, type SecretStore } from "./secrets.js";
-import type { ManifestEntry } from "./io/plan.js";
+import { planManifest, type ManifestEntry } from "./io/plan.js";
 
 /**
  * What a quiesce could not finish.
@@ -298,7 +298,8 @@ interface Session {
  * appearing after the app believed it had finished with them.
  */
 /** What a teardown selects on, shared by an open lease and one still opening. */
-interface ReceiveOwner {
+/** Who a receive belongs to. Exported so a caller can carry it truthfully. */
+export interface ReceiveOwner {
   readonly authority: ReceiveAuthority;
   readonly epoch: number;
   /** The renderer document that asked for this. */
@@ -357,6 +358,20 @@ interface LeaseEntry extends ReceiveOwner {
    * keeps a page from naming a directory it was never given.
    */
   readonly directory: string;
+  /**
+   * Where each file of this receive will land, relative to the directory.
+   *
+   * Retained for the same reason the directory is: after a publication the
+   * caller needs to name the files, and by then the manifest is gone. It is the
+   * PLAN's segments rather than the manifest's raw names, so the split is the
+   * one implementation both sides use rather than a second one written here.
+   *
+   * These are a PREDICTION until publication says `complete`. They are exact
+   * then, and only then, because the native planner refuses rather than
+   * renames: an unsafe component, a case collision or a file-versus-parent
+   * conflict produces zero files, never a file under a different name.
+   */
+  readonly plannedSegments: readonly (readonly string[])[];
   /** Non-null while a terminal publication is running. Never rejects — the
    *  caller gets the real error; this exists only to be JOINED. */
   terminal: Promise<void> | null;
@@ -409,7 +424,11 @@ interface LeaseEntry extends ReceiveOwner {
 
 /** A lease entry that has not been through a cleanup attempt yet. */
 function newLeaseEntry(
-  fields: ReceiveOwner & { readonly adapter: NativeReceiveAdapter; readonly directory: string },
+  fields: ReceiveOwner & {
+    readonly adapter: NativeReceiveAdapter;
+    readonly directory: string;
+    readonly plannedSegments: readonly (readonly string[])[];
+  },
 ): LeaseEntry {
   return {
     ...fields,
@@ -1464,6 +1483,13 @@ export class AppService {
         rootPath: directory,
         manifest,
       });
+      // Planned here only to LEARN the names, never to refuse: the destination
+      // has already accepted this manifest and re-deciding it at a second
+      // boundary could only disagree with the side that is doing the writing.
+      // A plan that does not come back leaves the list empty, which registers
+      // nothing rather than guessing.
+      const planned = planManifest(manifest);
+      const plannedSegments = planned.ok ? planned.files.map((file) => file.segments) : [];
 
       // Re-checked after the open, too: creating the destination is IO and both
       // identities can change during it. Anything that survived to here under a
@@ -1483,13 +1509,13 @@ export class AppService {
         // Handing it to the retirement registry first means the failure leaves
         // an OWNED entry behind. The teardown that fenced this open rescans
         // after joining it and retries; so does any later one.
-        const stale = newLeaseEntry({ adapter, authority, epoch: captured, document, directory });
+        const stale = newLeaseEntry({ adapter, authority, epoch: captured, document, directory, plannedSegments });
         await this.retireEntry(stale).catch(() => undefined);
         throw new ServiceRefusal(
           accountStale ? "account changed" : documentStale ? "document changed" : "service disposed",
         );
       }
-      this.leases.set(id, newLeaseEntry({ adapter, authority, epoch: captured, document, directory }));
+      this.leases.set(id, newLeaseEntry({ adapter, authority, epoch: captured, document, directory, plannedSegments }));
       return { leaseId: id, files: adapter.fileCount };
     } finally {
       this.opening.delete(pending);
@@ -1564,12 +1590,17 @@ export class AppService {
    * that resolves the entry may already have been retired — and a receipt must
    * name the folder the receive actually used, not whatever is current.
    */
-  receiveTarget(leaseId: string): { readonly directory: string; readonly owner: ReceiveOwner } | null {
+  receiveTarget(leaseId: string): {
+    readonly directory: string;
+    readonly owner: ReceiveOwner;
+    readonly plannedSegments: readonly (readonly string[])[];
+  } | null {
     const entry = this.leases.get(leaseId);
     if (entry === undefined) return null;
     return {
       directory: entry.directory,
       owner: { authority: entry.authority, epoch: entry.epoch, document: entry.document },
+      plannedSegments: entry.plannedSegments,
     };
   }
 
@@ -1758,6 +1789,18 @@ export class AppService {
    */
   get accountEpoch(): number {
     return this.epoch;
+  }
+
+  /**
+   * Who this process is signed in as, or "" when it is not.
+   *
+   * Synchronous, because the callers that need it are re-checking authority on
+   * a path where an await would be the window they exist to close. It moves
+   * with the epoch and is cleared by sign-out, so a holder that compares BOTH
+   * is refused by the epoch first and by this second.
+   */
+  get accountIdentity(): string {
+    return this.accountEmail;
   }
 
   /**

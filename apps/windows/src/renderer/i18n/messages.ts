@@ -138,6 +138,15 @@ export const en = {
   recvResidue: "Some incomplete files may still be in that folder.",
   recvSavedCount: "Saved {done} of {total}",
   recvReveal: "Show in Explorer",
+  /** The per-file list a finished receive announces. */
+  recvFilesTitle: "Received files",
+  /** Shows ONE file rather than the folder the batch went to. */
+  recvShowFile: "Show",
+  recvDragHint: "Drag a file out to copy it somewhere else.",
+  recvActionMissing: "That file is no longer there. It may have been moved, renamed, or deleted since it arrived.",
+  recvActionExpired: "That file is no longer available from here. Receive it again to get a fresh copy.",
+  recvActionClosing: "Relayium is closing. Nothing was opened.",
+  recvActionFailed: "That did not work. Nothing was opened.",
   recvRevealBusy: "Opening\u2026",
   /** Each refusal names a different situation, because each has a different
    *  next action. Never the operating system's own text, which carries the
@@ -615,6 +624,13 @@ export const zh: Record<MessageKey, string> = {
   recvResidue: "该文件夹中可能仍残留未完成的文件。",
   recvSavedCount: "已保存 {done} / {total}",
   recvReveal: "在文件资源管理器中显示",
+  recvFilesTitle: "已接收的文件",
+  recvShowFile: "显示",
+  recvDragHint: "将文件拖出即可复制到其他位置。",
+  recvActionMissing: "该文件已不存在，可能在接收后被移动、重命名或删除。",
+  recvActionExpired: "已无法从这里访问该文件。请重新接收以获取新的副本。",
+  recvActionClosing: "Relayium 正在关闭，未打开任何内容。",
+  recvActionFailed: "操作未能完成，未打开任何内容。",
   recvRevealBusy: "正在打开\u2026",
   recvRevealMissing: "该文件夹已不存在，可能已被移动、重命名，或所在的驱动器已断开。",
   recvRevealExpired: "该记录不属于当前登录的账户。",

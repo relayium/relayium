@@ -43,12 +43,14 @@
   type Intent = { ticket: Ticket; peerId: string; linkGeneration: number } | null;
   import type { RoomController } from "../rooms/room-controller.svelte.js";
   import type { RevealController } from "../receive/reveal-controller.svelte.js";
+  import type { ReceivedController, ReceivedRefusal } from "../receive/received-controller.svelte.js";
   import type { RevealRefusal } from "../../shared/receive-receipt.js";
   import type { PickedFile } from "../../../../../web/src/lib/drag";
 
   let {
     room,
     reveal,
+    received,
     verifyPeers,
     messageDraft = $bindable(""),
   }: {
@@ -58,6 +60,8 @@
      *  is over, and a reveal that fails must not land in the transfer's own
      *  state where it would read as "the files did not arrive". */
     reveal: RevealController;
+    /** The files that receive wrote, one token each. Pushed by main. */
+    received: ReceivedController;
     verifyPeers: boolean;
     messageDraft?: string;
   } = $props();
@@ -140,6 +144,21 @@
    * a quit in progress and a receipt that expired with their account — three
    * things with three different next actions, only one of which is "look again".
    */
+  /**
+   * One sentence per refusal, each naming a different situation.
+   *
+   * Separate from `revealText` because these are about ONE file rather than the
+   * folder: "that file is gone" and "that folder is gone" have different next
+   * actions, and one sentence covering both would be wrong for whichever the
+   * user is actually looking at.
+   */
+  function receivedText(reason: ReceivedRefusal): string {
+    if (reason === "missing") return t("recvActionMissing");
+    if (reason === "unknown-token") return t("recvActionExpired");
+    if (reason === "unavailable") return t("recvActionClosing");
+    return t("recvActionFailed");
+  }
+
   function revealText(reason: RevealRefusal): string {
     if (reason === "missing") return t("recvRevealMissing");
     if (reason === "stale" || reason === "unknown") return t("recvRevealExpired");
@@ -582,6 +601,41 @@
                Never the operating system's own text, which carries the path. -->
           {#if reveal.refusal !== null}
             <p class="problem small" data-test="recv-reveal-refused">{revealText(reveal.refusal)}</p>
+          {/if}
+          <!-- The files themselves, each with its own capability token. The
+               relative path is safe to show: it is relative to a root this page
+               was never given. Dragging is MAIN's — the row asks, and main
+               re-checks the file before the OS is told to do anything. -->
+          {#if received.items.length > 0}
+            <p class="dim small" data-test="recv-files-title">{t("recvFilesTitle")}</p>
+            <ul class="entries" data-test="recv-files">
+              {#each received.items as item (item.token)}
+                <li
+                  draggable="true"
+                  data-test="recv-file"
+                  ondragstart={(event) => {
+                    // The browser's own drag is cancelled: Electron starts a
+                    // REAL file drag from main, which a synthetic one cannot.
+                    event.preventDefault();
+                    void received.act("drag", item.token);
+                  }}
+                >
+                  <span class="name">{item.relativePath}</span>
+                  <button
+                    class="small"
+                    data-test="recv-file-show"
+                    disabled={received.busy !== null}
+                    onclick={() => void received.act("reveal", item.token)}
+                  >
+                    {t("recvShowFile")}
+                  </button>
+                </li>
+              {/each}
+            </ul>
+            <p class="dim small" data-test="recv-drag-hint">{t("recvDragHint")}</p>
+          {/if}
+          {#if received.refusal !== null}
+            <p class="problem small" data-test="recv-file-refused">{receivedText(received.refusal)}</p>
           {/if}
         {:else if receipt?.kind === "partial"}
           <p class="problem" data-test="recv-partial">

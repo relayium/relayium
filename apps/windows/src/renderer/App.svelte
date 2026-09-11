@@ -51,6 +51,7 @@
   import { SignInController, type Phase, type SignInBridge } from "./sign-in-controller.js";
   import type { ReceiveBridge } from "./receive/receive-coordinator.js";
   import { RevealController, type RevealBridge } from "./receive/reveal-controller.svelte.js";
+  import { ReceivedController, type ReceivedBridge } from "./receive/received-controller.svelte.js";
   import PendingSelection from "./pages/PendingSelection.svelte";
   import PairHandoff from "./pages/PairHandoff.svelte";
   import { PairHandoffController } from "./pair/pair-handoff-controller.svelte.js";
@@ -91,6 +92,7 @@
       update: UpdateSummaryBridge;
       osEntry: OsEntryBridge;
       pairHandoff: PairHandoffBridge;
+      receivedDrag: ReceivedBridge;
     };
 
   const bridge = (globalThis as unknown as { relayium: Bridge }).relayium;
@@ -308,6 +310,16 @@
    * and main holds the folder.
    */
   const reveal = new RevealController(bridge.receive);
+
+  /**
+   * The files a finished receive wrote, one token each.
+   *
+   * Announced by main after a publication, so this only subscribes: there is
+   * nothing to load, because a transfer that finished before this document
+   * existed belongs to the document that asked for it, not to this one.
+   */
+  const received = new ReceivedController(bridge.receivedDrag);
+  onDestroy(received.start());
 
   /**
    * What the OS handed this process, if anything.
@@ -716,6 +728,7 @@
     <LanPage
       room={lanRoom}
       {reveal}
+      {received}
       receiving={lanRoom !== null}
       busy={lanBusy}
       onStart={() => void startLan()}
@@ -726,6 +739,7 @@
     <PairPage
       room={pairRoom}
       {reveal}
+      {received}
       {minted}
       {minting}
       refusal={mintRefusal}

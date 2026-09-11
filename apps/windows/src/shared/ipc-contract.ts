@@ -113,6 +113,15 @@ export const IPC = {
    */
   pairHandoffCopy: "relayium:pair-handoff-copy",
   /**
+   * Drag a received file out, or show it in Explorer.
+   *
+   * Named by the capability token the item was announced with. The renderer
+   * never learns where the file is, so it cannot ask for one it was not given,
+   * and main re-checks that the file is still the one it registered before the
+   * OS is asked to do anything with it.
+   */
+  receivedAct: "relayium:received-act",
+  /**
    * Open the ONE signalling route this build has, for one room.
    *
    * The renderer names a room KIND (and, for a code room, a validated code) —
@@ -548,6 +557,14 @@ export const IPC_EVENTS = {
    * lapsed must stop being offered even if nobody touches the screen.
    */
   pairHandoffState: "relayium:pair-handoff-state-changed",
+  /**
+   * The files one finished receive actually wrote, as draggable items.
+   *
+   * Pushed on the ORIGINATING document for the same reason the receipt is:
+   * these are authority over particular files, granted to the page that asked
+   * for that receive, not a fact about the build that any page may act on.
+   */
+  receivedItems: "relayium:received-items",
 } as const;
 
 export const IPC_EVENT_NAMES: readonly string[] = Object.values(IPC_EVENTS);

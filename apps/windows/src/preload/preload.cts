@@ -83,6 +83,12 @@ contextBridge.exposeInMainWorld("relayium", {
     copy: invoke("relayium:pair-handoff-copy"),
     onState: subscribe("relayium:pair-handoff-state-changed"),
   },
+  // A received file, dragged out or shown in Explorer. The page holds a token;
+  // the path stays in main.
+  receivedDrag: {
+    act: invoke("relayium:received-act"),
+    onItems: subscribe("relayium:received-items"),
+  },
   signaling: {
     open: invoke("relayium:signaling-open"),
     send: invoke("relayium:signaling-send"),

@@ -4,7 +4,7 @@
 // The split is deliberate: rules that only exist inside an `ipcMain.handle`
 // closure cannot be tested, and the rules here are the ones a race would break.
 
-import { app, clipboard, dialog, shell, type BrowserWindow } from "electron";
+import { app, clipboard, dialog, nativeImage, shell, type BrowserWindow } from "electron";
 import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import {
@@ -34,7 +34,7 @@ import {
   type SignalingEvent,
   type SignalingRoom,
 } from "../shared/ipc-contract.js";
-import { AppService, type AppServiceDeps, type CleanupOutcome } from "./app-service.js";
+import { AppService, type AppServiceDeps, type CleanupOutcome, type ReceiveOwner } from "./app-service.js";
 import { StoredReceiveService, type StoredReceiveDeps } from "./features/stored-receive.js";
 import { InboxService, type InboxServiceDeps } from "./features/inbox.js";
 import { AccountIdentity } from "./features/account-identity.js";
@@ -74,6 +74,8 @@ import { ReceiptRegistry } from "./io/receipt-registry.js";
 import { issueReceipt } from "./features/receive-receipts.js";
 import { OsEntryService } from "./features/os-entry.js";
 import { PairHandoffService } from "./features/pair-handoff.js";
+import { ReceivedDragService } from "./features/received-drag.js";
+import { isReceivedAction } from "../shared/received-drag.js";
 import { isPairHandoffAction } from "../shared/pair-handoff.js";
 import { openApprovedExternal } from "./window.js";
 
@@ -337,6 +339,8 @@ export interface HandlerControl {
   readonly osEntry: OsEntryService;
   /** The live pairing code, for the quit risk snapshot and teardown. */
   readonly pairHandoff: PairHandoffService;
+  /** Received files still draggable, for the teardown that forgets them. */
+  readonly receivedDrag: ReceivedDragService;
   readonly resident: ResidentBridge;
   /**
    * Stop main's own outgoing work, recoverably.
@@ -721,6 +725,51 @@ export function registerHandlers(
     return result;
   });
 
+  /**
+   * Files a finished receive wrote, as things a person can act on.
+   *
+   * The path stays here. What crosses is a token, and every action re-checks
+   * that the file is still the one that was registered before the OS is asked
+   * to touch it — a name can come to mean something else between a transfer
+   * finishing and somebody dragging its result somewhere.
+   */
+  /**
+   * The image the OS shows under the cursor during a drag.
+   *
+   * This build's own icon, resolved once. Electron refuses an empty image, and
+   * a thumbnail derived from the file would put the CONTENT of a received file
+   * on screen outside the app, which is the one thing the rest of this path is
+   * careful not to do.
+   */
+  const DRAG_ICON = nativeImage
+    .createFromPath(fileURLToPath(new URL("../../assets/app-icon.png", import.meta.url)))
+    .resize({ width: 32, height: 32 });
+
+  const receivedDrag = new ReceivedDragService({
+    startDrag: (absolutePath) => {
+      const contents = window.webContents;
+      if (contents.isDestroyed()) return false;
+      // Electron refuses an empty icon, so the app's own is used. The icon is
+      // this build's, never anything derived from the file being dragged.
+      contents.startDrag({ file: absolutePath, icon: DRAG_ICON });
+      return true;
+    },
+    showItemInFolder: (absolutePath) => shell.showItemInFolder(absolutePath),
+    currentDocument: () => router.generation,
+    accountEpoch: () => service.accountEpoch,
+    currentAccountId: () => service.accountIdentity,
+    reportFailure: (err) => events.reportFailure?.(err),
+  });
+
+  router.handle(IPC.receivedAct, async (payload) => {
+    const body = expectObject(payload);
+    const action = body["action"];
+    if (!isReceivedAction(action)) return { kind: "unknown-token" };
+    // The document comes from the ROUTER. A received file belongs to the page
+    // that received it; a page cannot name a generation to claim another's.
+    return receivedDrag.act(action, expectString(body["token"], 128), router.generation);
+  });
+
   router.handle(IPC.pairHandoffState, async () => pairHandoff.view());
 
   router.handle(IPC.pairHandoffCopy, async (payload) => {
@@ -785,6 +834,7 @@ export function registerHandlers(
         router.emit(IPC_EVENTS.receiveReceipt, document, receipt);
       },
     });
+    await announceReceivedFiles(report, target);
     return report;
   });
 
@@ -796,6 +846,49 @@ export function registerHandlers(
    * none of them carries the operating system's text, which routinely contains
    * the path this channel exists to keep on this side.
    */
+  /**
+   * Announce the files a receive actually wrote, as things to drag or reveal.
+   *
+   * ## Only `complete`, and why the paths may be derived at all
+   *
+   * `PublishReport` carries counts, not names. The paths are therefore derived
+   * as the receive root plus the PLAN's segments, and that is exact rather than
+   * a guess for one reason: the writer refuses instead of renaming. An unsafe
+   * component, a case collision or a file-versus-parent conflict produces ZERO
+   * files, never a file under some other name — so a publication that reports
+   * `complete` wrote precisely those paths.
+   *
+   * Derivation is still not trusted blindly. `register` stats each path and
+   * answers null when it is not a file, so a derivation that was somehow wrong
+   * announces nothing rather than handing out a token for the wrong file.
+   */
+  const announceReceivedFiles = async (
+    report: PublishReport,
+    target: { readonly directory: string; readonly owner: ReceiveOwner; readonly plannedSegments: readonly (readonly string[])[] } | null,
+  ): Promise<void> => {
+    if (report.status !== "complete" || target === null) return;
+    const authority = {
+      authority: target.owner.authority,
+      epoch: target.owner.epoch,
+      document: target.owner.document,
+      accountId: service.accountIdentity,
+    } as const;
+    const items = [];
+    for (const segments of target.plannedSegments) {
+      if (segments.length === 0) continue;
+      const view = await receivedDrag.register({
+        absolutePath: join(target.directory, ...segments),
+        relativePath: segments.join("/"),
+        authority,
+      });
+      if (view !== null) items.push(view);
+    }
+    if (items.length === 0) return;
+    // The ORIGINATING document, like the receipt beside it. These are authority
+    // over particular files, granted to the page that asked for that receive.
+    router.emit(IPC_EVENTS.receivedItems, target.owner.document, items);
+  };
+
   router.handle(IPC.receiveReveal, async (payload) => {
     const body = expectObject(payload);
     // Deliberately NOT validated here beyond being present: the registry checks
@@ -1536,6 +1629,9 @@ export function registerHandlers(
     // A code minted under the previous account does not outlive the sign-out
     // that ended it; it is withdrawn here rather than refused on use.
     pairHandoff.onAccountChanged();
+    // ACCOUNT items go; DIRECT ones stay. A LAN file the user received is
+    // theirs regardless of who is signed in.
+    receivedDrag.onAccountChanged();
   });
 
   /** A task or vault id the renderer named. It names; it authorises nothing. */
@@ -1943,6 +2039,9 @@ export function registerHandlers(
     // A pairing code belongs to the page that minted it. A replacement page
     // must not inherit a live link to somebody else's conversation.
     pairHandoff.revokeDocument(generation);
+    // The files were received BY that document. Its successor did not receive
+    // them and does not inherit the right to drag them anywhere.
+    receivedDrag.revokeDocument(generation);
     volunteered = null;
     for (const [requestId, resolve] of [...outstanding]) {
       outstanding.delete(requestId);
@@ -1971,6 +2070,9 @@ export function registerHandlers(
     // Copying is an admission too: one started now would put a link on the
     // clipboard for a session that is ending.
     pairHandoff.fence();
+    // Registration stays open — a receive that completed during a quit prompt
+    // really did complete — but ACTING is an admission and stops here.
+    receivedDrag.fence();
     inbox.fence();
     storedSend.fence();
     inboxSend.fence();
@@ -2147,6 +2249,7 @@ export function registerHandlers(
     // and releasing them cannot fail anything else's teardown.
     await osEntry.dispose();
     pairHandoff.dispose();
+    receivedDrag.dispose();
     // Terminal: every held path is dropped and no token can be redeemed again.
     receipts.dispose();
     await service.dispose();
@@ -2167,6 +2270,7 @@ export function registerHandlers(
     storedReceive.resume();
     osEntry.resume();
     pairHandoff.resume();
+    receivedDrag.resume();
     storedSend.resume();
     inboxSend.resume();
     accountSummary.resume();
@@ -2185,6 +2289,7 @@ export function registerHandlers(
     accountSummary,
     osEntry,
     pairHandoff,
+    receivedDrag,
     resident,
     fence,
     quiesce,
