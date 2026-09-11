@@ -52,6 +52,9 @@
   import type { ReceiveBridge } from "./receive/receive-coordinator.js";
   import { RevealController, type RevealBridge } from "./receive/reveal-controller.svelte.js";
   import PendingSelection from "./pages/PendingSelection.svelte";
+  import PairHandoff from "./pages/PairHandoff.svelte";
+  import { PairHandoffController } from "./pair/pair-handoff-controller.svelte.js";
+  import type { PairHandoffBridge } from "./pair/bridge.js";
   import { OsEntryController } from "./os-entry/os-entry-controller.svelte.js";
   import type { OsEntryBridge } from "./os-entry/bridge.js";
   import type { TransportBridge } from "./transport/bridge.js";
@@ -87,6 +90,7 @@
       accountSummary: AccountSummaryBridge;
       update: UpdateSummaryBridge;
       osEntry: OsEntryBridge;
+      pairHandoff: PairHandoffBridge;
     };
 
   const bridge = (globalThis as unknown as { relayium: Bridge }).relayium;
@@ -317,6 +321,17 @@
   const osEntry = new OsEntryController(bridge.osEntry);
   void osEntry.load();
   onDestroy(() => osEntry.destroy());
+
+  /**
+   * The live pairing code, as something a person can hand over.
+   *
+   * Loaded as well as subscribed: a code minted before this document existed —
+   * a reload while a link was live — is already held by main, and no push is
+   * coming for it.
+   */
+  const pairHandoff = new PairHandoffController(bridge.pairHandoff);
+  void pairHandoff.load();
+  onDestroy(() => pairHandoff.destroy());
   const detachReveal = reveal.start();
 
   async function setPref(key: "verifyPeers", value: boolean) {
@@ -723,6 +738,11 @@
       bind:messageDraft
       verifyPeers={effectiveVerifyPeers}
     />
+    <!-- The code as something that can be HANDED OVER: a join link and its QR,
+         for the device that is not going to type six characters. Beside the
+         pairing controls rather than inside them, because it exists only while
+         a code does and renders nothing otherwise. -->
+    <PairHandoff controller={pairHandoff} />
   {:else if page() === "stored"}
     <StoredPage
       {stored}

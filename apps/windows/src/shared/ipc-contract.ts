@@ -96,6 +96,23 @@ export const IPC = {
    */
   osEntryClear: "relayium:os-entry-clear",
   /**
+   * The pairing handoff: one live code, its join link and its QR.
+   *
+   * Read once on mount; everything after arrives on the pushed event. The code
+   * itself is minted through `pairCreate` — this is the surface that turns a
+   * minted code into something a person can hand to another device.
+   */
+  pairHandoffState: "relayium:pair-handoff-state",
+  /**
+   * Copy the join link, by NAMING the action rather than supplying the text.
+   *
+   * The payload carries no URL and no code. Main writes what main retained, so
+   * a renderer cannot put arbitrary text on the user's clipboard through this
+   * channel, and a code that has expired or outlived its document is refused
+   * instead of copied.
+   */
+  pairHandoffCopy: "relayium:pair-handoff-copy",
+  /**
    * Open the ONE signalling route this build has, for one room.
    *
    * The renderer names a room KIND (and, for a code room, a validated code) —
@@ -524,6 +541,13 @@ export const IPC_EVENTS = {
    * the one document that asked for it.
    */
   osEntryState: "relayium:os-entry-state-changed",
+  /**
+   * The live pairing code changed — minted, copied, expired or withdrawn.
+   *
+   * Pushed because expiry is main's clock, not the page's: a link that has
+   * lapsed must stop being offered even if nobody touches the screen.
+   */
+  pairHandoffState: "relayium:pair-handoff-state-changed",
 } as const;
 
 export const IPC_EVENT_NAMES: readonly string[] = Object.values(IPC_EVENTS);

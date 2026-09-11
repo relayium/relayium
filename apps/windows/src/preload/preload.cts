@@ -76,6 +76,13 @@ contextBridge.exposeInMainWorld("relayium", {
     clear: invoke("relayium:os-entry-clear"),
     onState: subscribe("relayium:os-entry-state-changed"),
   },
+  // The pairing handoff. `copy` names an action and carries no text, so the
+  // page cannot put a URL of its own on the clipboard through it.
+  pairHandoff: {
+    state: invoke("relayium:pair-handoff-state"),
+    copy: invoke("relayium:pair-handoff-copy"),
+    onState: subscribe("relayium:pair-handoff-state-changed"),
+  },
   signaling: {
     open: invoke("relayium:signaling-open"),
     send: invoke("relayium:signaling-send"),

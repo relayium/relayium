@@ -49,7 +49,7 @@
 // the device poll inside the main process, releases a late success, and requires
 // the page AND the authoritative auth state to still say signed out.
 
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, clipboard, ipcMain } from "electron";
 // STATIC, not dynamic. `registerSchemesAsPrivileged` runs at this module's
 // top level and Electron only accepts it before the `ready` event; a dynamic
 // `import()` inside an async function resolves after ready has already fired.
@@ -269,7 +269,7 @@ async function main() {
   check(
     "bridge exposed",
     parsed.keys.sort().join(",") ===
-      "accountSummary,appInfo,auth,ice,inbox,inboxSend,loginItem,osEntry,pair,prefs,receive,resident,send,signaling,stored,update",
+      "accountSummary,appInfo,auth,ice,inbox,inboxSend,loginItem,osEntry,pair,pairHandoff,prefs,receive,resident,send,signaling,stored,update",
     parsed.keys.join(","),
   );
   check("no raw ipcRenderer in the page", parsed.hasIpc === false);
@@ -301,6 +301,10 @@ async function main() {
     // takes a capability token and a bounded range. None of the three accepts a
     // path, which is what keeps staging main's decision rather than the page's.
     "relayium:os-entry-state", "relayium:os-entry-read", "relayium:os-entry-clear",
+    // The pairing handoff. `copy` NAMES an action and carries no text, so this
+    // channel cannot be used to put a URL of the page's choosing on the
+    // clipboard.
+    "relayium:pair-handoff-state", "relayium:pair-handoff-copy",
     "relayium:stored-receive-start", "relayium:stored-receive-cancel",
     "relayium:stored-receive-result", "relayium:stored-inventory",
     "relayium:stored-cleanup-retry",
@@ -425,6 +429,7 @@ async function main() {
   );
 
   await assertSendFilesReachedThePane(win);
+  await assertPairHandoffRefusesWithoutACode(win);
   await driveSignInCancellation(win);
 
   process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures })}\n`);
@@ -455,6 +460,43 @@ async function main() {
  * IPC, real pane — and then asserts the property the whole contract exists for:
  * the directory the file came from must not reach the screen.
  */
+/**
+ * The pairing handoff refuses cleanly, and never writes the clipboard.
+ *
+ * This run is signed out, so no code can be minted and the interesting half is
+ * the refusal path — which is also the half with a security property worth
+ * pinning. `copy` NAMES an action and carries no text: main writes what main
+ * retained. If that ever became "main writes what the page sent", this channel
+ * would be a way to put arbitrary content on someone's clipboard, and the bug
+ * would look exactly like a working feature.
+ *
+ * The clipboard is read, never written. A smoke that stamped a sentinel over
+ * whatever the developer had copied would be a rude test.
+ */
+async function assertPairHandoffRefusesWithoutACode(win) {
+  const js = (expr) => win.webContents.executeJavaScript(expr);
+  const call = async (expr) => JSON.parse(await js(`${expr}.then((v) => JSON.stringify(v))`));
+  // Awaited: `clipboard.readText()` resolves to the text here rather than
+  // returning it, and comparing two unawaited promises would compare two
+  // distinct objects and fail for a reason that has nothing to do with the
+  // clipboard.
+  const before = await clipboard.readText();
+
+  const idle = await call("globalThis.relayium.pairHandoff.state()");
+  check("the handoff starts with no code", idle.kind === "idle", JSON.stringify(idle));
+
+  const none = await call(`globalThis.relayium.pairHandoff.copy({ action: "copy-join-link" })`);
+  check("copying with no code is refused", none.kind === "no-code", JSON.stringify(none));
+
+  // An action this protocol does not define is refused rather than guessed at.
+  const bogus = await call(`globalThis.relayium.pairHandoff.copy({ action: "copy-anything" })`);
+  check("an undefined action is refused", bogus.kind === "unavailable", JSON.stringify(bogus));
+
+  // The property the whole shape exists for.
+  const after = await clipboard.readText();
+  check("the clipboard was never written", after === before, `before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
+}
+
 async function assertSendFilesReachedThePane(win) {
   const js = (expr) => win.webContents.executeJavaScript(expr);
   const present = (name) => js(`document.querySelector('[data-test="${name}"]') !== null`);

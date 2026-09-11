@@ -73,6 +73,8 @@ import { IpcRefusal, IpcRouter, expectChunk, expectIndex, expectObject, expectSt
 import { ReceiptRegistry } from "./io/receipt-registry.js";
 import { issueReceipt } from "./features/receive-receipts.js";
 import { OsEntryService } from "./features/os-entry.js";
+import { PairHandoffService } from "./features/pair-handoff.js";
+import { isPairHandoffAction } from "../shared/pair-handoff.js";
 import { openApprovedExternal } from "./window.js";
 
 /**
@@ -333,6 +335,8 @@ export interface HandlerControl {
    * still looking at.
    */
   readonly osEntry: OsEntryService;
+  /** The live pairing code, for the quit risk snapshot and teardown. */
+  readonly pairHandoff: PairHandoffService;
   readonly resident: ResidentBridge;
   /**
    * Stop main's own outgoing work, recoverably.
@@ -684,7 +688,49 @@ export function registerHandlers(
   // -------------------------------------------------------------------------
 
   // No payload. The renderer asks for a code and names nothing.
-  router.handle(IPC.pairCreate, () => service.createPairCode());
+  /**
+   * The live pairing code, and what a person can do with it.
+   *
+   * Minting stays where it was; this holds what was minted so it can be shown
+   * as a join link and a QR and copied on request. The origin comes from the
+   * build, never from a payload, so no renderer can steer where a scanned code
+   * points.
+   */
+  const pairHandoff = new PairHandoffService({
+    origin,
+    // MAIN writes the clipboard. The renderer names an action; it never
+    // supplies the text, so this channel cannot be used to put arbitrary
+    // content on the user's clipboard.
+    writeClipboard: (text) => clipboard.writeText(text),
+    currentDocument: () => router.generation,
+    accountEpoch: () => service.accountEpoch,
+    onView: (view) => {
+      router.emit(IPC_EVENTS.pairHandoffState, router.generation, view);
+    },
+    reportFailure: (err) => events.reportFailure?.(err),
+  });
+
+  router.handle(IPC.pairCreate, async () => {
+    // The ticket is taken BEFORE the mint. A document swap or a sign-out while
+    // the request is in flight retires the ticket, so the code that arrives
+    // afterwards is dropped rather than adopted for a page that no longer
+    // exists.
+    const ticket = pairHandoff.beginMint();
+    const result = await service.createPairCode();
+    if (result.ok) pairHandoff.adopt(ticket, result.code, result.expiresAt, router.generation);
+    return result;
+  });
+
+  router.handle(IPC.pairHandoffState, async () => pairHandoff.view());
+
+  router.handle(IPC.pairHandoffCopy, async (payload) => {
+    const body = expectObject(payload);
+    const action = body["action"];
+    if (!isPairHandoffAction(action)) return { kind: "unavailable" };
+    // The document comes from the ROUTER. A code belongs to the page that
+    // minted it, and a page cannot name a generation to claim another's.
+    return pairHandoff.copy(action, router.generation);
+  });
 
   // -------------------------------------------------------------------------
   // Preferences
@@ -1487,6 +1533,9 @@ export function registerHandlers(
     // person who is no longer here. Not awaited — the watcher is synchronous
     // and must not be held while handles close.
     void osEntry.onAccountChanged().catch((err: unknown) => events.reportFailure?.(err));
+    // A code minted under the previous account does not outlive the sign-out
+    // that ended it; it is withdrawn here rather than refused on use.
+    pairHandoff.onAccountChanged();
   });
 
   /** A task or vault id the renderer named. It names; it authorises nothing. */
@@ -1891,6 +1940,9 @@ export function registerHandlers(
     // document's capability, and the file handles behind them are this
     // process's to release; a replacement page must inherit neither.
     revocations.add(osEntry.revokeDocument(generation));
+    // A pairing code belongs to the page that minted it. A replacement page
+    // must not inherit a live link to somebody else's conversation.
+    pairHandoff.revokeDocument(generation);
     volunteered = null;
     for (const [requestId, resolve] of [...outstanding]) {
       outstanding.delete(requestId);
@@ -1916,6 +1968,9 @@ export function registerHandlers(
     // The selection itself is left staged: quiesce joins the reads, and a Stay
     // must find the user's files where they left them.
     osEntry.fence();
+    // Copying is an admission too: one started now would put a link on the
+    // clipboard for a session that is ending.
+    pairHandoff.fence();
     inbox.fence();
     storedSend.fence();
     inboxSend.fence();
@@ -1974,6 +2029,9 @@ export function registerHandlers(
     // joined below, so the descriptors are let go while the rest drains rather
     // than after it.
     const osEntryStopping = osEntry.quiesce();
+    // Synchronous: it holds no work, only a live code. Taken here so the count
+    // below describes the same moment as everything beside it.
+    const pairHeld = pairHandoff.quiesce().held;
     // ## The update facade is quiesced HERE, and NOT on the install path
     //
     // An install asks the resident side to quiesce before it launches, and that
@@ -2050,6 +2108,10 @@ export function registerHandlers(
         // still held for something the user picked, which is exactly what a
         // quit prompt exists to mention rather than discover afterwards.
         osEntryHeld.leftover +
+        // A pairing link still live is an invitation this machine has handed
+        // out and not withdrawn. Quitting over it silently would leave the
+        // other side waiting on a code that is about to stop working.
+        (pairHeld ? 1 : 0) +
         // What the update facade could not stop inside its bounded wait. It
         // reports `joined` truthfully rather than assuming quiet, and an
         // unjoined check or download is exactly the kind of thing a quit prompt
@@ -2084,6 +2146,7 @@ export function registerHandlers(
     // After the receives: this holds only read handles on the user's own files,
     // and releasing them cannot fail anything else's teardown.
     await osEntry.dispose();
+    pairHandoff.dispose();
     // Terminal: every held path is dropped and no token can be redeemed again.
     receipts.dispose();
     await service.dispose();
@@ -2103,6 +2166,7 @@ export function registerHandlers(
     service.admitReceives();
     storedReceive.resume();
     osEntry.resume();
+    pairHandoff.resume();
     storedSend.resume();
     inboxSend.resume();
     accountSummary.resume();
@@ -2120,6 +2184,7 @@ export function registerHandlers(
     inboxSend,
     accountSummary,
     osEntry,
+    pairHandoff,
     resident,
     fence,
     quiesce,
