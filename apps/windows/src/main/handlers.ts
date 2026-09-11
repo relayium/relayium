@@ -351,6 +351,15 @@ export interface HandlerControl {
   readonly pairHandoff: PairHandoffService;
   /** Received files still draggable, for the teardown that forgets them. */
   readonly receivedDrag: ReceivedDragService;
+  /**
+   * The document generation currently allowed to hold state.
+   *
+   * For callers that are MAIN's rather than a page's — the tray — and that
+   * therefore have no document of their own to present. The services still
+   * check one, because the check exists to stop a stale PAGE acting, and
+   * passing the current generation is how a caller says it is not one.
+   */
+  readonly generation: () => number;
   readonly resident: ResidentBridge;
   /**
    * Stop main's own outgoing work, recoverably.
@@ -2309,6 +2318,7 @@ export function registerHandlers(
     osEntry,
     pairHandoff,
     receivedDrag,
+    generation: () => router.generation,
     resident,
     fence,
     quiesce,

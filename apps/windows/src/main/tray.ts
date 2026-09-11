@@ -68,6 +68,17 @@ export interface TrayActions {
   /** What the Device Inbox is doing, for the line that reports it. */
   readonly inboxStatus: () => InboxStatus;
   /**
+   * Show the folder deliveries land in, and whether there is one to show.
+   *
+   * The pair is deliberate. A menu has nowhere to put a refusal — no room for a
+   * sentence and nothing that stays on screen long enough to read one — so the
+   * item is ABSENT when there is no folder rather than present and refusing.
+   * That is the rule the rest of this app follows for any control whose reason
+   * cannot be shown beside it.
+   */
+  readonly revealInbox: () => void;
+  readonly hasInboxFolder: () => boolean;
+  /**
    * The signed-in account, or "" when there is none.
    *
    * The address itself, because a tray that said only "signed in" would not
@@ -157,6 +168,15 @@ export function trayMenuTemplate(t: Translate, actions: TrayActions): readonly T
     { label: t("resident.tray.nearby"), click: actions.openNearby },
     { label: t("resident.tray.inbox"), click: actions.openInbox },
     { label: t("resident.tray.updates"), click: actions.openUpdates },
+    // "Where did my files go" is a question asked of a tray icon, and answering
+    // it should not require opening the window the files arrived without.
+    //
+    // Spread rather than rendered-and-disabled: a menu has nowhere to put a
+    // refusal, so when there is no folder the item is ABSENT instead of present
+    // and failing.
+    ...(actions.hasInboxFolder()
+      ? [{ label: t("resident.tray.revealInbox"), click: actions.revealInbox }]
+      : []),
     {
       // Says what it will DO, not what is true now: a menu item labelled with a
       // state is read as a toggle by half of everyone and as a status by the

@@ -691,6 +691,11 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
     },
     inboxPaused: () => control.inbox.receivingPaused,
     inboxStatus: () => control.inbox.view().status,
+    hasInboxFolder: () => control.inbox.view().hasDestination,
+    // Main owns the path and main performs the action; there is no argument on
+    // this call that could name a directory. The generation is the router's,
+    // exactly as the renderer's own reveal passes it.
+    revealInbox: async () => (await control.inbox.revealFolder(control.generation())).kind === "ok",
     accountIdentity: () => control.service.accountIdentity,
     onLocaleChanged: () => refreshTray(),
     platform: options.residentPlatform

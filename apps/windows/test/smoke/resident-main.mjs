@@ -3441,6 +3441,18 @@ async function scenarioResidentSurfaces(win, runtime) {
   // cannot show what it would do, so nothing about an update happens from one.
   check("the tray offers Updates", labels[8] === "Updates", labels[8]);
 
+  // ## The reveal is absent until there is something to reveal
+  //
+  // This run has no receiving folder configured, and a menu has nowhere to put
+  // a refusal — so the item must not be there at all rather than be there and
+  // fail. Asserted on the real runtime, where `hasInboxFolder` is main's own
+  // answer rather than a fixture's.
+  check(
+    "no receive folder, so no reveal is offered",
+    labels.includes("Show the receive folder") === false,
+    labels.join("|"),
+  );
+
   // The earlier quit stopped the rooms and the Stay did not reopen them, so the
   // truthful item here is Resume — the tray reports the page's actual state
   // rather than what it assumed at launch.

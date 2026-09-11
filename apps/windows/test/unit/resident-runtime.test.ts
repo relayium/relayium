@@ -120,6 +120,8 @@ function runtime(
     setInboxPaused?: (paused: boolean) => void;
     inboxPaused?: () => boolean;
     inboxStatus?: () => InboxStatus;
+    hasInboxFolder?: () => boolean;
+    revealInbox?: () => Promise<boolean>;
     accountIdentity?: () => string;
   } = {},
 ) {
@@ -141,6 +143,8 @@ function runtime(
     setInboxPaused: over.setInboxPaused ?? (() => undefined),
     inboxPaused: over.inboxPaused ?? (() => false),
     inboxStatus: over.inboxStatus ?? (() => ({ kind: "idle", pending: 0 })),
+    hasInboxFolder: over.hasInboxFolder ?? (() => false),
+    revealInbox: over.revealInbox ?? (async () => true),
     accountIdentity: over.accountIdentity ?? (() => ""),
     locale: "en",
   });
@@ -562,6 +566,8 @@ describe("the native surfaces follow the page's language", () => {
       setInboxPaused: () => undefined,
       inboxPaused: () => false,
       inboxStatus: () => ({ kind: "idle", pending: 0 }),
+      hasInboxFolder: () => false,
+      revealInbox: async () => true,
       accountIdentity: () => "",
       onLocaleChanged: () => {
         rebuilt += 1;

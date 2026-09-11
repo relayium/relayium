@@ -93,6 +93,10 @@ export interface ResidentRuntimeDeps {
   readonly inboxPaused: () => boolean;
   /** What the Device Inbox is doing, for the line that reports it. */
   readonly inboxStatus: () => InboxStatus;
+  /** Whether a receiving folder is configured at all. */
+  readonly hasInboxFolder: () => boolean;
+  /** Show it. Resolves false when it could not be shown, for any reason. */
+  readonly revealInbox: () => Promise<boolean>;
   /** The signed-in address, or "" when there is none. */
   readonly accountIdentity: () => string;
   readonly onLocaleChanged?: () => void;
@@ -397,6 +401,15 @@ export class ResidentRuntime {
       },
       inboxPaused: () => this.deps.inboxPaused(),
       inboxStatus: () => this.deps.inboxStatus(),
+      // Offered only when there is a folder, so the menu never carries an item
+      // that can only refuse. A reveal that still fails opens the Inbox page,
+      // which is the one surface that can say why.
+      hasInboxFolder: () => this.deps.inboxStatus().kind !== "needs-account" && this.deps.hasInboxFolder(),
+      revealInbox: () => {
+        void this.deps.revealInbox().then((ok) => {
+          if (!ok) void this.openPage("inbox");
+        });
+      },
       accountIdentity: () => this.deps.accountIdentity(),
       quit: () => void this.requestQuit(),
     };

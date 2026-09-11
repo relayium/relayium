@@ -15,6 +15,8 @@ const actions = (nearbyActive = true, inboxPaused = false, over = {}) => ({
   setInboxPaused: vi.fn(),
   inboxPaused: () => inboxPaused,
   inboxStatus: () => ({ kind: "idle", pending: 0 }) as InboxStatus,
+  hasInboxFolder: () => true,
+  revealInbox: vi.fn(),
   accountIdentity: () => "",
   quit: vi.fn(),
   ...over,
@@ -90,6 +92,35 @@ describe("what the tray says the Device Inbox is doing", () => {
   });
 });
 
+describe("showing where deliveries land", () => {
+  it("offers it when there is a folder", () => {
+    const a = actions();
+    const entry = entryFor(trayMenuTemplate(translator("en"), a), "Show the receive folder");
+    if ("click" in entry) entry.click();
+    expect(a.revealInbox).toHaveBeenCalledOnce();
+  });
+
+  it("does NOT offer it when there is none", () => {
+    // A menu has nowhere to put a refusal, so the item is absent rather than
+    // present and failing — the same rule the rest of the app follows for a
+    // control whose reason cannot be shown beside it.
+    const items = trayMenuTemplate(translator("en"), actions(true, false, { hasInboxFolder: () => false }));
+    expect(items.some((e) => "label" in e && e.label === "Show the receive folder")).toBe(false);
+  });
+
+  it("leaves every other item where it was", () => {
+    // Absent means absent: the menu without it is the menu that was there
+    // before, not a shorter one with a hole in it.
+    const without = trayMenuTemplate(translator("en"), actions(true, false, { hasInboxFolder: () => false }));
+    const with_ = trayMenuTemplate(translator("en"), actions());
+    expect(with_.length).toBe(without.length + 1);
+    for (const label of ["Open Relayium", "Device Inbox", "Pause Nearby", "Quit Relayium"]) {
+      expect(() => entryFor(without, label)).not.toThrow();
+      expect(() => entryFor(with_, label)).not.toThrow();
+    }
+  });
+});
+
 describe("the tray menu", () => {
   it("opens the app, its two live surfaces, and Nearby's toggle", () => {
     const items = trayMenuTemplate(translator("en"), actions());
@@ -103,6 +134,7 @@ describe("the tray menu", () => {
       "Nearby devices",
       "Device Inbox",
       "Updates",
+      "Show the receive folder",
       "Pause Nearby",
       "Pause Device Inbox",
       "—",
@@ -174,7 +206,7 @@ describe("the tray menu", () => {
     // would do, so nothing about an update may happen from one.
     expect(a.openUpdates).toHaveBeenCalledOnce();
     expect(a.quit).not.toHaveBeenCalled();
-    click(12);
+    click(13);
     expect(a.quit).toHaveBeenCalledOnce();
   });
 });
