@@ -848,6 +848,82 @@ async function main() {
 
   notes.push(`profile AFTER second instance: ${JSON.stringify(profileState())}`);
 
+  // ---- The registered verb, EXECUTED rather than read -------------------
+  //
+  // Everything above proves the installer wrote the right string into the
+  // registry. Nothing proved that string starts this app with a file.
+  //
+  // Staging was covered by the bootstrap smoke emitting `second-instance`
+  // in-process with an argv the test composed itself — which exercises the
+  // listener and assumes the command line. The assumption is the whole risk:
+  // an installer that registered `--send-file`, or dropped the quotes around
+  // `%1`, or named a path that no longer exists, passes every registry
+  // assertion and does nothing when a person right-clicks a file. That is the
+  // defect this batch of work already found once, in `321d131be`, where the
+  // verbs were registered and the flag was never parsed.
+  //
+  // So the command is taken FROM the registry, `%1` is substituted the way the
+  // shell substitutes it, and it is spawned. What is still not proven is the
+  // shell's own half — that Explorer performs that substitution and honours
+  // `MultiSelectModel`. That needs Explorer, and it stays documented rather
+  // than claimed.
+  const verbCommand = regQueryDefault(`${SEND_FILE_KEY}\\command`);
+  if (check("the file send command is registered for the launch", verbCommand !== null, SEND_FILE_KEY)) {
+    const pickedDir = path.join(runnerTemp, "verb-selection");
+    mkdirSync(pickedDir, { recursive: true });
+    const picked = path.join(pickedDir, "picked-by-verb.txt");
+    writeFileSync(picked, "picked with a right-click\n");
+
+    // The registry's own tokens. Only `%1` is replaced — the executable, the
+    // flag and their order are the installer's, not this test's.
+    const tokens = tokenizeCommand(verbCommand).map((token) => (token === "%1" ? picked : token));
+    check("the registered command still names the installed executable", samePath(tokens[0], installedExe), tokens[0]);
+    check("and the file took the place of %1", tokens.includes(picked), tokens.join(" "));
+
+    const verbChild = spawn(tokens[0], tokens.slice(1), { stdio: "ignore" });
+    if (verbChild.pid) {
+      spawnedPids.add(verbChild.pid);
+      spawnedChildren.set(verbChild.pid, verbChild);
+    }
+    const verbExited = await new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(false), DEADLINE.exit);
+      verbChild.on("exit", () => {
+        clearTimeout(timer);
+        spawnedPids.delete(verbChild.pid);
+        spawnedChildren.delete(verbChild.pid);
+        resolve(true);
+      });
+    });
+    check("the verb launch hands over and exits", verbExited);
+    if (!verbExited) await killOwned(verbChild.pid);
+
+    if (
+      await waitFor(
+        "the selection to reach the running app",
+        async () => (await present("pending-selection")) === true,
+        DEADLINE.launch,
+      )
+    ) {
+      const count = await cdp.evaluate('document.querySelector(\'[data-test="pending-count"]\')?.innerText ?? ""');
+      check("the pane names the file the verb passed", String(count).includes("picked-by-verb.txt"), String(count));
+
+      // The token contract, on the installed build: the pane is given names and
+      // relative paths, and the DIRECTORY is main's alone. A staged selection
+      // that leaked its absolute path would leak it here first.
+      const body = await cdp.evaluate("document.body.innerText");
+      check("no absolute path reached the screen", !String(body).includes(pickedDir), pickedDir);
+      const html = await cdp.evaluate("document.body.innerHTML");
+      check("and none is hidden in an attribute either", !String(html).includes(pickedDir));
+    }
+
+    // Still one window: a verb launch must join the running app, not open a
+    // second one beside it.
+    const afterVerb = (await cdpTargets(port)).filter((t) => t.type === "page");
+    check("the verb did not open a second window", afterVerb.length === 1 && afterVerb[0]?.id === target1.id, `saw ${afterVerb.length}`);
+
+    rmSync(pickedDir, { recursive: true, force: true });
+  }
+
   const sealedBefore = hashSealed();
   check("a sealed identity was written", sealedBefore !== null);
 
