@@ -97,6 +97,8 @@
       osEntry: OsEntryBridge;
       pairHandoff: PairHandoffBridge;
       account: { onAuthority(cb: (payload: unknown) => void): () => void };
+      /** Whether this build may still run, pushed when the answer moves. */
+      onClientSupport(cb: (payload: unknown) => void): () => void;
       receivedDrag: ReceivedBridge;
       help: HelpBridge;
     };
@@ -147,6 +149,9 @@
   /** Whether this build may run at all. `null` until `appInfo` answers, and a
    *  `null` never blocks — failing open includes the moment before the answer. */
   let support = $state<SupportReport | null>(null);
+  /** Dismissed for this session only. A recommendation the user has read once
+   *  should not follow them, and a dismissal is not an answer worth storing. */
+  let updateDismissed = $state(false);
   let prefs = $state<PreferencesValues>({ verifyPeers: false });
   /** Set when the settings file exists and could not be read. The values shown
    *  are then defaults rather than the user's, and Account says so instead of
@@ -291,6 +296,9 @@
       banner = info.banner;
       // Absent means supported. See `AppInfo.support`.
       support = info.support ?? null;
+      // A dismissal answers the version it was shown for. A NEW recommendation
+      // is news again, so it is not still dismissed.
+      updateDismissed = false;
       lanAutoStart = info.lanAutoStart !== false;
       // Deferred until crypto is ready: starting a room here would compose a
       // workspace whose very first link throws.
@@ -338,6 +346,37 @@
    * identity: it says THAT it changed, and the re-read is the authoritative
    * answer.
    */
+  /**
+   * Whether this build may still run, after the launch was judged.
+   *
+   * The launch reads the CACHE — a fetch on the path to the first paint would
+   * hold a start open for a slow origin — and the refresh runs behind it. This
+   * is how its answer arrives, and without it a floor published now took effect
+   * on the next start rather than now.
+   *
+   * Shaped rather than trusted: this payload crosses IPC, and a page that
+   * assigned whatever arrived could be handed a state that is neither of the
+   * two it knows.
+   */
+  onDestroy(
+    bridge.onClientSupport((payload) => {
+      const shaped = payload as Partial<SupportReport> | null;
+      if (shaped === null || typeof shaped !== "object") return;
+      if (shaped.state !== "blocked" && shaped.state !== "recommended" && shaped.state !== "supported") {
+        return;
+      }
+      if (typeof shaped.current !== "string" || typeof shaped.minimum !== "string") return;
+      if (typeof shaped.latest !== "string") return;
+      support = {
+        state: shaped.state,
+        current: shaped.current,
+        minimum: shaped.minimum,
+        latest: shaped.latest,
+      };
+      updateDismissed = false;
+    }),
+  );
+
   onDestroy(
     bridge.account.onAuthority(() => {
       if (!SETTLED.includes(phase.kind)) return;
@@ -805,6 +844,26 @@
       -->
     </Card>
   {:else}
+    <!--
+      A newer release exists, said once and dismissible.
+
+      An inset above the content rather than an overlay, and nothing is
+      disabled or hidden by it: this is a recommendation, not a gate. macOS
+      states the reason and it is the same here — a banner that covers what it
+      is recommending an update for is a banner people dismiss without reading.
+
+      No update button, for the reason the blocked card gives: this is reached
+      because of a document fetched over the network.
+    -->
+    {#if support?.state === "recommended" && !updateDismissed}
+      <p class="recommend" data-test="update-recommended" role="status">
+        <strong>{t("updateRecommendedTitle")}</strong>
+        {t("updateRecommendedBody", { current: support.current, latest: support.latest })}
+        <button type="button" data-test="update-dismiss" onclick={() => (updateDismissed = true)}>
+          {t("updateRecommendedDismiss")}
+        </button>
+      </p>
+    {/if}
   <PendingSelection controller={osEntry} />
   <!-- Nothing composes a room until the encryption library is loaded, so this
        says which state it is in rather than rendering a pairing screen whose
@@ -901,6 +960,22 @@
 <style>
   h2 { margin: 0 0 var(--space-hairline); font-size: 15px; font-weight: 600; }
   .dim { color: var(--text-dim); margin: 0 0 var(--space-section); }
+  /* An inset above the content, never over it: a banner that covers what it is
+     recommending an update for is a banner people dismiss without reading. */
+  .recommend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-hairline) var(--space-inline);
+    margin: 0 0 var(--space-section);
+    padding: var(--space-inline);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-raised, transparent);
+    color: var(--text-dim);
+  }
+  .recommend strong { color: var(--text); }
+  .recommend button { margin-left: auto; }
   .indeterminate {
     position: relative;
     overflow: hidden;

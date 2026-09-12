@@ -30,11 +30,9 @@ import { NO_MEMORY, type PolicyStore } from "./policy-store.js";
 /**
  * What the shell is told. Versions as text, for the sentence a person reads.
  *
- * `recommended` reaches the shell and the shell does nothing with it yet: only
- * `blocked` has a surface. macOS shows a dismissible inset banner for the
- * middle state, and Windows owes one — recorded rather than half-built, because
- * writing its copy without wiring it is the exact pattern a batch earlier today
- * spent its time deleting. The state is unreachable while the floor is inert.
+ * Both `blocked` and `recommended` have a surface now: the first replaces the
+ * product, the second is a dismissible line above it, exactly as macOS does it.
+ * Neither is reachable while the shipped floor is inert.
  */
 export interface SupportReport {
   readonly state: SupportState;
@@ -60,6 +58,7 @@ export function report(version: string, policy: ClientPolicy): SupportReport {
 export interface PolicyGateDeps {
   readonly version: string;
   readonly store: PolicyStore;
+
   /** Absent in a build with no network policy source, which is every build
    *  until an endpoint is served. Its absence is not a failure. */
   readonly source?: PolicySource;
@@ -86,6 +85,24 @@ export class PolicyGate {
     return new PolicyGate(deps, report(deps.version, resolved.policy));
   }
 
+  #listeners = new Set<(report: SupportReport) => void>();
+
+  /**
+   * Hear about a change, and only a change.
+   *
+   * A method rather than a constructor dependency because the gate is opened
+   * before the IPC router exists — the launch has to be judged before a window
+   * loads, and the thing that would listen is built after.
+   *
+   * The gap this closes: the launch is judged from the CACHE, so without a push
+   * a floor published now took effect on the next start. macOS re-renders the
+   * moment a document lands.
+   */
+  listen(cb: (report: SupportReport) => void): () => void {
+    this.#listeners.add(cb);
+    return () => this.#listeners.delete(cb);
+  }
+
   /** What `appInfo` carries. Synchronous by construction. */
   current(): SupportReport {
     return this.#report;
@@ -101,15 +118,32 @@ export class PolicyGate {
    *
    * Deliberately not awaited by anything on the launch path, and deliberately
    * unable to throw: its only job is to leave a better cache behind. It updates
-   * this process's own report too, so a caller that reads `current()` later in
-   * the session sees the newer answer — but nothing re-renders on it yet.
+   * this process's own report, and tells `onChange` when the answer actually
+   * moved — which is what lets a floor published now take effect now rather
+   * than on the next start.
    */
   async refresh(signal?: AbortSignal): Promise<void> {
     const source = this.#deps.source;
     if (source === undefined) return;
     try {
       const resolved = await source.resolve(signal);
-      this.#report = report(this.#deps.version, resolved.policy);
+      const next = report(this.#deps.version, resolved.policy);
+      const changed =
+        next.state !== this.#report.state ||
+        next.minimum !== this.#report.minimum ||
+        next.latest !== this.#report.latest;
+      this.#report = next;
+      // Outside the comparison on purpose: a listener that throws must not make
+      // `refresh` look like a failed refresh. Its own errors are its own.
+      if (changed) {
+        for (const listener of [...this.#listeners]) {
+          try {
+            listener(next);
+          } catch {
+            /* a shell that cannot take the news is not this gate's problem */
+          }
+        }
+      }
     } catch {
       /* the cache and the floor already answered; a refresh cannot make it worse */
     }

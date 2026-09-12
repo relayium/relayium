@@ -80,6 +80,27 @@ describe("a build the product has withdrawn support for", () => {
     }
   });
 
+  it("recommends inside the else, never over the blocked card", () => {
+    // A build the product has withdrawn support for must not ALSO be told a
+    // newer one is available: it is not a recommendation, it is a stop. The
+    // banner therefore lives inside the same `{:else}` as the product.
+    const gateAt = markup.indexOf('{#if support?.state === "blocked"}');
+    const elseAt = markup.indexOf("{:else}", gateAt);
+    const bannerAt = markup.indexOf('{#if support?.state === "recommended"');
+    expect(bannerAt, "the recommendation banner is not rendered at all").toBeGreaterThan(-1);
+    expect(bannerAt, "the banner is outside the else").toBeGreaterThan(elseAt);
+  });
+
+  it("offers no action a policy document could aim, on the banner either", () => {
+    // Same rule as the blocked card and for the same reason. The one button
+    // here dismisses; it goes nowhere.
+    const at = markup.indexOf('{#if support?.state === "recommended"');
+    const banner = markup.slice(at, markup.indexOf("{/if}", at));
+    expect(banner).not.toMatch(/<a\s/);
+    expect(banner).not.toMatch(/https?:/);
+    expect(banner).toContain("update-dismiss");
+  });
+
   it("treats an absent report as supported", () => {
     // Failing open includes the moment before `appInfo` has answered, and a
     // composition that never opened a gate. `support?.state === "blocked"` is
