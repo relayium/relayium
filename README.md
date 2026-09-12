@@ -422,7 +422,8 @@ receiver. With advanced verification on, a 6-digit SAS code shown on both screen
 **Can I send files between different operating systems — say a Windows PC and an iPhone?**
 Yes. Relayium runs in the browser, so it's fully cross-platform: Windows ↔ iPhone, Android ↔ Mac,
 Linux ↔ anything. Unlike AirDrop it isn't limited to Apple devices, and nobody needs to install
-anything — the only native app is the optional macOS one, and the CLI on macOS, Linux and Windows.
+anything — the optional native apps are the macOS one and the Android public preview, plus the CLI
+on macOS, Linux and Windows.
 
 **What's the file-size limit?**
 Realtime transfer has no server-imposed limit. In Chrome/Edge files stream straight to disk (size bound only by free space).
