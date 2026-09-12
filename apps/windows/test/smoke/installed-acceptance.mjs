@@ -1494,6 +1494,36 @@ async function main() {
     );
   }
 
+  // ---- A network destination, refused by its SPELLING -------------------
+  //
+  // `installer.nsh` defines two error levels so "an acceptance test can assert
+  // WHICH refusal happened rather than just non-zero". Only the collision, exit
+  // 2, was ever asserted. Exit 3 covers a path that cannot be resolved AND a
+  // network destination, and neither had been produced by a test — so the guard
+  // that keeps this app's private data off an SMB share had never run.
+  //
+  // No share is needed, and that is the point of where the check sits: the UNC
+  // test is SYNTACTIC, on the first two characters, before any filesystem call.
+  // The installer's own comment gives the reason — the GUID form is unavailable
+  // over SMB, so a network path could never be canonicalised into the same
+  // namespace as a local one, and `.onVerifyInstDir` runs on every keystroke,
+  // where opening a handle on a half-typed `\\server\...` would stall the page
+  // on an SMB lookup.
+  for (const [label, destination] of [
+    ["a UNC server share", String.raw`\\relayium-no-such-host\share\Relayium`],
+    ["an administrative share", String.raw`\\127.0.0.1\C$\Relayium`],
+  ]) {
+    const refused = await runInstaller(["/S", `/D=${destination}`], DEADLINE.install, `install into ${label}`);
+    check(`install into ${label} ran to completion`, refused.ok, refused.reason);
+    // Exit 3 specifically. "Non-zero" would also be satisfied by a crash or by
+    // NSIS failing to reach the guard at all, neither of which is evidence.
+    check(`install into ${label} was refused as unsupported`, refused.code === 3, `exit ${refused.code}`);
+    check(
+      `the sealed identity survived the refused install into ${label}`,
+      hashSealed() === sealedBefore,
+    );
+  }
+
   // ---- Same-version reinstall preserves the identity --------------------
   const reinstall = await runInstaller(["/S", `/D=${installDir}`], DEADLINE.install, "same-version reinstall");
   check("reinstall ran to completion", reinstall.ok, reinstall.reason);
