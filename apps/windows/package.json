@@ -17,7 +17,8 @@
     "test:smoke": "node test/smoke/electron-smoke.mjs",
     "test:smoke:resident": "node test/smoke/resident-smoke.mjs",
     "package:win": "electron-builder --win --x64 --publish never",
-    "pretest": "npm run build:inbox && npm run build:stored"
+    "pretest": "npm run build:inbox && npm run build:stored",
+    "feed:manifest": "node build/make-update-manifest.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
