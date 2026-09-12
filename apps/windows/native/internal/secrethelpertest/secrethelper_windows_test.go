@@ -414,8 +414,153 @@ func TestOversizeRequestIsRefusedByTheRealExecutable(t *testing.T) {
 	}
 }
 
-func TestCrossUserRemainsUnproven(t *testing.T) {
-	t.Logf("%s a blob sealed by another user cannot be opened here. This suite will not "+
-		"create a second account, and inferring the property from the flags passed would "+
-		"describe the request rather than test the outcome.", unprovenPrefix)
+// callAs runs the helper as ANOTHER local user and returns what that process did.
+//
+// `Start-Process -Credential` is the only way to launch as a different account
+// without an interactive logon, and it cannot pipe: stdin, stdout and stderr are
+// redirected through files. Those files live under a directory both accounts can
+// reach, because the current user's temp directory is not readable by anybody
+// else — a permission failure there would look exactly like the refusal this
+// test is trying to observe.
+//
+// The exit code returned is the HELPER's, taken from the launched process, not
+// PowerShell's. A launch that failed is reported as such rather than counted as
+// a refusal.
+func callAs(t *testing.T, user, password, helper string, request []byte) (result, error) {
+	t.Helper()
+	shared, err := os.MkdirTemp(`C:\Windows\Temp`, "relayium-xuser-")
+	if err != nil {
+		return result{}, fmt.Errorf("creating a shared directory: %w", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(shared) })
+	// Both accounts must be able to read the request and write the response.
+	if out, icaclsErr := exec.Command("icacls", shared, "/grant", "*S-1-1-0:(OI)(CI)M").CombinedOutput(); icaclsErr != nil {
+		return result{}, fmt.Errorf("granting access to %s: %w (%s)", shared, icaclsErr, out)
+	}
+	in := filepath.Join(shared, "request.bin")
+	outPath := filepath.Join(shared, "response.bin")
+	errPath := filepath.Join(shared, "stderr.txt")
+	if writeErr := os.WriteFile(in, request, 0o644); writeErr != nil {
+		return result{}, fmt.Errorf("writing the request: %w", writeErr)
+	}
+	// The helper is copied in: it is built under the current user's temp
+	// directory, which the other account cannot read.
+	helperCopy := filepath.Join(shared, "relayium-secret-helper.exe")
+	binary, readErr := os.ReadFile(helper)
+	if readErr != nil {
+		return result{}, fmt.Errorf("reading the helper: %w", readErr)
+	}
+	if writeErr := os.WriteFile(helperCopy, binary, 0o755); writeErr != nil {
+		return result{}, fmt.Errorf("copying the helper: %w", writeErr)
+	}
+
+	script := fmt.Sprintf(`
+$ErrorActionPreference = 'Stop'
+$secure = ConvertTo-SecureString %s -AsPlainText -Force
+$cred = New-Object System.Management.Automation.PSCredential('%s', $secure)
+$p = Start-Process -FilePath %s -Credential $cred -WorkingDirectory %s `+
+		`-RedirectStandardInput %s -RedirectStandardOutput %s -RedirectStandardError %s -Wait -PassThru
+exit $p.ExitCode
+`,
+		psQuote(password), user, psQuote(helperCopy), psQuote(shared),
+		psQuote(in), psQuote(outPath), psQuote(errPath))
+
+	ctx, cancel := context.WithTimeout(context.Background(), processBudget)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script)
+	var launcherErr bytes.Buffer
+	cmd.Stderr = &launcherErr
+	exit := 0
+	if runErr := cmd.Run(); runErr != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(runErr, &exitErr) {
+			return result{}, fmt.Errorf("launching as %s: %w (%s)", user, runErr, launcherErr.String())
+		}
+		exit = exitErr.ExitCode()
+	}
+	// PowerShell itself failing is not the helper refusing. Its own diagnostics
+	// go to `launcherErr`; anything there means the launch, not the operation.
+	if strings.Contains(launcherErr.String(), "Start-Process") {
+		return result{}, fmt.Errorf("Start-Process failed: %s", launcherErr.String())
+	}
+	res := result{exit: exit}
+	if stderrBytes, readStderrErr := os.ReadFile(errPath); readStderrErr == nil {
+		res.stderr = string(stderrBytes)
+	}
+	if response, readOutErr := os.ReadFile(outPath); readOutErr == nil && len(response) > 0 {
+		status, payload, decodeErr := secretframe.DecodeResponse(response)
+		if decodeErr != nil {
+			return result{}, fmt.Errorf("the helper's response did not decode: %w", decodeErr)
+		}
+		res.status = status
+		res.payload = payload
+	}
+	return res, nil
+}
+
+/** A PowerShell single-quoted literal, with its own quote doubled. */
+func psQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+}
+
+// TestCrossUser proves — or honestly declines to prove — that a blob sealed by
+// one account cannot be opened by another.
+//
+// This is the invariant the whole secret-at-rest design rests on. The flags say
+// it should hold: the shipped path passes `CRYPTPROTECT_UI_FORBIDDEN` and never
+// `CRYPTPROTECT_LOCAL_MACHINE`, and a separate test asserts that. But flags are
+// the REQUEST. This is the outcome.
+//
+// ## The trap this is shaped around
+//
+// A local account that has never logged in may have no DPAPI master key, and
+// `CryptUnprotectData` fails for that reason with no mention of ownership. A
+// test that only checked "the other user could not open it" would pass on a
+// machine where the other user could not open ANYTHING — proving nothing while
+// looking like proof of the strongest claim in the design.
+//
+// So the second account must SEAL successfully first. Only after its own DPAPI
+// is shown to work does its refusal to open the first account's blob mean what
+// this test says it means.
+func TestCrossUser(t *testing.T) {
+	user := os.Getenv("RELAYIUM_XUSER")
+	password := os.Getenv("RELAYIUM_XUSER_PASSWORD")
+	if user == "" || password == "" {
+		t.Logf("%s a blob sealed by another user cannot be opened here. No second account "+
+			"was provided (RELAYIUM_XUSER), and inferring the property from the flags passed "+
+			"would describe the request rather than test the outcome.", unprovenPrefix)
+		return
+	}
+
+	helper := buildHelper(t)
+	secret := []byte("the other account must never read this")
+	sealed := call(t, helper, sealRequest(t, secret))
+	if sealed.exit != 0 || sealed.status != secretframe.StatusOK {
+		t.Fatalf("sealing as this user: exit %d status %d stderr %q", sealed.exit, sealed.status, sealed.stderr)
+	}
+
+	// FIRST: the other account's own DPAPI works. Without this, everything below
+	// could be a machine with no master key rather than an enforced boundary.
+	theirs, err := callAs(t, user, password, helper, sealRequest(t, []byte("their own secret")))
+	if err != nil {
+		t.Fatalf("running the helper as %s: %v", user, err)
+	}
+	if theirs.exit != 0 || theirs.status != secretframe.StatusOK {
+		t.Fatalf("the second account cannot seal at all, so its refusal below would prove nothing: "+
+			"exit %d status %d stderr %q", theirs.exit, theirs.status, theirs.stderr)
+	}
+
+	// THEN: and only then, the boundary itself.
+	opened, err := callAs(t, user, password, helper, openRequest(t, sealed.payload))
+	if err != nil {
+		t.Fatalf("running the helper as %s: %v", user, err)
+	}
+	if opened.exit == 0 && opened.status == secretframe.StatusOK {
+		t.Fatalf("PROVEN FALSE: %s opened a blob sealed by this account", user)
+	}
+	if bytes.Contains(opened.payload, secret) {
+		t.Fatalf("PROVEN FALSE: the plaintext reached %s", user)
+	}
+	t.Logf("PROVEN: %s sealed its own blob successfully and could not open this account's "+
+		"(exit %d, status %d)", user, opened.exit, opened.status)
 }

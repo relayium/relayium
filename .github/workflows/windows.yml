@@ -652,8 +652,46 @@ jobs:
       # `$LASTEXITCODE` handling and `$PSNativeCommandUseErrorActionPreference`
       # semantics on a lane that cannot be rehearsed locally, which is a poor
       # trade for a summary the `-v` output already contains.
+      # A second local account, so the cross-user invariant can be OBSERVED
+      # rather than declared unproven.
+      #
+      # `secrethelper_windows_test.go` says it plainly: a blob sealed by another
+      # user cannot be opened here, "and inferring the property from the flags
+      # passed would describe the request rather than test the outcome". The
+      # flags are right and separately asserted; what was missing is an account
+      # to be refused. This runner is ephemeral and elevated, so it can provide
+      # one.
+      #
+      # The password is generated here and never leaves the job. It guards
+      # nothing beyond this run — the account exists for two subprocesses and is
+      # removed below whatever happens.
+      - name: Create a second local account for the cross-user proof
+        id: xuser
+        run: |
+          $password = -join ((48..57) + (65..90) + (97..122) + (33,35,37,38) |
+            Get-Random -Count 24 | ForEach-Object { [char]$_ })
+          net user relayium-xuser $password /add /y
+          if ($LASTEXITCODE -ne 0) { throw "could not create the second account ($LASTEXITCODE)" }
+          # The DPAPI master key is created on first use, not at account
+          # creation, so nothing here needs an interactive logon — the test
+          # proves the account can seal before it concludes anything from a
+          # refusal.
+          "password=$password" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "::add-mask::$password"
+
       - name: Native helper tests
+        env:
+          RELAYIUM_XUSER: relayium-xuser
+          RELAYIUM_XUSER_PASSWORD: ${{ steps.xuser.outputs.password }}
         run: go test -v -count=1 -timeout 10m ./...
+
+      # Unconditional: a runner is ephemeral, but an account left behind by a
+      # failing job is the kind of residue that is only noticed when it matters.
+      - name: Remove the second local account
+        if: always()
+        run: |
+          net user relayium-xuser /delete
+          if ($LASTEXITCODE -ne 0) { Write-Host "the second account was already gone ($LASTEXITCODE)" }
 
       # The helper must also link for the target it ships to. Building after the
       # tests so a compile error in a non-test path is still caught.
