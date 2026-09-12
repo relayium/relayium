@@ -12,7 +12,11 @@
 // else is the shipping path: the real `ResidentRuntime`, the real
 // `QuitCoordinator`, the real `AppService`.
 
-import { app, BrowserWindow, clipboard } from "electron";
+// `Notification` is a member of the electron module in the MAIN process, not a
+// global. The first version of the toast scenario used the bare name and CI
+// answered `ReferenceError: Notification is not defined` — which is the test
+// failing loudly at the right place, not a platform verdict.
+import { app, BrowserWindow, clipboard, Notification } from "electron";
 import { SecretStore } from "../../dist/main/secrets.js";
 import { IceControl } from "../../dist/main/net/ice-control.js";
 import { PairControl } from "../../dist/main/net/pair-control.js";
