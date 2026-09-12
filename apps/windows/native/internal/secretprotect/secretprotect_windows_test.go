@@ -16,10 +16,12 @@ import (
 )
 
 // Markers for -v readback, matching the convention the file-IO helper uses.
-const (
-	provenPrefix   = "PROVEN-INVARIANT:"
-	unprovenPrefix = "UNPROVEN-INVARIANT:"
-)
+//
+// `unprovenPrefix` was removed with the last thing in this package that
+// reported one: cross-user protection, now proven a layer up. A marker constant
+// with no user is a package that looks like it still declares something
+// unproven to anybody grepping for it.
+const provenPrefix = "PROVEN-INVARIANT:"
 
 func TestRoundTripThroughRealDPAPI(t *testing.T) {
 	p := New()
@@ -313,16 +315,23 @@ func TestOversizeInputsAreRefused(t *testing.T) {
 	}
 }
 
-// Cross-user protection is a real property of user-scope DPAPI, but proving it
-// needs a second account this test must not create. Where one is not available
-// this reports the invariant as UNPROVEN rather than passing — and it never
-// infers the property from the flags alone, which would be describing the
-// request rather than testing the outcome.
-func TestCrossUserIsNotProvenByFlagsAlone(t *testing.T) {
-	t.Logf("%s a blob sealed by another user cannot be opened here. Proving it needs a "+
-		"second real account, which this test will not create; passing flags is a "+
-		"description of the request, not evidence about another user's blob.",
-		unprovenPrefix)
+// Cross-user protection is a real property of user-scope DPAPI, and this layer
+// still does not prove it — a test here calls the API in-process, so "another
+// user" would mean launching a subprocess, which is exactly what the layer
+// above already does.
+//
+// It is PROVEN there, against a real second account: see `TestCrossUser` in
+// `internal/secrethelpertest`, which runs the SHIPPED executable as a second
+// local account created by CI. That account must seal its own blob before
+// anything is concluded from a refusal, because an account with no DPAPI master
+// key would fail to open anything at all.
+//
+// This says so rather than repeating `UNPROVEN`. A reader grepping that marker
+// for a security review would otherwise conclude the boundary is untested, which
+// stopped being true on run 34674997632.
+func TestCrossUserIsProvenByTheLayerThatShips(t *testing.T) {
+	t.Logf("cross-user protection is proven in internal/secrethelpertest TestCrossUser, " +
+		"against a real second account, not here: this layer calls the API in-process.")
 }
 
 // The bound is enforced BEFORE the copy, so an over-bound API result is never
