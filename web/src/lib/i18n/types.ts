@@ -191,7 +191,6 @@ export interface Messages {
   footer: string;
   offlineFooter: string; // async page's own footer: random-key AES-256-GCM, ciphertext durably stored (NOT the LAN/realtime X25519 footer)
   busy: string;
-  tooMany: (max: number, n: number) => string;
   titleDefault: string;
   descDefault?: string; // home <meta description>; falls back to titleDefault when absent
   titleCross: string; // <title> for the cross-network (realtime) route
