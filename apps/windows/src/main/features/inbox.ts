@@ -2050,7 +2050,7 @@ export class InboxService {
       key: handle.key,
       taskID: handle.taskID,
       residue: handle.residue,
-      reason: handle.reason,
+      // `handle.reason` deliberately does not cross. See `InboxRetainedView`.
     }));
   }
 

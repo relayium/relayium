@@ -474,6 +474,8 @@ class FakeDestination implements ReceiveDestination {
   report: PublishReport;
   /** When set, cancel() rejects with this residue flag. */
   cancelResidue: boolean | null = null;
+  /** The `code` on that rejection. A real teardown carries an OS errno here. */
+  cancelCode = "residue";
   /** When set, publish() REJECTS with this instead of resolving. */
   publishThrows: unknown = null;
 
@@ -504,7 +506,10 @@ class FakeDestination implements ReceiveDestination {
     this.cancelled = true;
     if (this.cancelResidue !== null) {
       return Promise.reject(
-        Object.assign(new Error("residue"), { code: "residue", residue: this.cancelResidue }),
+        Object.assign(new Error("residue"), {
+          code: this.cancelCode,
+          residue: this.cancelResidue,
+        }),
       );
     }
     return Promise.resolve();
@@ -1172,6 +1177,43 @@ describe("receiver — review cases", () => {
     destination.cancelResidue = null;
     expect(await receiver.releaseRetained(retained[0]!.key)).toBe(true);
     expect(receiver.canAdmit()).toBe(true);
+  });
+
+  it("keeps the teardown's errno in this process and puts it in a log", async () => {
+    const runtime = await realRuntime();
+    const payload = new Uint8Array(16).fill(2);
+    const { delivery, ciphertext, contentKey } = await buildDelivery(
+      runtime,
+      [{ kind: "file", name: "b.bin", size: 16 }],
+      payload,
+    );
+    const destination = new FakeDestination(1);
+    destination.cancelResidue = true;
+    // What an OS actually raises when a directory cannot be removed. `codeOf`
+    // returns `error.code` verbatim, so this IS the value space of the field —
+    // and it was the retained row's entire on-screen label.
+    destination.cancelCode = "EBUSY";
+    destination.publishThrows = Object.assign(new Error("publish refused"), {
+      code: "publish-failed",
+    });
+    const { receiver } = receiverFor(runtime, contentKey, ciphertext, destination, { calls: [] });
+
+    const logged: string[] = [];
+    const realError = console.error;
+    console.error = (...args: unknown[]) => void logged.push(args.map(String).join(" "));
+    try {
+      await receiver.receive(delivery, new AbortController().signal);
+    } finally {
+      console.error = realError;
+    }
+
+    // Kept HERE, where a diagnostic belongs...
+    const [handle] = receiver.retainedHandles();
+    expect(handle?.reason).toBe("EBUSY");
+    // ...and actually written, which is the only reason keeping it off the
+    // screen costs nothing. The page is given `residue` and no errno; see
+    // `InboxRetainedView` and `no-raw-diagnostics-on-screen.test.ts`.
+    expect(logged.join("\n")).toMatch(/\[inbox\] retained .*cleanup EBUSY, residue present/);
   });
 
   it("refuses new work once the retention bound is reached", async () => {
