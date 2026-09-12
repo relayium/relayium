@@ -464,7 +464,7 @@ export const IPC_CHANNELS: readonly string[] = Object.values(IPC);
  * `preload.cts` subscribes to exactly this literal and re-exposes a typed
  * callback. There is no `on(channel, cb)`: a generic subscribe would make every
  * present and future main-to-renderer message reachable, which is the mirror of
- * the generic `invoke` the bridge already refuses. `ipc-contract.test.ts`
+ * the generic `invoke` the bridge already refuses. `ipc.test.ts`
  * asserts the preload's set matches this file, so a second event cannot arrive
  * without review.
  */

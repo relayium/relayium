@@ -2,7 +2,7 @@
 // browser.
 //
 // Every flag below is load-bearing. They are set here rather than at the call
-// site so `window.test.ts` can assert the exact set, and so a future window
+// site so `window-preferences.test.ts` can assert the exact set, and so a future window
 // cannot be created with a quietly weaker one.
 
 import { shell, type BrowserWindow, type WebPreferences } from "electron";

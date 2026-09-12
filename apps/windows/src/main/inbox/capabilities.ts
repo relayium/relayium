@@ -70,8 +70,9 @@ export interface ImplementedFeatures {
  *
  * Both are `false`: the receive path is not wired yet. Flipping either one is a
  * deliberate act that belongs in the same change that finishes the path, and
- * `inbox-capabilities.test.ts` pins that they are only advertised together with
- * their implementation.
+ * `inbox-receive.test.ts` pins that they are only advertised together with
+ * their implementation: with these flags it asserts that no capability is
+ * offered, that enrolment is refused, and that auto-accept degrades to `ask`.
  */
 export const IMPLEMENTED: ImplementedFeatures = Object.freeze({
   files: false,

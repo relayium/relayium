@@ -7,7 +7,7 @@
 // glance. It deliberately does NOT import the shared contract — a sandboxed
 // preload runs in a restricted CommonJS context, and more importantly a boundary
 // that pulls its own definition from elsewhere is one where a change somewhere
-// else silently widens what is exposed. `ipc-contract.test.ts` asserts these
+// else silently widens what is exposed. `ipc.test.ts` asserts these
 // literals match the contract, so drift is caught without the coupling.
 //
 // ## What is not here
@@ -30,7 +30,7 @@ const invoke = (channel: string) => (payload?: unknown) => ipcRenderer.invoke(ch
  * message reachable from any script the renderer runs — the exact mirror of the
  * generic `invoke` this bridge already refuses, and it would arrive without
  * anybody reviewing what started being pushed. So the name is spelled here,
- * once, and `ipc-contract.test.ts` asserts the set matches the contract.
+ * once, and `ipc.test.ts` asserts the set matches the contract.
  *
  * `ipcRenderer` and the Electron `event` object are both dropped: the callback
  * receives the payload and nothing else, so a renderer cannot reach `sender`

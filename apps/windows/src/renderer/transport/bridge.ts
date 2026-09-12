@@ -4,7 +4,8 @@
 // preload spells its channel names as literals: the bridge is a trust boundary,
 // and a boundary whose shape is pulled from the other side of itself is one
 // where a change over there silently widens what this side believes it has.
-// `ipc-contract.test.ts` is what keeps the two honest.
+// `ipc.test.ts` is what keeps the two honest: it compares the preload's spelled-out
+// channels against `IPC_CHANNELS` as an EXACT set.
 //
 // Note what is NOT in this interface: no URL, no host, no path, no header, no
 // filesystem destination. The renderer names a room KIND and, for a code room,
