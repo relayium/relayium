@@ -37,6 +37,16 @@ import * as nodeCrypto from "node:crypto";
 const failures = [];
 const check = (name, ok, detail) => {
   if (!ok) failures.push(detail ? `${name}: ${detail}` : name);
+  // RETURNED, so `if (!check(...)) return;` means what it reads as.
+  //
+  // Not cosmetic. A guard written that way against a `check` returning
+  // undefined makes its function return on the FIRST line, and the run stays
+  // green — a scenario that never executes reports nothing. That happened in
+  // `smoke-main.mjs`, where the idiom was borrowed from
+  // `installed-acceptance.mjs`, whose `check` does return. Every one of these
+  // files is read the same way by anyone writing a new scenario, so they now
+  // answer the same way.
+  return ok;
 };
 
 const [userDataDir, secretsDir, destinationDir, inboxRootDir, firstSendDir, updateDir, restartSendDir, phase] =
