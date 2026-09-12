@@ -247,6 +247,11 @@ async function main() {
     window.__click = async (sel) => {
       const el = document.querySelector(sel);
       if (el === null) return false;
+      // A disabled control is not clicked, and saying so is the point: a helper
+      // that returned true here would have every \`check("… was pressed", …)\`
+      // report success for a press that did nothing, and the real failure would
+      // surface somewhere else as a symptom. See \`resident-main.mjs\`.
+      if (el.disabled === true) return false;
       el.click();
       await window.__tick();
       return true;

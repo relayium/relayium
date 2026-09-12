@@ -751,7 +751,7 @@ async function assertEveryScreenExplainsItself(win) {
     js(
       `(() => { const el = document.querySelector('[data-test="${name}"]'); if (!el) return false;` +
         ` const target = el.tagName === "BUTTON" ? el : el.querySelector("button") ?? el;` +
-        ` target.click(); return true; })()`,
+        ` if (target.disabled === true) return false; target.click(); return true; })()`,
     );
 
   for (const page of ["lan", "pair", "stored", "inbox", "account"]) {
@@ -946,7 +946,7 @@ async function assertSignedOutGatesRatherThanGreys(win) {
     js(
       `(() => { const el = document.querySelector('[data-test="${name}"]'); if (!el) return false;` +
         ` const target = el.tagName === "BUTTON" ? el : el.querySelector("button") ?? el;` +
-        ` target.click(); return true; })()`,
+        ` if (target.disabled === true) return false; target.click(); return true; })()`,
     );
 
   if (!(await waitFor("the sidebar", () => present("nav-inbox")))) return;
@@ -1024,7 +1024,7 @@ async function driveSignInCancellation(win) {
     js(
       `(() => { const el = document.querySelector('[data-test="${name}"]'); if (!el) return false;` +
         ` const target = el.tagName === "BUTTON" ? el : el.querySelector("button") ?? el;` +
-        ` target.click(); return true; })()`,
+        ` if (target.disabled === true) return false; target.click(); return true; })()`,
     );
   const present = (name) => js(`document.querySelector('[data-test="${name}"]') !== null`);
 
