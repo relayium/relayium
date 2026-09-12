@@ -265,6 +265,9 @@ export interface Messages {
     errTooShort: string;
     errEmailTaken: string;
     errLogin: string;
+    errRateLimited: string;
+    errEmailInvalid: string;
+    errUnrecognised: string;
     errNetwork: string; // request never reached the server (offline / fetch threw)
     pendingDeletion: string; // frozen-account reactivate banner (fragment token)
     reactivate: string;
