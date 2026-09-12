@@ -123,6 +123,60 @@ async function main() {
   }
   await js(`window.__inboxHarness.setLang("en")`);
 
+  // --- Every InboxStatus member puts something on screen -------------------
+  //
+  // The page renders these through an `{#if status.kind === ...}` chain, and
+  // Svelte gives if-chains NO exhaustiveness check. TypeScript cannot help
+  // either: a tenth member would simply match no branch and the status area
+  // would render nothing, with a green build and a green unit suite. Driving
+  // every member is the only mechanism that catches it, which is the reason
+  // this list is exhaustive and not a sample.
+  //
+  // `disabled` is handled structurally rather than by a status line: when the
+  // user has not asked to receive, the whole surface is the offer to turn it
+  // on, so its evidence is the enable button.
+  const STATUSES = [
+    ["unavailable", { status: { kind: "unavailable", reason: "internal" } }, "inbox-unavailable"],
+    ["needs-account", { status: { kind: "needs-account" } }, "inbox-sign-in"],
+    ["account-unreadable", { status: { kind: "account-unreadable" } }, "inbox-store-unreadable"],
+    ["disabled", { status: { kind: "disabled" }, enabled: false, policy: "off" }, "inbox-enable"],
+    ["folder-missing", { status: { kind: "folder-missing" } }, "inbox-folder-missing"],
+    ["starting", { status: { kind: "starting" } }, "inbox-starting"],
+    ["receiving", { status: { kind: "receiving" } }, "inbox-receiving"],
+    ["idle", { status: { kind: "idle", pending: 0 } }, "inbox-idle"],
+    [
+      "blocked",
+      { status: { kind: "blocked", reason: "storage-unreadable", residue: "none", pending: 0 } },
+      "inbox-blocked",
+    ],
+    [
+      "offline",
+      { status: { kind: "offline", reason: "transport", retryInSeconds: 30 } },
+      "inbox-offline",
+    ],
+  ];
+  const statusTexts = {};
+  for (const [name, view, hook] of STATUSES) {
+    await js(`window.__push(${JSON.stringify(view)})`);
+    const text = await js(`window.__text("[data-test=${hook}]")`);
+    if (!check(`${name} renders ${hook}`, typeof text === "string", String(text))) continue;
+    check(`${name} says something`, text.length > 0, `${hook} is empty`);
+    statusTexts[name] = text;
+  }
+  // Nine sentences for nine states. Two reading the same would mean a person
+  // cannot tell two situations apart — the failure this page's own comments
+  // call out ("the same screen for two opposite situations").
+  const distinct = new Set(Object.values(statusTexts));
+  check(
+    "the statuses do not read as each other",
+    distinct.size === Object.keys(statusTexts).length,
+    JSON.stringify(statusTexts),
+  );
+  // The sign-in offer is wired, not merely drawn.
+  await js(`window.__push(${JSON.stringify({ status: { kind: "needs-account" } })})`);
+  await js(`window.__click("[data-test=inbox-sign-in]")`);
+  equal("the sign-in offer calls back", (await js(`window.__inboxHarness.calls()`)).signIn, 1);
+
   // --- Nothing retained shows no card -------------------------------------
   await js(`window.__push({ retained: [] })`);
   equal("no retained card when nothing is retained", await js(`window.__count("[data-test=inbox-retained]")`), 0);
