@@ -113,6 +113,74 @@ func stream(t *testing.T, payloads ...string) io.Reader {
 	return &buf
 }
 
+// gatedStream yields the first `hold` frames immediately and the rest only
+// after that many responses have been written.
+//
+// The alternative is to send everything at once and hope the dispatcher keeps
+// up, which is a race against `MaxInboxDepth` rather than a test of anything.
+type gated struct {
+	t       *testing.T
+	head    *bytes.Buffer
+	tail    *bytes.Buffer
+	out     *syncBuffer
+	hold    int
+	release bool
+}
+
+func gatedStream(t *testing.T, payloads []string, hold int) func(*syncBuffer) io.Reader {
+	t.Helper()
+	return func(out *syncBuffer) io.Reader {
+		head := &bytes.Buffer{}
+		tail := &bytes.Buffer{}
+		for i, p := range payloads {
+			if i < hold {
+				head.Write(requestFrame(t, p))
+			} else {
+				tail.Write(requestFrame(t, p))
+			}
+		}
+		return &gated{t: t, head: head, tail: tail, out: out, hold: hold}
+	}
+}
+
+func (g *gated) Read(p []byte) (int, error) {
+	if g.head.Len() > 0 {
+		return g.head.Read(p)
+	}
+	if !g.release {
+		// Wait for the held requests to have been answered. Bounded, so a server
+		// that answers nothing fails the test rather than hanging it.
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if countResponses(g.out.bytes()) >= g.hold {
+				g.release = true
+				break
+			}
+			time.Sleep(time.Millisecond)
+		}
+		if !g.release {
+			g.t.Errorf("the server answered fewer than %d of the first requests", g.hold)
+			return 0, io.EOF
+		}
+	}
+	return g.tail.Read(p)
+}
+
+// countResponses counts whole response frames already written.
+func countResponses(raw []byte) int {
+	fr := wire.NewReader(bytes.NewReader(raw))
+	n := 0
+	for {
+		f, err := fr.ReadFrame()
+		if err != nil {
+			return n
+		}
+		if f.Kind == wire.KindResponse {
+			n++
+		}
+	}
+}
+
 func decodeResponse(t *testing.T, frame []byte) wire.Response {
 	t.Helper()
 	fr := wire.NewReader(bytes.NewReader(frame))
@@ -138,7 +206,15 @@ type outcome struct {
 
 func run(t *testing.T, opener Opener, in io.Reader) outcome {
 	t.Helper()
+	return runWith(t, opener, func(*syncBuffer) io.Reader { return in })
+}
+
+// runWith builds the input from the SAME buffer the server writes to, so a
+// reader can hold a request back until earlier ones have been answered.
+func runWith(t *testing.T, opener Opener, makeIn func(*syncBuffer) io.Reader) outcome {
+	t.Helper()
 	out := &syncBuffer{}
+	in := makeIn(out)
 	log := &syncBuffer{}
 	exit := Serve(Options{In: in, Out: out, Log: log, Opener: opener,
 		Grace: 2 * time.Second, DrainGrace: time.Second,
@@ -303,7 +379,26 @@ func TestSourceLimitRefusesBeforeOpening(t *testing.T) {
 		payloads = append(payloads, `{"id":`+itoa(i+1)+`,"op":"open-source","path":"C:\\f`+string(rune('a'+i))+`"}`)
 	}
 	op := openerWith(sources)
-	got := run(t, op, stream(t, payloads...))
+	// The ninth request is released only once the first eight have been
+	// ANSWERED, which is what a host with a bounded inbox actually does.
+	//
+	// `MaxInboxDepth` is 8, the same as `MaxOpenSources`. Feeding all nine at
+	// once therefore races the dispatcher: when it has not drained one in time
+	// the ninth overflows the inbox and is refused as `E_PROTOCOL inbox
+	// overflow`, which ends the session — eight responses, and the source limit
+	// never reached. That is the server working as designed and the test asking
+	// for something no host would do. Reproduced locally at roughly one run in
+	// three, and seen in hosted run 34677450580.
+	got := runWith(t, op, gatedStream(t, payloads, MaxOpenSources))
+	// Checked before indexing. A short response set is a real failure — the
+	// server answered fewer opens than it was asked — and indexing straight
+	// into it turns that into a panic whose message is about a slice rather
+	// than about the server. Hosted run 34677450580 panicked here with
+	// "index out of range [8] with length 8" and said nothing else.
+	if len(got.responses) != MaxOpenSources+1 {
+		t.Fatalf("got %d responses for %d opens; want one per open (log: %q)",
+			len(got.responses), MaxOpenSources+1, got.log)
+	}
 	last := got.responses[MaxOpenSources]
 	if last.OK || last.Code != CodeSourceLimit {
 		t.Fatalf("ninth open = %+v", last)
