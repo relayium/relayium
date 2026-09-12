@@ -479,7 +479,6 @@ export interface Messages {
     downloadsN: (n: number) => string; // per-file download count
     burnTag: string; // burn-after-read badge
     expiresIn: (left: string) => string; // per-file expiry countdown
-    expiringSoon: string; // <1h marker
     del: string; // delete button
     confirmDel: string; // confirm() before deleting a file
     nodesTitle: string; // "My Nodes" section heading
@@ -502,7 +501,6 @@ export interface Messages {
     nodeOnline: string; // online-status label
     nodeOffline: string; // offline-status label
     nodeRelayed: (bytes: string) => string; // relayed-traffic figure through this node
-    nodeStored: (bytes: string) => string; // bytes stored on this node
     nodeFreeTag: string; // "(free)" tag next to relayed/stored figures — own-node traffic isn't billed
     nodeStorageFree: (free: string, total: string) => string; // "X free of Y" disk line
     nodesTrafficHint: string; // explains relay-vs-storage: stored files don't count as "relayed"
@@ -1334,7 +1332,6 @@ export interface Messages {
     expiresOn: (when: string) => string; // echoes the link's expiry back to the sender
     copy: string;
     copied: string;
-    cliHeading: string; // "Fetch it from the terminal" — CLI command builder heading
     cliIntro: string; // one-line lead-in above the builder
     cliDestLabel: string; // label for the destination-directory input
     cliDestHint: string; // hint: paste your pwd, or leave . for the current dir
