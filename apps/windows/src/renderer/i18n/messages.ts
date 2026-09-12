@@ -233,6 +233,21 @@ export const en = {
   accountStoreUnreadable:
     "Relayium cannot open its private storage on this PC, so signing in is unavailable. Same-network transfers still work.",
 
+  // --- Why the account screen is showing a failure ------------------------
+  //
+  // One per `FailureReason`. They exist because the screen used to render
+  // whatever string arrived — an Electron IPC rejection, or a sentence written
+  // for a developer — to every user in every language.
+  accountFailedUnreachable: "That could not be completed just now. Check your connection and try again.",
+  accountFailedDeclined: "That sign-in was declined.",
+  accountFailedExpired: "That code expired. Try signing in again.",
+  /** Certain: a credential is on this PC and cancelling did not remove it. */
+  accountFailedCredentialRemains:
+    "Cancelling did not remove the sign-in credential it had already saved on this PC. Sign in and then sign out to clear it.",
+  /** Uncertain, and says so rather than guessing in either direction. */
+  accountFailedCredentialUncertain:
+    "Cancelling could not check whether a sign-in credential was left on this PC. Sign in and then sign out to be sure it is cleared.",
+
   startingTitle: "Starting Relayium…",
   startingBody: "Preparing secure transfer.",
   startFailedTitle: "Relayium could not start",
@@ -765,6 +780,14 @@ export const zh: Record<MessageKey, string> = {
   accountExpiresIn: "此代码将在 {minutes} 分钟后失效。",
   accountStoreUnreadable:
     "Relayium 无法在这台电脑上打开它的私有存储，因此暂时无法登录。同一网络的传输仍然可用。",
+
+  accountFailedUnreachable: "此操作暂时无法完成。请检查网络连接后重试。",
+  accountFailedDeclined: "这次登录被拒绝了。",
+  accountFailedExpired: "这串代码已失效。请重新登录。",
+  accountFailedCredentialRemains:
+    "取消登录时，已保存在这台电脑上的登录凭据没能被清除。请登录后再退出登录，以清除它。",
+  accountFailedCredentialUncertain:
+    "取消登录时，无法确认这台电脑上是否残留了登录凭据。请登录后再退出登录，以确保它已被清除。",
 
   startingTitle: "正在启动 Relayium…",
   startingBody: "正在准备加密传输。",

@@ -266,19 +266,67 @@ describe("a cancelled sign-in cannot be completed by a late response", () => {
     expect(d.controller.phase).toEqual({ kind: "signedIn", accountEmail: "a@b.c" });
   });
 
-  it("reports a cancellation whose cleanup failed as a failure", async () => {
+  it("reports a cancellation whose cleanup failed as a failure, by code", async () => {
     const d = drive({
       cancel: async () => ({
         state: SIGNED_IN,
-        cleanupFailure: "cancelled sign-in could not remove the credential it wrote: disk went away",
+        cleanupFailure: "credential-remains" as const,
+        // Present, and deliberately not the thing that is asserted below: this
+        // is the half that must never reach a screen.
+        cleanupDetail: "cancelled sign-in could not remove the credential it wrote: disk went away",
       }),
     });
     await d.controller.signIn();
     await d.controller.cancel();
-    expect(d.controller.phase).toMatchObject({
-      kind: "failed",
-      message: /could not remove the credential/ as unknown as string,
+    // `toEqual`, not `toMatchObject` with a RegExp value. The previous form of
+    // this assertion accepted ANY string — see `vacuous-matchers.test.ts`.
+    expect(d.controller.phase).toEqual({ kind: "failed", reason: "credential-remains" });
+  });
+
+  it("distinguishes a cleanup that could not check from one that is certain", async () => {
+    const d = drive({
+      cancel: async () => ({
+        state: SIGNED_IN,
+        cleanupFailure: "credential-uncertain" as const,
+        cleanupDetail: "cancelled sign-in could not read back its own credential: EIO",
+      }),
     });
+    await d.controller.signIn();
+    await d.controller.cancel();
+    // Two different true statements about the user's own machine. Collapsing
+    // them would either invent a credential or hide one.
+    expect(d.controller.phase).toEqual({ kind: "failed", reason: "credential-uncertain" });
+  });
+
+  it("never lets main's diagnostic text become the phase", async () => {
+    const leak = "cancelled sign-in could not remove the credential it wrote: C:\\Users\\me\\x";
+    const d = drive({
+      cancel: async () => ({
+        state: SIGNED_IN,
+        cleanupFailure: "credential-remains" as const,
+        cleanupDetail: leak,
+      }),
+    });
+    await d.controller.signIn();
+    await d.controller.cancel();
+    // The whole point of the code: whatever main puts in the detail, no part of
+    // it is anywhere in what the screen will be given.
+    expect(JSON.stringify(d.controller.phase)).not.toContain("could not remove");
+    expect(JSON.stringify(d.controller.phase)).not.toContain("Users");
+  });
+
+  it("reports an IPC rejection as a code, not as the rejection text", async () => {
+    const d = drive({
+      cancel: async () => {
+        throw new Error(
+          "Error invoking remote method 'relayium:auth-cancel': Error: refused: internals",
+        );
+      },
+    });
+    await d.controller.signIn();
+    await d.controller.cancel();
+    // This is what used to be rendered verbatim on the account screen.
+    expect(d.controller.phase).toEqual({ kind: "failed", reason: "unreachable" });
   });
 
   it("shows a failure rather than success when main's cancellation errors", async () => {
