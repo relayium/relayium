@@ -266,6 +266,14 @@ jobs:
       - name: Same network, in a real renderer
         run: npm run test:smoke:lan-page
 
+      # The screen the realtime product IS. The realtime job below renders it
+      # for real, against a real server and a real browser peer — but it can
+      # only reach the states a healthy pairing produces. It cannot expire a
+      # relay credential, drop a signalling socket, flood the text lane, or
+      # hand back each publish-failure reason in turn. All of that has copy.
+      - name: Link pane, in a real renderer
+        run: npm run test:smoke:link-pane
+
       # Why a sealed identity stops being readable.
       #
       # Runs after `build` because it drives the real `SecretStore` out of
