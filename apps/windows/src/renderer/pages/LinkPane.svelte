@@ -39,6 +39,7 @@
   import { pickedFromInput, pickedFromDrop } from "../send/picked-files.js";
   import { MAX_FILES } from "../../../../../web/src/lib/manifest";
   import { sendGate, type Ticket } from "../send/send-gate.svelte.js";
+  import { linkEndKey, linkIsTerminal } from "../rooms/link-ending.js";
 
   /** An outgoing intent: the quit permission, and the conversation it was for. */
   type Intent = { ticket: Ticket; peerId: string; linkGeneration: number } | null;
@@ -88,6 +89,24 @@
    */
   const status = $derived(workspace.linkStatus);
   const connected = $derived(status === "open");
+
+  /**
+   * Why the link ended, when the workspace knows.
+   *
+   * Published by the shared workspace since Windows started using it and read
+   * by nothing here until now. Two of its three values are named endings the
+   * user has to act on differently — an expired relay credential means make a
+   * new code, a lost signalling socket means this link can never come back —
+   * and both used to arrive as the same unexplained "Failed".
+   */
+  const endReason = $derived(workspace.linkEndReason);
+  /** The link is over, whether or not the ending had a name. One rule, in a
+   *  module, because three things below ask it. */
+  const terminal = $derived(linkIsTerminal(endReason, status));
+  /** A WARNING, not a state: both lanes still work while this is true. */
+  const relayExpiring = $derived(workspace.relayExpiring);
+  /** False means this link cannot be rebuilt if it drops. Said BEFORE it does. */
+  const recoveryAvailable = $derived(workspace.recoveryAvailable);
 
   const STATUS_KEY = {
     idle: "linkStatusIdle",
@@ -506,9 +525,17 @@
             ? t("linkFailed", { peer: peerLabel })
             : t("linkConnecting", { peer: peerLabel })}
     >
-      <!-- Localised. The raw enum is an English identifier and would sit under
-           a Chinese title as `requesting`. -->
-      <p class="dim small" data-test="link-status">{t(STATUS_KEY[status])}</p>
+      <!-- A named ending REPLACES the status line rather than sitting beside
+           it: "Not connected" is true and useless next to a connection that
+           stopped because its relay ran out. A plain failure keeps the status
+           word, which is the most this side actually knows. -->
+      {#if endReason}
+        <p class="dim small" data-test="link-end-reason">{t(linkEndKey(endReason))}</p>
+      {:else}
+        <!-- Localised. The raw enum is an English identifier and would sit
+             under a Chinese title as `requesting`. -->
+        <p class="dim small" data-test="link-status">{t(STATUS_KEY[status])}</p>
+      {/if}
       <!-- Indeterminate on purpose: there is no percentage to show while ICE is
            gathering, and a fake determinate bar would be inventing one. Under
            reduced motion the animation is off and this is a static track, which
@@ -518,11 +545,64 @@
           <span></span>
         </div>
       {/if}
-      <button data-test="link-cancel" onclick={() => room.disconnect()}>{t("linkCancel")}</button>
+      <!-- The way out of a terminal state, and it is worded as one: Cancel
+           stops something in progress, and there is nothing in progress here.
+
+           `dismissLinkEnd()` ALONE, deliberately. It clears the reason and the
+           failed status, which drops `usingMixed()` — the shared rule that
+           keeps an unread ending on screen — so `linkPeerId` empties and the
+           pairing screen comes back with its Create button. Calling
+           `room.disconnect()` as well would ALSO set `userStopped`, and with
+           the peer still on the roster that lands on "Disconnected /
+           Reconnect": an offer to rebuild the very link whose relay just ran
+           out, which is the one thing macOS says not to do here.
+
+           The draft goes with it. It was typed for a conversation that no
+           longer exists, and carrying it into the next link would put text
+           meant for one peer in the composer for another. The web clears its
+           compose field at the same point. -->
+      {#if terminal}
+        <button
+          class="primary"
+          data-test="link-restart"
+          onclick={() => {
+            messageDraft = "";
+            workspace.dismissLinkEnd();
+          }}
+        >
+          {t("linkRestart")}
+        </button>
+      {:else}
+        <button data-test="link-cancel" onclick={() => room.disconnect()}>{t("linkCancel")}</button>
+      {/if}
     </Card>
   {:else}
     <Card title={t("linkConnected", { peer: peerLabel })}>
       {#if sas}<p class="dim small" data-test="sas">{sas}</p>{/if}
+
+      <!-- Two WARNINGS, not states. The link is fully live under both and every
+           control below stays usable; they gate nothing.
+
+           `recoveryAvailable` is worth saying only before anything breaks: once
+           the transport is gone, "this cannot be restored" is news too late.
+
+           The `!terminal` guard is belt and braces and is written down as such
+           rather than claimed to be load-bearing: both getters already answer
+           the safe way once the link is gone — `relayExpiring` is ANDed with
+           `manager.current`, and `recoveryAvailable` returns true with no link,
+           because a warning on a screen with nothing to lose is noise. The
+           guard states the rule at the surface that has to hold it, so a change
+           to either getter cannot quietly put a warning under a dead link. -->
+      {#if !terminal && relayExpiring}
+        <p class="problem small" data-test="link-relay-expiring" role="status">
+          {t("linkRelayExpiring")}
+        </p>
+      {/if}
+      {#if !terminal && !recoveryAvailable}
+        <p class="problem small" data-test="link-no-recovery" role="status">
+          {t("linkRecoveryUnavailable")}
+        </p>
+      {/if}
 
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
