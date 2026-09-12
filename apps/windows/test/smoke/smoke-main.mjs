@@ -1025,6 +1025,35 @@ async function assertSignedOutGatesRatherThanGreys(win) {
   // The gate REPLACES the surface rather than disabling it: a greyed Enable
   // states no reason and leaves the reader guessing whether it is broken.
   check("the gated surface is not also offered", (await present("inbox-enable")) === false);
+
+  // ---- the pairing screen gates only the half that spends an account -------
+  //
+  // Found by comparing macOS's view files against this app's rather than by
+  // reading the parity ledger, which did not mention it.
+  // `CapabilityGateView.swift` says the Cross-network screen gates "only the
+  // half that spends an account — joining a code is right beside it and needs
+  // nothing", and Windows did not gate it at all: pressing Create signed out
+  // spent a round trip and came back with the same sentence as a refusal.
+  //
+  // The copy already existed and already said the right thing. What is asserted
+  // here is that it is said BEFORE the attempt, and that the half needing no
+  // account is untouched.
+  check("the pair row clicked", await clickTest("nav-pair"));
+  if (!(await waitFor("the pairing screen", () => present("pair-join")))) return;
+  check("creating a code says up front that it needs an account",
+    (await present("pair-signed-out")) === true);
+  // Absent, not greyed. A disabled Create states no reason.
+  check("and the Create button is not also offered",
+    (await present("pair-create")) === false);
+  // The half that needs nothing is still there, and still the obvious action.
+  check("joining a code is untouched", (await present("pair-join")) === true);
+  // The way out is offered, and deliberately not as the prominent control —
+  // a primary Sign in here would outrank the Join beside it. macOS gives the
+  // same reason for the same screen.
+  check("a sign-in is offered", (await present("pair-sign-in")) === true);
+  check("and it does not outrank Join",
+    (await js(`document.querySelector('[data-test="pair-sign-in"]').className`))
+      .includes("primary") === false);
 }
 
 async function assertPairHandoffRefusesWithoutACode(win) {
