@@ -776,6 +776,24 @@ async function assertEveryScreenExplainsItself(win) {
     check(`${page} help is a real control`, state.height >= 32 && state.width > 200, JSON.stringify(state));
     check(`${page} help names what it opens`, state.controls === true, JSON.stringify(state));
 
+    // The row carries the one sentence that is always on screen. A row saying
+    // only "Help" tells a reader nothing about whether opening it will answer
+    // their question — which is why the Mac puts the purpose here, and why it
+    // is asserted CLOSED rather than after expanding.
+    const row = await js(
+      `(() => { const s = document.querySelector('[data-test="help"]');` +
+        ` const toggle = s.querySelector('[data-test="help-toggle"]');` +
+        ` const purpose = s.querySelector('[data-test="help-purpose"]');` +
+        ` const hintId = toggle.getAttribute("aria-describedby");` +
+        ` const hint = hintId ? document.getElementById(hintId) : null;` +
+        ` return { visible: purpose !== null && toggle.contains(purpose),` +
+        ` text: (purpose?.textContent ?? "").trim().length,` +
+        ` hint: (hint?.textContent ?? "").trim().length }; })()`,
+    );
+    check(`${page} says what it is for while still closed`, row.visible === true && row.text > 0, JSON.stringify(row));
+    // The hint is what a screen reader gets in place of seeing that preview.
+    check(`${page} help describes what opening it gives`, row.hint > 0, JSON.stringify(row));
+
     check(`${page} help opens`, await clickTest("help-toggle"));
     const opened = await js(
       `(() => { const s = document.querySelector('[data-test="help"]');` +

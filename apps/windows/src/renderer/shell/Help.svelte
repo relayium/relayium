@@ -56,17 +56,29 @@
     data-test="help-toggle"
     aria-expanded={open}
     aria-controls="help-body"
+    aria-describedby="help-hint"
     onclick={() => (open = !open)}
   >
-    <span>{t("helpHeading")}</span>
+    <span class="rows">
+      <span class="heading">{t("helpHeading")}</span>
+      <!-- The one sentence that is always on screen, so it is the one that has
+           to earn its line. The Mac carries it here for a reason worth copying:
+           somebody who has not worked out what the screen IS cannot use its
+           first step, and a row saying only "Help" tells them nothing about
+           whether opening it will answer their question. -->
+      <span class="purpose" data-test="help-purpose">{t(content.purpose)}</span>
+    </span>
     <!-- The chevron says which way it will go. The accessible state is on the
          button itself, so a screen reader is told without reading the glyph. -->
     <span class="chevron" aria-hidden="true">{open ? "▾" : "▸"}</span>
   </button>
+  <!-- What opening this will get you, for a reader who cannot see the row's
+       second line as a preview. `aria-expanded` already says which way the
+       control will go; this says what is behind it. The Mac carries the same
+       thing as an accessibility hint. -->
+  <span id="help-hint" class="sr-only">{t(open ? "helpHide" : "helpShow")}</span>
   <!-- Present in the tree either way, so `aria-controls` always resolves. -->
   <div id="help-body" hidden={!open} data-test="help-body">
-    <p data-test="help-purpose">{t(content.purpose)}</p>
-
     <h3>{t("helpStepsHeading")}</h3>
     <ol data-test="help-steps">
       {#each content.steps as step (step)}
@@ -106,13 +118,36 @@
   }
   .toggle {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
+    gap: var(--gap, 12px);
     width: 100%;
     text-align: start;
   }
+  .rows {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .heading {
+    font-weight: 600;
+  }
+  .purpose {
+    color: var(--dim, inherit);
+    font-size: 0.95em;
+    font-weight: 400;
+  }
   .chevron {
     opacity: 0.7;
+    flex: 0 0 auto;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
   }
   #help-body {
     padding: var(--gap, 12px) 0 0;
