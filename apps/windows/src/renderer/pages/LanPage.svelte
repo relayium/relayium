@@ -128,6 +128,10 @@
         </div>
       </div>
     {:else}
+      <!-- Beside the list, because it describes the list. Not a banner and not
+           coloured as a problem: what it says is ordinary and true every time,
+           and an alarm shown on every visit is one people learn to skip. -->
+      <p class="dim small" data-test="lan-safety">{t("lanSafety")}</p>
       <ul class="devices">
         {#each peers as peer (peer.id)}
           <li>
@@ -148,6 +152,11 @@
           </li>
         {/each}
       </ul>
+      <!-- With the names it is about, as macOS puts its own. A name is the one
+           thing on this screen that came from somebody else. -->
+      <p class="dim small" data-test="lan-names">
+        {t("lanNamesDisclaimer", { setting: t("settingsVerify") })}
+      </p>
     {/if}
 
     <p class="footer">

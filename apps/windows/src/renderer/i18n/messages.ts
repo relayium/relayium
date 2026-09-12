@@ -33,7 +33,33 @@ export const en = {
 
   // --- Same network -------------------------------------------------------
   lanTitle: "Same network",
-  lanSubtitle: "Send to a device on this network, with nothing going through a server.",
+  /**
+   * What the list actually IS, which is not what this used to say.
+   *
+   * It read "Send to a device on this network, with nothing going through a
+   * server", and both halves overstated. Relayium never scans a network: it
+   * asks its rendezvous service who else arrives from the same public address,
+   * which is usually your Wi-Fi and sometimes is not. And whether the transfer
+   * runs directly or over a Relayium relay depends on the network — this
+   * screen's own help panel already says so (`helpLanBoundary`), and said the
+   * opposite of the lede above it. What IS true either way is that Relayium
+   * has no key, so that is the promise kept here.
+   */
+  lanSubtitle: "Send to another device that reaches the internet from the same address as this PC. Encrypted end to end, so Relayium cannot read it either way.",
+  /**
+   * Said beside the list, because it is a description of the list.
+   *
+   * macOS says the same thing in `nearby.safetySummary`. Deliberately not a
+   * warning banner: the risk is real and ordinary, and an alarm gets dismissed
+   * and teaches nothing. The previous screen said nothing at all — its help
+   * panel mentioned the grouping only as a reason a device you EXPECT might be
+   * missing, never as a reason one you do not expect might be present.
+   */
+  lanSafety:
+    "Usually that address is your Wi-Fi. On a carrier network, a VPN, or a shared gateway it can include devices that are not yours, so check who you are sending to.",
+  /** With the names it is about, as macOS puts `nearby.namesDisclaimer`. */
+  lanNamesDisclaimer:
+    "Names come from the other device and are not proof of who it is. Turn on \u201c{setting}\u201d in Settings to compare a code before anything is sent.",
   lanOff: "Receiving is off",
   // Says the whole consequence, because it is not obvious and it is not small.
   lanOffBody:
@@ -738,7 +764,11 @@ export const zh: Record<MessageKey, string> = {
   thisPc: "这台电脑",
 
   lanTitle: "同一网络",
-  lanSubtitle: "直接传给同一网络里的设备，不经过服务器。",
+  lanSubtitle: "发送给与这台电脑从同一地址访问互联网的另一台设备。全程端到端加密，无论走哪条路径 Relayium 都无法读取。",
+  lanSafety:
+    "通常这个地址就是你的 Wi-Fi。但在运营商网络、VPN 或共用网关下，它也可能包含不属于你的设备，所以发送前请确认对方是谁。",
+  lanNamesDisclaimer:
+    "名称由对方设备提供，不能作为身份证明。可在设置中打开“{setting}”，在发送任何内容之前先核对验证码。",
   lanOff: "接收已关闭",
   lanOffBody:
     "这台电脑尚未加入同一网络的房间，所以别的设备看不到它，它也看不到别的设备。打开接收后才能发现设备并发送。",
