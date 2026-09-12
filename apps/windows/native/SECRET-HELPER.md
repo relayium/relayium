@@ -10,7 +10,8 @@ not a property this helper implements or needs. That test has since been
 corrected to the refuse-or-identical property described under *What a tampered
 blob must do* below, and **the corrected oracle awaits the next Windows run** —
 until that run completes, nothing here claims it has executed on a real host.
-**Cross-user protection and power-loss behaviour remain UNPROVEN.**
+**Cross-user protection is PROVEN as of run 34674997632; power-loss behaviour
+remains UNPROVEN.**
 
 ## Why it exists
 
@@ -201,10 +202,20 @@ this; the wrapper switch is read by the test binary alone. Every real subprocess
 runs under a context budget and is joined through `t.Cleanup`, so a failing test
 cannot leave a child behind.
 
-**Cross-user protection is reported UNPROVEN.** It is a real property of
-user-scope DPAPI, but proving it needs a second real account that these tests
-will not create, and inferring it from the flags passed would describe the
-request rather than test the outcome.
+**Cross-user protection is PROVEN, against a real second account.** It is a
+property of user-scope DPAPI, and proving it needs an account to be refused —
+inferring it from the flags passed would describe the request rather than test
+the outcome. The CI lane creates one: `TestCrossUser` seals as this account,
+then runs the shipped executable AS the second account, which must seal its own
+blob successfully before anything is concluded from a refusal. An account that
+has never logged in may have no DPAPI master key, and would then fail to open
+ANYTHING — a test without that first step would pass on such a machine while
+proving nothing. Only after its own seal succeeds does its failure to open this
+account's blob mean ownership. Run 34674997632: sealed its own, refused this
+one, exit 3.
+
+With no second account in the environment the same test reports the invariant
+UNPROVEN rather than passing, so a local run claims nothing it did not observe.
 
 ## Not certified
 
