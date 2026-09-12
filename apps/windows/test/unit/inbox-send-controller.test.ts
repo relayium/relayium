@@ -182,6 +182,63 @@ describe("choosing what and where", () => {
   });
 });
 
+describe("files chosen by dropping them", () => {
+  // A dropped `File` has no `webkitRelativePath` — the folder picker sets it and
+  // nothing else does — so a drop that handed over bare files would flatten the
+  // tree the person dropped. The manifest is where that shows: `docs/note.txt`
+  // would be declared as `note.txt`, and two siblings with the same leaf name
+  // would collide.
+  it("declares the path the person dropped, not just the leaf name", async () => {
+    const h = harness();
+    await h.controller.refreshTargets();
+    h.controller.pickEntries([
+      { file: fileOf("note.txt", 3), path: "docs/note.txt" },
+      { file: fileOf("note.txt", 4), path: "docs/sub/note.txt" },
+    ]);
+    h.controller.toggle("dev-a");
+    await h.controller.send();
+
+    expect(h.calls.start[0]?.entries).toEqual([
+      { path: "docs/note.txt", size: 3 },
+      { path: "docs/sub/note.txt", size: 4 },
+    ]);
+  });
+
+  // A loose file dropped on its own has no folder to be relative to, so the
+  // absence of a path is a fact rather than a gap.
+  it("falls back to the leaf name when a dropped file has no path", async () => {
+    const h = harness();
+    await h.controller.refreshTargets();
+    h.controller.pickEntries([{ file: fileOf("loose.bin", 2) }]);
+    h.controller.toggle("dev-a");
+    await h.controller.send();
+    expect(h.calls.start[0]?.entries).toEqual([{ path: "loose.bin", size: 2 }]);
+  });
+
+  it("replaces the selection, as the pickers on this surface do", () => {
+    const h = harness();
+    h.controller.pick([fileOf("picked.bin", 1)]);
+    h.controller.pickEntries([{ file: fileOf("dropped.bin", 2), path: "d/dropped.bin" }]);
+    expect(h.controller.files).toHaveLength(1);
+    expect(h.controller.pathOf(h.controller.files[0]!)).toBe("d/dropped.bin");
+  });
+
+  // Deliberately NOT a test that a picker "forgets" dropped paths. One was
+  // written and it passed with the clearing removed, because the map is keyed
+  // by File OBJECT: a later selection holds different objects, so a stale entry
+  // can never be found by it. Clearing is about not retaining every dropped
+  // File for the life of the page, which this suite cannot observe — so the
+  // reason is stated where the clearing is, and no test claims to prove it.
+
+  it("takes nothing while a send is in flight", () => {
+    const h = harness();
+    h.controller.pick([fileOf("a.bin", 1)]);
+    (h.controller as unknown as { busy: boolean }).busy = true;
+    h.controller.pickEntries([{ file: fileOf("b.bin", 2), path: "b.bin" }]);
+    expect(h.controller.files.map((f) => f.name)).toEqual(["a.bin"]);
+  });
+});
+
 describe("delivering to several devices", () => {
   it("gives each target its own job, its own status and its own outcome", async () => {
     const h = harness();

@@ -34,6 +34,18 @@
   import type { InboxController } from "../inbox/inbox-controller.svelte.js";
   import type { InboxSendController, TargetStatus } from "../inbox/inbox-send-controller.svelte.js";
   import type { InboxAcceptOutcome } from "../../shared/ipc-contract.js";
+  import { pickedFromDrop } from "../send/picked-files.js";
+
+  /**
+   * Drag feedback for the composer's drop zone, and its one refusal.
+   *
+   * The only state this page owns; everything else it renders belongs to a
+   * controller. These two are presentation of a gesture that starts and ends
+   * here, so putting them in the send controller would give it a field about
+   * the mouse.
+   */
+  let dragging = $state(false);
+  let dropRefused = $state(false);
 
   let {
     inbox,
@@ -572,7 +584,55 @@
           onchange={(e) => send.pick([...((e.currentTarget as HTMLInputElement).files ?? [])])}
         />
         <label class="button" for="inbox-send-folder">{t("inboxSendPickFolder")}</label>
+        <!-- NOT asserted on screen by any harness, and the reason is worth
+             stating: this composer renders only when signed in, and every
+             renderer harness in this repository runs signed out — the Device
+             Inbox shows `inbox-sign-in` and nothing else there. What IS covered
+             is the part that decides what gets sent: `pickEntries` carrying the
+             dropped path into the manifest, in inbox-send-controller.test.ts.
+
+             The same choice without the dialog, which is what a drop is on this
+             product's other two send surfaces. It REPLACES, as the two pickers
+             beside it do: a drop that appended while they replaced would make
+             the surface disagree with itself about what dropping means.
+
+             Gated on there being somewhere to send: a revoked, switched-off or
+             removed device leaves no target, and a zone that accepts a drop it
+             cannot act on is worse than one that is not there. -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <span
+          class="dropzone"
+          class:over={dragging}
+          data-test="inbox-send-drop"
+          ondragover={(event) => {
+            if (send.busy || send.targetsUnavailable) return;
+            event.preventDefault();
+            dragging = true;
+          }}
+          ondragleave={() => (dragging = false)}
+          ondrop={(event) => {
+            event.preventDefault();
+            dragging = false;
+            if (send.busy || send.targetsUnavailable) return;
+            dropRefused = false;
+            const transfer = event.dataTransfer;
+            void pickedFromDrop(transfer).then((dropped) => {
+              // Never a partial batch: `pickedFromDrop` refuses a tree it could
+              // not read whole, and saying so is the only way a person learns
+              // their folder was not taken.
+              if (!dropped.complete) {
+                dropRefused = true;
+                return;
+              }
+              if (dropped.files.length === 0) return;
+              send.pickEntries(dropped.files);
+            });
+          }}
+        >{t("inboxSendDropHint")}</span>
       </div>
+      {#if dropRefused}
+        <p class="problem" data-test="inbox-drop-refused" role="status">{t("dropUnreadable")}</p>
+      {/if}
       {#if send.files.length > 0}
         <p class="dim" data-test="inbox-send-picked">
           {t("inboxSendPicked", { count: send.files.length, size: size(send.totalBytes) })}
@@ -581,9 +641,9 @@
              before pressing send. Relative names only: the page never holds a
              path, and these are what the manifest will declare. -->
         <ul class="names" data-test="inbox-send-names">
-          {#each send.files.slice(0, 6) as file (file.webkitRelativePath || file.name)}
+          {#each send.files.slice(0, 6) as file (send.pathOf(file))}
             <li>
-              <span>{file.webkitRelativePath || file.name}</span>
+              <span>{send.pathOf(file)}</span>
               <span class="dim small">{size(file.size)}</span>
             </li>
           {/each}

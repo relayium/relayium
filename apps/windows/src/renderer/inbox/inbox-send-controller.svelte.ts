@@ -300,18 +300,72 @@ export class InboxSendController {
   }
 
   /** The user picked files or a folder. A new pick replaces the last one. */
+  /**
+   * Paths for files that arrived by DROP, which carry none of their own.
+   *
+   * Cleared whenever a picker replaces the selection — for RETENTION, not for
+   * correctness. The map is keyed by File OBJECT, so a later selection holds
+   * different objects and could never find a stale entry anyway; what clearing
+   * prevents is holding every dropped File for the life of the page. A test
+   * asserting the correctness story passed with the clearing removed, which is
+   * how the real reason was found.
+   */
+  #droppedPaths: Map<File, string> | null = null;
+
   pick(files: readonly File[]): void {
     if (this.busy) return;
     // Frozen here, so the array `encryptFiles` walks is the array the manifest
     // was planned from.
     this.files = Object.freeze([...files]);
+    this.#droppedPaths = null;
     this.mode = "files";
     this.clearStatuses();
+  }
+
+  /**
+   * The same choice, made by dropping instead of by the dialog.
+   *
+   * A dropped `File` has no `webkitRelativePath` — that property is set by the
+   * folder picker and by nothing else — so a drop that handed over bare files
+   * would flatten the tree the person dropped, turning `docs/note.txt` into
+   * `note.txt` and colliding two siblings with the same leaf name. The path
+   * therefore travels BESIDE the file rather than being read off it.
+   *
+   * Replaces, exactly as `pick` does. On this surface the pickers replace, and a
+   * drop is the same choice without the dialog; appending here would make the
+   * two disagree about what dropping means.
+   */
+  pickEntries(entries: readonly { readonly file: File; readonly path?: string }[]): void {
+    if (this.busy) return;
+    // `path` is optional because that is what a drop actually produces: a loose
+    // file dropped on its own has no folder to be relative to. `pathOf` falls
+    // back to the leaf name, so an absent path is a fact rather than a gap.
+    const paths = new Map<File, string>();
+    for (const entry of entries) {
+      if (entry.path !== undefined && entry.path.length > 0) paths.set(entry.file, entry.path);
+    }
+    this.files = Object.freeze(entries.map((entry) => entry.file));
+    this.#droppedPaths = paths;
+    this.mode = "files";
+    this.clearStatuses();
+  }
+
+  /**
+   * The relative path this file will be sent under.
+   *
+   * One answer for the manifest and for what the page lists, so the names a
+   * person checks before pressing send are the names that get declared.
+   */
+  pathOf(file: File): string {
+    const dropped = this.#droppedPaths?.get(file);
+    if (dropped !== undefined && dropped.length > 0) return dropped;
+    return (file.webkitRelativePath ?? "").length > 0 ? file.webkitRelativePath : file.name;
   }
 
   clear(): void {
     if (this.busy) return;
     this.files = [];
+    this.#droppedPaths = null;
     this.message = "";
     this.clearStatuses();
   }
@@ -407,13 +461,11 @@ export class InboxSendController {
   ): Promise<void> {
     const picked = payload.files;
     const entries = picked.map((file) => ({
-      // `webkitRelativePath` when the user picked a folder, so the structure
-      // they chose is preserved; the leaf name otherwise. Read defensively:
-      // Chromium always defines it, but it is a `webkit`-prefixed extension and
-      // Node's `File` does not have it at all — without this the controller
-      // could not be driven outside a browser, which is where its ordering and
-      // cancellation races are actually testable.
-      path: (file.webkitRelativePath ?? "").length > 0 ? file.webkitRelativePath : file.name,
+      // `pathOf`, not `webkitRelativePath` directly: a DROPPED file has no such
+      // property — the folder picker sets it and nothing else does — so reading
+      // it here would flatten a dropped tree. One answer, shared with what the
+      // page lists, so the names a person checked are the names declared.
+      path: this.pathOf(file),
       size: file.size,
     }));
 
