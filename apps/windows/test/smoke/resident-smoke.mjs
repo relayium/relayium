@@ -192,7 +192,20 @@ function onExit(phase, code) {
     finish(1, `smoke [${phase}]: produced no result line (exit ${code})\n${out}\n${err}\n`);
     return;
   }
-  const { failures } = JSON.parse(line.slice("RELAYIUM_SMOKE ".length));
+  const { failures, notes } = JSON.parse(line.slice("RELAYIUM_SMOKE ".length));
+  // ## Notes are printed on the way past, pass or fail
+  //
+  // The child records things it OBSERVED but will not fail on — a
+  // platform-guarded scenario that did not run, an environment verdict that
+  // belongs to the room rather than the product. Added on 2026-09-12 for the
+  // real-notification scenario, whose whole output is a note: "the OS accepted
+  // the toast" or "the OS did not show it: <the platform's words>".
+  //
+  // They were reported into a void for one run, because the child gained the
+  // channel and this wrapper still destructured only `failures`. A channel
+  // nobody prints is the same as no channel, which is the shape of half the
+  // defects fixed today.
+  for (const note of notes ?? []) process.stdout.write(`smoke [${phase}] note: ${note}\n`);
   if (failures.length > 0) {
     // ## The child's transcript survives a failure
     //

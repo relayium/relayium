@@ -34,7 +34,11 @@
 // else is the shipping path: the real `ResidentRuntime`, the real
 // `QuitCoordinator`, the real `AppService`.
 
-import { app, BrowserWindow, clipboard } from "electron";
+// `Notification` is a member of the electron module in the MAIN process, not a
+// global. The first version of the toast scenario used the bare name and CI
+// answered `ReferenceError: Notification is not defined` — which is the test
+// failing loudly at the right place, not a platform verdict.
+import { app, BrowserWindow, clipboard, Notification } from "electron";
 import { SecretStore } from "../../dist/main/secrets.js";
 import { IceControl } from "../../dist/main/net/ice-control.js";
 import { PairControl } from "../../dist/main/net/pair-control.js";
@@ -57,6 +61,15 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import * as nodeCrypto from "node:crypto";
 
 const failures = [];
+/**
+ * Things this run OBSERVED but will not fail on.
+ *
+ * A platform-guarded scenario that does not run, or an environment verdict that
+ * is the room's rather than the product's. Reported alongside the failures so a
+ * green run says which of those happened instead of leaving a silent gap where
+ * an answer should be.
+ */
+const notes = [];
 const check = (name, ok, detail) => {
   if (!ok) failures.push(detail ? `${name}: ${detail}` : name);
   // RETURNED, so `if (!check(...)) return;` means what it reads as.
@@ -1215,6 +1228,8 @@ async function main() {
   await scenarioNoLateStartWhileQuitting(win, runtime);
   // Last: it replaces the document every earlier scenario was driving.
   await scenarioOutcomeDoesNotCrossDocuments(win);
+  // After that, because it touches no document at all.
+  await assertTheShippedToastPathRunsOnWindows();
 
   report();
   app.exit(failures.length === 0 ? 0 : 1);
@@ -3269,13 +3284,73 @@ async function waitForValue(predicate, timeoutMs = 8000) {
   }
 }
 
+/**
+ * The SHIPPED notification path, against the real platform.
+ *
+ * Every other notification case in this repository uses a fake `Notification`:
+ * they prove `showNotification` reports an unsupported platform, a throwing
+ * constructor and a `failed` event, which is the logic. None of them can answer
+ * the question underneath — **can this app raise a toast on Windows at all?**
+ *
+ * So this hands the shipped function the exact dependencies `main.ts` builds:
+ * `Notification.isSupported()` and `new Notification({title, body})`, with the
+ * real Electron classes, on the real runner.
+ *
+ * ## What it asserts, and what it refuses to
+ *
+ * Asserted, because they are the product's: the function reaches `show()`
+ * without throwing, and it reports nothing synchronously.
+ *
+ * NOT asserted: that a toast appeared where somebody could see it. Nobody is
+ * looking at this machine, and a CI session's notification service is an
+ * environment property rather than a product one — failing the run on it would
+ * be blaming the app for the room it is in. The platform's own verdict is
+ * REPORTED instead, in its own words, so a green run says which of the two
+ * happened rather than hiding it.
+ */
+async function assertTheShippedToastPathRunsOnWindows() {
+  if (process.platform !== "win32") {
+    notes.push("the real notification path: not Windows");
+    return;
+  }
+  const { showNotification } = await import("../../dist/main/notify.js");
+
+  const reported = [];
+  const supported = Notification.isSupported();
+  check("the platform reports notification support", supported === true, String(supported));
+
+  const asked = showNotification(
+    {
+      isSupported: () => Notification.isSupported(),
+      create: (t, b) => new Notification({ title: t, body: b }),
+      onClick: () => undefined,
+      report: (err) => reported.push(String(err?.message ?? err)),
+    },
+    "Relayium smoke",
+    "A toast raised by the shipped path, on a real runner.",
+  );
+
+  check("the shipped path reached show() without throwing", asked === true, String(asked));
+  check("and reported nothing synchronously", reported.length === 0, reported.join(" | "));
+
+  // `failed` is asynchronous. Give the OS a moment to refuse.
+  await new Promise((r) => setTimeout(r, 1500));
+  if (reported.length > 0) {
+    // Not a failure of this run. The platform's own string, so the log says
+    // WHY rather than leaving a silent gap where an answer should be.
+    notes.push(`the OS did not show the toast: ${reported.join(" | ")}`);
+  } else {
+    notes.push("the OS accepted the toast (nobody was watching, so that is all this can say)");
+  }
+}
+
 /** Step the scheduler: end its nap now instead of waiting out an hour. */
 function handlerControlWake() {
   wakeInbox();
 }
 
 function report() {
-  process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures })}\n`);
+  process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures, notes })}\n`);
 }
 
 /**
@@ -3921,6 +3996,6 @@ main().catch((err) => {
   // record of what was actually observed; an exception is one more thing that
   // happened, not a reason to discard it.
   failures.push(`threw: ${String(err)}`);
-  process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures })}\n`);
+  process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures, notes })}\n`);
   app.exit(1);
 });
