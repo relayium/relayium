@@ -35,6 +35,7 @@ import { ENGINEERING_BANNER, isEngineeringBuild } from "./build-mode.js";
 import { apiOrigin } from "./origin.js";
 import { applicationMenuTemplate } from "./app-menu.js";
 import { windowBackground } from "./window-background.js";
+import { showNotification } from "./notify.js";
 import { fitToWorkArea } from "./window-sizing.js";
 import { registerHandlers } from "./handlers.js";
 import { parseSendFiles } from "./features/os-entry.js";
@@ -419,6 +420,12 @@ function handleSendFiles(argv: readonly string[]): void {
  * English literal onto a Chinese screen.
  */
 function residentPlatform(preferences: () => PreferenceStore): ResidentPlatform {
+  // A log line, not a dialog: this is where a path or a raw errno is allowed to
+  // go, and the user-facing surfaces carry closed codes instead. Shared with
+  // `notify`, which had nowhere to report a toast the OS refused.
+  const report = (err: unknown): void => {
+    process.stderr.write(`relayium: ${err instanceof Error ? err.message : String(err)}\n`);
+  };
   const window = (): BrowserWindow | null =>
     mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
 
@@ -470,10 +477,16 @@ function residentPlatform(preferences: () => PreferenceStore): ResidentPlatform 
       return response === 0;
     },
     notify: (title, body) => {
-      if (!Notification.isSupported()) return;
-      const notification = new Notification({ title, body });
-      notification.on("click", showWindow);
-      notification.show();
+      showNotification(
+        {
+          isSupported: () => Notification.isSupported(),
+          create: (t, b) => new Notification({ title: t, body: b }),
+          onClick: showWindow,
+          report,
+        },
+        title,
+        body,
+      );
     },
     showStopped: (notice) => {
       // A native dialog, not a log line and not a notification: this is the one
@@ -512,11 +525,7 @@ function residentPlatform(preferences: () => PreferenceStore): ResidentPlatform 
     writeAcknowledged: async () => {
       await preferences().write("firstCloseAcknowledged", true);
     },
-    reportFailure: (err) => {
-      // A log line, not a dialog: this is where a path or a raw errno is allowed
-      // to go, and the user-facing surfaces carry closed codes instead.
-      process.stderr.write(`relayium: ${err instanceof Error ? err.message : String(err)}\n`);
-    },
+    reportFailure: report,
   };
 }
 
