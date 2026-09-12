@@ -13,12 +13,26 @@
 <script lang="ts">
   import { t } from "../i18n/index.svelte.js";
   import Card from "../shell/Card.svelte";
-  import type { Phase, SignInController } from "../sign-in-controller.js";
+  import type { FailureReason, Phase, SignInController } from "../sign-in-controller.js";
   import AccountDetails from "./AccountDetails.svelte";
   import type { AccountSummaryController } from "../account/account-controller.svelte.js";
   import UpdateDetails from "./UpdateDetails.svelte";
   import type { UpdateSummaryController } from "../update/update-controller.svelte.js";
   import type { LoginItemOutcome } from "../../main/login-item.js";
+
+  /**
+   * A failure code to the sentence that says it.
+   *
+   * A total map, so a reason added to the controller without copy is a compile
+   * error here rather than a blank paragraph on the account screen.
+   */
+  const FAILURE_KEY = {
+    unreachable: "accountFailedUnreachable",
+    declined: "accountFailedDeclined",
+    expired: "accountFailedExpired",
+    "credential-remains": "accountFailedCredentialRemains",
+    "credential-uncertain": "accountFailedCredentialUncertain",
+  } as const satisfies Record<FailureReason, string>;
 
   let {
     controller,
@@ -105,7 +119,7 @@
     <p class="problem">{t("accountStoreUnreadable")}</p>
     <button data-test="retry" onclick={() => controller.refresh()}>{t("accountRetry")}</button>
   {:else if phase.kind === "failed"}
-    <p class="problem">{phase.message}</p>
+    <p class="problem">{t(FAILURE_KEY[phase.reason])}</p>
     <button data-test="sign-in" onclick={() => controller.signIn()}>{t("accountRetry")}</button>
   {:else}
     <p class="dim">{t("accountSignedOut")}</p>

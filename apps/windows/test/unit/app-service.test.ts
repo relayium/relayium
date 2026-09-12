@@ -317,6 +317,20 @@ function instrumentedStore(
 }
 
 describe("sign-in cancellation is main's decision, not the renderer's", () => {
+  // The diagnostic half of a failed cleanup is supposed to reach a log. Capture
+  // it rather than trusting the comment that says so, and keep it off the test
+  // output while we are at it.
+  let logged: string[] = [];
+  let realError: typeof console.error;
+  beforeEach(() => {
+    logged = [];
+    realError = console.error;
+    console.error = (...args: unknown[]) => void logged.push(args.map(String).join(" "));
+  });
+  afterEach(() => {
+    console.error = realError;
+  });
+
   it("refuses a poll that succeeds after the attempt was cancelled", async () => {
     const held = barrier<typeof OK_POLL>();
     const { service, store } = harness({
@@ -449,9 +463,15 @@ describe("sign-in cancellation is main's decision, not the renderer's", () => {
     await settle();
     held.release.resolve();
 
-    await expect(polling).rejects.toThrow(/could not remove the credential it wrote/);
+    // The refusal carries the CODE. See the sibling case below for why.
+    await expect(polling).rejects.toThrow(/refused: credential-remains/);
     const result = await cancelling;
-    expect(result.cleanupFailure).toMatch(/could not remove the credential it wrote/);
+    // A code for the screen, and the diagnostic kept separately for the log.
+    expect(result.cleanupFailure).toBe("credential-remains");
+    expect(result.cleanupDetail).toMatch(/could not remove the credential it wrote/);
+    // And the detail is not merely "kept": it reaches a log, which is the only
+    // reason dropping it from the screen is not a loss of diagnosability.
+    expect(logged.join("\n")).toMatch(/\[auth\] cancelled sign-in could not remove/);
     // And the report is honest about what is actually on disk.
     expect(result.state.signedIn).toBe(true);
   });
@@ -491,8 +511,14 @@ describe("sign-in cancellation is main's decision, not the renderer's", () => {
     await settle();
     held.release.resolve();
 
-    await expect(polling).rejects.toThrow(/different stored credential/);
-    expect((await cancelling).cleanupFailure).toMatch(/different stored credential/);
+    // The refusal carries the CODE now. It used to carry the prose, and a
+    // renderer that catches this rejection stringifies whatever is in it.
+    await expect(polling).rejects.toThrow(/refused: credential-remains/);
+    const cancelled2 = await cancelling;
+    // Certain: a credential IS on this PC, even though it is not this
+    // attempt's to delete.
+    expect(cancelled2.cleanupFailure).toBe("credential-remains");
+    expect(cancelled2.cleanupDetail).toMatch(/different stored credential/);
     expect(deletes).toBe(0);
     // The real store still holds what the adoption actually put there.
     expect(await store.get(BEARER_KEY)).toBe(OK_POLL.accessToken);

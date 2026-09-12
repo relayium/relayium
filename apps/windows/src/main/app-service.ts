@@ -155,6 +155,26 @@ export interface AppServiceDeps {
 }
 
 /**
+ * Why a cancellation's cleanup did not finish, as a CODE.
+ *
+ * A code and not a sentence, for the reason `CleanupOutcome` above already
+ * gives: a string built from `String(err)` names paths and internal types, so
+ * it belongs in a log, and what reaches a screen is what the caller derives.
+ * This type used to be a `string` and the renderer rendered it verbatim, which
+ * put "cancelled sign-in could not read back its own credential: TypeError..."
+ * on the account screen of every user in every language.
+ *
+ * The two cases differ in what is TRUE, not only in what went wrong:
+ *
+ * * `credential-remains` — a credential is definitely still stored on this PC.
+ * * `credential-uncertain` — this attempt could not find out whether one is.
+ *
+ * They get different copy because "there is one" and "I could not check" are
+ * different things to tell somebody about their own machine.
+ */
+export type CleanupFailure = "credential-remains" | "credential-uncertain";
+
+/**
  * A sign-in the user abandoned, and whether abandoning it left a mess.
  *
  * `cleanupFailure` is deliberately separate from `state`. "You are signed in
@@ -162,10 +182,13 @@ export interface AppServiceDeps {
  * not remove the token it had already written" are different sentences, and
  * only the second one is a failure. Collapsing them would let a cancellation
  * that left a credential on disk report itself as a cancellation.
+ *
+ * `cleanupDetail` is the diagnostic half. It is never rendered.
  */
 export interface CancelSignInResult {
   readonly state: AuthStateReport;
-  readonly cleanupFailure: string | null;
+  readonly cleanupFailure: CleanupFailure | null;
+  readonly cleanupDetail: string | null;
 }
 
 /** How many nonces are remembered. Bounded so a renderer cannot grow this
@@ -267,7 +290,10 @@ interface Attempt {
    */
   pollInFlight: boolean;
   /** Set when a refused adoption could not remove the credential it wrote. */
-  compensation: string | null;
+  compensation: CleanupFailure | null;
+  /** The diagnostic half of `compensation`. Logged by `recordCompensation`,
+   *  and never rendered. */
+  compensationDetail: string | null;
 }
 
 export type StoreHealth = "ok" | "unreadable" | "unavailable";
@@ -979,6 +1005,7 @@ export class AppService {
       pollable: false,
       pollInFlight: false,
       compensation: null,
+      compensationDetail: null,
     };
     this.attempt = mine;
     // ----------------------------------------------------------------------
@@ -1192,6 +1219,21 @@ export class AppService {
    *     precise lie this revision exists to remove. `cancelSignIn` joins this
    *     work and surfaces whatever it records.
    */
+  /**
+   * Record both halves of a failed cleanup.
+   *
+   * The detail goes to a log HERE rather than being handed to the renderer,
+   * which is the rule `CleanupOutcome` states and the rule this path used to
+   * break. It is logged at the fault rather than when `cancelSignIn` reads it,
+   * because a cancellation the user never completes must still leave a trace
+   * that a credential may be on this machine.
+   */
+  private recordCompensation(mine: Attempt, code: CleanupFailure, detail: string): void {
+    mine.compensation = code;
+    mine.compensationDetail = detail;
+    console.error(`[auth] ${detail}`);
+  }
+
   private async compensate(mine: Attempt, session: Session, written: string): Promise<void> {
     let stored: string;
     try {
@@ -1199,20 +1241,32 @@ export class AppService {
     } catch (err) {
       // Already absent is the good case: there is nothing left to remove.
       if (err instanceof SecretStoreError && err.code === "not-found") return;
-      mine.compensation = `cancelled sign-in could not read back its own credential: ${String(err)}`;
+      // Could not read the store back, so whether a credential is there is
+      // unknown. Saying "one remains" would be a guess in the alarming
+      // direction; saying nothing would be a guess in the reassuring one.
+      this.recordCompensation(
+        mine, "credential-uncertain",
+        `cancelled sign-in could not read back its own credential: ${String(err)}`,
+      );
       return;
     }
     if (stored !== written) {
       // Unreachable while transitions are serialized, which is why it is
       // reported rather than assumed away: deleting a credential this attempt
       // cannot prove it wrote is worse than reporting that one is there.
-      mine.compensation = "cancelled sign-in found a different stored credential and left it alone";
+      this.recordCompensation(
+        mine, "credential-remains",
+        "cancelled sign-in found a different stored credential and left it alone",
+      );
       return;
     }
     try {
       await session.store.delete(BEARER_KEY);
     } catch (err) {
-      mine.compensation = `cancelled sign-in could not remove the credential it wrote: ${String(err)}`;
+      this.recordCompensation(
+        mine, "credential-remains",
+        `cancelled sign-in could not remove the credential it wrote: ${String(err)}`,
+      );
     }
   }
 
@@ -1251,6 +1305,7 @@ export class AppService {
     return {
       state: await this.authState(),
       cleanupFailure: mine !== null && mine.nonce === nonce ? mine.compensation : null,
+      cleanupDetail: mine !== null && mine.nonce === nonce ? mine.compensationDetail : null,
     };
   }
 
