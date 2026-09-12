@@ -36,6 +36,7 @@
   import type { InboxAcceptOutcome, ResidueState, TaskPhase } from "../../shared/ipc-contract.js";
   import { pickedFromDrop } from "../send/picked-files.js";
   import { PHASE_KEY } from "../inbox/phase-copy.js";
+  import { BLOCKED_KEY } from "../inbox/blocked-copy.js";
 
   /**
    * A residue state to the sentence that says it.
@@ -358,7 +359,13 @@
         </div>
       {:else if status.kind === "blocked"}
         <p class="problem" data-test="inbox-blocked">
-          <strong>{t("inboxBlockedTitle")}</strong><br />{t("inboxBlockedBody")}
+          <!-- The REASON, not a sentence that fits every reason. The status has
+               always carried it and this rendered `inboxBlockedBody` over the
+               top, so a full disk, a folder that went away and a delivery the
+               person declined themselves all read the same. Two of those three
+               they could have fixed in a minute. Wording is macOS's; see
+               `inbox/blocked-copy.ts`. -->
+          <strong>{t("inboxBlockedTitle")}</strong><br />{t(BLOCKED_KEY[status.reason])}
         </p>
       {:else if status.kind === "offline"}
         <p class="problem" data-test="inbox-offline">

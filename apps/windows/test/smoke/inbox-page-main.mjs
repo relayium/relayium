@@ -243,6 +243,47 @@ async function main() {
   );
   await js(`window.__inboxHarness.setReleaseOk(true)`);
 
+  // --- A blocked delivery says WHICH problem --------------------------------
+  //
+  // `InboxStatus.blocked` has always carried its reason and the page rendered
+  // one sentence over all sixteen of them, so a full disk, a receive folder
+  // that had gone away and a delivery the person declined themselves all read
+  // the same. Wording is macOS's; what is proved here is that the reason
+  // reaches the screen at all, and that reasons a person acts on differently
+  // read differently.
+  //
+  // The state is not one main produces today — `InboxFacade.state()` never
+  // returns `blocked` — so this drives a surface before anything can reach it.
+  // That is deliberate and is the only way to check it at all: the alternative
+  // is finding out from the first user who does reach it.
+  const blockedFor = async (reason) => {
+    await js(`window.__push(${JSON.stringify({
+      status: { kind: "blocked", reason: "PLACEHOLDER", residue: "none", pending: 0 },
+    }).replace('"PLACEHOLDER"', JSON.stringify(reason))})`);
+    return js(`window.__text("[data-test=inbox-blocked]")`);
+  };
+  const declined = await blockedFor("cancelled");
+  const noFolder = await blockedFor("storage-unreadable");
+  const badBytes = await blockedFor("verification-failed");
+  const noKey = await blockedFor("key-unavailable");
+  const network = await blockedFor("transport");
+  for (const [name, text] of [["declined", declined], ["no folder", noFolder],
+                              ["bad bytes", badBytes], ["no key", noKey], ["network", network]]) {
+    check(`blocked/${name} says something`, typeof text === "string" && text.length > 0, String(text));
+  }
+  check(
+    "five reasons a person acts on differently read differently",
+    new Set([declined, noFolder, badBytes, noKey, network]).size === 5,
+    JSON.stringify({ declined, noFolder, badBytes, noKey, network }),
+  );
+  // The one that used to be indistinguishable and is the most actionable: a
+  // delivery the person themselves declined is not a fault to investigate.
+  check(
+    "a declined delivery does not read as a fault",
+    /declin/i.test(String(declined)),
+    String(declined),
+  );
+
   // --- The notice a FAILED act produces ------------------------------------
   //
   // `InboxNotice.failed` had no case in the page's switch and reached
