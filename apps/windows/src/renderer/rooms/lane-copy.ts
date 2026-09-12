@@ -76,6 +76,47 @@ export function publishFailureKey(reason: PublishFailureReason): MessageKey {
 }
 
 /**
+ * Why a CONNECTION did not open, when the lane knows and the link does not.
+ *
+ * A subset of the lane's keys on purpose, and the subset is the point: only
+ * these three say something about why a link failed to come up. The other four
+ * describe a conversation that already exists — a message too long, a peer
+ * flooding it — and captioning a failed connection with one of those borrows a
+ * sentence that says nothing about it.
+ *
+ * Separate from `textErrorMessageKey` because the question is different, and
+ * in the same module because both are maps over one union and keeping them
+ * apart in different files is how the second one drifts. `LinkPane` had this as
+ * its own ternary for one commit, which is exactly the shape everything else in
+ * this file replaced.
+ */
+export function connectionRefusedKey(key: TextErrorKey): MessageKey | null {
+  switch (key) {
+    case "peerBusy":
+      return "textPeerBusy";
+    case "selfBusy":
+      // A different device, and therefore a different next action: end the
+      // connection this PC is holding, rather than wait for somebody else's.
+      return "textSelfBusy";
+    case "unsupported":
+      return "textUnsupported";
+    case "":
+    case "tooLong":
+    case "flooding":
+    case "failed":
+    case "refused":
+      // Named rather than defaulted, so a new member has to state which side
+      // of this line it falls on instead of inheriting silence.
+      return null;
+    default: {
+      const unhandled: never = key;
+      void unhandled;
+      return null;
+    }
+  }
+}
+
+/**
  * The text lane's own error, in words. `""` means the lane has none.
  *
  * Returning a key rather than a sentence keeps the language out of here, and
@@ -94,6 +135,10 @@ export function textErrorMessageKey(key: TextErrorKey): MessageKey | "" {
       return "textUnsupported";
     case "peerBusy":
       return "textPeerBusy";
+    case "selfBusy":
+      // A different device, and therefore a different next action: end the
+      // connection this PC is holding, rather than wait for somebody else's.
+      return "textSelfBusy";
     case "failed":
       return "textFailed";
     case "refused":

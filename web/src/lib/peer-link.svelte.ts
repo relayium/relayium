@@ -89,9 +89,36 @@ export class UnsupportedLinkError extends Error {
   }
 }
 
+/**
+ * A link could not be had because something is already engaged.
+ *
+ * ## Which SIDE is engaged is not a detail
+ *
+ * Two opposite situations reach this class, and the next action differs: when
+ * THIS device already holds a link, the user hangs up their own connection;
+ * when the OTHER device answered `busy`, the user waits for theirs. Reporting
+ * both as "the other device is busy" is not vague, it is wrong in the local
+ * case — it blames the peer for a link this device is holding.
+ *
+ * macOS keeps them apart for the same reason and says so: the sentence names
+ * the device it is about, which is why `endedUnavailable` and its iOS twin
+ * differ only in the word for this machine.
+ *
+ * `side` is REQUIRED and has no default. Every construction site here knows
+ * which it is; a default would let a new one inherit the wrong answer silently,
+ * which is exactly how the two came to be conflated.
+ *
+ * The class identity is unchanged: `instanceof LinkBusyError` still means what
+ * it meant, and every caller that only cares that a link was refused is
+ * untouched.
+ */
 export class LinkBusyError extends Error {
-  constructor() {
-    super("relayium: another peer link is active");
+  constructor(readonly side: "local" | "peer") {
+    super(
+      side === "peer"
+        ? "relayium: the peer refused the link as busy"
+        : "relayium: another peer link is active here",
+    );
     this.name = "LinkBusyError";
   }
 }
@@ -724,13 +751,13 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
   ): Promise<MixedPeerLink> {
     if (current) {
       if (current.peerId === peerId) return current;
-      throw new LinkBusyError();
+      throw new LinkBusyError("local");
     }
     if (opening) {
       if (opening.peerId === peerId) return opening.promise;
-      throw new LinkBusyError();
+      throw new LinkBusyError("local");
     }
-    if (requested && requested.peerId !== peerId) throw new LinkBusyError();
+    if (requested && requested.peerId !== peerId) throw new LinkBusyError("local");
     if (requested?.peerId === peerId) {
       clearTimeout(requested.timer);
       clearInterval(requested.retry);
@@ -838,7 +865,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
       return link;
     })().catch((cause) => {
       try { conn?.close(); } catch { /* already gone */ }
-      const err = cause instanceof PeerBusyError ? new LinkBusyError() : cause;
+      const err = cause instanceof PeerBusyError ? new LinkBusyError("peer") : cause;
       if (mine === linkToken) status = "failed";
       finishRequest(peerId, undefined, err);
       throw err;
@@ -890,7 +917,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
       // flight instead of racing a second PeerConnection into the same lanes.
       return replacing.peerId === peerId
         ? replacing.promise
-        : Promise.reject(new LinkBusyError());
+        : Promise.reject(new LinkBusyError("local"));
     }
 
     const mine = ++replaceToken;
@@ -993,7 +1020,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
   function request(peerId: string): Promise<MixedPeerLink> {
     if (requested) {
       if (requested.peerId === peerId) return requested.promise;
-      return Promise.reject(new LinkBusyError());
+      return Promise.reject(new LinkBusyError("local"));
     }
     status = "requesting";
     timedOutPeers.delete(peerId);
@@ -1062,7 +1089,8 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
       unlisten = deps.signaling().onSignal((from, data) => {
         const msg = data as InboundSignal;
         if (msg.link === true && msg.busy === true) {
-          finishRequest(from, undefined, new LinkBusyError());
+          // The PEER said busy. Its own link, not ours.
+          finishRequest(from, undefined, new LinkBusyError("peer"));
           return;
         }
         // An authenticated departure. Checked by exact shape first, so a message
@@ -1173,7 +1201,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
         }
         if (deps.canAcceptLink && !deps.canAcceptLink(from)) {
           deps.signaling().sendSignal(from, { busy: true, link: true });
-          if (requested?.peerId === from) finishRequest(from, undefined, new LinkBusyError());
+          if (requested?.peerId === from) finishRequest(from, undefined, new LinkBusyError("local"));
           return;
         }
         if (current) {
@@ -1314,7 +1342,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
       }
       if (!supports(peerId)) return Promise.reject(new UnsupportedLinkError());
       if (current) {
-        if (current.peerId !== peerId) return Promise.reject(new LinkBusyError());
+        if (current.peerId !== peerId) return Promise.reject(new LinkBusyError("local"));
         // Mid-gap intent joins the rebuild instead of attaching to the dead
         // transport the held link still points at.
         if (recovering && recovering.peerId === peerId) return recovering.promise;
@@ -1322,10 +1350,10 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
       }
       if (opening) return opening.peerId === peerId
         ? opening.promise
-        : Promise.reject(new LinkBusyError());
+        : Promise.reject(new LinkBusyError("local"));
       if (requested) return requested.peerId === peerId
         ? requested.promise
-        : Promise.reject(new LinkBusyError());
+        : Promise.reject(new LinkBusyError("local"));
       // **The relay gate, on the way out.**
       //
       // Both branches below put the first legal `link/1` frame on the wire — an
@@ -1344,14 +1372,14 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
         if (gatedEnsure) {
           return gatedEnsure.peerId === peerId
             ? gatedEnsure.promise
-            : Promise.reject(new LinkBusyError());
+            : Promise.reject(new LinkBusyError("local"));
         }
         // A parked inbound request or a held offer for somebody ELSE owns the
         // one link this manager has, exactly as `opening` and `requested` do
         // above. For the same peer it is the other half of this exchange, and
         // the release order settles both from one establishment.
         const bound = gatedPeerId();
-        if (bound !== undefined && bound !== peerId) return Promise.reject(new LinkBusyError());
+        if (bound !== undefined && bound !== peerId) return Promise.reject(new LinkBusyError("local"));
         // A held offer has already published `connecting`, which is the truer
         // statement: this peer's offer is in hand, not merely wanted.
         if (!heldOffer) status = "requesting";

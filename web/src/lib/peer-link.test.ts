@@ -357,6 +357,64 @@ describe("mixed peer link ownership", () => {
     manager.stop();
   });
 
+  // ## Which SIDE is busy, from the real paths rather than a constructed error
+  //
+  // `LinkBusyError` carries `side`, and the whole value of that field is that
+  // each construction site states the right one. Nothing checked it: the lane
+  // test constructs the error directly, so flipping all eleven local sites to
+  // `"peer"` left every suite green. These two cases drive the real paths.
+  it("says THIS device is engaged when the link is already held here", async () => {
+    const sig = signalingHarness();
+    const transport = transportHarness();
+    const manager = createPeerLinkManager({
+      selfId: () => "a", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transport.connect,
+    });
+    await manager.ensure("b");
+    // Nothing was asked of "c" at all — this refusal is entirely local, and
+    // reporting it as the peer being busy blames a device that was never
+    // contacted.
+    await expect(manager.ensure("c")).rejects.toMatchObject({ side: "local" });
+    expect(sig.sent.filter((m) => m.to === "c")).toHaveLength(0);
+    manager.stop();
+  });
+
+  it("says the OTHER device is engaged when it answered busy", async () => {
+    const sig = signalingHarness();
+    const manager = createPeerLinkManager({
+      selfId: () => "b", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transportHarness().connect,
+    });
+    manager.listen();
+    const first = manager.ensure("a");
+    sig.inject("a", { link: true, busy: true });
+    // The peer SAID so. Opposite advice from the case above: wait, rather than
+    // end the connection this device is holding.
+    await expect(first).rejects.toMatchObject({ side: "peer" });
+    manager.stop();
+  });
+
+  it("says THIS device when its own admission refuses an offer", async () => {
+    // `canAcceptLink` is this device's policy. It tells the peer busy AND
+    // fails its own outstanding request — and that failure is this side's,
+    // even though a `busy` went out on the wire.
+    const sig = signalingHarness();
+    const transport = transportHarness();
+    const manager = createPeerLinkManager({
+      selfId: () => "b", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      canAcceptLink: () => false, connect: transport.connect,
+    });
+    manager.listen();
+    const waiting = manager.ensure("a");
+    sig.inject("a", { link: true, sdp: { type: "offer", sdp: "v=0" } });
+    await expect(waiting).rejects.toMatchObject({ side: "local" });
+    expect(sig.sent.at(-1)).toEqual({ to: "a", data: { busy: true, link: true } });
+    manager.stop();
+  });
+
   it("keeps the global one-link bound across different peers", async () => {
     const sig = signalingHarness();
     const transport = transportHarness();

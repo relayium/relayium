@@ -62,7 +62,7 @@ const REASONS = [
 ];
 
 /** Every named text-lane error. `""` is the lane having none. */
-const TEXT_ERRORS = ["tooLong", "flooding", "unsupported", "peerBusy", "failed", "refused"];
+const TEXT_ERRORS = ["tooLong", "flooding", "unsupported", "peerBusy", "selfBusy", "failed", "refused"];
 
 /** Capture the pane, refusing to claim a capture that shows nothing. */
 async function shoot(page, name) {
@@ -266,6 +266,13 @@ async function main() {
   check("a busy peer is named", /busy/i.test(busySaid ?? ""), busySaid);
   // And it replaces the bare status word, as a named ending does.
   equal("the generic status word gives way", await js(`window.__count('[data-test="link-status"]')`), 0);
+
+  // THIS device being engaged is the opposite advice, and used to be the same
+  // sentence: "The other device is busy" for a link the user themselves holds.
+  await js(`window.__set("setText", "peerBusy", "selfBusy")`);
+  const selfSaid = await js(`window.__text('[data-test="link-lane-reason"]')`);
+  check("and this PC being engaged says something else", selfSaid !== busySaid && (selfSaid ?? "").length > 0, selfSaid);
+  check("naming THIS PC rather than the peer", /this pc/i.test(selfSaid ?? ""), selfSaid);
 
   await js(`window.__set("setText", "unsupported", "unsupported")`);
   const oldSaid = await js(`window.__text('[data-test="link-lane-reason"]')`);
