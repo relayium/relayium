@@ -155,6 +155,10 @@ export const en = {
   helpTroubleHeading: "If it doesn't work",
   helpShow: "Show how this screen works, what Relayium can see, and what to do when it doesn't work",
   helpHide: "Hide the details",
+  /** Wording matches macOS's `error.selection.tooManyFiles` and the web's
+   *  `tooManyFiles`, rather than a third sentence for the same refusal. */
+  sendTooManyFiles:
+    "That selection holds more than {max} files. Send fewer files, or zip the folder first.",
   dropUnreadable: "Some of what you dropped could not be read, so nothing was taken. Try again, or use the Choose files button.",
   inboxSendDropHint: "or drop files here",
   helpGuideLink: "Read the guide on relayium.com",
@@ -713,6 +717,7 @@ export const zh: Record<MessageKey, string> = {
   helpTroubleHeading: "如果不成功",
   helpShow: "查看这个界面怎么用、Relayium 能看到什么，以及不成功时该怎么办",
   helpHide: "收起详细说明",
+  sendTooManyFiles: "该选择包含的文件超过 {max} 个。请减少文件数量，或先把文件夹压缩。",
   dropUnreadable: "拖入的内容里有一部分读不出来，所以什么都没有接收。请重试，或改用「选择文件」按钮。",
   inboxSendDropHint: "也可以把文件拖到这里",
   helpGuideLink: "在 relayium.com 上阅读指南",

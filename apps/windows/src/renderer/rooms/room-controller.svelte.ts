@@ -25,7 +25,11 @@ import {
 } from "../../../../../web/src/lib/relay-selection";
 import { relayDeadline, type RelayDeadline } from "../../../../../web/src/lib/relay-deadline";
 import { SignalingClient } from "../../../../../web/src/lib/signaling";
-import { createPeerWorkspace, type PeerWorkspace } from "../../../../../web/src/lib/peer-workspace.svelte";
+import {
+  createPeerWorkspace,
+  type PeerWorkspace,
+  type SendRefusal,
+} from "../../../../../web/src/lib/peer-workspace.svelte";
 import type { Peer } from "../../../../../web/src/lib/protocol";
 import type { SignalingRoom } from "../../shared/ipc-contract.js";
 import { createIceTransport } from "../transport/ice-transport.js";
@@ -325,6 +329,12 @@ export class RoomController {
 
     this.workspace = createPeerWorkspace({
       selfId: () => this.#selfId,
+      // A batch the workspace would not admit. Held here rather than thrown
+      // away: an over-limit selection is refused WHOLE now, and a refusal
+      // nobody sees is the silent truncation it replaced in a new costume.
+      onSendRefused: () => {
+        this.#sendRefusal = "too-many-files";
+      },
       joined: () => this.#joined,
       rejoinRefused: () => this.#refused,
       peerIds: () => this.#peers.map((p) => p.id),
@@ -777,6 +787,26 @@ export class RoomController {
   /** How the last incoming batch ended, for the surface that reports it. */
   get lastReceipt(): ReceiveOutcome | null {
     return this.#lastReceipt;
+  }
+
+  /**
+   * A batch this room refused to admit, for the pane to say so.
+   *
+   * `$state`, because it arrives from a handler and has to reach the screen.
+   * Cleared when the next selection is ATTEMPTED, not when one succeeds: a
+   * refusal that outlived the selection it was about would be describing
+   * something that is no longer on screen, and the person is already looking at
+   * the result of what they just did.
+   */
+  #sendRefusal = $state<SendRefusal | null>(null);
+
+  get sendRefusal(): SendRefusal | null {
+    return this.#sendRefusal;
+  }
+
+  /** Called by the pane before it hands over a new selection. */
+  clearSendRefusal(): void {
+    this.#sendRefusal = null;
   }
 
   /** Cleanup failures this room observed, for a surface that must say so. */

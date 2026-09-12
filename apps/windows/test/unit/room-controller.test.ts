@@ -11,6 +11,7 @@
 // clients and real servers, and are owed by R-LAN/R-PAIR.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MAX_FILES } from "../../../../web/src/lib/manifest";
 import { RoomController } from "../../src/renderer/rooms/room-controller.svelte.js";
 import type { SignalingRoom } from "../../src/shared/ipc-contract.js";
 import type { TransportBridge } from "../../src/renderer/transport/bridge.js";
@@ -449,6 +450,31 @@ describe("two concurrent rooms are independent", () => {
     await settle();
     expect(lan.caps.supportsLink("old-peer")).toBe(false);
     expect(lan.workspace.routes("old-peer")).toBe(false);
+  });
+
+  // The shared workspace refuses a selection over `MAX_FILES` whole rather than
+  // trimming it to fit — see `peer-workspace.test.ts` for why that trim was a
+  // defect and not a convenience. This is the Windows half: the refusal has to
+  // REACH this room, or the pane has nothing to say and the person is back to
+  // watching a button do nothing.
+  it("holds an over-limit refusal where the pane can read it", async () => {
+    const fake = fakeBridge();
+    const lan = makeRoom(fake.bridge, { kind: "lan" }, "windows");
+    fake.join(0, "lan-self", ["peer"]);
+    fake.signal(0, "peer", { caps: ["link/1"] });
+    await settle();
+    expect(lan.sendRefusal).toBeNull();
+
+    lan.workspace.sendFiles(
+      "peer",
+      Array.from({ length: MAX_FILES + 1 }, (_, i) => ({ file: new File(["x"], `f${String(i)}`) })),
+    );
+    expect(lan.sendRefusal).toBe("too-many-files");
+
+    // Cleared when the next selection is attempted, so a stale refusal does not
+    // sit over a screen that has moved on.
+    lan.clearSendRefusal();
+    expect(lan.sendRefusal).toBeNull();
   });
 });
 

@@ -183,6 +183,9 @@ export interface Messages {
    * change it — updating BOTH ends, because either side may be the old one and
    * the reader cannot tell which.
    */
+  /** A selection over `MAX_FILES`, refused whole. Wording matches macOS's
+   *  `error.selection.tooManyFiles` rather than being invented for the web. */
+  tooManyFiles: (max: number) => string;
   peerUnsupported: string;
   generating: string; // transient "creating…" state while a code/link is minted
   footer: string;
