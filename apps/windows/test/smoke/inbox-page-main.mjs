@@ -106,6 +106,11 @@ async function main() {
     window.__click = async (sel) => {
       const el = document.querySelector(sel);
       if (el === null) return false;
+      // A disabled control is not clicked, and saying so is the point: a helper
+      // that returned true here would have every \`check("… was pressed", …)\`
+      // report success for a press that did nothing, and the real failure would
+      // surface somewhere else as a symptom. See \`resident-main.mjs\`.
+      if (el.disabled === true) return false;
       el.click();
       await window.__tick();
       return true;
@@ -121,6 +126,38 @@ async function main() {
   if (!check("the harness mounted", await js(`typeof window.__inboxHarness === "object"`))) {
     return;
   }
+
+  // --- A click helper that lies is worse than no click helper ---------------
+  //
+  // `__click` and its siblings in the other smokes returned `true` whenever the
+  // element EXISTED, without looking at `disabled`. The Inbox policy radios are
+  // `disabled={inbox.busy}`, and `resident-main.mjs` clicks `auto` then `off`
+  // with no wait between them — so when busy had not cleared, the click did
+  // nothing, `check("off was chosen", …)` reported SUCCESS, and the run failed
+  // two assertions later with "off was handed to the transport: auto". The
+  // symptom was reported and the cause was hidden. CI 34698976524 printed
+  // exactly that.
+  //
+  // Proved here rather than asserted: a real disabled button in a real
+  // renderer, and the helper says no.
+  await js(`
+    (() => {
+      const probe = document.createElement("button");
+      probe.setAttribute("data-test", "click-guard-probe");
+      probe.disabled = true;
+      document.body.appendChild(probe);
+      window.__probeClicks = 0;
+      probe.addEventListener("click", () => { window.__probeClicks += 1; });
+    })();
+    true;
+  `);
+  equal(
+    "clicking a disabled control reports false",
+    await js(`window.__click("[data-test=click-guard-probe]")`),
+    false,
+  );
+  equal("and no click was delivered", await js(`window.__probeClicks`), 0);
+  await js(`document.querySelector("[data-test=click-guard-probe]").remove(); true;`);
   await js(`window.__inboxHarness.setLang("en")`);
 
   // --- Every InboxStatus member puts something on screen -------------------

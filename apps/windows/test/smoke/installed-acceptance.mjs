@@ -971,7 +971,7 @@ async function main() {
       '(() => { const el = document.querySelector(\'[data-test="nav-account"]\');' +
         " if (!el) return false;" +
         ' const target = el.tagName === "BUTTON" ? el : el.querySelector("button") ?? el;' +
-        " target.click(); return true; })()",
+        " if (target.disabled === true) return false; target.click(); return true; })()",
     );
     check("sidebar account row clicked", clicked === true);
     if (
@@ -1194,7 +1194,7 @@ async function main() {
   ) {
     const cleared = await cdp.evaluate(
       '(() => { const el = document.querySelector(\'[data-test="pending-clear"]\');' +
-        ' if (!el) return false; el.click(); return true; })()',
+        ' if (!el || el.disabled === true) return false; el.click(); return true; })()',
     );
     check("the staged selection can be discarded", cleared === true);
     check(

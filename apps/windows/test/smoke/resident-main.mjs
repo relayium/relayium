@@ -1209,7 +1209,7 @@ const clickTest = (win, name) =>
     win,
     `(() => { const el = document.querySelector('[data-test="${name}"]'); if (!el) return false;` +
       ` const target = el.tagName === "BUTTON" ? el : el.querySelector("button") ?? el;` +
-      ` target.click(); return true; })()`,
+      ` if (target.disabled === true) return false; target.click(); return true; })()`,
   );
 
 const present = (win, name) => js(win, `document.querySelector('[data-test="${name}"]') !== null`);
@@ -2188,6 +2188,7 @@ async function scenarioInboxSend(win) {
   await js(
     win,
     `(() => { const el = document.querySelector('[data-test="inbox-send-target"]:not([disabled])');
+      if (el.disabled === true) return false;
       el.click(); return true; })()`,
   );
   const ready = await waitInbox(
@@ -2421,6 +2422,7 @@ async function sendQuitRisk(win, runtime) {
   await js(
     win,
     `(() => { const el = document.querySelector('[data-test="inbox-send-target"]:not([disabled])');
+      if (el && el.disabled === true) return false;
       if (el && !el.checked) el.click(); return true; })()`,
   );
   await waitInbox(
