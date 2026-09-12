@@ -40,9 +40,13 @@ const (
 	RejectAlternateDataStream Rejection = "alternate-data-stream"
 	RejectInvalidCharacter    Rejection = "invalid-character"
 	RejectTrailingDotOrSpace  Rejection = "trailing-dot-or-space"
-	RejectSegmentTooLong      Rejection = "segment-too-long"
-	RejectTooDeep             Rejection = "too-deep"
-	RejectPathTooLong         Rejection = "path-too-long"
+	// A name that DISPLAYS as something other than what it is. See the loop in
+	// ValidateSegment for why this is its own reason rather than
+	// invalid-character.
+	RejectDeceptiveCharacter Rejection = "deceptive-character"
+	RejectSegmentTooLong     Rejection = "segment-too-long"
+	RejectTooDeep            Rejection = "too-deep"
+	RejectPathTooLong        Rejection = "path-too-long"
 )
 
 // Bounds. Both segment limits apply and neither implies the other.
@@ -161,6 +165,27 @@ func ValidateSegment(segment string) Verdict {
 		if r < 0x20 || r == '<' || r == '>' || r == '"' || r == '|' || r == '?' || r == '*' {
 			return rejectWith(RejectInvalidCharacter)
 		}
+		// DEL and the bidi controls, refused for a different reason than the
+		// characters above: those cannot be written, these can — and they change
+		// what the name LOOKS like without changing what it is.
+		//
+		// `photo\u202Egnp.exe` renders in Explorer as `photoexe.png`, because
+		// U+202E reverses everything after it. The reader double-clicks an
+		// executable believing it is an image, and on this platform the
+		// extension is what decides that. macOS removes exactly these from a
+		// received name; `web/src/lib/filename.ts` carries the same class with a
+		// test that names the attack.
+		//
+		// REFUSED rather than stripped, which is this receiver's model
+		// throughout: a name it cannot write faithfully is not quietly rewritten
+		// into a different one.
+		//
+		// C1 (U+0080-U+009F) is deliberately NOT here. No other implementation
+		// refuses it, and a name only some of a user's devices accept is the
+		// failure the shared manifest rule exists to prevent.
+		if r == 0x7f || isDeceptive(r) {
+			return rejectWith(RejectDeceptiveCharacter)
+		}
 	}
 	// Windows silently strips these at creation, so `report.txt ` and
 	// `report.txt` become one file — a collision the manifest never declared.
@@ -183,6 +208,20 @@ func ValidateSegment(segment string) Verdict {
 		return rejectWith(RejectReservedDeviceName)
 	}
 	return Verdict{OK: true, Segments: []string{segment}}
+}
+
+// isDeceptive reports the characters that change how a name reads without
+// changing what it is: the bidi overrides and isolates, and the marks that
+// travel with them. Byte-identical to the class in `web/src/lib/filename.ts`
+// and to `DECEPTIVE` in `src/main/io/winpath.ts`.
+func isDeceptive(r rune) bool {
+	switch r {
+	case 0x061C, 0x200E, 0x200F,
+		0x202A, 0x202B, 0x202C, 0x202D, 0x202E,
+		0x2066, 0x2067, 0x2068, 0x2069:
+		return true
+	}
+	return false
 }
 
 // CollisionKey answers "would these two names be the same file on disk?".

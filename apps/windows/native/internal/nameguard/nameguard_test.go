@@ -154,3 +154,53 @@ func TestCollisionKeyFoldsCase(t *testing.T) {
 		t.Fatal("distinct names collapsed to one key")
 	}
 }
+
+// A name that reads as something it is not.
+//
+// U+202E reverses everything after it, so `photo‮gnp.exe` renders in
+// Explorer as `photoexe.png`. The reader double-clicks an executable believing
+// it is an image, and on Windows the extension is what decides that. This guard
+// sees names chosen by a remote peer, which is the whole reason it exists.
+//
+// Refused rather than stripped, and reported as its own reason: `<` cannot be
+// written at all, while U+202E can be written perfectly and is still refused.
+func TestDeceptiveCharactersAreRefused(t *testing.T) {
+	deceptive := []rune{
+		0x007F, 0x061C, 0x200E, 0x200F,
+		0x202A, 0x202B, 0x202C, 0x202D, 0x202E,
+		0x2066, 0x2067, 0x2068, 0x2069,
+	}
+	for _, r := range deceptive {
+		for _, name := range []string{
+			string(r) + "lead.txt",
+			"mid" + string(r) + "dle.txt",
+			"trail.txt" + string(r),
+		} {
+			v := ValidateSegment(name)
+			if v.OK {
+				t.Fatalf("U+%04X in %q was accepted", r, name)
+			}
+			if v.Reason != RejectDeceptiveCharacter {
+				t.Fatalf("U+%04X in %q: reason = %q, want %q", r, name, v.Reason, RejectDeceptiveCharacter)
+			}
+		}
+	}
+}
+
+// The attack in one case, spelled out, so a reader of this file sees it.
+func TestTheRightToLeftOverrideCannotSwapAVisibleExtension(t *testing.T) {
+	v := ValidateRelativePath("docs/photo" + string(rune(0x202E)) + "gnp.exe")
+	if v.OK || v.Reason != RejectDeceptiveCharacter {
+		t.Fatalf("ok=%v reason=%q, want a deceptive-character refusal", v.OK, v.Reason)
+	}
+}
+
+// The rule is about characters that lie, not about scripts. Refusing these
+// would be a different bug wearing the same fix.
+func TestOrdinaryNonASCIINamesAreStillAccepted(t *testing.T) {
+	for _, name := range []string{"文件.txt", "café.txt", "Ünïcode ✅.txt"} {
+		if v := ValidateSegment(name); !v.OK {
+			t.Fatalf("%q was refused as %q", name, v.Reason)
+		}
+	}
+}

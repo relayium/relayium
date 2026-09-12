@@ -35,6 +35,7 @@ export type PathRejection =
   | "reserved-device-name"
   | "alternate-data-stream"
   | "invalid-character"
+  | "deceptive-character"
   | "trailing-dot-or-space"
   | "segment-too-long"
   | "too-deep"
@@ -67,6 +68,30 @@ const RESERVED = new Set<string>([
 
 /** `< > : " | ? *` plus every C0 control, including NUL and newline. */
 const INVALID_CHAR = /[<>:"|?*\u0000-\u001F]/;
+
+/**
+ * Characters that change how a name READS without changing what it is.
+ *
+ * DEL, and the bidi overrides and isolates. `photo\u202Egnp.exe` renders in
+ * Explorer as `photoexe.png`, because U+202E reverses everything after it — the
+ * reader double-clicks an executable believing it is an image, and on Windows
+ * the extension is what decides that.
+ *
+ * Its own class rather than an addition to `INVALID_CHAR`, and its own reason,
+ * because the two are different facts: those characters cannot be written at
+ * all, these can be written perfectly and are still refused.
+ *
+ * REFUSED, never stripped — this receiver does not rewrite a name into a
+ * different one. macOS strips them on its side; the outcome that matters is the
+ * same, which is that the name never reaches disk.
+ *
+ * Byte-identical to the class in `web/src/lib/filename.ts` and to `isDeceptive`
+ * in `native/internal/nameguard/nameguard.go`. C1 (U+0080-U+009F) is
+ * deliberately absent: no other implementation refuses it, and a name only some
+ * of a user's devices accept is the failure the shared manifest rule exists to
+ * prevent.
+ */
+const DECEPTIVE_CHAR = /[\u007F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/;
 
 /**
  * Bounds. TWO limits apply to a component and neither implies the other.
@@ -140,6 +165,7 @@ export function validateSegment(segment: string): PathVerdict {
   // directory listing shows.
   if (segment.includes(":")) return reject("alternate-data-stream");
   if (INVALID_CHAR.test(segment)) return reject("invalid-character");
+  if (DECEPTIVE_CHAR.test(segment)) return reject("deceptive-character");
   // Windows silently strips these at creation, so `report.txt ` and
   // `report.txt` become one file — a collision the manifest never declared.
   if (/[. ]$/.test(segment)) return reject("trailing-dot-or-space");
