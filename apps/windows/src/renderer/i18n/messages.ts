@@ -116,6 +116,30 @@ export const en = {
   linkStatusInterrupted: "Interrupted",
   linkStatusFailed: "Failed",
 
+  // --- Why a link ended, and the two warnings that come before it ----------
+  //
+  // The workspace has published all three of these since Windows started using
+  // it, and this client read none of them: a relay credential running out, or
+  // a lost signalling socket meaning the link can never be rebuilt, was silent
+  // — and when either ENDED the link it read as an unexplained "Failed".
+  //
+  // The wording is the WEB client's, not macOS's, and deliberately. macOS says
+  // "start again from the device list" because its equivalent surface is
+  // Nearby; Windows pairs by code, as the web does, so "start again" here
+  // means make another code. macOS applies the same rule to itself — its
+  // `endedUnavailable` and `endedUnavailableIOS` differ only because the
+  // sentence names the device it is about.
+  linkEndedRelay: "The relay time limit for this connection was reached. Start again to keep going.",
+  linkEndedSignaling:
+    "The connection to the pairing service was lost, so this link could not be restored. Start again.",
+  /** A WARNING, not a state: the link is fully live and both lanes still work. */
+  linkRelayExpiring:
+    "This relayed connection is close to its time limit. Finish what is in flight, then start a new one.",
+  /** Said BEFORE anything breaks, which is the only time it is any use. */
+  linkRecoveryUnavailable:
+    "Not connected to the pairing service, so this connection cannot be restored if it drops. Until then everything here keeps working, including new files and messages.",
+  linkRestart: "Start again",
+
   // --- Receiving ----------------------------------------------------------
   recvIncoming: "{peer} wants to send {count} file(s)",
   recvAccept: "Choose where to save",
@@ -713,6 +737,13 @@ export const zh: Record<MessageKey, string> = {
   linkStatusOpen: "已连接",
   linkStatusInterrupted: "已中断",
   linkStatusFailed: "连接失败",
+
+  linkEndedRelay: "这条连接已到中继时限。请重新开始以继续。",
+  linkEndedSignaling: "与配对服务的连接已断开，这条链路无法恢复。请重新开始。",
+  linkRelayExpiring: "这条中继连接快到时限了。把手上的传完，然后重新建立一条。",
+  linkRecoveryUnavailable:
+    "当前未连接配对服务，这条连接一旦断开就无法恢复。在那之前这里的一切照常可用，包括新发的文件和消息。",
+  linkRestart: "重新开始",
 
   recvIncoming: "{peer} 想发送 {count} 个文件",
   recvAccept: "选择保存位置",
