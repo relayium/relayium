@@ -454,9 +454,17 @@ func callAs(t *testing.T, user, password, helper string, request []byte) (result
 		return result{}, fmt.Errorf("copying the helper: %w", writeErr)
 	}
 
+	// The credential is built from .NET types rather than with
+	// `ConvertTo-SecureString`, which lives in Microsoft.PowerShell.Security and
+	// failed to autoload under `-NoProfile -NonInteractive` on the runner —
+	// reported as "the command was found in the module ... but the module could
+	// not be loaded". A SecureString filled character by character needs no
+	// module at all.
 	script := fmt.Sprintf(`
 $ErrorActionPreference = 'Stop'
-$secure = ConvertTo-SecureString %s -AsPlainText -Force
+$secure = New-Object System.Security.SecureString
+foreach ($ch in %s.ToCharArray()) { $secure.AppendChar($ch) }
+$secure.MakeReadOnly()
 $cred = New-Object System.Management.Automation.PSCredential('%s', $secure)
 $p = Start-Process -FilePath %s -Credential $cred -WorkingDirectory %s `+
 		`-RedirectStandardInput %s -RedirectStandardOutput %s -RedirectStandardError %s -Wait -PassThru
