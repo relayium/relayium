@@ -101,6 +101,18 @@ export const en = {
   textPeerBusy: "The other device is busy.",
   textUnsupported: "The other device cannot hold a conversation.",
   textTooLong: "That message is too long to send.",
+  /**
+   * The two `TextErrorKey` members this client used to render as SILENCE.
+   *
+   * The chain that consumed the union covered four of its six named members,
+   * and returned "" for the rest — so a message that could not be sent, and a
+   * session closed because the peer sent too many, told the user nothing at
+   * all. The wording is the web client's, which is accurate about the
+   * mechanism: `flooding` is a rate-limit bucket, not a receive buffer, so
+   * macOS's "before verification finished" would describe something else.
+   */
+  textFlooding: "The other device sent too many messages; the session was closed.",
+  textFailed: "The message session failed.",
   textDropped: "That message was not sent. It is still in the box.",
   linkSend: "Send",
   linkVerifyTitle: "Check this code matches",
@@ -150,11 +162,43 @@ export const en = {
   // The honest interim state. Never rendered as a save.
   recvUnsupported:
     "This build can receive the files but cannot yet write them to their final names. Nothing was saved.",
+  /**
+   * A real write failure, and now ONLY that.
+   *
+   * This sentence used to be the answer for every partial publication failure
+   * on Windows, because the helper's own wire codes reached this screen
+   * untranslated and no branch could match them. A full disk, a file locked by
+   * another program, a name already taken and a permission denial all said
+   * "could not write to the folder you chose" — which for a full disk sends
+   * somebody to check permissions on a folder that is perfectly fine.
+   *
+   * The two keys below it were written for exactly those cases and had never
+   * once been reachable.
+   */
   recvFailedPrefix: "Could not write to the folder you chose.",
   recvFailedPermission: "Relayium is not allowed to write to the folder you chose.",
   recvFailedConflict: "Some files already exist there under the same names.",
+  recvFailedNoSpace: "There is not enough free space in that folder.",
+  recvFailedInUse: "One of those files is open in another program. Close it, then receive again.",
+  recvFailedGone: "That folder is no longer there. Choose another one and receive again.",
+  /** The NAMES were validated before a byte was written, so what is too long
+   *  is the destination this app was pointed at. */
+  recvFailedNameTooLong: "The path inside that folder is too long for Windows. Choose a folder closer to the drive root.",
   recvFailedTimeout: "The save timed out.",
   recvFailedInternal: "The save could not be completed.",
+  /** Not a failure at all. Saying "could not write" about a cancel is false. */
+  recvFailedCancelled: "The save was cancelled.",
+  /**
+   * The one reason that most needed its own sentence and had none.
+   *
+   * `cleanup-uncertain` means the write may well have SUCCEEDED and only the
+   * teardown could not confirm it. It used to fall through to "Could not write
+   * to the folder you chose", which is not vague — it is a false statement
+   * about the user's own disk. The residue line renders beside this, because
+   * `residue` is true for exactly this case.
+   */
+  recvFailedUncertain:
+    "The save did not finish cleanly, so Relayium cannot confirm which files were written.",
   recvResidue: "Some incomplete files may still be in that folder.",
   recvSavedCount: "Saved {done} of {total}",
   recvReveal: "Show in Explorer",
@@ -723,6 +767,8 @@ export const zh: Record<MessageKey, string> = {
   textPeerBusy: "对方正忙。",
   textUnsupported: "对方无法进行对话。",
   textTooLong: "这条消息太长，无法发送。",
+  textFlooding: "对方发得太快，会话已关闭。",
+  textFailed: "消息会话失败。",
   textDropped: "这条消息没有发送成功，内容仍保留在输入框里。",
   linkSend: "发送",
   linkVerifyTitle: "核对这串验证码",
@@ -755,8 +801,14 @@ export const zh: Record<MessageKey, string> = {
   recvFailedPrefix: "无法写入你选择的文件夹。",
   recvFailedPermission: "Relayium 没有写入该文件夹的权限。",
   recvFailedConflict: "该文件夹中已存在同名文件。",
+  recvFailedNoSpace: "该文件夹所在磁盘空间不足。",
+  recvFailedInUse: "其中有文件正被其他程序占用。请关闭该程序后重新接收。",
+  recvFailedGone: "该文件夹已经不存在了。请另选一个文件夹后重新接收。",
+  recvFailedNameTooLong: "该文件夹内的路径超出了 Windows 的长度限制。请选择更靠近磁盘根目录的文件夹。",
   recvFailedTimeout: "保存超时。",
   recvFailedInternal: "保存未能完成。",
+  recvFailedCancelled: "保存已取消。",
+  recvFailedUncertain: "保存没有正常结束，Relayium 无法确认哪些文件已写入。",
   recvResidue: "该文件夹中可能仍残留未完成的文件。",
   recvSavedCount: "已保存 {done} / {total}",
   recvReveal: "在文件资源管理器中显示",

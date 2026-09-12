@@ -87,6 +87,45 @@ const FAILURE_BY_CODE: Record<string, PublishFailureReason> = {
   internal: "internal",
 };
 
+/**
+ * The HELPER's own wire codes, narrowed to reasons a person can act on.
+ *
+ * A second map, and it has to be: the one above translates the TypeScript
+ * client's error names on the `failed` path, and the partial path carries the
+ * helper's `E_*` codes from `native/internal/wire/code.go`. Until this existed
+ * those codes were forwarded verbatim and reached a screen where no branch
+ * could match them, so a full disk, a permission denial and a name collision
+ * all rendered as one sentence about not being able to write to the folder.
+ *
+ * `E_TYPE_CONFLICT` joins `exists` on purpose: "a directory is in the way of a
+ * file" and "a file is already there" need the same thing done about them, and
+ * a second sentence for it would be a distinction with no different action.
+ *
+ * `E_DELETE_PENDING` is `io-failed` for the same reason — a file mid-deletion
+ * is a transient the user cannot address except by trying again, which is what
+ * the generic sentence already invites.
+ *
+ * Anything unrecognised is `io-failed` rather than `internal`: the helper
+ * reached the filesystem and the filesystem refused, which is not this app
+ * malfunctioning.
+ */
+const PARTIAL_FAILURE_BY_WIRE_CODE: Record<string, PublishFailureReason> = {
+  E_EXISTS: "exists",
+  E_TYPE_CONFLICT: "exists",
+  E_ACCESS: "permission",
+  E_SHARING: "in-use",
+  E_NO_SPACE: "no-space",
+  E_NOT_FOUND: "gone",
+  E_NAME_TOO_LONG: "name-too-long",
+  E_DELETE_PENDING: "io-failed",
+  E_IO: "io-failed",
+  E_CANCELLED: "cancelled",
+  E_INTERNAL: "internal",
+};
+
+const partialReason = (code: string): PublishFailureReason =>
+  PARTIAL_FAILURE_BY_WIRE_CODE[code] ?? "io-failed";
+
 const toReport = (native: NativePublishReport): PublishReport =>
   native.status === "complete"
     ? { status: "complete", publishedCount: native.publishedCount, total: native.total }
@@ -95,7 +134,7 @@ const toReport = (native: NativePublishReport): PublishReport =>
         publishedCount: native.publishedCount,
         total: native.total,
         failedIndex: native.failedIndex,
-        reason: native.reason,
+        reason: partialReason(native.reason),
       };
 
 /** The production destination. */
@@ -189,7 +228,12 @@ export class LeaseReceiveAdapter implements NativeReceiveAdapter {
         publishedCount: published.length,
         total: staged.length,
         failedIndex: published.length,
-        reason: "publish-stopped",
+        // `io-failed`, not a name of its own. This adapter's lease publishes
+        // without classifying WHY it stopped, so there is no distinct action
+        // to offer — and "publish-stopped" was a code no screen ever matched,
+        // which is the same defect the helper path had. A reason nobody can
+        // act on differently earns no sentence of its own.
+        reason: "io-failed",
       };
     } catch (err) {
       // `publish-unsupported` is this adapter's honest answer, surfaced as a

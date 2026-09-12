@@ -85,7 +85,7 @@ describe("a receipt is issued only for a publication that actually completed", (
       publishedCount: 2,
       total: 5,
       failedIndex: 2,
-      reason: "conflict",
+      reason: "exists",
     };
     expect(h.issue(report, { directory: DEST, owner: owner() })).toBeNull();
     expect(h.pushed).toHaveLength(0);

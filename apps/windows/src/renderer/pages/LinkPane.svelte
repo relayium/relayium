@@ -40,6 +40,8 @@
   import { MAX_FILES } from "../../../../../web/src/lib/manifest";
   import { sendGate, type Ticket } from "../send/send-gate.svelte.js";
   import { linkEndKey, linkIsTerminal } from "../rooms/link-ending.js";
+  import { publishFailureKey, textErrorMessageKey } from "../rooms/lane-copy.js";
+  import type { PublishFailureReason } from "../../shared/ipc-contract.js";
 
   /** An outgoing intent: the quit permission, and the conversation it was for. */
   type Intent = { ticket: Ticket; peerId: string; linkGeneration: number } | null;
@@ -146,16 +148,9 @@
 
   const receipt = $derived(room.lastReceipt);
 
-  /** One sentence per named reason. `unsupported` is a build limitation and is
-   *  said as one; everything else is a real failure of this save. */
-  function failureText(reason: string): string {
-    if (reason === "unsupported") return t("recvUnsupported");
-    if (reason === "permission") return t("recvFailedPermission");
-    if (reason === "conflict") return t("recvFailedConflict");
-    if (reason === "timeout") return t("recvFailedTimeout");
-    if (reason === "internal" || reason === "helper-unavailable") return t("recvFailedInternal");
-    return t("recvFailedPrefix");
-  }
+  /** One sentence per named reason, over the WHOLE union. See `lane-copy.ts`
+   *  for what the chain this replaces got wrong, in both directions. */
+  const failureText = (reason: PublishFailureReason): string => t(publishFailureKey(reason));
 
   /**
    * One sentence per closed refusal, and each one names a different situation.
@@ -318,18 +313,13 @@
   let sending = $state<string | null>(null);
   let sendState = $state<"idle" | "waiting" | "failed">("idle");
 
-  /** Which sentence the lane's own error is. Never a raw key. */
-  const laneError = $derived(
-    text.errorKey === "tooLong"
-      ? t("textTooLong")
-      : text.errorKey === "refused"
-        ? t("textRefused")
-        : text.errorKey === "peerBusy"
-          ? t("textPeerBusy")
-          : text.errorKey === "unsupported"
-            ? t("textUnsupported")
-            : "",
-  );
+  /** Which sentence the lane's own error is. Never a raw key, and now never
+   *  silence either: the chain this replaces covered four of six named members
+   *  and returned "" for `flooding` and `failed`. */
+  const laneError = $derived.by(() => {
+    const key = textErrorMessageKey(text.errorKey);
+    return key === "" ? "" : t(key);
+  });
 
   /**
    * Send one body, or hold it and ask the lane to open.

@@ -998,7 +998,18 @@ export type PublishReport =
       readonly publishedCount: number;
       readonly total: number;
       readonly failedIndex: number;
-      readonly reason: string;
+      /**
+       * The union, and it was `string`.
+       *
+       * That widening was not cosmetic. Main narrows the `failed` path through
+       * `FAILURE_BY_CODE`, and the PARTIAL path had no such step: the helper's
+       * own wire code — `E_ACCESS`, `E_NO_SPACE`, `E_EXISTS`, checked only for
+       * being a non-empty string — travelled straight to the screen, where no
+       * branch could match it. Every partial publication failure therefore
+       * rendered one sentence about not being able to write to the folder,
+       * including a full disk, for which that is simply false.
+       */
+      readonly reason: PublishFailureReason;
     }
   /**
    * Publication did not produce a receipt.
@@ -1040,6 +1051,20 @@ export type PublishReport =
  * any path it might contain are deliberately NOT forwarded: the renderer needs
  * to know which sentence to show, not where on disk anything is.
  */
+/**
+ * Why a publication did not produce a complete receipt.
+ *
+ * The members below the line are the filesystem outcomes the native helper
+ * actually distinguishes — `winio/nt_windows.go:105` classifies NTSTATUS into
+ * them — kept apart HERE because each one has a different next action for the
+ * person whose files these are. Free some space, close the other program,
+ * choose another folder, shorten the destination: collapsing those into one
+ * "could not write" is what this union exists to stop.
+ *
+ * Anything the classifier cannot name, and every code with no distinct action,
+ * is `io-failed`. That is deliberate: a member nobody can act on differently is
+ * a sentence nobody can act on.
+ */
 export type PublishFailureReason =
   | "unsupported"
   | "helper-unavailable"
@@ -1047,7 +1072,26 @@ export type PublishFailureReason =
   | "cancelled"
   | "cleanup-uncertain"
   | "io-failed"
-  | "internal";
+  | "internal"
+  // ---- filesystem outcomes, one action each ------------------------------
+  /** Something is already there under that name. Rename it, or choose another
+   *  folder. Covers the type clash too: a file where a directory is expected
+   *  needs the same thing done about it. */
+  | "exists"
+  /** Windows refused the write. Choose a folder this account can write to. */
+  | "permission"
+  /** The disk is full. Reported as its own reason because "could not write to
+   *  the folder you chose" sends somebody to check permissions on a folder
+   *  that is perfectly fine. */
+  | "no-space"
+  /** Another program has the file open. Close it and receive again. */
+  | "in-use"
+  /** The destination folder is no longer there — moved, renamed or removed
+   *  while the transfer was running. */
+  | "gone"
+  /** The resulting path is longer than Windows will accept. The names were
+   *  already validated, so this is the DESTINATION being deep. */
+  | "name-too-long";
 
 /** The five browseable pages, mirrored from the renderer's own navigation. */
 export const RESIDENT_PAGES = ["lan", "pair", "stored", "inbox", "account"] as const;
