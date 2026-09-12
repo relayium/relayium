@@ -318,6 +318,74 @@ async function assertStartupTogglesAgainstWindowsItself(win) {
  * numbers were handed to a real window manager, and it honours them. A minimum
  * the app computes but the platform ignores would pass every unit test.
  */
+
+/**
+ * A build the product has withdrawn support for, in the real app.
+ *
+ * Everything else about the version gate is proved by unit cases and by a
+ * source check over `App.svelte`'s branches. Neither can answer the question
+ * that matters: with a real main process, a real preload and a real renderer,
+ * does a blocked build actually stop being a product?
+ *
+ * It is driven through the SHIPPED path — `PolicyGate`'s own push, the real IPC
+ * event, the real subscription — rather than by launching with a special flag.
+ * That is a stronger test and it costs nothing: the live refresh exists, so the
+ * state can be reached in a running app, which is exactly how it will be
+ * reached in the field.
+ *
+ * Runs last. It empties the shell on purpose.
+ */
+async function assertABlockedBuildRendersNothingElse(win) {
+  const js = (expr) => win.webContents.executeJavaScript(expr);
+  const before = await js(`document.querySelector('[data-test="nav-lan"]') !== null`);
+  if (!check("the product is on screen before the block", before === true)) return;
+
+  // The real channel, with the payload main would send. Not a page-local fake:
+  // this goes through `contextBridge`, the preload subscription and the shaping
+  // the page does on arrival.
+  win.webContents.send("relayium:client-support-changed", {
+    state: "blocked",
+    current: "0.0.1",
+    minimum: "9.9.9",
+    latest: "9.9.9",
+  });
+  await new Promise((r) => setTimeout(r, 120));
+
+  check(
+    "the unsupported card is shown",
+    (await js(`document.querySelector('[data-test="unsupported-title"]') !== null`)) === true,
+  );
+  // NOT BUILT, not hidden. Every one of these is a surface that starts work in
+  // its own effects — a room socket, a staged selection, a notification
+  // registration — and the whole rule is that a build which may not run does
+  // not start any of it.
+  //
+  // The NAVIGATION is deliberately not in this list, and finding that out is
+  // what this scenario was for: the first version asserted the nav rows were
+  // gone, and they are not. macOS does the same thing on purpose —
+  // `AppVersionGate` wraps the window's CONTENT and says why it is not inside
+  // `AppShellView`: "the shell's whole contract is that its split view renders
+  // unconditionally, and `MacSurfaceGuardTests` holds it to that." Windows
+  // matches. Asserting otherwise would have had me change the app to differ
+  // from the client it is supposed to match.
+  for (const gone of ["lan-start", "inbox-enable", "inbox-sign-in", "pair-create", "help-toggle"]) {
+    check(
+      `${gone} is not rendered at all`,
+      (await js(`document.querySelector('[data-test="${gone}"]') !== null`)) === false,
+    );
+  }
+  // The staged-selection pane too: it sits above the page chain and would
+  // otherwise let a build that may not run take files from Explorer.
+  check(
+    "no staged selection is taken",
+    (await js(`document.querySelector('[data-test="pending-selection"]') !== null`)) === false,
+  );
+  check(
+    "and it offers no way out that a policy document could aim",
+    (await js(`document.querySelectorAll('[data-test="unsupported-title"] ~ a').length`)) === 0,
+  );
+}
+
 async function assertTheWindowFitsTheScreen(win) {
   const work = screen.getPrimaryDisplay().workAreaSize;
   const bounds = win.getBounds();
@@ -694,6 +762,8 @@ async function main() {
   await assertStartupTogglesAgainstWindowsItself(win);
   await assertTheWindowFitsTheScreen(win);
   assertTheMenuIsThisAppsAndNotElectrons(win);
+  // LAST, because it empties the shell and nothing else can run afterwards.
+  await assertABlockedBuildRendersNothingElse(win);
 
   process.stdout.write(`RELAYIUM_SMOKE ${JSON.stringify({ failures, skipped })}\n`);
   // `quit`, not `exit`: it runs the app's real `before-quit` teardown, which
