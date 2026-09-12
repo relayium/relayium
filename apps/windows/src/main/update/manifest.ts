@@ -17,8 +17,10 @@
 // build), while a lower version with a higher build is a downgrade wearing a
 // newer number.
 
+import { compareTriples, MAX_VERSION_LENGTH, readVersion } from "../version.js";
+
 export const MAX_MANIFEST_BYTES = 64 * 1024;
-export const MAX_VERSION_LENGTH = 32;
+export { MAX_VERSION_LENGTH };
 export const MAX_URL_LENGTH = 2048;
 /** A generous ceiling on an installer, so a hostile `sizeBytes` cannot become a
  *  disk-fill budget. The Windows artifact is ~90 MB. */
@@ -74,37 +76,28 @@ export class ManifestError extends Error {
   }
 }
 
-const SEMVER = /^(0|[1-9][0-9]{0,4})\.(0|[1-9][0-9]{0,4})\.(0|[1-9][0-9]{0,4})$/;
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
- * `x.y.z`, and nothing else.
+ * `x.y.z`, and nothing else. See `readVersion` in `../version.js` for why.
  *
- * No prerelease, no build metadata, no `v` prefix, no four-part version. Every
- * one of those is a comparison rule this product does not need and would have
- * to get right to be safe. Leading zeros are refused so `1.01.0` cannot compare
- * equal to `1.1.0` in one place and differently in another.
+ * The rule lives there now, because the client-policy gate compares versions
+ * too and two orderings in one app is a divergence nobody sees until the day
+ * they disagree. This keeps the manifest's contract exactly: an unreadable
+ * version is still a `ManifestError("bad-version")`.
  */
 export function parseVersion(text: unknown): readonly [number, number, number] {
-  if (typeof text !== "string" || text.length > MAX_VERSION_LENGTH) throw new ManifestError("bad-version");
-  const match = SEMVER.exec(text);
-  if (match === null) throw new ManifestError("bad-version");
-  return [Number(match[1]), Number(match[2]), Number(match[3])];
+  const version = readVersion(text);
+  if (version === null) throw new ManifestError("bad-version");
+  return version;
 }
 
 /** -1, 0 or 1. Total over the strict form above. */
 export function compareVersions(left: string, right: string): number {
-  const a = parseVersion(left);
-  const b = parseVersion(right);
-  for (let i = 0; i < 3; i += 1) {
-    const l = a[i] ?? 0;
-    const r = b[i] ?? 0;
-    if (l !== r) return l < r ? -1 : 1;
-  }
-  return 0;
+  return compareTriples(parseVersion(left), parseVersion(right));
 }
 
 /** An https URL of a bounded length, with nothing that carries a credential or
