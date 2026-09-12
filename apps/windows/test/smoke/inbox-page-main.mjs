@@ -189,6 +189,31 @@ async function main() {
   );
   await js(`window.__inboxHarness.setReleaseOk(true)`);
 
+  // --- The notice a FAILED act produces ------------------------------------
+  //
+  // `InboxNotice.failed` had no case in the page's switch and reached
+  // `default: return t("inboxFailed")`. It reads correctly, which is why
+  // nothing noticed; the default was load-bearing for a real member, and that
+  // is what defeats exhaustiveness. Named explicitly now, and DRIVEN here so
+  // the naming is not only a compile-time claim.
+  await js(`window.__inboxHarness.setReleaseOk(false)`);
+  await js(`window.__push({ retained: [${JSON.stringify(retained("k9", "present"))}] })`);
+  await js(`window.__click("[data-test=inbox-release]")`);
+  await js(`window.__tick()`);
+  const failedNotice = await js(`window.__text("[data-test=inbox-notice]")`);
+  check(
+    "a failed act says so, rather than rendering nothing",
+    typeof failedNotice === "string" && failedNotice.length > 0,
+    String(failedNotice),
+  );
+  check(
+    "and says it in words, not as a code",
+    / /.test(String(failedNotice)) && !/\binternal\b/.test(String(failedNotice)),
+    String(failedNotice),
+  );
+  await js(`window.__inboxHarness.setReleaseOk(true)`);
+  await js(`window.__click("[data-test=inbox-notice-dismiss]")`);
+
   // --- Every journal phase renders its own sentence ------------------------
   const PHASES = ["claimed", "publishing", "published", "partial", "acked", "failed"];
   await js(

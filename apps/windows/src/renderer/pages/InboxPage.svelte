@@ -153,8 +153,24 @@
             : t("inboxPolicySetAsk");
       case "accepted":
         return acceptedText(notice.receipt);
-      default:
+      case "failed":
+        // The `reason` this carries is a code from main and stays there. The
+        // page says the one true thing it can: the act did not happen.
         return t("inboxFailed");
+      default: {
+        // An explicit `never`, and not merely the absence of a `default`.
+        //
+        // Removing the default alone gives NOTHING here, which was checked
+        // rather than assumed: with no default, an unhandled kind makes this
+        // function return `undefined`, `noticeText` becomes
+        // `string | null | undefined`, and `{#if noticeText}` renders nothing.
+        // A blank notice row is not better than the wrong sentence it replaced.
+        //
+        // This way a kind added to `InboxNotice` fails to compile HERE, at the
+        // one place that has to describe it.
+        const unhandled: never = notice;
+        return unhandled;
+      }
     }
   });
 

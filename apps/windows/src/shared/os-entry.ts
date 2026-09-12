@@ -57,17 +57,13 @@ export type SelectionRefusal =
   /** The path could not be examined at all. */
   | "unreadable"
   /** A quit is being decided, the page reloaded, or the account moved. */
-  | "unavailable"
-  /**
-   * A selection is already staged and has not been sent or discarded.
-   *
-   * REFUSED, not replaced. A burst of activations — a context verb wired
-   * per-file rather than in bulk, a user clicking twice — would otherwise
-   * silently discard everything but the last, and the person would send one
-   * file believing they had sent five. The held selection stands until it is
-   * explicitly discarded.
-   */
-  | "already-staged";
+  | "unavailable";
+// There is deliberately no member for "something is already staged". That
+// refusal is real, but it is not reported as a refusal REASON: the staged view
+// stays on screen and counts the turned-away activations in `refusedSince`, so
+// the page can say how many and what to do about them. See `#refusedSince` in
+// `src/main/features/os-entry.ts`. A member declared here and produced nowhere
+// is a decoy — this one existed until an exhaustiveness check found it.
 
 /**
  * One staged file, as a page may see it.

@@ -23,6 +23,14 @@ export const osEntryEn = {
   refusedEscapes: "That contains a shortcut or link that points somewhere else, so Relayium did not take any of it.",
   refusedCollision: "Two of those would have the same name in the same place, so Relayium did not take any of it.",
   refusedUnreadable: "Relayium could not read that.",
+  /**
+   * Empty is not unreadable.
+   *
+   * Reached by right-clicking a folder with nothing in it. It used to fall
+   * through to `refusedUnreadable`, which sends somebody to check permissions
+   * on a folder whose only problem is that it is empty.
+   */
+  refusedEmpty: "There was nothing in that to send.",
   refusedUnavailable: "Relayium could not take that just now.",
   /** Refused ALL of it, never part. Stated because partial is the usual bug. */
   refusedNothingTaken: "Nothing was staged.",
@@ -47,6 +55,7 @@ export const osEntryZh: Record<OsEntryMessageKey, string> = {
   refusedEscapes: "其中包含指向别处的快捷方式或链接，因此 Relayium 没有接收任何内容。",
   refusedCollision: "其中两项会出现在同一位置且同名，因此 Relayium 没有接收任何内容。",
   refusedUnreadable: "Relayium 无法读取该内容。",
+  refusedEmpty: "其中没有可发送的内容。",
   refusedUnavailable: "Relayium 现在无法接收该内容。",
   refusedNothingTaken: "没有暂存任何内容。",
 
