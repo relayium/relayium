@@ -1333,9 +1333,32 @@ async function main() {
     }
 
     // ---- roles --------------------------------------------------------------
+    // ## Why the detail here is a per-round table and not a set
+    //
+    // This failed a run on 2026-09-12 with the detail `initiator`, and that
+    // told nobody anything. Two very different things produce it:
+    //
+    //   * the product only ever draws one assignment, which would be a real
+    //     defect in role negotiation; or
+    //   * not enough rounds SUCCEEDED for the other to be drawn, which is this
+    //     harness failing to guarantee its own coverage.
+    //
+    // The link role is EMERGENT — whatever the browser ends up as — while the
+    // plan alternates `codeRole` only, so the second is entirely possible and
+    // the set cannot distinguish it from the first.
+    //
+    // A flake's failure detail is the clue. The `inbox-pause` flake was
+    // dismissed as a slow runner for a day and turned out to be a lost wake in
+    // the product; what identified it was noticing it waited out its ENTIRE
+    // budget rather than being merely late. This assertion now carries the same
+    // kind of evidence.
+    const roleTable = findings.rounds.map((r) =>
+      `#${r.round} ${r.codeRole} browser=${r.browserLinkRole} case=${r.case}`);
     step("BOTH link-role assignments were observed, not one of them twice",
       findings.rolesSeen.has("initiator") && findings.rolesSeen.has("responder"),
-      [...findings.rolesSeen].join("+") || "none");
+      `saw ${[...findings.rolesSeen].join("+") || "none"} across `
+      + `${findings.rounds.length} recorded round(s) of ${results.length} attempted, `
+      + `${usable.length} usable; ${JSON.stringify(roleTable)}`);
     step("the Windows client both MINTED a code and JOINED one it did not mint",
       findings.codeRolesPassed.has("create") && findings.codeRolesPassed.has("join"),
       [...findings.codeRolesPassed].join("+") || "none");
