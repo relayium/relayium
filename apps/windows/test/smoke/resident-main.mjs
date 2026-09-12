@@ -1,5 +1,27 @@
 // The resident lifecycle, in a real Electron, against the real wiring.
 //
+// ## Run this on WINDOWS. On macOS it ends with five failures and a throw.
+//
+// Measured 2026-09-12, twice, by stashing an unrelated change and re-running:
+// the same five appear with and without it, byte for byte —
+//
+//   timed out waiting for this account's other devices
+//   the account's other devices are listed
+//   an ineligible device says why
+//   and cannot be selected
+//   threw: Error: Script failed to execute …
+//
+// — and the same run is green on every Windows CI run. `scenarioInboxSend` is
+// where it starts; the throw afterwards is the page left in a bad state by the
+// timeout, not a separate fault.
+//
+// **There is deliberately no platform guard around it.** "Passes on Windows,
+// fails on macOS" does not establish that the scenario is legitimately
+// Windows-only — it could equally be a macOS-only defect in shared code — and a
+// skip added without knowing which is the kind that hides a failure rather than
+// reporting one. This note exists so the next person can tell a real regression
+// from the standing state in one read, which is what cost the diagnosis twice.
+//
 // `smoke-main.mjs` proves the app comes up and a sign-in can be cancelled. This
 // one proves the thing that makes it a resident app: closing the window does
 // not end anything, quitting asks first and can be refused, and a quit whose
