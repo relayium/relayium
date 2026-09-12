@@ -312,7 +312,9 @@
 <!-- ## State first, because every control below depends on which one it is. -->
 {#if status.kind === "unavailable"}
   <Card title={t("inboxUnavailableTitle")}>
-    <p class="dim">{t("inboxUnavailableBody")}</p>
+    <!-- Hooked like every other status branch, so the harness can prove this
+         one renders. It was the only one a test could not name. -->
+    <p class="dim" data-test="inbox-unavailable">{t("inboxUnavailableBody")}</p>
   </Card>
 {:else if status.kind === "needs-account"}
   <Card title={t("inboxNeedsAccountTitle")}>

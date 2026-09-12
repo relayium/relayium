@@ -123,7 +123,18 @@ const send = new InboxSendController(sendBridge, bridge.onState);
 
 const target = document.getElementById("app");
 if (target === null) throw new Error("the harness page has no mount point");
-mount(InboxPage, { target, props: { inbox, send } });
+/** Counted, so a scenario can prove the sign-in offer is wired, not just drawn. */
+let signInClicks = 0;
+mount(InboxPage, {
+  target,
+  props: {
+    inbox,
+    send,
+    onSignIn: () => {
+      signInClicks += 1;
+    },
+  },
+});
 
 /**
  * The driving surface, on `window`.
@@ -148,8 +159,8 @@ Object.defineProperty(globalThis, "__inboxHarness", {
     setLang(next: "en" | "zh"): void {
       setLang(next);
     },
-    calls(): { release: string[]; wake: number } {
-      return JSON.parse(JSON.stringify(calls)) as { release: string[]; wake: number };
+    calls(): { release: string[]; wake: number; signIn: number } {
+      return { ...(JSON.parse(JSON.stringify(calls)) as typeof calls), signIn: signInClicks };
     },
   },
   enumerable: true,
