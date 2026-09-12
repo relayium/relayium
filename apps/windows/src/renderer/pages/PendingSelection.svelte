@@ -36,8 +36,19 @@
         return ot("refusedUnreadable");
       case "unavailable":
         return ot("refusedUnavailable");
-      default:
-        return ot("refusedUnreadable");
+      case "no-selection":
+        // Empty, not unreadable. This used to reach the default below and tell
+        // somebody who right-clicked an empty folder that Relayium could not
+        // READ it, which sends them to check permissions for nothing.
+        return ot("refusedEmpty");
+      default: {
+        // An explicit `never`, not merely the absence of a default: with no
+        // default this function would return `undefined` for an unhandled
+        // member and the paragraph would render blank, which is not an
+        // improvement on the wrong sentence. Checked, not assumed.
+        const unhandled: never = refusal;
+        return unhandled;
+      }
     }
   }
 </script>

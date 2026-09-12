@@ -215,6 +215,13 @@ export class OsEntryService {
     // a burst or a second deliberate action, and in both cases overwriting
     // would throw away files the person believes they are about to send. It is
     // refused, counted, and made visible; discarding is the user's to do.
+    //
+    // Counted, and deliberately NOT a `SelectionRefusal` member. The staged
+    // view stays on screen and says how many activations were turned away, so
+    // the person can act on it; a refusal code would have been rendered by a
+    // pane that only appears when nothing is staged, and could never have
+    // reached them. `SelectionRefusal` carried an `already-staged` member for
+    // exactly that unreachable path until an exhaustiveness check found it.
     if (this.#staged !== null) {
       this.#refusedSince += 1;
       this.#publish();
