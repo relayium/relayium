@@ -6,7 +6,6 @@
 import { lang } from "../i18n/index.svelte.js";
 
 export const pairEn = {
-  handoffTitle: "Scan or send this link",
   scanHint: "Scan this with the other device's camera.",
   /** Shown when the encoder was unavailable. The code still works. */
   qrUnavailable: "A QR code could not be drawn on this PC. The code and link below still work.",
@@ -25,7 +24,6 @@ export const pairEn = {
 export type PairMessageKey = keyof typeof pairEn;
 
 export const pairZh: Record<PairMessageKey, string> = {
-  handoffTitle: "扫码或发送链接",
   scanHint: "用另一台设备的相机扫描。",
   qrUnavailable: "这台电脑无法绘制二维码。下面的配对码和链接仍然可用。",
   qrAlt: "加入链接的二维码",

@@ -28,9 +28,6 @@ export const osEntryEn = {
   refusedNothingTaken: "Nothing was staged.",
 
   receivedDrag: "Drag to a folder",
-  receivedReveal: "Show in folder",
-  receivedMissing: "That file is no longer where Relayium put it.",
-  receivedFailed: "Windows would not do that just now.",
 } as const;
 
 export type OsEntryMessageKey = keyof typeof osEntryEn;
@@ -54,9 +51,6 @@ export const osEntryZh: Record<OsEntryMessageKey, string> = {
   refusedNothingTaken: "没有暂存任何内容。",
 
   receivedDrag: "拖到文件夹",
-  receivedReveal: "在文件夹中显示",
-  receivedMissing: "这个文件已不在 Relayium 保存的位置。",
-  receivedFailed: "Windows 现在无法执行该操作。",
 };
 
 const CATALOGUES = { en: osEntryEn, zh: osEntryZh } as const;

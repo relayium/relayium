@@ -52,7 +52,6 @@ export const en = {
     "This PC could not join the same-network room, so it cannot see other devices or be seen by them. Check your connection.",
   lanRetry: "Try again",
   lanConnect: "Connect",
-  lanConnecting: "Connecting…",
   lanUnsupported: "This device is running an older version and cannot connect.",
   lanDisconnect: "Disconnect",
 
@@ -64,7 +63,6 @@ export const en = {
   pairYourCode: "Your code",
   pairEnterCode: "Enter a code",
   pairJoin: "Join",
-  pairJoining: "Joining…",
   pairExpires: "Expires in {minutes} min",
   pairSignedOut: "Sign in to create a code. Joining someone else's code needs no account.",
   pairQuota: "You have used this month's relay allowance. You can still join a code someone else created.",
@@ -111,7 +109,6 @@ export const en = {
   linkVerifyDecline: "It does not match",
   linkVerifyDeclined: "You said the codes did not match, so the connection was closed.",
   linkVerifyPending: "Waiting for the verification code…",
-  linkSendFailed: "That message was not sent. It is still in the box.",
   linkStatusIdle: "Not connected",
   linkStatusRequesting: "Asking to connect",
   linkStatusConnecting: "Connecting",
@@ -124,7 +121,6 @@ export const en = {
   recvAccept: "Choose where to save",
   recvDecline: "Decline",
   recvSaving: "Saving…",
-  recvSaved: "Saved to {label}",
   recvPartial: "Saved {done} of {total}. The rest could not be written.",
   recvCancelled: "Cancelled",
   // The honest interim state. Never rendered as a save.
@@ -312,8 +308,6 @@ export const en = {
   storedRetainedClean: "Cleaned up.",
   storedRetainedStuck: "Still could not be cleaned up.",
   storedRetainedUnavailable: "Not tried — Relayium is closing. The folder is still tracked.",
-  storedSendSoon: "Sending a link is not part of this build yet.",
-  storedHistorySoon: "Your sent links will be listed here.",
 
 
   // --- Device Inbox -------------------------------------------------------
@@ -355,9 +349,7 @@ export const en = {
   inboxChangeFolder: "Change folder",
   inboxFolderChosen: "Files will arrive in the folder you chose.",
 
-  inboxStartingTitle: "Starting…",
   inboxStartingBody: "Registering this PC with your account.",
-  inboxIdleTitle: "Waiting for deliveries",
   inboxIdleBody: "Nothing is waiting right now.",
   inboxReceivingTitle: "Receiving…",
   inboxReceivingBody: "A delivery is being saved.",
@@ -462,7 +454,6 @@ export const en = {
   inboxReceiptUnnamed: "The file names for this delivery were not recorded. Open the folder to see what arrived.",
   inboxHistoryNamesUnavailable:
     "The file names could not be read just now. Nothing has been deleted — the deliveries below are still counted correctly, only their names are missing.",
-  inboxHistoryItems: "What arrived",
   // "3 of 7" is the truth about a partial. Never the manifest presented whole.
   inboxHistoryPartial: "{saved} of {declared} saved",
   inboxHistoryMore: "and {count} more",
@@ -506,7 +497,6 @@ export const en = {
     "The delivery may or may not have been created. Nothing has been discarded, so checking again is safe — it will settle the same delivery rather than sending a second one.",
   inboxSendCheckAgain: "Check again",
   inboxSendRefused: "That device did not take it",
-  inboxSendRetry: "Try again",
   inboxSendOrphan:
     "Some encrypted data was left on the server and will be cleared automatically. There is nothing for you to do.",
   inboxSendRefusedUnavailable: "Not right now. Nothing was sent.",
@@ -594,7 +584,6 @@ export const en = {
 
   // --- Placeholders -------------------------------------------------------
   soonTitle: "Not in this build yet",
-  soonStored: "Sending a download link is not part of this build yet.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -629,7 +618,6 @@ export const zh: Record<MessageKey, string> = {
   lanOfflineBody: "这台电脑无法加入同一网络的房间，因此看不到其他设备，也不会被看到。请检查网络连接。",
   lanRetry: "重试",
   lanConnect: "连接",
-  lanConnecting: "正在连接…",
   lanUnsupported: "这台设备的版本较旧，无法连接。",
   lanDisconnect: "断开",
 
@@ -640,7 +628,6 @@ export const zh: Record<MessageKey, string> = {
   pairYourCode: "你的配对码",
   pairEnterCode: "输入配对码",
   pairJoin: "加入",
-  pairJoining: "正在加入…",
   pairExpires: "{minutes} 分钟后失效",
   pairSignedOut: "创建配对码需要登录。加入别人的配对码不需要账户。",
   pairQuota: "本月的中继流量已用完。你仍然可以加入别人创建的配对码。",
@@ -684,7 +671,6 @@ export const zh: Record<MessageKey, string> = {
   linkVerifyDecline: "不一致",
   linkVerifyDeclined: "你选择了「不一致」，连接已关闭。",
   linkVerifyPending: "正在等待验证码…",
-  linkSendFailed: "这条消息没有发送成功，内容仍保留在输入框里。",
   linkStatusIdle: "未连接",
   linkStatusRequesting: "正在请求连接",
   linkStatusConnecting: "正在连接",
@@ -696,7 +682,6 @@ export const zh: Record<MessageKey, string> = {
   recvAccept: "选择保存位置",
   recvDecline: "拒绝",
   recvSaving: "正在保存…",
-  recvSaved: "已保存到 {label}",
   recvPartial: "已保存 {done} / {total}，其余未能写入。",
   recvCancelled: "已取消",
   recvUnsupported: "此版本可以接收文件，但还不能把它们写入最终文件名。没有保存任何文件。",
@@ -854,8 +839,6 @@ export const zh: Record<MessageKey, string> = {
   storedRetainedClean: "已清理。",
   storedRetainedStuck: "仍未能清理。",
   storedRetainedUnavailable: "未尝试：Relayium 正在关闭。该文件夹仍在跟踪中。",
-  storedSendSoon: "此版本尚未包含「发送链接」。",
-  storedHistorySoon: "你发送过的链接会显示在这里。",
 
 
   inboxTitle: "设备收件箱",
@@ -885,9 +868,7 @@ export const zh: Record<MessageKey, string> = {
   inboxChangeFolder: "更换文件夹",
   inboxFolderChosen: "文件会保存到你选择的文件夹。",
 
-  inboxStartingTitle: "正在启动…",
   inboxStartingBody: "正在将这台电脑注册到你的账号。",
-  inboxIdleTitle: "等待投递",
   inboxIdleBody: "当前没有待处理的内容。",
   inboxReceivingTitle: "正在接收…",
   inboxReceivingBody: "正在保存一次投递。",
@@ -980,7 +961,6 @@ export const zh: Record<MessageKey, string> = {
   inboxReceiptUnnamed: "这次投递的文件名没有记录下来。打开文件夹即可查看收到的内容。",
   inboxHistoryNamesUnavailable:
     "暂时读不到文件名。没有任何内容被删除——下面的投递数量仍然是准确的，只是缺少名称。",
-  inboxHistoryItems: "收到的内容",
   inboxHistoryPartial: "已保存 {saved}／共 {declared}",
   inboxHistoryMore: "还有 {count} 项",
   inboxHistoryForget: "从列表中移除",
@@ -1019,7 +999,6 @@ export const zh: Record<MessageKey, string> = {
     "这次投递可能已经创建，也可能没有。相关数据都已保留，因此再检查一次是安全的——它会确认同一次投递，而不会重复发送。",
   inboxSendCheckAgain: "再检查一次",
   inboxSendRefused: "该设备没有接收",
-  inboxSendRetry: "重试",
   inboxSendOrphan: "服务器上残留了一些加密数据，会被自动清理，你不需要做任何事。",
   inboxSendRefusedUnavailable: "暂时无法发送，未发送任何内容。",
   inboxSendRefusedCapacity: "同时进行的发送太多了，请等待其中一个完成。",
@@ -1096,7 +1075,6 @@ export const zh: Record<MessageKey, string> = {
   sendDeleteFailed: "删除失败，没有做任何更改。",
 
   soonTitle: "此版本尚未包含",
-  soonStored: "此版本尚未包含「发送链接」。",
 };
 
 export const CATALOGUES = { en, zh } as const;

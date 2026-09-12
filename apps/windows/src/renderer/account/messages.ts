@@ -42,7 +42,6 @@ export const accountEn = {
 
   // --- Plan and usage -----------------------------------------------------
   planTitle: "Plan",
-  planEffective: "Your plan",
   /** The tier id, shown only when the plan name could not be read. */
   planFromProfileOnly: "Plan {planId}. Details could not be loaded.",
   planIncludedStorage: "Included storage",
@@ -116,7 +115,6 @@ export const accountEn = {
   // --- Devices ------------------------------------------------------------
   devicesTitle: "Your devices",
   devicesEmpty: "No devices are signed in to this account.",
-  deviceThis: "This PC",
   deviceUnnamed: "Unnamed device",
   deviceEnrolled: "Device Inbox on",
   deviceLastSeen: "Last used {date}",
@@ -182,7 +180,6 @@ export const accountZh: Record<AccountMessageKey, string> = {
   profileMethodNone: "没有记录",
 
   planTitle: "套餐",
-  planEffective: "当前套餐",
   planFromProfileOnly: "套餐 {planId}。详细信息未能加载。",
   planIncludedStorage: "包含存储空间",
   planIncludedTraffic: "每月包含传输量",
@@ -232,7 +229,6 @@ export const accountZh: Record<AccountMessageKey, string> = {
 
   devicesTitle: "你的设备",
   devicesEmpty: "这个账户下没有已登录的设备。",
-  deviceThis: "这台电脑",
   deviceUnnamed: "未命名设备",
   deviceEnrolled: "已开启设备收件箱",
   deviceLastSeen: "最近使用：{date}",
