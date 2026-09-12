@@ -253,12 +253,39 @@
     }
   }
 
+  /**
+   * A server error code to the sentence that says it.
+   *
+   * The account endpoints emit fourteen codes. This knew four, and everything
+   * else fell through to `errLogin` — "wrong email or password", a specific
+   * claim about something the person can retype.
+   *
+   * The worst of those was the throttle. A locked-out sign-in answers 429, the
+   * screen said the password was wrong, and retyping the correct one is exactly
+   * what keeps the lockout alive: the app was telling somebody to do the one
+   * thing that prolongs the problem.
+   *
+   * Two of the codes below already had their own sentence in this catalogue and
+   * were simply never wired — `current password incorrect` and
+   * `account_pending_deletion`, the latter handled on the magic-link path and
+   * not this one. The rest take macOS's wording rather than a second phrasing
+   * of the same idea.
+   *
+   * The fallback no longer names the credentials. An unrecognised code is a
+   * thing this build does not understand, and saying so is the only honest
+   * option — the same treatment five Windows catch-alls got on 2026-09-12.
+   */
   function mapError(code?: string): string {
     if (code === "password too short") return t.account.errTooShort;
     if (code === "email already registered") return t.account.errEmailTaken;
     if (code === "invalid credentials") return t.account.errLogin;
     if (code === "network") return t.account.errNetwork;
-    return t.account.errLogin;
+    if (code === "too many attempts, try again later") return t.account.errRateLimited;
+    if (code === "too many requests") return t.account.errRateLimited;
+    if (code === "current password incorrect") return t.account.errCurrentWrong;
+    if (code === "account_pending_deletion") return t.account.pendingDeletion;
+    if (code === "invalid_email") return t.account.errEmailInvalid;
+    return t.account.errUnrecognised;
   }
 
   async function onSubmit() {

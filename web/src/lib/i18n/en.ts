@@ -109,6 +109,26 @@ const en: Messages = {
     errTooShort: "Password must be at least 8 characters.",
     errEmailTaken: "That email is already registered — please log in.",
     errLogin: "Wrong email or password.",
+    /**
+     * The throttle, and the reason this one matters most.
+     *
+     * The server answers a locked-out sign-in with 429. Until 2026-09-12 that
+     * fell through to `errLogin`, so a person was told their password was wrong
+     * — and retyping the correct one is exactly what keeps the lockout alive.
+     * Wording is macOS's `error.account.rateLimited`.
+     */
+    errRateLimited: "Too many attempts. Wait a minute, then try again.",
+    /** macOS's `error.account.emailInvalid`. */
+    errEmailInvalid: "That doesn't look like a valid email address.",
+    /**
+     * What an unrecognised code says, instead of naming the credentials.
+     *
+     * The account endpoints emit fourteen codes; this screen knew four. Every
+     * other one read as "wrong email or password", which is a specific claim
+     * about something the person can retype. macOS's `error.account.server`,
+     * without its status token.
+     */
+    errUnrecognised: "The server returned an error. Try again shortly.",
     errNetwork: "Network error — check your connection and try again.",
     pendingDeletion: "Your account is scheduled for deletion. Reactivate it to keep it.",
     reactivate: "Reactivate",
