@@ -227,6 +227,29 @@ jobs:
       - name: Resident lifecycle smoke
         run: npm run test:smoke:resident
 
+      # Four renderer suites that existed and ran nowhere.
+      #
+      # Each builds the real Svelte client and drives it in a real Electron
+      # renderer, and between them they carry 341 assertions — the OS-entry
+      # pane, the pairing handoff, the account screen and the update screen.
+      # No workflow and no package script invoked any of them, so every one of
+      # those assertions had never executed on Windows. They were found by
+      # reading a GREEN run for what it skipped rather than for what it failed.
+      #
+      # They cost one to three seconds each. Separate steps rather than one
+      # command, so a failure names the surface without anybody opening a log.
+      - name: OS-entry pane, in a real renderer
+        run: npm run test:smoke:os-entry
+
+      - name: Pairing handoff, in a real renderer
+        run: npm run test:smoke:pair-handoff
+
+      - name: Account screen, in a real renderer
+        run: npm run test:smoke:account-details
+
+      - name: Update screen, in a real renderer
+        run: npm run test:smoke:update-details
+
       # Why a sealed identity stops being readable.
       #
       # Runs after `build` because it drives the real `SecretStore` out of
