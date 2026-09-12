@@ -38,6 +38,8 @@ import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import { join } from "node:path";
 
+import { UPLOAD_STATES, type UploadState } from "../../../shared/ipc-contract.js";
+
 /** How many records this installation keeps. Reached only by unresolved ones:
  *  a published record can be forgotten by the user, an unknown one cannot. */
 export const MAX_RECORDS = 512;
@@ -45,18 +47,13 @@ export const MAX_RECORDS = 512;
 /** The document is read whole, so it is bounded like every other input. */
 export const MAX_JOURNAL_BYTES = 4 * 1024 * 1024;
 
-export type UploadState =
-  /** Init succeeded; bytes may be in flight. Nothing is publishable. */
-  | "pending"
-  /**
-   * Finalize did not settle. The object MAY exist under an id this client never
-   * learned. The key is retained and the record is never evicted.
-   */
-  | "ambiguous"
-  /** Finalized, with the server's object id. This is the only publishable state. */
-  | "published"
-  /** Provably nothing was created, or the user retired it. */
-  | "closed";
+/**
+ * One union, declared in the shared contract and re-exported here.
+ *
+ * It used to be declared in this file, which meant the screen at the far end of
+ * the IPC saw only `string` — and mapped three of the four members.
+ */
+export type { UploadState };
 
 export interface UploadRecord {
   readonly jobId: string;
@@ -106,7 +103,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const HEX_64 = /^[0-9a-f]{64}$/;
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
-const STATES: ReadonlySet<string> = new Set(["pending", "ambiguous", "published", "closed"]);
+/** Derived, not restated. A new member reaches this validator by existing. */
+const STATES: ReadonlySet<string> = new Set<string>(UPLOAD_STATES);
 
 function checkedRecord(raw: unknown): UploadRecord {
   if (!isRecord(raw)) throw new JournalError("corrupt");

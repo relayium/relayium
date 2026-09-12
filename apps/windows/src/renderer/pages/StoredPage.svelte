@@ -31,6 +31,8 @@
   } from "../send/stored-send-controller.svelte.js";
   import type { AccountSummaryController } from "../account/account-controller.svelte.js";
   import { pickedFromDrop, type DroppedFiles } from "../send/picked-files.js";
+  import { uploadStateKey } from "../send/stored-state.js";
+  import type { UploadState } from "../../shared/ipc-contract.js";
   import type { PickedFile } from "../../../../../web/src/lib/drag";
   import { sendGate } from "../send/send-gate.svelte.js";
 
@@ -103,12 +105,9 @@
     return t("sendRecheckedUnknown");
   }
 
-  function stateOf(state: string): string {
-    if (state === "published") return t("sendHistoryPublished");
-    if (state === "ambiguous") return t("sendHistoryAmbiguous");
-    if (state === "closed") return t("sendHistoryClosed");
-    return state;
-  }
+  /** One label per state, over the WHOLE union. The chain this replaces ended
+   *  `return state;`, which put a wire identifier on screen. */
+  const stateOf = (state: UploadState): string => t(uploadStateKey(state));
 
   /** One sentence per closed refusal. Never a file name. */
   function refusalOf(refusal: NonNullable<StoredSendController["refusal"]>): string {

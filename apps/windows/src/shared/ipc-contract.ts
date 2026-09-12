@@ -1574,10 +1574,51 @@ export type StoredSendStart =
       readonly manifest?: ManifestRefusal | null;
     };
 
+/**
+ * Where one stored upload got to.
+ *
+ * Declared HERE rather than in the journal that owns the records, because the
+ * screen is the other end of it and a union only one side can see is a union
+ * the other side widens. It was `string` on the entry below, and that is
+ * exactly what happened: the history list mapped three of these four members
+ * and rendered the fourth as its own raw identifier.
+ */
+export const UPLOAD_STATES = [
+  /** Init succeeded; bytes may be in flight. Nothing is publishable. */
+  "pending",
+  /**
+   * Finalize did not settle. The object MAY exist under an id this client never
+   * learned. The key is retained and the record is never evicted.
+   */
+  "ambiguous",
+  /** Finalized, with the server's object id. The only publishable state. */
+  "published",
+  /** Provably nothing was created, or the user retired it. */
+  "closed",
+] as const;
+
+/**
+ * Derived from the list above rather than written twice.
+ *
+ * The journal validates a record's state against a `Set` of these strings, and
+ * that set used to be its own literal beside its own copy of the union — two
+ * places to add a member and no way to notice adding it to only one. The list
+ * is the single source now: the union comes from it, and so does the set.
+ */
+export type UploadState = (typeof UPLOAD_STATES)[number];
+
 /** One past send, as the history list renders it. No key, no link, no path. */
 export interface StoredSendHistoryEntry {
   readonly jobId: string;
-  readonly state: string;
+  /**
+   * The union, not a widened `string`.
+   *
+   * `pending` used to reach the screen and fall out of the map as itself, so a
+   * row for an upload that never settled read as the English word "pending" —
+   * in a Chinese UI too. The same shape as the retained-cleanup card rendering
+   * `EBUSY`, and as the sign-in rendering `String(err)`.
+   */
+  readonly state: UploadState;
   readonly fileCount: number;
   readonly totalBytes: number;
   readonly burnAfterRead: boolean;
