@@ -29,8 +29,9 @@
  */
 import type { DeliveryReceipt, InboxFailureCode, ResidueState } from "../main/inbox/receipts.js";
 import type { TaskPhase } from "../main/inbox/journal.js";
+import type { SupportReport } from "../main/policy/policy-gate.js";
 
-export type { DeliveryReceipt, InboxFailureCode, ResidueState, TaskPhase };
+export type { DeliveryReceipt, InboxFailureCode, ResidueState, TaskPhase, SupportReport };
 
 export const IPC = {
   /** Build/runtime facts the shell renders. No secrets. */
@@ -638,6 +639,18 @@ export interface AppInfo {
    * off, so an automated UI run can avoid joining a real production room.
    */
   readonly lanAutoStart: boolean;
+  /**
+   * Whether this build may run its product surfaces, and what to say if not.
+   *
+   * Carried on `appInfo` rather than its own channel because it is a property
+   * of the BUILD, decided before there is a product surface to gate — the same
+   * category as `version` and `engineering`, and answered at the same moment.
+   *
+   * Optional so a composition that has not opened a gate is `supported` by
+   * absence rather than blocked by it. Failing open is the rule everywhere in
+   * this mechanism, including here.
+   */
+  readonly support?: SupportReport;
 }
 
 /** A write is bounded before it is buffered, so a chunk cannot become an

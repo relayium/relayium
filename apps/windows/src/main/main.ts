@@ -38,6 +38,10 @@ import { windowBackground } from "./window-background.js";
 import { showNotification } from "./notify.js";
 import { fitToWorkArea } from "./window-sizing.js";
 import { registerHandlers } from "./handlers.js";
+import { currentDataRoot } from "./storage.js";
+import { PolicyGate } from "./policy/policy-gate.js";
+import { PolicyStore, policyPath } from "./policy/policy-store.js";
+import { PolicySource } from "./policy/policy-source.js";
 import { parseSendFiles } from "./features/os-entry.js";
 import { hardenContents, RENDERER_PREFERENCES } from "./window.js";
 import type { HandlerComposition, HandlerControl } from "./handlers.js";
@@ -419,6 +423,29 @@ function handleSendFiles(argv: readonly string[]): void {
  * module that composed it, so this file cannot accidentally introduce an
  * English literal onto a Chinese screen.
  */
+/**
+ * Open the version gate, and never let it be the reason a start fails.
+ *
+ * A data root that cannot be resolved is not an error here: it means there is
+ * nowhere to have remembered a policy, which is the same as having heard none,
+ * which is the embedded floor. Every path out of this returns a usable gate.
+ */
+async function openPolicyGate(): Promise<PolicyGate> {
+  const root = currentDataRoot();
+  const store = new PolicyStore(
+    root.ok ? policyPath(root.path) : policyPath(app.getPath("userData")),
+  );
+  const gate = await PolicyGate.open({
+    version: app.getVersion(),
+    store,
+    source: new PolicySource({ origin: apiOrigin(), store }),
+  });
+  // Behind the launch, deliberately not awaited: its only job is to leave a
+  // better cache for next time. `refresh` cannot throw.
+  void gate.refresh();
+  return gate;
+}
+
 function residentPlatform(preferences: () => PreferenceStore): ResidentPlatform {
   // A log line, not a dialog: this is where a path or a raw errno is allowed to
   // go, and the user-facing surfaces carry closed codes instead. Shared with
@@ -658,6 +685,19 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
   const origin = apiOrigin();
   registerAppScheme(origin);
 
+  // ## Whether this build may run at all, decided before the window loads
+  //
+  // From the CACHE only, which is local and immediate. The network refresh runs
+  // behind the launch and writes the cache for the next one — awaiting an
+  // 8-second timeout here would hold a start open for a slow origin, which is
+  // the failure this mechanism exists to avoid rather than to cause. See
+  // `PolicyGate`, which records that this is weaker than macOS's live model.
+  //
+  // It cannot throw and it cannot block a build that has heard nothing: with
+  // no cache the embedded floor is in force, and the floor cannot block the
+  // binary carrying it.
+  const policyGate = options.composition?.policyGate ?? (await openPolicyGate());
+
   mainWindow = await createWindow();
   // Handlers are registered BEFORE the renderer is loaded. The page's first
   // `appInfo()` runs as soon as the bundle executes, and a handler registered
@@ -669,6 +709,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
     APP_HOST,
     {
       ...(options.composition ?? {}),
+      policyGate,
       // The folder pickers this registration opens are native dialogs, so they
       // need the same language the tray and the quit prompt use. Read per
       // dialog through the resident runtime, which is created just below and

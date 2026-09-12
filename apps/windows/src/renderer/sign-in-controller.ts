@@ -30,7 +30,7 @@
 // what main reports. If the adoption legitimately beat the click, "signed in" is
 // the truth and this shows it rather than a comfortable lie.
 
-import type { AuthState } from "../shared/ipc-contract";
+import type { AuthState, SupportReport } from "../shared/ipc-contract";
 
 export type Phase =
   | { kind: "loading" }
@@ -74,6 +74,9 @@ export interface AppInfoView {
   /** Whether same-network discovery starts on its own. False only in an
    *  engineering build told to stay out of the room. */
   readonly lanAutoStart?: boolean;
+  /** Whether this build may run at all. Absent means supported — see
+   *  `AppInfo.support`; failing open includes not having been told. */
+  readonly support?: SupportReport;
 }
 
 export interface CancelResult {
