@@ -702,6 +702,24 @@ jobs:
           "password=$password" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "::add-mask::$password"
 
+          # Warm the profile HERE, not in the test.
+          #
+          # The first `Start-Process -Credential` for an account creates its
+          # user profile, which is slow and highly variable — TestCrossUser
+          # timed out at ~61s twice in six runs (34676037986, 34678895608) with
+          # PowerShell producing no output at all, which is what that looks
+          # like from outside. Doing it in this step takes the variance out of
+          # the measured path, and if profile creation is what fails, the step
+          # that says "create a second local account" is the one that reports
+          # it.
+          $secure = New-Object System.Security.SecureString
+          foreach ($ch in $password.ToCharArray()) { $secure.AppendChar($ch) }
+          $secure.MakeReadOnly()
+          $cred = New-Object System.Management.Automation.PSCredential('relayium-xuser', $secure)
+          $warm = Start-Process -FilePath "cmd.exe" -ArgumentList "/c","exit" -Credential $cred `
+            -WorkingDirectory "C:\Windows\Temp" -Wait -PassThru
+          if ($warm.ExitCode -ne 0) { throw "warming the second account's profile failed ($($warm.ExitCode))" }
+
       # A real volume, so the mount-point refusal can be OBSERVED.
       #
       # `TestMountPointCrossingIsRefused` asks for a volume GUID path and skips

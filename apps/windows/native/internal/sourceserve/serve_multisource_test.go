@@ -51,7 +51,10 @@ func TestInterleavedSourcesKeepTheirOwnBytes(t *testing.T) {
 		t.Fatalf("exit = %d, log = %q", got.exit, got.log)
 	}
 	if len(got.responses) != 7 {
-		t.Fatalf("want 7 responses, got %d: %+v", len(got.responses), got.responses)
+		// The server's own log, because the two ways to get here look identical
+		// from a count: the dispatcher refused something, or the writer never
+		// drained. Only the log distinguishes them.
+		t.Fatalf("want 7 responses, got %d: %+v (log: %q)", len(got.responses), got.responses, got.log)
 	}
 	byID := map[uint64]int{}
 	for i, r := range got.responses {
