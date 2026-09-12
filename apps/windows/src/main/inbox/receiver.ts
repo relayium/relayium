@@ -616,11 +616,10 @@ export class Receiver {
       // a concurrent attempt already released successfully — putting a handle
       // back that is genuinely gone, and blocking the task id forever.
       if (this.retained.get(key) === handle) {
-        this.retained.set(key, {
-          ...handle,
-          residue: residueOn(error),
-          reason: codeOf(error) ?? handle.reason,
-        });
+        const reason = codeOf(error) ?? handle.reason;
+        const residue = residueOn(error);
+        this.retained.set(key, { ...handle, residue, reason });
+        console.error(`[inbox] retry on ${key} failed: cleanup ${reason}, residue ${residue}`);
       }
       return false;
     } finally {
@@ -649,13 +648,12 @@ export class Receiver {
   private retain(taskID: string, destination: ReceiveDestination, error: unknown): ResidueState {
     const residue = residueOn(error);
     const key = this.retainKey(taskID);
-    this.retained.set(key, {
-      key,
-      taskID,
-      destination,
-      residue,
-      reason: codeOf(error) ?? "cleanup-uncertain",
-    });
+    const reason = codeOf(error) ?? "cleanup-uncertain";
+    this.retained.set(key, { key, taskID, destination, residue, reason });
+    // Logged HERE and not sent to the page. `codeOf` returns `error.code`
+    // verbatim, so this is an unbounded OS errno; the page used to render it as
+    // the retained row's whole label and a person read `EBUSY`.
+    console.error(`[inbox] retained ${key}: cleanup ${reason}, residue ${residue}`);
     return residue;
   }
 

@@ -409,6 +409,13 @@ export const en = {
   inboxRetainedBody:
     "A delivery was stopped and Relayium could not confirm that the partly-written files were removed. You can ask it to try again.",
   inboxRetainedRetry: "Try cleanup again",
+  // What each retained row says. One per `ResidueState`, because whether the
+  // partly-written files are STILL THERE is the only part of this a person can
+  // act on. The row used to show the teardown's error code instead — an
+  // unbounded OS errno, so people read `EBUSY`.
+  inboxRetainedResiduePresent: "Partly-written files are still on this PC.",
+  inboxRetainedResidueNone: "Nothing was left on this PC, but the transfer was not closed cleanly.",
+  inboxRetainedResidueUnknown: "Relayium could not check whether partly-written files were left on this PC.",
 
   inboxDeclined: "No folder was chosen, so nothing was turned on.",
   inboxEnabledNotice: "Receiving is on.",
@@ -933,6 +940,9 @@ export const zh: Record<MessageKey, string> = {
   inboxRetainedBody:
     "一次投递被中断，Relayium 无法确认已写入的部分文件是否已被清除。你可以让它再试一次。",
   inboxRetainedRetry: "重试清理",
+  inboxRetainedResiduePresent: "这台电脑上仍留有已写入的部分文件。",
+  inboxRetainedResidueNone: "这台电脑上没有残留文件，但这次传输没有正常结束。",
+  inboxRetainedResidueUnknown: "Relayium 无法确认这台电脑上是否残留了已写入的部分文件。",
 
   inboxDeclined: "未选择文件夹，因此没有打开任何功能。",
   inboxEnabledNotice: "接收已打开。",

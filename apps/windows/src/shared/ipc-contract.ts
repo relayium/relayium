@@ -1216,9 +1216,17 @@ export interface InboxRetainedView {
   /** Opaque. `inboxReleaseRetained` takes this; it is not a path. */
   readonly key: string;
   readonly taskID: string;
+  /**
+   * Whether partly-written files are still on disk. The ONLY thing this row
+   * can honestly tell a person, and the only thing it now shows.
+   *
+   * The teardown's failure code used to ride along here and the page rendered
+   * it as the row's entire label, so a person read `EBUSY` — `codeOf` returns
+   * `error.code` verbatim, so the label was an unbounded OS errno in whatever
+   * language the OS produced it. It stays in the main process, where
+   * `receiver.ts` logs it, because that is where a diagnostic belongs.
+   */
   readonly residue: ResidueState;
-  /** The stable code the teardown failed with. */
-  readonly reason: string;
 }
 
 /** Everything the Inbox page renders. No path, no token, no key. */

@@ -33,8 +33,20 @@
   import { sendGate } from "../send/send-gate.svelte.js";
   import type { InboxController } from "../inbox/inbox-controller.svelte.js";
   import type { InboxSendController, TargetStatus } from "../inbox/inbox-send-controller.svelte.js";
-  import type { InboxAcceptOutcome } from "../../shared/ipc-contract.js";
+  import type { InboxAcceptOutcome, ResidueState } from "../../shared/ipc-contract.js";
   import { pickedFromDrop } from "../send/picked-files.js";
+
+  /**
+   * A residue state to the sentence that says it.
+   *
+   * Total, so a state added to the contract without copy is a compile error
+   * here rather than a blank row on the Inbox.
+   */
+  const RESIDUE_KEY = {
+    present: "inboxRetainedResiduePresent",
+    none: "inboxRetainedResidueNone",
+    unknown: "inboxRetainedResidueUnknown",
+  } as const satisfies Record<ResidueState, string>;
 
   /**
    * Drag feedback for the composer's drop zone, and its one refusal.
@@ -908,7 +920,11 @@
       <ul class="list" data-test="inbox-retained">
         {#each inbox.view.retained as handle (handle.key)}
           <li>
-            <div class="who"><span class="dim small">{handle.reason}</span></div>
+            <div class="who">
+              <span class="dim small" data-test="inbox-retained-residue">
+                {t(RESIDUE_KEY[handle.residue])}
+              </span>
+            </div>
             <button type="button" data-test="inbox-release" onclick={() => void inbox.release(handle.key)}>
               {t("inboxRetainedRetry")}
             </button>
