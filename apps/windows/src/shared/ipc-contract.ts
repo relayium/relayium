@@ -1583,6 +1583,40 @@ export type StoredSendStart =
  * exactly what happened: the history list mapped three of these four members
  * and rendered the fourth as its own raw identifier.
  */
+/**
+ * The SERVER's state for one Device Inbox delivery.
+ *
+ * Read from `server/internal/inbox/task.go`, whose own comment says the
+ * database CHECK constraint repeats the list so a future write path cannot
+ * invent one. Declared here rather than in `main/inbox/wire.ts` where it was,
+ * for the reason `UPLOAD_STATES` moved: the SENDER's screen is the other end of
+ * this, and a union only main can see is a union the renderer widens.
+ *
+ * It did. `InboxSendView.delivered.state` was `string`, and the page compared
+ * it against two values — one of which belongs to a different union entirely —
+ * and called everything else "waiting for that device to collect it". For
+ * `expired`, `revoked` and `failed_terminal` that is a false statement about
+ * somebody's files: the server has recorded that they will never be collected.
+ *
+ * Sender-local phases are deliberately NOT here. Central cannot observe
+ * encrypting or uploading, and `handleReportInboxTask` refuses them by name.
+ */
+export const TASK_STATES = [
+  "queued",
+  "notified",
+  "downloading",
+  "verifying",
+  /** Reached only from `verifying`, and only with `committed: true`. */
+  "saved",
+  "attention_required",
+  "expired",
+  "revoked",
+  "failed_retryable",
+  "failed_terminal",
+] as const;
+
+export type TaskState = (typeof TASK_STATES)[number];
+
 export const UPLOAD_STATES = [
   /** Init succeeded; bytes may be in flight. Nothing is publishable. */
   "pending",

@@ -46,6 +46,7 @@
 // later step is checked against it, so a re-pick is a NEW job with a NEW key
 // rather than a re-run against changed plaintext.
 
+import type { TaskState } from "../../shared/ipc-contract.js";
 import type { AccountContext } from "../inbox/account.js";
 import type { AuthorityInput } from "../stored/upload/authority.js";
 import type { SendOutcome } from "../inbox/send-coordinator.js";
@@ -151,7 +152,7 @@ export type InboxSendView =
    * `created` says only whether THIS attempt was the one that created it — a
    * converged retry reports `false` and is just as delivered.
    */
-  | { readonly kind: "delivered"; readonly created: boolean; readonly state: string }
+  | { readonly kind: "delivered"; readonly created: boolean; readonly state: TaskState }
   | { readonly kind: "cancelled"; readonly state: string | null }
   /**
    * The outcome could not be established and a delivery may be live.
@@ -212,9 +213,20 @@ export function describeSendOutcome(outcome: SendOutcome): InboxSendView {
 }
 
 /** The server's own state token, defensively read. */
-function taskState(task: SenderTask): string {
-  const state = (task as unknown as { State?: unknown }).State;
-  return typeof state === "string" ? state : "unknown";
+/**
+ * The task's state, as the type already says it is.
+ *
+ * This used to cast through `unknown` back to `string` and answer `"unknown"`
+ * for anything else — inventing an eleventh value that is not a `TaskState`,
+ * and throwing away a guarantee that already held. `WireTask.State` is typed
+ * `TaskState`, and `SendTransport.parseTask` refuses a response whose `State`
+ * is not in `TASK_STATES`, so a task that exists has a state from the set.
+ *
+ * The laundering is what let `InboxSendView.delivered.state` be `string` all
+ * the way to a screen that then matched two values out of ten.
+ */
+function taskState(task: SenderTask): TaskState {
+  return task.State;
 }
 
 /**

@@ -2299,13 +2299,41 @@ async function scenarioInboxSend(win) {
     win,
     `document.querySelector('[data-test="inbox-send-status"][data-phase="settled"]')?.textContent?.trim() ?? ""`,
   );
+  // The SERVER's task state, as a closed attribute beside the sentence.
+  //
+  // This assertion used to match `/Delivered|已送达/` against the copy, which
+  // is how it came to pass for a screen that said "Delivered — waiting for that
+  // device to collect it" about a delivery the server had recorded as expired
+  // or revoked: the word was there, so the check was satisfied. A screen's copy
+  // is not a machine-readable state, and asserting on it makes the assertion
+  // hostage to wording that SHOULD change.
+  const deliveryState = await js(
+    win,
+    `document.querySelector('[data-test="inbox-send-status"][data-phase="settled"]')?.getAttribute("data-delivery") ?? ""`,
+  );
   process.stdout.write(
     `RELAYIUM_INBOX_SEND_SETTLED ${JSON.stringify({
       status,
+      deliveryState,
       requests: sendSink.requests.map((r) => `${r.method} ${r.url}`),
     })}\n`,
   );
-  check("and it is reported as delivered", /Delivered|已送达/.test(status), status);
+  // Central holds the task and the target has not claimed it here, so `queued`
+  // is the truthful state — and the page must say what that IS rather than
+  // calling it delivered.
+  check("and central holds the delivery", deliveryState === "queued", deliveryState);
+  // The EXACT sentence, not "does not contain the wrong word".
+  //
+  // The first version of this check asserted the copy did not say "Delivered",
+  // and it passed against an injected defect that rendered the saved sentence
+  // for a queued delivery — because the saved sentence is "Saved on the other
+  // device." and contains no such word. A negative assertion about wording is
+  // satisfied by any wording that happens to differ.
+  check(
+    "and the sentence is the one for that state",
+    status === "Waiting for the other device.",
+    status,
+  );
 
   // ---- what the server was actually asked ---------------------------------
   // Scoped to THIS scenario's requests. Nothing here can be satisfied by an
@@ -2565,7 +2593,12 @@ async function sendQuitRisk(win, runtime) {
     win,
     `document.querySelector('[data-test="inbox-send-status"][data-phase="settled"]')?.textContent?.trim() ?? ""`,
   );
-  check("and it completed", /Delivered|已送达/.test(status), status);
+  const heldState = await js(
+    win,
+    `document.querySelector('[data-test="inbox-send-status"][data-phase="settled"]')?.getAttribute("data-delivery") ?? ""`,
+  );
+  // Same correction as above: the closed state, not the copy.
+  check("and it completed", heldState === "queued", `${heldState} / ${status}`);
   // The picked files survive a Stay: a person who chose to keep working must
   // not find their selection gone.
   check("the selection survived the quit prompt", (await present(win, "inbox-send-picked")) === true);
