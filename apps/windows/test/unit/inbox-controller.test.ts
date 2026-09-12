@@ -7,7 +7,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { InboxController, type InboxBridge } from "../../src/renderer/inbox/inbox-controller.svelte.js";
-import type { InboxMessageView, InboxPendingView, InboxView } from "../../src/shared/ipc-contract.js";
+import type { InboxMessageView, InboxPendingView, InboxView, InboxReceiptView } from "../../src/shared/ipc-contract.js";
 
 const IDLE: InboxView = {
   status: { kind: "idle", pending: 0 },
@@ -30,7 +30,7 @@ const TASK: InboxPendingView = {
   state: "notified",
 };
 
-const RECEIPT = {
+const RECEIPT: InboxReceiptView = {
   taskID: "task-9",
   phase: "acked",
   total: 3,

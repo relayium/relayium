@@ -28,8 +28,9 @@
  * Type-only, so nothing from `src/main/**` is bundled into the renderer.
  */
 import type { DeliveryReceipt, InboxFailureCode, ResidueState } from "../main/inbox/receipts.js";
+import type { TaskPhase } from "../main/inbox/journal.js";
 
-export type { DeliveryReceipt, InboxFailureCode, ResidueState };
+export type { DeliveryReceipt, InboxFailureCode, ResidueState, TaskPhase };
 
 export const IPC = {
   /** Build/runtime facts the shell renders. No secrets. */
@@ -1273,8 +1274,16 @@ export interface InboxView {
  */
 export interface InboxReceiptView {
   readonly taskID: string;
-  /** The journal's own phase: claimed, published, acked, partial, failed… */
-  readonly phase: string;
+  /**
+   * The journal's own phase, as the journal's own type.
+   *
+   * Not widened to `string`. The page turns this into a sentence, and its
+   * fallback for an unrecognised phase says the delivery is BLOCKED — a claim
+   * about somebody's files, not a blank. Widening here is what would let a
+   * seventh phase reach that fallback silently; with the union, adding one is a
+   * compile error at the map that has to describe it.
+   */
+  readonly phase: TaskPhase;
   /** Items the manifest declared. */
   readonly total: number;
   /** Items actually published. */

@@ -453,7 +453,6 @@ export const en = {
   inboxReceiptSaved: "Saved",
   inboxReceiptAckPending: "Saved, not yet confirmed",
   inboxReceiptPartial: "Partly saved",
-  inboxReceiptBlocked: "Needs a decision",
   inboxReceiptWorking: "In progress",
   inboxReceiptFailed: "Did not finish",
   // Per row, and only when this delivery has no names of its own. The record
@@ -976,7 +975,6 @@ export const zh: Record<MessageKey, string> = {
   inboxReceiptSaved: "已保存",
   inboxReceiptAckPending: "已保存，尚未确认",
   inboxReceiptPartial: "部分保存",
-  inboxReceiptBlocked: "需要你决定",
   inboxReceiptWorking: "进行中",
   inboxReceiptFailed: "未完成",
   inboxReceiptUnnamed: "这次投递的文件名没有记录下来。打开文件夹即可查看收到的内容。",

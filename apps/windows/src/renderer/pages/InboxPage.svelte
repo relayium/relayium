@@ -33,8 +33,9 @@
   import { sendGate } from "../send/send-gate.svelte.js";
   import type { InboxController } from "../inbox/inbox-controller.svelte.js";
   import type { InboxSendController, TargetStatus } from "../inbox/inbox-send-controller.svelte.js";
-  import type { InboxAcceptOutcome, ResidueState } from "../../shared/ipc-contract.js";
+  import type { InboxAcceptOutcome, ResidueState, TaskPhase } from "../../shared/ipc-contract.js";
   import { pickedFromDrop } from "../send/picked-files.js";
+  import { PHASE_KEY } from "../inbox/phase-copy.js";
 
   /**
    * A residue state to the sentence that says it.
@@ -189,13 +190,8 @@
   ] as const;
 
   /** One sentence per journal phase. Closed codes in, product copy out. */
-  function phaseOf(phase: string): string {
-    if (phase === "acked") return t("inboxReceiptSaved");
-    if (phase === "published") return t("inboxReceiptAckPending");
-    if (phase === "partial") return t("inboxReceiptPartial");
-    if (phase === "failed") return t("inboxReceiptFailed");
-    if (phase === "claimed" || phase === "publishing") return t("inboxReceiptWorking");
-    return t("inboxReceiptBlocked");
+  function phaseOf(phase: TaskPhase): string {
+    return t(PHASE_KEY[phase]);
   }
 
   /**
