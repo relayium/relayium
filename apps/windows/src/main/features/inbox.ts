@@ -457,6 +457,8 @@ export class InboxService {
    * by clearing `isPaused` with the rest of an account's state.
    */
   #userPaused = false;
+  /** A `wake()` that arrived with no waiter. Consumed by the next `nap`. */
+  #woken = false;
   #disposed = false;
 
   /** The last published view, so an unchanged pass pushes nothing. */
@@ -550,7 +552,29 @@ export class InboxService {
 
   /** End the current nap or pass and try again now. The "Try again" control. */
   wake(): void {
-    for (const waiter of [...this.#waiters]) waiter();
+    const waiting = [...this.#waiters];
+    if (waiting.length === 0) {
+      // ## A wake with nobody to hand it to is REMEMBERED, not dropped
+      //
+      // The loop registers a waiter only while it is inside `nap`. Everything
+      // from the heartbeat to the end of a pass is time with none registered —
+      // and `mayClaim` is a callback the FACADE reads inside `drain`, so a pass
+      // that found the user paused has already decided, and will not look
+      // again on its way out.
+      //
+      // So a `resumeReceiving()` landing in that window used to vanish, and the
+      // loop then slept the whole idle backoff — an hour in the pause suite,
+      // and the reason its "resuming wakes the loop" case failed CI three
+      // times, each time by waiting out its entire budget rather than by being
+      // slow.
+      //
+      // Set only when nobody is listening: a wake that WAS delivered must not
+      // also be remembered, or the next nap would return instantly for a
+      // resume that has already been acted on.
+      this.#woken = true;
+      return;
+    }
+    for (const waiter of waiting) waiter();
   }
 
   /**
@@ -1102,6 +1126,13 @@ export class InboxService {
   private nap(seconds: number, signal: AbortSignal): Promise<void> {
     return new Promise<void>((resolve) => {
       if (signal.aborted || seconds <= 0) {
+        resolve();
+        return;
+      }
+      if (this.#woken) {
+        // A wake arrived while this loop was between naps. Consume it once and
+        // go straight round rather than sleeping through what it was for.
+        this.#woken = false;
         resolve();
         return;
       }

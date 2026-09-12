@@ -287,7 +287,21 @@ async function serviceIn(
   root: string,
   wire: Wire,
   reuse?: Map<string, string>,
-  over: { enabled?: boolean; heartbeatHold?: () => Promise<void> | null } = {},
+  over: {
+    enabled?: boolean;
+    heartbeatHold?: () => Promise<void> | null;
+    /**
+     * Hold the pass AFTER the drain has made its claim decision.
+     *
+     * `heartbeatHold` stands before `facade.drain`, which is too early to see
+     * the window this file's flake lives in: released there, the pass goes on
+     * to read `mayClaim` and, if the user resumed meanwhile, claims — so a
+     * lost wake is invisible. `listPending` runs after the drain and before
+     * the pass returns, which is exactly where the loop has decided nothing
+     * and has not yet registered a waiter.
+     */
+    pendingHold?: () => Promise<void> | null;
+  } = {},
 ) {
   const runtime = await realRuntime();
   const secrets = reuse ?? new Map<string, string>();
@@ -348,6 +362,11 @@ async function serviceIn(
           if (held) await held;
           return { presence: "online", intervalSeconds: 30 };
         },
+        pending: async () => {
+          const held = over.pendingHold?.();
+          if (held) await held;
+          return { tasks: [], leaseSeconds: 300, heartbeatIntervalSecs: 30 };
+        },
       }) as never,
     resolveDevice: async () => ({ id: "dev-1", name: "A PC" }),
     directoryUsable: async () => true,
@@ -404,6 +423,107 @@ describe("the service threads the gate into the facade", () => {
     await waitFor("the pass to finish", () => service.view().status.kind !== "starting", 4000)
       .catch(() => undefined);
     expect(wire.claims).toBe(0);
+  });
+
+  // The lost wake, reproduced in the window it actually lives in.
+  //
+  // This is the flake that has failed CI three times, always by waiting out its
+  // whole budget — 4185ms, then 20018ms, then 20018ms again. A slow runner does
+  // not starve a worker for twenty seconds; nothing happening at all does.
+  //
+  // ## Where the window is, and why the first reproduction missed it
+  //
+  // `mayClaim: () => !this.#userPaused` is a callback the FACADE reads, inside
+  // `facade.drain()`. It is not something `pass()` re-checks on the way out. So
+  // a paused pass runs: heartbeat, drain (reads `mayClaim`, claims nothing),
+  // `listPending`, return `backoff.idle` — an hour here — and only THEN does
+  // the loop reach `nap` and register a waiter.
+  //
+  // Every await from the drain onward is a moment with no waiter registered. A
+  // `resumeReceiving()` landing there calls `wake()`, `wake()` finds nobody,
+  // and the wake is gone. The loop then sleeps the hour.
+  //
+  // An earlier attempt held the pass at the HEARTBEAT, which is before the
+  // drain. Released, that pass read `mayClaim` when it was already true and
+  // claimed — so the fix under test looked like it did nothing, and the hazard
+  // looked unreachable. The hold has to be after the claim decision, which is
+  // what `pendingHold` is for.
+  it("does not lose a resume that lands after the pass decided not to claim", async () => {
+    const wire = newWire();
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let holdOnce = true;
+    const { service } = await serviceIn(await tempRoot(), wire, undefined, {
+      enabled: true,
+      pendingHold: () => {
+        if (!holdOnce) return null;
+        holdOnce = false;
+        return held;
+      },
+    });
+
+    service.start();
+    service.pauseReceiving();
+    // Parked past the drain: this pass has already decided to claim nothing,
+    // and the loop has not yet reached `nap`.
+    await waitFor("the pass to reach listPending", () => wire.heartbeats >= 1);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(wire.claims).toBe(0);
+
+    // The resume lands in the window. There is no waiter to hand it to.
+    service.resumeReceiving();
+    release!();
+
+    // Every backoff is an hour, so a claim after this can only come from the
+    // wake being REMEMBERED. Without that, this waits out the budget — which is
+    // what CI has been reporting.
+    await waitFor("the claim after a resume that had nobody to wake", () => wire.claims >= 1, 4000);
+    expect(wire.claims).toBeGreaterThanOrEqual(1);
+  });
+
+  // The other half of the sticky wake, which had no test until the RED proof
+  // for it refused to fire.
+  //
+  // `wake()` remembers a wake ONLY when nobody is listening. Remembering one
+  // that was actually delivered would leave the flag set, the next `nap` would
+  // consume it and return immediately, and the loop would run an extra pass for
+  // a resume that had already been acted on — a spin, not a hang, and therefore
+  // the kind of defect that hides.
+  //
+  // Driven by the count: one resume, one further pass.
+  it("does not also remember a wake that was delivered", async () => {
+    const wire = newWire();
+    const { service } = await serviceIn(await tempRoot(), wire, undefined, { enabled: true });
+    service.start();
+    service.pauseReceiving();
+    await waitFor("the first pass", () => wire.heartbeats >= 1);
+
+    // Wait until the loop is actually IN its nap, rather than guessing with a
+    // sleep. A fixed 60ms was not enough: the resume landed in the no-waiter
+    // window instead, so this case silently exercised its sibling's branch and
+    // the RED proof for the property it names refused to fire.
+    //
+    // Heartbeats stopping is the signal. Every backoff is an hour, so once the
+    // count has held still the pass is over and the loop is asleep.
+    const settled = async (): Promise<number> => {
+      for (;;) {
+        const seen = wire.heartbeats;
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        if (wire.heartbeats === seen) return seen;
+      }
+    };
+    const before = await settled();
+
+    service.resumeReceiving();
+    await waitFor("the pass the resume asked for", () => wire.heartbeats > before, 4000);
+
+    // EXACTLY one more, counted after everything settles again.
+    //
+    // Comparing against a snapshot taken right after `waitFor` did not work and
+    // is worth recording: the extra pass a remembered wake causes can already
+    // have landed by then, so the snapshot contains it and matches itself. The
+    // absolute count is the claim — one resume, one pass.
+    expect(await settled()).toBe(before + 1);
   });
 
   it("resuming wakes the loop and the claim happens", async () => {
