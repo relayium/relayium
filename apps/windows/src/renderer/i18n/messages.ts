@@ -262,6 +262,11 @@ export const en = {
   // version. Says what is required and what to do, and never blames the user or
   // their machine.
   unsupportedTitle: "This version of Relayium can no longer run",
+  /** macOS's `update.recommendedTitle` / `recommendedBody` / `actionDismiss`,
+   *  with "this Mac" becoming "this PC". Not a second answer to one question. */
+  updateRecommendedTitle: "A newer Relayium is available",
+  updateRecommendedBody: "This PC is running {current}. The current release is {latest}.",
+  updateRecommendedDismiss: "Not now",
   unsupportedBody:
     "Relayium {current} is below the minimum supported version, {minimum}. Update to {latest} to continue. Nothing has been deleted, and your files and keys are untouched.",
 
@@ -821,6 +826,9 @@ export const zh: Record<MessageKey, string> = {
   startRetry: "重试",
 
   unsupportedTitle: "此版本的 Relayium 已无法运行",
+  updateRecommendedTitle: "有新版 Relayium 可用",
+  updateRecommendedBody: "这台电脑运行的是 {current}，当前发布版本是 {latest}。",
+  updateRecommendedDismiss: "以后再说",
   unsupportedBody:
     "Relayium {current} 低于最低支持版本 {minimum}。请更新到 {latest} 后继续使用。没有任何内容被删除，你的文件和密钥不受影响。",
 

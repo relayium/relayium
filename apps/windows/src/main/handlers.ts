@@ -522,6 +522,12 @@ export function registerHandlers(
     ...(composition.policyGate ? { support: composition.policyGate.current() } : {}),
   }));
 
+  // The refresh that runs behind the launch, reaching the page when it changes
+  // the answer. `router.emit` is the same push the account authority uses.
+  composition.policyGate?.listen((support) => {
+    router.emit(IPC_EVENTS.clientSupport, router.generation, support);
+  });
+
   // The attempt nonce is renderer-supplied, so it is bounded and shaped at this
   // boundary like every other untrusted payload. It names an attempt; it
   // authorises nothing.

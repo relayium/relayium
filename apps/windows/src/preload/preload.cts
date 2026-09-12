@@ -48,6 +48,8 @@ const subscribe = (channel: string) => (cb: (payload: unknown) => void) => {
 
 contextBridge.exposeInMainWorld("relayium", {
   appInfo: invoke("relayium:app-info"),
+  /** Whether this build may still run. See `IPC_EVENTS.clientSupport`. */
+  onClientSupport: subscribe("relayium:client-support-changed"),
   auth: {
     start: invoke("relayium:auth-start"),
     poll: invoke("relayium:auth-poll"),

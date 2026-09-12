@@ -564,6 +564,18 @@ export const IPC_EVENTS = {
    * page is showing, unlike a receive receipt, which is authority granted to
    * the one document that asked for it.
    */
+  /**
+   * Whether this build may still run, having changed since start-up.
+   *
+   * Pushed because the launch is judged from the CACHE — awaiting an 8-second
+   * fetch on the path to the first paint would hold a start open for a slow
+   * origin, which is the failure the whole mechanism exists to avoid. So the
+   * refresh runs behind the launch and says so here when the answer moved.
+   *
+   * Without this a floor published now took effect on the next start. macOS
+   * re-renders the moment a document lands; this is that.
+   */
+  clientSupport: "relayium:client-support-changed",
   osEntryState: "relayium:os-entry-state-changed",
   /**
    * The live pairing code changed — minted, copied, expired or withdrawn.
