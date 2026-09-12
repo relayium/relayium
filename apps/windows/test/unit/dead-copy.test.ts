@@ -48,9 +48,26 @@ function keysOf(file: string, exported: string): string[] {
 describe("every catalogue key is named by something", () => {
   // Renderer source AND the suites: a key used only by a test is still a key
   // with a reader, and deleting it would break that reader.
+  // COMMENTS STRIPPED, and that is not tidiness.
+  //
+  // This pin let a dead key through on 2026-09-12 because the commit that
+  // killed it mentioned it in a comment explaining why — and the pattern below
+  // accepts a backticked name. So a key could be kept alive by the very note
+  // saying it was gone. A mention is not a reader.
+  // Three comment syntaxes, because the mention that slipped through was in the
+  // third: a Svelte `<!-- -->` in markup, which neither JS form matches. Found
+  // by checking the strip against the key it was written for instead of
+  // trusting the suite to stay green.
+  const strip = (source: string): string =>
+    source
+      .replace(/<!--[\s\S]*?-->/g, " ")
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .split("\n")
+      .map((line) => line.replace(/(^|[^:\w])\/\/.*$/, "$1"))
+      .join("\n");
   const corpus = [...globSync("src/**/*.{ts,svelte}"), ...globSync("test/**/*.{ts,mjs}")]
     .filter((f) => !f.endsWith("messages.ts"))
-    .map((f) => readFileSync(f, "utf8"))
+    .map((f) => strip(readFileSync(f, "utf8")))
     .join("\n");
 
   it("has a corpus and catalogues to check", () => {

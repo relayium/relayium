@@ -367,8 +367,26 @@ export const en = {
   inboxReceivingTitle: "Receiving…",
   inboxReceivingBody: "A delivery is being saved.",
   inboxBlockedTitle: "Something needs a decision",
-  inboxBlockedBody:
-    "A delivery stopped in a way Relayium cannot resolve on its own. It has not been discarded and it will not be retried automatically.",
+  // --- Why a delivery stopped ----------------------------------------------
+  //
+  // macOS's own sentences, reused rather than re-answered: `InboxCopy.text(for:)`
+  // in `RelayiumAppKit`, with "this Mac" becoming "this PC". See
+  // `inbox/blocked-copy.ts` for which Windows code takes which, and why the
+  // codes macOS has no twin for take its fallback instead of a new sentence.
+  inboxBlockedDirectory:
+    "A delivery stopped because the receive folder wasn't available. Reconnect the disk, or choose another folder.",
+  inboxBlockedDownload: "A delivery couldn't be downloaded. It will be tried again.",
+  inboxBlockedVerify:
+    "A delivery didn't match what the sender described, so nothing was saved. Ask them to send it again.",
+  inboxBlockedDeclined: "You declined this delivery. Nothing was saved.",
+  inboxBlockedUnsupported:
+    "A delivery uses something this version doesn't support. Updating Relayium may fix it.",
+  inboxBlockedInternal:
+    "A delivery stopped for a reason this PC couldn't identify, so nothing was saved.",
+  inboxBlockedKey:
+    "This PC's receiving key is unavailable, so nothing can be decrypted. Sign in again, then try again.",
+  inboxBlockedEnrolment:
+    "Relayium couldn't set this PC up to receive. Updating to the latest version may fix it.",
   inboxOfflineTitle: "Cannot reach Relayium",
   inboxOfflineBody: "Trying again in {seconds}s.",
   inboxRetryNow: "Try again now",
@@ -891,8 +909,14 @@ export const zh: Record<MessageKey, string> = {
   inboxReceivingTitle: "正在接收…",
   inboxReceivingBody: "正在保存一次投递。",
   inboxBlockedTitle: "有内容需要你决定",
-  inboxBlockedBody:
-    "一次投递以 Relayium 无法自行解决的方式中断了。它没有被丢弃，也不会自动重试。",
+  inboxBlockedDirectory: "接收文件夹不可用，投递已停止。请重新连接磁盘，或另选一个文件夹。",
+  inboxBlockedDownload: "有一项投递未能下载，稍后会重试。",
+  inboxBlockedVerify: "投递内容与发送方的描述不符，因此未保存任何文件。请让对方重新发送。",
+  inboxBlockedDeclined: "你拒绝了这次投递，未保存任何文件。",
+  inboxBlockedUnsupported: "该投递使用了此版本不支持的内容。更新 Relayium 或可解决。",
+  inboxBlockedInternal: "投递因这台电脑无法判定的原因而停止，未保存任何文件。",
+  inboxBlockedKey: "这台电脑的接收密钥不可用，因此无法解密任何内容。请重新登录后重试。",
+  inboxBlockedEnrolment: "Relayium 无法将这台电脑设置为接收设备。更新到最新版本或可解决。",
   inboxOfflineTitle: "无法连接 Relayium",
   inboxOfflineBody: "将在 {seconds} 秒后重试。",
   inboxRetryNow: "立即重试",
