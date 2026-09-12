@@ -676,6 +676,14 @@ export const en = {
     "Your sent links could not be read just now. They have not been deleted — this is a problem reading them, not a missing history.",
   sendHistoryItem: "{count} file(s), {size}",
   sendHistoryPublished: "Shared",
+  /**
+   * The fourth state, which had no label and rendered as its own identifier.
+   *
+   * "Unfinished" rather than "Uploading": a row reaches the HISTORY list, and a
+   * `pending` record there is one whose upload never settled — the bytes are
+   * not necessarily still moving, and after a restart they certainly are not.
+   */
+  sendHistoryPending: "Unfinished",
   sendHistoryAmbiguous: "Unconfirmed",
   sendHistoryClosed: "Deleted",
   sendHistoryExpires: "Expires {when}",
@@ -1197,6 +1205,7 @@ export const zh: Record<MessageKey, string> = {
     "此刻无法读取你发送过的链接。它们并未被删除——这是读取问题，不是历史为空。",
   sendHistoryItem: "{count} 个文件，{size}",
   sendHistoryPublished: "已分享",
+  sendHistoryPending: "未完成",
   sendHistoryAmbiguous: "未确认",
   sendHistoryClosed: "已删除",
   sendHistoryExpires: "{when} 过期",
