@@ -36,6 +36,7 @@ import {
   ACCOUNT_SUMMARY_LOADING,
   type AccountDeviceView,
   type AccountMutationOutcome,
+  type AccountResendOutcome,
   type AccountSectionName,
   type AccountSummaryView,
 } from "../../shared/account-summary.js";
@@ -73,6 +74,15 @@ export class AccountSummaryController {
   renameDraft = $state("");
   /** The last "open my account page" attempt failed. */
   manageFailed = $state(false);
+  /** A resend is in flight. One address, so one flag rather than a map. */
+  resending = $state(false);
+  /**
+   * What the last resend did, or null when nothing has been asked yet.
+   *
+   * A closed value, never a sentence — the wording is the view's, in both
+   * maintained languages.
+   */
+  resendOutcome = $state<AccountResendOutcome | null>(null);
 
   readonly #stop: Array<() => void> = [];
   #epoch = 0;
@@ -80,6 +90,8 @@ export class AccountSummaryController {
   /** Per row: which operation may still write. Bumped by every supersession. */
   readonly #rowSeq = new Map<string, number>();
   #rowToken = 0;
+  /** Which resend may still write. Bumped by every account change. */
+  #resendSeq = 0;
   /**
    * Per section: which refresh call owns the "reading" indicator.
    *
@@ -157,6 +169,9 @@ export class AccountSummaryController {
     this.#refreshOwner.clear();
     this.#refreshToken += 1;
     this.#manageSeq += 1;
+    this.#resendSeq += 1;
+    this.resending = false;
+    this.resendOutcome = null;
     this.prompt = null;
     this.renameDraft = "";
     this.rows = {};
@@ -299,6 +314,38 @@ export class AccountSummaryController {
     const id = open.id;
     this.prompt = null;
     await this.#run(id, () => this.bridge.revoke({ id }));
+  }
+
+  /**
+   * Ask for the verification email again.
+   *
+   * No argument, and no id: main reads the address from the profile the server
+   * returns for the credential main holds. The same supersession rule as a row
+   * operation — an answer belonging to an account somebody has already left
+   * writes nothing.
+   */
+  async resendVerification(): Promise<void> {
+    if (this.#destroyed || this.resending) return;
+    const epoch = this.#epoch;
+    const seq = ++this.#resendSeq;
+    this.resending = true;
+    this.resendOutcome = null;
+    let outcome: AccountResendOutcome;
+    try {
+      outcome = await this.bridge.resendVerification();
+    } catch {
+      // The channel itself failed, so nothing left this app. Unlike a row
+      // mutation there is no "unknown" to report: `failed` is the truth, and a
+      // retry of an email that was never requested costs nothing.
+      outcome = { kind: "failed", failure: { kind: "network" } };
+    }
+    if (this.#destroyed || this.#epoch !== epoch || this.#resendSeq !== seq) return;
+    this.resending = false;
+    this.resendOutcome = outcome;
+    // The server's current answer became "verified" while this screen was
+    // showing otherwise. Re-READ, so the badge this button sits under goes
+    // away instead of contradicting the sentence beside it.
+    if (outcome.kind === "already-verified") await this.refresh("profile");
   }
 
   /**

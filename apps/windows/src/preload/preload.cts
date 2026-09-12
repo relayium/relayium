@@ -187,6 +187,7 @@ contextBridge.exposeInMainWorld("relayium", {
     refresh: invoke("relayium:account-summary-refresh"),
     rename: invoke("relayium:account-device-rename"),
     revoke: invoke("relayium:account-device-revoke"),
+    resendVerification: invoke("relayium:account-resend-verification"),
     manage: invoke("relayium:account-manage"),
     onState: subscribe("relayium:account-summary"),
   },

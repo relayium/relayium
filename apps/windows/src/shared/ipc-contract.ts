@@ -360,6 +360,14 @@ export const IPC = {
   accountDeviceRename: "relayium:account-device-rename",
   /** Revoke one device. Signs out only on a self-revoke under this account. */
   accountDeviceRevoke: "relayium:account-device-revoke",
+  /**
+   * Ask for the verification email again.
+   *
+   * Carries NOTHING. The address is read by main from the profile the server
+   * returns for the credential main holds — a payload with an email in it would
+   * let the page make this app email anybody.
+   */
+  accountResendVerification: "relayium:account-resend-verification",
   /** Open the account page, from MAIN, at an address only main composes. */
   accountManage: "relayium:account-manage",
 

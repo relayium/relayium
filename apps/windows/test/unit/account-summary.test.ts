@@ -320,6 +320,69 @@ describe("renaming and revoking", () => {
   });
 });
 
+describe("asking for the verification email again", () => {
+  it("sends the address the SERVER just gave, and never one a caller chose", async () => {
+    // The security property in one case. Nothing in the signature can carry an
+    // address: the only email that reaches the wire is the one this credential's
+    // own profile came back with, so a renderer — or any other caller — cannot
+    // make this app email somebody else.
+    const { origin, seen } = await serve((incoming, respond) => {
+      if (incoming.url === "/api/me") {
+        respond(200, json({ user: { ...ME.user, email: "real@owner.example", emailVerified: false } }));
+        return;
+      }
+      respond(200, json({ status: "sent" }));
+    });
+    const client = new AccountClient({ context: context(origin) });
+
+    await expect(client.resendVerification(AbortSignal.timeout(5000))).resolves.toBe("sent");
+
+    expect(seen[0]).toMatchObject({ method: "GET", url: "/api/me" });
+    expect(seen[1]).toMatchObject({ method: "POST", url: "/api/auth/email/resend" });
+    expect(JSON.parse(seen[1]?.body ?? "{}")).toEqual({ email: "real@owner.example" });
+    // The profile read and the POST. No retry, no probe.
+    expect(seen).toHaveLength(2);
+  });
+
+  it("sends NOTHING when the server's current answer is already verified", async () => {
+    // The race worth having: somebody finished verifying in a browser while this
+    // screen was still showing the badge. An email nobody needs is not the
+    // answer, and neither is a failure — the outcome is what is true.
+    const { origin, seen } = await serve((incoming, respond) => {
+      if (incoming.url === "/api/me") {
+        respond(200, json({ user: { ...ME.user, emailVerified: true } }));
+        return;
+      }
+      respond(200, json({ status: "sent" }));
+    });
+    const client = new AccountClient({ context: context(origin) });
+
+    await expect(client.resendVerification(AbortSignal.timeout(5000))).resolves.toBe("already-verified");
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.url).toBe("/api/me");
+  });
+
+  it("refuses rather than posting an empty address", async () => {
+    // An unverified account with no email on it should not become a POST with
+    // `{"email":""}` — that is a request whose meaning is entirely up to the
+    // server, made on behalf of a user who has no address to verify.
+    const { origin, seen } = await serve((incoming, respond) => {
+      if (incoming.url === "/api/me") {
+        respond(200, json({ user: { ...ME.user, email: "", emailVerified: false } }));
+        return;
+      }
+      respond(200, json({ status: "sent" }));
+    });
+    const client = new AccountClient({ context: context(origin) });
+
+    await expect(
+      client.resendVerification(AbortSignal.timeout(5000)),
+    ).rejects.toMatchObject({ code: "malformed" });
+    expect(seen).toHaveLength(1);
+  });
+});
+
 describe("the transport", () => {
   it("refuses a redirect rather than following it with the bearer", async () => {
     // The target is a REAL second origin that would happily answer. A test

@@ -285,6 +285,33 @@ export type AccountMutationOutcome =
   | { readonly kind: "failed"; readonly failure: AccountFailure };
 
 /**
+ * What asking for the verification email again did.
+ *
+ * Its own union rather than a reuse of `AccountMutationOutcome`: none of the
+ * device-shaped members can occur here, and a screen forced to handle
+ * `unknown-device` for an email is a screen with unreachable branches in it.
+ *
+ * There is deliberately no `uncertain`. The server answers 200 whatever it
+ * decides — it will not say whether the account exists, whether it was already
+ * verified, or whether the throttle swallowed the request — so the only claim
+ * this app can honestly make is that it ASKED, and that claim is equally true
+ * when the reply is lost on the way back. `requested` therefore covers both,
+ * and only a failure raised BEFORE anything was sent is reported as one.
+ */
+export type AccountResendOutcome =
+  /** The request left this machine. Nothing more than that is knowable. */
+  | { readonly kind: "requested" }
+  /** The server's current answer for this credential is already verified. */
+  | { readonly kind: "already-verified" }
+  /** A resend is already running. Nothing was sent. */
+  | { readonly kind: "busy" }
+  /** Nobody is signed in any more. Nothing was sent. */
+  | { readonly kind: "signed-out" }
+  /** A quit is being decided, the page reloaded, or the account moved. */
+  | { readonly kind: "unavailable" }
+  | { readonly kind: "failed"; readonly failure: AccountFailure };
+
+/**
  * The longest device name this client will send, in RUNES.
  *
  * Restated from the account client, which takes it from the server's own

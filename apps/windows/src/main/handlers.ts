@@ -1282,6 +1282,11 @@ export function registerHandlers(
   router.handle(IPC.accountDeviceRevoke, (payload) =>
     accountSummary.revokeDevice(router.generation, expectString(expectObject(payload)["id"], MAX_INBOX_ID_LENGTH)),
   );
+  // No payload is read at all. The address comes from the profile main fetches
+  // under its own captured credential; see `AccountClient.resendVerification`.
+  router.handle(IPC.accountResendVerification, () =>
+    accountSummary.resendVerification(router.generation),
+  );
   // A closed TOKEN, never a URL. A channel that took an address from a page
   // would be script-triggered navigation carrying the user's real session.
   router.handle(IPC.accountManage, async (payload) => {
