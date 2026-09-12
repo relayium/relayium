@@ -1409,6 +1409,8 @@ const en: Messages = {
     flooding: "The other device sent too many messages; the session was closed.",
     unsupported: "That device's Relayium is older and cannot receive messages. Update it on both sides.",
     peerBusy: "That device is busy with a transfer.",
+    /** THIS device. Opposite advice: hang up the connection you are holding. */
+    selfBusy: "This device is already in another connection. End it, then try again.",
     failed: "The message session failed.",
     refused: "The other device declined.",
     copy: "Copy",

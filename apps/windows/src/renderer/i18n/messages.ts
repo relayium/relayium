@@ -151,6 +151,15 @@ export const en = {
   linkStatusRequesting: "Asking to connect",
   linkStatusConnecting: "Connecting",
   linkStatusOpen: "Connected",
+  /**
+   * THIS device is engaged, which is the opposite advice from `textPeerBusy`.
+   *
+   * Both used to be "The other device is busy." — wrong, not merely vague, in
+   * the local case: it blames the peer for a link the user themselves has
+   * open. macOS keeps the two apart for the same reason and says so, because
+   * the sentence names the device it is about.
+   */
+  textSelfBusy: "This PC is already in another connection. End it, then try again.",
   linkStatusInterrupted: "Interrupted",
   linkStatusFailed: "Failed",
 
@@ -844,6 +853,7 @@ export const zh: Record<MessageKey, string> = {
   linkStatusRequesting: "正在请求连接",
   linkStatusConnecting: "正在连接",
   linkStatusOpen: "已连接",
+  textSelfBusy: "这台电脑已经在另一条连接中。请先结束它，然后重试。",
   linkStatusInterrupted: "已中断",
   linkStatusFailed: "连接失败",
 

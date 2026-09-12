@@ -1576,6 +1576,8 @@ export interface Messages {
     flooding: string;
     unsupported: string;
     peerBusy: string;
+    /** THIS device is engaged. The opposite advice from `peerBusy`. */
+    selfBusy: string;
     failed: string;
     refused: string;
     // ── history ──

@@ -795,10 +795,24 @@ describe("mixed text session", () => {
 
   it("maps a link-manager busy rejection to the explicit state", async () => {
     const base = await harness();
-    base.ensureLink.mockRejectedValueOnce(new LinkBusyError());
+    base.ensureLink.mockRejectedValueOnce(new LinkBusyError("peer"));
     await base.session.openWith("peer");
     expect(base.session.status).toBe("peerBusy");
     expect(base.session.errorKey).toBe("peerBusy");
+  });
+
+  it("tells the two busy SIDES apart, because the advice is opposite", async () => {
+    // The peer being engaged means wait. THIS device being engaged means hang
+    // up the connection you are holding. Both used to arrive as `peerBusy`,
+    // which blamed the peer for a link the user themselves had open.
+    //
+    // The status stays `peerBusy` for both — it means "a link was refused" to
+    // everything that reads it. What the side decides is the sentence.
+    const local = await harness();
+    local.ensureLink.mockRejectedValueOnce(new LinkBusyError("local"));
+    await local.session.openWith("peer");
+    expect(local.session.status).toBe("peerBusy");
+    expect(local.session.errorKey).toBe("selfBusy");
   });
 
   it("cancels a pending link open when the conversation is ended", async () => {

@@ -1370,6 +1370,7 @@ const zh: Messages = {
     flooding: "对方发得太快，会话已关闭。",
     unsupported: "对方的 Relayium 版本较旧，收不到消息。两端都更新一下。",
     peerBusy: "对方正在传输文件。",
+    selfBusy: "这台设备已经在另一条连接中。请先结束它，然后重试。",
     failed: "消息会话失败。",
     refused: "对方拒绝了。",
     copy: "复制",

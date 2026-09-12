@@ -40,7 +40,7 @@
   import { MAX_FILES } from "../../../../../web/src/lib/manifest";
   import { sendGate, type Ticket } from "../send/send-gate.svelte.js";
   import { linkEndKey, linkIsTerminal } from "../rooms/link-ending.js";
-  import { publishFailureKey, textErrorMessageKey } from "../rooms/lane-copy.js";
+  import { connectionRefusedKey, publishFailureKey, textErrorMessageKey } from "../rooms/lane-copy.js";
   import type { PublishFailureReason } from "../../shared/ipc-contract.js";
 
   /** An outgoing intent: the quit permission, and the conversation it was for. */
@@ -161,9 +161,7 @@
    * and captioning a failed CONNECTION with one of those would be borrowing an
    * unrelated sentence to explain something it says nothing about.
    */
-  const laneReasonKey = $derived(
-    text.errorKey === "peerBusy" ? "textPeerBusy" : text.errorKey === "unsupported" ? "textUnsupported" : null,
-  );
+  const laneReasonKey = $derived(connectionRefusedKey(text.errorKey));
 
   const receipt = $derived(room.lastReceipt);
 
