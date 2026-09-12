@@ -23,6 +23,7 @@
 
 import { assertSignedByPin, decodeSignature, TrustError, type UpdateTrust } from "./trust.js";
 import { MAX_MANIFEST_BYTES, parseManifest, type UpdateManifest } from "./manifest.js";
+import { boundedGet, HttpError } from "../net/bounded-get.js";
 
 /** A base64url Ed25519 signature is 86 bytes of text; the ceiling is generous
  *  for a trailing newline and nothing else. */
@@ -60,18 +61,20 @@ export class FeedError extends Error {
   }
 }
 
-const isAbort = (error: unknown): boolean => {
-  const name = (error as { name?: unknown } | null)?.name;
-  return name === "AbortError" || name === "TimeoutError";
-};
-
+/**
+ * The transport, shared with everything else that reads a document off the
+ * network. See `../net/bounded-get.ts`.
+ *
+ * Wrapped rather than used directly so this module's taxonomy does not move:
+ * every `FeedFailure` a caller could already see, it still sees, with the same
+ * status and detail. `untrusted` is this module's own and never comes from
+ * here — a transport cannot tell you a signature is wrong.
+ */
 export interface FeedOptions {
   readonly fetchImpl?: typeof fetch;
   readonly timeoutMs?: number;
 }
 
-/** One bounded GET with no credential and no redirect. Owns its response body
- *  on every exit. */
 async function get(
   fetchImpl: typeof fetch,
   url: string,
@@ -79,67 +82,11 @@ async function get(
   timeoutMs: number,
   caller: AbortSignal | undefined,
 ): Promise<Uint8Array> {
-  const deadline = AbortSignal.timeout(timeoutMs);
-  const signal = caller ? AbortSignal.any([deadline, caller]) : deadline;
-  let response: Response;
   try {
-    response = await fetchImpl(url, {
-      method: "GET",
-      // The complete header set. No authorization, no cookie, no user agent
-      // override, nothing that identifies this installation.
-      headers: { accept: "application/octet-stream" },
-      redirect: "error",
-      signal,
-    });
+    return await boundedGet(fetchImpl, url, max, timeoutMs, caller);
   } catch (error) {
-    if (isAbort(error)) {
-      throw new FeedError(caller?.aborted === true ? "cancelled" : "timeout");
-    }
-    if (/redirect/i.test(String((error as Error)?.message))) throw new FeedError("redirect");
+    if (error instanceof HttpError) throw new FeedError(error.code, error.status, error.detail);
     throw new FeedError("network");
-  }
-  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
-  const abandon = async (): Promise<void> => {
-    if (reader !== null) {
-      await reader.cancel().catch(() => undefined);
-      return;
-    }
-    await response.body?.cancel().catch(() => undefined);
-  };
-  try {
-    if (!response.ok) throw new FeedError("http", response.status);
-    const declared = Number(response.headers.get("content-length") ?? "0");
-    if (Number.isFinite(declared) && declared > max) throw new FeedError("too-large");
-    reader = response.body?.getReader() ?? null;
-    if (reader === null) throw new FeedError("malformed", null, "no body");
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value === undefined) continue;
-      total += value.byteLength;
-      if (total > max) throw new FeedError("too-large");
-      chunks.push(value);
-    }
-    const out = new Uint8Array(total);
-    let at = 0;
-    for (const chunk of chunks) {
-      out.set(chunk, at);
-      at += chunk.byteLength;
-    }
-    return out;
-  } catch (error) {
-    await abandon();
-    if (error instanceof FeedError) throw error;
-    if (isAbort(error)) throw new FeedError(caller?.aborted === true ? "cancelled" : "timeout");
-    throw new FeedError("network");
-  } finally {
-    try {
-      reader?.releaseLock();
-    } catch {
-      /* already released */
-    }
   }
 }
 
