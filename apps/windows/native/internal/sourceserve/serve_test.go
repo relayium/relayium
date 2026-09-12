@@ -216,8 +216,26 @@ func runWith(t *testing.T, opener Opener, makeIn func(*syncBuffer) io.Reader) ou
 	out := &syncBuffer{}
 	in := makeIn(out)
 	log := &syncBuffer{}
+	// Budgets for the RUNNER, not for the behaviour, and this is the second
+	// attempt at saying so correctly.
+	//
+	// `Serve` documents what happens when `DrainGrace` expires: "abandoning an
+	// undeliverable reply is the correct trade". On a loaded CI machine the
+	// writer goroutine may simply not be SCHEDULED within a second, and then
+	// that trade abandons every reply — hosted run 34679348056 reported "want 7
+	// responses, got 0" for seven frames that never came close to any limit.
+	// Nothing about the host stopped draining; nothing ran.
+	//
+	// The tests that are actually about shutdown timing set their own budgets,
+	// explicitly, further down. These are for the ones that are not.
+	//
+	// Raising them cannot hide a defect in what these tests assert: a reply that
+	// is never produced is still missing at ten seconds. An earlier attempt
+	// raised these for the source-limit test and was reverted when stressing it
+	// showed no improvement — that failure was an inbox overflow with its own
+	// log line, a different fault that needed a different fix.
 	exit := Serve(Options{In: in, Out: out, Log: log, Opener: opener,
-		Grace: 2 * time.Second, DrainGrace: time.Second,
+		Grace: 10 * time.Second, DrainGrace: 10 * time.Second,
 		ForceExit: func(int) { t.Errorf("shutdown was forced when it should have settled") }})
 	return parse(t, exit, out.bytes(), log.buf.String())
 }
