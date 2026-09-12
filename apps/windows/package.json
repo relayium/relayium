@@ -19,7 +19,11 @@
     "package:win": "electron-builder --win --x64 --publish never",
     "pretest": "npm run build:inbox && npm run build:stored",
     "feed:manifest": "node build/make-update-manifest.mjs",
-    "feed:stage": "node build/stage-windows-release.mjs"
+    "feed:stage": "node build/stage-windows-release.mjs",
+    "test:smoke:os-entry": "node test/smoke/os-entry-smoke.mjs",
+    "test:smoke:pair-handoff": "node test/smoke/pair-handoff-smoke.mjs",
+    "test:smoke:account-details": "node test/smoke/account-details-smoke.mjs",
+    "test:smoke:update-details": "node test/smoke/update-details-smoke.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
