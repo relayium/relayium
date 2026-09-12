@@ -417,7 +417,14 @@ describe("the service threads the gate into the facade", () => {
     // Every backoff is an hour, so nothing would fire on its own: a claim after
     // this can only be the wake `resumeReceiving` performs.
     service.resumeReceiving();
-    await waitFor("the claim after resume", () => wire.claims >= 1);
+    // The budget here is about the RUNNER, not the product. The wake is
+    // immediate — `resumeReceiving` performs it, and every backoff is an hour,
+    // so nothing else could produce a claim — but this file runs in a parallel
+    // vitest worker, and a loaded Windows runner can stall one for seconds.
+    // Hosted run 34671774469 failed this at 4185ms against the 4000ms default.
+    // Raising it cannot hide a product regression: a wake that never happens
+    // still fails, just later.
+    await waitFor("the claim after resume", () => wire.claims >= 1, 30_000);
     expect(wire.claims).toBeGreaterThanOrEqual(1);
   });
 });
