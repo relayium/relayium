@@ -47,7 +47,9 @@
         // member and the paragraph would render blank, which is not an
         // improvement on the wrong sentence. Checked, not assumed.
         const unhandled: never = refusal;
-        return unhandled;
+        void unhandled;
+        // Reachable only if main sends a refusal this build does not know.
+        return ot("refusedUnavailable");
       }
     }
   }
