@@ -16,13 +16,25 @@
 // first and exits, which is also how a `relayium://` deep link opened while the
 // app is already running reaches the window that exists.
 
-import { app, BrowserWindow, dialog, Menu, nativeImage, Notification, protocol, screen, Tray } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  Menu,
+  nativeImage,
+  nativeTheme,
+  Notification,
+  protocol,
+  screen,
+  Tray,
+} from "electron";
 import { readFile } from "node:fs/promises";
 import { join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ENGINEERING_BANNER, isEngineeringBuild } from "./build-mode.js";
 import { apiOrigin } from "./origin.js";
 import { applicationMenuTemplate } from "./app-menu.js";
+import { windowBackground } from "./window-background.js";
 import { fitToWorkArea } from "./window-sizing.js";
 import { registerHandlers } from "./handlers.js";
 import { parseSendFiles } from "./features/os-entry.js";
@@ -158,6 +170,11 @@ async function createWindow(): Promise<BrowserWindow> {
   // is left. See `window-sizing.ts` for the failure this prevents.
   const sizing = fitToWorkArea(screen.getPrimaryDisplay().workAreaSize);
   const window = new BrowserWindow({
+    // The window's own surface, which is painted before the page exists and in
+    // any area a resize exposes before the renderer catches up. Electron's
+    // default is white; see `window-background.ts` for what that looks like to
+    // somebody in dark mode.
+    backgroundColor: windowBackground(nativeTheme.shouldUseDarkColors),
     width: sizing.width,
     height: sizing.height,
     minWidth: sizing.minWidth,
@@ -180,6 +197,16 @@ async function createWindow(): Promise<BrowserWindow> {
     // browsing with their real session.
     process.stderr.write(`relayium: refused ${why} to ${new URL(url).protocol}\n`);
   });
+
+  // The system appearance can change while the app is running, and the window
+  // keeps whatever colour it was built with unless it is told. The renderer
+  // re-evaluates `prefers-color-scheme` by itself; this is the surface beneath
+  // it, which has no stylesheet to consult.
+  const followTheme = (): void => {
+    if (!window.isDestroyed()) window.setBackgroundColor(windowBackground(nativeTheme.shouldUseDarkColors));
+  };
+  nativeTheme.on("updated", followTheme);
+  window.on("closed", () => nativeTheme.removeListener("updated", followTheme));
 
   // Closing hides. The macOS app makes the same choice
   // (`applicationShouldTerminateAfterLastWindowClosed = false`) for the same

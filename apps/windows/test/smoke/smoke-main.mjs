@@ -455,6 +455,19 @@ async function main() {
   // `getLastWebPreferences()` does not report `spellcheck` at all, so asserting
   // it there passes on `undefined` whatever the window was built with — a check
   // that cannot fail is worse than no check.
+  // The window's own surface, read from the real window. Electron's default is
+  // white, so in dark mode this is the difference between a window that is the
+  // right colour before the page paints and one that flashes.
+  {
+    const { nativeTheme } = await import("electron");
+    const expected = nativeTheme.shouldUseDarkColors ? "#1c1c1e" : "#ffffff";
+    check(
+      "the window is the same colour as the page it will show",
+      win.getBackgroundColor().toLowerCase() === expected,
+      `${win.getBackgroundColor()} expected ${expected} (dark=${nativeTheme.shouldUseDarkColors})`,
+    );
+  }
+
   check(
     "no spellchecker, so typing fetches nothing",
     win.webContents.session.isSpellCheckerEnabled() === false,
