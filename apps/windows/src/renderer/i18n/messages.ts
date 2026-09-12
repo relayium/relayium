@@ -592,8 +592,33 @@ export const en = {
   inboxSendTargetRevoked: "That device's inbox was withdrawn",
   inboxSendTargetNoKey: "That device has no usable key yet",
   inboxSendTargetNoText: "That device cannot receive messages",
-  inboxSendDelivered: "Delivered",
-  inboxSendDeliveredWaiting: "Delivered — waiting for that device to collect it",
+  // --- What the OTHER device is doing with the delivery --------------------
+  //
+  // The server's ten task states, each as the sentence it actually means.
+  //
+  // These two used to be the whole vocabulary, chosen by `state === "acked" ||
+  // state === "saved"` — where `acked` belongs to the RECEIVER's local journal
+  // and can never appear here. So everything except `saved` said "waiting for
+  // that device to collect it", including `expired`, `revoked` and
+  // `failed_terminal`, which the server has recorded will never be collected.
+  // Telling a sender their files are on their way when nothing was written is
+  // the misleading state this vocabulary exists to end.
+  //
+  // macOS's sentences, reused rather than re-written: it has had all ten since
+  // its send screen shipped, and two clients saying the same thing differently
+  // about one delivery is two things to learn.
+  inboxSendDelivered: "Saved on the other device.",
+  inboxSendStateQueued: "Waiting for the other device.",
+  inboxSendStateNotified: "The other device has been told about it.",
+  inboxSendStateDownloading: "The other device is downloading it.",
+  inboxSendStateVerifying: "The other device is checking it.",
+  inboxSendStateAttention: "The other device needs attention before it can save this.",
+  /** Not "waiting": nothing is coming, and nothing was saved. */
+  inboxSendStateExpired: "This delivery expired before the other device took it. Nothing was saved.",
+  inboxSendStateRevoked: "Receiving was revoked on the other device, so this wasn't delivered.",
+  /** Distinct from terminal on purpose: one is over, the other is not. */
+  inboxSendStateFailedRetryable: "The other device couldn't take it yet. It will try again.",
+  inboxSendStateFailedTerminal: "The other device couldn't save this. Nothing was written there.",
   inboxSendCancelled: "Cancelled. Nothing was delivered.",
   // The distinction the whole outcome union exists for. Never softened.
   inboxSendUnknown: "Relayium could not confirm what happened",
@@ -1132,8 +1157,16 @@ export const zh: Record<MessageKey, string> = {
   inboxSendTargetRevoked: "该设备的收件箱已被撤销",
   inboxSendTargetNoKey: "该设备还没有可用的密钥",
   inboxSendTargetNoText: "该设备无法接收文字",
-  inboxSendDelivered: "已送达",
-  inboxSendDeliveredWaiting: "已送达——等待该设备接收",
+  inboxSendDelivered: "已保存到对方设备。",
+  inboxSendStateQueued: "正在等待对方设备。",
+  inboxSendStateNotified: "已通知对方设备。",
+  inboxSendStateDownloading: "对方设备正在下载。",
+  inboxSendStateVerifying: "对方设备正在校验。",
+  inboxSendStateAttention: "对方设备需要先处理一些问题才能保存。",
+  inboxSendStateExpired: "这次投递在对方设备取走之前就已过期。没有保存任何内容。",
+  inboxSendStateRevoked: "对方设备上的接收权限已被吊销，因此没有投递。",
+  inboxSendStateFailedRetryable: "对方设备暂时无法取走。稍后会自动重试。",
+  inboxSendStateFailedTerminal: "对方设备无法保存这次投递。那台设备上没有写入任何内容。",
   inboxSendCancelled: "已取消，未发送任何内容。",
   inboxSendUnknown: "Relayium 无法确认这次发送的结果",
   inboxSendUnknownBody:

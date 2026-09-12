@@ -31,6 +31,7 @@
   import { t } from "../i18n/index.svelte.js";
   import Card from "../shell/Card.svelte";
   import { sendGate } from "../send/send-gate.svelte.js";
+  import { deliveryStateKey } from "../inbox/delivery-copy.js";
   import type { InboxController } from "../inbox/inbox-controller.svelte.js";
   import type { InboxSendController, TargetStatus } from "../inbox/inbox-send-controller.svelte.js";
   import type { InboxAcceptOutcome, ResidueState, TaskPhase } from "../../shared/ipc-contract.js";
@@ -246,13 +247,9 @@
     if (state.refusal !== null) return startRefusalText(state.refusal);
     const view = state.view;
     if (view === null) return t("inboxSendRefusedGeneric");
-    if (view.kind === "delivered") {
-      // Central holds it. Whether the target has collected it is a different
-      // fact, and one this side genuinely knows from the task state.
-      return view.state === "acked" || view.state === "saved"
-        ? t("inboxSendDelivered")
-        : t("inboxSendDeliveredWaiting");
-    }
+    // What the other device is doing with it, over the WHOLE server union. See
+    // `delivery-copy.ts` for what the two-branch version claimed.
+    if (view.kind === "delivered") return t(deliveryStateKey(view.state));
     if (view.kind === "cancelled") return t("inboxSendCancelled");
     if (view.kind === "unknown") return t("inboxSendUnknown");
     return t("inboxSendRefused");
@@ -759,6 +756,7 @@
                   data-test="inbox-send-status"
                   data-device={target.deviceID}
                   data-phase={state.phase}
+                  {...state.view?.kind === "delivered" ? { "data-delivery": state.view.state } : {}}
                 >
                   {statusText(state)}
                 </p>

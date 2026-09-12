@@ -17,21 +17,16 @@
 // `inboxDeliveryView`, `handleClaimInboxTasks`, `handleReportInboxTask`) and
 // `server/internal/inbox/task.go` (state set, `MaxClaimBatch`).
 
-/** Server task states. Sender-local phases are NOT in this set. */
-export const TASK_STATES = [
-  "queued",
-  "notified",
-  "downloading",
-  "verifying",
-  "saved",
-  "attention_required",
-  "expired",
-  "revoked",
-  "failed_retryable",
-  "failed_terminal",
-] as const;
+/**
+ * Server task states, declared in the shared contract and re-exported here.
+ *
+ * They used to be declared in this file. That put them out of reach of the
+ * SENDER's screen, which is the other end of the same delivery — so the view
+ * carried `state: string` and the page mapped two values out of ten.
+ */
+import { TASK_STATES, type TaskState } from "../../shared/ipc-contract.js";
 
-export type TaskState = (typeof TASK_STATES)[number];
+export { TASK_STATES, type TaskState };
 
 /** States that never transition again. */
 export const TERMINAL_TASK_STATES: ReadonlySet<string> = new Set([
