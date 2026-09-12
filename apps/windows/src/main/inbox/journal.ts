@@ -89,7 +89,8 @@ export type TaskPhase =
   /** Terminal without publication. */
   | "failed";
 
-const PHASES: readonly TaskPhase[] = ["claimed", "publishing", "published", "partial", "acked", "failed"];
+/** Exported so a test can hold the page's phase copy against this list. */
+export const PHASES: readonly TaskPhase[] = ["claimed", "publishing", "published", "partial", "acked", "failed"];
 
 /**
  * Which transitions are legal.
