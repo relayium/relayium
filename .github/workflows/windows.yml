@@ -257,6 +257,15 @@ jobs:
       - name: Device Inbox, in a real renderer
         run: npm run test:smoke:inbox-page
 
+      # The same-network roster, which nothing drove at all: the realtime lane
+      # pairs by CODE, and the bootstrap smoke only asserts that lan-start is
+      # ABSENT when signed out. Every state here — empty, offline,
+      # reconnecting, user-stopped, a peer with no link support, and the two
+      # sentences about who else can be at this public address — was
+      # compile-checked and never displayed.
+      - name: Same network, in a real renderer
+        run: npm run test:smoke:lan-page
+
       # Why a sealed identity stops being readable.
       #
       # Runs after `build` because it drives the real `SecretStore` out of
