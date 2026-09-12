@@ -58,6 +58,7 @@
     type AccountFailure,
     type AccountMutationOutcome,
     type AccountProviderView,
+    type AccountResendOutcome,
     type AccountCycleView,
   } from "../../shared/account-summary.js";
 
@@ -114,6 +115,39 @@
         const unhandled: never = failure.kind;
         void unhandled;
         return at("failedUnreadable");
+      }
+    }
+  }
+
+  /**
+   * What asking for the verification email again did.
+   *
+   * There is no `uncertain` to handle: main resolves a lost reply to
+   * `requested`, because "we asked" stays true when the answer goes missing on
+   * the way back, and the sentence for it already tells the reader what to do
+   * if nothing arrives.
+   */
+  function resendText(outcome: AccountResendOutcome): string {
+    switch (outcome.kind) {
+      case "requested":
+        return at("resendRequested");
+      case "already-verified":
+        return at("resendAlreadyVerified");
+      case "busy":
+        return at("resendBusy");
+      case "signed-out":
+        return at("mutationSignedOut");
+      case "unavailable":
+        return at("mutationUnavailable");
+      case "failed":
+        return failureText(outcome.failure);
+      default: {
+        // Same guard as `failureText` and for the same reason: without it a new
+        // member returns `undefined` and this line renders blank, which reads
+        // as the click having done nothing at all.
+        const unhandled: never = outcome;
+        void unhandled;
+        return at("mutationUnavailable");
       }
     }
   }
@@ -307,6 +341,26 @@
               <span class="badge" class:warn={!profile.value.emailVerified}>
                 {profile.value.emailVerified ? at("profileVerified") : at("profileUnverified")}
               </span>
+              <!-- Offered only where it can do something. Stating "not
+                   verified" and leaving the reader to find the original email
+                   — or leave for a browser — was the gap this closes; macOS
+                   has had the same action since its account screen shipped. -->
+              {#if !profile.value.emailVerified}
+                <button
+                  class="linkish"
+                  type="button"
+                  data-test="profile-resend"
+                  disabled={controller.resending}
+                  onclick={() => void controller.resendVerification()}
+                >
+                  {controller.resending ? at("resendSending") : at("resendAction")}
+                </button>
+              {/if}
+              {#if controller.resendOutcome}
+                <span class="dim block small" data-test="profile-resend-outcome">
+                  {resendText(controller.resendOutcome)}
+                </span>
+              {/if}
             </dd>
             <dt>{at("profileMethods")}</dt>
             <dd data-test="profile-methods">
@@ -745,6 +799,20 @@
   .small { font-size: 13px; }
   .block { display: block; margin-top: var(--space-hairline); }
   .problem { margin: 0 0 var(--space-inner); }
+
+  /* Inline beside the badge it answers, so it reads as part of that sentence
+     rather than as a second control competing with the card's Refresh. */
+  .linkish {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    margin-left: var(--space-tight);
+    color: var(--accent);
+    font: inherit;
+    font-size: 13px;
+    text-decoration: underline;
+  }
+  .linkish:hover:not(:disabled) { background: transparent; }
 
   /* A two-column term/value list that becomes one column when the window is
      narrow. 680px is where the reading measure stops being comfortable beside a

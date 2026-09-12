@@ -18,6 +18,7 @@ import type { AccountSummaryBridge } from "../../src/renderer/account/bridge.js"
 import type {
   AccountDeviceView,
   AccountMutationOutcome,
+  AccountResendOutcome,
   AccountSummaryView,
 } from "../../src/shared/account-summary.js";
 
@@ -77,6 +78,8 @@ interface Harness {
     rename: { id: string; name: string }[];
     revoke: string[];
     manage: string[];
+    /** A count: the channel carries no argument at all. */
+    resend: number;
   };
   readonly holds: {
     state: Promise<void> | null;
@@ -89,6 +92,7 @@ interface Harness {
     rename: AccountMutationOutcome;
     revoke: AccountMutationOutcome;
     manage: boolean;
+    resend: AccountResendOutcome;
   };
   /** Main pushed a snapshot. */
   push(payload: unknown): void;
@@ -96,7 +100,7 @@ interface Harness {
 }
 
 function harness(): Harness {
-  const calls: Harness["calls"] = { state: 0, refresh: [], rename: [], revoke: [], manage: [] };
+  const calls: Harness["calls"] = { state: 0, refresh: [], rename: [], revoke: [], manage: [], resend: 0 };
   const holds: Harness["holds"] = { state: null, refresh: null, mutate: null };
   const answers: Harness["answers"] = {
     state: makeView(),
@@ -104,6 +108,7 @@ function harness(): Harness {
     rename: { kind: "renamed", name: "Renamed" },
     revoke: { kind: "revoked", self: false, signedOut: false },
     manage: true,
+    resend: { kind: "requested" },
   };
   const listeners = new Set<(payload: unknown) => void>();
 
@@ -127,6 +132,11 @@ function harness(): Harness {
       calls.revoke.push(payload.id);
       if (holds.mutate) await holds.mutate;
       return answers.revoke;
+    },
+    async resendVerification() {
+      calls.resend += 1;
+      if (holds.mutate) await holds.mutate;
+      return answers.resend;
     },
     async manage(payload) {
       calls.manage.push(payload.target);
@@ -551,5 +561,97 @@ describe("destroy", () => {
     expect(h.calls.refresh).toEqual([]);
     expect(h.calls.manage).toEqual([]);
     expect(h.controller.prompt).toBeNull();
+  });
+});
+
+describe("asking for the verification email again", () => {
+  it("shows it running, then what it did", async () => {
+    const h = harness();
+    const hold = deferred();
+    h.holds.mutate = hold.promise;
+    const running = h.controller.resendVerification();
+    expect(h.controller.resending).toBe(true);
+    expect(h.controller.resendOutcome).toBeNull();
+    hold.resolve();
+    await running;
+    expect(h.controller.resending).toBe(false);
+    expect(h.controller.resendOutcome).toEqual({ kind: "requested" });
+    expect(h.calls.resend).toBe(1);
+  });
+
+  it("refuses a second click while the first is running", async () => {
+    const h = harness();
+    const hold = deferred();
+    h.holds.mutate = hold.promise;
+    const running = h.controller.resendVerification();
+    await h.controller.resendVerification();
+    hold.resolve();
+    await running;
+    // One request. The main-side flag would refuse a second anyway; refusing it
+    // here is what stops the screen flickering through a second busy state for
+    // a click that was never going to send anything.
+    expect(h.calls.resend).toBe(1);
+  });
+
+  it("clears the last sentence when a new attempt starts", async () => {
+    const h = harness();
+    h.answers.resend = { kind: "failed", failure: { kind: "network" } };
+    await h.controller.resendVerification();
+    expect(h.controller.resendOutcome).toEqual({ kind: "failed", failure: { kind: "network" } });
+
+    const hold = deferred();
+    h.holds.mutate = hold.promise;
+    h.answers.resend = { kind: "requested" };
+    const running = h.controller.resendVerification();
+    // The old failure is gone WHILE the retry runs, not only once it lands: a
+    // stale "that did not work" under a spinner reads as the retry having
+    // failed too.
+    expect(h.controller.resendOutcome).toBeNull();
+    hold.resolve();
+    await running;
+    expect(h.controller.resendOutcome).toEqual({ kind: "requested" });
+  });
+
+  it("a broken channel is a failure, not silence", async () => {
+    const h = harness();
+    const controller = new AccountSummaryController({
+      ...(h.controller as unknown as { bridge: AccountSummaryBridge }).bridge,
+      resendVerification: () => Promise.reject(new Error("channel gone")),
+    });
+    await controller.resendVerification();
+    expect(controller.resendOutcome).toEqual({ kind: "failed", failure: { kind: "network" } });
+    expect(controller.resending).toBe(false);
+  });
+
+  it("re-reads the profile when the server says it is already verified", async () => {
+    // The badge this button sits under is now wrong. Re-READ, so it goes away
+    // instead of contradicting the sentence beside it. Never a re-send.
+    const h = harness();
+    h.answers.resend = { kind: "already-verified" };
+    await h.controller.resendVerification();
+    expect(h.calls.refresh).toEqual(["profile"]);
+    expect(h.calls.resend).toBe(1);
+  });
+
+  it("does not re-read for an ordinary requested", async () => {
+    const h = harness();
+    await h.controller.resendVerification();
+    expect(h.calls.refresh).toEqual([]);
+  });
+
+  it("drops an answer belonging to the account that has since left", async () => {
+    // The other half of the main-side rule: main reports a landed request as
+    // `requested` whatever the account did afterwards, because it happened.
+    // What must not happen is that sentence appearing under somebody else's
+    // email, so the guard that stops it lives here.
+    const h = harness();
+    const hold = deferred();
+    h.holds.mutate = hold.promise;
+    const running = h.controller.resendVerification();
+    h.push(makeView({ epoch: 2 }));
+    hold.resolve();
+    await running;
+    expect(h.controller.resendOutcome).toBeNull();
+    expect(h.controller.resending).toBe(false);
   });
 });

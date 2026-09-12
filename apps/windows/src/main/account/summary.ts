@@ -616,8 +616,39 @@ export class AccountClient {
     }
   }
 
+  /**
+   * Ask the server to send the verification email again.
+   *
+   * The address is NOT a parameter, and that is the security property: it is
+   * read from the profile this client just fetched under its own bearer. A
+   * method that took an address would let whatever called it make this app
+   * email anybody, and the renderer is a caller.
+   *
+   * The endpoint answers 200 whatever happens — it will not say whether an
+   * account exists, whether it was already verified, or whether the throttle
+   * swallowed the request. So this returns nothing, and the surface above says
+   * only what is true: that it was asked for.
+   */
+  async resendVerification(signal: AbortSignal): Promise<"sent" | "already-verified"> {
+    // Read FRESH rather than trusting the held view. Two reasons, and the
+    // second is the one that matters: the address must be the server's current
+    // answer for this credential, and somebody may have finished verifying in a
+    // browser since this screen was drawn — in which case the truthful outcome
+    // is "already verified", not an email nobody needs.
+    const profile = await this.profile(signal);
+    if (profile.emailVerified) return "already-verified";
+    const email = profile.email;
+    if (typeof email !== "string" || email.length === 0 || email.length > 320) {
+      throw new AccountApiError("malformed");
+    }
+    const target = this.url("/api/auth/email/resend");
+    if (target.pathname !== "/api/auth/email/resend") throw new AccountApiError("malformed");
+    await this.json("POST", target, { email }, signal);
+    return "sent";
+  }
+
   private async json(
-    method: "GET" | "PATCH" | "DELETE",
+    method: "GET" | "POST" | "PATCH" | "DELETE",
     target: URL,
     body: unknown,
     signal: AbortSignal,

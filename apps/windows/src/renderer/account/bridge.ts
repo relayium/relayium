@@ -24,6 +24,7 @@
 import type {
   AccountExternalTarget,
   AccountMutationOutcome,
+  AccountResendOutcome,
   AccountSectionName,
   AccountSummaryView,
 } from "../../shared/account-summary.js";
@@ -41,6 +42,14 @@ export interface AccountSummaryBridge {
   refresh(payload: { section?: AccountSectionName }): Promise<AccountSummaryView>;
   rename(payload: { id: string; name: string }): Promise<AccountMutationOutcome>;
   revoke(payload: { id: string }): Promise<AccountMutationOutcome>;
+  /**
+   * Ask the server to send the verification email again.
+   *
+   * Takes no argument, and that is the point: main reads the address from the
+   * profile the server returns for the credential main holds. See the header —
+   * the renderer never supplies an identity it was not handed.
+   */
+  resendVerification(): Promise<AccountResendOutcome>;
   /** Open the fixed account page in the user's browser. Main validates it. */
   manage(payload: { target: AccountExternalTarget }): Promise<{ ok: boolean }>;
   /** Main pushed a new snapshot — an account change, or a read landing. */

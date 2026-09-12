@@ -65,6 +65,7 @@ import {
   type AccountProfileView,
   type AccountProviderView,
   type AccountRenewalView,
+  type AccountResendOutcome,
   type AccountSection,
   type AccountSectionName,
   type AccountSummaryView,
@@ -104,6 +105,7 @@ export interface AccountReadClient {
     signal: AbortSignal,
   ): Promise<string>;
   revokeDevice(deviceID: string, signal: AbortSignal): Promise<void>;
+  resendVerification(signal: AbortSignal): Promise<"sent" | "already-verified">;
 }
 
 export interface AccountSummaryDeps {
@@ -423,6 +425,15 @@ export class AccountSummaryService {
    */
   readonly #rows = new Map<string, number>();
   #rowToken = 0;
+  /**
+   * A resend is in flight.
+   *
+   * One flag rather than a row token, because there is one address and no id to
+   * key on. Two clicks landing two requests would be two identical emails, or —
+   * more likely — one email and one throttle refusal presented as a failure of
+   * the click that actually worked.
+   */
+  #resending = false;
   readonly #work = new Set<Work>();
 
   #client: AccountReadClient | null = null;
@@ -1008,6 +1019,66 @@ export class AccountSummaryService {
       }
       return { kind: "revoked", self: true, signedOut: true };
     });
+  }
+
+  /**
+   * Ask the server to send the verification email again.
+   *
+   * Windows STATED that an address was unverified and offered nothing to do
+   * about it; the badge's own reason for existing is that several server
+   * actions will refuse later. macOS has had this since its account screen
+   * shipped.
+   *
+   * The address is never a parameter. It is read by `AccountClient` from the
+   * profile the server returns for the credential this process just captured —
+   * a channel that accepted an address from the page would let the page make
+   * this app email anybody.
+   *
+   * The same admission discipline as `#mutate`, minus the row: fence, document,
+   * epoch before and after the capture, and an abort registration so a quit
+   * does not leave it hanging.
+   */
+  async resendVerification(document: number): Promise<AccountResendOutcome> {
+    if (this.#disposed || this.#fenced || this.#quiesced) return { kind: "unavailable" };
+    if (document !== this.deps.currentDocument()) return { kind: "unavailable" };
+    // Claimed synchronously, before the first await, or two clicks in one tick
+    // both get past a flag neither has set yet.
+    if (this.#resending) return { kind: "busy" };
+    this.#resending = true;
+    const epoch = this.#epoch;
+    const control = new AbortController();
+    const registration = this.#register(control);
+    try {
+      const captured = await this.#capture();
+      if (this.#disposed || this.#fenced || this.#quiesced || this.#epoch !== epoch) {
+        return { kind: "unavailable" };
+      }
+      if (document !== this.deps.currentDocument()) return { kind: "unavailable" };
+      if (control.signal.aborted) return { kind: "unavailable" };
+      if (!captured.ok) {
+        return captured.failure.kind === "signed-out"
+          ? { kind: "signed-out" }
+          : captured.failure.kind === "unavailable"
+            ? { kind: "unavailable" }
+            : { kind: "failed", failure: captured.failure };
+      }
+      try {
+        const result = await captured.client.resendVerification(control.signal);
+        return result === "already-verified" ? { kind: "already-verified" } : { kind: "requested" };
+      } catch (err) {
+        // Uncertainty resolves to `requested` here, and that is the whole
+        // reason this outcome has no `uncertain` member: a reply lost after the
+        // POST left still means the request was made, and the sentence the
+        // screen shows for it — asked for, check spam if it does not arrive —
+        // stays true. Only a failure raised before dispatch is a failure.
+        if (control.signal.aborted) return { kind: "unavailable" };
+        if (mutationIsUncertain(err)) return { kind: "requested" };
+        return { kind: "failed", failure: failureFor(err) };
+      }
+    } finally {
+      this.#resending = false;
+      registration.done();
+    }
   }
 
   /**

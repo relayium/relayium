@@ -676,6 +676,10 @@ async function main() {
     "relayium:account-summary-state", "relayium:account-summary-refresh",
     "relayium:account-device-rename", "relayium:account-device-revoke",
     "relayium:account-manage",
+    // Reviewed: carries NOTHING. Main reads the address from the profile the
+    // server returns for the credential main holds, so this channel cannot be
+    // used to make the app email an address a page chose.
+    "relayium:account-resend-verification",
     // Updates. None of these carries an address, a key or a version the page
     // chose: `update-act` takes one of four closed actions and is always a
     // MANUAL trigger, and `update-notes` names a destination with a token that

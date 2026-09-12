@@ -37,6 +37,24 @@ export const accountEn = {
   profileNoName: "No name set",
   profileVerified: "Email verified",
   profileUnverified: "Email not verified",
+  // The way out of the state the badge above states. macOS's wording, kept
+  // word for word: two clients saying the same thing differently about the
+  // same email is two things to learn.
+  resendAction: "Send the email again",
+  resendSending: "Sending…",
+  /**
+   * True whatever the server decided.
+   *
+   * `POST /api/auth/email/resend` answers 200 in every case — it will not say
+   * whether an account exists, whether it was already verified, or whether a
+   * throttle swallowed the request. So the only honest claim is that it was
+   * asked for, and the spam-folder line covers the case where it does not
+   * arrive. This is macOS's sentence, unchanged.
+   */
+  resendRequested: "Requested. If it doesn't arrive, check your spam folder.",
+  /** Somebody finished verifying elsewhere while this screen was open. */
+  resendAlreadyVerified: "That address is already verified.",
+  resendBusy: "That request is already running.",
   profileMethods: "Sign-in methods",
   profileMethodNone: "None recorded",
 
@@ -176,6 +194,11 @@ export const accountZh: Record<AccountMessageKey, string> = {
   profileNoName: "未设置名称",
   profileVerified: "邮箱已验证",
   profileUnverified: "邮箱未验证",
+  resendAction: "重新发送验证邮件",
+  resendSending: "正在发送…",
+  resendRequested: "已提交请求。如果没有收到，请查看垃圾邮件文件夹。",
+  resendAlreadyVerified: "该邮箱地址已经通过验证。",
+  resendBusy: "该请求正在进行中。",
   profileMethods: "登录方式",
   profileMethodNone: "没有记录",
 

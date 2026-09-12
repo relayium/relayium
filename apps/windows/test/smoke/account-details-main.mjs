@@ -530,6 +530,85 @@ async function main() {
   await js(`window.__tick()`);
   equal("exactly one revoke was sent", (await js(`window.__accountHarness.calls()`)).revoke.length, 1);
 
+  // --- The verification email: offered only where it can do something -------
+  await js(`window.__push(${JSON.stringify({ ...READY, epoch: 60 })})`);
+  equal(
+    "a verified address offers nothing to resend",
+    await js(`window.__count('[data-test="profile-resend"]')`),
+    0,
+  );
+
+  const UNVERIFIED = {
+    ...READY,
+    epoch: 61,
+    profile: { kind: "ready", value: { ...PROFILE, emailVerified: false } },
+  };
+  await js(`window.__push(${JSON.stringify(UNVERIFIED)})`);
+  await js(`window.__accountHarness.resetCalls()`);
+  equal(
+    "an unverified address offers the way out of that state",
+    await js(`window.__count('[data-test="profile-resend"]')`),
+    1,
+  );
+  equal(
+    "and says nothing about a request nobody has made",
+    await js(`window.__count('[data-test="profile-resend-outcome"]')`),
+    0,
+  );
+
+  // Held, so the running state is actually observed rather than assumed.
+  await js(`window.__accountHarness.takeHold()`);
+  check("the resend button presses", await js(`window.__click('[data-test="profile-resend"]')`));
+  equal(
+    "it says it is sending",
+    await js(`window.__text('[data-test="profile-resend"]')`),
+    "Sending…",
+  );
+  equal(
+    "and refuses a second press while it runs",
+    await js(`window.__disabled('[data-test="profile-resend"]')`),
+    true,
+  );
+  await js(`window.__accountHarness.releaseHold(); window.__tick()`);
+  await js(`window.__tick()`);
+  equal(
+    "the sentence is true whatever the server decided",
+    await js(`window.__text('[data-test="profile-resend-outcome"]')`),
+    "Requested. If it doesn't arrive, check your spam folder.",
+  );
+  equal("exactly one request was sent", (await js(`window.__accountHarness.calls()`)).resend, 1);
+  await shoot(page, "05-en-resend-requested");
+
+  // Chinese, because the copy is a maintained pair and a screen that renders
+  // one of them is half a screen.
+  await js(`window.__accountHarness.setLang("zh"); window.__tick()`);
+  equal(
+    "the sentence renders in Chinese too",
+    await js(`window.__text('[data-test="profile-resend-outcome"]')`),
+    "已提交请求。如果没有收到，请查看垃圾邮件文件夹。",
+  );
+  equal(
+    "and so does the action",
+    await js(`window.__text('[data-test="profile-resend"]')`),
+    "重新发送验证邮件",
+  );
+  await shoot(page, "05-zh-resend-requested");
+  await js(`window.__accountHarness.setLang("en"); window.__tick()`);
+
+  // A failure is a sentence, not silence.
+  await js(`window.__accountHarness.setResendOutcome({ kind: "failed", failure: { kind: "network" } })`);
+  await js(`window.__click('[data-test="profile-resend"]')`);
+  await js(`window.__tick()`);
+  check(
+    "a failed resend says something",
+    ((await js(`window.__text('[data-test="profile-resend-outcome"]')`)) ?? "").length > 0,
+  );
+  check(
+    "and the button is pressable again",
+    (await js(`window.__disabled('[data-test="profile-resend"]')`)) === false,
+  );
+  await js(`window.__accountHarness.setResendOutcome({ kind: "requested" })`);
+
   // --- An unknown outcome offers a re-READ, never a re-send -----------------
   await js(`window.__push(${JSON.stringify({ ...READY, epoch: 7 })})`);
   await js(`window.__accountHarness.resetCalls()`);

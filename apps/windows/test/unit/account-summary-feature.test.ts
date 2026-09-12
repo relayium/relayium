@@ -109,15 +109,28 @@ const DEVICES: readonly AccountDevice[] = [
   device({ id: "dev-b", name: "Laptop" }),
 ];
 
+/**
+ * The member the surrounding test never exercises.
+ *
+ * A stub that RESOLVES would let a test pass because a resend silently
+ * succeeded somewhere nobody looked. This one is loud on contact.
+ */
+const NO_RESEND = {
+  resendVerification: (): Promise<"sent"> => {
+    throw new Error("resendVerification is not part of this test");
+  },
+};
+
 /** A client whose every call is observable, holdable and individually failable. */
 function fakeClient(epoch: number) {
-  const calls = { profile: 0, usage: 0, devices: 0, rename: [] as string[], revoke: [] as string[] };
+  const calls = { profile: 0, usage: 0, devices: 0, rename: [] as string[], revoke: [] as string[], resend: 0 };
   const holds = {
     profile: null as Promise<void> | null,
     usage: null as Promise<void> | null,
     devices: null as Promise<void> | null,
     rename: null as Promise<void> | null,
     revoke: null as Promise<void> | null,
+    resend: null as Promise<void> | null,
   };
   const fails = {
     profile: null as unknown,
@@ -125,11 +138,13 @@ function fakeClient(epoch: number) {
     devices: null as unknown,
     rename: null as unknown,
     revoke: null as unknown,
+    resend: null as unknown,
   };
   const answers = {
     profile: makeProfile(),
     usage: makeUsage(),
     devices: DEVICES as readonly AccountDevice[],
+    resend: "sent" as "sent" | "already-verified",
   };
   /** Server-side effects the stand-in actually performed, for the lost-reply cases. */
   const committed = { renamed: [] as string[], revoked: [] as string[] };
@@ -169,6 +184,12 @@ function fakeClient(epoch: number) {
       committed.revoked.push(id);
       if (fails.revoke) throw fails.revoke;
     },
+    async resendVerification() {
+      calls.resend += 1;
+      if (holds.resend) await holds.resend;
+      if (fails.resend) throw fails.resend;
+      return answers.resend;
+    },
   };
   return { client, calls, holds, fails, answers, committed };
 }
@@ -200,6 +221,7 @@ function failingClient(fails: { profile?: unknown; usage?: unknown; devices?: un
     devices: () => (fails.devices ? Promise.reject(fails.devices) : Promise.resolve(DEVICES)),
     renameDevice: (_id, name) => Promise.resolve(name),
     revokeDevice: () => Promise.resolve(),
+    ...NO_RESEND,
   };
 }
 
@@ -668,6 +690,7 @@ describe("a mutation whose answer never arrived is reported as unknown", () => {
           dispatched.resolve();
           return abortsAs(signal, new AccountApiError("network"));
         },
+        ...NO_RESEND,
       }),
     });
     await h.service.refresh();
@@ -714,6 +737,7 @@ describe("revoking this device", () => {
           dispatched.resolve();
           await hold.promise;
         },
+        ...NO_RESEND,
       }),
     });
     await h.service.refresh();
@@ -794,6 +818,7 @@ describe("lifecycle", () => {
         devices: () => Promise.resolve(DEVICES),
         renameDevice: (_i, n) => Promise.resolve(n),
         revokeDevice: () => Promise.resolve(),
+        ...NO_RESEND,
       }),
     });
     void h.service.refreshProfile();
@@ -815,6 +840,7 @@ describe("lifecycle", () => {
         devices: () => Promise.resolve(DEVICES),
         renameDevice: (_i, n) => Promise.resolve(n),
         revokeDevice: () => Promise.resolve(),
+        ...NO_RESEND,
       }),
     });
     // Aborted while the credential is still being read: the client must never
@@ -842,6 +868,7 @@ describe("lifecycle", () => {
         devices: () => Promise.resolve(DEVICES),
         renameDevice: (_i, n) => Promise.resolve(n),
         revokeDevice: () => Promise.resolve(),
+        ...NO_RESEND,
       }),
     });
     void h.service.refreshProfile();
@@ -1140,5 +1167,145 @@ describe("the default normaliser is used when the host supplies none", () => {
     await h.service.renameDevice(h.document, "dev-b", "  Travel   laptop ");
     expect(normalizeDeviceName).toHaveBeenCalled();
     expect(h.client().calls.rename).toEqual(["dev-b:Travel laptop"]);
+  });
+});
+
+describe("asking for the verification email again", () => {
+  it("asks once, and reports only that it was asked", async () => {
+    const h = harness();
+    await h.service.refresh();
+    await expect(h.service.resendVerification(h.document)).resolves.toEqual({ kind: "requested" });
+    expect(h.client().calls.resend).toBe(1);
+  });
+
+  it("refuses the second click while the first is still running", async () => {
+    // Not queued. Two requests are two identical emails, or — more likely — one
+    // email and one throttle refusal presented as a failure of the click that
+    // actually worked.
+    const h = harness();
+    await h.service.refresh();
+    const client = h.client();
+    let release!: () => void;
+    client.holds.resend = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const first = h.service.resendVerification(h.document);
+    await expect(h.service.resendVerification(h.document)).resolves.toEqual({ kind: "busy" });
+    release();
+    await expect(first).resolves.toEqual({ kind: "requested" });
+    expect(client.calls.resend).toBe(1);
+  });
+
+  it("frees the flag afterwards, so a later click is not refused forever", async () => {
+    const h = harness();
+    await h.service.refresh();
+    h.client().fails.resend = new AccountApiError("origin-refused");
+    await expect(h.service.resendVerification(h.document)).resolves.toMatchObject({ kind: "failed" });
+    h.client().fails.resend = null;
+    await expect(h.service.resendVerification(h.document)).resolves.toEqual({ kind: "requested" });
+  });
+
+  it("reports already-verified rather than a failure", async () => {
+    const h = harness();
+    await h.service.refresh();
+    h.client().answers.resend = "already-verified";
+    await expect(h.service.resendVerification(h.document)).resolves.toEqual({ kind: "already-verified" });
+  });
+
+  // ## Why a lost reply is `requested` and not a failure
+  //
+  // The POST left this machine. Whether the answer came back says nothing about
+  // whether the email was sent — and the sentence the screen shows already tells
+  // the reader what to do when it does not arrive. Reporting a failure here
+  // would be a claim this process cannot support, next to a button inviting a
+  // retry of something that may well have worked.
+  for (const [label, error] of [
+    ["a dropped connection", new AccountApiError("network")],
+    ["a deadline", new AccountApiError("timeout")],
+    ["a reply this build could not read", new AccountApiError("malformed")],
+    ["a 5xx", new AccountApiError("server-refused", undefined, 503)],
+  ] as const) {
+    it(`${label} still reads as requested`, async () => {
+      const h = harness();
+      await h.service.refresh();
+      h.client().fails.resend = error;
+      await expect(h.service.resendVerification(h.document)).resolves.toEqual({ kind: "requested" });
+    });
+  }
+
+  it("a refusal raised before anything was sent IS a failure", async () => {
+    // `origin-refused` is the one code `mutationIsUncertain` treats as
+    // definitive: nothing was dispatched, so there is no email in flight to be
+    // honest about.
+    const h = harness();
+    await h.service.refresh();
+    h.client().fails.resend = new AccountApiError("origin-refused");
+    await expect(h.service.resendVerification(h.document)).resolves.toEqual({
+      kind: "failed",
+      // `unreadable` rather than `unavailable`: `failureFor` maps every code it
+      // has no specific sentence for to that, and the sentence for it says the
+      // least this build can honestly say.
+      failure: { kind: "unreadable" },
+    });
+  });
+
+  it("sends nothing for a document that has since reloaded", async () => {
+    const h = harness();
+    await h.service.refresh();
+    const stale = h.document;
+    h.document = stale + 1;
+    await expect(h.service.resendVerification(stale)).resolves.toEqual({ kind: "unavailable" });
+    expect(h.client().calls.resend).toBe(0);
+  });
+
+  it("sends nothing when nobody is signed in", async () => {
+    const h = harness();
+    await h.service.refresh();
+    h.authority = "signed-out";
+    await expect(h.service.resendVerification(h.document)).resolves.toEqual({ kind: "signed-out" });
+    expect(h.client().calls.resend).toBe(0);
+  });
+
+  it("sends nothing when the account moves before the credential is read", async () => {
+    const h = harness();
+    await h.service.refresh();
+    let release!: () => void;
+    h.authorityHold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const running = h.service.resendVerification(h.document);
+    h.changeAccount();
+    release();
+    await expect(running).resolves.toEqual({ kind: "unavailable" });
+    // Summed across EVERY client, not `h.client()`. An account change makes a
+    // new one, so the newest client has of course sent nothing — asserting on
+    // it alone passed while a resend was in fact dispatched under the account
+    // that had just been left. Two guards cover this (the post-capture epoch
+    // check and the abort an account change raises), so it stays green until
+    // both are gone; the proof it is not vacuous is that removing the whole set
+    // at once turns it red with a resend recorded on the middle client.
+    expect(h.clients.reduce((total, made) => total + made.calls.resend, 0)).toBe(0);
+  });
+
+  it("still reports an email that WAS requested when the account then moves", async () => {
+    // Deliberate, and the same rule `#mutate` states for a landed revoke: a
+    // result this process KNOWS must not be downgraded to "could not be done".
+    // The POST left. What protects the SCREEN from showing that sentence under
+    // somebody else's account is the renderer's own epoch guard, which
+    // `account-summary-controller.test.ts` covers.
+    const h = harness();
+    await h.service.refresh();
+    const client = h.client();
+    let release!: () => void;
+    client.holds.resend = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const running = h.service.resendVerification(h.document);
+    // Wait until the request is genuinely in flight, or this tests the capture
+    // guard again rather than the window it names.
+    while (client.calls.resend === 0) await Promise.resolve();
+    h.changeAccount();
+    release();
+    await expect(running).resolves.toEqual({ kind: "requested" });
   });
 });

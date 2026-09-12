@@ -40,6 +40,7 @@ import { setLang } from "../i18n/index.svelte.js";
 import {
   ACCOUNT_SUMMARY_LOADING,
   type AccountMutationOutcome,
+  type AccountResendOutcome,
   type AccountSummaryView,
 } from "../../shared/account-summary.js";
 import "../tokens.css";
@@ -50,9 +51,11 @@ interface Calls {
   rename: { id: string; name: string }[];
   revoke: string[];
   manage: string[];
+  /** A count, because the channel carries no argument at all. */
+  resend: number;
 }
 
-const calls: Calls = { state: 0, refresh: [], rename: [], revoke: [], manage: [] };
+const calls: Calls = { state: 0, refresh: [], rename: [], revoke: [], manage: [], resend: 0 };
 const listeners = new Set<(payload: unknown) => void>();
 
 const answers = {
@@ -60,6 +63,7 @@ const answers = {
   rename: { kind: "renamed", name: "Renamed" } as AccountMutationOutcome,
   revoke: { kind: "revoked", self: false, signedOut: false } as AccountMutationOutcome,
   manage: true,
+  resend: { kind: "requested" } as AccountResendOutcome,
 };
 
 /** A hold the driver can take, so a busy row can actually be observed. */
@@ -89,6 +93,11 @@ const bridge: AccountSummaryBridge = {
     calls.revoke.push(payload.id);
     await waitForHold();
     return answers.revoke;
+  },
+  async resendVerification() {
+    calls.resend += 1;
+    await waitForHold();
+    return answers.resend;
   },
   async manage(payload) {
     calls.manage.push(payload.target);
@@ -131,6 +140,9 @@ Object.defineProperty(globalThis, "__accountHarness", {
     setRevokeOutcome(outcome: AccountMutationOutcome): void {
       answers.revoke = outcome;
     },
+    setResendOutcome(outcome: AccountResendOutcome): void {
+      answers.resend = outcome;
+    },
     setManageOk(ok: boolean): void {
       answers.manage = ok;
     },
@@ -157,6 +169,7 @@ Object.defineProperty(globalThis, "__accountHarness", {
       calls.rename.length = 0;
       calls.revoke.length = 0;
       calls.manage.length = 0;
+      calls.resend = 0;
     },
   },
   enumerable: true,
