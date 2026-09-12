@@ -422,11 +422,20 @@ describe("the service threads the gate into the facade", () => {
     // so nothing else could produce a claim — but this file runs in a parallel
     // vitest worker, and a loaded Windows runner can stall one for seconds.
     // Hosted run 34671774469 failed this at 4185ms against the 4000ms default.
-    // Raising it cannot hide a product regression: a wake that never happens
+    //
+    // TWO clocks, and the first attempt only moved one. Raising this budget
+    // without raising vitest's per-test timeout (5000ms) meant the case stopped
+    // failing on its own budget and started failing on vitest's, with "Test
+    // timed out in 5000ms" instead of a message naming the wake — the flake
+    // unfixed and the diagnostic worse. Run 34676037986 said so twice. The
+    // inner budget is deliberately BELOW the outer one so this assertion is
+    // the one that reports.
+    //
+    // Raising them cannot hide a product regression: a wake that never happens
     // still fails, just later.
-    await waitFor("the claim after resume", () => wire.claims >= 1, 30_000);
+    await waitFor("the claim after resume", () => wire.claims >= 1, 20_000);
     expect(wire.claims).toBeGreaterThanOrEqual(1);
-  });
+  }, 30_000);
 });
 
 describe("pauseReceiving and resumeReceiving", () => {

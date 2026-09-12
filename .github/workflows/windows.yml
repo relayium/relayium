@@ -679,10 +679,33 @@ jobs:
           "password=$password" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "::add-mask::$password"
 
+      # A real volume, so the mount-point refusal can be OBSERVED.
+      #
+      # `TestMountPointCrossingIsRefused` asks for a volume GUID path and skips
+      # without one, which it has done on every run this lane has ever made: the
+      # io-helper's refusal to cross a mount point is part of its redirection
+      # protection and has never been exercised on the only Windows machine in
+      # the loop. The runner has real volumes; `mountvol` prints their GUID
+      # paths. This is a missing environment variable, not a missing capability.
+      #
+      # The test mounts it at a directory under its OWN temp directory and
+      # removes it in a `defer`. A volume may carry several mount points, so
+      # the drive letter is untouched.
+      - name: Resolve a volume for the mount-point refusal
+        id: volume
+        run: |
+          $out = & mountvol C: /L
+          if ($LASTEXITCODE -ne 0) { throw "mountvol could not report C:'s volume ($LASTEXITCODE)" }
+          $guid = ($out | Where-Object { $_ -match '\\\\\?\\Volume\{' }).Trim()
+          if (-not $guid) { throw "mountvol printed no volume GUID path: $out" }
+          Write-Host "second volume: $guid"
+          "path=$guid" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
       - name: Native helper tests
         env:
           RELAYIUM_XUSER: relayium-xuser
           RELAYIUM_XUSER_PASSWORD: ${{ steps.xuser.outputs.password }}
+          RELAYIUM_TEST_SECOND_VOLUME: ${{ steps.volume.outputs.path }}
         run: go test -v -count=1 -timeout 10m ./...
 
       # Unconditional: a runner is ephemeral, but an account left behind by a
