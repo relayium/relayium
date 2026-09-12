@@ -40,6 +40,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const failures = [];
 const notes = [];
@@ -80,6 +81,8 @@ if (!localAppData) bail("LOCALAPPDATA is not set");
 // space-free path would leave the quoting behaviour every real user hits — a
 // default install lands under `Programs` — untested.
 const installDir = path.join(runnerTemp, "relayium acceptance", "Relayium");
+/** This app's source directory, for facts the packaged build must agree with. */
+const REPO_APP = fileURLToPath(new URL("../..", import.meta.url));
 const dataRoot = path.join(localAppData, "Relayium");
 /** Coupled to `APP_DIRECTORY` in `storage.ts` and `installer.nsh`, via the path above. */
 const APP_DIR_NAME = path.basename(dataRoot);
@@ -900,6 +903,19 @@ async function main() {
   check("production origin despite an injected override", info.origin === "https://relayium.com", JSON.stringify(info));
   check("not an engineering build despite an injected flag", info.engineering === false, String(info.engineering));
   check("no engineering banner", info.banner === null, String(info.banner));
+  // The version the INSTALLED build reports, which is the only place the truth
+  // is observable: unpackaged, `app.getVersion()` answers Electron's own
+  // version, so a bootstrap smoke cannot tell a correct read from a wrong one
+  // by its value. Here it must be the version that was packaged.
+  //
+  // This is not a diagnostic string. The same value is sent to central when a
+  // device enrols in the Device Inbox, and central validates it — a build that
+  // reported a literal frozen at install time would pin every Windows client
+  // at one version for the life of the product.
+  {
+    const packaged = JSON.parse(readFileSync(path.join(REPO_APP, "package.json"), "utf8")).version;
+    check("the installed build reports the version that was packaged", info.version === packaged, `${info.version} vs ${packaged}`);
+  }
 
   // First DPAPI use: this WRITES the sealed installation identity.
   const state1 = await cdp.evaluate("globalThis.relayium.auth.state()");

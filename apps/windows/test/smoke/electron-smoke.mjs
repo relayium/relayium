@@ -79,6 +79,20 @@ const child = spawn(String(electronPath), [smokeMain, owned[0], owned[1], sentFi
   env: {
     ...process.env,
     ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
+    // POISONED on purpose, and the child asserts it was ignored.
+    //
+    // Two call sites used to read `npm_package_version` for the version this
+    // build reports — one of them the version a device ENROLS with, which
+    // central validates. In a packaged app that variable does not exist, so
+    // both fell through to a hard-coded literal that happened to be right.
+    //
+    // Running the smoke through `npm` sets the variable to the real version,
+    // which would make the broken read and the correct one indistinguishable.
+    // Setting it to something no build could be is what makes the difference
+    // visible — and it doubles as the other half of that comment in
+    // `handlers.ts`: this identity must not be settable by whoever launches
+    // the process.
+    npm_package_version: "9.9.9-poison",
     // Ambient engineering overrides are CLEARED, not inherited.
     //
     // This wrapper spreads `process.env`, so a developer who had exported these

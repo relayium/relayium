@@ -495,7 +495,12 @@ export function registerHandlers(
     origin,
     engineering: isEngineeringBuild(),
     banner: isEngineeringBuild() ? ENGINEERING_BANNER : null,
-    version: process.env["npm_package_version"] ?? "0.0.1",
+    // From COMPILED metadata, never the environment. See the reasoning on
+    // `appVersion` in the update section below: `npm_package_version` exists
+    // only while an npm SCRIPT is running, so a packaged app launched by a
+    // person does not have it and this fell back to a hard-coded literal. It
+    // was right only because the package version happens to be that literal.
+    version: app.getVersion(),
     // Same-network discovery starts automatically, exactly as the shipped Mac
     // does. This is the one way to suppress it, and it is deliberately narrow:
     // `engineeringOverride` returns nothing in a packaged build, so a shipped
@@ -1063,7 +1068,12 @@ export function registerHandlers(
       return root.path;
     },
     platform: "windows",
-    appVersion: process.env["npm_package_version"] ?? "0.0.1",
+    // The version this device ENROLS with, which central validates and can
+    // refuse on. Read from compiled metadata for the reason given on
+    // `appVersion` in the update section: from the environment it would be
+    // absent in every packaged build — pinning every installed Windows client
+    // at one literal forever — and settable by whoever launched the process.
+    appVersion: app.getVersion(),
     authority: () => service.captureAccountAuthority(),
     accountEpoch: () => service.accountEpoch,
     // Read at the moment a copy is admitted and re-checked before it writes.

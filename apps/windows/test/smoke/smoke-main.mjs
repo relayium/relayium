@@ -516,6 +516,17 @@ async function main() {
   check("appInfo answered over real IPC", typeof info.origin === "string", JSON.stringify(info));
   check("production origin by default", info.origin === PRODUCTION_ORIGIN, info.origin);
   check("not an engineering build by default", info.engineering === false, String(info.engineering));
+  // The wrapper started this process with `npm_package_version=9.9.9-poison`.
+  // A build that reads its identity from the environment reports it; one that
+  // reads compiled metadata does not. The same value reaches central during
+  // Device Inbox enrolment, where it is validated, so this is not a diagnostic
+  // string.
+  check("the version is not taken from the environment", info.version !== "9.9.9-poison", String(info.version));
+  check(
+    "the version is the one compiled into this build",
+    info.version === app.getVersion(),
+    `${info.version} vs ${app.getVersion()}`,
+  );
 
   // Every declared channel has a handler. A channel the renderer can call and
   // nothing answers is a hang, not an error.
