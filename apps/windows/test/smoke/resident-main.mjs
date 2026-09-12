@@ -1214,6 +1214,37 @@ const clickTest = (win, name) =>
 
 const present = (win, name) => js(win, `document.querySelector('[data-test="${name}"]') !== null`);
 
+/**
+ * Click, once the control will actually take one.
+ *
+ * `clickTest` now answers `false` for a `disabled` target instead of claiming
+ * the press happened, which turned a silent race into a visible one — and this
+ * is the other half. The Inbox policy radios are `disabled={inbox.busy}`, and
+ * the sequence below chooses `auto` and then `off` with nothing between them:
+ * if busy had not cleared, the second press went nowhere.
+ *
+ * A wait rather than a sleep, so it costs nothing when the control is already
+ * ready, which is almost always. Returns what `clickTest` returned, so a
+ * `check` on it still means what it reads as.
+ *
+ * Used for every control on this page that carries `disabled={inbox.busy}` —
+ * the three policy radios, turn-on, turn-off, change-folder, accept and reject
+ * — rather than only the pair that failed. The others differ from that pair by
+ * luck of timing, not by design.
+ *
+ * Deliberately NOT applied to every click in this file: a control with no
+ * disabled state gains nothing, and a helper used where it is not needed stops
+ * saying anything about why it is used where it is.
+ */
+async function clickWhenEnabled(win, name, timeoutMs = 4000) {
+  const started = Date.now();
+  for (;;) {
+    if (await clickTest(win, name)) return true;
+    if (Date.now() - started > timeoutMs) return false;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}
+
 const shown = (win, name) => js(win, `document.querySelector('[data-test="${name}"]')?.textContent ?? ""`);
 
 /** A wait the Inbox scenarios use: this run steps the scheduler itself, so a
@@ -1290,7 +1321,7 @@ async function scenarioInboxConsent(win) {
 
   // ---- refusal ------------------------------------------------------------
   inbox.pick = () => null; // the person closes the dialog
-  check("turn on was clicked", await clickTest(win, "inbox-enable"));
+  check("turn on was clicked", await clickWhenEnabled(win, "inbox-enable"));
   const declined = await waitInbox(win, "the refusal notice", `document.querySelector('[data-test="inbox-notice"]') !== null`);
   check("closing the folder dialog is reported as its own outcome", declined === true);
   check("a closed dialog enrols nothing", inbox.enrolled === 0, String(inbox.enrolled));
@@ -1302,7 +1333,7 @@ async function scenarioInboxConsent(win) {
   // ---- consent ------------------------------------------------------------
   inbox.pick = () => destinationDir;
   await clickTest(win, "inbox-notice-dismiss");
-  check("turn on was clicked again", await clickTest(win, "inbox-enable"));
+  check("turn on was clicked again", await clickWhenEnabled(win, "inbox-enable"));
   const on = await waitInbox(win, "the on state", `document.querySelector('[data-test="inbox-disable"]') !== null`);
   check("choosing a folder turns receiving on", on === true);
   // ## Bounded diagnostics, emitted whether or not the assertion holds
@@ -1409,7 +1440,7 @@ async function scenarioInboxPending(win) {
   const body = await js(win, `document.querySelector('[data-test="inbox-pending"]')?.textContent ?? ""`);
   check("a held delivery is described by size, not by name", body.includes("4.0 KB"), body);
 
-  check("accept was clicked", await clickTest(win, "inbox-accept"));
+  check("accept was clicked", await clickWhenEnabled(win, "inbox-accept"));
   await waitForValue(() => inbox.accepted.length > 0);
   check(
     "the accept was handed to the transport as an accept",
@@ -1424,7 +1455,7 @@ async function scenarioInboxPending(win) {
   check("a queued acceptance is not reported as a save", !notice.toLowerCase().includes("saved"), notice);
 
   await clickTest(win, "inbox-notice-dismiss");
-  check("decline was clicked", await clickTest(win, "inbox-reject"));
+  check("decline was clicked", await clickWhenEnabled(win, "inbox-reject"));
   await waitForValue(() => inbox.accepted.some((entry) => entry.accept === false));
   check(
     "a decline is handed over as a decline",
@@ -1944,7 +1975,7 @@ async function scenarioInboxPolicy(win) {
   );
 
   // ---- auto -------------------------------------------------------------
-  check("auto was chosen", await clickTest(win, "inbox-policy-auto"));
+  check("auto was chosen", await clickWhenEnabled(win, "inbox-policy-auto"));
   const announcedAuto = await waitForValue(() => inbox.lastAutoAccept === "auto", 8000);
   check("auto was handed to the transport", announcedAuto === true, inbox.lastAutoAccept);
   check(
@@ -1954,7 +1985,7 @@ async function scenarioInboxPolicy(win) {
   );
 
   // ---- off --------------------------------------------------------------
-  check("off was chosen", await clickTest(win, "inbox-policy-off"));
+  check("off was chosen", await clickWhenEnabled(win, "inbox-policy-off"));
   const announcedOff = await waitForValue(() => inbox.lastAutoAccept === "off", 8000);
   check("off was handed to the transport", announcedOff === true, inbox.lastAutoAccept);
 
@@ -1967,7 +1998,7 @@ async function scenarioInboxPolicy(win) {
   check("nothing is claimed while off", inbox.claims === claimsAtOff, String(inbox.claims));
 
   // ---- back to ask ------------------------------------------------------
-  check("ask was chosen again", await clickTest(win, "inbox-policy-ask"));
+  check("ask was chosen again", await clickWhenEnabled(win, "inbox-policy-ask"));
   const backToAsk = await waitForValue(() => inbox.lastAutoAccept === "ask", 8000);
   check("ask was handed to the transport", backToAsk === true, inbox.lastAutoAccept);
   handlerControlWake();
@@ -2045,7 +2076,7 @@ async function scenarioInboxReceiptsAndReveal(win) {
 async function scenarioInboxAutomaticReceive(win, runtime) {
   await openInbox(win);
   // Unattended saving is the user's choice, made here as a person makes it.
-  check("auto was chosen for the delivery", await clickTest(win, "inbox-policy-auto"));
+  check("auto was chosen for the delivery", await clickWhenEnabled(win, "inbox-policy-auto"));
   const announced = await waitForValue(() => inbox.lastAutoAccept === "auto", 8000);
   check("auto reached the transport", announced === true, inbox.lastAutoAccept);
 
