@@ -132,8 +132,24 @@ export class PairHandoffController {
       case "expired":
         this.copyNotice = { kind: "expired" };
         return;
-      default:
+      case "no-code":
+      case "unavailable":
+        // Both are honestly "the copy did not happen", and neither can say more
+        // without describing main's internals. Named rather than defaulted, so
+        // a fifth outcome cannot inherit a verdict nobody chose for it.
         this.copyNotice = { kind: "failed" };
+        return;
+      default: {
+        // Compile-time and run-time are different jobs. The assignment is the
+        // guarantee: a fifth outcome fails the build here. The line after it is
+        // what happens if the TYPE is ever wrong — main sending a shape this
+        // build does not know — and there the conservative answer is the right
+        // one. Throwing would take out the renderer; rendering the value would
+        // put an object on screen.
+        const unhandled: never = outcome;
+        void unhandled;
+        this.copyNotice = { kind: "failed" };
+      }
     }
   }
 

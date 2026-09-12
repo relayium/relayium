@@ -98,8 +98,23 @@
         return failure.status === undefined
           ? at("failedRefused")
           : at("failedRefusedStatus", { status: failure.status });
-      default:
+      case "unreadable":
         return at("failedUnreadable");
+      default: {
+        // The default used to BE the `unreadable` case, unnamed. Correct, and
+        // the wrong structure: a seventh kind would have inherited "this client
+        // cannot show you your account right now", which is a specific claim
+        // nobody had made about it.
+        //
+        // An explicit `never` rather than no default at all — without one this
+        // returns `undefined` and the card renders blank. And a real sentence
+        // after it rather than the `never` value, because this line runs only
+        // if the TYPE is wrong, and putting an object on screen is not better
+        // than saying the least this build can honestly say.
+        const unhandled: never = failure.kind;
+        void unhandled;
+        return at("failedUnreadable");
+      }
     }
   }
 
@@ -133,8 +148,16 @@
           : "";
       case "failed":
         return failureText(outcome.failure);
-      default:
+      case "renamed":
+        // Deliberately silent, like the non-self `revoked` above it: the row
+        // updates in place and there is nothing to announce. Named rather than
+        // left to a default, so the silence is a decision on the record.
         return "";
+      default: {
+        const unhandled: never = outcome;
+        void unhandled;
+        return "";
+      }
     }
   }
 

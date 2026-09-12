@@ -169,7 +169,10 @@
         // This way a kind added to `InboxNotice` fails to compile HERE, at the
         // one place that has to describe it.
         const unhandled: never = notice;
-        return unhandled;
+        void unhandled;
+        // Runs only if the TYPE is wrong. The least this page can honestly say
+        // beats putting an object on screen.
+        return t("inboxFailed");
       }
     }
   });
