@@ -856,6 +856,14 @@ async function main() {
         found.bytes.subarray(0, 8).toString("hex"),
       );
     }
+
+    // Release TOOLING must not be inside the product. `manifest-publisher` and
+    // `release-staging` are compiled with the main process so their rules are
+    // typed and tested against the shipping verifier, and `electron-builder.yml`
+    // excludes them from `files`. An exclusion nothing checks is a comment.
+    for (const tool of ["dist/main/update/manifest-publisher.js", "dist/main/update/release-staging.js"]) {
+      check(`${tool} is NOT shipped inside the app`, bytesInAsar(asar, tool, 1) === null, tool);
+    }
   }
 
   // ---- The shortcuts, and the identity a toast is attributed to ---------

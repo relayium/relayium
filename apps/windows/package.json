@@ -18,7 +18,8 @@
     "test:smoke:resident": "node test/smoke/resident-smoke.mjs",
     "package:win": "electron-builder --win --x64 --publish never",
     "pretest": "npm run build:inbox && npm run build:stored",
-    "feed:manifest": "node build/make-update-manifest.mjs"
+    "feed:manifest": "node build/make-update-manifest.mjs",
+    "feed:stage": "node build/stage-windows-release.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.0",

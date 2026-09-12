@@ -23,6 +23,14 @@ files:
   # `assets/**` above re-includes them — the last matching pattern wins — which
   # would ship the installer's source inside the application.
   - "!assets/installer.nsh"
+  # Release TOOLING, compiled alongside the app so its rules are typed and
+  # tested, and excluded here so it is not carried inside the product. Same
+  # reasoning as the installer script above: something the app never runs has no
+  # business shipping in it. The installed-artifact acceptance asserts their
+  # absence from the packaged archive, because an exclusion nothing checks is a
+  # comment.
+  - "!dist/main/update/manifest-publisher.js"
+  - "!dist/main/update/release-staging.js"
   - package.json
 
 # The native receive helper ships beside the app, not inside the asar: it is an
