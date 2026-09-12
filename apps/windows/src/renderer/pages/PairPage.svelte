@@ -32,6 +32,8 @@
     onLeave,
     now,
     verifyPeers,
+    signedOut = false,
+    onSignIn,
     codeDraft = $bindable(""),
     messageDraft = $bindable(""),
   }: {
@@ -50,6 +52,14 @@
     /** An owned ticking clock. `Date.now()` in a `$derived` never updates. */
     now: number;
     verifyPeers: boolean;
+    /**
+     * Whether creating a code is possible at all.
+     *
+     * Defaults to false so a caller that has not been told cannot gate a screen
+     * on its own silence — the same rule the version gate follows.
+     */
+    signedOut?: boolean;
+    onSignIn?: () => void;
     /** Hoisted above this component so a sidebar click does not destroy a code
      *  the user is halfway through typing. */
     codeDraft?: string;
@@ -107,6 +117,29 @@
       <p class="dim small" data-test="pair-expires">{t("pairExpires", { minutes: minutesLeft })}</p>
       <p class="dim small">{t("pairWaiting")}</p>
       <button class="quiet" data-test="pair-leave" onclick={onLeave}>{t("pairLeave")}</button>
+    {:else if signedOut}
+      <!--
+        Said BEFORE the attempt, not after it.
+        
+        Pressing Create signed out used to spend a round trip and come back with
+        the same sentence as a refusal. macOS states it up front —
+        `CapabilityGateView` gates "only the half that spends an account" — and
+        the copy for it already existed here, shown reactively.
+
+        The sign-in is deliberately NOT `primary`. Joining a code is right
+        beside this and needs no account, so it is the thing a signed-out reader
+        can actually do; a prominent Sign in here would outrank it. macOS gives
+        the same reason for the same screen.
+
+        The Create button is ABSENT rather than disabled: a greyed control
+        states no reason and offers no way forward.
+      -->
+      <p class="dim" data-test="pair-signed-out">{t("pairSignedOut")}</p>
+      {#if onSignIn}
+        <button class="quiet" type="button" data-test="pair-sign-in" onclick={onSignIn}>
+          {t("navAccount")}
+        </button>
+      {/if}
     {:else}
       <button class="primary" data-test="pair-create" onclick={onCreate} disabled={minting}>
         {minting ? t("pairCreating") : t("pairCreate")}

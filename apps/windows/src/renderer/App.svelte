@@ -906,6 +906,8 @@
       onJoin={joinCode}
       onLeave={leavePair}
       {now}
+      {signedOut}
+      onSignIn={() => goTo("account")}
       bind:codeDraft
       bind:messageDraft
       verifyPeers={effectiveVerifyPeers}
