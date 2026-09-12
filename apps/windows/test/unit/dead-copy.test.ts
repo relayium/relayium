@@ -27,6 +27,12 @@ import { describe, expect, it } from "vitest";
 
 /** The English half of each catalogue. `zh` parity is a compile error already. */
 const CATALOGUES: readonly (readonly [string, string])[] = [
+  // The MAIN process's own catalogue, added 2026-09-12 after six
+  // `resident.login.*` keys were found read by nothing: the startup surface was
+  // built in the renderer with renderer copy, and the tray has no startup
+  // entry, so they were superseded duplicates. Its keys are quoted and dotted
+  // (`"resident.tray.open"`), which the shape below handles.
+  ["src/main/l10n.ts", "EN"],
   ["src/renderer/i18n/messages.ts", "en"],
   ["src/renderer/account/messages.ts", "accountEn"],
   ["src/renderer/update/messages.ts", "updateEn"],
@@ -42,7 +48,11 @@ function keysOf(file: string, exported: string): string[] {
   // The object ends where the next top-level declaration begins.
   const end = rest.slice(20).search(/\n(?:export|const|function|type|interface)\s/);
   const block = end < 0 ? rest : rest.slice(0, 20 + end);
-  return [...new Set([...block.matchAll(/^ {2}(\w+):/gm)].map((m) => m[1]!))];
+  // Bare identifiers in the renderer catalogues, quoted dotted names in the
+  // main-process one. Both are keys and both are read the same way.
+  return [
+    ...new Set([...block.matchAll(/^ {2}"?([\w.]+)"?:/gm)].map((m) => m[1]!)),
+  ];
 }
 
 describe("every catalogue key is named by something", () => {
@@ -66,7 +76,12 @@ describe("every catalogue key is named by something", () => {
       .map((line) => line.replace(/(^|[^:\w])\/\/.*$/, "$1"))
       .join("\n");
   const corpus = [...globSync("src/**/*.{ts,svelte}"), ...globSync("test/**/*.{ts,mjs}")]
-    .filter((f) => !f.endsWith("messages.ts"))
+    // Every catalogue is excluded from the corpus, not just the renderer ones.
+    // Adding `l10n.ts` to the list above without adding it here made this pin
+    // VACUOUS for it: the file was in its own corpus, so every key matched
+    // itself and no main-process key could ever be reported. Caught by the RED
+    // proof for that addition refusing to fire.
+    .filter((f) => !CATALOGUES.some(([catalogue]) => f === catalogue || f.endsWith(catalogue)))
     .map((f) => strip(readFileSync(f, "utf8")))
     .join("\n");
 

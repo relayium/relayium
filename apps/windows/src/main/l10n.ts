@@ -83,8 +83,6 @@ export type MessageKey =
   | "resident.firstClose.hide"
   | "resident.firstClose.quit"
   | "resident.firstClose.cancel"
-  | "resident.login.title"
-  | "resident.login.body"
   | "resident.tray.updates"
   | "resident.update.confirmTitle"
   | "resident.update.confirmBody"
@@ -94,10 +92,6 @@ export type MessageKey =
   | "resident.login.confirmBody"
   | "resident.login.confirm"
   | "resident.login.cancel"
-  | "resident.login.stateOn"
-  | "resident.login.stateOff"
-  | "resident.login.stateDisabledByUser"
-  | "resident.login.stateExternallyEnabled"
   | "resident.quit.transferTitle"
   | "resident.quit.transferBody"
   | "resident.quit.localTextTitle"
@@ -220,8 +214,6 @@ export const EN: Catalog = {
   "resident.firstClose.hide": "Keep running",
   "resident.firstClose.quit": "Quit Relayium",
   "resident.firstClose.cancel": "Cancel",
-  "resident.login.title": "Open at login",
-  "resident.login.body": "Start Relayium when you sign in to Windows.",
   // Consent to END the running app. Said plainly, including what it costs:
   // somebody with a transfer running needs to know before they answer.
   "resident.tray.updates": "Updates",
@@ -235,12 +227,6 @@ export const EN: Catalog = {
     "Relayium will be added to your Windows startup programs. You can remove it here or in Task Manager at any time.",
   "resident.login.confirm": "Add to startup",
   "resident.login.cancel": "Cancel",
-  "resident.login.stateOn": "Relayium starts when you sign in.",
-  "resident.login.stateOff": "Relayium does not start when you sign in.",
-  "resident.login.stateDisabledByUser":
-    "Relayium is listed in your startup programs but is turned off there, so it will not start. Turn it back on in Task Manager, under Startup apps.",
-  "resident.login.stateExternallyEnabled":
-    "Something else on this PC starts Relayium when you sign in.",
   "resident.quit.transferTitle": "Quit while a transfer is running?",
   "resident.quit.transferBody": "The transfer will stop and will not finish.",
   "resident.quit.localTextTitle": "Quit with unsent text?",
@@ -346,8 +332,6 @@ export const ZH_HANS: Catalog = {
   "resident.firstClose.hide": "继续运行",
   "resident.firstClose.quit": "退出 Relayium",
   "resident.firstClose.cancel": "取消",
-  "resident.login.title": "登录时启动",
-  "resident.login.body": "登录 Windows 时自动启动 Relayium。",
   "resident.tray.updates": "更新",
   "resident.update.confirmTitle": "关闭 Relayium 并安装更新？",
   "resident.update.confirmBody":
@@ -359,11 +343,6 @@ export const ZH_HANS: Catalog = {
     "Relayium 将被添加到 Windows 启动项。你随时可以在这里或任务管理器中移除。",
   "resident.login.confirm": "添加到启动项",
   "resident.login.cancel": "取消",
-  "resident.login.stateOn": "登录时会启动 Relayium。",
-  "resident.login.stateOff": "登录时不会启动 Relayium。",
-  "resident.login.stateDisabledByUser":
-    "Relayium 已在启动项中，但已被禁用，因此不会启动。可在任务管理器的“启动应用”中重新启用。",
-  "resident.login.stateExternallyEnabled": "此电脑上有其他设置会在登录时启动 Relayium。",
   "resident.quit.transferTitle": "传输正在进行，仍要退出吗？",
   "resident.quit.transferBody": "传输将中止，且不会完成。",
   "resident.quit.localTextTitle": "还有未发送的文本，仍要退出吗？",
