@@ -233,16 +233,29 @@
     workspace.sendFiles(intent.peerId, files);
   }
 
+  /** Set when a drop was refused whole; cleared by the next drop that works. */
+  let dropRefused = $state(false);
+
   function onDrop(event: DragEvent) {
     event.preventDefault();
     dragging = false;
+    dropRefused = false;
     // Captured BEFORE the read, which is asynchronous for a dropped directory,
     // and re-checked in full after it.
     const intent = captureIntent();
     if (intent === null) return;
-    void pickedFromDrop(event.dataTransfer).then((files) => {
-      if (files.length === 0 || !intentHolds(intent)) return;
-      workspace.sendFiles(intent.peerId, files);
+    void pickedFromDrop(event.dataTransfer).then((dropped) => {
+      if (!intentHolds(intent)) return;
+      // A partial batch is never offered, so this is the only place that can
+      // tell the person their folder was not taken. Silence here is what made
+      // a truncated folder look like a delivered one.
+      if (!dropped.complete) {
+        dropRefused = true;
+        return;
+      }
+      dropRefused = false;
+      if (dropped.files.length === 0) return;
+      workspace.sendFiles(intent.peerId, dropped.files);
     });
   }
 
@@ -514,6 +527,9 @@
         ondragleave={() => (dragging = false)}
         ondrop={onDrop}
       >
+        {#if dropRefused}
+          <p class="problem small" data-test="drop-refused" role="status">{t("dropUnreadable")}</p>
+        {/if}
         <!-- The picker is opened by a real user gesture on a real control, so
              Electron shows the native Windows dialog and this app needs no
              arbitrary-path read channel at all. -->

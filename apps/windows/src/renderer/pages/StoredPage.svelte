@@ -30,7 +30,7 @@
     type StoredSendController,
   } from "../send/stored-send-controller.svelte.js";
   import type { AccountSummaryController } from "../account/account-controller.svelte.js";
-  import { pickedFromDrop } from "../send/picked-files.js";
+  import { pickedFromDrop, type DroppedFiles } from "../send/picked-files.js";
   import type { PickedFile } from "../../../../../web/src/lib/drag";
   import { sendGate } from "../send/send-gate.svelte.js";
 
@@ -155,6 +155,8 @@
 
   /** Whether a drag is over the drop target, so it can say it is. */
   let dragging = $state(false);
+  /** Set when a drop was refused whole; cleared by the next drop. */
+  let dropRefused = $state(false);
 
   /** A past send's link, held only while its row is showing it. */
   let shownLink = $state<string | null>(null);
@@ -193,6 +195,9 @@
       void stored.open();
     }}
   >
+    {#if dropRefused}
+      <p class="problem small" data-test="drop-refused" role="status">{t("dropUnreadable")}</p>
+    {/if}
     <label class="sr-only" for="stored-link">{t("storedLinkLabel")}</label>
     <input
       id="stored-link"
@@ -337,14 +342,22 @@
       event.preventDefault();
       dragging = false;
       const transfer = event.dataTransfer;
-      void sendGate.pickThenStart<PickedFile[]>(
+      dropRefused = false;
+      void sendGate.pickThenStart<DroppedFiles>(
         () => pickedFromDrop(transfer),
-        (picked) => {
+        (dropped) => {
+          // A partial batch is never offered. Saying so is the only way a
+          // person learns their folder was not taken; silence made a truncated
+          // folder look like a delivered one.
+          if (!dropped.complete) {
+            dropRefused = true;
+            return;
+          }
           // The PATHS go with the files. Mapping to `entry.file` here threw the
           // dropped folder's structure away — `docs/note.txt` arrived as
           // `note.txt`, and two siblings with the same basename collided.
-          if (picked.length === 0) return;
-          send.pickEntries(picked.map((entry) => ({ file: entry.file, path: entry.path ?? entry.file.name })));
+          if (dropped.files.length === 0) return;
+          send.pickEntries(dropped.files.map((entry) => ({ file: entry.file, path: entry.path ?? entry.file.name })));
         },
       );
     }}
