@@ -253,6 +253,32 @@ async function main() {
   await js(`window.__set("setText", "open", "")`);
   equal("and nothing is said when the lane is fine", await js(`window.__count('[data-test="text-error"]')`), 0);
 
+  at("a connection that could not open says WHY");
+  // The defect this scenario exists for: `mixed-text-session` already stores
+  // the cause — `peerBusy` when the other device answered busy, `unsupported`
+  // when its build cannot hold a conversation — and Windows already has both
+  // sentences. They rendered on the message card, which is gated on the link
+  // being OPEN, so at the moment the connection failed the correct sentence
+  // was computed, stored, and on a card that could not be on screen.
+  await js(`window.__set("setStatus", "failed")`);
+  await js(`window.__set("setText", "peerBusy", "peerBusy")`);
+  const busySaid = await js(`window.__text('[data-test="link-lane-reason"]')`);
+  check("a busy peer is named", /busy/i.test(busySaid ?? ""), busySaid);
+  // And it replaces the bare status word, as a named ending does.
+  equal("the generic status word gives way", await js(`window.__count('[data-test="link-status"]')`), 0);
+
+  await js(`window.__set("setText", "unsupported", "unsupported")`);
+  const oldSaid = await js(`window.__text('[data-test="link-lane-reason"]')`);
+  check("an older peer is named differently", oldSaid !== busySaid && (oldSaid ?? "").length > 0, oldSaid);
+
+  // A lane error left over from an earlier conversation is NOT a caption for
+  // this failure. Only the two that say why a connection did not open.
+  await js(`window.__set("setText", "failed", "tooLong")`);
+  equal("an unrelated lane error is not borrowed", await js(`window.__count('[data-test="link-lane-reason"]')`), 0);
+  equal("and the status word comes back", await js(`window.__count('[data-test="link-status"]')`), 1);
+  await js(`window.__set("setText", "open", "")`);
+  await js(`window.__set("setStatus", "open")`);
+
   at("verification gates both directions");
   await js(`window.__set("setVerification", true, "", false)`);
   equal("with no code yet, it waits", await js(`window.__count('[data-test="sas-pending"]')`), 1);

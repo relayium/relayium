@@ -105,6 +105,7 @@
   /** The link is over, whether or not the ending had a name. One rule, in a
    *  module, because three things below ask it. */
   const terminal = $derived(linkIsTerminal(endReason, status));
+
   /** A WARNING, not a state: both lanes still work while this is true. */
   const relayExpiring = $derived(workspace.relayExpiring);
   /** False means this link cannot be rebuilt if it drops. Said BEFORE it does. */
@@ -145,6 +146,24 @@
   const recv = $derived(workspace.recv);
   const send = $derived(workspace.send);
   const text = $derived(workspace.text);
+  /**
+   * Why the connection did not open, when the LANE knows and the link does not.
+   *
+   * `mixed-text-session` catches `LinkBusyError` and `UnsupportedLinkError`
+   * and stores each as its own `errorKey`. Both sentences have existed here
+   * since the text lane shipped — and both rendered on the message card, which
+   * is gated on the link being OPEN. So at the one moment either is true, the
+   * correct sentence was computed, stored, and on a card that could not be on
+   * screen; what the reader got was "Could not connect" over the word "Failed".
+   *
+   * Only these two. The lane has six error keys and the other four are about a
+   * conversation that already exists — a message too long, a peer flooding it —
+   * and captioning a failed CONNECTION with one of those would be borrowing an
+   * unrelated sentence to explain something it says nothing about.
+   */
+  const laneReasonKey = $derived(
+    text.errorKey === "peerBusy" ? "textPeerBusy" : text.errorKey === "unsupported" ? "textUnsupported" : null,
+  );
 
   const receipt = $derived(room.lastReceipt);
 
@@ -521,6 +540,10 @@
            word, which is the most this side actually knows. -->
       {#if endReason}
         <p class="dim small" data-test="link-end-reason">{t(linkEndKey(endReason))}</p>
+      {:else if laneReasonKey}
+        <!-- Replaces the status word for the same reason a named ending does:
+             "Failed" beside a peer that is simply busy is true and useless. -->
+        <p class="dim small" data-test="link-lane-reason">{t(laneReasonKey)}</p>
       {:else}
         <!-- Localised. The raw enum is an English identifier and would sit
              under a Chinese title as `requesting`. -->
