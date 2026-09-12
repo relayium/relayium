@@ -31,7 +31,7 @@ import {
   type SendRefusal,
 } from "../../../../../web/src/lib/peer-workspace.svelte";
 import type { Peer } from "../../../../../web/src/lib/protocol";
-import type { SignalingRoom } from "../../shared/ipc-contract.js";
+import type { PublishFailureReason, SignalingRoom } from "../../shared/ipc-contract.js";
 import { createIceTransport } from "../transport/ice-transport.js";
 import { createSignalingTransport, type SignalingTransport } from "../transport/signaling-transport.js";
 import { mintToken, type TransportBridge } from "../transport/bridge.js";
@@ -70,7 +70,23 @@ export type ReceiveOutcome =
   | { readonly kind: "partial"; readonly saved: number; readonly total: number; readonly residue: boolean }
   | {
       readonly kind: "failed";
-      readonly reason: string;
+      /**
+       * The union main emits, not a widened `string`.
+       *
+       * The widening is how the screen's map came adrift from what main sends:
+       * with `string` here, a reason nobody had written a sentence for was not
+       * a build error, it was a silent fall to the catch-all. Two of the
+       * branches downstream matched values main has never produced, and three
+       * values main DOES produce matched nothing.
+       *
+       * The narrowing had to be earned rather than merely declared. On the
+       * `failed` path main already mapped its codes; on the PARTIAL path it
+       * forwarded the helper's own `E_*` wire code verbatim, so there really
+       * was a wider set arriving here. `native-receive-adapter.ts` now narrows
+       * that path too, and this type is what stops it drifting again. The same
+       * correction the Inbox delivery PHASE got.
+       */
+      readonly reason: PublishFailureReason;
       readonly residue: boolean;
       /** Files that DID reach their final names before the failure. Never
        *  dropped: they exist, and a receipt that omits them is wrong. */

@@ -33,7 +33,7 @@
 //      bytes under another's name. It is checked.
 
 import type { FileSink, SaveTarget } from "../../../../../web/src/lib/filesink";
-import type { PublishReport } from "../../shared/ipc-contract.js";
+import type { PublishFailureReason, PublishReport } from "../../shared/ipc-contract.js";
 
 /** The privileged half, as the renderer sees it. */
 export interface ReceiveBridge {
@@ -92,7 +92,9 @@ export class PartialPublicationError extends Error {
   constructor(
     readonly publishedCount: number,
     readonly total: number,
-    readonly reason: string,
+    /** The union, not a widened `string`: `PublishReport` already carries it
+     *  as one, and widening here is what let the screen's map drift from it. */
+    readonly reason: PublishFailureReason,
     /** Bytes may remain in the user's folder. */
     readonly residue: boolean = false,
   ) {
