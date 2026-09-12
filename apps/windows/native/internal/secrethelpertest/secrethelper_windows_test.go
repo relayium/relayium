@@ -468,7 +468,8 @@ exit $p.ExitCode
 	ctx, cancel := context.WithTimeout(context.Background(), processBudget)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script)
-	var launcherErr bytes.Buffer
+	var launcherOut, launcherErr bytes.Buffer
+	cmd.Stdout = &launcherOut
 	cmd.Stderr = &launcherErr
 	exit := 0
 	if runErr := cmd.Run(); runErr != nil {
@@ -478,16 +479,21 @@ exit $p.ExitCode
 		}
 		exit = exitErr.ExitCode()
 	}
-	// PowerShell itself failing is not the helper refusing. Its own diagnostics
-	// go to `launcherErr`; anything there means the launch, not the operation.
-	if strings.Contains(launcherErr.String(), "Start-Process") {
-		return result{}, fmt.Errorf("Start-Process failed: %s", launcherErr.String())
-	}
 	res := result{exit: exit}
 	if stderrBytes, readStderrErr := os.ReadFile(errPath); readStderrErr == nil {
 		res.stderr = string(stderrBytes)
 	}
-	if response, readOutErr := os.ReadFile(outPath); readOutErr == nil && len(response) > 0 {
+	response, readOutErr := os.ReadFile(outPath)
+	// A launch that never reached the helper is NOT a refusal, and the two look
+	// identical from an exit code alone: no response, no helper stderr. When
+	// that happens the launcher's own words are the only evidence there is, so
+	// they are returned as an error rather than silently becoming a verdict.
+	if (readOutErr != nil || len(response) == 0) && res.stderr == "" {
+		return result{}, fmt.Errorf(
+			"the helper produced nothing as %s (exit %d); powershell said: %s | %s",
+			user, exit, strings.TrimSpace(launcherOut.String()), strings.TrimSpace(launcherErr.String()))
+	}
+	if readOutErr == nil && len(response) > 0 {
 		status, payload, decodeErr := secretframe.DecodeResponse(response)
 		if decodeErr != nil {
 			return result{}, fmt.Errorf("the helper's response did not decode: %w", decodeErr)
