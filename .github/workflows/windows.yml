@@ -250,6 +250,13 @@ jobs:
       - name: Update screen, in a real renderer
         run: npm run test:smoke:update-details
 
+      # The screen the product is named for, and the last major one with no
+      # real-renderer coverage. Drives the retained-cleanup card and the receipt
+      # phase line: both carry copy that is compile-checked and, until this
+      # step, was never DISPLAYED by anything.
+      - name: Device Inbox, in a real renderer
+        run: npm run test:smoke:inbox-page
+
       # Why a sealed identity stops being readable.
       #
       # Runs after `build` because it drives the real `SecretStore` out of

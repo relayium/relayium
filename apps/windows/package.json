@@ -23,7 +23,8 @@
     "test:smoke:os-entry": "node test/smoke/os-entry-smoke.mjs",
     "test:smoke:pair-handoff": "node test/smoke/pair-handoff-smoke.mjs",
     "test:smoke:account-details": "node test/smoke/account-details-smoke.mjs",
-    "test:smoke:update-details": "node test/smoke/update-details-smoke.mjs"
+    "test:smoke:update-details": "node test/smoke/update-details-smoke.mjs",
+    "test:smoke:inbox-page": "node test/smoke/inbox-page-smoke.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
