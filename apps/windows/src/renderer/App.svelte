@@ -53,6 +53,7 @@
   import { RevealController, type RevealBridge } from "./receive/reveal-controller.svelte.js";
   import { ReceivedController, type ReceivedBridge } from "./receive/received-controller.svelte.js";
   import type { HelpBridge } from "./shell/guide-link.js";
+  import type { SupportReport } from "../shared/ipc-contract.js";
   import { OfferAnnouncer } from "./receive/offer-announcer.js";
   import PendingSelection from "./pages/PendingSelection.svelte";
   import PairHandoff from "./pages/PairHandoff.svelte";
@@ -143,6 +144,9 @@
    * everything, so it cannot be scrolled out of sight.
    */
   let banner = $state<string | null>(null);
+  /** Whether this build may run at all. `null` until `appInfo` answers, and a
+   *  `null` never blocks — failing open includes the moment before the answer. */
+  let support = $state<SupportReport | null>(null);
   let prefs = $state<PreferencesValues>({ verifyPeers: false });
   /** Set when the settings file exists and could not be read. The values shown
    *  are then defaults rather than the user's, and Account says so instead of
@@ -285,6 +289,8 @@
     },
     onInfo: (info) => {
       banner = info.banner;
+      // Absent means supported. See `AppInfo.support`.
+      support = info.support ?? null;
       lanAutoStart = info.lanAutoStart !== false;
       // Deferred until crypto is ready: starting a room here would compose a
       // workspace whose very first link throws.
@@ -763,6 +769,42 @@
        Explorer; what they picked has to be visible from whichever screen
        happens to be open, not only from one the app chose to navigate to. The
        pane renders nothing when nothing is staged. -->
+  <!--
+    A build the product no longer supports renders NOTHING else.
+
+    Not hidden and not disabled — NOT BUILT, which is the rule
+    `AppVersionGate.swift` states and the reason it states it: a below-minimum
+    build must not open a room socket, stage a selection or register for
+    anything while it shows the reader why. Every branch below, including the
+    staged-selection pane, is inside the `{:else}`.
+
+    Absent support is `supported`. Failing open is the rule everywhere in this
+    mechanism, and a composition that never opened a gate must not be blocked
+    by its own silence.
+  -->
+  {#if support?.state === "blocked"}
+    <Card>
+      <h2 data-test="unsupported-title">{t("unsupportedTitle")}</h2>
+      <p class="dim" data-test="unsupported-body">
+        {t("unsupportedBody", {
+          current: support.current,
+          minimum: support.minimum,
+          latest: support.latest,
+        })}
+      </p>
+      <!--
+        No buttons at all, and both absences are deliberate.
+
+        No UPDATE button: where an update comes from is the shipped updater's
+        pinned feed, and this screen is reached because of a document fetched
+        over the network. A button here would be the one place a policy could
+        influence what gets installed.
+
+        No QUIT button: the window already has one, and a renderer-driven quit
+        would be a new IPC capability bought for a control the OS supplies.
+      -->
+    </Card>
+  {:else}
   <PendingSelection controller={osEntry} />
   <!-- Nothing composes a room until the encryption library is loaded, so this
        says which state it is in rather than rendering a pairing screen whose
@@ -852,6 +894,7 @@
        yet. -->
   {#if cryptoPhase === "ready"}
     <Help page={page()} />
+  {/if}
   {/if}
 </AppShell>
 

@@ -68,6 +68,7 @@ import {
 import { SignalingHub, isWellFormedCode, type SignalingSocketFactory } from "./net/signaling-socket.js";
 import { BoundedTransport } from "./net/transport.js";
 import { SecretStore, platformCipher } from "./secrets.js";
+import type { PolicyGate } from "./policy/policy-gate.js";
 import { currentDataRoot } from "./storage.js";
 import { IpcRefusal, IpcRouter, expectChunk, expectIndex, expectObject, expectString } from "./ipc.js";
 import { ReceiptRegistry } from "./io/receipt-registry.js";
@@ -93,6 +94,13 @@ import { openApprovedExternal } from "./window.js";
  */
 export interface HandlerComposition {
   makeStore?: () => Promise<SecretStore>;
+  /**
+   * Whether this build may run its product surfaces.
+   *
+   * Optional, and its absence is `supported`: a composition that never opened a
+   * gate must not block itself by its own silence. See `PolicyGate`.
+   */
+  policyGate?: PolicyGate;
   /** The destination a batch is written into. See `AppServiceDeps`. */
   makeDestination?: AppServiceDeps["makeDestination"];
   /** The signalling socket constructor, substituted so a test can drive the hub
@@ -509,6 +517,9 @@ export function registerHandlers(
     // production room — which is precisely what Mac's own `UITestMode`
     // residency gate is for.
     lanAutoStart: engineeringOverride("RELAYIUM_WINDOWS_NO_LAN_AUTOSTART") === undefined,
+    // Absent when no gate was opened, and absent means supported. A composition
+    // that never composed one must not block itself by its own silence.
+    ...(composition.policyGate ? { support: composition.policyGate.current() } : {}),
   }));
 
   // The attempt nonce is renderer-supplied, so it is bounded and shaped at this

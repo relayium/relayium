@@ -252,6 +252,15 @@ export const en = {
     "The encryption library could not be loaded, so transfers cannot run. Nothing has been sent or received.",
   startRetry: "Try again",
 
+  // --- This build may no longer run -----------------------------------------
+  //
+  // Not an error and not a failure: the product has withdrawn support for this
+  // version. Says what is required and what to do, and never blames the user or
+  // their machine.
+  unsupportedTitle: "This version of Relayium can no longer run",
+  unsupportedBody:
+    "Relayium {current} is below the minimum supported version, {minimum}. Update to {latest} to continue. Nothing has been deleted, and your files and keys are untouched.",
+
   settingsTitle: "Settings",
   settingsVerify: "Ask me to check a verification code",
   settingsVerifyHelp:
@@ -787,6 +796,10 @@ export const zh: Record<MessageKey, string> = {
   startFailedTitle: "Relayium 无法启动",
   startFailedBody: "加密库未能加载，因此无法进行传输。没有发送或接收任何内容。",
   startRetry: "重试",
+
+  unsupportedTitle: "此版本的 Relayium 已无法运行",
+  unsupportedBody:
+    "Relayium {current} 低于最低支持版本 {minimum}。请更新到 {latest} 后继续使用。没有任何内容被删除，你的文件和密钥不受影响。",
 
   settingsTitle: "设置",
   settingsVerify: "每次连接都让我核对验证码",
