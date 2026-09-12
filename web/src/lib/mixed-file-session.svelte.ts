@@ -2087,7 +2087,22 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     },
 
     enqueue(peerId, picked) {
-      const chosen = picked.slice(0, MAX_FILES);
+      // NOT `picked.slice(0, MAX_FILES)`, which is what this was.
+      //
+      // Trimming here made an over-limit batch pass the `files.length <=
+      // MAX_FILES` check on the receive side of this same file — so the bound
+      // written to refuse the batch was satisfied by quietly discarding the
+      // part that broke it, and the sender watched a complete-looking transfer.
+      //
+      // `peer-workspace`'s `sendFiles` is the choke point that reports this to
+      // a person; reaching here over the limit is a caller that bypassed it,
+      // and the answer is still to refuse rather than to trim.
+      //
+      // Defence in depth, and stated as such: the covered path is the choke
+      // point, and this guard has no test of its own because no caller reaches
+      // it over the limit today. It exists so the next one cannot.
+      if (picked.length > MAX_FILES) return;
+      const chosen = picked;
       if (chosen.length === 0) return;
       const files = chosen.map(({ file, path }) => ({ name: file.name, size: file.size, path }));
       const valid = files.every((file) => Number.isSafeInteger(file.size) && file.size >= 0);

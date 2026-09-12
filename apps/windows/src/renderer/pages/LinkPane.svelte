@@ -37,6 +37,7 @@
   import { t } from "../i18n/index.svelte.js";
   import Card from "../shell/Card.svelte";
   import { pickedFromInput, pickedFromDrop } from "../send/picked-files.js";
+  import { MAX_FILES } from "../../../../../web/src/lib/manifest";
   import { sendGate, type Ticket } from "../send/send-gate.svelte.js";
 
   /** An outgoing intent: the quit permission, and the conversation it was for. */
@@ -230,6 +231,10 @@
     const intent = pickIntent;
     pickIntent = null;
     if (intent === null || files.length === 0 || !intentHolds(intent)) return;
+    // Cleared before the attempt, like `dropRefused` above: whatever this
+    // selection turns out to be, the previous refusal is no longer what the
+    // person is looking at.
+    room?.clearSendRefusal();
     workspace.sendFiles(intent.peerId, files);
   }
 
@@ -255,6 +260,9 @@
       }
       dropRefused = false;
       if (dropped.files.length === 0) return;
+      // Same clearing as `sendPicked`: the drop path reaches `sendFiles`
+      // directly rather than through it.
+      room?.clearSendRefusal();
       workspace.sendFiles(intent.peerId, dropped.files);
     });
   }
@@ -529,6 +537,14 @@
       >
         {#if dropRefused}
           <p class="problem small" data-test="drop-refused" role="status">{t("dropUnreadable")}</p>
+        {:else if room?.sendRefusal === "too-many-files"}
+          <!-- A different refusal from the one above and it says so: one is a
+               file that could not be read, this is a selection that is simply
+               too large. Telling them apart is the difference between checking
+               a disk and sending fewer files. -->
+          <p class="problem small" data-test="send-refused-count" role="status">
+            {t("sendTooManyFiles", { max: MAX_FILES })}
+          </p>
         {/if}
         <!-- The picker is opened by a real user gesture on a real control, so
              Electron shows the native Windows dialog and this app needs no
