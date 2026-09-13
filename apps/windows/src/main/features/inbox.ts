@@ -52,7 +52,7 @@
 // this publishes is counts and closed codes; the destination the renderer
 // learns about is the boolean `hasDestination`.
 
-import { stat } from "node:fs/promises";
+import { probeFolder, type FolderProbe } from "../inbox/folder-probe.js";
 
 import { InboxApi } from "../inbox/api.js";
 import type { AccountContext } from "../inbox/account.js";
@@ -278,7 +278,7 @@ export interface InboxServiceDeps {
   makeDestination?: InboxDestinationFactory;
   resolveDevice?(bearer: string, signal: AbortSignal): Promise<CurrentDevice>;
   /** Whether the chosen folder is still there. Production is a `stat`. */
-  directoryUsable?(path: string): Promise<boolean>;
+  directoryUsable?(path: string): Promise<FolderProbe>;
   makeApi?(context: AccountContext, bearer: string): FacadeApi & PresenceApi;
   now?(): number;
   readonly backoff?: InboxBackoff;
@@ -347,15 +347,17 @@ interface Operation {
   readonly settled: Promise<void>;
 }
 
-async function directoryExists(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isDirectory();
-  } catch {
-    // Missing, unreadable, or not a directory. All three mean the grant cannot
-    // be honoured, and none of them is something polling harder will fix.
-    return false;
-  }
-}
+/**
+ * The default probe. See `inbox/folder-probe.ts` for what it asks and why.
+ *
+ * This was a boolean from `stat().isDirectory()`, and its comment listed what
+ * it merged — missing, unreadable, not a directory — on the grounds that none
+ * of them is fixed by polling harder. True of the BACKOFF, and the backoff is
+ * unchanged. What was wrong is that the screen then said "the receiving folder
+ * is not there" about all three, and that a folder which exists and cannot be
+ * WRITTEN passed the check entirely.
+ */
+const defaultProbe = probeFolder;
 
 /** A thrown value as a stable code. Never a message, never a path. */
 function codeOf(error: unknown): InboxFailureCode {
@@ -857,14 +859,14 @@ export class InboxService {
     }
 
     // ---- 4. destination --------------------------------------------------
-    const usable = await (this.deps.directoryUsable ?? directoryExists)(bound.grant.directory);
+    const usable = await (this.deps.directoryUsable ?? defaultProbe)(bound.grant.directory);
     if (signal.aborted || !bound.alive) return this.backoff.idle;
-    if (!usable) {
+    if (!usable.ok) {
       // Receiving is on with nowhere to receive INTO. Never `idle`, and never
       // silently `disabled`: the policy the user set is still their answer, and
       // this names what is missing. Slower than a failure retry, because no
       // amount of polling reattaches a removed drive.
-      this.publish({ kind: "folder-missing" });
+      this.publish({ kind: "folder-missing", problem: usable.problem });
       return this.backoff.blocked;
     }
 
@@ -1673,8 +1675,11 @@ export class InboxService {
     if (signal.aborted || chosen === null || chosen.length === 0) return null;
     // A folder that is not there is not a destination. Refused BEFORE the grant
     // is written, so a failure preparing it cannot enrol a fictitious receiver.
-    const usable = await (this.deps.directoryUsable ?? directoryExists)(chosen);
-    return usable && !signal.aborted ? chosen : null;
+    // A folder that cannot take a delivery is not a destination — and that now
+    // includes one that cannot be written, which previously passed and enrolled
+    // a receiver whose every delivery would fail at write time.
+    const usable = await (this.deps.directoryUsable ?? defaultProbe)(chosen);
+    return usable.ok && !signal.aborted ? chosen : null;
   }
 
   /**
@@ -1753,7 +1758,7 @@ export class InboxService {
     if (directory.length === 0) return Promise.resolve({ kind: "failed", reason: "storage-unreadable" });
     return this.own(async () => {
       try {
-        const usable = await (this.deps.directoryUsable ?? directoryExists)(directory);
+        const usable = await (this.deps.directoryUsable ?? defaultProbe)(directory);
         if (!bound.alive || this.#bound !== bound) {
           return { kind: "failed", reason: "account-changed" } as const;
         }
@@ -1762,7 +1767,7 @@ export class InboxService {
         }
         if (this.admissionClosed()) return { kind: "refused" } as const;
         // Refused rather than opening whatever is at a stale path.
-        if (!usable) return { kind: "failed", reason: "storage-unreadable" } as const;
+        if (!usable.ok) return { kind: "failed", reason: "storage-unreadable" } as const;
         await reveal(directory);
         return { kind: "ok" } as const;
       } catch (err) {

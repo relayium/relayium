@@ -15,6 +15,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import type { FolderProblem } from "../../src/main/inbox/folder-probe.js";
 
 import {
   COMPOSED_FEATURES,
@@ -174,6 +175,8 @@ interface Harness {
   holdSecret: Promise<void> | null;
   secretEntered: (() => void) | null;
   usable: boolean;
+  /** Which problem an unusable folder reports. Write-only; default `missing`. */
+  problem: FolderProblem;
   document: number;
   device: { id: string; name: string };
   readonly dialogs: () => number;
@@ -223,6 +226,8 @@ async function harness(
     holdSecret: null as Promise<void> | null,
     secretEntered: null as (() => void) | null,
     usable: true,
+    /** Which problem an unusable folder reports. */
+    problem: "missing" as FolderProblem,
     document: 1,
     device: { id: "dev-1", name: "A PC" },
   };
@@ -285,7 +290,7 @@ async function harness(
     async directoryUsable() {
       state.probeEntered += 1;
       if (state.probeHold !== null) await state.probeHold;
-      return state.usable;
+      return state.usable ? { ok: true } : { ok: false, problem: state.problem };
     },
     async makeDestination() {
       destinations += 1;
@@ -380,6 +385,10 @@ async function harness(
     },
     set usable(next: boolean) {
       state.usable = next;
+    },
+    /** Which problem an unusable folder reports. Default `missing`. */
+    set problem(next: FolderProblem) {
+      state.problem = next;
     },
     get device() {
       return state.device;
@@ -1642,5 +1651,56 @@ describe("the named history", () => {
     await waitFor("the second enrolment", () => second.calls.enrol > 0);
     const history = await second.service.history();
     expect(history?.[0]?.items[0]?.name).toBe("keeps/its/name.bin");
+  });
+});
+
+describe("a folder that cannot take a delivery names WHICH problem", () => {
+  const granted = {
+    grant: { directory: "/chosen", enabled: true, policy: "ask" as const, withdrawalPending: false },
+  };
+
+  for (const problem of ["missing", "not-a-directory", "not-writable"] as const) {
+    it(`reports ${problem} rather than one sentence for all three`, async () => {
+      const h = await harness(granted);
+      await waitFor("the enrolment", () => h.calls.enrol > 0 || status(h) === "folder-missing");
+      h.problem = problem;
+      h.usable = false;
+      h.service.wake();
+      await waitFor("the folder guard", () => status(h) === "folder-missing");
+      const view = h.service.view().status;
+      if (view.kind !== "folder-missing") throw new Error("expected folder-missing");
+      expect(view.problem).toBe(problem);
+      // The user's answer is still their answer, whichever problem it is.
+      expect(h.service.view().enabled).toBe(true);
+    });
+  }
+
+  it("does not enrol a folder it cannot write into", async () => {
+    // THE defect. `stat().isDirectory()` passed a read-only folder, so this
+    // path recorded a grant, enrolled a receiver, and every delivery to it
+    // failed at write time — after being claimed and downloaded.
+    const h = await harness();
+    await waitFor("the disabled guard", () => status(h) === "disabled");
+    h.problem = "not-writable";
+    h.usable = false;
+    expect(await h.service.enable()).toEqual({ kind: "declined" });
+    expect(h.calls.enrol).toBe(0);
+    expect([...h.secrets.keys()].some((key) => key.startsWith("inbox-grant-"))).toBe(false);
+  });
+
+  it("claims nothing while the folder cannot take it", async () => {
+    // Failing BEFORE the claim is the whole point: a claimed delivery has
+    // spent a claim, a download and a server round trip before anyone learns
+    // the folder was never going to accept it.
+    const h = await harness(granted);
+    await waitFor("the enrolment", () => h.calls.enrol > 0 || status(h) === "folder-missing");
+    h.problem = "not-writable";
+    h.usable = false;
+    const before = h.calls.claim;
+    h.service.wake();
+    await waitFor("the folder guard", () => status(h) === "folder-missing");
+    h.service.wake();
+    await waitFor("the guard to hold", () => status(h) === "folder-missing");
+    expect(h.calls.claim).toBe(before);
   });
 });

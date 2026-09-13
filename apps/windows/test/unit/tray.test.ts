@@ -43,7 +43,7 @@ describe("what the tray says the Device Inbox is doing", () => {
     { kind: "needs-account" },
     { kind: "account-unreadable" },
     { kind: "disabled" },
-    { kind: "folder-missing" },
+    { kind: "folder-missing", problem: "missing" },
     { kind: "starting" },
     { kind: "idle", pending: 0 },
     { kind: "receiving" },

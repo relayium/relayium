@@ -124,7 +124,16 @@ export function inboxStatusLabel(t: Translate, status: InboxStatus, paused: bool
     case "disabled":
       return t("resident.tray.statusInboxOff");
     case "folder-missing":
-      return t("resident.tray.statusInboxFolderMissing");
+      // Three problems, three lines. The screen behind this says why in full;
+      // the tray says enough that somebody knows whether to go looking for the
+      // folder or to go free some space.
+      return t(
+        status.problem === "not-writable"
+          ? "resident.tray.statusInboxFolderNotWritable"
+          : status.problem === "not-a-directory"
+            ? "resident.tray.statusInboxFolderNotDir"
+            : "resident.tray.statusInboxFolderMissing",
+      );
     case "starting":
       return t("resident.tray.statusInboxStarting");
     case "receiving":

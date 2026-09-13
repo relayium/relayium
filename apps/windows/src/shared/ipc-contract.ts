@@ -28,10 +28,12 @@
  * Type-only, so nothing from `src/main/**` is bundled into the renderer.
  */
 import type { DeliveryReceipt, InboxFailureCode, ResidueState } from "../main/inbox/receipts.js";
+import type { FolderProblem } from "../main/inbox/folder-probe.js";
 import type { TaskPhase } from "../main/inbox/journal.js";
 import type { SupportReport } from "../main/policy/policy-gate.js";
 
 export type { DeliveryReceipt, InboxFailureCode, ResidueState, TaskPhase, SupportReport };
+export type { FolderProblem };
 
 export const IPC = {
   /** Build/runtime facts the shell renders. No secrets. */
@@ -1266,12 +1268,18 @@ export type InboxStatus =
   /** The user has not asked to receive. */
   | { readonly kind: "disabled" }
   /**
-   * Receiving is on and the chosen folder is not there.
+   * Receiving is on and the chosen folder cannot take a delivery.
    *
    * Never `disabled` and never `idle`: the user's answer is still their answer,
-   * and this names what is missing.
+   * and this names what is wrong with it.
+   *
+   * `problem` was not here, and one sentence — "the receiving folder is not
+   * there" — covered three situations with three different fixes. It was also
+   * false for two of them: a folder that is present but unreadable is there,
+   * and so is a file sitting where the folder used to be. A `not-writable`
+   * folder did not reach this state at ALL, because nothing checked.
    */
-  | { readonly kind: "folder-missing" }
+  | { readonly kind: "folder-missing"; readonly problem: FolderProblem }
   /** Adopting the account or enrolling. Nothing has failed. */
   | { readonly kind: "starting" }
   | { readonly kind: "idle"; readonly pending: number }

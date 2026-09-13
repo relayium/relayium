@@ -490,9 +490,30 @@ export const en = {
   inboxAccountUnreadableBody:
     "Relayium could not open the encrypted storage that holds this device's keys. Receiving cannot continue until it can, and your messages have not been deleted.",
 
+  // --- Three folder problems, three fixes ----------------------------------
+  //
+  // One title and one body used to cover all of them, and the probe behind it
+  // was a boolean whose own comment listed what it merged: "Missing,
+  // unreadable, or not a directory." So a folder that was present but
+  // unreadable, and a path where a FILE now sits, both reported "not there".
+  //
+  // And a folder that could not be WRITTEN never reached this state at all,
+  // because nothing checked. It reported ready, claimed deliveries, and failed
+  // once per delivery at write time.
   inboxFolderMissingTitle: "The receiving folder is not there",
   inboxFolderMissingBody:
     "Receiving is still on, but the folder you chose cannot be found — it may have been moved, renamed, or be on a drive that is disconnected. Choose it again to continue.",
+  inboxFolderNotDirTitle: "Something else is at that path now",
+  inboxFolderNotDirBody:
+    "Receiving is still on, but what is at the folder's path is not a folder any more — a file with that name may have replaced it. Move that file, or choose a different folder.",
+  inboxFolderNotWritableTitle: "The receiving folder cannot be written to",
+  /**
+   * "Right now" is doing work: `access(W_OK)` reflects the permissions, and a
+   * full disk or a quota can still refuse a write this check allows. The
+   * sentence names both causes rather than promising the next write succeeds.
+   */
+  inboxFolderNotWritableBody:
+    "Receiving is still on, but Relayium cannot save into the folder you chose right now — its permissions may have changed, or the disk may be full. Free some space, fix the permissions, or choose a different folder.",
   inboxChooseFolder: "Choose folder",
   inboxChangeFolder: "Change folder",
   inboxFolderChosen: "Files will arrive in the folder you chose.",
@@ -1106,6 +1127,12 @@ export const zh: Record<MessageKey, string> = {
     "Relayium 无法打开保存本设备密钥的加密存储。在此之前无法继续接收，你的消息不会被删除。",
 
   inboxFolderMissingTitle: "接收文件夹不存在",
+  inboxFolderNotDirTitle: "该路径下现在是别的东西",
+  inboxFolderNotDirBody:
+    "接收仍处于开启状态，但该文件夹路径下现在不是文件夹了——可能被同名文件取代。请移走该文件，或另选一个文件夹。",
+  inboxFolderNotWritableTitle: "无法写入接收文件夹",
+  inboxFolderNotWritableBody:
+    "接收仍处于开启状态，但 Relayium 现在无法保存到你选择的文件夹——可能是权限发生了变化，也可能是磁盘已满。请释放空间、修复权限，或另选一个文件夹。",
   inboxFolderMissingBody:
     "接收仍处于打开状态，但找不到你选择的文件夹——它可能已被移动、重命名，或所在的磁盘已断开。重新选择即可继续。",
   inboxChooseFolder: "选择文件夹",

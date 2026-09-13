@@ -68,6 +68,8 @@ export type MessageKey =
   | "resident.tray.statusInboxUnreadable"
   | "resident.tray.statusInboxOff"
   | "resident.tray.statusInboxFolderMissing"
+  | "resident.tray.statusInboxFolderNotDir"
+  | "resident.tray.statusInboxFolderNotWritable"
   | "resident.tray.statusInboxStarting"
   | "resident.tray.statusInboxReceiving"
   | "resident.tray.statusInboxBlocked"
@@ -227,6 +229,11 @@ export const EN: Catalog = {
   "resident.tray.statusInboxUnreadable": "Device Inbox: this PC's store cannot be read",
   "resident.tray.statusInboxOff": "Device Inbox: off",
   "resident.tray.statusInboxFolderMissing": "Device Inbox: the chosen folder is missing",
+  // Terse, because a tray line is read in passing — but not the SAME line, for
+  // the reason the screen behind it now gives three: a read-only folder is not
+  // a missing one, and sending somebody to look for it wastes the trip.
+  "resident.tray.statusInboxFolderNotDir": "Device Inbox: something replaced the folder",
+  "resident.tray.statusInboxFolderNotWritable": "Device Inbox: cannot write to the folder",
   "resident.tray.statusInboxStarting": "Device Inbox: starting",
   "resident.tray.statusInboxReceiving": "Device Inbox: receiving now",
   "resident.tray.statusInboxBlocked": "Device Inbox: stopped, needs you",
@@ -355,6 +362,8 @@ export const ZH_HANS: Catalog = {
   "resident.tray.statusInboxUnreadable": "设备收件箱：无法读取本机存储",
   "resident.tray.statusInboxOff": "设备收件箱：已关闭",
   "resident.tray.statusInboxFolderMissing": "设备收件箱：所选文件夹已不存在",
+  "resident.tray.statusInboxFolderNotDir": "设备收件箱：该路径已被别的东西占用",
+  "resident.tray.statusInboxFolderNotWritable": "设备收件箱：无法写入该文件夹",
   "resident.tray.statusInboxStarting": "设备收件箱：正在启动",
   "resident.tray.statusInboxReceiving": "设备收件箱：正在接收",
   "resident.tray.statusInboxBlocked": "设备收件箱：已停止，需要你处理",

@@ -32,6 +32,7 @@
   import Card from "../shell/Card.svelte";
   import { sendGate } from "../send/send-gate.svelte.js";
   import { deliveryStateKey } from "../inbox/delivery-copy.js";
+  import { folderProblemCopy } from "../inbox/folder-copy.js";
   import type { InboxController } from "../inbox/inbox-controller.svelte.js";
   import type { InboxSendController, TargetStatus } from "../inbox/inbox-send-controller.svelte.js";
   import type { InboxAcceptOutcome, ResidueState, TaskPhase } from "../../shared/ipc-contract.js";
@@ -332,7 +333,9 @@
       <!-- The live state, under the switch that produced it. -->
       {#if status.kind === "folder-missing"}
         <p class="problem" data-test="inbox-folder-missing">
-          <strong>{t("inboxFolderMissingTitle")}</strong><br />{t("inboxFolderMissingBody")}
+          <strong>{t(folderProblemCopy(status.problem).title)}</strong><br />{t(
+            folderProblemCopy(status.problem).body,
+          )}
         </p>
       {:else if status.kind === "starting"}
         <p class="dim" data-test="inbox-starting">{t("inboxStartingBody")}</p>
