@@ -39,7 +39,7 @@
   import { pickedFromInput, pickedFromDrop } from "../send/picked-files.js";
   import { MAX_FILES } from "../../../../../web/src/lib/manifest";
   import { sendGate, type Ticket } from "../send/send-gate.svelte.js";
-  import { linkEndKey, linkIsTerminal } from "../rooms/link-ending.js";
+  import { linkEndKey, linkIsTerminal, linkPathKey } from "../rooms/link-ending.js";
   import { connectionRefusedKey, publishFailureKey, textErrorMessageKey } from "../rooms/lane-copy.js";
   import type { PublishFailureReason } from "../../shared/ipc-contract.js";
 
@@ -110,6 +110,8 @@
   const relayExpiring = $derived(workspace.relayExpiring);
   /** False means this link cannot be rebuilt if it drops. Said BEFORE it does. */
   const recoveryAvailable = $derived(workspace.recoveryAvailable);
+  /** Which route this connection took, once it is known. Null until then. */
+  const pathKey = $derived(linkPathKey(workspace.linkPath));
 
   const STATUS_KEY = {
     idle: "linkStatusIdle",
@@ -598,6 +600,12 @@
   {:else}
     <Card title={t("linkConnected", { peer: peerLabel })}>
       {#if sas}<p class="dim small" data-test="sas">{sas}</p>{/if}
+      <!-- Which route the bytes take. Absent until classified, and absent once
+           the link is over: a badge describing a connection that no longer
+           exists is worse than none. The web gates it the same way. -->
+      {#if pathKey && !terminal}
+        <p class="dim small" data-test="link-path" data-path={workspace.linkPath}>{t(pathKey)}</p>
+      {/if}
 
       <!-- Two WARNINGS, not states. The link is fully live under both and every
            control below stays usable; they gate nothing.
