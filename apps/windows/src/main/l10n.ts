@@ -82,6 +82,7 @@ export type MessageKey =
   | "resident.notify.incomingTextTitle"
   | "resident.notify.incomingTextBody"
   | "resident.tray.revealInbox"
+  | "resident.tray.notifyBlocked"
   | "resident.firstClose.title"
   | "resident.firstClose.body"
   | "resident.firstClose.hide"
@@ -249,6 +250,15 @@ export const EN: Catalog = {
   "resident.notify.incomingTextTitle": "Someone wants to send you a message",
   "resident.notify.incomingTextBody": "Open Relayium to accept or decline.",
   "resident.tray.revealInbox": "Show the receive folder",
+  /**
+   * Shown only after a toast actually failed to appear.
+   *
+   * It says what was OBSERVED, not what is configured. Electron cannot ask
+   * Windows whether this app is muted, so "notifications are turned off" would
+   * be a claim about a setting nothing read; "could not be shown" is what
+   * happened. The item opens the settings where it is fixed.
+   */
+  "resident.tray.notifyBlocked": "A notification could not be shown — open settings",
   "resident.firstClose.title": "Relayium is still running",
   "resident.firstClose.body":
     "Closing this window leaves Relayium running in the notification area, so it is ready when you need it. Open it again from the Relayium icon there, or quit it completely.",
@@ -376,6 +386,7 @@ export const ZH_HANS: Catalog = {
   "resident.notify.incomingTextBody": "打开 Relayium 接受或拒绝。",
   "resident.notify.incomingBody": "打开 Relayium 以接受或拒绝。",
   "resident.tray.revealInbox": "显示接收文件夹",
+  "resident.tray.notifyBlocked": "有通知未能显示——打开通知设置",
   "resident.firstClose.title": "Relayium 仍在运行",
   "resident.firstClose.body":
     "关闭此窗口后，Relayium 会继续在通知区域运行，随时可用。你可以从那里的 Relayium 图标重新打开，或者完全退出。",

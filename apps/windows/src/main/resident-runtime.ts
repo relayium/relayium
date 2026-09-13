@@ -101,6 +101,14 @@ export interface ResidentRuntimeDeps {
   readonly accountIdentity: () => string;
   readonly onLocaleChanged?: () => void;
   /**
+   * Open the OS notification settings.
+   * 
+   * Optional, and absent everywhere but the shipped composition: a test host
+   * has no Settings app, and an adapter that silently did nothing would be a
+   * tray item that looks like it worked.
+   */
+  readonly openNotificationSettings?: (() => void) | undefined;
+  /**
    * Stop admitting new work in EVERY feature main composes, synchronously and
    * without stopping anything that is running. See `HandlerControl.fence`.
    *
@@ -390,6 +398,11 @@ export class ResidentRuntime {
       openUpdates: () => void this.openPage("account"),
       setNearby: (active) => void this.setLan(active ? "resume" : "pause"),
       nearbyActive: () => this.nearby,
+      // Observed, not configured. See `notify.ts`: the flag is set by a toast
+      // that did not appear and cleared by one that did.
+      notifyBlocked: () => this.#notifyBlocked,
+      canOpenNotificationSettings: () => this.deps.openNotificationSettings !== undefined,
+      openNotificationSettings: () => this.deps.openNotificationSettings?.(),
       // Straight to main's own service: unlike Nearby, whose room the PAGE
       // owns, the Device Inbox runs here. It therefore works with the window
       // hidden or closed, which is the state a tray item exists for.
@@ -497,6 +510,25 @@ export class ResidentRuntime {
    * being announced. `attention` is not suppressed — it exists because
    * something is waiting for them.
    */
+  /**
+   * Whether the last toast this app tried failed to appear.
+   *
+   * Held here rather than on the platform adapter because the TRAY reads it,
+   * and the tray is rebuilt from this object. Set only by an observed failure;
+   * cleared by an observed success, so a warning cannot outlive the problem.
+   */
+  #notifyBlocked = false;
+
+  /** Called by the platform adapter with what actually happened to a toast. */
+  noteNotifyOutcome(shown: boolean): void {
+    if (this.#notifyBlocked === !shown) return;
+    this.#notifyBlocked = !shown;
+    // The menu is built from this, so it has to be rebuilt when it changes —
+    // the same refresh the pause labels use, rather than a second mechanism
+    // for the same job.
+    this.deps.onLocaleChanged?.();
+  }
+
   notify(event: NotificationEvent): boolean {
     if (event.kind !== "attention" && this.deps.platform.isFocused()) return false;
     const content = present(event, this.translate);

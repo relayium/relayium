@@ -135,3 +135,96 @@ describe("the page-reported notice set", () => {
     }
   });
 });
+
+describe("what actually happened to the toast", () => {
+  const content = { title: "T", body: "B" };
+
+  function deps(over: Partial<NotifyDeps> = {}): { deps: NotifyDeps; outcomes: boolean[] } {
+    const outcomes: boolean[] = [];
+    const handlers = new Map<string, (event: unknown, error: string) => void>();
+    return {
+      outcomes,
+      deps: {
+        isSupported: () => true,
+        create: () =>
+          ({
+            on: (event: string, fn: (e: unknown, err: string) => void) => handlers.set(event, fn),
+            show: () => undefined,
+            // Exposed so a case can fire the platform's own failure event.
+            fire: (error: string) => handlers.get("failed")?.(null, error),
+          }) as unknown as NotificationHandle,
+        onClick: () => undefined,
+        report: () => undefined,
+        onOutcome: (shown) => outcomes.push(shown),
+        ...over,
+      } as NotifyDeps,
+    };
+  }
+
+  it("reports success when the toast reached the platform", () => {
+    const { deps: d, outcomes } = deps();
+    expect(showNotification(d, content.title, content.body)).toBe(true);
+    expect(outcomes).toEqual([true]);
+  });
+
+  it("reports failure when the platform supports none", () => {
+    const { deps: d, outcomes } = deps({ isSupported: () => false });
+    expect(showNotification(d, content.title, content.body)).toBe(false);
+    expect(outcomes).toEqual([false]);
+  });
+
+  it("reports failure when constructing one throws", () => {
+    const { deps: d, outcomes } = deps({
+      create: () => {
+        throw new Error("no");
+      },
+    });
+    expect(showNotification(d, content.title, content.body)).toBe(false);
+    expect(outcomes).toEqual([false]);
+  });
+
+  it("reports failure when show() throws", () => {
+    const { deps: d, outcomes } = deps({
+      create: () =>
+        ({
+          on: () => undefined,
+          show: () => {
+            throw new Error("no");
+          },
+        }) as unknown as NotificationHandle,
+    });
+    expect(showNotification(d, content.title, content.body)).toBe(false);
+    expect(outcomes).toEqual([false]);
+  });
+
+  it("reports failure when the OS says the toast did not appear", () => {
+    // The asynchronous one, and the only signal Windows gives when the OS
+    // refuses or suppresses a toast. `show()` returning is not a toast anybody
+    // saw — which is why the success report above is not the last word.
+    const created: { fire: (error: string) => void }[] = [];
+    const { deps: d, outcomes } = deps({
+      create: () => {
+        const handlers = new Map<string, (e: unknown, err: string) => void>();
+        const handle = {
+          on: (event: string, fn: (e: unknown, err: string) => void) => handlers.set(event, fn),
+          show: () => undefined,
+          fire: (error: string) => handlers.get("failed")?.(null, error),
+        };
+        created.push(handle);
+        return handle as unknown as NotificationHandle;
+      },
+    });
+    showNotification(d, content.title, content.body);
+    expect(outcomes).toEqual([true]);
+    created[0]?.fire("the user has notifications off");
+    expect(outcomes).toEqual([true, false]);
+  });
+
+  it("never puts the platform's own message in the outcome", () => {
+    // The outcome is a fact a tray can act on. The message is a log line: it is
+    // the platform's string and can carry anything.
+    const { deps: d, outcomes } = deps({ isSupported: () => false });
+    showNotification(d, content.title, content.body);
+    expect(outcomes.every((o) => typeof o === "boolean")).toBe(true);
+  });
+});

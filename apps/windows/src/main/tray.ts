@@ -77,6 +77,28 @@ export interface TrayActions {
    * cannot be shown beside it.
    */
   readonly revealInbox: () => void;
+  /**
+   * Whether a notification has actually failed to appear since the last one
+   * that worked.
+   *
+   * Observed, never inferred: Electron cannot ask Windows whether this app is
+   * muted, so nothing here claims notifications are off — only that one did not
+   * arrive. Until this existed, every failure went to stderr and the person
+   * whose window was shut was told nothing by the feature whose whole job is to
+   * tell them.
+   */
+  readonly notifyBlocked: () => boolean;
+  /**
+   * Whether this platform HAS a notification-settings screen this app can open.
+   *
+   * Separate from `notifyBlocked` because they are different facts and each is
+   * true to its name. A toast can fail on a development Mac, where there is no
+   * `ms-settings:` to send anybody to; an item offering to open settings that
+   * cannot be opened is worse than no item.
+   */
+  readonly canOpenNotificationSettings: () => boolean;
+  /** Open the OS notification settings. Main composes the target. */
+  readonly openNotificationSettings: () => void;
   readonly hasInboxFolder: () => boolean;
   /**
    * The signed-in account, or "" when there is none.
@@ -185,6 +207,13 @@ export function trayMenuTemplate(t: Translate, actions: TrayActions): readonly T
     // and failing.
     ...(actions.hasInboxFolder()
       ? [{ label: t("resident.tray.revealInbox"), click: actions.revealInbox }]
+      : []),
+    // Present only after a toast actually failed. Spread rather than disabled,
+    // for the reason the item above gives: a menu has nowhere to put a refusal,
+    // and an always-present item about notifications being broken would be
+    // noise on every open for the many users whose notifications work.
+    ...(actions.notifyBlocked() && actions.canOpenNotificationSettings()
+      ? [{ label: t("resident.tray.notifyBlocked"), click: actions.openNotificationSettings }]
       : []),
     {
       // Says what it will DO, not what is true now: a menu item labelled with a
