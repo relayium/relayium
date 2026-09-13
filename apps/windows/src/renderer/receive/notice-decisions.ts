@@ -77,9 +77,27 @@ export function noticesFor<Room extends object>(
   const previous = memory.seenInbound.get(room) ?? 0;
   if (latest > previous) {
     memory.seenInbound.set(room, latest);
-    // Only for messages that arrived after this page started watching, so a
-    // reconnect that replays a transcript does not re-announce it.
-    if (previous > 0 || state.inboundIds.includes(latest)) notices.push("saved-message");
+    // Announced on the first sight of a populated room too, deliberately.
+    //
+    // This used to read `if (previous > 0 || state.inboundIds.includes(latest))`
+    // under a comment promising that a reconnect replaying a transcript would
+    // not re-announce it. It could not: `latest` is the maximum of
+    // `inboundIds`, and reaching here means `latest > previous >= 0`, so the
+    // list is non-empty and contains it. The right-hand side was always true
+    // and the whole condition read `previous > 0 || true`.
+    //
+    // Keeping the behaviour and dropping the dead clause, because the promise
+    // is not one this layer can keep. `seenInbound` is a plain Map that dies
+    // with the page (`App.svelte`), so nothing here can tell a transcript
+    // replayed by a RELOAD from one replayed on reconnect after the app was
+    // closed while a message arrived. They want opposite treatment: suppress
+    // the first and you lose a duplicate toast, suppress the second and a
+    // message the user has never seen arrives in silence. A notice is a nudge,
+    // so under that ambiguity the smaller harm is announcing.
+    //
+    // Distinguishing them needs a high-water mark that survives a page load.
+    // See DECISION-LOG.md, 2026-09-13.
+    notices.push("saved-message");
   }
 
   // A code waiting to be compared is the one thing that genuinely needs the
