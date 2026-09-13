@@ -168,10 +168,16 @@ Still required for parity:
 
   Two differences from macOS remain, both recorded rather than glossed:
 
-  - macOS re-renders the moment a document lands, so a floor published now
-    takes effect now. Windows judges a launch by what the device already
-    remembers and refreshes behind it, so a floor takes effect on the NEXT
-    start. Closing that needs a push to the shell (`policy-gate.ts`).
+  - ~~A floor takes effect on the next start, where macOS re-renders
+    immediately.~~ **Wrong when written (2026-09-13) and corrected the same
+    day.** The live push exists — `PolicyGate.listen`, `handlers.ts`'s
+    registration, `IPC_EVENTS.clientSupport`, the page's subscription — so a
+    floor published now reaches a RUNNING client. The claim was copied from a
+    stale header comment in `policy-gate.ts` that contradicted the methods
+    beneath it. What was genuinely missing was proof: nothing named `policyGate`
+    or `clientSupport`, and the smoke that appeared to cover it pushed the IPC
+    event itself. It now serves a real document to the real source; deleting the
+    one line that carries the policy to the page fails it.
   - There is no admin lever. The macOS form validates a proposed minimum
     against a verified release catalogue so an operator cannot set a floor to a
     version that was never published; Windows has no releases to validate
