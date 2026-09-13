@@ -48,6 +48,7 @@ const calls = {
   rejectText: 0,
   abortFile: 0,
   sendText: [] as string[],
+  clearText: 0,
   sendFiles: 0,
   openText: 0,
   disconnect: 0,
@@ -94,6 +95,7 @@ interface LinkWorkspaceStandIn {
   rejectText(): void;
   abortFile(): void;
   sendText(peerId: string, body: string): void;
+  clearText(): void;
   sendFiles(peerId: string, files: readonly unknown[]): void;
   openText(peerId: string): Promise<void>;
   disconnect(): void;
@@ -160,6 +162,10 @@ const workspace: LinkWorkspaceStandIn = {
   sendText: (_peerId, body) => {
     calls.sendText.push(body);
   },
+  clearText: () => {
+    calls.clearText += 1;
+    state.textHistory = [];
+  },
   sendFiles: () => {
     calls.sendFiles += 1;
   },
@@ -218,7 +224,7 @@ const _workspaceAssignable: Pick<
   | "linkPeerId" | "linkStatus" | "linkEndReason" | "linkGeneration" | "relayExpiring"
   | "recoveryAvailable" | "sasCode" | "incoming" | "recv" | "send" | "text"
   | "acceptFile" | "rejectFile" | "acceptText" | "rejectText" | "abortFile"
-  | "sendText" | "openText" | "disconnect" | "dismissLinkEnd"
+  | "sendText" | "clearText" | "openText" | "disconnect" | "dismissLinkEnd"
 > = workspace as unknown as PeerWorkspace;
 void _workspaceAssignable;
 const _roomAssignable: Pick<
@@ -281,6 +287,11 @@ Object.defineProperty(globalThis, "__linkHarness", {
     setText(status: TextStatus, errorKey: TextErrorKey): void {
       state.textStatus = status;
       state.textErrorKey = errorKey;
+    },
+    setHistory(bodies: readonly string[]): void {
+      state.textHistory = bodies.map(
+        (body, i) => ({ id: i + 1, dir: i % 2 === 0 ? "in" : "out", body, failed: false }) as TextMessage,
+      );
     },
     /**
      * A FINISHED incoming batch, which is where the receipt renders.

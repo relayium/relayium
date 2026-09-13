@@ -140,6 +140,14 @@
   const awaitingSas = $derived(needsConfirmation && sas === "");
 
   let declined = $state(false);
+  /**
+   * The clear confirmation is open.
+   *
+   * Page state, not the workspace's: nothing has been asked of the session
+   * until it is answered, and a confirmation nobody answered has changed
+   * nothing anywhere.
+   */
+  let clearing = $state(false);
   let dragging = $state(false);
 
   const incoming = $derived(workspace.incoming);
@@ -801,6 +809,37 @@
           <li class:out={entry.dir === "out"} class:failed={entry.failed}>{entry.body}</li>
         {/each}
       </ul>
+      <!-- Offered only when there is something to clear, and confirmed because
+           it cannot be undone: an unrecoverable wipe one button from Send is a
+           misclick away. `clearText()` has been in the shared workspace since
+           the text lane shipped and this client called it nowhere, so the only
+           way to get messages off the screen was to end the link. -->
+      {#if text.history.length > 0}
+        {#if clearing}
+          <div class="confirm" data-test="text-clear-confirm-card">
+            <p class="problem small">{t("textClearTitle")}</p>
+            <p class="dim small" data-test="text-clear-body">{t("textClearBody")}</p>
+            <button
+              class="danger"
+              type="button"
+              data-test="text-clear-confirm"
+              onclick={() => {
+                clearing = false;
+                workspace.clearText();
+              }}
+            >
+              {t("textClearConfirm")}
+            </button>
+            <button type="button" data-test="text-clear-cancel" onclick={() => (clearing = false)}>
+              {t("textClearCancel")}
+            </button>
+          </div>
+        {:else}
+          <button class="quiet" type="button" data-test="text-clear" onclick={() => (clearing = true)}>
+            {t("textClear")}
+          </button>
+        {/if}
+      {/if}
       <form
         class="composer"
         onsubmit={(e) => {
@@ -913,6 +952,15 @@
   button:active:not(:disabled), .button:active { transform: scale(0.98); }
   .primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
   .quiet { border: 0; background: transparent; color: var(--text-dim); padding-left: 0; }
+  /* Set apart from the transcript above it, because it is a question about
+     that transcript rather than part of it. */
+  .confirm {
+    margin: var(--space-inner) 0;
+    padding: var(--space-inner);
+    border: 1px solid var(--border);
+    border-radius: var(--corner);
+  }
+  .confirm p { margin: 0 0 var(--space-tight); }
   .button input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
   .button:focus-within, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

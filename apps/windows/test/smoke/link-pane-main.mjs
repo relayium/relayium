@@ -286,6 +286,34 @@ async function main() {
   await js(`window.__set("setText", "open", "")`);
   await js(`window.__set("setStatus", "open")`);
 
+  at("a conversation can be cleared without ending it");
+  // `PeerWorkspace.clearText()` has existed in the shared code Windows uses
+  // since the text lane shipped, the web renders a Clear button wired to it,
+  // and macOS confirms before clearing. Windows offered nothing: the only way
+  // to get messages off the screen was to end the link.
+  await js(`window.__set("setText", "open", "")`);
+  await js(`window.__set("setHistory", ["hello", "hi back"])`);
+  equal("the transcript renders", await js(`window.__count('[data-test="history"] li')`), 2);
+  equal("clear is offered", await js(`window.__count('[data-test="text-clear"]')`), 1);
+  check("it presses", await js(`window.__click('[data-test="text-clear"]')`));
+  // Confirmed, not immediate: an unrecoverable wipe beside a Send button is a
+  // misclick away.
+  equal("and asks first", await js(`window.__count('[data-test="text-clear-confirm"]')`), 1);
+  equal("nothing cleared yet", (await js(`window.__linkHarness.calls()`)).clearText, 0);
+  const warning = await js(`window.__text('[data-test="text-clear-body"]')`);
+  check("saying it is local and cannot be undone", /this pc|cannot be undone/i.test(warning ?? ""), warning);
+  check("declining leaves it alone", await js(`window.__click('[data-test="text-clear-cancel"]')`));
+  equal("still there", await js(`window.__count('[data-test="history"] li')`), 2);
+  equal("and still nothing cleared", (await js(`window.__linkHarness.calls()`)).clearText, 0);
+  await js(`window.__click('[data-test="text-clear"]')`);
+  check("confirming clears", await js(`window.__click('[data-test="text-clear-confirm"]')`));
+  equal("the transcript is empty", await js(`window.__count('[data-test="history"] li')`), 0);
+  equal("through the workspace, once", (await js(`window.__linkHarness.calls()`)).clearText, 1);
+  // The distinction the feature exists for.
+  equal("and the session is NOT ended", (await js(`window.__linkHarness.calls()`)).disconnect, 0);
+  equal("the composer is still there", await js(`window.__count('[data-test="message"]')`), 1);
+  await shoot(page, "07-en-cleared");
+
   at("verification gates both directions");
   await js(`window.__set("setVerification", true, "", false)`);
   equal("with no code yet, it waits", await js(`window.__count('[data-test="sas-pending"]')`), 1);
