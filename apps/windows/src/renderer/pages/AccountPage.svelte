@@ -19,6 +19,7 @@
   import UpdateDetails from "./UpdateDetails.svelte";
   import type { UpdateSummaryController } from "../update/update-controller.svelte.js";
   import type { LoginItemOutcome } from "../../main/login-item.js";
+  import { startupFailureKey, startupStateKey } from "../account/startup-copy.js";
 
   /**
    * A failure code to the sentence that says it.
@@ -77,15 +78,9 @@
    */
   const startupSentence = $derived.by(() => {
     if (!startup) return "";
-    if (!startup.ok) {
-      return startup.failure.kind === "unreadable"
-        ? t("settingsStartupUnreadable")
-        : t("settingsStartupWriteFailed");
-    }
-    if (startup.state === "on") return t("settingsStartupOn");
-    if (startup.state === "disabled-by-user") return t("settingsStartupDisabled");
-    if (startup.state === "on-by-other-means") return t("settingsStartupOther");
-    return t("settingsStartupOff");
+    // Total over both unions, in a module a test can call. See `startup-copy`
+    // for what the chain this replaces got wrong about the third failure.
+    return startup.ok ? t(startupStateKey(startup.state)) : t(startupFailureKey(startup.failure));
   });
   const startupChecked = $derived(startup?.ok === true && startup.state === "on");
 </script>
