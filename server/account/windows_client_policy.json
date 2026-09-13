@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "windows": {
+    "policyRevision": 1,
+    "minimumSupportedVersion": "0.0.0",
+    "minimumSupportedBuild": 0,
+    "recommendedVersion": "0.0.0",
+    "latestVersion": "0.0.1"
+  }
+}

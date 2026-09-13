@@ -82,6 +82,7 @@ func (s *Service) CSRFGuard(next http.Handler) http.Handler {
 func (s *Service) routeMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/client-policy/macos", s.handleMacVersionPolicy)
+	mux.HandleFunc("GET /api/client-policy/windows", s.handleWindowsVersionPolicy)
 	mux.HandleFunc("POST /api/auth/register", s.handleRegister)
 	mux.HandleFunc("POST /api/auth/password/login", s.handlePasswordLogin)
 	mux.HandleFunc("POST /api/auth/password/change", s.RequireSession(s.handleChangePassword))

@@ -345,3 +345,48 @@ var adminVersionPolicyTmpl = template.Must(template.New("version-policy").Parse(
 <select name="mac_latest_version">{{range .Releases}}<option value="{{.Version}}"{{if eq .Version $.Policy.MacLatestVersion}} selected{{end}}>{{.Version}}</option>{{end}}</select>
 <small>{{if eq .Lang "en"}}The order must remain minimum <= recommended <= latest. Only verified releases are offered.{{else}}必须满足最低版本 ≤ 推荐版本 ≤ 最新版本；这里只提供已验证发布。{{end}}</small></label>
 <button type="submit">{{if eq .Lang "en"}}Review and save{{else}}检查并保存{{end}}</button></form></body></html>`))
+
+// The Windows client policy, served verbatim.
+//
+// The Windows half of the supported-version gate is entirely in the client
+// (`apps/windows/src/main/policy/`) and has never had a server end: the route
+// below did not exist, so every Windows launch fell back to the floor compiled
+// into its own binary and the fetch path had never once succeeded. That is the
+// half `DURABLE-PARITY.md` names.
+//
+// ## Why the document is a FILE and not built here
+//
+// The client decodes these bytes with `decodePolicy`, which refuses a document
+// whole on any single unreadable field. A struct marshalled here and a decoder
+// written there are two statements of one contract that can drift silently —
+// and the failure mode of that drift is invisible, because a refused document
+// makes the client fall back to its floor without a user-visible symptom.
+//
+// So there is one artefact. This file is served byte for byte, and
+// `apps/windows/test/unit/policy-contract.test.ts` runs the SHIPPED decoder
+// over these same bytes. Neither side can move without the other noticing.
+//
+// ## Why it is inert, and why it is not adjustable
+//
+// The values are exactly `EMBEDDED_FLOOR`'s, so the document is accepted and
+// blocks nothing: `supportState` answers "supported" for every build. The
+// owner has set the minimum to none for now (OA-033), and this respects that
+// while giving the mechanism a working server end.
+//
+// There is deliberately no admin form. The macOS lever validates a proposed
+// minimum against a VERIFIED RELEASE CATALOGUE, so an operator cannot set a
+// floor to a version that was never published. Windows has no releases yet, so
+// there is nothing to validate against, and an unvalidated field could set a
+// floor above every installed client with no build to move to and no way back.
+// That lever arrives with a real catalogue (OA-029, OA-030).
+//
+//go:embed windows_client_policy.json
+var windowsClientPolicyJSON []byte
+
+func (s *Service) handleWindowsVersionPolicy(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	// Same as the macOS route: a cached policy is a policy that cannot be
+	// changed in the emergency it exists for.
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(windowsClientPolicyJSON)
+}
