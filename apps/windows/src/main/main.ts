@@ -859,6 +859,13 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
       ? options.residentPlatform(residentPlatform(control.preferences, noteNotifyOutcome))
       : residentPlatform(control.preferences, noteNotifyOutcome),
   });
+  // The tray is a live control surface, so it hears about the version gate the
+  // same way the page does. Seeded from the verdict this launch was judged on,
+  // then kept current by the gate's own push — a build blocked while running
+  // loses its resident controls without a restart, and one unblocked by a
+  // corrected policy gets them back without one either.
+  resident.noteVersionBlocked(policyGate.blocked);
+  policyGate.listen((support) => resident?.noteVersionBlocked(support.state === "blocked"));
   createTray(resident);
   await mainWindow.loadURL(`${APP_ORIGIN}/index.html`);
 

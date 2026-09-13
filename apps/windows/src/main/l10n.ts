@@ -89,6 +89,7 @@ export type MessageKey =
   | "resident.firstClose.quit"
   | "resident.firstClose.cancel"
   | "resident.tray.updates"
+  | "resident.tray.versionBlocked"
   | "resident.update.confirmTitle"
   | "resident.update.confirmBody"
   | "resident.update.confirm"
@@ -268,6 +269,9 @@ export const EN: Catalog = {
   // Consent to END the running app. Said plainly, including what it costs:
   // somebody with a transfer running needs to know before they answer.
   "resident.tray.updates": "Updates",
+  // The whole tray when this build may no longer run. Says the requirement
+  // rather than a state, because it is the only line a person gets here.
+  "resident.tray.versionBlocked": "Update required to keep using Relayium",
   "resident.update.confirmTitle": "Close Relayium to install the update?",
   "resident.update.confirmBody":
     "Relayium will close and the installer will open. Anything still transferring will stop. You can install later instead.",
@@ -394,6 +398,7 @@ export const ZH_HANS: Catalog = {
   "resident.firstClose.quit": "退出 Relayium",
   "resident.firstClose.cancel": "取消",
   "resident.tray.updates": "更新",
+  "resident.tray.versionBlocked": "需要更新后才能继续使用 Relayium",
   "resident.update.confirmTitle": "关闭 Relayium 并安装更新？",
   "resident.update.confirmBody":
     "Relayium 将关闭并打开安装程序。正在传输的内容会中断。你也可以稍后再安装。",

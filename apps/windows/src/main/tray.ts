@@ -37,6 +37,16 @@ export type TrayMenuEntry = TrayMenuItem | TrayStatusLine | { readonly type: "se
 
 export interface TrayActions {
   readonly show: () => void;
+  /**
+   * Whether the version gate has stopped this build.
+   *
+   * The tray is a live control surface, and a blocked build is one whose window
+   * has replaced the entire product with an unsupported card. Leaving Resume
+   * Inbox on this menu would mean a build the product refuses to run could be
+   * put back into service from a menu — which is exactly what macOS's
+   * `MenuBarVersionBlock` exists to prevent (`RelayiumApp.swift`).
+   */
+  readonly versionBlocked: () => boolean;
   /** Open a page directly. The tray is the only way back to a hidden window,
    *  so it is also the fastest way to the thing the user came back FOR. */
   readonly openNearby: () => void;
@@ -173,7 +183,39 @@ export function inboxStatusLabel(t: Translate, status: InboxStatus, paused: bool
   }
 }
 
+/**
+ * The whole tray when this build may no longer run.
+ *
+ * Three things, mirroring macOS: what is required, the way to the update, and
+ * the way out. Nothing here opens a destination, resumes a feature or toggles a
+ * state — every one of those would be a control on a product that has been
+ * withdrawn.
+ *
+ * "Open Relayium" stays where macOS omits it, deliberately. On a Mac the Dock
+ * icon reaches the window; a resident Windows build with a hidden window has
+ * this menu as its only way back, and the window it opens is the blocked card
+ * itself, which cannot start work. Without it, Quit would be the only exit from
+ * the one state whose whole job is to tell somebody what to do next.
+ *
+ * The update item is a ROUTE, like it is on the ordinary menu: it opens the
+ * page. Nothing about an update should happen from a menu, because a menu
+ * cannot show what it is about to do.
+ */
+function blockedTemplate(t: Translate, actions: TrayActions): readonly TrayMenuEntry[] {
+  return [
+    { label: t("resident.tray.versionBlocked"), enabled: false },
+    { type: "separator" },
+    { label: t("resident.tray.show"), click: actions.show },
+    { label: t("resident.tray.updates"), click: actions.openUpdates },
+    { type: "separator" },
+    { label: t("resident.tray.quit"), click: actions.quit },
+  ];
+}
+
 export function trayMenuTemplate(t: Translate, actions: TrayActions): readonly TrayMenuEntry[] {
+  // Before anything else is read: the status lines below describe features this
+  // build is no longer running.
+  if (actions.versionBlocked()) return blockedTemplate(t, actions);
   const active = actions.nearbyActive();
   const paused = actions.inboxPaused();
   const account = actions.accountIdentity();

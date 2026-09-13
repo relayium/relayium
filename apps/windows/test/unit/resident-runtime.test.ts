@@ -123,6 +123,7 @@ function runtime(
     hasInboxFolder?: () => boolean;
     revealInbox?: () => Promise<boolean>;
     accountIdentity?: () => string;
+    onLocaleChanged?: () => void;
   } = {},
 ) {
   const { bridge } = fakeBridge();
@@ -140,6 +141,7 @@ function runtime(
     // Main's own service in production. Inert here: these cases are about the
     // window's lifecycle, and a runtime that silently had no inbox control
     // would offer a tray item that does nothing.
+    ...(over.onLocaleChanged ? { onLocaleChanged: over.onLocaleChanged } : {}),
     setInboxPaused: over.setInboxPaused ?? (() => undefined),
     inboxPaused: over.inboxPaused ?? (() => false),
     inboxStatus: over.inboxStatus ?? (() => ({ kind: "idle", pending: 0 })),
@@ -795,5 +797,60 @@ describe("what was ASKED to stop is not what was seen to stop", () => {
     // agreed to leave behind.
     expect(asks).toBe(2);
     expect(events).toContain("exit");
+  });
+});
+
+describe("the tray and the version gate", () => {
+  // The gate's push already reaches the PAGE, which replaces the product with
+  // an unsupported card. The tray is the other live control surface and never
+  // heard about it, so a blocked build could be put back into service from a
+  // menu — the thing macOS's `MenuBarVersionBlock` exists to prevent.
+
+  const labels = (app: ResidentRuntime): string[] =>
+    app.trayMenu().flatMap((entry) => ("label" in entry ? [entry.label] : []));
+
+  it("loses its controls the moment the gate blocks, without a restart", () => {
+    let rebuilt = 0;
+    const app = runtime({ onLocaleChanged: () => { rebuilt += 1; } });
+    expect(labels(app)).toContain(EN["resident.tray.resumeNearby"]);
+
+    app.noteVersionBlocked(true);
+
+    // Rebuilt, not merely different on the next read: the menu is already on
+    // screen when this arrives, and a tray nobody rebuilds keeps offering what
+    // it was built with.
+    expect(rebuilt).toBe(1);
+    expect(labels(app)).toContain(EN["resident.tray.versionBlocked"]);
+    expect(labels(app)).not.toContain(EN["resident.tray.resumeNearby"]);
+  });
+
+  it("gets them back when a corrected policy unblocks it", () => {
+    // The other direction, and it needs no restart either. A policy published
+    // in error and withdrawn must not leave every running client crippled until
+    // someone relaunches it.
+    let rebuilt = 0;
+    const app = runtime({ onLocaleChanged: () => { rebuilt += 1; } });
+    app.noteVersionBlocked(true);
+    app.noteVersionBlocked(false);
+    expect(rebuilt).toBe(2);
+    expect(labels(app)).toContain(EN["resident.tray.resumeNearby"]);
+    expect(labels(app)).not.toContain(EN["resident.tray.versionBlocked"]);
+  });
+
+  it("does not rebuild when the answer has not moved", () => {
+    // `refresh` runs on a schedule and most answers are the same answer. A
+    // rebuild per poll would rebuild a menu the user may have open.
+    let rebuilt = 0;
+    const app = runtime({ onLocaleChanged: () => { rebuilt += 1; } });
+    app.noteVersionBlocked(false);
+    app.noteVersionBlocked(false);
+    expect(rebuilt).toBe(0);
+  });
+
+  it("starts unblocked, so a runtime with no gate has a working menu", () => {
+    // Absent means supported everywhere else in this build. A resident process
+    // that blocked itself by its own silence would be the worst default there
+    // is.
+    expect(labels(runtime())).not.toContain(EN["resident.tray.versionBlocked"]);
   });
 });

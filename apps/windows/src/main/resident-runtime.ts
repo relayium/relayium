@@ -401,6 +401,7 @@ export class ResidentRuntime {
       // Observed, not configured. See `notify.ts`: the flag is set by a toast
       // that did not appear and cleared by one that did.
       notifyBlocked: () => this.#notifyBlocked,
+      versionBlocked: () => this.#versionBlocked,
       canOpenNotificationSettings: () => this.deps.openNotificationSettings !== undefined,
       openNotificationSettings: () => this.deps.openNotificationSettings?.(),
       // Straight to main's own service: unlike Nearby, whose room the PAGE
@@ -518,6 +519,31 @@ export class ResidentRuntime {
    * cleared by an observed success, so a warning cannot outlive the problem.
    */
   #notifyBlocked = false;
+
+  /**
+   * Whether the version gate has stopped this build.
+   *
+   * Held beside `#notifyBlocked` for the same reason and updated the same way:
+   * the tray reads it, and the tray is rebuilt from this object. It starts
+   * false so a runtime composed without a gate has a working menu — absent
+   * means supported everywhere else in this build, and a resident process that
+   * blocked itself by its own silence would be the worst possible default.
+   */
+  #versionBlocked = false;
+
+  /**
+   * Called when the version gate's answer moves, in either direction.
+   *
+   * Both directions matter. A build blocked while running must lose its
+   * controls without a restart — that is the point of the live push — and a
+   * build unblocked by a corrected policy must get them back the same way,
+   * without one either.
+   */
+  noteVersionBlocked(blocked: boolean): void {
+    if (this.#versionBlocked === blocked) return;
+    this.#versionBlocked = blocked;
+    this.deps.onLocaleChanged?.();
+  }
 
   /** Called by the platform adapter with what actually happened to a toast. */
   noteNotifyOutcome(shown: boolean): void {
