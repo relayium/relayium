@@ -55,6 +55,7 @@
   import type { HelpBridge } from "./shell/guide-link.js";
   import type { SupportReport } from "../shared/ipc-contract.js";
   import { OfferAnnouncer } from "./receive/offer-announcer.js";
+  import { noticesFor } from "./receive/notice-decisions.js";
   import PendingSelection from "./pages/PendingSelection.svelte";
   import PairHandoff from "./pages/PairHandoff.svelte";
   import Help from "./shell/Help.svelte";
@@ -692,71 +693,41 @@
   /** The rule lives in its own module, where it can be tested. */
   const offers = new OfferAnnouncer<RoomController, object>();
   /**
-   * The same rule for a message REQUEST, in its own announcer.
+   * The same rule for a message REQUEST, by link GENERATION.
    *
-   * Not the same instance: two independent offers can be outstanding on one
-   * room — a file batch and a conversation — and one announcer keyed by room
-   * would let whichever arrived second silence the first.
+   * It was a second `OfferAnnouncer` holding a `{ generation }` token, and the
+   * token was rebuilt every pass — so identity never matched and the request
+   * re-announced on every effect run. A number compares by value and does what
+   * the token was for.
    */
-  const textOffers = new OfferAnnouncer<RoomController, object>();
+  const announcedTextRequest = new Map<RoomController, number>();
+  /**
+   * Raise whatever the current state calls for.
+   *
+   * The DECISIONS are in `notice-decisions.ts`, where a test can drive them —
+   * the step `OfferAnnouncer`'s own header argued for and stopped short of. What
+   * stays here is what only an effect can do: read reactive state and call the
+   * bridge.
+   */
+  const noticeMemory = { seenInbound, announcedSas, offers, announcedTextRequest };
   $effect(() => {
     void revision;
     for (const room of [lanRoom, pairRoom]) {
       if (!room) continue;
-      const history = room.workspace.text.history;
-      const latest = history.reduce((id, entry) => (entry.dir === "in" ? Math.max(id, entry.id) : id), 0);
-      const previous = seenInbound.get(room) ?? 0;
-      if (latest > previous) {
-        seenInbound.set(room, latest);
-        // Only for messages that arrived after this page started watching, so a
-        // reconnect that replays a transcript does not re-announce it.
-        if (previous > 0 || history.some((entry) => entry.dir === "in" && entry.id === latest)) {
-          void bridge.resident.notify({ kind: "saved-message" }).catch(() => undefined);
-        }
-      }
-      // A code waiting to be compared is the one thing that genuinely needs the
-      // user, which is what `attention` is for. Announced once per room.
-      const waiting = room.workspace.sasCode !== "" && !room.verificationConfirmed;
-      if (waiting && !announcedSas.has(room)) {
-        announcedSas.add(room);
-        void bridge.resident.notify({ kind: "attention" }).catch(() => undefined);
-      }
-      if (!waiting) announcedSas.delete(room);
-
-      // ## An offer nobody has answered yet
-      //
-      // The one event a person has no other way to notice: nothing was clicked
-      // to start it, the window may not be in front of them, and until it is
-      // answered the sender is waiting. The card behind the window carries the
-      // peer, the names and the count; this carries none of them, because it is
-      // shown where anyone standing there can read it.
-      //
-      // Suppression while focused is left to main and is right: somebody
-      // looking at the offer card does not need telling about it.
-      if (offers.shouldAnnounce(room, room.workspace.incoming)) {
-        void bridge.resident.notify({ kind: "incoming" }).catch(() => undefined);
-      }
-
-      // ## A conversation nobody has answered yet
-      //
-      // Every word of the reasoning above applies: the peer sent the request,
-      // nothing was clicked here, the window may not be in front of anybody,
-      // and the sender sits at `waitingAccept` until it is answered. macOS
-      // announces it (`notify.incomingText`) and this client did not.
-      //
-      // A SEPARATE kind, not a second use of `incoming` — that one says files,
-      // and saying it about a conversation is the defect this avoids rather
-      // than the shortcut it looks like.
-      //
-      // Keyed by a token that changes with the request rather than by the
-      // status string, because `incomingRequest` is one value: a second
-      // conversation after the first was declined has to be announceable, and
-      // a shared string would look identical to the one already announced.
-      const request = room.workspace.text.status === "incomingRequest"
-        ? { generation: room.workspace.linkGeneration }
-        : null;
-      if (textOffers.shouldAnnounce(room, request)) {
-        void bridge.resident.notify({ kind: "incoming-text" }).catch(() => undefined);
+      const notices = noticesFor(
+        room,
+        {
+          inboundIds: room.workspace.text.history.filter((e) => e.dir === "in").map((e) => e.id),
+          sasCode: room.workspace.sasCode,
+          verificationConfirmed: room.verificationConfirmed,
+          incoming: room.workspace.incoming,
+          textRequested: room.workspace.text.status === "incomingRequest",
+          linkGeneration: room.workspace.linkGeneration,
+        },
+        noticeMemory,
+      );
+      for (const kind of notices) {
+        void bridge.resident.notify({ kind }).catch(() => undefined);
       }
     }
   });
