@@ -145,7 +145,34 @@ export type MessageKey =
  * reach the others, so the substitution cannot be applied where it means
  * nothing. Widening this union is the whole review surface for interpolation.
  */
-export type CountedMessageKey = "native.download.pickTitle";
+export const COUNTED_MESSAGE_KEYS = [
+  "native.download.pickTitle",
+  /**
+   * The same dialog, for a link the server deletes after one download.
+   *
+   * A SECOND key rather than a second substitution: `CountedMessageKey` exists
+   * to keep the main process's interpolation surface at exactly one variable,
+   * and a burn flag folded in as `{burn}` would widen the one thing this design
+   * reviews. Two complete sentences cost nothing and stay reviewable.
+   *
+   * Windows has no facts screen before the picker — the comment at the picker
+   * says so — and this dialog is where the write is authorised. macOS says the
+   * same thing on its facts screen (`download.burnNotice`); saying it nowhere
+   * was the gap.
+   */
+  "native.download.pickTitleBurn",
+] as const;
+
+/**
+ * Derived from the list above, which is the point.
+ *
+ * `l10n.test.ts` asserted that `{count}` appears in the counted keys and
+ * nowhere else, against its OWN hand-written copy of this set — so adding
+ * `pickTitleBurn` to the type left that copy at one member and the pin
+ * reported the new key as an unexpected template. It was right to fail and
+ * wrong about why. Fourth restated set found this way today.
+ */
+export type CountedMessageKey = (typeof COUNTED_MESSAGE_KEYS)[number];
 
 export type Catalog = Readonly<Record<MessageKey | CountedMessageKey, string>>;
 
@@ -278,6 +305,11 @@ export const EN: Catalog = {
   "native.receive.pickTitle": "Choose a folder to receive files into",
   "native.receive.pickConfirm": "Use Folder",
   "native.download.pickTitle": "Choose where to save {count} file(s)",
+  // "Used up", not "deleted". The files being saved are not deleted; the LINK
+  // is spent, and after this nobody — including this person — can open it
+  // again. Those are different claims and only one of them is true.
+  "native.download.pickTitleBurn":
+    "Choose where to save {count} file(s) — this link is used up once they are saved",
   "native.download.pickConfirm": "Save Here",
   "native.inbox.pickTitle": "Choose where your devices send files",
   "native.inbox.pickConfirm": "Receive Here",
@@ -385,6 +417,7 @@ export const ZH_HANS: Catalog = {
   "native.receive.pickTitle": "选择用于接收文件的文件夹",
   "native.receive.pickConfirm": "使用此文件夹",
   "native.download.pickTitle": "选择保存位置（{count} 个文件）",
+  "native.download.pickTitleBurn": "选择保存位置（{count} 个文件）——保存后这个链接就用掉了",
   "native.download.pickConfirm": "保存到这里",
   "native.inbox.pickTitle": "选择你的设备发来的文件的保存位置",
   "native.inbox.pickConfirm": "接收到这里",
