@@ -46,7 +46,18 @@ export type NotificationEvent =
    * window; this exists for the person who cannot see it, and a lock screen is
    * not where any of it belongs.
    */
-  | { readonly kind: "incoming" };
+  | { readonly kind: "incoming" }
+  /**
+   * Somebody started a MESSAGE session, and nobody has answered yet.
+   *
+   * Its own kind rather than a second use of `incoming`, because that one says
+   * files. The reason it exists is the reason `incoming` exists, written on
+   * that one: nothing was clicked to start it, the window may not be in front
+   * of anybody, and the sender waits at `waitingAccept` until it is answered.
+   *
+   * Carries nothing about the peer or the message, for the same reason.
+   */
+  | { readonly kind: "incoming-text" };
 
 export interface NotificationContent {
   readonly title: string;
@@ -60,6 +71,7 @@ const TITLE: Readonly<Record<NotificationEvent["kind"], MessageKey>> = {
   failed: "resident.notify.failedTitle",
   "link-ready": "resident.notify.linkReadyTitle",
   incoming: "resident.notify.incomingTitle",
+  "incoming-text": "resident.notify.incomingTextTitle",
 };
 
 const BODY: Readonly<Record<NotificationEvent["kind"], MessageKey>> = {
@@ -69,6 +81,7 @@ const BODY: Readonly<Record<NotificationEvent["kind"], MessageKey>> = {
   failed: "resident.notify.failedBody",
   "link-ready": "resident.notify.linkReadyBody",
   incoming: "resident.notify.incomingBody",
+  "incoming-text": "resident.notify.incomingTextBody",
 };
 
 /**

@@ -1169,12 +1169,16 @@ export interface ResidentSnapshot {
 /**
  * Something the page can see and main cannot.
  *
- * `incoming` is an offer waiting on the user. It is the page's to report
- * because the session lives in the room the page owns, and it is worth
- * reporting because the window may not be in front of anyone: nothing was
- * clicked to start it, and until it is answered the sender is waiting.
+ * `incoming` is a file offer waiting on the user, and `incoming-text` a
+ * message request waiting on them. Both are the page's to report because the
+ * session lives in the room the page owns, and both are worth reporting for
+ * the same reason: nothing was clicked to start either, the window may not be
+ * in front of anyone, and until it is answered the sender is waiting. They are
+ * separate because one says files and the other does not.
  */
-export type ResidentNotice = "saved-message" | "attention" | "incoming";
+export const RESIDENT_NOTICES = ["saved-message", "attention", "incoming", "incoming-text"] as const;
+
+export type ResidentNotice = (typeof RESIDENT_NOTICES)[number];
 
 /**
  * The closed set, in one place.
@@ -1184,7 +1188,11 @@ export type ResidentNotice = "saved-message" | "attention" | "incoming";
  * refuse the new kind at the boundary while every type checked.
  */
 export function isResidentNotice(value: unknown): value is ResidentNotice {
-  return value === "saved-message" || value === "attention" || value === "incoming";
+  // Derived, not restated. The comment above this function already warned that
+  // a restated set is how a new kind gets refused at the boundary while every
+  // type checks — and it was still a chain of comparisons, so adding
+  // `incoming-text` would have done precisely that.
+  return (RESIDENT_NOTICES as readonly string[]).includes(value as string);
 }
 
 /** The largest draft count that will be believed. Beyond it the page is not

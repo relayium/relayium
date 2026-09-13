@@ -65,3 +65,43 @@ describe("one announcement per offer", () => {
     expect(a.shouldAnnounce(lan, same)).toBe(false);
   });
 });
+
+describe("two kinds of offer on one room", () => {
+  it("do not silence each other", () => {
+    // The reason `App.svelte` holds TWO announcers rather than one. A file
+    // batch and a message request can be outstanding on the same room at the
+    // same time, and a single announcer keyed by room would record whichever
+    // arrived first and answer false for the second — so the person hears
+    // about one of the two things waiting for them.
+    const room = {};
+    const fileOffer = { files: 2 };
+    const textRequest = { generation: 1 };
+
+    const files = new OfferAnnouncer<object, object>();
+    const texts = new OfferAnnouncer<object, object>();
+    expect(files.shouldAnnounce(room, fileOffer)).toBe(true);
+    expect(texts.shouldAnnounce(room, textRequest)).toBe(true);
+
+    // And the failure that shape avoids, stated as the assertion it is:
+    const shared = new OfferAnnouncer<object, object>();
+    expect(shared.shouldAnnounce(room, fileOffer)).toBe(true);
+    expect(shared.shouldAnnounce(room, textRequest)).toBe(true);
+    // …the SECOND is announced, but it has now displaced the first, so the
+    // first re-announces if it is asked about again. Two announcers keep each
+    // one's memory to itself.
+    expect(shared.shouldAnnounce(room, fileOffer)).toBe(true);
+    expect(files.shouldAnnounce(room, fileOffer)).toBe(false);
+  });
+
+  it("announces a SECOND request after the first is gone", () => {
+    // A conversation declined, then another started. Keyed by a value that
+    // changes with the link generation rather than by the status string, which
+    // is one constant value and would look identical to the one already
+    // announced.
+    const room = {};
+    const texts = new OfferAnnouncer<object, object>();
+    expect(texts.shouldAnnounce(room, { generation: 1 })).toBe(true);
+    expect(texts.shouldAnnounce(room, null)).toBe(false);
+    expect(texts.shouldAnnounce(room, { generation: 2 })).toBe(true);
+  });
+});

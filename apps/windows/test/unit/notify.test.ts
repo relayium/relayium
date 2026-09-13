@@ -12,6 +12,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { showNotification, type NotificationHandle, type NotifyDeps } from "../../src/main/notify.js";
+import { RESIDENT_NOTICES, isResidentNotice } from "../../src/shared/ipc-contract.js";
 
 /** A stand-in that records its listeners so a test can fire them. */
 function fakeNotification() {
@@ -105,5 +106,32 @@ describe("showing a notification", () => {
     };
     expect(() => showNotification(base, "Title", "Body")).not.toThrow();
     expect(message(reported[0])).toContain("show refused");
+  });
+});
+
+describe("the page-reported notice set", () => {
+  it("accepts every member at the boundary", () => {
+    // The guard used to be a chain of comparisons, under a comment warning that
+    // a restated set is how a new kind gets refused at the boundary while every
+    // type checks. Adding `incoming-text` would have done exactly that: the
+    // page would have sent it, the union would have allowed it, and main would
+    // have thrown `unknown notice`.
+    for (const notice of RESIDENT_NOTICES) {
+      expect(isResidentNotice(notice), notice).toBe(true);
+    }
+  });
+
+  it("refuses anything else", () => {
+    for (const other of ["", "incoming-file", "INCOMING", "saved", "link-ready", null, 3, {}]) {
+      expect(isResidentNotice(other), JSON.stringify(other)).toBe(false);
+    }
+  });
+
+  it("keeps main's own events out of the page's set", () => {
+    // `saved`, `failed` and `link-ready` are main's to raise. A page that could
+    // claim "files saved" would be announcing something it cannot know.
+    for (const mains of ["saved", "failed", "link-ready"]) {
+      expect(isResidentNotice(mains), mains).toBe(false);
+    }
   });
 });
