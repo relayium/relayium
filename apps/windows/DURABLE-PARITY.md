@@ -104,6 +104,32 @@ and how it will be verified:
 They were recorded here from the beginning and never queued, so the one document
 the owner reads when asking "what needs me" did not mention Windows at all.
 
+## The local gate
+
+`npm run gates` runs all twelve — types, unit, build, and the nine smokes — and
+answers with one exit code. About 107 seconds.
+
+It exists because a written rule failed twice in one day. A batch shipped with
+four `tsc` errors that `npm run check` had reported: that command is five tools
+reporting in two different formats, and the output was being filtered with a
+pattern that could not match `tsc`'s, so a failing run displayed
+`COMPLETED 358 FILES 0 ERRORS` and read as green. The lesson was written down,
+and in the next batch a ledger-editing script raised a traceback while the same
+shell line went on to commit and push, so the visible output ended in a push URL
+and the commit shipped incomplete.
+
+Both were the same mistake — judging a step by the text near the end of its
+output rather than by whether it succeeded — and the second happened after the
+first was recorded. So the rule is a command now. The exit code is the product;
+the table is for reading.
+
+Deliberately NOT a CI step, and a test asserts the workflow does not call it:
+CI runs these as separate named steps so a failure names the surface without
+anybody opening a log, and collapsing them would take that away. The gate list
+is checked against `package.json`, so a new smoke is missing from the local gate
+until it is added — a pre-push check with a hole in it is worse than none,
+because it answers "all green" about a subset nobody chose.
+
 ## Gates that remain separate
 
 Code signing, the update feed and any public release surface are each their own
