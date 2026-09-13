@@ -62,6 +62,9 @@ import { SecretStore } from "../../dist/main/secrets.js";
 import { IceControl } from "../../dist/main/net/ice-control.js";
 import { PairControl } from "../../dist/main/net/pair-control.js";
 import { PreferenceStore } from "../../dist/main/preferences.js";
+import { PolicyGate } from "../../dist/main/policy/policy-gate.js";
+import { PolicySource } from "../../dist/main/policy/policy-source.js";
+import { PolicyStore } from "../../dist/main/policy/policy-store.js";
 import { IPC_CHANNELS } from "../../dist/shared/ipc-contract.js";
 import {
   bootstrap,
@@ -166,6 +169,39 @@ const smokeStore = new SecretStore(secretsDir, testCipher);
  * and the classification of what Windows reports back are the shipped path.
  */
 let loginItemConsent = false;
+
+/**
+ * The version gate, composed here so the blocked-build scenario can drive the
+ * REAL chain rather than the last link of it.
+ *
+ * What the scenario used to do was `win.webContents.send(...)` with a payload
+ * shaped like main's. That proves the preload bridge and the page, and nothing
+ * before them — `handlers.ts` registers the listener that carries a policy from
+ * this gate to that channel, and deleting that line left every suite green
+ * while an emergency floor silently stopped reaching any running client.
+ *
+ * So the document arrives the way one really arrives: through the shipped
+ * `PolicySource`, decoded by the shipped `decodePolicy`, into the shipped
+ * `PolicyGate`, whose own listener notification is what reaches the page.
+ * `fetchImpl` is the only seam, and it is the same seam every other network
+ * dependency in this file uses — nothing here touches a socket.
+ */
+const policyStore = new PolicyStore(path.join(secretsDir, "client-policy.json"));
+/** Set by the scenario. Until then the source answers with no document, which
+ *  is the floor, which blocks nothing. */
+let servedPolicy = null;
+const policySource = new PolicySource({
+  origin: "https://relayium.invalid",
+  store: policyStore,
+  fetchImpl: async () =>
+    servedPolicy === null
+      ? new Response("", { status: 503 })
+      : new Response(JSON.stringify(servedPolicy), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+});
+let policyGate = null;
 
 // ## Nothing in this run reaches the network, and nothing overrides ambiently
 //
@@ -327,11 +363,17 @@ async function assertStartupTogglesAgainstWindowsItself(win) {
  * that matters: with a real main process, a real preload and a real renderer,
  * does a blocked build actually stop being a product?
  *
- * It is driven through the SHIPPED path — `PolicyGate`'s own push, the real IPC
- * event, the real subscription — rather than by launching with a special flag.
- * That is a stronger test and it costs nothing: the live refresh exists, so the
- * state can be reached in a running app, which is exactly how it will be
- * reached in the field.
+ * It is driven through the SHIPPED path — a document served to the real
+ * `PolicySource`, decoded by the real decoder, resolved by the real
+ * `PolicyGate`, whose listener notification is what reaches the page — rather
+ * than by launching with a special flag or by pushing the IPC event from here.
+ *
+ * That distinction is the whole value, and this scenario did not have it until
+ * 2026-09-13. It used to call `win.webContents.send(...)` itself, under a
+ * comment claiming it drove the gate. The link it skipped is the one line in
+ * `handlers.ts` that registers the gate's listener on the router; deleting that
+ * line kept every gate green while an emergency floor stopped reaching any
+ * running client. Nothing in any suite named `policyGate` or `clientSupport`.
  *
  * Runs last. It empties the shell on purpose.
  */
@@ -340,15 +382,38 @@ async function assertABlockedBuildRendersNothingElse(win) {
   const before = await js(`document.querySelector('[data-test="nav-lan"]') !== null`);
   if (!check("the product is on screen before the block", before === true)) return;
 
-  // The real channel, with the payload main would send. Not a page-local fake:
-  // this goes through `contextBridge`, the preload subscription and the shaping
-  // the page does on arrival.
-  win.webContents.send("relayium:client-support-changed", {
-    state: "blocked",
-    current: "0.0.1",
-    minimum: "9.9.9",
-    latest: "9.9.9",
-  });
+  // A policy the product would publish to stop a build in the field. It goes
+  // to the source, not to the page: `refresh()` fetches it, decodes it, sees
+  // the answer move, and notifies the listener `handlers.ts` registered — which
+  // emits the real IPC event, through `contextBridge`, the preload
+  // subscription and the shaping the page does on arrival.
+  // Derived from the build this is actually running, not a fixed "9.9.9".
+  //
+  // An unpackaged run reports ELECTRON's version from `app.getVersion()` —
+  // 44.3.0 today — so a hardcoded 9.9.9 floor is below it and blocks nothing.
+  // The first draft of this did exactly that and the scenario passed its screen
+  // assertions for the wrong reason. A floor one major above whatever is
+  // running cannot be outgrown by a version bump.
+  const running = app.getVersion();
+  const above = `${Number.parseInt(running.split(".")[0], 10) + 1}.0.0`;
+  servedPolicy = {
+    schema: 1,
+    windows: {
+      policyRevision: 2,
+      minimumSupportedVersion: above,
+      minimumSupportedBuild: 0,
+      recommendedVersion: above,
+      latestVersion: above,
+    },
+  };
+  await policyGate.refresh();
+  // The gate reached the blocked verdict itself. Asserted separately from the
+  // screen so a failure says WHICH half broke: a document that never decoded,
+  // or a verdict that never travelled.
+  check(
+    `the gate itself moved to blocked (running ${running}, floor ${above})`,
+    policyGate.blocked === true,
+  );
   await new Promise((r) => setTimeout(r, 120));
 
   check(
@@ -455,11 +520,24 @@ function assertTheMenuIsThisAppsAndNotElectrons(win) {
 }
 
 async function main() {
+  // Opened before the app, exactly as `openPolicyGate()` does: the launch has
+  // to be judged before a window loads. No refresh here — this run starts
+  // supported, and the scenario at the end is what makes a document arrive.
+  policyGate = await PolicyGate.open({
+    version: app.getVersion(),
+    store: policyStore,
+    source: policySource,
+  });
+
   await bootstrap({
     showOnLaunch: false,
     confirmLoginItem: async () => loginItemConsent,
     composition: {
       makeStore: async () => smokeStore,
+      // The gate `handlers.ts` will register its listener on. Production builds
+      // one in `openPolicyGate()`; this is the same class over the same source
+      // with the fetch injected.
+      policyGate,
       // ## The account reads are injected even though this run never signs in
       //
       // `AccountSummaryService.refresh()` runs at startup regardless, and the

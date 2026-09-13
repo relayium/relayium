@@ -10,13 +10,19 @@
 // So: this launch is judged by what the device already remembers, and the
 // network refresh runs behind it and writes the cache for the NEXT launch.
 //
-// **That is weaker than macOS, and it is recorded rather than glossed.** The
-// Mac's model is observable and re-renders the moment a document lands, so a
-// floor published now takes effect now. Here it takes effect on the next start.
-// Closing that difference needs a push to the shell and is a separate batch;
-// what is here is a real lever — an emergency floor reaches every client that
-// restarts — and it is the half that cannot be added later, because it has to
-// be in the binary before the binary ships.
+// The push that closes the gap is in this file: `listen` below, notified by
+// `refresh` when the answer actually moves, registered by `handlers.ts` and
+// emitted on `IPC_EVENTS.clientSupport`. A floor published now reaches a
+// RUNNING client, as macOS does — the launch is still judged from the cache,
+// which is what keeps a slow origin off the path to first paint.
+//
+// This comment used to say the push was "a separate batch", two functions above
+// the methods that implement it. That was stale for as long as it took someone
+// to read the header and not the file, which turned out to be until 2026-09-13,
+// when it was copied into `DURABLE-PARITY.md` as a live parity gap. The
+// delivery is proven end to end by `smoke-main.mjs`'s last scenario, which
+// serves a real document to a real source and asserts the product leaves the
+// screen.
 import {
   EMBEDDED_FLOOR,
   supportState,
