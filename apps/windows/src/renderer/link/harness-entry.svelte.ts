@@ -65,6 +65,7 @@ const state = $state({
   relayExpiring: false,
   recoveryAvailable: true,
   sasCode: "",
+  linkPath: undefined as PeerWorkspace["linkPath"],
   verificationConfirmed: true,
   incoming: null as Incoming | null,
   recv: null as Xfer | null,
@@ -85,6 +86,7 @@ interface LinkWorkspaceStandIn {
   readonly relayExpiring: boolean;
   readonly recoveryAvailable: boolean;
   readonly sasCode: string;
+  readonly linkPath: PeerWorkspace["linkPath"];
   readonly incoming: Incoming | null;
   readonly recv: Xfer | null;
   readonly send: Xfer | null;
@@ -121,6 +123,9 @@ const workspace: LinkWorkspaceStandIn = {
   },
   get sasCode() {
     return state.sasCode;
+  },
+  get linkPath() {
+    return state.linkPath;
   },
   get incoming() {
     return state.incoming;
@@ -225,6 +230,7 @@ const _workspaceAssignable: Pick<
   | "recoveryAvailable" | "sasCode" | "incoming" | "recv" | "send" | "text"
   | "acceptFile" | "rejectFile" | "acceptText" | "rejectText" | "abortFile"
   | "sendText" | "clearText" | "openText" | "disconnect" | "dismissLinkEnd"
+  | "linkPath"
 > = workspace as unknown as PeerWorkspace;
 void _workspaceAssignable;
 const _roomAssignable: Pick<
@@ -283,6 +289,9 @@ Object.defineProperty(globalThis, "__linkHarness", {
       state.verifyPeers = verifyPeers;
       state.sasCode = sas;
       state.verificationConfirmed = confirmed;
+    },
+    setPath(next: PeerWorkspace["linkPath"]): void {
+      state.linkPath = next;
     },
     setText(status: TextStatus, errorKey: TextErrorKey): void {
       state.textStatus = status;

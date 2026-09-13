@@ -286,6 +286,38 @@ async function main() {
   await js(`window.__set("setText", "open", "")`);
   await js(`window.__set("setStatus", "open")`);
 
+  at("which route the connection took");
+  // The shared workspace has published this since Windows started using it and
+  // the web renders it; this client showed nothing, so a person watching a
+  // large transfer could not tell whether it was crossing Relayium's relay —
+  // the metered, slower route — or going direct.
+  await js(`window.__set("setStatus", "open")`);
+  equal("nothing while the path is unclassified", await js(`window.__count('[data-test="link-path"]')`), 0);
+  const PATHS = { lan: "LAN direct", p2p: "P2P direct", relay: "Relayed" };
+  for (const [path, expected] of Object.entries(PATHS)) {
+    await js(`window.__set("setPath", ${JSON.stringify(path)})`);
+    equal(`${path}: the badge says so`, await js(`window.__text('[data-test="link-path"]')`), expected);
+    equal(`${path}: and carries the closed value`, await js(`window.__attr('[data-test="link-path"]', "data-path")`), path);
+  }
+  // `unknown` is a member of the type the workspace never assigns. Rendering
+  // the word would turn "not established yet" into a claim.
+  await js(`window.__set("setPath", "unknown")`);
+  equal("an unknown path says nothing at all", await js(`window.__count('[data-test="link-path"]')`), 0);
+
+  // The `!terminal` guard, reached in the one tick where it can act: the
+  // status is still `open` and the ending is already named, which is the order
+  // `mixed-session` publishes them in. Setting the status off `open` first
+  // removes the whole card and the badge is absent for a reason that has
+  // nothing to do with the guard — the first version of this case did exactly
+  // that and stayed green when the guard was deleted. Second time this same
+  // setup mistake in one session; recorded rather than quietly fixed.
+  await js(`window.__set("setPath", "relay")`);
+  equal("the badge is up while the link is live", await js(`window.__count('[data-test="link-path"]')`), 1);
+  await js(`window.__set("setEndReason", "relayExpired")`);
+  equal("and goes the moment the link is named as ended", await js(`window.__count('[data-test="link-path"]')`), 0);
+  await js(`window.__set("setEndReason", "")`);
+  await js(`window.__set("setPath", undefined)`);
+
   at("a conversation can be cleared without ending it");
   // `PeerWorkspace.clearText()` has existed in the shared code Windows uses
   // since the text lane shipped, the web renders a Clear button wired to it,

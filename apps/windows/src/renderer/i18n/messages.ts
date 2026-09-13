@@ -164,6 +164,22 @@ export const en = {
   linkVerifyDecline: "It does not match",
   linkVerifyDeclined: "You said the codes did not match, so the connection was closed.",
   linkVerifyPending: "Waiting for the verification code…",
+  /**
+   * Which route this connection actually took.
+   *
+   * `relay` means the bytes cross Relayium's relay, which is metered against
+   * the monthly allowance and is the slower path; the other two mean they do
+   * not. The shared workspace has published this since Windows started using
+   * it, the web renders it beside the link state, and this client showed
+   * nothing — so a person watching a large transfer had no way to tell.
+   *
+   * The web's wording, unchanged. Nothing here claims anything about speed or
+   * allowances: the badge names the route, and the pricing page is where the
+   * allowance is explained.
+   */
+  linkPathLan: "LAN direct",
+  linkPathP2p: "P2P direct",
+  linkPathRelay: "Relayed",
   linkStatusIdle: "Not connected",
   linkStatusRequesting: "Asking to connect",
   linkStatusConnecting: "Connecting",
@@ -913,6 +929,9 @@ export const zh: Record<MessageKey, string> = {
   linkVerifyDecline: "不一致",
   linkVerifyDeclined: "你选择了「不一致」，连接已关闭。",
   linkVerifyPending: "正在等待验证码…",
+  linkPathLan: "局域网直连",
+  linkPathP2p: "P2P 直连",
+  linkPathRelay: "中继",
   linkStatusIdle: "未连接",
   linkStatusRequesting: "正在请求连接",
   linkStatusConnecting: "正在连接",

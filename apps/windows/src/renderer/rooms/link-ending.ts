@@ -48,6 +48,38 @@ export function linkEndKey(reason: LinkEndReason): MessageKey {
 }
 
 /**
+ * Which route the connection took, in words — or null while nobody knows.
+ *
+ * `undefined` is the ordinary state before the path is classified, and it is
+ * NOT a value to render: `mixed-session` samples after the connection settles
+ * and assigns only a classified result, so an absent badge means "not
+ * established yet" and printing the word "unknown" would turn that absence
+ * into a claim.
+ *
+ * `"unknown"` is a member of `ConnPath` that the workspace never assigns, and
+ * it is named here rather than defaulted so a future path that DOES emit it
+ * cannot inherit one of the three real labels.
+ */
+export function linkPathKey(path: PeerWorkspace["linkPath"]): MessageKey | null {
+  switch (path) {
+    case "lan":
+      return "linkPathLan";
+    case "p2p":
+      return "linkPathP2p";
+    case "relay":
+      return "linkPathRelay";
+    case "unknown":
+    case undefined:
+      return null;
+    default: {
+      const unhandled: never = path;
+      void unhandled;
+      return null;
+    }
+  }
+}
+
+/**
  * The link is over, whether or not the ending had a name.
  *
  * One rule in one place because three surfaces ask it: the sentence, the two
