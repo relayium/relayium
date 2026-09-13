@@ -426,3 +426,128 @@ describe("measureRelays", () => {
     expect(Math.round(stalled.at - calledAt)).toBeGreaterThan(stalled.ms + STALL_MS - 20);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The injectable transport
+// ---------------------------------------------------------------------------
+//
+// The seam exists so a non-browser client (the Electron renderer, whose relative
+// `/api/ice` resolves against `app://relayium` rather than the API server) can
+// reuse THIS classification instead of re-deriving it. So what these tests pin
+// is not "an option was threaded through" — it is that the default is untouched
+// and that an injected transport produces byte-identical verdicts.
+describe("fetchIceConfig transport seam", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const reply = (body: unknown, init: ResponseInit = {}) =>
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+      ...init,
+    });
+
+  it("uses the browser default — global fetch, credentials included — when none is passed", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ iceServers: STUN }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const cfg = await fetchIceConfig("424242");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/ice?code=424242", { credentials: "include" });
+    expect(cfg.iceServers).toEqual(STUN);
+  });
+
+  it("never touches global fetch when a transport is injected", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("global fetch must not be used"));
+    vi.stubGlobal("fetch", fetchMock);
+    const transport = vi.fn().mockResolvedValue(reply({ iceServers: STUN, relays: [] }));
+
+    const cfg = await fetchIceConfig("", transport);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(cfg.iceServers).toEqual(STUN);
+  });
+
+  it("hands the transport the same URL the browser path would have requested", async () => {
+    const transport = vi.fn().mockResolvedValue(reply({ iceServers: STUN }));
+
+    await fetchIceConfig("", transport);
+    expect(transport).toHaveBeenLastCalledWith("/api/ice");
+
+    await fetchIceConfig("424242", transport);
+    expect(transport).toHaveBeenLastCalledWith("/api/ice?code=424242");
+  });
+
+  // The four verdicts a re-implementation is most likely to lose. Each is
+  // asserted through the injected path, so a client that routes its request
+  // through main gets the classification rather than a flattened failure.
+  it("classifies a withheld relay through an injected transport", async () => {
+    const transport = vi.fn().mockResolvedValue(reply({ relayDenied: "quota" }, { status: 403 }));
+    const cfg = await fetchIceConfig("424242", transport);
+    expect(cfg.relayStatus).toBe("quota");
+    // A denial is an ANSWER, so it is not repeated.
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  it("classifies an unverified denial through an injected transport", async () => {
+    const transport = vi.fn().mockResolvedValue(reply({ relayDenied: "unverified" }, { status: 403 }));
+    const cfg = await fetchIceConfig("424242", transport);
+    expect(cfg.relayStatus).toBe("unverified");
+  });
+
+  it("keeps 429 distinct from unavailable, and does not spend another token on it", async () => {
+    const transport = vi.fn().mockResolvedValue(new Response(null, { status: 429 }));
+    const cfg = await fetchIceConfig("424242", transport);
+    expect(cfg.relayStatus).toBe("ratelimited");
+    expect(cfg.iceServers).toEqual(FALLBACK_STUN);
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a code room that got no TURN as `none`, not as a healthy LAN config", async () => {
+    const transport = vi.fn().mockResolvedValue(reply({ iceServers: STUN, relays: [] }));
+    const cfg = await fetchIceConfig("424242", transport);
+    expect(cfg.relayStatus).toBe("none");
+  });
+
+  it("keeps the relay pool's region and stun fields through an injected transport", async () => {
+    const relays = [
+      { id: "eu", region: "eu-west", stun: "stun:eu.example:3478", iceServers: [{ urls: ["turn:eu.example:3478"], username: "u", credential: "c" }] },
+    ];
+    const transport = vi.fn().mockResolvedValue(reply({ iceServers: STUN, relays }));
+    const cfg = await fetchIceConfig("424242", transport);
+    expect(cfg.relays).toEqual(relays);
+    expect(cfg.relayStatus).toBe("ok");
+  });
+
+  it("retries a 5xx once through the injected transport and honours Retry-After", async () => {
+    const transport = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 503, headers: { "Retry-After": "0" } }))
+      .mockResolvedValueOnce(reply({ iceServers: STUN, relays: [] }));
+
+    const cfg = await fetchIceConfig("", transport);
+
+    expect(transport).toHaveBeenCalledTimes(2);
+    expect(cfg.relayStatus).toBe("ok");
+    expect(cfg.iceServers).toEqual(STUN);
+  });
+
+  it("treats a rejecting transport as unavailable, after one retry", async () => {
+    const transport = vi.fn().mockRejectedValue(new Error("main refused"));
+    const cfg = await fetchIceConfig("424242", transport);
+    expect(cfg.relayStatus).toBe("unavailable");
+    expect(cfg.iceServers).toEqual(FALLBACK_STUN);
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+
+  it("fetchIceServers forwards the transport too", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("global fetch must not be used"));
+    vi.stubGlobal("fetch", fetchMock);
+    const transport = vi.fn().mockResolvedValue(reply({ iceServers: STUN }));
+
+    expect(await fetchIceServers("424242", transport)).toEqual(STUN);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

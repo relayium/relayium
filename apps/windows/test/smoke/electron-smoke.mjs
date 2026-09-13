@@ -20,7 +20,7 @@
 // path it could not remove.
 
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,6 +34,21 @@ const owned = [
   mkdtempSync(path.join(tmpdir(), "relayium-smoke-profile-")),
   mkdtempSync(path.join(tmpdir(), "relayium-smoke-secrets-")),
 ];
+
+/**
+ * A real file, launched the way Explorer launches one.
+ *
+ * The installer registers its verbs as `Relayium.exe --send-files "%1"`. The
+ * path is handed over WITHOUT the flag so the launch itself stages nothing:
+ * the hidden-start assertion has to run first, and a selection arriving at
+ * launch would put the window on screen before it could. The smoke builds the
+ * real argv itself and drives the `second-instance` listener, which is the path
+ * a right-click takes whenever the app is already running.
+ */
+const sendDir = mkdtempSync(path.join(tmpdir(), "relayium-smoke-send-"));
+owned.push(sendDir);
+const sentFile = path.join(sendDir, "picked.txt");
+writeFileSync(sentFile, "picked by right-click\n");
 
 /** Returns the paths that could NOT be removed, so nothing is claimed falsely. */
 function removeOwned() {
@@ -58,12 +73,26 @@ function finish(code, message) {
   process.exit(code);
 }
 
-const child = spawn(String(electronPath), [smokeMain, ...owned], {
+const child = spawn(String(electronPath), [smokeMain, owned[0], owned[1], sentFile], {
   cwd,
   stdio: ["ignore", "pipe", "pipe"],
   env: {
     ...process.env,
     ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
+    // POISONED on purpose, and the child asserts it was ignored.
+    //
+    // Two call sites used to read `npm_package_version` for the version this
+    // build reports — one of them the version a device ENROLS with, which
+    // central validates. In a packaged app that variable does not exist, so
+    // both fell through to a hard-coded literal that happened to be right.
+    //
+    // Running the smoke through `npm` sets the variable to the real version,
+    // which would make the broken read and the correct one indistinguishable.
+    // Setting it to something no build could be is what makes the difference
+    // visible — and it doubles as the other half of that comment in
+    // `handlers.ts`: this identity must not be settable by whoever launches
+    // the process.
+    npm_package_version: "9.9.9-poison",
     // Ambient engineering overrides are CLEARED, not inherited.
     //
     // This wrapper spreads `process.env`, so a developer who had exported these
@@ -106,7 +135,10 @@ child.on("exit", (code) => {
     finish(1, `smoke: produced no result line (exit ${code})\n${out}\n${err}\n`);
     return;
   }
-  const { failures } = JSON.parse(line.slice("RELAYIUM_SMOKE ".length));
+  const { failures, skipped = [] } = JSON.parse(line.slice("RELAYIUM_SMOKE ".length));
+  // Printed whatever the outcome. A scenario that did not run here must not be
+  // indistinguishable from one that ran and was satisfied.
+  for (const note of skipped) process.stdout.write(`smoke SKIPPED ${note}\n`);
   if (failures.length > 0) {
     finish(1, `smoke: ${failures.length} failed\n${failures.join("\n")}\n`);
     return;

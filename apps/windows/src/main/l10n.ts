@@ -1,0 +1,514 @@
+// Main-process copy, in Relayium's two maintained languages.
+//
+// The renderer has the Web i18n runtime; the main process cannot use it — that
+// is a Svelte rune store — and until this file existed the main process had no
+// localization at all: the tray menu was two English string literals.
+//
+// Deliberately plain. A closed key union, two complete catalogs, and a lookup.
+// No plural engine, no runtime loading. Every value a user sees from the main
+// process is one of these strings.
+//
+// Interpolation is exactly one substitution — `{count}` — reachable only
+// through `counter()`, and only for the keys in `CountedMessageKey`. The
+// ordinary `Translate` cannot name those keys and the counting one cannot name
+// any other, so there is no path that renders a template unsubstituted and no
+// path that puts an arbitrary value into user-facing copy. It exists because
+// the stored-link picker is the only place on Windows that can tell the user
+// how many files they are about to authorise a write for.
+
+/** The maintained product languages. English is the source and the fallback. */
+export type Locale = "en" | "zh-Hans";
+
+/**
+ * Every string the main process can show — the resident surfaces, and the
+ * native dialogs main opens on the page's behalf.
+ *
+ * Prefixed by surface so these do not collide with the renderer's key space
+ * when the two are eventually reconciled. Some have no Mac counterpart — the
+ * first-close notice is Windows-specific, because closing a window on macOS is
+ * already understood not to quit.
+ */
+export type MessageKey =
+  | "menu.file"
+  | "menu.edit"
+  | "menu.view"
+  | "menu.window"
+  | "menu.quit"
+  | "menu.undo"
+  | "menu.redo"
+  | "menu.cut"
+  | "menu.copy"
+  | "menu.paste"
+  | "menu.selectAll"
+  | "menu.actualSize"
+  | "menu.zoomIn"
+  | "menu.zoomOut"
+  | "menu.fullScreen"
+  | "menu.minimize"
+  | "menu.close"
+  | "menu.developer"
+  | "menu.reload"
+  | "menu.forceReload"
+  | "menu.devTools"
+  | "resident.tray.tooltip"
+  | "resident.tray.show"
+  | "resident.tray.quit"
+  | "resident.tray.nearby"
+  | "resident.tray.inbox"
+  | "resident.tray.pauseNearby"
+  | "resident.tray.resumeNearby"
+  | "resident.tray.pauseInbox"
+  | "resident.tray.resumeInbox"
+  | "resident.tray.statusSignedOut"
+  | "resident.tray.statusNearbyOn"
+  | "resident.tray.statusNearbyOff"
+  | "resident.tray.statusInboxPaused"
+  | "resident.tray.statusInboxUnavailable"
+  | "resident.tray.statusInboxNeedsAccount"
+  | "resident.tray.statusInboxUnreadable"
+  | "resident.tray.statusInboxOff"
+  | "resident.tray.statusInboxFolderMissing"
+  | "resident.tray.statusInboxFolderNotDir"
+  | "resident.tray.statusInboxFolderNotWritable"
+  | "resident.tray.statusInboxStarting"
+  | "resident.tray.statusInboxReceiving"
+  | "resident.tray.statusInboxBlocked"
+  | "resident.tray.statusInboxOffline"
+  | "resident.tray.statusInboxOn"
+  | "resident.notify.linkReadyTitle"
+  | "resident.notify.linkReadyBody"
+  | "resident.notify.incomingTitle"
+  | "resident.notify.incomingBody"
+  | "resident.notify.incomingTextTitle"
+  | "resident.notify.incomingTextBody"
+  | "resident.tray.revealInbox"
+  | "resident.tray.notifyBlocked"
+  | "resident.firstClose.title"
+  | "resident.firstClose.body"
+  | "resident.firstClose.hide"
+  | "resident.firstClose.quit"
+  | "resident.firstClose.cancel"
+  | "resident.tray.updates"
+  | "resident.update.confirmTitle"
+  | "resident.update.confirmBody"
+  | "resident.update.confirm"
+  | "resident.update.cancel"
+  | "resident.login.confirmTitle"
+  | "resident.login.confirmBody"
+  | "resident.login.confirm"
+  | "resident.login.cancel"
+  | "resident.quit.transferTitle"
+  | "resident.quit.transferBody"
+  | "resident.quit.localTextTitle"
+  | "resident.quit.localTextBody"
+  | "resident.quit.bothBody"
+  | "resident.quit.unknownTitle"
+  | "resident.quit.unknownBody"
+  | "resident.quit.now"
+  | "resident.quit.stay"
+  | "resident.quit.residueTitle"
+  | "resident.quit.residueUnknownTitle"
+  | "resident.quit.residueUnknownBody"
+  | "resident.quit.residueBody"
+  | "resident.quit.residueQuitAnyway"
+  | "resident.stopped.title"
+  | "resident.stopped.body"
+  | "resident.stopped.dismiss"
+  | "resident.quit.residueStay"
+  | "resident.notify.savedTitle"
+  | "resident.notify.messageSavedTitle"
+  | "resident.notify.messageSavedBody"
+  | "resident.notify.savedBody"
+  | "resident.notify.attentionTitle"
+  | "resident.notify.attentionBody"
+  | "resident.notify.failedTitle"
+  | "resident.notify.failedBody"
+  | "native.receive.pickTitle"
+  | "native.receive.pickConfirm"
+  | "native.download.pickConfirm"
+  /**
+   * The Device Inbox destination.
+   *
+   * Its own pair rather than reusing the LAN receive strings, because the
+   * question is a different one and the answer lasts. `native.receive.pickTitle`
+   * asks where to put THIS transfer, once, with the sender already on screen;
+   * this asks for a standing destination for deliveries that will arrive later,
+   * from any of the user's own devices, while they are doing something else. A
+   * shared string would have to be vague enough to mean both, and the folder a
+   * person picks for "a transfer" is not the one they pick for "from now on".
+   */
+  | "native.inbox.pickTitle"
+  | "native.inbox.pickConfirm";
+
+/**
+ * The keys that take a number, and the only ones that may contain `{count}`.
+ *
+ * Deliberately disjoint from `MessageKey`: `Translate` cannot reach these, so a
+ * template cannot be shown to a user unsubstituted, and `TranslateCount` cannot
+ * reach the others, so the substitution cannot be applied where it means
+ * nothing. Widening this union is the whole review surface for interpolation.
+ */
+export const COUNTED_MESSAGE_KEYS = [
+  "native.download.pickTitle",
+  /**
+   * The same dialog, for a link the server deletes after one download.
+   *
+   * A SECOND key rather than a second substitution: `CountedMessageKey` exists
+   * to keep the main process's interpolation surface at exactly one variable,
+   * and a burn flag folded in as `{burn}` would widen the one thing this design
+   * reviews. Two complete sentences cost nothing and stay reviewable.
+   *
+   * Windows has no facts screen before the picker — the comment at the picker
+   * says so — and this dialog is where the write is authorised. macOS says the
+   * same thing on its facts screen (`download.burnNotice`); saying it nowhere
+   * was the gap.
+   */
+  "native.download.pickTitleBurn",
+] as const;
+
+/**
+ * Derived from the list above, which is the point.
+ *
+ * `l10n.test.ts` asserted that `{count}` appears in the counted keys and
+ * nowhere else, against its OWN hand-written copy of this set — so adding
+ * `pickTitleBurn` to the type left that copy at one member and the pin
+ * reported the new key as an unexpected template. It was right to fail and
+ * wrong about why. Fourth restated set found this way today.
+ */
+export type CountedMessageKey = (typeof COUNTED_MESSAGE_KEYS)[number];
+
+export type Catalog = Readonly<Record<MessageKey | CountedMessageKey, string>>;
+
+/**
+ * The notice a user sees the first time closing the window does not quit.
+ *
+ * It says the app KEEPS RUNNING. It does not say it is receiving: with LAN
+ * discovery off or the Device Inbox disabled that would be false, and a resident
+ * notice that overstates reachability is worse than no notice — the user would
+ * stop looking for the reason transfers are not arriving. Reachability belongs
+ * on a surface that knows the actual state.
+ */
+export const EN: Catalog = {
+  // The application menu. `&` marks the Windows access key: Alt+F, Alt+E and so
+  // on, which is how a menu bar is reached without a mouse on this platform.
+  "menu.file": "&File",
+  "menu.edit": "&Edit",
+  "menu.view": "&View",
+  "menu.window": "&Window",
+  "menu.quit": "Quit Relayium",
+  "menu.undo": "Undo",
+  "menu.redo": "Redo",
+  "menu.cut": "Cut",
+  "menu.copy": "Copy",
+  "menu.paste": "Paste",
+  "menu.selectAll": "Select All",
+  "menu.actualSize": "Actual Size",
+  "menu.zoomIn": "Zoom In",
+  "menu.zoomOut": "Zoom Out",
+  "menu.fullScreen": "Full Screen",
+  "menu.minimize": "Minimize",
+  "menu.close": "Close Window",
+  "menu.developer": "&Developer",
+  "menu.reload": "Reload",
+  "menu.forceReload": "Force Reload",
+  "menu.devTools": "Toggle Developer Tools",
+  "resident.tray.tooltip": "Relayium",
+  "resident.tray.show": "Open Relayium",
+  "resident.tray.quit": "Quit Relayium",
+  "resident.tray.nearby": "Nearby devices",
+  "resident.tray.inbox": "Device Inbox",
+  "resident.tray.pauseNearby": "Pause Nearby",
+  "resident.tray.resumeNearby": "Resume Nearby",
+  "resident.tray.pauseInbox": "Pause Device Inbox",
+  "resident.tray.resumeInbox": "Resume Device Inbox",
+  "resident.tray.statusSignedOut": "Not signed in",
+  "resident.tray.statusNearbyOn": "Nearby: on",
+  "resident.tray.statusNearbyOff": "Nearby: off",
+  "resident.tray.statusInboxPaused": "Device Inbox: paused",
+  "resident.tray.statusInboxUnavailable": "Device Inbox: not available in this build",
+  "resident.tray.statusInboxNeedsAccount": "Device Inbox: sign in to receive",
+  "resident.tray.statusInboxUnreadable": "Device Inbox: this PC's store cannot be read",
+  "resident.tray.statusInboxOff": "Device Inbox: off",
+  "resident.tray.statusInboxFolderMissing": "Device Inbox: the chosen folder is missing",
+  // Terse, because a tray line is read in passing — but not the SAME line, for
+  // the reason the screen behind it now gives three: a read-only folder is not
+  // a missing one, and sending somebody to look for it wastes the trip.
+  "resident.tray.statusInboxFolderNotDir": "Device Inbox: something replaced the folder",
+  "resident.tray.statusInboxFolderNotWritable": "Device Inbox: cannot write to the folder",
+  "resident.tray.statusInboxStarting": "Device Inbox: starting",
+  "resident.tray.statusInboxReceiving": "Device Inbox: receiving now",
+  "resident.tray.statusInboxBlocked": "Device Inbox: stopped, needs you",
+  "resident.tray.statusInboxOffline": "Device Inbox: retrying",
+  "resident.tray.statusInboxOn": "Device Inbox: on",
+  "resident.notify.linkReadyTitle": "Your link is ready",
+  "resident.notify.linkReadyBody": "Open Relayium to copy it.",
+  "resident.notify.incomingTitle": "Someone wants to send you files",
+  "resident.notify.incomingBody": "Open Relayium to accept or decline.",
+  // A MESSAGE session, not files. Saying "send you files" about a conversation
+  // is the defect this pair exists to avoid, and reusing the file wording
+  // would have been the cheaper mistake.
+  "resident.notify.incomingTextTitle": "Someone wants to send you a message",
+  "resident.notify.incomingTextBody": "Open Relayium to accept or decline.",
+  "resident.tray.revealInbox": "Show the receive folder",
+  /**
+   * Shown only after a toast actually failed to appear.
+   *
+   * It says what was OBSERVED, not what is configured. Electron cannot ask
+   * Windows whether this app is muted, so "notifications are turned off" would
+   * be a claim about a setting nothing read; "could not be shown" is what
+   * happened. The item opens the settings where it is fixed.
+   */
+  "resident.tray.notifyBlocked": "A notification could not be shown — open settings",
+  "resident.firstClose.title": "Relayium is still running",
+  "resident.firstClose.body":
+    "Closing this window leaves Relayium running in the notification area, so it is ready when you need it. Open it again from the Relayium icon there, or quit it completely.",
+  "resident.firstClose.hide": "Keep running",
+  "resident.firstClose.quit": "Quit Relayium",
+  "resident.firstClose.cancel": "Cancel",
+  // Consent to END the running app. Said plainly, including what it costs:
+  // somebody with a transfer running needs to know before they answer.
+  "resident.tray.updates": "Updates",
+  "resident.update.confirmTitle": "Close Relayium to install the update?",
+  "resident.update.confirmBody":
+    "Relayium will close and the installer will open. Anything still transferring will stop. You can install later instead.",
+  "resident.update.confirm": "Close and install",
+  "resident.update.cancel": "Not now",
+  "resident.login.confirmTitle": "Start Relayium at login?",
+  "resident.login.confirmBody":
+    "Relayium will be added to your Windows startup programs. You can remove it here or in Task Manager at any time.",
+  "resident.login.confirm": "Add to startup",
+  "resident.login.cancel": "Cancel",
+  "resident.quit.transferTitle": "Quit while a transfer is running?",
+  "resident.quit.transferBody": "The transfer will stop and will not finish.",
+  "resident.quit.localTextTitle": "Quit with unsent text?",
+  "resident.quit.localTextBody": "Text you have not sent will be discarded.",
+  "resident.quit.bothBody":
+    "The transfer will stop and will not finish, and text you have not sent will be discarded.",
+  "resident.quit.unknownTitle": "Quit Relayium?",
+  "resident.quit.unknownBody":
+    "Relayium could not check whether a transfer is running or whether you have unsent text. Quitting now would stop anything still in progress.",
+  "resident.quit.now": "Quit",
+  "resident.quit.stay": "Stay open",
+  "resident.quit.residueTitle": "Some files could not be cleaned up",
+  "resident.quit.residueBody":
+    "Relayium could not remove everything it had partly written. Quitting now leaves those files on this PC.",
+  "resident.quit.residueUnknownTitle": "Quit before everything has stopped?",
+  "resident.quit.residueUnknownBody":
+    "Relayium could not confirm that everything has stopped. Something may still be sending, and quitting now would end it.",
+  "resident.quit.residueQuitAnyway": "Quit anyway",
+  "resident.stopped.title": "Relayium has stopped and needs to be restarted",
+  "resident.stopped.body":
+    "Shutting down did not finish, so Relayium can no longer send or receive. The window is still here, but nothing will work until you quit it and open it again. Quitting from the notification area will try the shutdown once more.",
+  "resident.stopped.dismiss": "OK",
+  "resident.quit.residueStay": "Stay open",
+  "resident.notify.savedTitle": "Files saved",
+  "resident.notify.messageSavedTitle": "Message received",
+  "resident.notify.messageSavedBody": "Open Relayium to read it.",
+  "resident.notify.savedBody": "Open Relayium to see them.",
+  "resident.notify.attentionTitle": "Relayium needs your attention",
+  "resident.notify.attentionBody": "Open Relayium to continue.",
+  "resident.notify.failedTitle": "A transfer did not finish",
+  "resident.notify.failedBody": "Open Relayium for details.",
+  // The two folder pickers. The confirm labels and the receive title are the
+  // shipped Mac's own words — `inbox.pickerMessage`, `inbox.pickerPrompt`,
+  // `download.savePanelPrompt`.
+  //
+  // The stored-link title carries the count, where macOS does not, because on
+  // macOS the download pane has already shown the object's facts before the
+  // panel opens. Windows has no such surface yet, so this dialog is the only
+  // place the user learns how many files they are authorising a write for, and
+  // matching a panel that assumes a page that does not exist here would drop
+  // the information rather than move it.
+  "native.receive.pickTitle": "Choose a folder to receive files into",
+  "native.receive.pickConfirm": "Use Folder",
+  "native.download.pickTitle": "Choose where to save {count} file(s)",
+  // "Used up", not "deleted". The files being saved are not deleted; the LINK
+  // is spent, and after this nobody — including this person — can open it
+  // again. Those are different claims and only one of them is true.
+  "native.download.pickTitleBurn":
+    "Choose where to save {count} file(s) — this link is used up once they are saved",
+  "native.download.pickConfirm": "Save Here",
+  "native.inbox.pickTitle": "Choose where your devices send files",
+  "native.inbox.pickConfirm": "Receive Here",
+};
+
+export const ZH_HANS: Catalog = {
+  "menu.file": "文件(&F)",
+  "menu.edit": "编辑(&E)",
+  "menu.view": "视图(&V)",
+  "menu.window": "窗口(&W)",
+  "menu.quit": "退出 Relayium",
+  "menu.undo": "撤销",
+  "menu.redo": "重做",
+  "menu.cut": "剪切",
+  "menu.copy": "复制",
+  "menu.paste": "粘贴",
+  "menu.selectAll": "全选",
+  "menu.actualSize": "实际大小",
+  "menu.zoomIn": "放大",
+  "menu.zoomOut": "缩小",
+  "menu.fullScreen": "全屏",
+  "menu.minimize": "最小化",
+  "menu.close": "关闭窗口",
+  "menu.developer": "开发者(&D)",
+  "menu.reload": "重新加载",
+  "menu.forceReload": "强制重新加载",
+  "menu.devTools": "切换开发者工具",
+  "resident.tray.tooltip": "Relayium",
+  "resident.tray.show": "打开 Relayium",
+  "resident.tray.quit": "退出 Relayium",
+  "resident.tray.nearby": "附近设备",
+  "resident.tray.inbox": "设备收件箱",
+  "resident.tray.pauseNearby": "暂停附近设备",
+  "resident.tray.resumeNearby": "恢复附近设备",
+  "resident.tray.pauseInbox": "暂停设备收件箱",
+  "resident.tray.resumeInbox": "恢复设备收件箱",
+  "resident.tray.statusSignedOut": "未登录",
+  "resident.tray.statusNearbyOn": "附近设备：已开启",
+  "resident.tray.statusNearbyOff": "附近设备：已关闭",
+  "resident.tray.statusInboxPaused": "设备收件箱：已暂停",
+  "resident.tray.statusInboxUnavailable": "设备收件箱：此版本不支持",
+  "resident.tray.statusInboxNeedsAccount": "设备收件箱：登录后即可接收",
+  "resident.tray.statusInboxUnreadable": "设备收件箱：无法读取本机存储",
+  "resident.tray.statusInboxOff": "设备收件箱：已关闭",
+  "resident.tray.statusInboxFolderMissing": "设备收件箱：所选文件夹已不存在",
+  "resident.tray.statusInboxFolderNotDir": "设备收件箱：该路径已被别的东西占用",
+  "resident.tray.statusInboxFolderNotWritable": "设备收件箱：无法写入该文件夹",
+  "resident.tray.statusInboxStarting": "设备收件箱：正在启动",
+  "resident.tray.statusInboxReceiving": "设备收件箱：正在接收",
+  "resident.tray.statusInboxBlocked": "设备收件箱：已停止，需要你处理",
+  "resident.tray.statusInboxOffline": "设备收件箱：正在重试",
+  "resident.tray.statusInboxOn": "设备收件箱：已开启",
+  "resident.notify.linkReadyTitle": "链接已就绪",
+  "resident.notify.linkReadyBody": "打开 Relayium 即可复制。",
+  "resident.notify.incomingTitle": "有人想向你发送文件",
+  "resident.notify.incomingTextTitle": "有人想向你发送消息",
+  "resident.notify.incomingTextBody": "打开 Relayium 接受或拒绝。",
+  "resident.notify.incomingBody": "打开 Relayium 以接受或拒绝。",
+  "resident.tray.revealInbox": "显示接收文件夹",
+  "resident.tray.notifyBlocked": "有通知未能显示——打开通知设置",
+  "resident.firstClose.title": "Relayium 仍在运行",
+  "resident.firstClose.body":
+    "关闭此窗口后，Relayium 会继续在通知区域运行，随时可用。你可以从那里的 Relayium 图标重新打开，或者完全退出。",
+  "resident.firstClose.hide": "继续运行",
+  "resident.firstClose.quit": "退出 Relayium",
+  "resident.firstClose.cancel": "取消",
+  "resident.tray.updates": "更新",
+  "resident.update.confirmTitle": "关闭 Relayium 并安装更新？",
+  "resident.update.confirmBody":
+    "Relayium 将关闭并打开安装程序。正在传输的内容会中断。你也可以稍后再安装。",
+  "resident.update.confirm": "关闭并安装",
+  "resident.update.cancel": "暂不",
+  "resident.login.confirmTitle": "登录时启动 Relayium？",
+  "resident.login.confirmBody":
+    "Relayium 将被添加到 Windows 启动项。你随时可以在这里或任务管理器中移除。",
+  "resident.login.confirm": "添加到启动项",
+  "resident.login.cancel": "取消",
+  "resident.quit.transferTitle": "传输正在进行，仍要退出吗？",
+  "resident.quit.transferBody": "传输将中止，且不会完成。",
+  "resident.quit.localTextTitle": "还有未发送的文本，仍要退出吗？",
+  "resident.quit.localTextBody": "尚未发送的文本将被丢弃。",
+  "resident.quit.bothBody": "传输将中止且不会完成，尚未发送的文本也将被丢弃。",
+  "resident.quit.unknownTitle": "退出 Relayium？",
+  "resident.quit.unknownBody":
+    "Relayium 无法确认当前是否有传输正在进行，也无法确认是否有尚未发送的文本。现在退出会中止仍在进行的操作。",
+  "resident.quit.now": "退出",
+  "resident.quit.stay": "保持运行",
+  "resident.quit.residueTitle": "部分文件未能清理",
+  "resident.quit.residueBody":
+    "Relayium 未能删除它写入的部分内容。现在退出会把这些文件留在此电脑上。",
+  "resident.quit.residueUnknownTitle": "尚未确认全部停止，仍要退出吗？",
+  "resident.quit.residueUnknownBody":
+    "Relayium 无法确认所有操作都已停止，可能仍有内容正在发送，现在退出会将其中断。",
+  "resident.quit.residueQuitAnyway": "仍然退出",
+  "resident.stopped.title": "Relayium 已停止，需要重新启动",
+  "resident.stopped.body":
+    "关闭过程未能完成，Relayium 已无法发送或接收。窗口仍在，但在你退出并重新打开之前都不会正常工作。从通知区域退出会再次尝试关闭。",
+  "resident.stopped.dismiss": "好",
+  "resident.quit.residueStay": "保持运行",
+  "resident.notify.savedTitle": "文件已保存",
+  "resident.notify.messageSavedTitle": "收到消息",
+  "resident.notify.messageSavedBody": "打开 Relayium 查看。",
+  "resident.notify.savedBody": "打开 Relayium 查看。",
+  "resident.notify.attentionTitle": "Relayium 需要你的确认",
+  "resident.notify.attentionBody": "打开 Relayium 继续。",
+  "resident.notify.failedTitle": "传输未完成",
+  "resident.notify.failedBody": "打开 Relayium 查看详情。",
+  "native.receive.pickTitle": "选择用于接收文件的文件夹",
+  "native.receive.pickConfirm": "使用此文件夹",
+  "native.download.pickTitle": "选择保存位置（{count} 个文件）",
+  "native.download.pickTitleBurn": "选择保存位置（{count} 个文件）——保存后这个链接就用掉了",
+  "native.download.pickConfirm": "保存到这里",
+  "native.inbox.pickTitle": "选择你的设备发来的文件的保存位置",
+  "native.inbox.pickConfirm": "接收到这里",
+};
+
+/**
+ * Map an OS locale tag onto a maintained language.
+ *
+ * Electron's `app.getLocale()` returns tags like `zh-CN`, `zh-TW`, `en-GB`.
+ *
+ * Only **Simplified** Chinese regions resolve to `zh-Hans`. `zh-TW`, `zh-HK`
+ * and an explicit `zh-Hant` fall back to English rather than being served
+ * Simplified copy: Traditional Chinese is not a maintained language here, and
+ * quietly substituting Simplified would claim a support this product does not
+ * offer. English is the declared fallback, so that is what they get.
+ */
+export function resolveLocale(raw: string | undefined): Locale {
+  if (!raw) return "en";
+  const tag = raw.toLowerCase().replace(/_/g, "-");
+  if (tag === "zh" || tag === "zh-hans") return "zh-Hans";
+  if (tag.startsWith("zh-hans-")) return "zh-Hans";
+  // Region subtags that use the Simplified script.
+  if (tag === "zh-cn" || tag === "zh-sg" || tag === "zh-my") return "zh-Hans";
+  return "en";
+}
+
+export function catalogFor(locale: Locale): Catalog {
+  return locale === "zh-Hans" ? ZH_HANS : EN;
+}
+
+export type Translate = (key: MessageKey) => string;
+
+/** A lookup for the counted keys. The count is a number, never a string. */
+export type TranslateCount = (key: CountedMessageKey, count: number) => string;
+
+/** The one substitution point this catalog has. */
+const COUNT_PLACEHOLDER = "{count}";
+
+/**
+ * A lookup bound to one language.
+ *
+ * The locale is supplied rather than read from `app` so this module imports no
+ * Electron and every case is testable without one.
+ */
+export function translator(locale: Locale): Translate {
+  const catalog = catalogFor(locale);
+  return (key) => catalog[key];
+}
+
+/**
+ * A counting lookup bound to one language.
+ *
+ * The count is formatted here rather than concatenated by the caller: the two
+ * catalogs put the number in different places, which is the whole reason a
+ * catalog owns its own word order.
+ */
+export function counter(locale: Locale): TranslateCount {
+  const catalog = catalogFor(locale);
+  return (key, count) => catalog[key].replace(COUNT_PLACEHOLDER, wholeCount(count));
+}
+
+/**
+ * A number a person can read, from whatever arrives.
+ *
+ * The count comes from a validated manifest, so nothing here is reachable
+ * today. It exists because this string is the dialog that AUTHORISES a write:
+ * `NaN file(s)` or `-1 file(s)` there is worse than any of the inputs that
+ * would produce it. `Math.max(0, NaN)` is `NaN`, which is how this was wrong
+ * the first time.
+ */
+function wholeCount(count: number): string {
+  if (!Number.isFinite(count)) return "0";
+  return String(Math.max(0, Math.trunc(count)));
+}

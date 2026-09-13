@@ -1,0 +1,143 @@
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { present, type NotificationEvent } from "../../src/main/notifications.js";
+import { translator } from "../../src/main/l10n.js";
+
+const t = translator("en");
+
+describe("an offer nobody has answered yet", () => {
+  it("names no peer, no file and no count", () => {
+    // All of that is on the offer card, behind the window. This is shown where
+    // whoever is standing there can read it.
+    for (const locale of ["en", "zh-Hans"] as const) {
+      const content = present({ kind: "incoming" }, translator(locale));
+      const said = `${content.title} ${content.body}`;
+      expect(said).not.toMatch(/\d/);
+      expect(said).not.toMatch(/\.[a-z0-9]{2,4}\b/i);
+      expect(content.title.trim()).not.toBe("");
+      expect(content.body.trim()).not.toBe("");
+    }
+  });
+
+  it("is not the one that says files ARRIVED", () => {
+    // The difference is the whole point: one is a question waiting for an
+    // answer, the other is an outcome. Announcing an offer as an arrival would
+    // tell somebody their files are in when nobody has accepted them.
+    const offered = present({ kind: "incoming" }, t);
+    const landed = present({ kind: "saved", files: 1 }, t);
+    expect(offered.title).not.toBe(landed.title);
+    expect(offered.body).not.toBe(landed.body);
+  });
+});
+
+describe("a message request is not a file offer", () => {
+  it("says a message, not files", () => {
+    // The shortcut this avoids was reusing `incoming`, whose title is "Someone
+    // wants to send you files". A conversation is not files, and the person
+    // reading a lock screen has no way to find out otherwise.
+    for (const locale of ["en", "zh-Hans"] as const) {
+      const t = translator(locale);
+      const text = present({ kind: "incoming-text" }, t);
+      const files = present({ kind: "incoming" }, t);
+      expect(text.title, locale).not.toBe(files.title);
+      expect(text.title.trim(), locale).not.toBe("");
+    }
+  });
+
+  it("carries no peer, no message and no count", () => {
+    // Same rule as the file offer beside it: shown where anyone standing there
+    // can read it.
+    const content = present({ kind: "incoming-text" }, translator("en"));
+    const said = `${content.title} ${content.body}`;
+    for (const leak of ["@", "http", ":\\", "/", "0", "1", "2", "3"]) {
+      expect(said, leak).not.toContain(leak);
+    }
+  });
+});
+
+describe("an upload that finished says so, and says nothing else", () => {
+  it("names neither the link nor anything in it", () => {
+    // The link IS the secret: its fragment carries the key. A notification is
+    // shown on a lock screen, read by whoever is standing there, and kept by
+    // the system after it is dismissed — so this says there is something to
+    // collect and where, and nothing about what.
+    for (const locale of ["en", "zh-Hans"] as const) {
+      const content = present({ kind: "link-ready" }, translator(locale));
+      const said = `${content.title} ${content.body}`;
+      expect(said).not.toMatch(/https?:/i);
+      expect(said).not.toContain("#");
+      expect(said).not.toMatch(/\/d\//);
+      expect(content.title.trim()).not.toBe("");
+      expect(content.body.trim()).not.toBe("");
+    }
+  });
+
+  it("is its own event rather than a reused one", () => {
+    // "Files saved" describes a RECEIVE. Announcing an upload with it would
+    // tell the sender that something arrived, which is the other direction.
+    const ready = present({ kind: "link-ready" }, t);
+    const saved = present({ kind: "saved", files: 1 }, t);
+    expect(ready.title).not.toBe(saved.title);
+    expect(ready.body).not.toBe(saved.body);
+  });
+});
+
+describe("notifications say counts and closed codes, nothing else", () => {
+  it("renders every case in both languages", () => {
+    // TOTAL over the union by type, not a list somebody remembers to extend.
+    // As a plain array this covered six kinds and a seventh would have shipped
+    // with no copy in either language and nothing saying so — which is exactly
+    // what `incoming-text` was about to do.
+    const byKind = {
+      saved: { kind: "saved", files: 3 },
+      "saved-message": { kind: "saved-message" },
+      attention: { kind: "attention" },
+      failed: { kind: "failed" },
+      "link-ready": { kind: "link-ready" },
+      incoming: { kind: "incoming" },
+      "incoming-text": { kind: "incoming-text" },
+    } as const satisfies Record<NotificationEvent["kind"], NotificationEvent>;
+    const events: NotificationEvent[] = Object.values(byKind);
+    for (const event of events) {
+      for (const locale of ["en", "zh-Hans"] as const) {
+        const content = present(event, translator(locale));
+        expect(content.title.trim()).not.toBe("");
+        expect(content.body.trim()).not.toBe("");
+      }
+    }
+  });
+
+  it("never varies with a file count", () => {
+    // A count would be safe to show; formatting one here would not be, because
+    // that is the seam a filename would later arrive through.
+    const one = present({ kind: "saved", files: 1 }, t);
+    const many = present({ kind: "saved", files: 4096 }, t);
+    expect(one).toEqual(many);
+  });
+
+  it("says nothing about a message beyond where to read it", () => {
+    const content = present({ kind: "saved-message" }, t);
+    // Its OWN keys: reusing the files title said "Files saved" for a message.
+    expect(content.title).toBe("Message received");
+    expect(content.body).toBe("Open Relayium to read it.");
+  });
+
+  /**
+   * The textual guard, mirroring `InboxSurfaceGuardTests` on macOS. A leak
+   * cannot be caught by rendering the cases we thought of; it is caught by the
+   * module having no place to put a value.
+   */
+  it("the module contains no interpolation at all", () => {
+    const source = readFileSync(
+      fileURLToPath(new URL("../../src/main/notifications.ts", import.meta.url)),
+      "utf8",
+    );
+    const code = source
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("//") && !line.trimStart().startsWith("*"))
+      .join("\n");
+    expect(code).not.toMatch(/`[^`]*\$\{/);
+    expect(code).not.toMatch(/\+\s*event\./);
+  });
+});

@@ -117,6 +117,11 @@
   let textCompose = $state("");
   const workspace: PeerWorkspace = createPeerWorkspace({
     selfId: () => selfId,
+    // Said, not swallowed. An over-limit selection is refused whole now, and a
+    // refusal nobody sees is the silent truncation this replaced wearing a
+    // different face. `flash` is the same notice a drop onto a peer that is too
+    // old already uses.
+    onSendRefused: () => flash(messages[lang()].tooManyFiles(MAX_FILES)),
     joined: () => joinedRoom,
     // The room refused or expired this page's membership. In a code room that is
     // exactly `linkDead` — a close before we ever joined — and it means no

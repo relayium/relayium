@@ -589,8 +589,12 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
     } catch (err) {
       if (mine !== attempt) return;
       if (err instanceof LinkBusyError) {
+        // The STATUS stays `peerBusy` — it means "a link was refused" to
+        // everything that reads it, and changing that would be a behaviour
+        // change in code this batch is only adding information to. What the
+        // side decides is the SENTENCE, and the two are opposite advice.
         status = "peerBusy";
-        errorKey = "peerBusy";
+        errorKey = err.side === "peer" ? "peerBusy" : "selfBusy";
         return;
       }
       if (err instanceof UnsupportedLinkError) {

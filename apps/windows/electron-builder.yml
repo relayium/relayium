@@ -17,7 +17,57 @@ directories:
 files:
   - dist/**
   - assets/**
+  # A consequence of `nsis.include` below: `assets/` is the build-resources
+  # directory, so it holds an installer script the app itself never runs.
+  # electron-builder excludes build resources by default, but the explicit
+  # `assets/**` above re-includes them — the last matching pattern wins — which
+  # would ship the installer's source inside the application.
+  - "!assets/installer.nsh"
+  # Release TOOLING, compiled alongside the app so its rules are typed and
+  # tested, and excluded here so it is not carried inside the product. Same
+  # reasoning as the installer script above: something the app never runs has no
+  # business shipping in it. The installed-artifact acceptance asserts their
+  # absence from the packaged archive, because an exclusion nothing checks is a
+  # comment.
+  - "!dist/main/update/manifest-publisher.js"
+  - "!dist/main/update/release-staging.js"
   - package.json
+
+# The native receive helper ships beside the app, not inside the asar: it is an
+# executable the main process spawns, and a file inside an archive cannot be
+# spawned. `to:` places it at `resources/relayium-io-helper.exe`, which is what
+# `process.resourcesPath` names at runtime.
+#
+# An explicit `from`/`to` pair rather than a glob, so the intended path is
+# stated once and cannot drift.
+#
+# It does NOT make a missing helper fail the build. Measured: with the file
+# absent, electron-builder logs `file source doesn't exist` and exits **0**,
+# producing an installer with no helper in it. A warning in a log nobody reads is
+# not a gate, so the guarantee lives in `.github/workflows/windows.yml`, which
+# asserts the binary before the tests and asserts the packaged resource after.
+#
+# x64 only, matching the single `target` arch below. Nothing here builds or
+# claims arm64.
+extraResources:
+  - from: native/build/relayium-io-helper.exe
+    to: relayium-io-helper.exe
+  # The secret helper. A DISTINCT binary from the IO helper above: it protects
+  # the account bearer and installation identity with user-scope DPAPI, and
+  # `secrets.ts` resolves it at exactly this name under `process.resourcesPath`.
+  - from: native/build/relayium-secret-helper.exe
+    to: relayium-secret-helper.exe
+  # The update custody helper. A THIRD distinct binary, and distinct for the
+  # same reason as the second: it holds the app-owned staging root by handle and
+  # is the only thing that may create, delete, rename or launch a staged
+  # installer. `src/main/update/native-scope.ts` resolves it at exactly this
+  # name under `process.resourcesPath` and refuses to spawn anything else.
+  #
+  # Its absence is not a build failure either — see the note above — so the
+  # guarantee lives in `.github/workflows/windows.yml`, which asserts the binary
+  # before the tests and compares the packaged bytes after.
+  - from: native/build/relayium-update-helper.exe
+    to: relayium-update-helper.exe
 
 win:
   target:
@@ -30,6 +80,11 @@ win:
   # step that must not be inferred from a green build.
 
 nsis:
+  # The destination guard. electron-builder would pick this file up from
+  # `buildResources` by convention; it is named explicitly because a security
+  # control that is wired by a naming convention is one a later reorganisation
+  # can silently unwire. See the file for what it refuses and why.
+  include: assets/installer.nsh
   # Per-user, so installing needs no administrator and an install cannot write
   # outside the user's own profile.
   perMachine: false
@@ -37,10 +92,16 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  # The installer owns the `relayium://` association (see `protocols` below).
-  # The app never registers it at runtime — doing so from a development run or a
-  # test would seize the scheme from whatever already owns it on that machine.
+  # `relayium://` is registered by `assets/installer.nsh` (`customInstall`) and
+  # removed conditionally by its `customUnInstall`. NOT by the `protocols:` key
+  # below — see the note there.
 
+# INERT FOR THIS TARGET. The pinned app-builder-lib reads `protocols` only in
+# `LinuxTargetHelper` and `AppxTarget`; the NSIS target ignores it entirely.
+# Kept because it is the declared, portable statement of intent and other targets
+# would honour it — but it registers nothing here, and an earlier comment in this
+# file wrongly claimed it did. The real Windows registration is in
+# `assets/installer.nsh`.
 protocols:
   - name: Relayium
     schemes: [relayium]

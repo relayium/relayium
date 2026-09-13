@@ -19,6 +19,7 @@ import type { PickedFile } from "./drag";
 import type { Incoming, Xfer } from "./transfer-model";
 import type { RelayGate } from "./relay-selection";
 import type { Conn, ConnPath } from "./webrtc";
+import { MAX_FILES } from "./manifest";
 
 export const EXPLICIT_DISCONNECT_SUPPRESS_MS = 60_000;
 
@@ -40,7 +41,23 @@ export interface PeerWorkspaceDeps extends Omit<MixedSessionDeps,
    * room and every STUN-only code.
    */
   relayGate?(): RelayGate | null;
+  /**
+   * A batch this workspace would not admit, so the surface can say so.
+   *
+   * One wire per product rather than a return value each of the seven
+   * `sendFiles` call sites would have to handle: a refusal every caller must
+   * remember to render is a refusal some caller will not.
+   *
+   * Only reasons a PERSON can act on are reported. `blocksNewIntent` and a peer
+   * that does not route `link/1` already have visible states of their own; an
+   * over-limit selection had none, which is how it came to be truncated in
+   * silence instead.
+   */
+  onSendRefused?(reason: SendRefusal): void;
 }
+
+/** Why a batch was not admitted. See `onSendRefused`. */
+export type SendRefusal = "too-many-files";
 
 export interface PeerWorkspace {
   readonly mixed: MixedSession;
@@ -357,6 +374,21 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
       // uploading or already uploaded. Refused HERE as well as at that call site
       // because this is the single choke point every batch passes through.
       if (!files.length) return;
+      // Refused WHOLE, and never trimmed to fit.
+      //
+      // `enqueue` used to begin `picked.slice(0, MAX_FILES)`, so a person who
+      // dropped 1500 files sent 1000 and was shown 1000, with nothing saying
+      // the other 500 were gone. The receiving side accepted it because the
+      // manifest was internally consistent — the truncation existed, in effect,
+      // to make an over-limit batch PASS the `files.length <= MAX_FILES` check
+      // written to stop it.
+      //
+      // macOS refuses whole and always has. This is that rule, in the code both
+      // the web client and the Windows realtime room share.
+      if (files.length > MAX_FILES) {
+        deps.onSendRefused?.("too-many-files");
+        return;
+      }
       if (blocksNewIntent(peerId)) return;
       // Unsupported is terminal. There is no second transport to seal this batch
       // onto, so the batch is simply not started — and because `routes` is the

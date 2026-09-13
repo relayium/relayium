@@ -71,6 +71,35 @@ type IceRead =
   | { ok: false; status: RelayAvailability; retryable: boolean; retryAfterMs?: number };
 
 /**
+ * How the `/api/ice` request is actually put on the wire.
+ *
+ * ## Why this seam exists, and why it is the ONLY thing that varies
+ *
+ * Everything below this line — which failures are worth repeating, the
+ * `Retry-After` cap, 429-is-not-transient, `relayDenied`, `relayStatusOf` — is
+ * the classification a cross-network session lives or dies by, and it is the
+ * part that must never be re-implemented per client. A second copy is silent
+ * divergence with a green board on both sides: the Windows renderer would
+ * flatten a quota denial into "connection failed" and nobody would see it until
+ * a user did.
+ *
+ * The Electron renderer is served from `app://relayium`, so a RELATIVE
+ * `/api/ice` resolves against the app bundle rather than the API server, and the
+ * request has to be made by a process that knows the origin. That is a
+ * difference in TRANSPORT, so transport is the only thing injected. The
+ * transport hands back a `Response`; the reasoning stays here, once.
+ *
+ * The default is unchanged browser behaviour, including `credentials:
+ * "include"` — `handleICE` derives relay entitlement from the pairing code's
+ * owner rather than the requester's session, so the cookie is not load-bearing
+ * for authorization, but removing it is a behaviour change this seam has no
+ * business making.
+ */
+export type IceTransport = (url: string) => Promise<Response>;
+
+const browserTransport: IceTransport = (url) => fetch(url, { credentials: "include" });
+
+/**
  * One attempt at `/api/ice`.
  *
  * The distinction that matters is *which* failures are worth repeating. A
@@ -83,10 +112,10 @@ type IceRead =
  * with a `relayDenied` body) is an answer, not a failure, and must reach the UI
  * verbatim.
  */
-async function readIceConfig(url: string): Promise<IceRead> {
+async function readIceConfig(url: string, transport: IceTransport): Promise<IceRead> {
   let res: Response;
   try {
-    res = await fetch(url, { credentials: "include" });
+    res = await transport(url);
   } catch {
     return { ok: false, status: "unavailable", retryable: true };
   }
@@ -143,14 +172,17 @@ async function deniedReason(res: Response): Promise<RelayAvailability | null> {
   return null;
 }
 
-export async function fetchIceConfig(code = ""): Promise<IceConfig> {
+export async function fetchIceConfig(
+  code = "",
+  transport: IceTransport = browserTransport,
+): Promise<IceConfig> {
   const q = code ? `?code=${encodeURIComponent(code)}` : "";
   const url = `/api/ice${q}`;
-  let read = await readIceConfig(url);
+  let read = await readIceConfig(url, transport);
   const wait = read.ok ? 0 : read.retryAfterMs ?? ICE_RETRY_DELAY_MS;
   if (!read.ok && read.retryable && wait <= ICE_MAX_RETRY_AFTER_MS) {
     await new Promise((r) => setTimeout(r, wait));
-    read = await readIceConfig(url);
+    read = await readIceConfig(url, transport);
   }
   // Unreadable: keep the empty list (never a third-party STUN — see FALLBACK)
   // but say why, instead of letting it look like a normal LAN config.
@@ -169,8 +201,11 @@ function relayStatusOf(cfg: IceConfig, code: string): RelayAvailability {
   return pooled || hasTurnServer(cfg.iceServers) ? "ok" : "none";
 }
 
-export async function fetchIceServers(code = ""): Promise<RTCIceServer[]> {
-  return (await fetchIceConfig(code)).iceServers;
+export async function fetchIceServers(
+  code = "",
+  transport: IceTransport = browserTransport,
+): Promise<RTCIceServer[]> {
+  return (await fetchIceConfig(code, transport)).iceServers;
 }
 
 /**

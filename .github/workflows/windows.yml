@@ -9,6 +9,11 @@
 # dependency, so `web/**` is a real trigger — a change to `crypto.ts` must run
 # the Windows lane or the fixture conformance below is a check nobody ran.
 #
+# The `realtime` job widens that further. It drives the shipped web UI through
+# CDP, imports the shared e2e harness, and compiles and runs the real server, so
+# `web/src/**`, `web/e2e/**`, `server/**` and the web build inputs are all real
+# triggers for this lane rather than `web.yml`'s alone.
+#
 # It deliberately does NOT name `apps/RelayiumKit/**`. The Swift package is not
 # an input to this build; the frozen fixtures it happens to host are read as
 # data, and `compat.yml` already gates those unfiltered for every platform.
@@ -27,11 +32,19 @@ on:
     paths:
       - apps/windows/**
       # Dependency closure, named precisely rather than as all of `web/`. The
-      # client compiles the protocol modules in `web/src/lib` and installs the
-      # web client's toolchain from its lockfile; it does not read the marketing
-      # pages, the generated static site or the e2e harnesses, and triggering on
-      # those would make an unrelated copy edit pay for a Windows runner.
-      - web/src/lib/**
+      # client compiles the protocol modules under `web/src`, installs the web
+      # client's toolchain from its lockfile, and — since `realtime` — drives the
+      # shipped web UI, imports the shared e2e harness and runs the real server.
+      # It still does not read the marketing pages or the generated static site,
+      # and triggering on those would make an unrelated copy edit pay for a
+      # Windows runner.
+      #
+      # `web/e2e/**` is the whole directory rather than the three files reached
+      # today: the harness is shared, its own imports may grow, and a filter that
+      # under-triggers is a Windows lane that silently stops running.
+      - web/src/**
+      - web/e2e/**
+      - server/**
       - web/package.json
       - web/package-lock.json
       # The TypeScript and Svelte configuration is a real transitive input, not
@@ -43,6 +56,13 @@ on:
       - web/tsconfig.app.json
       - web/tsconfig.node.json
       - web/svelte.config.js
+      # The web BUILD inputs. `npm run build` in `web/` is
+      # `gen-pages.mjs && vite build`, and `realtime` serves the built bundle.
+      - web/vite.config.ts
+      - web/vite-plugin-pwa.ts
+      - web/vite-plugin-route-shells.ts
+      - web/index.html
+      - web/scripts/**
       - .github/workflows/windows.yml
   workflow_dispatch:
   workflow_call:
@@ -57,7 +77,9 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 30
+    # Raised from 30: the lane now installs the artifact, launches it twice,
+    # reinstalls over itself and uninstalls, none of which existed before.
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: apps/windows
@@ -85,10 +107,91 @@ jobs:
       # place this project can least afford to find out at runtime.
       - run: npm run check
 
+      # The native receive helper, built BEFORE `npm test`.
+      #
+      # Not a duplicate of the independent `native` job below. That job is the
+      # helper's own Go test and build, and it deliberately has no `needs:` so
+      # this lane still runs when the helper is red. This step exists for a
+      # different reason: the TypeScript client tests drive the REAL helper
+      # subprocess, so on Windows they need the binary on disk before `npm test`
+      # runs — not after, and not from another job's workspace.
+      #
+      # `-o build/...` writes where `electron-builder.yml`'s `extraResources`
+      # expects it, so one build serves both the tests and the package.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: apps/windows/native/go.mod
+          cache-dependency-path: apps/windows/native/go.sum
+      # The signed fixture the update helper's trust matrix verifies against.
+      #
+      # Resolved deterministically from the Node the workflow already pins, and
+      # asserted VALID here — independently of the code under test — before any
+      # Go test runs. Without it the signer-chain walk never executes, so the
+      # tests treat its absence as a failure rather than skipping; this step
+      # exists so that failure never happens for an avoidable reason and its
+      # cause is visible at the top of the log.
+      #
+      # Nothing is signed, imported or installed: this is a binary already on the
+      # runner, and the tests only ever COPY it into a temporary directory.
+      - name: Resolve the signed acceptance fixture
+        shell: pwsh
+        run: |
+          $node = (Get-Command node.exe).Source
+          if (-not $node) { throw "node.exe not found; the update trust matrix needs a signed fixture" }
+          $signature = Get-AuthenticodeSignature -LiteralPath $node
+          if ($signature.Status -ne "Valid") {
+            throw "the acceptance fixture $node is not validly signed (status $($signature.Status)); the update trust matrix cannot run"
+          }
+          Write-Host "signed fixture: $node"
+          Write-Host "signer: $($signature.SignerCertificate.Subject)"
+          "RELAYIUM_SIGNED_FIXTURE=$node" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # The tests read signatures through the SAME interpreter that just
+          # validated this fixture. Windows PowerShell 5.1 fails here with
+          # `CouldNotAutoloadMatchingModule` for Microsoft.PowerShell.Security,
+          # because the job's inherited PSModulePath is PowerShell 7's — so a
+          # test that reached for `powershell` found no
+          # `Get-AuthenticodeSignature` at all.
+          $pwsh = (Get-Command pwsh).Source
+          if (-not $pwsh) { throw "pwsh not found; the update trust matrix reads signatures through it" }
+          Write-Host "signature interpreter: $pwsh"
+          "RELAYIUM_POWERSHELL=$pwsh" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      #
+      # Each build's status is checked immediately. `pwsh` does not stop a
+      # multi-line script when a native command fails, and the step's exit code
+      # is the LAST command's — so a failed io-helper build followed by a
+      # successful update-helper build exited 0, and the failure was invisible.
+      # The existence assertion below does not cover it either: a binary left by
+      # an earlier run satisfies `Test-Path` without having been rebuilt here.
+      - name: Build the native helpers
+        shell: pwsh
+        working-directory: apps/windows/native
+        run: |
+          go build -o build/relayium-io-helper.exe ./cmd/relayium-io-helper
+          if ($LASTEXITCODE -ne 0) { throw "relayium-io-helper.exe failed to build ($LASTEXITCODE)" }
+          go build -o build/relayium-secret-helper.exe ./cmd/relayium-secret-helper
+          if ($LASTEXITCODE -ne 0) { throw "relayium-secret-helper.exe failed to build ($LASTEXITCODE)" }
+          go build -o build/relayium-update-helper.exe ./cmd/relayium-update-helper
+          if ($LASTEXITCODE -ne 0) { throw "relayium-update-helper.exe failed to build ($LASTEXITCODE)" }
+
+      # Loudly, before anything depends on it. A missing helper would otherwise
+      # surface as five client tests skipping or an installer packaged without a
+      # binary it claims to ship — both of which read as success.
+      - name: Assert the helper binary exists
+        shell: pwsh
+        run: |
+          foreach ($helper in @("native/build/relayium-io-helper.exe", "native/build/relayium-secret-helper.exe", "native/build/relayium-update-helper.exe")) {
+            if (-not (Test-Path -LiteralPath $helper)) {
+              throw "native helper missing at $helper; the client tests and extraResources both require it"
+            }
+            Write-Host "helper: $helper $((Get-Item -LiteralPath $helper).Length) bytes"
+          }
+
       # Unit and conformance tests. This is where the imported protocol modules
       # are executed against the frozen cross-language fixtures under
       # `apps/RelayiumKit/Tests/Fixtures/`, so the reuse claim is proven by
-      # execution rather than asserted.
+      # execution rather than asserted. On Windows it also runs the client tests
+      # that spawn the helper built above.
       - run: npm test
 
       - run: npm run build
@@ -100,19 +203,225 @@ jobs:
       - name: Electron bootstrap smoke
         run: npm run test:smoke
 
+      # The Device Inbox against a REAL server, on Windows.
+      #
+      # The script is owned by the acceptance writer and integrated separately;
+      # this workflow only runs it. It needs Go — installed earlier in this job —
+      # and the built main/renderer from `npm run build` above.
+      - name: Device Inbox real-server acceptance
+        run: node test/smoke/inbox-server-acceptance.mjs
+
+      # The resident lifecycle, on Windows, for the first time.
+      #
+      # Every CP14 resident run so far happened on a macOS-hosted Electron, so
+      # this main/preload/renderer lifecycle has never run on the platform it is
+      # written for. Placed before packaging so a broken lifecycle fails ahead of
+      # the installer steps.
+      #
+      # What it proves, exactly: the real Electron main, preload and renderer
+      # behave on Windows. `resident-main` INJECTS the login-item read/write and
+      # answers the native confirmations itself, so this step does NOT touch the
+      # OS startup entry and does NOT exercise a native consent dialog. Whether
+      # Windows actually launches the app at sign-in stays unproven here and
+      # belongs to the later full-product acceptance.
+      - name: Resident lifecycle smoke
+        run: npm run test:smoke:resident
+
+      # Four renderer suites that existed and ran nowhere.
+      #
+      # Each builds the real Svelte client and drives it in a real Electron
+      # renderer, and between them they carry 341 assertions — the OS-entry
+      # pane, the pairing handoff, the account screen and the update screen.
+      # No workflow and no package script invoked any of them, so every one of
+      # those assertions had never executed on Windows. They were found by
+      # reading a GREEN run for what it skipped rather than for what it failed.
+      #
+      # They cost one to three seconds each. Separate steps rather than one
+      # command, so a failure names the surface without anybody opening a log.
+      - name: OS-entry pane, in a real renderer
+        run: npm run test:smoke:os-entry
+
+      - name: Pairing handoff, in a real renderer
+        run: npm run test:smoke:pair-handoff
+
+      - name: Account screen, in a real renderer
+        run: npm run test:smoke:account-details
+
+      - name: Update screen, in a real renderer
+        run: npm run test:smoke:update-details
+
+      # The screen the product is named for, and the last major one with no
+      # real-renderer coverage. Drives the retained-cleanup card and the receipt
+      # phase line: both carry copy that is compile-checked and, until this
+      # step, was never DISPLAYED by anything.
+      - name: Device Inbox, in a real renderer
+        run: npm run test:smoke:inbox-page
+
+      # The same-network roster, which nothing drove at all: the realtime lane
+      # pairs by CODE, and the bootstrap smoke only asserts that lan-start is
+      # ABSENT when signed out. Every state here — empty, offline,
+      # reconnecting, user-stopped, a peer with no link support, and the two
+      # sentences about who else can be at this public address — was
+      # compile-checked and never displayed.
+      - name: Same network, in a real renderer
+        run: npm run test:smoke:lan-page
+
+      # The screen the realtime product IS. The realtime job below renders it
+      # for real, against a real server and a real browser peer — but it can
+      # only reach the states a healthy pairing produces. It cannot expire a
+      # relay credential, drop a signalling socket, flood the text lane, or
+      # hand back each publish-failure reason in turn. All of that has copy.
+      - name: Link pane, in a real renderer
+        run: npm run test:smoke:link-pane
+
+      # Why a sealed identity stops being readable.
+      #
+      # Runs after `build` because it drives the real `SecretStore` out of
+      # `dist/`, on a fresh temp profile per cell, with a synthetic fixture.
+      #
+      # `continue-on-error` so a diagnostic result cannot prevent the installed
+      # acceptance below from running and reporting — the two answer different
+      # questions and one failing must not hide the other's answer. The failure
+      # is NOT swallowed: the gate step at the end of this job re-raises it, so a
+      # red cell still fails the run.
+      - name: Secret durability matrix
+        id: durability
+        continue-on-error: true
+        run: node test/smoke/secret-durability.mjs
+
       # The actual installer. Unsigned, and the step name says so.
       - name: Package unsigned Windows installer
         run: npx electron-builder --win --x64 --publish never
 
-      - name: Record installer provenance
+      # The helper must be IN the package, not merely present on the runner.
+      #
+      # electron-builder does not enforce this: with the `extraResources` source
+      # missing it logs `file source doesn't exist` and exits 0, shipping an
+      # installer without the binary it claims to carry. Measured locally, not
+      # assumed. So the packaged tree is inspected directly.
+      - name: Assert the helper was packaged
         shell: pwsh
         run: |
-          $exe = Get-ChildItem release -Filter *.exe -Recurse | Select-Object -First 1
-          if (-not $exe) { throw "electron-builder produced no .exe" }
-          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+          # electron-builder does NOT fail on a missing extraResources source —
+          # measured: it logs a warning and exits 0, shipping an installer
+          # without the binary it claims to carry. So each helper is checked.
+          # Existence is not enough. `release/` is not cleaned between builds, so
+          # a resource left by an earlier run would satisfy a presence check
+          # while the binary built this run never reached the package. Equality
+          # is the assertion; presence is only its precondition.
+          foreach ($name in @("relayium-io-helper.exe", "relayium-secret-helper.exe", "relayium-update-helper.exe")) {
+            $shippedPath = "release/win-unpacked/resources/$name"
+            if (-not (Test-Path -LiteralPath $shippedPath)) {
+              throw "helper missing from the packaged app at $shippedPath"
+            }
+            $built = (Get-FileHash -LiteralPath "native/build/$name" -Algorithm SHA256).Hash
+            $shipped = (Get-FileHash -LiteralPath $shippedPath -Algorithm SHA256).Hash
+            if ($built -ne $shipped) {
+              throw "packaged $name is not the one built this run: built $built, packaged $shipped"
+            }
+            Write-Host "packaged $name matches built: $built"
+          }
+
+      # Root level only, and exactly one.
+      #
+      # This step used to search with `-Recurse` and take the first result,
+      # which reaches `release\win-unpacked\Relayium.exe` — the unpacked
+      # application binary, not the installer. The artifact upload below globs
+      # `release/*.exe`, so the hash recorded here could describe a different
+      # file from the one published. Dropping `-Recurse` alone would not be
+      # enough: with several candidates, `Select-Object -First 1` would still
+      # pick one silently. The count assertion is the actual fix.
+      #
+      # The resolved path is exported so the acceptance step below installs the
+      # exact byte sequence whose hash is recorded and whose file is uploaded.
+      - name: Record installer provenance
+        id: provenance
+        shell: pwsh
+        run: |
+          $found = @(Get-ChildItem -LiteralPath release -Filter *.exe -File)
+          if ($found.Count -ne 1) {
+            throw "expected exactly one root-level installer in release/, found $($found.Count): $($found.Name -join ', ')"
+          }
+          $exe = $found[0]
+          $hash = (Get-FileHash -LiteralPath $exe.FullName -Algorithm SHA256).Hash
           Write-Host "installer: $($exe.Name)"
           Write-Host "sha256: $hash"
           "$hash  $($exe.Name)" | Out-File -FilePath release/SHA256SUMS.txt -Encoding ascii
+          "RELAYIUM_INSTALLER=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      # ## The signature is READ BACK from the file, in both directions
+      #
+      # This lane has no certificate and produces an unsigned installer on
+      # purpose — `electron-builder.yml` says so, and says it carries no
+      # certificate configuration "rather than appearing to sign". A pipeline
+      # that reports success without reading back what it actually produced is
+      # exactly how appearing to sign happens, so this asserts the truth either
+      # way instead of inferring it from whether a step ran.
+      #
+      # With no credential it REQUIRES the installer to be unsigned. That is not
+      # a formality: the day a signing step is added, a misconfiguration that
+      # silently signs nothing would otherwise look identical to today's green
+      # run. With a credential it requires a valid signature and records the
+      # signer, and anything else fails the job.
+      #
+      # `Get-AuthenticodeSignature` reads the file, not the build log. Status
+      # `NotSigned` is the honest answer for an unsigned artifact; `Valid` is
+      # the only accepted answer for a signed one, so an expired, untrusted or
+      # tampered signature is a failure rather than a warning.
+      - name: Verify what was actually produced
+        shell: pwsh
+        env:
+          # Empty until OA-029 chooses a route and its secret is set. Read here
+          # rather than in a condition so the step runs in BOTH states and
+          # asserts the one it is in.
+          RELAYIUM_WINDOWS_SIGNING: ${{ secrets.RELAYIUM_WINDOWS_SIGNING }}
+        run: |
+          $exe = $env:RELAYIUM_INSTALLER
+          if (-not $exe) { throw "no installer recorded by the provenance step" }
+          $signature = Get-AuthenticodeSignature -LiteralPath $exe
+          $expected = -not [string]::IsNullOrWhiteSpace($env:RELAYIUM_WINDOWS_SIGNING)
+          Write-Host "signing expected: $expected"
+          Write-Host "signature status: $($signature.Status)"
+          if ($expected) {
+            if ($signature.Status -ne "Valid") {
+              throw "signing was configured but the produced installer is $($signature.Status); refusing to publish it as signed"
+            }
+            $subject = $signature.SignerCertificate.Subject
+            Write-Host "signer: $subject"
+            "signer: $subject" | Out-File -FilePath release/SHA256SUMS.txt -Encoding ascii -Append
+          } else {
+            if ($signature.Status -ne "NotSigned") {
+              throw "no signing credential is configured, yet the installer reports $($signature.Status); the lane does not know what it built"
+            }
+            Write-Host "unsigned, as this lane intends"
+            "unsigned: no signing credential configured" | Out-File -FilePath release/SHA256SUMS.txt -Encoding ascii -Append
+          }
+
+      # The artifact a user would actually download: installed, launched and
+      # interrogated. Runs BEFORE the upload, so an installer that cannot be
+      # installed is never published as evidence that it can.
+      #
+      # Invoked directly rather than through an npm script because
+      # `apps/windows/package.json` is outside this task's writable scope.
+      # Runs regardless of the durability outcome above. These are independent
+      # questions — one is about the packaged artifact, the other about the key
+      # lifecycle — and the run needs both answers, not the first one that fails.
+      - name: Installed artifact acceptance
+        if: always() && steps.provenance.outcome == 'success'
+        run: node test/smoke/installed-acceptance.mjs "$env:RELAYIUM_INSTALLER"
+        shell: pwsh
+
+      # Both diagnostics reported; now neither is masked.
+      #
+      # `continue-on-error` above turns a failed step into a recorded outcome
+      # rather than a stopped job. Without this gate that outcome would be a
+      # green check over a red result, which is precisely the reporting failure
+      # this lane exists to avoid.
+      - name: Fail if the durability matrix failed
+        if: always() && steps.durability.outcome == 'failure'
+        run: |
+          echo "the secret durability matrix failed; see the step above for the per-cell closed codes"
+          exit 1
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -122,3 +431,357 @@ jobs:
             apps/windows/release/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 7
+
+  # The Windows client and a real browser, in one room, on a Windows runner.
+  #
+  # ## What this job is for
+  #
+  # Every other Windows result is single-client: unit tests, the bootstrap and
+  # resident smokes, the installed artifact, the Inbox backend run. Interop
+  # evidence for this client has until now been produced on a Mac host, where
+  # the Electron client runs but the real Windows destination — the lease, the
+  # `winpath` guards and the native helper — cannot exist, and every destination
+  # assertion is answered by the fixture's portable provider instead. This is the
+  # first lane that runs it where those exist.
+  #
+  # No `needs:`, for the same reason `native` has none: it must still run when
+  # another job is red, and it is not gated on producing an installer.
+  #
+  # No signing, no fixture requiring a credential, no publication, no artifact
+  # upload. Nothing here needs a secret and nothing here produces a distributable.
+  realtime:
+    runs-on: windows-latest
+    # The fixture's own budget is 25 minutes and it runs up to 8 rounds, each
+    # with its own server, Electron and Chrome. 35 leaves room for the two npm
+    # installs, two builds and the Go work in front of it without letting a
+    # genuinely hung round run until the runner is killed.
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            apps/windows/package-lock.json
+            web/package-lock.json
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          # From the module's own `go` directive, like the `native` job, so the
+          # toolchain cannot drift from what the module declares. All three
+          # modules this job builds — the guardian, the native helper and the
+          # server — declare the same version.
+          go-version-file: apps/windows/test/native/owned-process/go.mod
+          cache-dependency-path: |
+            apps/windows/test/native/owned-process/go.sum
+            apps/windows/native/go.sum
+            server/go.sum
+
+      # Chrome, resolved HERE because the shared harness cannot resolve it.
+      #
+      # `resolveChrome` (`web/e2e/harness.mjs`) has candidate paths for darwin
+      # and linux and NONE for win32, so on this runner it throws
+      # "no Chrome found on platform win32" unless `CHROME_PATH` is set. That
+      # harness is shared with the lanes owning the other platforms and is not
+      # this job's to edit, so the path is supplied from outside instead.
+      #
+      # A missing browser is a FAILURE rather than a skip: a realtime interop
+      # job that quietly did not have a second peer is the exact shape of green
+      # that proves nothing.
+      - name: Resolve the browser
+        shell: pwsh
+        run: |
+          $candidates = @(
+            "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+            "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
+            "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
+          )
+          $chrome = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+          if (-not $chrome) {
+            throw "no Chrome on this runner; tried:`n  $($candidates -join "`n  ")"
+          }
+          Write-Host "browser: $chrome ($((Get-Item -LiteralPath $chrome).VersionInfo.ProductVersion))"
+          "CHROME_PATH=$chrome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # Both dependency trees, from the existing reviewed lockfiles.
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: web
+      - name: Install Windows client dependencies
+        run: npm ci
+        working-directory: apps/windows
+
+      # The bundle the browser half actually loads. `npm run build` here is
+      # `gen-pages.mjs && vite build`; the fixture serves `web/dist` from the
+      # real server and refuses to start without it.
+      - name: Build the web bundle
+        run: npm run build
+        working-directory: web
+
+      # The client the Electron half actually runs.
+      - name: Build the Windows client
+        run: npm run build
+        working-directory: apps/windows
+
+      # The native receive helper. On win32 the fixture uses the REAL
+      # destination, which spawns this binary — `resolveHelperPath` resolves it
+      # from `dist/main/io/../../../native/build/` in the unpackaged layout. Its
+      # absence would not skip the typed-refusal check: the check would FAIL,
+      # with `helper-unavailable` instead of the helper's own `E_MANIFEST`.
+      # Built where `electron-builder.yml`'s `extraResources` expects it, the
+      # same path the `build` job uses.
+      #
+      # Each build's exit status is checked immediately. `pwsh` does not stop a
+      # multi-line script when a native command fails, so without these the
+      # second `go build` succeeding would mask the first one failing and the
+      # step would exit 0. The existence assertion below does NOT cover that: a
+      # stale binary from a previous step or a cached workspace would satisfy it.
+      - name: Build the native helpers
+        shell: pwsh
+        working-directory: apps/windows/native
+        run: |
+          go build -o build/relayium-io-helper.exe ./cmd/relayium-io-helper
+          if ($LASTEXITCODE -ne 0) { throw "relayium-io-helper.exe failed to build ($LASTEXITCODE)" }
+          go build -o build/relayium-secret-helper.exe ./cmd/relayium-secret-helper
+          if ($LASTEXITCODE -ne 0) { throw "relayium-secret-helper.exe failed to build ($LASTEXITCODE)" }
+
+      - name: Assert the helper binary exists
+        shell: pwsh
+        working-directory: apps/windows
+        run: |
+          $helper = "native/build/relayium-io-helper.exe"
+          if (-not (Test-Path -LiteralPath $helper)) {
+            throw "native helper missing at $helper; the real Windows destination cannot open a lease without it"
+          }
+          Write-Host "helper: $helper $((Get-Item -LiteralPath $helper).Length) bytes"
+
+      # The test-only Job Object guardian's own tests.
+      #
+      # `-count=1` because a cached PASS says nothing about this commit's real
+      # handle behaviour; `-timeout` bounds a wedged child into a reported
+      # failure; `-v` so which cases executed is readable off the log. Exit
+      # status is `go test`'s own — no pipeline, same reasoning as `native`.
+      - name: Owned-process guardian tests
+        run: go test -v -count=1 -timeout 12m ./...
+        working-directory: apps/windows/test/native/owned-process
+
+      # The Windows-only half must have COMPILED IN, not merely not-failed.
+      #
+      # `go test ./...` is green on a build where `guard_windows_test.go` was
+      # excluded — the 24 platform-independent cases pass on their own, and the
+      # job-object cases that are the entire point of this module would simply be
+      # absent. `-list` reports the tests this build configuration WOULD run,
+      # honouring build tags, and the step above ran the whole package with no
+      # `-run` filter and no `t.Skip` anywhere in it. Present in `-list` plus a
+      # green unfiltered run is therefore execution.
+      - name: Assert every Windows job-object case is compiled in
+        shell: pwsh
+        working-directory: apps/windows/test/native/owned-process
+        run: |
+          $expected = @(
+            "TestTheJobHoldsAChildAndItsGrandchildAndAccountsForBoth",
+            "TestAForcedShutdownEmptiesTheWholeTree",
+            "TestATargetThatWillNotLeaveIsReportedAndThenEnded",
+            "TestAChildThatExitsImmediatelyLeavesAnEmptyJob",
+            "TestAFailedAssignmentTerminatesTheProcessAndObservesItsExit",
+            "TestAFailedAssignmentWhoseTerminationCANNOTBeObservedIsUNPROVEN",
+            "TestAFailedResumeDisposesThroughTheJobAndProvesIt",
+            "TestKillingTheGuardianItselfStillCollectsTheTree",
+            "TestKillingTheGuardedChildTakesItsDescendantsToo",
+            "TestAnExecutableThatCannotStartIsAFailure"
+          )
+          $listed = go test -list ".*" ./...
+          if ($LASTEXITCODE -ne 0) { throw "go test -list failed with $LASTEXITCODE" }
+          $missing = $expected | Where-Object { $listed -notcontains $_ }
+          if ($missing) {
+            throw "these Windows job-object cases are not in this build: $($missing -join ', ')"
+          }
+          Write-Host "all $($expected.Count) Windows job-object cases are compiled in"
+
+      # The acceptance itself, at its OWN defaults.
+      #
+      # No `RT_ROUNDS`, no `RT_CONTROL`, no `INTEROP_*`. The round loop covers
+      # both link roles, both code roles and every required case, and each of
+      # those is asserted to have actually RUN — capping the rounds would forfeit
+      # that coverage rather than shorten the job. Exit is 0 only when there are
+      # no failures AND no cleanup findings.
+      - name: Realtime pairing acceptance
+        run: node test/smoke/realtime-pairing-acceptance.mjs
+        working-directory: apps/windows
+
+  # The native receive helper, on its own.
+  #
+  # ## Why a separate job and not a step in `build`
+  #
+  # These are the only tests in this repository that exercise NT filesystem
+  # primitives and a real helper subprocess, and they are the newest code here.
+  # As a step they would sit behind the npm install, the type check, the unit
+  # tests, the bundle and the packaging — so a helper failure would be reported
+  # late, and a failure anywhere earlier would mean the native tests never ran
+  # at all. Independent jobs mean each lane's result is its own, and the
+  # installer acceptance above still runs when the helper is red.
+  #
+  # No `needs:`, deliberately — but no longer because the helper is unbundled.
+  # It IS bundled now: the `build` job compiles it and `electron-builder.yml`
+  # ships it as an `extraResources` entry. That job builds its own copy rather
+  # than depending on this one.
+  #
+  # The independence is the point: this job is the helper's own Go test and
+  # build, and keeping it off the installer lane's critical path means that lane
+  # still runs, and still reports, when the helper's tests are red.
+  #
+  # The native sources are read-only to this workflow's author; this job runs
+  # them, it does not own them.
+  native:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/windows/native
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          # From the module's own `go` directive rather than a version repeated
+          # here, so the toolchain cannot drift away from what the module
+          # declares.
+          go-version-file: apps/windows/native/go.mod
+          cache-dependency-path: apps/windows/native/go.sum
+
+      # The update helper's trust matrix needs a validly signed binary, and its
+      # absence is a FAILURE rather than a skip — the signer-chain walk is the
+      # one path no unsigned fixture reaches. Resolved and asserted here,
+      # independently of the code under test, so a bad fixture is reported as a
+      # bad fixture instead of surfacing later as a verification error.
+      #
+      # `setup-node` is not used in this job, so the runner's preinstalled Node
+      # is the deterministic source. Nothing is signed, imported or installed.
+      - name: Resolve the signed acceptance fixture
+        shell: pwsh
+        working-directory: .
+        run: |
+          $node = (Get-Command node.exe -ErrorAction SilentlyContinue).Source
+          if (-not $node) { throw "node.exe not found; the update trust matrix needs a signed fixture" }
+          $signature = Get-AuthenticodeSignature -LiteralPath $node
+          if ($signature.Status -ne "Valid") {
+            throw "the acceptance fixture $node is not validly signed (status $($signature.Status)); the update trust matrix cannot run"
+          }
+          Write-Host "signed fixture: $node"
+          Write-Host "signer: $($signature.SignerCertificate.Subject)"
+          "RELAYIUM_SIGNED_FIXTURE=$node" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # The tests read signatures through the SAME interpreter that just
+          # validated this fixture. Windows PowerShell 5.1 fails here with
+          # `CouldNotAutoloadMatchingModule` for Microsoft.PowerShell.Security,
+          # because the job's inherited PSModulePath is PowerShell 7's — so a
+          # test that reached for `powershell` found no
+          # `Get-AuthenticodeSignature` at all.
+          $pwsh = (Get-Command pwsh).Source
+          if (-not $pwsh) { throw "pwsh not found; the update trust matrix reads signatures through it" }
+          Write-Host "signature interpreter: $pwsh"
+          "RELAYIUM_POWERSHELL=$pwsh" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # `-count=1` defeats the test cache: a cached PASS from a previous commit
+      # is not evidence that this commit's NT filesystem behaviour is correct,
+      # and these tests touch real handles rather than pure functions.
+      # `-timeout` bounds a hung subprocess or a blocked write into a reported
+      # failure instead of a job that runs until the runner is killed.
+      #
+      # `-v` because exit 0 is not the evidence wanted here. Without it the log
+      # shows only `ok`, and a run in which the junction, retarget and real
+      # helper-subprocess tests all SKIPPED — for a missing privilege, an
+      # unsupported filesystem, a build tag — is indistinguishable from one in
+      # which they passed. `-v` puts every `--- PASS/FAIL/SKIP: TestName` line
+      # in the hosted log, so which cases actually executed is a fact that can
+      # be read off the run rather than assumed from a green check.
+      #
+      # No `| Tee-Object` or other capture: the step's exit status is `go test`'s
+      # own, verbatim. A pwsh pipeline would put that exit code behind
+      # `$LASTEXITCODE` handling and `$PSNativeCommandUseErrorActionPreference`
+      # semantics on a lane that cannot be rehearsed locally, which is a poor
+      # trade for a summary the `-v` output already contains.
+      # A second local account, so the cross-user invariant can be OBSERVED
+      # rather than declared unproven.
+      #
+      # `secrethelper_windows_test.go` says it plainly: a blob sealed by another
+      # user cannot be opened here, "and inferring the property from the flags
+      # passed would describe the request rather than test the outcome". The
+      # flags are right and separately asserted; what was missing is an account
+      # to be refused. This runner is ephemeral and elevated, so it can provide
+      # one.
+      #
+      # The password is generated here and never leaves the job. It guards
+      # nothing beyond this run — the account exists for two subprocesses and is
+      # removed below whatever happens.
+      - name: Create a second local account for the cross-user proof
+        id: xuser
+        run: |
+          $password = -join ((48..57) + (65..90) + (97..122) + (33,35,37,38) |
+            Get-Random -Count 24 | ForEach-Object { [char]$_ })
+          net user relayium-xuser $password /add /y
+          if ($LASTEXITCODE -ne 0) { throw "could not create the second account ($LASTEXITCODE)" }
+          # The DPAPI master key is created on first use, not at account
+          # creation, so nothing here needs an interactive logon — the test
+          # proves the account can seal before it concludes anything from a
+          # refusal.
+          "password=$password" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "::add-mask::$password"
+
+          # Warm the profile HERE, not in the test.
+          #
+          # The first `Start-Process -Credential` for an account creates its
+          # user profile, which is slow and highly variable — TestCrossUser
+          # timed out at ~61s twice in six runs (34676037986, 34678895608) with
+          # PowerShell producing no output at all, which is what that looks
+          # like from outside. Doing it in this step takes the variance out of
+          # the measured path, and if profile creation is what fails, the step
+          # that says "create a second local account" is the one that reports
+          # it.
+          $secure = New-Object System.Security.SecureString
+          foreach ($ch in $password.ToCharArray()) { $secure.AppendChar($ch) }
+          $secure.MakeReadOnly()
+          $cred = New-Object System.Management.Automation.PSCredential('relayium-xuser', $secure)
+          $warm = Start-Process -FilePath "cmd.exe" -ArgumentList "/c","exit" -Credential $cred `
+            -WorkingDirectory "C:\Windows\Temp" -Wait -PassThru
+          if ($warm.ExitCode -ne 0) { throw "warming the second account's profile failed ($($warm.ExitCode))" }
+
+      # A real volume, so the mount-point refusal can be OBSERVED.
+      #
+      # `TestMountPointCrossingIsRefused` asks for a volume GUID path and skips
+      # without one, which it has done on every run this lane has ever made: the
+      # io-helper's refusal to cross a mount point is part of its redirection
+      # protection and has never been exercised on the only Windows machine in
+      # the loop. The runner has real volumes; `mountvol` prints their GUID
+      # paths. This is a missing environment variable, not a missing capability.
+      #
+      # The test mounts it at a directory under its OWN temp directory and
+      # removes it in a `defer`. A volume may carry several mount points, so
+      # the drive letter is untouched.
+      - name: Resolve a volume for the mount-point refusal
+        id: volume
+        run: |
+          $out = & mountvol C: /L
+          if ($LASTEXITCODE -ne 0) { throw "mountvol could not report C:'s volume ($LASTEXITCODE)" }
+          $guid = ($out | Where-Object { $_ -match '\\\\\?\\Volume\{' }).Trim()
+          if (-not $guid) { throw "mountvol printed no volume GUID path: $out" }
+          Write-Host "second volume: $guid"
+          "path=$guid" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Native helper tests
+        env:
+          RELAYIUM_XUSER: relayium-xuser
+          RELAYIUM_XUSER_PASSWORD: ${{ steps.xuser.outputs.password }}
+          RELAYIUM_TEST_SECOND_VOLUME: ${{ steps.volume.outputs.path }}
+        run: go test -v -count=1 -timeout 10m ./...
+
+      # Unconditional: a runner is ephemeral, but an account left behind by a
+      # failing job is the kind of residue that is only noticed when it matters.
+      - name: Remove the second local account
+        if: always()
+        run: |
+          net user relayium-xuser /delete
+          if ($LASTEXITCODE -ne 0) { Write-Host "the second account was already gone ($LASTEXITCODE)" }
+
+      # The helper must also link for the target it ships to. Building after the
+      # tests so a compile error in a non-test path is still caught.
+      - name: Build the helper
+        run: go build ./cmd/relayium-io-helper

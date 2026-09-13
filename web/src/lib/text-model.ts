@@ -47,7 +47,18 @@ export type TextStatus =
 /** Terminal-error keys, all of which are keys of Messages["text"], so the UI can
  *  render one without a mapping table. "" means no error. */
 export type TextErrorKey =
-  | "" | "tooLong" | "flooding" | "unsupported" | "peerBusy" | "failed" | "refused";
+  | "" | "tooLong" | "flooding" | "unsupported"
+  /** The OTHER device is engaged. Wait for it. */
+  | "peerBusy"
+  /**
+   * THIS device is already engaged, or will not admit another link.
+   *
+   * Split from `peerBusy` because the next action is the opposite one: hang up
+   * the connection this device is holding. Both used to arrive as `peerBusy`,
+   * which blamed the peer for a link the user themselves had open.
+   */
+  | "selfBusy"
+  | "failed" | "refused";
 
 export interface TextMessage {
   id: number;      // monotonic, local; also the list key

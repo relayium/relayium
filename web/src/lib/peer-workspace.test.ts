@@ -1,10 +1,11 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { CHROME_MAX_MESSAGE_BYTES } from "./wire-limit";
+import { MAX_FILES } from "./manifest";
 import { canReleaseConfirmedSend } from "./confirm-send";
 import { generateKeyPair, ready } from "./crypto";
 import { CAP_LINK, CAP_TEXT, peerSupportsLink, recordPeerCaps, resetPeerCaps, retainPeers } from "./peer-caps.svelte";
 import { clearRoom, enterRoom } from "./room.svelte";
-import { createPeerWorkspace } from "./peer-workspace.svelte";
+import { createPeerWorkspace, type SendRefusal } from "./peer-workspace.svelte";
 import type { SignalingClient } from "./signaling";
 import type { Conn, InboundSignal } from "./webrtc";
 import type { ConnectOpts } from "./webrtc";
@@ -49,6 +50,7 @@ function setup(opts: { realLinkCaps?: boolean } = {}) {
   let peers = ["a", "z", "old"];
   // Never let a triggered transport rebuild reach a real RTCPeerConnection.
   const resume = vi.fn((_opts: { signal?: AbortSignal }) => new Promise<Conn>(() => {}));
+  const refusals: SendRefusal[] = [];
   const workspace = createPeerWorkspace({
     selfId: () => selfId,
     joined: () => joined,
@@ -59,9 +61,10 @@ function setup(opts: { realLinkCaps?: boolean } = {}) {
     supportsLink: opts.realLinkCaps ? undefined : (peerId) => peerId !== "old",
     connect,
     resume,
+    onSendRefused: (reason) => refusals.push(reason),
   });
   return {
-    workspace, sent, connect, resume,
+    workspace, sent, connect, resume, refusals,
     inject(from: string, data: InboundSignal) {
       for (const listener of [...listeners]) listener(from, data);
     },
@@ -93,6 +96,43 @@ describe("peer workspace capability routing", () => {
     expect(mixedText).toHaveBeenCalledTimes(1);
     expect(h.sent.filter((x) => (x.data as { link?: boolean }).link === true)).toEqual([]);
     expect(h.connect).not.toHaveBeenCalled();
+  });
+
+  // The over-limit choke point. `enqueue` used to begin
+  // `picked.slice(0, MAX_FILES)`, so a person who dropped 1500 files sent 1000,
+  // saw 1000, and was told nothing about the other 500. The receiving side of
+  // that same module refuses `files.length > MAX_FILES` — so the trim existed,
+  // in effect, to make an over-limit batch PASS the check written to stop it.
+  // macOS refuses whole; this is that rule in the code the web client and the
+  // Windows realtime room share.
+  it("refuses a batch over MAX_FILES whole, and says which refusal it is", () => {
+    const h = setup();
+    const mixedFiles = vi.spyOn(h.workspace.mixed.file, "enqueue").mockImplementation(() => {});
+    const tooMany = Array.from({ length: MAX_FILES + 1 }, (_, i) => ({
+      file: new File(["x"], `f${String(i)}.txt`),
+    }));
+
+    h.workspace.sendFiles("z", tooMany);
+
+    // Nothing was sent, and nothing was TRIMMED and sent.
+    expect(mixedFiles).not.toHaveBeenCalled();
+    expect(h.refusals).toEqual(["too-many-files"]);
+    expect(h.sent.filter((x) => (x.data as { link?: boolean }).link === true)).toEqual([]);
+  });
+
+  it("admits a batch at exactly MAX_FILES", () => {
+    // The bound is inclusive on the receive side (`<= MAX_FILES`), so it must be
+    // inclusive here or the two disagree about exactly one batch size.
+    const h = setup();
+    const mixedFiles = vi.spyOn(h.workspace.mixed.file, "enqueue").mockImplementation(() => {});
+    const exact = Array.from({ length: MAX_FILES }, (_, i) => ({
+      file: new File(["x"], `f${String(i)}.txt`),
+    }));
+
+    h.workspace.sendFiles("z", exact);
+
+    expect(mixedFiles).toHaveBeenCalledTimes(1);
+    expect(h.refusals).toEqual([]);
   });
 
   // The empty-batch choke point. With pre-upload live, App's auto-send effect

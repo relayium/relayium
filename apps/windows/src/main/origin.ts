@@ -7,10 +7,19 @@
 // origin is a constant compiled into the build, and the only way to reach a
 // local server is an engineering build, which is a different product.
 
+import { PRODUCTION_SITE_ORIGIN } from "../shared/origin-constants.js";
 import { engineeringOverride, isEngineeringBuild } from "./build-mode.js";
 
-/** The one origin a distributed build will ever contact. */
-export const PRODUCTION_ORIGIN = "https://relayium.com";
+/**
+ * The one origin a distributed build will ever contact.
+ *
+ * Derived from the site constant rather than spelling the host a second time.
+ * The two names answer different questions — which server this build DIALS,
+ * versus where the public site is PUBLISHED — and they coincide in production.
+ * Writing the literal twice would let them drift apart silently, which is the
+ * only way they could ever disagree.
+ */
+export const PRODUCTION_ORIGIN = PRODUCTION_SITE_ORIGIN;
 
 /**
  * The loopback origin an engineering build may use, matching the macOS

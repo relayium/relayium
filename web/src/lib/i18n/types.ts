@@ -183,12 +183,14 @@ export interface Messages {
    * change it — updating BOTH ends, because either side may be the old one and
    * the reader cannot tell which.
    */
+  /** A selection over `MAX_FILES`, refused whole. Wording matches macOS's
+   *  `error.selection.tooManyFiles` rather than being invented for the web. */
+  tooManyFiles: (max: number) => string;
   peerUnsupported: string;
   generating: string; // transient "creating…" state while a code/link is minted
   footer: string;
   offlineFooter: string; // async page's own footer: random-key AES-256-GCM, ciphertext durably stored (NOT the LAN/realtime X25519 footer)
   busy: string;
-  tooMany: (max: number, n: number) => string;
   titleDefault: string;
   descDefault?: string; // home <meta description>; falls back to titleDefault when absent
   titleCross: string; // <title> for the cross-network (realtime) route
@@ -263,6 +265,9 @@ export interface Messages {
     errTooShort: string;
     errEmailTaken: string;
     errLogin: string;
+    errRateLimited: string;
+    errEmailInvalid: string;
+    errUnrecognised: string;
     errNetwork: string; // request never reached the server (offline / fetch threw)
     pendingDeletion: string; // frozen-account reactivate banner (fragment token)
     reactivate: string;
@@ -477,7 +482,6 @@ export interface Messages {
     downloadsN: (n: number) => string; // per-file download count
     burnTag: string; // burn-after-read badge
     expiresIn: (left: string) => string; // per-file expiry countdown
-    expiringSoon: string; // <1h marker
     del: string; // delete button
     confirmDel: string; // confirm() before deleting a file
     nodesTitle: string; // "My Nodes" section heading
@@ -500,7 +504,6 @@ export interface Messages {
     nodeOnline: string; // online-status label
     nodeOffline: string; // offline-status label
     nodeRelayed: (bytes: string) => string; // relayed-traffic figure through this node
-    nodeStored: (bytes: string) => string; // bytes stored on this node
     nodeFreeTag: string; // "(free)" tag next to relayed/stored figures — own-node traffic isn't billed
     nodeStorageFree: (free: string, total: string) => string; // "X free of Y" disk line
     nodesTrafficHint: string; // explains relay-vs-storage: stored files don't count as "relayed"
@@ -1332,7 +1335,6 @@ export interface Messages {
     expiresOn: (when: string) => string; // echoes the link's expiry back to the sender
     copy: string;
     copied: string;
-    cliHeading: string; // "Fetch it from the terminal" — CLI command builder heading
     cliIntro: string; // one-line lead-in above the builder
     cliDestLabel: string; // label for the destination-directory input
     cliDestHint: string; // hint: paste your pwd, or leave . for the current dir
@@ -1574,6 +1576,8 @@ export interface Messages {
     flooding: string;
     unsupported: string;
     peerBusy: string;
+    /** THIS device is engaged. The opposite advice from `peerBusy`. */
+    selfBusy: string;
     failed: string;
     refused: string;
     // ── history ──

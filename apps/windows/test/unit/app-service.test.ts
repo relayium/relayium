@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { LeaseReceiveAdapter } from "../../src/main/net/native-receive-adapter.js";
+import { ReceiveLease } from "../../src/main/io/receive-lease.js";
 import { AppService, type AppServiceDeps } from "../../src/main/app-service.js";
 import { BEARER_KEY } from "../../src/main/account/device-auth.js";
 import { SecretStore, SecretStoreError, type SecretCipher } from "../../src/main/secrets.js";
-import { ReceiveLease } from "../../src/main/io/receive-lease.js";
 
 const ORIGIN = "https://relayium.com";
 const MAGIC = Buffer.from([0x52, 0x4c, 0x4d, 0x31]);
@@ -41,6 +42,24 @@ interface Harness {
   pickDirectory: () => Promise<string | null>;
 }
 
+/**
+ * The PORTABLE staging destination, injected explicitly on every platform.
+ *
+ * These tests assert `ReceiveLease` staging lifecycle — a real staging
+ * directory under the chosen root, a real handle, and a publication that
+ * refuses truthfully as `unsupported`. Left to the default, `openDestination`
+ * chooses by platform: on Windows it opens the packaged native helper, which in
+ * a Vitest run has no packaged layout to resolve and fails with
+ * `NativeHelperError`. That is the SHIPPING behaviour and must not be softened;
+ * what was wrong was a test asking for portable semantics and not saying so.
+ *
+ * Stated here rather than mocked: no `process.platform` is touched, the
+ * production default is untouched, and the Windows native path keeps its own
+ * tests.
+ */
+const portableDestination: NonNullable<AppServiceDeps["makeDestination"]> = async (options) =>
+  new LeaseReceiveAdapter(await ReceiveLease.open(options));
+
 function harness(over: Partial<AppServiceDeps> = {}): Harness {
   const store = new SecretStore(join(dir, "secrets"), cipher);
   const deps: AppServiceDeps = {
@@ -65,6 +84,7 @@ function harness(over: Partial<AppServiceDeps> = {}): Harness {
     pickDirectory: async () => root,
     openApproval: async () => true,
     newId: () => `lease-${Math.random().toString(16).slice(2)}`,
+    makeDestination: portableDestination,
     ...over,
   };
   return { service: new AppService(deps), store, pickDirectory: deps.pickDirectory };
@@ -297,6 +317,20 @@ function instrumentedStore(
 }
 
 describe("sign-in cancellation is main's decision, not the renderer's", () => {
+  // The diagnostic half of a failed cleanup is supposed to reach a log. Capture
+  // it rather than trusting the comment that says so, and keep it off the test
+  // output while we are at it.
+  let logged: string[] = [];
+  let realError: typeof console.error;
+  beforeEach(() => {
+    logged = [];
+    realError = console.error;
+    console.error = (...args: unknown[]) => void logged.push(args.map(String).join(" "));
+  });
+  afterEach(() => {
+    console.error = realError;
+  });
+
   it("refuses a poll that succeeds after the attempt was cancelled", async () => {
     const held = barrier<typeof OK_POLL>();
     const { service, store } = harness({
@@ -429,9 +463,15 @@ describe("sign-in cancellation is main's decision, not the renderer's", () => {
     await settle();
     held.release.resolve();
 
-    await expect(polling).rejects.toThrow(/could not remove the credential it wrote/);
+    // The refusal carries the CODE. See the sibling case below for why.
+    await expect(polling).rejects.toThrow(/refused: credential-remains/);
     const result = await cancelling;
-    expect(result.cleanupFailure).toMatch(/could not remove the credential it wrote/);
+    // A code for the screen, and the diagnostic kept separately for the log.
+    expect(result.cleanupFailure).toBe("credential-remains");
+    expect(result.cleanupDetail).toMatch(/could not remove the credential it wrote/);
+    // And the detail is not merely "kept": it reaches a log, which is the only
+    // reason dropping it from the screen is not a loss of diagnosability.
+    expect(logged.join("\n")).toMatch(/\[auth\] cancelled sign-in could not remove/);
     // And the report is honest about what is actually on disk.
     expect(result.state.signedIn).toBe(true);
   });
@@ -471,8 +511,14 @@ describe("sign-in cancellation is main's decision, not the renderer's", () => {
     await settle();
     held.release.resolve();
 
-    await expect(polling).rejects.toThrow(/different stored credential/);
-    expect((await cancelling).cleanupFailure).toMatch(/different stored credential/);
+    // The refusal carries the CODE now. It used to carry the prose, and a
+    // renderer that catches this rejection stringifies whatever is in it.
+    await expect(polling).rejects.toThrow(/refused: credential-remains/);
+    const cancelled2 = await cancelling;
+    // Certain: a credential IS on this PC, even though it is not this
+    // attempt's to delete.
+    expect(cancelled2.cleanupFailure).toBe("credential-remains");
+    expect(cancelled2.cleanupDetail).toMatch(/different stored credential/);
     expect(deletes).toBe(0);
     // The real store still holds what the adoption actually put there.
     expect(await store.get(BEARER_KEY)).toBe(OK_POLL.accessToken);
@@ -803,5 +849,76 @@ describe("privileged request admission", () => {
 
     const started = await service.startSignIn(nextNonce());
     expect(started.expiresIn).toBe(START_RESPONSE.expiresIn - 120);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The account-change watcher, and the credential a main feature captures
+// ---------------------------------------------------------------------------
+
+describe("the account authority a resident feature subscribes to", () => {
+  it("wakes its watchers exactly once for one sign-out", async () => {
+    // `signOut` used to call `notifyAuthorityChange()` twice — once where it
+    // belongs, immediately after the epoch bump, and once more a few lines
+    // later at a misleading indentation. Nothing between the two calls changes
+    // what a watcher observes, so the second was pure duplication.
+    //
+    // It matters because a watcher is a callback of unknown cost. The Device
+    // Inbox scheduler tears a binding down from one: invalidate, abort, and
+    // queue a join. Firing it twice for a single transition runs that teardown
+    // a second time against state the first pass already retired.
+    const { service } = harness();
+    const nonce = nextNonce();
+    await service.startSignIn(nonce);
+    await service.pollSignIn(nonce);
+
+    let woken = 0;
+    const release = service.onAccountChanged(() => {
+      woken += 1;
+    });
+    await service.signOut();
+    release();
+
+    expect(woken).toBe(1);
+  });
+
+  it("stops waking a watcher that released itself", async () => {
+    const { service } = harness();
+    let woken = 0;
+    service.onAccountChanged(() => {
+      woken += 1;
+    })();
+    const nonce = nextNonce();
+    await service.startSignIn(nonce);
+    await service.pollSignIn(nonce);
+    await service.signOut();
+    expect(woken).toBe(0);
+  });
+
+  it("hands a main feature the bearer and the epoch it was read under", async () => {
+    const { service } = harness();
+    expect(await service.captureAccountAuthority()).toEqual({ kind: "signed-out" });
+
+    const nonce = nextNonce();
+    await service.startSignIn(nonce);
+    await service.pollSignIn(nonce);
+
+    const captured = await service.captureAccountAuthority();
+    expect(captured).toEqual({ kind: "ok", bearer: "tok", epoch: service.accountEpoch });
+
+    await service.signOut();
+    expect(await service.captureAccountAuthority()).toEqual({ kind: "signed-out" });
+  });
+
+  it("reports an unusable store as unavailable rather than as signed out", async () => {
+    // The distinction the Inbox depends on: an enrolment may still be live on
+    // the server, so "could not read this PC's storage" must not be rendered as
+    // an invitation to switch a feature on that is already on.
+    const { service } = harness({
+      makeStore: async () => {
+        throw new SecretStoreError("encryption-unavailable");
+      },
+    });
+    expect(await service.captureAccountAuthority()).toEqual({ kind: "unavailable" });
   });
 });

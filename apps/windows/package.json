@@ -8,17 +8,32 @@
   "main": "dist/main/index.js",
   "scripts": {
     "build:main": "tsc -p tsconfig.main.json && tsc -p tsconfig.preload.json",
+    "build:inbox": "vite build --config vite.inbox.config.ts",
+    "build:stored": "vite build --config vite.stored.config.ts",
     "build:renderer": "vite build",
-    "build": "npm run build:main && npm run build:renderer",
-    "check": "svelte-check --tsconfig ./tsconfig.renderer.json && tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "build": "npm run build:main && npm run build:inbox && npm run build:stored && npm run build:renderer",
+    "check": "svelte-check --tsconfig ./tsconfig.renderer.json && tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.inbox.json && tsc -p tsconfig.stored.json && tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
     "test:smoke": "node test/smoke/electron-smoke.mjs",
-    "package:win": "electron-builder --win --x64 --publish never"
+    "test:smoke:resident": "node test/smoke/resident-smoke.mjs",
+    "package:win": "electron-builder --win --x64 --publish never",
+    "pretest": "npm run build:inbox && npm run build:stored",
+    "feed:manifest": "node build/make-update-manifest.mjs",
+    "feed:stage": "node build/stage-windows-release.mjs",
+    "test:smoke:os-entry": "node test/smoke/os-entry-smoke.mjs",
+    "test:smoke:pair-handoff": "node test/smoke/pair-handoff-smoke.mjs",
+    "test:smoke:account-details": "node test/smoke/account-details-smoke.mjs",
+    "test:smoke:update-details": "node test/smoke/update-details-smoke.mjs",
+    "test:smoke:inbox-page": "node test/smoke/inbox-page-smoke.mjs",
+    "test:smoke:lan-page": "node test/smoke/lan-page-smoke.mjs",
+    "test:smoke:link-pane": "node test/smoke/link-pane-smoke.mjs",
+    "gates": "node build/gates.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
     "@tsconfig/svelte": "^5.0.8",
     "@types/node": "^24.13.2",
+    "@types/qrcode": "1.5.6",
     "electron": "44.3.0",
     "electron-builder": "26.15.3",
     "svelte": "^5.57.0",
@@ -28,6 +43,7 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
-    "libsodium-wrappers": "^0.8.4"
+    "libsodium-wrappers": "^0.8.4",
+    "qrcode": "1.5.4"
   }
 }

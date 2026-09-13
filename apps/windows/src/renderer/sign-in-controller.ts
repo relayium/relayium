@@ -30,7 +30,7 @@
 // what main reports. If the adoption legitimately beat the click, "signed in" is
 // the truth and this shows it rather than a comfortable lie.
 
-import type { AuthState } from "../shared/ipc-contract";
+import type { AuthState, SupportReport } from "../shared/ipc-contract";
 
 export type Phase =
   | { kind: "loading" }
@@ -42,17 +42,49 @@ export type Phase =
   | { kind: "cancelling" }
   | { kind: "signedIn"; accountEmail: string }
   | { kind: "storeProblem"; health: "unreadable" | "unavailable" }
-  | { kind: "failed"; message: string };
+  | { kind: "failed"; reason: FailureReason };
+
+/**
+ * Why the account screen is showing a failure.
+ *
+ * A code, so the screen can say it in the user's language. This used to be a
+ * `message: string` that the template rendered verbatim, and what flowed into
+ * it was `String(err)` — an Electron IPC rejection, wrapper text and all — or
+ * an English sentence written for a developer. Both reached the account screen
+ * of every user in every language.
+ *
+ * `unreachable` covers every "the call did not complete" case on purpose. The
+ * distinctions between them (IPC gone, main threw, the network died) are real
+ * but they are not distinctions the person can act on differently, and the
+ * detail belongs in main's log, not on this screen.
+ */
+export type FailureReason =
+  | "unreachable"
+  | "declined"
+  | "expired"
+  /** Cancellation left a credential on this PC. Certain. */
+  | "credential-remains"
+  /** Cancellation could not find out whether it left one. */
+  | "credential-uncertain";
 
 export interface AppInfoView {
   readonly origin: string;
   readonly version: string;
   readonly banner: string | null;
+  /** Whether same-network discovery starts on its own. False only in an
+   *  engineering build told to stay out of the room. */
+  readonly lanAutoStart?: boolean;
+  /** Whether this build may run at all. Absent means supported — see
+   *  `AppInfo.support`; failing open includes not having been told. */
+  readonly support?: SupportReport;
 }
 
 export interface CancelResult {
   readonly state: AuthState;
-  readonly cleanupFailure: string | null;
+  /** A code from main. See `CleanupFailure` in `app-service.ts`. */
+  readonly cleanupFailure: "credential-remains" | "credential-uncertain" | null;
+  /** Diagnostic only. Deliberately not read here — it names paths and types. */
+  readonly cleanupDetail?: string | null;
 }
 
 export interface SignInBridge {
@@ -196,7 +228,7 @@ export class SignInController {
       this.applyState(state);
     } catch (err) {
       if (!this.alive(gen)) return;
-      this.setPhase({ kind: "failed", message: String(err) });
+      this.setPhase({ kind: "failed", reason: "unreachable" });
     }
   }
 
@@ -229,7 +261,7 @@ export class SignInController {
       // something they already cancelled.
       if (!this.alive(gen)) return;
       this.starting = false;
-      this.setPhase({ kind: "failed", message: String(err) });
+      this.setPhase({ kind: "failed", reason: "unreachable" });
       return;
     }
 
@@ -289,7 +321,7 @@ export class SignInController {
     } catch (err) {
       if (!this.alive(gen)) return;
       this.bump();
-      this.setPhase({ kind: "failed", message: String(err) });
+      this.setPhase({ kind: "failed", reason: "unreachable" });
       return;
     }
 
@@ -309,10 +341,10 @@ export class SignInController {
       return;
     }
     if (outcome.status === "denied") {
-      this.setPhase({ kind: "failed", message: "That sign-in was declined." });
+      this.setPhase({ kind: "failed", reason: "declined" });
       return;
     }
-    this.setPhase({ kind: "failed", message: "That code expired. Try signing in again." });
+    this.setPhase({ kind: "failed", reason: "expired" });
   }
 
   private expire(gen: number): void {
@@ -320,7 +352,7 @@ export class SignInController {
     const nonce = this.nonce;
     this.bump();
     this.nonce = null;
-    this.setPhase({ kind: "failed", message: "That code expired. Try signing in again." });
+    this.setPhase({ kind: "failed", reason: "expired" });
     // Best effort, and allowed to be: the main process enforces the same
     // deadline itself and refuses to adopt a success that arrives after it, so
     // nothing depends on this call landing.
@@ -357,13 +389,13 @@ export class SignInController {
         // Cancellation that could not remove the credential it wrote is a
         // failure, and saying "cancelled" here would be the exact untruth this
         // revision exists to remove.
-        this.setPhase({ kind: "failed", message: result.cleanupFailure });
+        this.setPhase({ kind: "failed", reason: result.cleanupFailure });
         return;
       }
       this.applyState(result.state);
     } catch (err) {
       if (!this.alive(gen)) return;
-      this.setPhase({ kind: "failed", message: String(err) });
+      this.setPhase({ kind: "failed", reason: "unreachable" });
     }
   }
 
@@ -377,7 +409,7 @@ export class SignInController {
       await this.refresh();
     } catch (err) {
       if (!this.alive(gen)) return;
-      this.setPhase({ kind: "failed", message: String(err) });
+      this.setPhase({ kind: "failed", reason: "unreachable" });
     }
   }
 

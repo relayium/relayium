@@ -16,15 +16,31 @@
 // first and exits, which is also how a `relayium://` deep link opened while the
 // app is already running reaches the window that exists.
 
-import { app, BrowserWindow, Menu, nativeImage, protocol, Tray } from "electron";
+import { BrowserWindow, Menu, Notification, Tray, app, dialog, nativeImage, nativeTheme, protocol, screen, shell } from "electron";
 import { readFile } from "node:fs/promises";
 import { join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ENGINEERING_BANNER, isEngineeringBuild } from "./build-mode.js";
 import { apiOrigin } from "./origin.js";
+import { applicationMenuTemplate } from "./app-menu.js";
+import { windowBackground } from "./window-background.js";
+import { showNotification } from "./notify.js";
+import { fitToWorkArea } from "./window-sizing.js";
 import { registerHandlers } from "./handlers.js";
+import { currentDataRoot } from "./storage.js";
+import { PolicyGate } from "./policy/policy-gate.js";
+import { PolicyStore, policyPath } from "./policy/policy-store.js";
+import { PolicySource } from "./policy/policy-source.js";
+import { parseSendFiles } from "./features/os-entry.js";
 import { hardenContents, RENDERER_PREFERENCES } from "./window.js";
-import type { HandlerComposition } from "./handlers.js";
+import type { HandlerComposition, HandlerControl } from "./handlers.js";
+import { routeFromArgv } from "./deep-link.js";
+import { resolveLocale, translator } from "./l10n.js";
+import type { PreferenceStore } from "./preferences.js";
+import { drainAbandoned } from "./secret/helper-transport.js";
+import { ResidentRuntime, type ResidentPlatform } from "./resident-runtime.js";
+import type { FirstCloseDialog } from "./first-run.js";
+import type { QuitPrompt } from "./quit.js";
 
 export const APP_SCHEME = "app";
 export const APP_HOST = "relayium";
@@ -129,9 +145,19 @@ function registerAppScheme(origin: string): void {
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
-/** Owned teardown for everything `registerHandlers` started. */
-let disposeHandlers: (() => Promise<void>) | null = null;
-/** Set only by an explicit Quit, so closing the window hides instead. */
+/** The resident behaviour. Null before `bootstrap` composes it. */
+let resident: ResidentRuntime | null = null;
+/**
+ * What actually happened to a toast, on its way to the tray.
+ *
+ * A closure rather than a direct call, because the adapter that shows the
+ * notification is built as an ARGUMENT to the runtime that owns the tray — so
+ * the runtime does not exist when the adapter is created, and does by the time
+ * any toast is shown.
+ */
+const noteNotifyOutcome = (shown: boolean): void => resident?.noteNotifyOutcome(shown);
+let handlerControl: HandlerControl | null = null;
+/** Set only once a quit has actually been agreed, so a close hides instead. */
 let quitting = false;
 
 function showWindow(): void {
@@ -142,11 +168,20 @@ function showWindow(): void {
 }
 
 async function createWindow(): Promise<BrowserWindow> {
+  // The USABLE space on the display the window will open on, not the display's
+  // resolution: the taskbar is not available and Windows scaling shrinks what
+  // is left. See `window-sizing.ts` for the failure this prevents.
+  const sizing = fitToWorkArea(screen.getPrimaryDisplay().workAreaSize);
   const window = new BrowserWindow({
-    width: 1040,
-    height: 700,
-    minWidth: 880,
-    minHeight: 560,
+    // The window's own surface, which is painted before the page exists and in
+    // any area a resize exposes before the renderer catches up. Electron's
+    // default is white; see `window-background.ts` for what that looks like to
+    // somebody in dark mode.
+    backgroundColor: windowBackground(nativeTheme.shouldUseDarkColors),
+    width: sizing.width,
+    height: sizing.height,
+    minWidth: sizing.minWidth,
+    minHeight: sizing.minHeight,
     show: false,
     title: "Relayium",
     icon: fileURLToPath(new URL("../../assets/app-icon.png", import.meta.url)),
@@ -166,13 +201,27 @@ async function createWindow(): Promise<BrowserWindow> {
     process.stderr.write(`relayium: refused ${why} to ${new URL(url).protocol}\n`);
   });
 
+  // The system appearance can change while the app is running, and the window
+  // keeps whatever colour it was built with unless it is told. The renderer
+  // re-evaluates `prefers-color-scheme` by itself; this is the surface beneath
+  // it, which has no stylesheet to consult.
+  const followTheme = (): void => {
+    if (!window.isDestroyed()) window.setBackgroundColor(windowBackground(nativeTheme.shouldUseDarkColors));
+  };
+  nativeTheme.on("updated", followTheme);
+  window.on("closed", () => nativeTheme.removeListener("updated", followTheme));
+
   // Closing hides. The macOS app makes the same choice
   // (`applicationShouldTerminateAfterLastWindowClosed = false`) for the same
   // reason: this app's job is to stay reachable, and a window is not the app.
   window.on("close", (event) => {
-    if (quitting) return;
+    if (quitting || resident?.isQuitting) return;
     event.preventDefault();
-    window.hide();
+    // The first time, this explains itself and offers Hide, Quit or Cancel;
+    // afterwards it hides silently. Either way it tears nothing down: the
+    // renderer, its rooms and its transfers are untouched by hiding.
+    void resident?.onWindowClose().catch(() => window.hide());
+    if (!resident) window.hide();
   });
 
   return window;
@@ -202,45 +251,403 @@ function trayIcon(): Electron.NativeImage {
   return image;
 }
 
-function createTray(): void {
+/**
+ * Ask, natively, before adding Relayium to the user's startup programs.
+ *
+ * In the language the window is showing, like every other native surface here,
+ * and it asks BEFORE anything is written: a renderer click is a request, and
+ * this is the consent.
+ */
+/**
+ * Ask, natively, before closing the app to install an update.
+ *
+ * The same shape as the startup-programs consent above and for a stronger
+ * reason: this one ENDS the running app. It is asked every time — consent to
+ * interrupt somebody's work cannot be remembered — in the language the window
+ * is showing, and the default button is Cancel, because a person pressing
+ * Return on a dialog they did not read must not lose a transfer.
+ */
+async function confirmUpdateInstall(): Promise<boolean> {
+  const t = translator(resident ? resident.currentLocale : "en");
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  const options: Electron.MessageBoxOptions = {
+    type: "question",
+    title: t("resident.update.confirmTitle"),
+    message: t("resident.update.confirmTitle"),
+    detail: t("resident.update.confirmBody"),
+    buttons: [t("resident.update.confirm"), t("resident.update.cancel")],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+  };
+  const answer = win === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(win, options);
+  return answer.response === 0;
+}
+
+async function confirmLoginItem(): Promise<boolean> {
+  const t = translator(resident ? resident.currentLocale : "en");
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  const options: Electron.MessageBoxOptions = {
+    type: "question",
+    title: t("resident.login.confirmTitle"),
+    message: t("resident.login.confirmTitle"),
+    detail: t("resident.login.confirmBody"),
+    buttons: [t("resident.login.confirm"), t("resident.login.cancel")],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+  };
+  const { response } = win
+    ? await dialog.showMessageBox(win, options)
+    : await dialog.showMessageBox(options);
+  return response === 0;
+}
+
+/**
+ * Install the application menu, in the language the app is rendering.
+ *
+ * Called at start-up and again whenever the locale changes, for the same reason
+ * the tray is: a menu built once in the wrong language stays wrong for the life
+ * of the process. See `app-menu.ts` for what is in it and what is deliberately
+ * not.
+ */
+function installApplicationMenu(): void {
+  const t = translator(resident ? resident.currentLocale : "en");
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate(
+      applicationMenuTemplate(t, isEngineeringBuild()) as Electron.MenuItemConstructorOptions[],
+    ),
+  );
+}
+
+/** Rebuild the menu in place, for a language or a Nearby change. */
+function refreshTray(): void {
+  if (!tray || !resident) return;
+  tray.setToolTip(resident.trayTooltip());
+  tray.setContextMenu(Menu.buildFromTemplate(trayTemplate(resident)));
+}
+
+function trayTemplate(runtime: ResidentRuntime): Electron.MenuItemConstructorOptions[] {
+  return runtime
+    .trayMenu()
+    .map((entry) => {
+      if ("type" in entry) return { type: "separator" as const };
+      // A status line reports; it has nothing to press. Electron renders that
+      // as a disabled item, which is also what a screen reader announces.
+      if ("enabled" in entry) return { label: entry.label, enabled: false };
+      return { label: entry.label, click: entry.click };
+    });
+}
+
+function createTray(runtime: ResidentRuntime): void {
   // A resident tray presence is the baseline, not a nicety: receiving while the
   // window is hidden is what "reachable" means, and a tray icon is the only
   // honest way to tell the user the app is still running.
   tray = new Tray(trayIcon());
-  tray.setToolTip("Relayium");
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: "Open Relayium", click: showWindow },
-      { type: "separator" },
-      {
-        label: "Quit Relayium",
-        click: () => {
-          quitting = true;
-          app.quit();
-        },
-      },
-    ]),
-  );
-  tray.on("click", showWindow);
+  tray.setToolTip(runtime.trayTooltip());
+  tray.setContextMenu(Menu.buildFromTemplate(trayTemplate(runtime)));
+  // Quit goes through the coordinator, which asks first and cleans up after —
+  // never `app.quit()` straight from a menu item, which would discard a running
+  // transfer without a word.
+  tray.on("click", () => runtime.trayActions().show());
 }
 
-/** A `relayium://` URL from a second instance or an OS activation. */
+/**
+ * A pairing link from a second instance, an OS activation, or the web.
+ *
+ * Both spellings the released Mac accepts: the custom scheme, and the
+ * `https://relayium.com/cross-network?mode=text#c=004291` page URL. The code
+ * stays a STRING the whole way — parsed as text, validated as six digits,
+ * handed on as six digits — because `004291` read as a number is `4291`, which
+ * is a different room.
+ *
+ * The link is OFFERED to the page, never merged into what it is doing: a code
+ * arriving mid-transfer does not silently join, and the draft and cancel intent
+ * survive it.
+ */
 function handleDeepLink(argv: readonly string[]): void {
-  const link = argv.find((arg) => arg.startsWith(`${DEEP_LINK_SCHEME}://`));
+  const link = argv.find(
+    (arg) => arg.startsWith(`${DEEP_LINK_SCHEME}://`) || arg.startsWith("https://"),
+  );
   if (!link) return;
   showWindow();
-  // Routing the link to a destination is a later slice; what is delivered here
-  // is that a second instance forwards it and the existing window comes forward
-  // rather than a second app starting.
+  const parsed = routeFromArgv([link]);
+  if (!parsed.ok) return;
+  const route = parsed.route;
+  if (route.kind === "download") {
+    // Handed to the page as a LINK, which it offers back on the stored channel.
+    // Opening a link does not start a download: the page shows it, the user
+    // asks, and the folder picker is what authorises writing anything.
+    void resident?.offerStoredLink(route.url);
+    return;
+  }
+  if (route.kind === "realtime-with-mode") {
+    void resident?.offerPairCode(route.code, route.mode === "text" ? "text" : "files");
+    return;
+  }
+  // A pairing route with no code opens the page; there is nothing to join yet.
+  if (route.kind === "realtime" && route.code !== null) void resident?.offerPairCode(route.code);
+}
+
+/**
+ * Files the OS handed this process, through `--send-files`.
+ *
+ * The installer registers Explorer verbs on files and directories and a SendTo
+ * shortcut, all of which launch this executable with that flag — so without
+ * this the menu entries start the app and silently drop everything the person
+ * picked. Explorer sends one invocation per right-click and ONE invocation
+ * carrying every path for SendTo, which is why staging takes the whole list.
+ *
+ * Handled exactly like a deep link and for the same reason: the OS decides when
+ * it happens, both at launch and at a second instance, and both paths must
+ * reach the same place. Nothing is awaited — argv handling must not hold
+ * startup or the `second-instance` listener while the filesystem is walked.
+ *
+ * Refusals are not reported here. `activate` publishes them into the view the
+ * pane renders, which is the surface a person can actually see.
+ */
+function handleSendFiles(argv: readonly string[]): void {
+  const control = handlerControl;
+  if (!control) return;
+  if (parseSendFiles(argv) === null) return;
+  showWindow();
+  void control.osEntry.activate(argv).catch(() => undefined);
+}
+
+/**
+ * The real Electron surfaces the resident behaviour drives.
+ *
+ * No translator here on purpose: every string is already localized by the pure
+ * module that composed it, so this file cannot accidentally introduce an
+ * English literal onto a Chinese screen.
+ */
+/**
+ * Open the version gate, and never let it be the reason a start fails.
+ *
+ * A data root that cannot be resolved is not an error here: it means there is
+ * nowhere to have remembered a policy, which is the same as having heard none,
+ * which is the embedded floor. Every path out of this returns a usable gate.
+ */
+async function openPolicyGate(): Promise<PolicyGate> {
+  const root = currentDataRoot();
+  const store = new PolicyStore(
+    root.ok ? policyPath(root.path) : policyPath(app.getPath("userData")),
+  );
+  const gate = await PolicyGate.open({
+    version: app.getVersion(),
+    store,
+    source: new PolicySource({ origin: apiOrigin(), store }),
+  });
+  // Behind the launch, deliberately not awaited: its only job is to leave a
+  // better cache for next time. `refresh` cannot throw.
+  void gate.refresh();
+  return gate;
+}
+
+/**
+ * @param onNotifyOutcome What actually happened to a toast.
+ *
+ * Late-bound on purpose. This adapter is built as an ARGUMENT to the runtime
+ * that consumes the outcome, so the runtime does not exist yet at this point;
+ * the caller passes a closure that reads it when the toast is shown, which is
+ * always after construction. The same shape `onLocaleChanged` already uses to
+ * reach a tray built later.
+ */
+function residentPlatform(
+  preferences: () => PreferenceStore,
+  onNotifyOutcome?: (shown: boolean) => void,
+): ResidentPlatform {
+  // A log line, not a dialog: this is where a path or a raw errno is allowed to
+  // go, and the user-facing surfaces carry closed codes instead. Shared with
+  // `notify`, which had nowhere to report a toast the OS refused.
+  const report = (err: unknown): void => {
+    process.stderr.write(`relayium: ${err instanceof Error ? err.message : String(err)}\n`);
+  };
+  const window = (): BrowserWindow | null =>
+    mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+
+  const ask = async (options: Electron.MessageBoxOptions): Promise<number | null> => {
+    const win = window();
+    // Window-modal where there is a window, so the question cannot be lost
+    // behind it; a hidden window is shown first, because a modal nobody can see
+    // is a hang.
+    if (win) {
+      if (!win.isVisible()) showWindow();
+      const { response } = await dialog.showMessageBox(win, options);
+      return response;
+    }
+    const { response } = await dialog.showMessageBox(options);
+    return response;
+  };
+
+  return {
+    show: showWindow,
+    hide: () => window()?.hide(),
+    exit: () => {
+      quitting = true;
+      app.quit();
+    },
+    askFirstClose: (d: FirstCloseDialog) =>
+      ask({
+        type: "info",
+        title: d.title,
+        message: d.title,
+        detail: d.body,
+        buttons: [...d.buttons],
+        defaultId: 0,
+        cancelId: 2,
+        noLink: true,
+      }),
+    confirm: async (prompt: QuitPrompt) => {
+      const response = await ask({
+        type: "warning",
+        title: prompt.title,
+        message: prompt.title,
+        detail: prompt.body,
+        buttons: [prompt.quitAction, prompt.stayAction],
+        defaultId: 1,
+        cancelId: 1,
+        noLink: true,
+      });
+      // Exactly the quit button. A dismissed dialog is not consent, and neither
+      // is a window closed by the compositor.
+      return response === 0;
+    },
+    notify: (title, body) => {
+      showNotification(
+        {
+          isSupported: () => Notification.isSupported(),
+          create: (t, b) => new Notification({ title: t, body: b }),
+          onClick: showWindow,
+          report,
+          // What actually happened, as opposed to the platform's message about
+          // it. The tray reads this; the message stays in the log.
+          onOutcome: (shown) => onNotifyOutcome?.(shown),
+        },
+        title,
+        body,
+      );
+    },
+    showStopped: (notice) => {
+      // A native dialog, not a log line and not a notification: this is the one
+      // state where the app is visible and cannot work, so it must be in front
+      // of the user rather than behind a toast they may have muted. The window
+      // is brought forward first for the same reason.
+      //
+      // Nothing here quits or relaunches: they chose to stay, and the message
+      // says what to do rather than doing it for them. The text is entirely
+      // from the closed catalogue — no error, no path.
+      showWindow();
+      const win = window();
+      const options: Electron.MessageBoxOptions = {
+        type: "warning",
+        title: notice.title,
+        message: notice.title,
+        detail: notice.body,
+        buttons: [notice.dismiss],
+        defaultId: 0,
+        noLink: true,
+      };
+      // Fire and forget: the acknowledgement is the user's, and nothing here
+      // waits on it or acts differently for it.
+      void (win ? dialog.showMessageBox(win, options) : dialog.showMessageBox(options)).catch(
+        () => undefined,
+      );
+    },
+    isFocused: () => window()?.isFocused() === true,
+    // The acknowledgement lives in the settings file, written through the SAME
+    // store the rest of the app uses — two stores over one path would each
+    // serialise only their own writes. A read that throws is treated as "not
+    // acknowledged", which shows the notice again; a write that throws is
+    // reported as not persisted rather than silently acked, which would make
+    // the notice never appear again.
+    readAcknowledged: async () => (await preferences().read()).firstCloseAcknowledged,
+    writeAcknowledged: async () => {
+      await preferences().write("firstCloseAcknowledged", true);
+    },
+    reportFailure: report,
+  };
 }
 
 export interface BootstrapOptions {
   /** Substituted composition. See `HandlerComposition` — injection only, never
    *  an ambient override, and never supplied by the shipped entry point. */
   readonly composition?: HandlerComposition;
+  /**
+   * Wrap the real resident surfaces.
+   *
+   * Injection only, like `composition`, and for the same reason: the resident
+   * behaviour is native dialogs, a tray and notifications, and an automated run
+   * has to be able to answer a dialog without a person. The wrapper receives the
+   * REAL platform, so anything it does not replace still runs the shipped path.
+   */
+  readonly residentPlatform?: (real: ResidentPlatform) => ResidentPlatform;
   /** Leave the window hidden. A test drives the renderer through `webContents`
    *  and has no reason to put a window on a developer's screen. */
   readonly showOnLaunch?: boolean;
+  /**
+   * Answer the native install consent, in process.
+   *
+   * Injection only, like `composition` and `residentPlatform`, and for the same
+   * reason: the shipped path opens a modal dialog, and a run with nobody in
+   * front of it cannot answer one. Without this the install half of the update
+   * flow — consent, quiesce, installer, release — cannot be exercised at all.
+   *
+   * It replaces only the ANSWER. Everything the answer is used for — the
+   * re-check after the prompt, the cleanup counts, the exclusion that stops the
+   * install waiting on itself — is the shipped adapter.
+   *
+   * Not reachable from a renderer, a flag or the environment.
+   */
+  readonly confirmUpdateInstall?: () => Promise<boolean>;
+  /**
+   * Answer the native startup consent, in process.
+   *
+   * Injection only, and for exactly the reason the update consent above gives:
+   * the shipped hook opens a modal dialog, and a run with nobody in front of it
+   * cannot answer one. Without this the ENABLE half of the startup toggle
+   * cannot be exercised at all, which is why that toggle was proven only
+   * through a substituted system and never against Windows itself.
+   *
+   * It replaces only the ANSWER. The registry write, the deliberate re-read
+   * afterwards, and the classification of what Windows reports back are all the
+   * shipped path. Not reachable from a renderer, a flag or the environment.
+   */
+  readonly confirmLoginItem?: () => Promise<boolean>;
+  /**
+   * Record the post-install exit instead of performing it.
+   *
+   * Injection only, and for the same reason as the consent above: the shipped
+   * hook ends the process, which would end an automated run mid-scenario. What
+   * is under test is that the choreography DECIDES to exit — exactly once, and
+   * only after a launched install — so recording the decision is the whole
+   * observation. Not reachable from a renderer, a flag or the environment.
+   */
+  readonly exitAfterInstall?: () => void;
+}
+
+/** Test/diagnostic only: the composed resident behaviour, once bootstrapped. */
+export function residentRuntime(): ResidentRuntime | null {
+  return resident;
+}
+
+/** Test/diagnostic only: what main still holds. */
+export function ownedReceives(): number | null {
+  return handlerControl?.service.openLeaseCount ?? null;
+}
+
+/**
+ * Test/diagnostic only: end the Device Inbox's current backoff.
+ *
+ * The same thing the page's "Try again now" reaches, exposed so a driven run
+ * can step the scheduler deliberately rather than sleeping through a real
+ * interval. It STARTS nothing and enables nothing — a fenced or disabled
+ * scheduler wakes into the same guard it was parked at.
+ */
+export function wakeInbox(): boolean {
+  if (!handlerControl) return false;
+  handlerControl.inbox.wake();
+  return true;
 }
 
 export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
@@ -251,31 +658,208 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
   app.on("second-instance", (_event, argv) => {
     showWindow();
     handleDeepLink(argv);
+    // Explorer launches the registered verb again rather than talking to the
+    // running app, so a second right-click arrives HERE. Without this the menu
+    // entry works exactly once per app lifetime.
+    handleSendFiles(argv);
   });
 
-  // ## Protocol association is the INSTALLER's job, and only on Windows
+  // ## This app never registers `relayium://`. The installer owns it.
   //
-  // `setAsDefaultProtocolClient` mutates a machine-wide association. Calling it
-  // from a development run or a smoke test would seize `relayium://` from
-  // whatever already owns it — on a developer's Mac that is the real, shipped
-  // Relayium macOS app. A test must not reach outside its own process and
-  // reconfigure the host, so this is gated on being a packaged Windows build.
-  // The NSIS installer registers the scheme at install time; the app only ever
-  // *handles* what it is given.
-  if (process.platform === "win32" && app.isPackaged) {
-    app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME);
-  }
+  // `assets/installer.nsh` writes the association at install time and removes it
+  // at uninstall, only when it still names that installation. Registering here
+  // too would put a second writer on a shared, single-valued resource and would
+  // leave a key the uninstaller could not recognise as its own.
+  //
+  // Nothing in this process mutates a host association, packaged or not: a
+  // development run or a smoke test must never seize the scheme from whatever
+  // already owns it. The app only *handles* what it is given — see
+  // `handleDeepLink`.
+
+  // ## Notifications need an identity, and it has to be the INSTALLER's
+  //
+  // On Windows a toast is attributed to an AppUserModelID, and the one that
+  // exists on the machine is the shortcut's — `electron-builder.yml` sets
+  // `appId: com.relayium.windows`. Without this, Electron uses a per-process
+  // default that matches no installed shortcut, and the notification either
+  // shows unattributed or does not appear at all. Spelled as the literal it
+  // must equal rather than derived, so a mismatch is a visible edit.
+  //
+  // Windows-only, because it is a Windows concept; and untestable from macOS,
+  // so nothing here claims it works — the claim is that the identity is set and
+  // matches the installer.
+  if (process.platform === "win32") app.setAppUserModelId("com.relayium.windows");
 
   await app.whenReady();
+  // Before any window exists, so no build of this app ever shows Electron's
+  // default developer menu — not even for the moment between ready and the
+  // first paint.
+  installApplicationMenu();
   const origin = apiOrigin();
   registerAppScheme(origin);
+
+  // ## Whether this build may run at all, decided before the window loads
+  //
+  // From the CACHE only, which is local and immediate. The network refresh runs
+  // behind the launch and writes the cache for the next one — awaiting an
+  // 8-second timeout here would hold a start open for a slow origin, which is
+  // the failure this mechanism exists to avoid rather than to cause. See
+  // `PolicyGate`, which records that this is weaker than macOS's live model.
+  //
+  // It cannot throw and it cannot block a build that has heard nothing: with
+  // no cache the embedded floor is in force, and the floor cannot block the
+  // binary carrying it.
+  const policyGate = options.composition?.policyGate ?? (await openPolicyGate());
 
   mainWindow = await createWindow();
   // Handlers are registered BEFORE the renderer is loaded. The page's first
   // `appInfo()` runs as soon as the bundle executes, and a handler registered
   // after `loadURL` races it — intermittently, which is the worst kind.
-  disposeHandlers = registerHandlers(mainWindow, origin, APP_SCHEME, APP_HOST, options.composition ?? {});
-  createTray();
+  const control = registerHandlers(
+    mainWindow,
+    origin,
+    APP_SCHEME,
+    APP_HOST,
+    {
+      ...(options.composition ?? {}),
+      policyGate,
+      // The folder pickers this registration opens are native dialogs, so they
+      // need the same language the tray and the quit prompt use. Read per
+      // dialog through the resident runtime, which is created just below and
+      // follows what the PAGE reports; `app.getLocale()` is only the answer
+      // until the window has said otherwise.
+      locale:
+        options.composition?.locale ??
+        (() => resident?.currentLocale ?? resolveLocale(app.getLocale())),
+    },
+    {
+      // Real transitions, not a method waiting for a caller: a publication that
+      // actually completed, a message the page actually received, a failure
+      // that actually happened.
+      onPublished: (report) => resident?.onPublished(report),
+      onNotice: (notice) => resident?.onNotice(notice),
+      // Suppressed while the window is focused by `notify` itself: somebody
+      // watching the upload finish does not need to be told it finished.
+      onLinkReady: () => void resident?.notify({ kind: "link-ready" }),
+      onLocale: (locale) => resident?.setLocale(locale),
+      onNearby: (active) => resident?.setNearbyActive(active),
+      confirmLoginItem: async () =>
+        options.confirmLoginItem ? options.confirmLoginItem() : confirmLoginItem(),
+      confirmUpdateInstall: async () =>
+        options.confirmUpdateInstall ? options.confirmUpdateInstall() : confirmUpdateInstall(),
+      // The installer is running; this process is what it is replacing. The
+      // platform's own exit sets `quitting`, so `before-quit` lets it through
+      // rather than asking a person who has already agreed.
+      // The installer is running; this process is what it is replacing. This
+      // sets `quitting` and calls `app.quit()` directly, so `before-quit` lets
+      // it through rather than asking a person who has already agreed — and so
+      // it never re-enters the quit coordinator, which would quiesce the update
+      // facade that just produced this outcome.
+      exitAfterInstall: () => {
+        if (options.exitAfterInstall) {
+          options.exitAfterInstall();
+          return;
+        }
+        quitting = true;
+        app.quit();
+      },
+      reportFailure: (err) =>
+        process.stderr.write(`relayium: ${err instanceof Error ? err.message : String(err)}\n`),
+    },
+  );
+  handlerControl = control;
+
+  // The main process shows native dialogs, a tray menu and notifications, and
+  // they must be in the language the WINDOW is showing. `app.getLocale()` is
+  // only the starting point — the page reports its own catalogue and this
+  // follows it, because the two APIs can disagree.
+  resident = new ResidentRuntime({
+    service: control.service,
+    // ## Everything main holds, INCLUDING what it is sending
+    //
+    // This is the pre-quit question — "is anything happening?" — and it is asked
+    // BEFORE any fence or abort. It counted only the two RECEIVING features, so
+    // an upload or a device delivery in flight made the app look idle at exactly
+    // the moment the user was deciding whether to end it. The counts that
+    // `quiesce` reports come after work has been aborted and are far too late to
+    // inform a consent.
+    //
+    // `inventory().active` on each sender includes an admission that has not
+    // registered a job yet: a send one await from opening an upload is work a
+    // person would be surprised to lose, and reporting zero for it would be the
+    // same omission one step earlier.
+    storedActive: () =>
+      control.storedReceive.active +
+      control.inbox.active +
+      control.storedSend.inventory().active +
+      control.inboxSend.inventory().active,
+    // ## Why the account reader is deliberately NOT in that sum
+    //
+    // This number is what `quitRisk` turns into the TRANSFER prompt — "the
+    // transfer will stop and will not finish". Profile, usage and device reads
+    // are none of that: they are ordinary refreshes that cost nothing to
+    // abandon, and counting them would warn a person that their file transfer
+    // was about to be interrupted while the account page was merely reloading.
+    // A prompt that cries wolf is worse than no prompt, because the one time it
+    // matters it reads the same.
+    //
+    // The account work is still FENCED and DRAINED by the quit path, and what
+    // `quiesce` could not join is reported through the residue count — which is
+    // the honest place for "something did not finish", and says so without
+    // claiming it was a transfer.
+    resident: control.resident,
+    fence: control.fence,
+    quiesce: control.quiesce,
+    resume: control.resume,
+    dispose: control.dispose,
+    drainAbandoned: () => drainAbandoned(),
+    locale: resolveLocale(app.getLocale()),
+    // Pausing from the tray stops new claims WITHOUT writing the user's policy
+    // or telling central — the page's enable/disable is what does that, and a
+    // menu is the wrong place to un-enrol a device from.
+    setInboxPaused: (paused) => {
+      if (paused) control.inbox.pauseReceiving();
+      else control.inbox.resumeReceiving();
+    },
+    inboxPaused: () => control.inbox.receivingPaused,
+    inboxStatus: () => control.inbox.view().status,
+    hasInboxFolder: () => control.inbox.view().hasDestination,
+    // Main owns the path and main performs the action; there is no argument on
+    // this call that could name a directory. The generation is the router's,
+    // exactly as the renderer's own reveal passes it.
+    revealInbox: async () => (await control.inbox.revealFolder(control.generation())).kind === "ok",
+    accountIdentity: () => control.service.accountIdentity,
+    onLocaleChanged: () => {
+      refreshTray();
+      // The menu bar is rendered in the same language as everything else.
+      installApplicationMenu();
+    },
+    /**
+     * The OS notification settings, on the one platform that has this URI.
+     *
+     * NOT through `openApprovedExternal`: that helper refuses anything but
+     * http/https on this build's pinned origin, which is exactly right for a
+     * link and exactly wrong here. This is a fixed OS URI with no data in it —
+     * a literal, never composed from anything, never reachable from a page.
+     *
+     * `undefined` off Windows, which is what keeps the tray item away from a
+     * platform where it could not do anything. A development Mac can still
+     * fail a toast; it just has nowhere to send anybody.
+     */
+    openNotificationSettings:
+      process.platform === "win32"
+        ? () => {
+            void shell.openExternal("ms-settings:notifications");
+          }
+        : undefined,
+    platform: options.residentPlatform
+      // Late-bound through the module's own `resident`, which is null until
+      // the line below returns. Nothing reads it before then: the first toast
+      // cannot precede the app being up.
+      ? options.residentPlatform(residentPlatform(control.preferences, noteNotifyOutcome))
+      : residentPlatform(control.preferences, noteNotifyOutcome),
+  });
+  createTray(resident);
   await mainWindow.loadURL(`${APP_ORIGIN}/index.html`);
 
   if (isEngineeringBuild()) {
@@ -287,16 +871,18 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
 
   if (options.showOnLaunch !== false) showWindow();
   handleDeepLink(process.argv);
+  handleSendFiles(process.argv);
 
   app.on("before-quit", (event) => {
-    quitting = true;
-    if (!disposeHandlers) return;
-    // Cancel in-flight sign-ins and receive leases before the process goes
-    // away, so a quit does not leave staged bytes on the user's disk.
-    const dispose = disposeHandlers;
-    disposeHandlers = null;
+    // Already agreed, already cleaned up — this is the coordinator's own exit
+    // coming back around, and it must be allowed through.
+    if (quitting || resident?.isQuitting) return;
     event.preventDefault();
-    void dispose().finally(() => app.quit());
+    // Ask, join, and quit only if the user said so. The foundation's
+    // `dispose().finally(app.quit)` quit whether cleanup worked or not, and
+    // turned a rejection into an unhandled one; a person who could have said
+    // "stay and try again" never got to.
+    void resident?.requestQuit();
   });
   app.on("window-all-closed", () => {
     // Deliberately empty: the tray keeps the app alive. Quit is explicit.

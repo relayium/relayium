@@ -69,7 +69,7 @@ Which path a transfer takes, precisely — this is narrower than "it tries direc
 first" and the difference is what decides whether anything is billed:
 
 - **Same LAN, browser:** direct. The server issues no relay for a code-less LAN
-  room, so `chooseRtcConfig` (`web/src/lib/ice.ts:208-220`) leaves the policy at
+  room, so `chooseRtcConfig` (`web/src/lib/ice.ts:236-248`) leaves the policy at
   `all` and host candidates carry the bytes.
 - **Cross-network, browser:** **relay, by design — not as a fallback.** As soon
   as a TURN server is present in the ICE list, that same function returns

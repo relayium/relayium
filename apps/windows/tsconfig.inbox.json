@@ -1,0 +1,17 @@
+{
+  "//": "Typechecks the bundle entry. Vite transpiles without checking types, so without this an entry that violates InboxRuntime would emit happily and fail at runtime. Deliberately NOT part of tsconfig.main.json: the entry imports web/src/lib, which is outside that project's rootDir.",
+  "//strictness": "strict, but WITHOUT noUncheckedIndexedAccess and exactOptionalPropertyTypes. Those are this app's rules, not the web project's (it extends @tsconfig/svelte, which sets neither), and imposing them here reports findings in source outside this lease rather than in the entry. The entry itself neither indexes arrays nor assigns optional properties, so it loses nothing.",
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["build/inbox-runtime.entry.ts", "src/main/inbox/runtime-contract.ts"]
+}

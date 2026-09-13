@@ -44,6 +44,7 @@ const en: Messages = {
   peersTitle: "Nearby devices",
   crossPeersTitle: "Connected peer",
   pickSendTo: (n) => `Click or drop files to send to ${n}`,
+  tooManyFiles: (max: number) => `That selection holds more than ${String(max)} files. Send fewer files, or zip the folder first.`,
   peerUnsupported: "That device's Relayium is too old to connect. Update Relayium on both devices to send files or messages.",
   generating: "Creating…",
   emptyPeers: "No other devices yet. Open this page on another device or browser window on the same network.",
@@ -55,7 +56,6 @@ const en: Messages = {
   footer: "End-to-end encrypted (X25519 + AES-256-GCM) · same-network sessions stay direct; cross-network TURN carries ciphertext that servers and relays cannot decrypt",
   offlineFooter: "Encrypted in your browser with AES-256-GCM before upload · the server stores only ciphertext it can't decrypt — the decryption key lives solely in the link.",
   busy: "A transfer is already in progress — please wait for it to finish",
-  tooMany: (m, n) => `Up to ${m} files at a time; ignored the extra ${n}`,
   titleDefault: "Relayium — end-to-end encrypted file and text transfer",
   descDefault:
     "Open-source, end-to-end encrypted file and text transfer in your browser. Files stream directly on your local network or through a ciphertext-only relay across networks. Text needs both devices online; Relayium servers keep no message bodies or history, though either endpoint may retain it.",
@@ -109,6 +109,26 @@ const en: Messages = {
     errTooShort: "Password must be at least 8 characters.",
     errEmailTaken: "That email is already registered — please log in.",
     errLogin: "Wrong email or password.",
+    /**
+     * The throttle, and the reason this one matters most.
+     *
+     * The server answers a locked-out sign-in with 429. Until 2026-09-12 that
+     * fell through to `errLogin`, so a person was told their password was wrong
+     * — and retyping the correct one is exactly what keeps the lockout alive.
+     * Wording is macOS's `error.account.rateLimited`.
+     */
+    errRateLimited: "Too many attempts. Wait a minute, then try again.",
+    /** macOS's `error.account.emailInvalid`. */
+    errEmailInvalid: "That doesn't look like a valid email address.",
+    /**
+     * What an unrecognised code says, instead of naming the credentials.
+     *
+     * The account endpoints emit fourteen codes; this screen knew four. Every
+     * other one read as "wrong email or password", which is a specific claim
+     * about something the person can retype. macOS's `error.account.server`,
+     * without its status token.
+     */
+    errUnrecognised: "The server returned an error. Try again shortly.",
     errNetwork: "Network error — check your connection and try again.",
     pendingDeletion: "Your account is scheduled for deletion. Reactivate it to keep it.",
     reactivate: "Reactivate",
@@ -296,7 +316,6 @@ const en: Messages = {
     downloadsN: (n) => `${n} download${n === 1 ? "" : "s"}`,
     burnTag: "Burn after read",
     expiresIn: (left) => `Expires in ${left}`,
-    expiringSoon: "Expiring soon",
     del: "Delete",
     confirmDel: "Delete this file link? The recipient won't be able to download it.",
     nodesTitle: "My Nodes",
@@ -319,7 +338,6 @@ const en: Messages = {
     nodeOnline: "Online",
     nodeOffline: "Offline",
     nodeRelayed: (bytes) => `Relayed ${bytes}`,
-    nodeStored: (bytes) => `Stored ${bytes}`,
     nodeFreeTag: "free",
     nodeStorageFree: (free, total) => `Disk ${free} free of ${total}`,
     nodesTrafficHint: "\"Relayed\" counts cross-network browser traffic carried through TURN by design; same-network sessions and direct CLI paths do not count. Files stored through offline/async upload count as \"Stored\", not relayed.",
@@ -1162,7 +1180,6 @@ const en: Messages = {
     expiresOn: (w) => `This link expires on ${w}`,
     copy: "Copy link",
     copied: "Copied",
-    cliHeading: "Fetch it from the terminal",
     cliIntro: "Have the Relayium CLI on the other machine? Build the command and paste it there:",
     cliDestLabel: "Save to",
     cliDestHint: "Paste your pwd output, or leave . to land in the current directory.",
@@ -1392,6 +1409,8 @@ const en: Messages = {
     flooding: "The other device sent too many messages; the session was closed.",
     unsupported: "That device's Relayium is older and cannot receive messages. Update it on both sides.",
     peerBusy: "That device is busy with a transfer.",
+    /** THIS device. Opposite advice: hang up the connection you are holding. */
+    selfBusy: "This device is already in another connection. End it, then try again.",
     failed: "The message session failed.",
     refused: "The other device declined.",
     copy: "Copy",
