@@ -565,6 +565,16 @@ export const en = {
   inboxRefused: "Not done — Relayium is closing.",
   inboxSuperseded: "That was replaced by a newer change, so nothing was altered.",
   inboxFailed: "That did not work. Relayium will try again on its own.",
+  /**
+   * Receiving is OFF on this device, so nothing will be tried again.
+   *
+   * The sentence above used to cover this, and its second half was the
+   * problem: it promises an automatic retry, and with receiving off there is
+   * nothing running to make one. A person told that waits for a delivery that
+   * is never coming. macOS names the same case in `send.blockReceiveOff`.
+   */
+  inboxAcceptedNotEnabled:
+    "Receiving is switched off on this PC, so nothing was collected. Turn it on above, then accept again.",
 
 
 
@@ -1147,6 +1157,7 @@ export const zh: Record<MessageKey, string> = {
   inboxRefused: "未执行：Relayium 正在关闭。",
   inboxSuperseded: "该操作已被更新的更改取代，因此未做任何改动。",
   inboxFailed: "操作未成功。Relayium 会自行重试。",
+  inboxAcceptedNotEnabled: "这台电脑的接收已关闭，因此没有收取任何内容。请先在上方打开，然后重新接受。",
 
 
 
