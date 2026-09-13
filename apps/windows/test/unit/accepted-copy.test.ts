@@ -7,16 +7,33 @@ import { describe, expect, it } from "vitest";
 
 import { acceptedCopy } from "../../src/renderer/inbox/accepted-copy.js";
 import { BLOCKED_KEY } from "../../src/renderer/inbox/blocked-copy.js";
-import type { InboxAcceptOutcome, InboxFailureCode } from "../../src/shared/ipc-contract.js";
+import type { DeliveryReceipt, InboxAcceptOutcome, InboxFailureCode } from "../../src/shared/ipc-contract.js";
 import { en, zh } from "../../src/renderer/i18n/messages.js";
 
+/**
+ * Fixtures typed against the real receipt, not shaped by hand.
+ *
+ * The first version of this file invented the fields it thought a receipt had
+ * — `recorded` instead of `journalRecorded`, and no `failedIndex` or `reason`
+ * on the partial. `npm run check` said so and I filtered its output with a
+ * pattern that could not match a `tsc` error, so CI found it instead. The
+ * annotation is what makes the fixture answer to the contract.
+ */
 const receipt = {
-  saved: { kind: "saved", total: 2, residue: "none", ackPending: false, recorded: true },
-  savedAck: { kind: "saved", total: 2, residue: "none", ackPending: true, recorded: true },
-  message: { kind: "saved-message", ackPending: false, recorded: true },
-  partial: { kind: "partial", savedCount: 1, total: 3, residue: "present" },
+  saved: { kind: "saved", total: 2, residue: "none", ackPending: false, journalRecorded: true },
+  savedAck: { kind: "saved", total: 2, residue: "none", ackPending: true, journalRecorded: true },
+  message: { kind: "saved-message", residue: "none", ackPending: false, journalRecorded: true },
+  partial: {
+    kind: "partial",
+    savedCount: 1,
+    total: 3,
+    failedIndex: 1,
+    reason: "io-failed",
+    residue: "present",
+    journalRecorded: true,
+  },
   refused: { kind: "refused", failure: { code: "key-unavailable", residue: "none" } },
-} as const;
+} as const satisfies Record<string, DeliveryReceipt>;
 
 /** Every member, with a representative payload. Total by TYPE, not by memory. */
 const OUTCOMES = {
