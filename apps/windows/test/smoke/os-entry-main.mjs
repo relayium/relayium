@@ -109,7 +109,19 @@ async function main() {
     window.__text = (s) => { const e = document.querySelector(s); return e === null ? null : e.textContent.replace(/\\s+/g, " ").trim(); };
     window.__count = (s) => document.querySelectorAll(s).length;
     window.__attr = (s, n) => { const e = document.querySelector(s); return e === null ? null : e.getAttribute(n); };
-    window.__click = async (s) => { const e = document.querySelector(s); if (e === null) return false; e.click(); await window.__tick(); return true; };
+    window.__click = async (s) => {
+      const e = document.querySelector(s);
+      if (e === null) return false;
+      // A disabled control is not clicked, and saying so is the point: a
+      // helper that returned true here reports success for a press that did
+      // nothing, and the real failure surfaces somewhere else as a symptom.
+      // The rule and its wording are the resident driver's; this file kept the
+      // weak version because the batch that fixed the others did not sweep.
+      if (e.disabled === true) return false;
+      e.click();
+      await window.__tick();
+      return true;
+    };
     window.__push = async (v) => { window.__osEntryHarness.push(v); await window.__tick(); };
     true;
   `);
