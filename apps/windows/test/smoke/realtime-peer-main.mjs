@@ -58,6 +58,7 @@ import { bootstrap } from "../../dist/main/main.js";
 // The PRODUCTION win32 destination, imported so it can be OBSERVED — never
 // replaced. See `observingWindowsDestination`.
 import { NativeHelperDestination } from "../../dist/main/net/native-receive-adapter.js";
+import { RECEIPT_MARKERS, SNAPSHOT_EXPR, stoppedBecauseFor } from "./pane-snapshot.mjs";
 
 const configPath = process.argv[2];
 
@@ -149,7 +150,11 @@ const observed = {
   /** Milliseconds from the start of the receive watch to each observation, or
    *  null where it never happened. Reported so an ordering problem is visible
    *  as an ordering problem. */
-  receiveTiming: { acceptedAt: null, messageAt: null, outcomeAt: null, stoppedBecause: "" },
+  receiveTiming: {
+    acceptedAt: null, messageAt: null, outcomeAt: null, stoppedBecause: "",
+    /** Which pane hooks were on screen when a watch gave up. Empty otherwise. */
+    showing: [], statusLine: "",
+  },
   receivedOutcome: "",
   receivedNotice: "",
   /**
@@ -310,9 +315,6 @@ const sendFiles = (win, files) =>
 const readMessages = (win) =>
   js(win, `[...document.querySelectorAll('[data-test="history"] li')].map((el) => el.textContent)`);
 
-/** The terminal receipts `LinkPane` can render, in the order it tests them. */
-const RECEIPT_MARKERS = ["recv-saved", "recv-failed", "recv-partial", "recv-cancelled", "recv-failed-saved"];
-
 /**
  * Watch ONE receive, recording each thing as it actually happens.
  *
@@ -403,7 +405,21 @@ async function watchReceive(win) {
     }
     await new Promise((r) => setTimeout(r, 150));
   }
-  if (!timing.stoppedBecause) timing.stoppedBecause = `the ${budgetMs}ms watch budget elapsed`;
+  if (!timing.stoppedBecause) {
+    // Read HERE, where the giving-up happens and the window is still open. A
+    // snapshot taken after the round unwinds would describe a torn-down page.
+    // A read that THREW is not an empty screen, and must not be reported as
+    // one: "nothing on screen" is a diagnosis, and the honest statement here is
+    // that the snapshot could not be taken.
+    const snapshot = await js(win, SNAPSHOT_EXPR).then(
+      (s) => ({ ...s, failure: "" }),
+      (err) => ({ present: [], status: "", failure: String(err) }));
+    timing.showing = snapshot.present;
+    timing.statusLine = snapshot.status;
+    timing.stoppedBecause = snapshot.failure
+      ? `the ${budgetMs}ms watch budget elapsed; the window could not be read (${snapshot.failure})`
+      : stoppedBecauseFor(budgetMs, snapshot.present);
+  }
 
   // Each missing observation is named as itself. "The receive did not finish"
   // and "the message never arrived" are different failures and a single timeout
