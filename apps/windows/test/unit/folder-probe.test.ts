@@ -97,8 +97,13 @@ describe("probing a receive folder", () => {
     // So the filesystem is injected, and this is the exact shape: `stat` says
     // directory, `access` is satisfied — as it is on Windows, where it consults
     // the read-only attribute and not the ACL — and only the create refuses.
+    // The folder is built with `path.join`, not written as a literal: the
+    // probe joins too, and a hard-coded "/anywhere/..." expectation is a POSIX
+    // separator assumption that fails on Windows. Which it did — the second
+    // platform assumption of my own in this batch, after `chmod`.
+    const folder = path.join(path.sep, "anywhere");
     const created: string[] = [];
-    const probe = await probeFolder("/anywhere", {
+    const probe = await probeFolder(folder, {
       stat: () => Promise.resolve({ isDirectory: () => true }),
       access: () => Promise.resolve(),
       create: (target) => {
@@ -110,12 +115,12 @@ describe("probing a receive folder", () => {
     expect(probe).toEqual({ ok: false, problem: "not-writable" });
     // And it tried, in the folder it was asked about.
     expect(created).toHaveLength(1);
-    expect(created[0]?.startsWith("/anywhere")).toBe(true);
+    expect(created[0]).toBe(path.join(folder, ".relayium-write-probe"));
   });
 
   it("removes its probe file when the create succeeds", async () => {
     const removed: string[] = [];
-    const probe = await probeFolder("/anywhere", {
+    const probe = await probeFolder(path.join(path.sep, "anywhere"), {
       stat: () => Promise.resolve({ isDirectory: () => true }),
       access: () => Promise.resolve(),
       create: () => Promise.resolve(),
@@ -132,7 +137,7 @@ describe("probing a receive folder", () => {
     // Untidy, not unusable. The write plainly succeeded, and failing the folder
     // over the cleanup would be false in the direction that stops deliveries
     // which would have worked.
-    const probe = await probeFolder("/anywhere", {
+    const probe = await probeFolder(path.join(path.sep, "anywhere"), {
       stat: () => Promise.resolve({ isDirectory: () => true }),
       access: () => Promise.resolve(),
       create: () => Promise.resolve(),
