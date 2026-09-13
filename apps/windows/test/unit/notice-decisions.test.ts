@@ -60,23 +60,31 @@ describe("an arriving message", () => {
   });
 
   it("DOES announce a transcript it is seeing for the first time", () => {
-    // Recorded as behaviour rather than asserted as desirable.
+    // Decided, not merely observed. The vacuous guard that used to sit here —
+    // `previous > 0 || inboundIds.includes(latest)`, which is `previous > 0 ||
+    // true` — has been removed, and this is the behaviour that was always
+    // running underneath it.
     //
-    // The shipped code carries a second condition next to the high-water mark —
-    // `previous > 0 || history.some(e => e.dir === "in" && e.id === latest)` —
-    // under a comment saying it is "only for messages that arrived after this
-    // page started watching, so a reconnect that replays a transcript does not
-    // re-announce it". That condition is VACUOUS: `latest` is derived from the
-    // inbound ids, so it is always one of them, and the guard is
-    // `previous > 0 || true`.
-    //
-    // Found by injection — deleting the guard changed no test, because the
-    // high-water mark had already stopped the second pass.
-    //
-    // Left alone deliberately. Suppressing a first-observation transcript is a
-    // product judgement (a person returning to a room may well want to know
-    // what arrived), and this batch is an extraction. Recorded in ACTIVE-WORK.
+    // Kept because the renderer cannot tell the two replays apart:
+    // `seenInbound` dies with the page, so a transcript replayed by a RELOAD
+    // and one replayed on reconnect after the app was closed while a message
+    // arrived look identical here. Announcing costs a duplicate toast in the
+    // first case; suppressing loses the only notice in the second.
+    // DECISION-LOG.md, 2026-09-13.
     expect(noticesFor({}, state({ inboundIds: [1, 2, 3] }), memory())).toContain("saved-message");
+  });
+
+  it("announces the first message in a room it first saw EMPTY", () => {
+    // The trap in the obvious fix. Suppressing a first observation by testing
+    // `previous > 0` looks right and is wrong: a room seen while its transcript
+    // was empty records nothing (`latest` is 0, so `latest > previous` is
+    // false), and the first real message then still has `previous === 0` and
+    // would be swallowed. Distinguishing "never seen this room" from "seen it
+    // empty" needs `Map.has`, not the value.
+    const room = {};
+    const mem = memory();
+    expect(noticesFor(room, state({ inboundIds: [] }), mem)).not.toContain("saved-message");
+    expect(noticesFor(room, state({ inboundIds: [1] }), mem)).toContain("saved-message");
   });
 });
 
