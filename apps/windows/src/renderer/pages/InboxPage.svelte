@@ -38,6 +38,7 @@
   import { pickedFromDrop } from "../send/picked-files.js";
   import { PHASE_KEY } from "../inbox/phase-copy.js";
   import { BLOCKED_KEY } from "../inbox/blocked-copy.js";
+  import { acceptedCopy } from "../inbox/accepted-copy.js";
 
   /**
    * A residue state to the sentence that says it.
@@ -98,29 +99,15 @@
    * only the acknowledgement is missing. Calling that a failure would be false
    * in the direction that matters most.
    */
+  /**
+   * What an accepted delivery actually did.
+   *
+   * The decision is in `accepted-copy.ts`, total over both unions. See it for
+   * what the chain here used to say for the two members it never named.
+   */
   function acceptedText(outcome: InboxAcceptOutcome): string {
-    if (outcome.kind === "received") {
-      const receipt = outcome.receipt;
-      if (receipt.kind === "saved") {
-        return receipt.ackPending ? t("inboxAckPending") : t("inboxAcceptedSaved");
-      }
-      if (receipt.kind === "saved-message") {
-        return receipt.ackPending ? t("inboxAckPending") : t("inboxAcceptedSavedMessage");
-      }
-      if (receipt.kind === "partial") {
-        return t("inboxAcceptedPartial", {
-          saved: receipt.savedCount,
-          total: receipt.total,
-        });
-      }
-      return t("inboxFailed");
-    }
-    if (outcome.kind === "queued") return t("inboxAcceptedQueued");
-    if (outcome.kind === "blocked") return t("inboxAcceptedBlocked");
-    if (outcome.kind === "already-settled") return t("inboxAcceptedSettled");
-    if (outcome.kind === "busy") return t("inboxAcceptedBusy");
-    if (outcome.kind === "refused") return t("inboxAcceptedRefused");
-    return t("inboxFailed");
+    const copy = acceptedCopy(outcome);
+    return "values" in copy ? t(copy.key, copy.values) : t(copy.key);
   }
 
   /** One sentence per notice. Closed codes in, product copy out. */
