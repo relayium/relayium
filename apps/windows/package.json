@@ -26,7 +26,8 @@
     "test:smoke:update-details": "node test/smoke/update-details-smoke.mjs",
     "test:smoke:inbox-page": "node test/smoke/inbox-page-smoke.mjs",
     "test:smoke:lan-page": "node test/smoke/lan-page-smoke.mjs",
-    "test:smoke:link-pane": "node test/smoke/link-pane-smoke.mjs"
+    "test:smoke:link-pane": "node test/smoke/link-pane-smoke.mjs",
+    "gates": "node build/gates.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
