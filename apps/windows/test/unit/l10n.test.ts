@@ -6,13 +6,21 @@ import {
   counter,
   resolveLocale,
   translator,
+  COUNTED_MESSAGE_KEYS,
   type CountedMessageKey,
   type MessageKey,
 } from "../../src/main/l10n.js";
 
 /** The complete set of keys allowed to carry `{count}`. Widening this is the
  *  review surface for interpolation; see `l10n.ts`. */
-const COUNTED: readonly CountedMessageKey[] = ["native.download.pickTitle"];
+/**
+ * The set itself, not a copy of it.
+ *
+ * This was a hand-written list of one, and adding a second counted key left it
+ * stale — so the pin below reported the new key as a template in a key that
+ * takes no count. Right to fail, wrong about why.
+ */
+const COUNTED: readonly CountedMessageKey[] = COUNTED_MESSAGE_KEYS;
 
 describe("both maintained languages are complete", () => {
   it("has the same key set in each", () => {

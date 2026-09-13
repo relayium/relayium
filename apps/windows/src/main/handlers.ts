@@ -57,6 +57,7 @@ import { ENGINEERING_BANNER, engineeringOverride, isEngineeringBuild } from "./b
 import { IceControl, IceRequestRegistry } from "./net/ice-control.js";
 import { PairControl } from "./net/pair-control.js";
 import { catalogFor, counter, type Locale, type Translate, type TranslateCount } from "./l10n.js";
+import { downloadPickTitleKey } from "./download-title.js";
 import { PreferenceStore, isPreferenceKey, preferencesPath } from "./preferences.js";
 import {
   currentState,
@@ -1009,7 +1010,14 @@ export function registerHandlers(
         // The count comes from the VALIDATED manifest, and this dialog is
         // where the user authorises the write. Windows has no facts surface
         // before it yet, so the number belongs here rather than nowhere.
-        title: tc("native.download.pickTitle", facts.fileCount),
+        //
+        // And so does the one fact that makes this authorisation irreversible.
+        // `facts.burnAfterRead` means the server deletes the object after one
+        // successful GET: saving spends the link, for everybody, including the
+        // person spending it. macOS states that on its facts screen
+        // (`download.burnNotice`); Windows was saying nothing at all, and this
+        // dialog is the last moment anyone could be told.
+        title: tc(downloadPickTitleKey(facts.burnAfterRead), facts.fileCount),
         buttonLabel: t("native.download.pickConfirm"),
       });
       const rootPath = picked.canceled ? null : (picked.filePaths[0] ?? null);
