@@ -393,6 +393,16 @@ export const en = {
   settingsStartupUnreadable:
     "Windows could not be asked whether Relayium starts at sign-in, so this is unknown rather than off.",
   settingsStartupWriteFailed: "That could not be changed on this PC.",
+  /**
+   * The PROMPT failed, so nothing was attempted.
+   *
+   * Distinct from the sentence above it because the culprit is different:
+   * `enable()` returns `consent-failed` when `askConsent()` throws, and
+   * Windows refused nothing. Telling somebody their PC would not take the
+   * change sends them to look for a machine problem that is not there.
+   */
+  settingsStartupConsentFailed:
+    "Relayium could not ask you to confirm, so nothing was changed. Try the switch again.",
 
   // --- Stored ------------------------------------------------------------
   storedTitle: "Send a link",
@@ -1006,6 +1016,7 @@ export const zh: Record<MessageKey, string> = {
   settingsStartupOther: "此电脑上有其他设置会在登录时启动 Relayium。",
   settingsStartupUnreadable: "无法向 Windows 查询是否登录时启动，因此状态未知，而不是「关闭」。",
   settingsStartupWriteFailed: "该设置在这台电脑上未能更改。",
+  settingsStartupConsentFailed: "Relayium 没能向你弹出确认，因此没有做任何更改。请再试一次。",
 
   storedTitle: "发送链接",
   storedSubtitle: "接收别人以链接发给你的文件，或者自己发送一个。",
