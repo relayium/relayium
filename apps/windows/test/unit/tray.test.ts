@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { trayMenuTemplate, trayTooltip } from "../../src/main/tray.js";
-import { translator } from "../../src/main/l10n.js";
+import { EN, ZH_HANS, translator } from "../../src/main/l10n.js";
 import { inboxStatusLabel } from "../../src/main/tray.js";
 import type { InboxStatus } from "../../src/shared/ipc-contract.js";
 import type { TrayMenuEntry } from "../../src/main/tray.js";
@@ -17,6 +17,9 @@ const actions = (nearbyActive = true, inboxPaused = false, over = {}) => ({
   inboxStatus: () => ({ kind: "idle", pending: 0 }) as InboxStatus,
   hasInboxFolder: () => true,
   revealInbox: vi.fn(),
+  notifyBlocked: () => false,
+  canOpenNotificationSettings: () => true,
+  openNotificationSettings: vi.fn(),
   accountIdentity: () => "",
   quit: vi.fn(),
   ...over,
@@ -30,6 +33,11 @@ const actions = (nearbyActive = true, inboxPaused = false, over = {}) => ({
  * these cases assert is that a particular item does a particular thing, which
  * the label identifies and the index only approximates.
  */
+/** Whether any entry carries this label. `entryFor` throws; absence is a
+ *  legitimate assertion for items that are conditionally present. */
+const hasEntry = (items: readonly TrayMenuEntry[], label: string): boolean =>
+  items.some((e) => "label" in e && e.label === label);
+
 const entryFor = (items: readonly TrayMenuEntry[], label: string) => {
   const found = items.find((e) => "label" in e && e.label === label);
   if (found === undefined) throw new Error(`no tray entry labelled ${label}`);
@@ -208,5 +216,49 @@ describe("the tray menu", () => {
     expect(a.quit).not.toHaveBeenCalled();
     click(13);
     expect(a.quit).toHaveBeenCalledOnce();
+  });
+});
+
+describe("a notification that did not appear", () => {
+  it("offers nothing while toasts are working", () => {
+    const items = trayMenuTemplate(translator("en"), actions(true, false));
+    expect(hasEntry(items, EN["resident.tray.notifyBlocked"])).toBe(false);
+  });
+
+  it("offers the settings once one has failed", () => {
+    // The product's resident value IS the toast: it runs in the tray so it can
+    // say something arrived. Every failure used to go to stderr and the person
+    // whose window was shut was told nothing.
+    const open = vi.fn();
+    const items = trayMenuTemplate(
+      translator("en"),
+      actions(true, false, { notifyBlocked: () => true, openNotificationSettings: open }),
+    );
+    const item = entryFor(items, EN["resident.tray.notifyBlocked"]);
+    if (!("click" in item)) throw new Error("the notification item does nothing");
+    item.click();
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers nothing on a platform with no settings to open", () => {
+    // A development Mac can fail a toast and has nowhere to send anybody. An
+    // item offering to open settings that cannot be opened is worse than none.
+    const items = trayMenuTemplate(
+      translator("en"),
+      actions(true, false, { notifyBlocked: () => true, canOpenNotificationSettings: () => false }),
+    );
+    expect(hasEntry(items, EN["resident.tray.notifyBlocked"])).toBe(false);
+  });
+
+  it("says a notification did not appear, not that they are switched off", () => {
+    // Electron cannot ask Windows whether this app is muted. "Notifications are
+    // off" would be a claim about a setting nothing read; what was observed is
+    // that one did not arrive.
+    for (const catalog of [EN, ZH_HANS]) {
+      const said = catalog["resident.tray.notifyBlocked"].toLowerCase();
+      expect(said).not.toContain("turned off");
+      expect(said).not.toContain("已关闭");
+    }
+    expect(ZH_HANS["resident.tray.notifyBlocked"]).not.toBe(EN["resident.tray.notifyBlocked"]);
   });
 });

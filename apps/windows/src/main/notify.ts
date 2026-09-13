@@ -38,8 +38,24 @@ export interface NotifyDeps {
   readonly create: (title: string, body: string) => NotificationHandle;
   /** What a click does. The window comes forward. */
   readonly onClick: () => void;
-  /** Where a failure goes. stderr in the shipped app; never a dialog. */
+  /** Where a failure DETAIL goes. stderr in the shipped app; never a dialog,
+   *  and never a user-facing surface: it is the platform's own string. */
   readonly report: (err: unknown) => void;
+  /**
+   * Whether a toast reached the screen, as a fact rather than a detail.
+   *
+   * Separate from `report` because they answer different questions and go to
+   * different places. `report` carries the platform's message, which is a log
+   * line. This carries only "it worked" or "it did not", which is the one part
+   * of a failed notification a person can act on — and until now nothing acted
+   * on it at all: every failure went to stderr and the user, whose window was
+   * shut, was told nothing by a feature whose entire job is to tell them.
+   *
+   * `false` is only ever OBSERVED, never inferred. Electron cannot ask Windows
+   * whether this app is muted, so nothing here claims notifications are off —
+   * it claims one did not appear, which is what was seen.
+   */
+  readonly onOutcome?: (shown: boolean) => void;
 }
 
 /**
@@ -52,6 +68,7 @@ export interface NotifyDeps {
 export function showNotification(deps: NotifyDeps, title: string, body: string): boolean {
   if (!deps.isSupported()) {
     deps.report(new Error("notification not shown: this platform reports no notification support"));
+    deps.onOutcome?.(false);
     return false;
   }
   let handle: NotificationHandle;
@@ -61,6 +78,7 @@ export function showNotification(deps: NotifyDeps, title: string, body: string):
     // Constructing one can throw; an app that let that escape would take down
     // whatever produced the event rather than merely failing to announce it.
     deps.report(err);
+    deps.onOutcome?.(false);
     return false;
   }
   handle.on("click", deps.onClick);
@@ -69,12 +87,20 @@ export function showNotification(deps: NotifyDeps, title: string, body: string):
   // an errno goes, and never to a user-facing surface.
   handle.on("failed", (_event, error) => {
     deps.report(new Error(`notification not shown: ${error}`));
+    // Asynchronous, and the only signal Windows gives when the OS refuses or
+    // suppresses a toast. A `show()` that returned is not a toast anybody saw.
+    deps.onOutcome?.(false);
   });
   try {
     handle.show();
   } catch (err) {
     deps.report(err);
+    deps.onOutcome?.(false);
     return false;
   }
+  // Reached the platform. `failed` may still fire and say otherwise, which is
+  // why this is reported here rather than assumed by the caller — and why a
+  // later success is what clears the warning.
+  deps.onOutcome?.(true);
   return true;
 }

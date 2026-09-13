@@ -16,18 +16,7 @@
 // first and exits, which is also how a `relayium://` deep link opened while the
 // app is already running reaches the window that exists.
 
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  Menu,
-  nativeImage,
-  nativeTheme,
-  Notification,
-  protocol,
-  screen,
-  Tray,
-} from "electron";
+import { BrowserWindow, Menu, Notification, Tray, app, dialog, nativeImage, nativeTheme, protocol, screen, shell } from "electron";
 import { readFile } from "node:fs/promises";
 import { join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -158,6 +147,15 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 /** The resident behaviour. Null before `bootstrap` composes it. */
 let resident: ResidentRuntime | null = null;
+/**
+ * What actually happened to a toast, on its way to the tray.
+ *
+ * A closure rather than a direct call, because the adapter that shows the
+ * notification is built as an ARGUMENT to the runtime that owns the tray — so
+ * the runtime does not exist when the adapter is created, and does by the time
+ * any toast is shown.
+ */
+const noteNotifyOutcome = (shown: boolean): void => resident?.noteNotifyOutcome(shown);
 let handlerControl: HandlerControl | null = null;
 /** Set only once a quit has actually been agreed, so a close hides instead. */
 let quitting = false;
@@ -446,7 +444,19 @@ async function openPolicyGate(): Promise<PolicyGate> {
   return gate;
 }
 
-function residentPlatform(preferences: () => PreferenceStore): ResidentPlatform {
+/**
+ * @param onNotifyOutcome What actually happened to a toast.
+ *
+ * Late-bound on purpose. This adapter is built as an ARGUMENT to the runtime
+ * that consumes the outcome, so the runtime does not exist yet at this point;
+ * the caller passes a closure that reads it when the toast is shown, which is
+ * always after construction. The same shape `onLocaleChanged` already uses to
+ * reach a tray built later.
+ */
+function residentPlatform(
+  preferences: () => PreferenceStore,
+  onNotifyOutcome?: (shown: boolean) => void,
+): ResidentPlatform {
   // A log line, not a dialog: this is where a path or a raw errno is allowed to
   // go, and the user-facing surfaces carry closed codes instead. Shared with
   // `notify`, which had nowhere to report a toast the OS refused.
@@ -510,6 +520,9 @@ function residentPlatform(preferences: () => PreferenceStore): ResidentPlatform 
           create: (t, b) => new Notification({ title: t, body: b }),
           onClick: showWindow,
           report,
+          // What actually happened, as opposed to the platform's message about
+          // it. The tray reads this; the message stays in the log.
+          onOutcome: (shown) => onNotifyOutcome?.(shown),
         },
         title,
         body,
@@ -821,9 +834,30 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<void> {
       // The menu bar is rendered in the same language as everything else.
       installApplicationMenu();
     },
+    /**
+     * The OS notification settings, on the one platform that has this URI.
+     *
+     * NOT through `openApprovedExternal`: that helper refuses anything but
+     * http/https on this build's pinned origin, which is exactly right for a
+     * link and exactly wrong here. This is a fixed OS URI with no data in it —
+     * a literal, never composed from anything, never reachable from a page.
+     *
+     * `undefined` off Windows, which is what keeps the tray item away from a
+     * platform where it could not do anything. A development Mac can still
+     * fail a toast; it just has nowhere to send anybody.
+     */
+    openNotificationSettings:
+      process.platform === "win32"
+        ? () => {
+            void shell.openExternal("ms-settings:notifications");
+          }
+        : undefined,
     platform: options.residentPlatform
-      ? options.residentPlatform(residentPlatform(control.preferences))
-      : residentPlatform(control.preferences),
+      // Late-bound through the module's own `resident`, which is null until
+      // the line below returns. Nothing reads it before then: the first toast
+      // cannot precede the app being up.
+      ? options.residentPlatform(residentPlatform(control.preferences, noteNotifyOutcome))
+      : residentPlatform(control.preferences, noteNotifyOutcome),
   });
   createTray(resident);
   await mainWindow.loadURL(`${APP_ORIGIN}/index.html`);
