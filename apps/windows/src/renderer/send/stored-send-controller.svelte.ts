@@ -286,13 +286,22 @@ export class StoredSendController {
   /**
    * Which attempt is current.
    *
-   * Bumped by every send, every cancel and every account change. A delayed
-   * result — a `feed` that was in flight, a `finally` from a send the user
-   * cancelled, a history read issued under the previous account — checks it
-   * before touching anything. Without it an older attempt's `finally`
-   * unconditionally cleared `busy` and refreshed history over a NEWER attempt,
-   * and a history read issued before a sign-out restored the old account's rows
-   * after it.
+   * Bumped by every send, every cancel, every account change and every
+   * selection that replaces the last one — a fresh pick, a fresh drop, Clear.
+   * A delayed result checks it before touching anything: a `feed` that was in
+   * flight, a `finally` from a send the user cancelled, main's answer to that
+   * cancellation. Without it an older attempt's `finally` unconditionally
+   * cleared `busy` and refreshed history over a NEWER attempt.
+   *
+   * A history READ is not one of them. Its rows belong to an account rather
+   * than to an attempt, so `refreshHistory` fences on `#epoch` and
+   * `#historySeq` instead — which is why `cancel` may refresh the record for
+   * the job it just stopped even when its own answer is too late to show.
+   *
+   * The superseding SELECTION belongs in that list for the same reason the
+   * others do: `pickEntries` and `clear` are reachable the moment Cancel
+   * clears `busy`, and they reset the outcome — so an answer still in flight
+   * had nothing standing between it and the fresh selection on screen.
    */
   #attempt = 0;
   /** The account generation this state belongs to. */
@@ -417,24 +426,39 @@ export class StoredSendController {
   /** The user dropped files or folders, which carry their own paths. */
   pickEntries(entries: readonly PickedEntry[]): void {
     if (this.busy) return;
+    // This selection SUPERSEDES the last send, so anything still owed to it is
+    // now stale. See `#attempt`.
+    this.#supersede();
     // Frozen here, so the array `encryptFiles` walks is the array the manifest
     // was planned from.
     this.picked = Object.freeze([...entries]);
-    this.outcome = null;
-    this.refusal = null;
-    this.link = null;
-    this.linkJobId = null;
     this.committed = 0;
     this.total = 0;
   }
 
   clear(): void {
     if (this.busy) return;
+    this.#supersede();
     this.picked = [];
+  }
+
+  /**
+   * Retire what the last send left on screen, and the replies still owed to it.
+   *
+   * The attempt bump is the part that is not merely cosmetic: without it these
+   * two cleared the outcome while a cancellation main had not yet answered was
+   * still in flight, and that answer then landed on the fresh selection.
+   */
+  #supersede(): void {
+    this.#attempt += 1;
     this.outcome = null;
     this.refusal = null;
     this.link = null;
     this.linkJobId = null;
+    // The copy confirmation's own reset is fenced by the attempt just retired,
+    // so that timer will now decline to fire. Cleared here rather than left to
+    // strand "Copied" on screen for good, over a link that is gone.
+    this.copied = null;
   }
 
   get totalBytes(): number {
@@ -576,8 +600,10 @@ export class StoredSendController {
   async cancel(): Promise<void> {
     if (!this.busy) return;
     const jobId = this.#jobId;
-    // The intent, recorded whether or not there is anything to name yet.
-    this.#attempt += 1;
+    // The intent, recorded whether or not there is anything to name yet — and
+    // held, because this is the generation main's answer will belong to.
+    const attempt = ++this.#attempt;
+    const epoch = this.#epoch;
     this.#jobId = null;
     this.busy = false;
     if (jobId === null) {
@@ -585,7 +611,20 @@ export class StoredSendController {
       this.outcome = { status: "cancelled" };
       return;
     }
-    this.outcome = await this.bridge.cancel({ jobId }).catch(() => null);
+    // Asked for the job Cancel was pressed on, exactly once, whatever the page
+    // does next: main must still stop that upload.
+    const settled = await this.bridge.cancel({ jobId }).catch(() => null);
+    // GUARDED, and this is the whole of the fix. `busy` was cleared above, so
+    // by the time this answer arrives the user may have started another send —
+    // which may already have published — signed out, or picked new files.
+    // Assigned unconditionally, a `cancelled` (or the bare `null` of a rejected
+    // channel) overwrote a newer send's published outcome and reinstated an
+    // outcome a sign-out had just cleared.
+    if (this.#current(attempt, epoch)) this.outcome = settled;
+    // NOT guarded, deliberately. This is the cancelled job's own settlement
+    // reaching the record, and its row is what the user has left to look at.
+    // `refreshHistory` carries its own epoch and sequence fence, so a stale
+    // read still cannot overwrite a newer one or another account's rows.
     await this.refreshHistory();
   }
 

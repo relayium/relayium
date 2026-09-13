@@ -13,7 +13,11 @@ import {
   retentionCapOf,
   type StoredSendBridge,
 } from "../../src/renderer/send/stored-send-controller.svelte.js";
-import type { StoredSendHistoryEntry, StoredSendStart } from "../../src/shared/ipc-contract.js";
+import type {
+  StoredSendHistoryEntry,
+  StoredSendOutcome,
+  StoredSendStart,
+} from "../../src/shared/ipc-contract.js";
 
 /**
  * A REAL 32-byte key, base64url.
@@ -688,4 +692,275 @@ describe("what a drop actually sends", () => {
     await h.controller.send();
     expect(h.seen[0]).toEqual([{ path: "plain.bin", size: 4 }]);
   });
+});
+
+// ---------------------------------------------------------------------------
+// A cancellation whose answer comes back late
+// ---------------------------------------------------------------------------
+//
+// Cancel releases the page BEFORE main is asked: `busy` is cleared and the
+// attempt bumped on the way in, which is what lets a person start another send
+// straight away. So by the time main's answer arrives the page may be somewhere
+// else entirely — a newer send uploading or already published, the account
+// gone, a fresh selection made — and that answer was written over all of them.
+//
+// Root's private probe reproduced two of these against the real rune module and
+// the real crypto; the fresh-selection ones are the same shape reached through
+// `pickEntries`/`clear`, which reset the outcome without advancing the attempt.
+
+const PUBLISHED_SECOND = { status: "published", objectId: "o-2", expiresAt: 0 } as const;
+
+const bin = (name: string, bytes = 4) => new File([new Uint8Array(bytes)], name);
+
+/**
+ * An ACKNOWLEDGED send, parked inside `feed`, cancelled with main's answer held.
+ *
+ * The barriers are entered-barriers rather than tick counts, because the whole
+ * question here is ordering: `feed` reports that `start` has been answered and
+ * the job id is held — the state Cancel is actually pressed in, as opposed to
+ * the before-acknowledgement case above — and `cancel` reports that main has
+ * the cancellation and owes an answer. Nothing below reads the clock.
+ */
+async function cancelHeldMidUpload() {
+  const feedEntered = deferred<void>();
+  const feedReply = deferred<{ expects: null }>();
+  const cancelEntered = deferred<void>();
+  /** `null` is the REJECTED channel, which the controller catches into `null`. */
+  const cancelAnswer = deferred<StoredSendOutcome | null>();
+  const secondEndEntered = deferred<void>();
+  const secondEnd = deferred<StoredSendOutcome>();
+  const cancelledJobs: string[] = [];
+  let starts = 0;
+  let historyReads = 0;
+
+  const built = bridge({
+    async start() {
+      starts += 1;
+      return starts === 1
+        ? {
+            ok: true,
+            jobId: "job-1",
+            contentKey: KEY,
+            expects: { fileIndex: 0, seq: 1, bytes: 4 },
+            cipherBytes: 4,
+            fileCount: 1,
+          }
+        : { ok: true, jobId: "job-2", contentKey: KEY, expects: null, cipherBytes: 0, fileCount: 1 };
+    },
+    async feed() {
+      feedEntered.resolve();
+      return feedReply.promise;
+    },
+    async end() {
+      secondEndEntered.resolve();
+      return secondEnd.promise;
+    },
+    async cancel(payload) {
+      cancelledJobs.push(payload.jobId);
+      cancelEntered.resolve();
+      const answer = await cancelAnswer.promise;
+      if (answer === null) throw new Error("the cancel channel rejected");
+      return answer;
+    },
+    async history() {
+      historyReads += 1;
+      return { entries: [ENTRY("job-1")] };
+    },
+  });
+
+  const controller = new StoredSendController(built.bridge);
+  controller.pick([bin("a.bin")]);
+  const first = controller.send();
+  await feedEntered.promise;
+  const cancelling = controller.cancel();
+  await cancelEntered.promise;
+  let second: Promise<void> = Promise.resolve();
+
+  return {
+    built,
+    controller,
+    cancelling,
+    cancelledJobs,
+    historyReads: () => historyReads,
+    /** A NEWER send, started in the window Cancel opened. */
+    async secondSend({ publish }: { readonly publish: boolean }) {
+      controller.pick([bin("b.bin", 8)]);
+      second = controller.send();
+      await secondEndEntered.promise;
+      if (!publish) return;
+      secondEnd.resolve(PUBLISHED_SECOND);
+      await second;
+    },
+    /** Main answers the cancellation at last. `null` rejects the channel. */
+    answerCancel(answer: StoredSendOutcome | null = { status: "cancelled" }) {
+      cancelAnswer.resolve(answer);
+    },
+    /** Release everything still held, so no case leaves work running. */
+    async finish() {
+      feedReply.resolve({ expects: null });
+      secondEnd.resolve(PUBLISHED_SECOND);
+      await Promise.all([first, second, cancelling]);
+    },
+  };
+}
+
+type HeldCancellation = Awaited<ReturnType<typeof cancelHeldMidUpload>>;
+
+/** What may happen between pressing Cancel and main answering it. */
+const SUPERSEDED: readonly {
+  readonly what: string;
+  readonly supersede: (h: HeldCancellation) => Promise<void>;
+  /** The state that must still be on screen once the late answer lands. */
+  readonly survives: StoredSendOutcome | null;
+}[] = [
+  {
+    what: "a newer send that is still uploading",
+    supersede: (h) => h.secondSend({ publish: false }),
+    survives: null,
+  },
+  {
+    what: "a newer send that has already published",
+    supersede: (h) => h.secondSend({ publish: true }),
+    survives: PUBLISHED_SECOND,
+  },
+  {
+    // A link is a key and the outcome is the other account's; `forgetAccount`
+    // cleared both, and the late answer put one back.
+    what: "the sign-out that cleared it",
+    supersede: async (h) => {
+      h.built.signOut(2);
+    },
+    survives: null,
+  },
+  {
+    what: "a fresh pick",
+    supersede: async (h) => {
+      h.controller.pick([bin("b.bin", 8)]);
+    },
+    survives: null,
+  },
+  {
+    what: "a fresh drop",
+    supersede: async (h) => {
+      h.controller.pickEntries([{ file: bin("b.bin", 8), path: "docs/b.bin" }]);
+    },
+    survives: null,
+  },
+  {
+    what: "Clear",
+    supersede: async (h) => {
+      h.controller.clear();
+    },
+    survives: null,
+  },
+];
+
+describe("a cancellation answered after the page moved on", () => {
+  for (const row of SUPERSEDED) {
+    it(`does not write its outcome over ${row.what}`, async () => {
+      const h = await cancelHeldMidUpload();
+      await row.supersede(h);
+      // Asserted BEFORE the answer lands, so a case that never reached the
+      // superseding state cannot pass by accident.
+      expect(h.controller.outcome).toEqual(row.survives);
+
+      h.answerCancel();
+      await h.cancelling;
+
+      expect(h.controller.outcome).toEqual(row.survives);
+      // And the cancellation still reached main for the job it was pressed on,
+      // exactly once: this must not be fixed by cancelling less.
+      expect(h.cancelledJobs).toEqual(["job-1"]);
+      await h.finish();
+    });
+  }
+
+  it("does not blank a newer outcome when main's answer is a rejection", async () => {
+    // The rejected channel yields `null`, which was assigned just as
+    // unconditionally — erasing a published send rather than merely mislabelling
+    // it. What a CURRENT rejected cancellation shows is unchanged; see below.
+    const h = await cancelHeldMidUpload();
+    await h.secondSend({ publish: true });
+
+    h.answerCancel(null);
+    await h.cancelling;
+
+    expect(h.controller.outcome).toEqual(PUBLISHED_SECOND);
+    await h.finish();
+  });
+
+  it("still refreshes the history for the job it cancelled", async () => {
+    // Deliberately NOT behind the guard. The cancelled job's settlement is what
+    // that read is FOR, and `refreshHistory` carries its own epoch and sequence
+    // fence, so a newer read still wins.
+    const h = await cancelHeldMidUpload();
+    h.controller.clear();
+    const before = h.historyReads();
+
+    h.answerCancel();
+    await h.cancelling;
+
+    expect(h.controller.outcome).toBeNull();
+    expect(h.historyReads()).toBe(before + 1);
+    expect(h.controller.history.map((entry) => entry.jobId)).toEqual(["job-1"]);
+    await h.finish();
+  });
+});
+
+describe("a cancellation nothing has superseded", () => {
+  for (const answer of [
+    { status: "cancelled" },
+    // Main could not establish what the job did. That is the answer, and it is
+    // the one that carries a Re-check — losing it would be worse than losing a
+    // "cancelled".
+    { status: "ambiguous", code: "no-match" },
+  ] as const) {
+    it(`shows main's ${answer.status} answer`, async () => {
+      const h = await cancelHeldMidUpload();
+      h.answerCancel(answer);
+      await h.cancelling;
+
+      expect(h.controller.outcome).toEqual(answer);
+      expect(h.controller.busy).toBe(false);
+      expect(h.cancelledJobs).toEqual(["job-1"]);
+      await h.finish();
+    });
+  }
+
+  it("leaves a rejected channel at the null outcome it already had", async () => {
+    // Unchanged on purpose. There is no authoritative answer to show, and
+    // inventing a successful cancellation — or new copy for this state — is a
+    // separate decision this fix does not make.
+    const h = await cancelHeldMidUpload();
+    h.answerCancel(null);
+    await h.cancelling;
+
+    expect(h.controller.outcome).toBeNull();
+    await h.finish();
+  });
+});
+
+describe("a selection that replaces the last send", () => {
+  for (const row of [
+    { what: "a fresh pick", act: (c: StoredSendController) => c.pick([bin("b.bin", 8)]) },
+    {
+      what: "a fresh drop",
+      act: (c: StoredSendController) => c.pickEntries([{ file: bin("b.bin", 8), path: "docs/b.bin" }]),
+    },
+    { what: "Clear", act: (c: StoredSendController) => c.clear() },
+  ]) {
+    it(`takes the copy confirmation away with the link ${row.what} replaced`, async () => {
+      // The 1500ms reset is fenced by the attempt it was issued under, and that
+      // attempt is the one being superseded here. Left alone, "Copied" would
+      // stay on screen for good, over a link that is gone.
+      const built = bridge();
+      const controller = new StoredSendController(built.bridge);
+      await controller.copyLink("job-1");
+      expect(controller.copied).toBe("copied");
+
+      row.act(controller);
+
+      expect(controller.copied).toBeNull();
+    });
+  }
 });
