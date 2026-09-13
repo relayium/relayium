@@ -155,13 +155,28 @@ Still required for parity:
 * **Real-network transfer demonstrated.** Everything proven so far is one
   runner and a loopback server.
 * **Signing, installer and upgrade acceptance**, each its own gate.
-* **A supported-version gate, before the first public release.** macOS refuses
-  to build its content at all when the served policy says the build is below
-  minimum, so a stale binary opens no socket. Windows has no equivalent and
-  there is no `/api/client-policy/windows` to read. Deferred deliberately — no
-  Windows build has ever been released, so there is nothing in the field to
-  protect — but it must ship in or before the first version it governs, because
-  a client already out there cannot be told to stop retroactively.
+* **A supported-version gate.** *Mechanism delivered 2026-09-13; the lever it
+  needs is still owner-blocked.* The client half is in
+  `src/main/policy/` with ten invariants and an adversarial case for each, and
+  `GET /api/client-policy/windows` is now implemented — serving the same
+  embedded file the shipped decoder is tested against, so the two halves cannot
+  drift apart in silence. It reaches production with the next SERVER release
+  (`release.yml` runs on a tag, and `auto-release.yml` tags weekly), not on
+  merge; until then a Windows client still falls back to its floor, which is
+  the same inert policy. The document is inert by construction (exactly
+  `EMBEDDED_FLOOR`), which is what OA-033 asked for: no minimum version yet.
+
+  Two differences from macOS remain, both recorded rather than glossed:
+
+  - macOS re-renders the moment a document lands, so a floor published now
+    takes effect now. Windows judges a launch by what the device already
+    remembers and refreshes behind it, so a floor takes effect on the NEXT
+    start. Closing that needs a push to the shell (`policy-gate.ts`).
+  - There is no admin lever. The macOS form validates a proposed minimum
+    against a verified release catalogue so an operator cannot set a floor to a
+    version that was never published; Windows has no releases to validate
+    against, and an unvalidated field could strand every installed client with
+    no build to move to. That waits for OA-029/OA-030.
 * **A real Explorer right-click.** Staging is driven in the bootstrap smoke
   through the shipping `second-instance` listener with the argv the installer's
   verbs produce, but no run has started from an actual right-click on Windows.
