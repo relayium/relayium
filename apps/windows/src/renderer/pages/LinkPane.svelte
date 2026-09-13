@@ -40,6 +40,7 @@
   import { MAX_FILES } from "../../../../../web/src/lib/manifest";
   import { sendGate, type Ticket } from "../send/send-gate.svelte.js";
   import { linkEndKey, linkIsTerminal, linkPathKey } from "../rooms/link-ending.js";
+  import { heldMessageOutcome } from "../rooms/held-message.js";
   import { connectionRefusedKey, publishFailureKey, textErrorMessageKey } from "../rooms/lane-copy.js";
   import type { PublishFailureReason } from "../../shared/ipc-contract.js";
 
@@ -434,7 +435,6 @@
   }
 
   /** Statuses from which this lane will never become `open` for this attempt. */
-  const LANE_TERMINAL: readonly string[] = ["refused", "peerBusy", "unsupported", "failed", "ended"];
 
   /**
    * The held message's two possible endings.
@@ -464,31 +464,29 @@
     const held = awaitingLane;
     if (held === null) return;
 
-    // A quit fenced this page, verification was switched on, or the link was
-    // replaced while the message was held. The lane opening afterwards is the
-    // PEER acting, not the user asking again — delivering here would send into a
-    // conversation the user never chose.
-    if (!intentHolds(awaitingIntent)) {
-      untrack(() => {
-        awaitingLane = null;
-        awaitingIntent = null;
-        sendState = "idle";
-        if (messageDraft.trim() === "") messageDraft = held;
-      });
-      return;
-    }
+    // The DECISION is in `held-message.ts`, where a test can reach it. What
+    // stays here is the writing, which only an effect can do.
+    const outcome = heldMessageOutcome({
+      status,
+      intentHolds: intentHolds(awaitingIntent),
+      sending: sending !== null,
+    });
+    if (outcome === "wait") return;
 
-    if (status === "open") {
-      if (sending !== null) return;
+    if (outcome === "deliver") {
       const intent = awaitingIntent;
       untrack(() => void deliver(held, intent));
       return;
     }
-    if (!LANE_TERMINAL.includes(status)) return;
+
+    // `abandon` and `failed` release the body the same way and differ only in
+    // what they claim about it: one says the send failed, the other says
+    // nothing, because the intent behind it stopped holding and there is no
+    // failure to report.
     untrack(() => {
       awaitingLane = null;
       awaitingIntent = null;
-      sendState = "failed";
+      sendState = outcome === "failed" ? "failed" : "idle";
       // Restored only into an empty box: a message typed while this one was
       // held belongs to the user, not to this release.
       if (messageDraft.trim() === "") messageDraft = held;
