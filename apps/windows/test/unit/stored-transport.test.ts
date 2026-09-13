@@ -226,7 +226,7 @@ describe("the ciphertext read", () => {
   it("carries no credential and no BYO opt-in header on any hop", async () => {
     const { impl, seen } = fakeFetch((request) =>
       request.url === `${ORIGIN}/api/files/${ID}/blob`
-        ? { status: 302, headers: { location: `https://n1.relayium.com/blob/${ID}` } }
+        ? { status: 302, headers: { location: `https://n5.relayium.com/blob/${ID}` } }
         : { chunks: [frame(4)] },
     );
     const body = await transport(impl).blob(ID, 100);
@@ -243,7 +243,7 @@ describe("the ciphertext read", () => {
   });
 
   it("follows central -> fleet, the ordinary unlimited-object path", async () => {
-    const fleet = `https://n7.relayium.com/blob/${ID}?tok=abc`;
+    const fleet = `https://n5.relayium.com/blob/${ID}?tok=abc`;
     const { impl, seen } = fakeFetch((request) =>
       request.url === fleet
         ? { chunks: [frame(6)] }
@@ -255,7 +255,7 @@ describe("the ciphertext read", () => {
   });
 
   it("replays central ONCE when a fleet hop answers 403 with a spent token", async () => {
-    const fleet = `https://n7.relayium.com/blob/${ID}`;
+    const fleet = `https://n5.relayium.com/blob/${ID}`;
     let fleetHits = 0;
     const { impl, seen } = fakeFetch((request) => {
       if (request.url !== fleet) return { status: 302, headers: { location: fleet } };
@@ -281,7 +281,7 @@ describe("the ciphertext read", () => {
   });
 
   it("refuses a second 403 rather than replaying forever", async () => {
-    const fleet = `https://n7.relayium.com/blob/${ID}`;
+    const fleet = `https://n5.relayium.com/blob/${ID}`;
     const { impl, seen } = fakeFetch((request) =>
       request.url === fleet ? { status: 403, chunks: [] } : { status: 302, headers: { location: fleet } },
     );
@@ -322,7 +322,7 @@ describe("the ciphertext read", () => {
 
   it("cancels the redirect response body before the next hop", async () => {
     // A hop that leaves its predecessor open holds a connection per hop.
-    const fleet = `https://n7.relayium.com/blob/${ID}`;
+    const fleet = `https://n5.relayium.com/blob/${ID}`;
     let cancelled = false;
     const impl = ((url: string, init?: RequestInit): Promise<Response> => {
       if (String(url) === fleet) {
@@ -431,10 +431,10 @@ describe("the direct-download trust boundary", () => {
 
   it("admits the fleet, the apex and a relative Location", () => {
     for (const location of [
-      "https://n1.relayium.com/blob/x",
+      "https://n5.relayium.com/blob/x",
       "https://deep.node.relayium.com/blob/x",
       "https://relayium.com/api/files/x/blob",
-      "https://n1.relayium.com:443/blob/x",
+      "https://n5.relayium.com:443/blob/x",
       "/api/files/other/blob",
     ]) {
       expect(verdict(location), location).toMatchObject({ follow: true });
@@ -459,7 +459,7 @@ describe("the direct-download trust boundary", () => {
   });
 
   it("refuses a downgrade, even from a plaintext hop", () => {
-    expect(verdict("http://n1.relayium.com/blob")).toEqual({ follow: false, reason: "insecure-scheme" });
+    expect(verdict("http://n5.relayium.com/blob")).toEqual({ follow: false, reason: "insecure-scheme" });
     // An engineering build on loopback therefore follows NO redirect at all:
     // production is the only place fleet-direct is exercised. Deliberate — a
     // plaintext hop is where a body could be substituted, and the AEAD failure
@@ -473,10 +473,10 @@ describe("the direct-download trust boundary", () => {
   });
 
   it("refuses userinfo, a fragment and a non-default port", () => {
-    expect(verdict("https://user:pass@n1.relayium.com/blob")).toEqual({ follow: false, reason: "userinfo" });
+    expect(verdict("https://user:pass@n5.relayium.com/blob")).toEqual({ follow: false, reason: "userinfo" });
     // The fragment is where a KEY lives in this product; refused, never stripped.
-    expect(verdict("https://n1.relayium.com/blob#k=VVV")).toEqual({ follow: false, reason: "fragment" });
-    expect(verdict("https://n1.relayium.com:8443/blob")).toEqual({ follow: false, reason: "port" });
+    expect(verdict("https://n5.relayium.com/blob#k=VVV")).toEqual({ follow: false, reason: "fragment" });
+    expect(verdict("https://n5.relayium.com:8443/blob")).toEqual({ follow: false, reason: "port" });
   });
 
   it("refuses a missing or unusable Location", () => {
@@ -485,7 +485,7 @@ describe("the direct-download trust boundary", () => {
   });
 
   it("refuses a repeat and an over-long chain", () => {
-    const seen = "https://n1.relayium.com/blob/x";
+    const seen = "https://n5.relayium.com/blob/x";
     expect(verdict(seen, { visited: [seen] })).toEqual({ follow: false, reason: "loop" });
     expect(verdict(seen, { hop: MAX_BLOB_REDIRECTS })).toEqual({ follow: false, reason: "too-many-hops" });
   });

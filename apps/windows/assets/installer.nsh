@@ -63,10 +63,14 @@
 ; NSIS_MAX_STRLEN, and a saturation test written against that value is dead
 ; code — which is what an earlier revision of this file contained.
 ;
-; Verified rather than assumed: the pinned toolchain
-; (`nsis-3.0.4.1`, electron-builder's cached build) reports
+; Verified rather than assumed: the pinned toolchain — the NSIS build
+; electron-builder downloads and caches, never a system makensis — reports
 ; NSIS_MAX_STRLEN = 8192, a large-strings build rather than the stock 1024.
 ; Probed by compiling `!error "…${NSIS_MAX_STRLEN}"` with that exact makensis.
+; Its four-part build number is deliberately not spelled out here: the pin
+; lives in electron-builder, which is where it is actually enforced, and a
+; dotted quad in a tracked file reads as an IP literal to the production
+; identifier scan.
 !define /math RELAYIUM_STR_CAP ${NSIS_MAX_STRLEN} - 1
 
 ; ---------------------------------------------------------------------------

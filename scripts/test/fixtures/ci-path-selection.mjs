@@ -49,21 +49,32 @@
 
 export const PATH_MATRIX = [
   ["server/account/pairroom.go",
-    ["android-interop.yml", "go.yml", "native-web-pairing.yml"],
-    "server-only: no NATIVE-BUILD runner may start — no macOS signing lane, no iOS lane, no "
-    + "Android build/lint gate. The two acceptances are a different thing from a native build: "
-    + "both COMPILE AND RUN this server as the signalling half of a real cross-client transfer, "
-    + "so a change here can break either one with no edit under apps/ at all. Android joined "
-    + "this row when its interop lane stopped omitting its own inputs"],
+    ["android-interop.yml", "go.yml", "native-web-pairing.yml", "windows.yml"],
+    "server-only: none of the three APP lanes may start — not macos.yml, not ios.yml, not "
+    + "android.yml. That is a claim about app BUILD AND RELEASE lanes, not about runner "
+    + "hardware: native-web-pairing.yml runs on a macOS runner of its own, because an "
+    + "acceptance is a different thing from building an app. What does start is every lane "
+    + "that COMPILES AND RUNS this server: go.yml, the two acceptances that drive it as the "
+    + "signalling half of a real cross-client "
+    + "transfer, and windows.yml, whose `realtime` job does the same and names `server/**` for "
+    + "exactly that reason. So a change here can break any of them with no edit under apps/ at "
+    + "all. Android joined this row when its interop lane stopped omitting its own inputs; "
+    + "Windows joined it when its realtime job began compiling and running the real server"],
   ["server/go.mod",
-    ["android-interop.yml", "go.yml", "native-web-pairing.yml"],
-    "the server module: still not a native BUILD trigger, and still an input to both acceptances "
-    + "for the same reason — each one builds this module from source"],
+    ["android-interop.yml", "go.yml", "native-web-pairing.yml", "windows.yml"],
+    "the server module: still not a trigger for macos.yml, ios.yml or android.yml — the app "
+    + "build and release lanes — and still an input to every lane that builds this module from "
+    + "source: the two acceptances, one of which spends a macOS runner on it, and windows.yml's "
+    + "realtime job alike"],
   ["web/src/lib/pair.ts",
     ["android-interop.yml", "native-web-pairing.yml", "web.yml", "windows.yml"],
-    "web-only: no native BUILD runner may start. Both cross-client acceptances build and serve "
-    + "the Web bundle this file is compiled into, and the peer they drive it against is a real "
-    + "native client, so a realtime-wire or pairing change here breaks them directly"],
+    "web-only in the sense that matters here: none of macos.yml, ios.yml or android.yml may "
+    + "start — the app build and release lanes. native-web-pairing.yml does start, on a macOS "
+    + "runner: both cross-client acceptances build and serve the Web bundle this file is compiled "
+    + "into, and the peer they drive it against is a real native client, so a realtime-wire or "
+    + "pairing change here breaks them directly. windows.yml is a NATIVE BUILD lane and is in "
+    + "this set on purpose: the Windows client compiles this module out of `web/src/lib` rather "
+    + "than vendoring a copy, which is why this row cannot claim that no native build starts"],
   ["apps/mac/Relayium/AccountView.swift", ["macos.yml"],
     "macOS-only source: no iOS runner, and no pairing runner either. The acceptance builds "
     + "`server` and `apps/RelayiumKit` and serves the Web bundle; it never reads, compiles or "
@@ -180,12 +191,16 @@ export const PATH_MATRIX = [
     + "evidence for the one thing the wire acceptance stubs. Same emulator boot, same lane and "
     + "no other; it builds the Web bundle and the Go server like the wire run, but those trees "
     + "already reach this workflow through `web/**`/`server/**`"],
-  ["web/e2e/android-interop.mjs", ["android-interop.yml", "native-web-pairing.yml", "web.yml"],
-    "the browser half the acceptance drives. All three lanes now reach it through `web/**` "
+  ["web/e2e/android-interop.mjs",
+    ["android-interop.yml", "native-web-pairing.yml", "web.yml", "windows.yml"],
+    "the browser half the acceptance drives. Three of the four lanes reach it through `web/**` "
     + "rather than by name — web.yml's own suite, the pairing acceptance that serves the "
-    + "bundle, and the Android lane that drives this exact file. The Android filter used to "
-    + "name this ONE path out of web/ while omitting the tree around it, which is how a "
-    + "workflow can watch its harness and miss the product the harness exercises"],
+    + "bundle, and the Android lane that drives this exact file — and windows.yml reaches it "
+    + "through `web/e2e/**`, the whole directory rather than the files its realtime job imports "
+    + "today, because that harness is shared and a filter that under-triggers is a Windows lane "
+    + "which silently stops running. The Android filter used to name this ONE path out of web/ "
+    + "while omitting the tree around it, which is how a workflow can watch its harness and miss "
+    + "the product the harness exercises"],
   ["scripts/windows-package.ps1", [],
     "a future Windows packaging script: `scripts/**` in a macOS-runner workflow is how it would "
     + "have inherited a macOS runner without anybody choosing that"],

@@ -172,7 +172,7 @@ describeOnPosix("the hop policy", () => {
     // `*.relayium.com` governs opaque ciphertext that fails an AEAD check when
     // it is wrong. Sharing it here would widen what may hand this app an
     // executable.
-    expect(verdict("https://n1.relayium.com/Setup.exe")).toMatchObject({
+    expect(verdict("https://n5.relayium.com/Setup.exe")).toMatchObject({
       follow: false,
       reason: "untrusted-host",
     });
