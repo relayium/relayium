@@ -177,7 +177,7 @@ async function main() {
     ["needs-account", { status: { kind: "needs-account" } }, "inbox-sign-in"],
     ["account-unreadable", { status: { kind: "account-unreadable" } }, "inbox-store-unreadable"],
     ["disabled", { status: { kind: "disabled" }, enabled: false, policy: "off" }, "inbox-enable"],
-    ["folder-missing", { status: { kind: "folder-missing" } }, "inbox-folder-missing"],
+    ["folder-missing", { status: { kind: "folder-missing", problem: "missing" } }, "inbox-folder-missing"],
     ["starting", { status: { kind: "starting" } }, "inbox-starting"],
     ["receiving", { status: { kind: "receiving" } }, "inbox-receiving"],
     ["idle", { status: { kind: "idle", pending: 0 } }, "inbox-idle"],
@@ -192,6 +192,43 @@ async function main() {
       "inbox-offline",
     ],
   ];
+  // The three folder problems, each its own sentence.
+  //
+  // One title and body used to cover all three, and the probe behind them was
+  // a boolean. So a folder that was present but unreadable, and a path a FILE
+  // had taken over, both said "the receiving folder is not there" — and a
+  // folder that could not be written never reached this state at all, because
+  // nothing checked.
+  const FOLDER_PROBLEMS = ["missing", "not-a-directory", "not-writable"];
+  const folderSaid = {};
+  for (const problem of FOLDER_PROBLEMS) {
+    await js(`window.__push(${JSON.stringify({ status: { kind: "folder-missing", problem } })})`);
+    equal(`${problem}: the card renders`, await js(`window.__count('[data-test="inbox-folder-missing"]')`), 1);
+    const said = await js(`window.__text('[data-test="inbox-folder-missing"]')`);
+    check(`${problem}: it says something`, (said ?? "").length > 0, said);
+    folderSaid[problem] = said;
+  }
+  check(
+    "the three folder problems read differently",
+    new Set(Object.values(folderSaid)).size === FOLDER_PROBLEMS.length,
+    JSON.stringify(folderSaid),
+  );
+  check(
+    "an unwritable folder is not called missing",
+    !/not there|cannot be found/i.test(folderSaid["not-writable"] ?? ""),
+    folderSaid["not-writable"],
+  );
+  check(
+    "and it names both causes",
+    /permission/i.test(folderSaid["not-writable"] ?? "") && /full/i.test(folderSaid["not-writable"] ?? ""),
+    folderSaid["not-writable"],
+  );
+  check(
+    "a replaced path is not called missing either",
+    !/not there|cannot be found/i.test(folderSaid["not-a-directory"] ?? ""),
+    folderSaid["not-a-directory"],
+  );
+
   const statusTexts = {};
   for (const [name, view, hook] of STATUSES) {
     await js(`window.__push(${JSON.stringify(view)})`);

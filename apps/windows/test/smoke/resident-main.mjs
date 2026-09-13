@@ -1010,7 +1010,11 @@ async function main() {
             ? makeDestination({ manifest: request.manifest })
             : makeWritingDestination({ ...request, rootPath: inbox.writeTo }),
         resolveDevice: async () => inbox.device,
-        directoryUsable: async () => inbox.folderUsable,
+        // A PROBE now, not a boolean: the service asks which problem a folder
+        // has so the screen can say which. `missing` is what this driver's
+        // `folderUsable = false` always meant.
+        directoryUsable: async () =>
+          inbox.folderUsable ? { ok: true } : { ok: false, problem: "missing" },
         backoff: { idle: 3600, afterWork: 3600, first: 3600, cap: 3600, blocked: 3600 },
       },
       // Device Inbox SEND. Only the HTTP is injected: the coordinator, the plan

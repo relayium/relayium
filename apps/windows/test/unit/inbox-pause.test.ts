@@ -369,7 +369,7 @@ async function serviceIn(
         },
       }) as never,
     resolveDevice: async () => ({ id: "dev-1", name: "A PC" }),
-    directoryUsable: async () => true,
+    directoryUsable: async () => ({ ok: true }) as const,
     makeDestination: async () => ({
       fileCount: 0,
       assertAuthority() {},
