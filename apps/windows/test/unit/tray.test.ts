@@ -21,6 +21,7 @@ const actions = (nearbyActive = true, inboxPaused = false, over = {}) => ({
   canOpenNotificationSettings: () => true,
   openNotificationSettings: vi.fn(),
   accountIdentity: () => "",
+  versionBlocked: () => false,
   quit: vi.fn(),
   ...over,
 });
@@ -260,5 +261,91 @@ describe("a notification that did not appear", () => {
       expect(said).not.toContain("已关闭");
     }
     expect(ZH_HANS["resident.tray.notifyBlocked"]).not.toBe(EN["resident.tray.notifyBlocked"]);
+  });
+});
+
+describe("a build the version gate has stopped", () => {
+  // macOS swaps its MenuBarExtra for `MenuBarVersionBlock` when a build is
+  // blocked, with a one-line reason: a build the product refuses to run could
+  // otherwise be put back into service from a menu. Windows had no equivalent —
+  // the tray offered Resume Inbox and Resume Nearby whatever the gate said,
+  // while the window had replaced the whole product with an unsupported card.
+
+  const en = translator("en");
+  const blocked = () => trayMenuTemplate(en, actions(true, false, { versionBlocked: () => true }));
+  // `hasEntry` and `entryFor` above already own "find an item by label"; this
+  // is the one thing they cannot answer — what the WHOLE menu contains, which
+  // is the question when the assertion is about what must NOT be there.
+  const labels = (menu: readonly TrayMenuEntry[]): string[] =>
+    menu.flatMap((entry) => ("label" in entry ? [entry.label] : []));
+
+  it("says what is required", () => {
+    expect(labels(blocked())).toContain(EN["resident.tray.versionBlocked"]);
+  });
+
+  it("offers no control that could put the build back into service", () => {
+    // BY NAME against the ordinary menu, not by counting: an item added to the
+    // unblocked template later has to be considered here rather than silently
+    // inheriting permission to appear.
+    const ordinary = labels(trayMenuTemplate(en, actions(false, true)));
+    const allowed = new Set([
+      EN["resident.tray.versionBlocked"],
+      EN["resident.tray.show"],
+      EN["resident.tray.updates"],
+      EN["resident.tray.quit"],
+    ]);
+    expect(labels(blocked()).filter((label) => !allowed.has(label))).toEqual([]);
+    // And the ones that specifically restart a feature are named, so this fails
+    // loudly rather than by an empty diff if the sets ever line up by accident.
+    for (const gone of [
+      EN["resident.tray.resumeNearby"],
+      EN["resident.tray.resumeInbox"],
+      EN["resident.tray.nearby"],
+      EN["resident.tray.inbox"],
+    ]) {
+      expect(ordinary).toContain(gone);
+      expect(labels(blocked())).not.toContain(gone);
+    }
+  });
+
+  it("keeps the way back to the window and the way out", () => {
+    // Deliberate deviation from macOS, where the Dock icon reaches the window.
+    // A resident Windows build with a hidden window has this menu as its only
+    // route back, and what it opens is the blocked card — which cannot start
+    // work. Leaving only Quit would strand somebody in the one state whose
+    // whole job is to say what to do next.
+    const menu = blocked();
+    // `click in entry` rather than `.click`: `TrayStatusLine` has no such
+    // property, and asserting it is a function is exactly asserting this item
+    // is not a status line.
+    for (const label of [EN["resident.tray.show"], EN["resident.tray.quit"]]) {
+      const entry = entryFor(menu, label);
+      expect("click" in entry && typeof entry.click === "function").toBe(true);
+    }
+  });
+
+  it("routes to the update page rather than acting", () => {
+    const openUpdates = vi.fn();
+    const menu = trayMenuTemplate(en, actions(true, false, {
+      versionBlocked: () => true,
+      openUpdates,
+    }));
+    const updates = entryFor(menu, EN["resident.tray.updates"]);
+    if ("click" in updates) updates.click?.();
+    expect(openUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it("says it in both maintained languages", () => {
+    const zh = trayMenuTemplate(translator("zh-Hans"), actions(true, false, {
+      versionBlocked: () => true,
+    }));
+    expect(labels(zh)).toContain(ZH_HANS["resident.tray.versionBlocked"]);
+    expect(ZH_HANS["resident.tray.versionBlocked"]).not.toBe(EN["resident.tray.versionBlocked"]);
+  });
+
+  it("is not shown to a build that is merely out of date", () => {
+    // `recommended` is a dismissible line above a working product, not a stop.
+    // A tray that emptied itself for it would be the gate overreaching.
+    expect(hasEntry(trayMenuTemplate(en, actions()), EN["resident.tray.versionBlocked"])).toBe(false);
   });
 });
