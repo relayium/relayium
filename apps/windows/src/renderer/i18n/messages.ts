@@ -140,6 +140,23 @@ export const en = {
   textFlooding: "The other device sent too many messages; the session was closed.",
   textFailed: "The message session failed.",
   textDropped: "That message was not sent. It is still in the box.",
+  /**
+   * Clearing is LOCAL, and every one of these says so.
+   *
+   * The transcript is memory-only and the workspace outlives navigation — a
+   * sidebar click deliberately does not destroy a conversation — so until now
+   * the only way to get messages off this screen was to end the link. That is
+   * a poor trade for somebody who wants the text gone and the connection kept.
+   *
+   * It removes messages from THIS PC. The other device keeps its own, and
+   * implying otherwise would be a claim about a machine this app cannot touch.
+   */
+  textClear: "Clear conversation",
+  textClearTitle: "Clear this conversation?",
+  textClearBody:
+    "These messages are only on this PC and clearing them cannot be undone. The other device keeps its own copy, and the connection stays open.",
+  textClearConfirm: "Clear",
+  textClearCancel: "Keep them",
   linkSend: "Send",
   linkVerifyTitle: "Check this code matches",
   linkVerifyBody: "Both devices should show the same code.",
@@ -862,6 +879,12 @@ export const zh: Record<MessageKey, string> = {
   textFlooding: "对方发得太快，会话已关闭。",
   textFailed: "消息会话失败。",
   textDropped: "这条消息没有发送成功，内容仍保留在输入框里。",
+  textClear: "清除对话",
+  textClearTitle: "清除这段对话？",
+  textClearBody:
+    "这些消息只在这台电脑上，清除后无法恢复。对方设备上的记录不受影响，连接也会保持。",
+  textClearConfirm: "清除",
+  textClearCancel: "保留",
   linkSend: "发送",
   linkVerifyTitle: "核对这串验证码",
   linkVerifyBody: "两台设备上显示的验证码应当一致。",
