@@ -77,6 +77,8 @@ export type MessageKey =
   | "resident.notify.linkReadyBody"
   | "resident.notify.incomingTitle"
   | "resident.notify.incomingBody"
+  | "resident.notify.incomingTextTitle"
+  | "resident.notify.incomingTextBody"
   | "resident.tray.revealInbox"
   | "resident.firstClose.title"
   | "resident.firstClose.body"
@@ -207,6 +209,11 @@ export const EN: Catalog = {
   "resident.notify.linkReadyBody": "Open Relayium to copy it.",
   "resident.notify.incomingTitle": "Someone wants to send you files",
   "resident.notify.incomingBody": "Open Relayium to accept or decline.",
+  // A MESSAGE session, not files. Saying "send you files" about a conversation
+  // is the defect this pair exists to avoid, and reusing the file wording
+  // would have been the cheaper mistake.
+  "resident.notify.incomingTextTitle": "Someone wants to send you a message",
+  "resident.notify.incomingTextBody": "Open Relayium to accept or decline.",
   "resident.tray.revealInbox": "Show the receive folder",
   "resident.firstClose.title": "Relayium is still running",
   "resident.firstClose.body":
@@ -324,6 +331,8 @@ export const ZH_HANS: Catalog = {
   "resident.notify.linkReadyTitle": "链接已就绪",
   "resident.notify.linkReadyBody": "打开 Relayium 即可复制。",
   "resident.notify.incomingTitle": "有人想向你发送文件",
+  "resident.notify.incomingTextTitle": "有人想向你发送消息",
+  "resident.notify.incomingTextBody": "打开 Relayium 接受或拒绝。",
   "resident.notify.incomingBody": "打开 Relayium 以接受或拒绝。",
   "resident.tray.revealInbox": "显示接收文件夹",
   "resident.firstClose.title": "Relayium 仍在运行",

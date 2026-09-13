@@ -691,6 +691,14 @@
   let announcedSas = new Set<RoomController>();
   /** The rule lives in its own module, where it can be tested. */
   const offers = new OfferAnnouncer<RoomController, object>();
+  /**
+   * The same rule for a message REQUEST, in its own announcer.
+   *
+   * Not the same instance: two independent offers can be outstanding on one
+   * room — a file batch and a conversation — and one announcer keyed by room
+   * would let whichever arrived second silence the first.
+   */
+  const textOffers = new OfferAnnouncer<RoomController, object>();
   $effect(() => {
     void revision;
     for (const room of [lanRoom, pairRoom]) {
@@ -727,6 +735,28 @@
       // looking at the offer card does not need telling about it.
       if (offers.shouldAnnounce(room, room.workspace.incoming)) {
         void bridge.resident.notify({ kind: "incoming" }).catch(() => undefined);
+      }
+
+      // ## A conversation nobody has answered yet
+      //
+      // Every word of the reasoning above applies: the peer sent the request,
+      // nothing was clicked here, the window may not be in front of anybody,
+      // and the sender sits at `waitingAccept` until it is answered. macOS
+      // announces it (`notify.incomingText`) and this client did not.
+      //
+      // A SEPARATE kind, not a second use of `incoming` — that one says files,
+      // and saying it about a conversation is the defect this avoids rather
+      // than the shortcut it looks like.
+      //
+      // Keyed by a token that changes with the request rather than by the
+      // status string, because `incomingRequest` is one value: a second
+      // conversation after the first was declined has to be announceable, and
+      // a shared string would look identical to the one already announced.
+      const request = room.workspace.text.status === "incomingRequest"
+        ? { generation: room.workspace.linkGeneration }
+        : null;
+      if (textOffers.shouldAnnounce(room, request)) {
+        void bridge.resident.notify({ kind: "incoming-text" }).catch(() => undefined);
       }
     }
   });

@@ -445,6 +445,7 @@ export class ResidentRuntime {
       attention: { kind: "attention" },
       "saved-message": { kind: "saved-message" },
       incoming: { kind: "incoming" },
+      "incoming-text": { kind: "incoming-text" },
     };
     this.notify(EVENT[notice]);
   }

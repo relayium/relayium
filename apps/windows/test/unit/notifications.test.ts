@@ -31,6 +31,31 @@ describe("an offer nobody has answered yet", () => {
   });
 });
 
+describe("a message request is not a file offer", () => {
+  it("says a message, not files", () => {
+    // The shortcut this avoids was reusing `incoming`, whose title is "Someone
+    // wants to send you files". A conversation is not files, and the person
+    // reading a lock screen has no way to find out otherwise.
+    for (const locale of ["en", "zh-Hans"] as const) {
+      const t = translator(locale);
+      const text = present({ kind: "incoming-text" }, t);
+      const files = present({ kind: "incoming" }, t);
+      expect(text.title, locale).not.toBe(files.title);
+      expect(text.title.trim(), locale).not.toBe("");
+    }
+  });
+
+  it("carries no peer, no message and no count", () => {
+    // Same rule as the file offer beside it: shown where anyone standing there
+    // can read it.
+    const content = present({ kind: "incoming-text" }, translator("en"));
+    const said = `${content.title} ${content.body}`;
+    for (const leak of ["@", "http", ":\\", "/", "0", "1", "2", "3"]) {
+      expect(said, leak).not.toContain(leak);
+    }
+  });
+});
+
 describe("an upload that finished says so, and says nothing else", () => {
   it("names neither the link nor anything in it", () => {
     // The link IS the secret: its fragment carries the key. A notification is
@@ -60,14 +85,20 @@ describe("an upload that finished says so, and says nothing else", () => {
 
 describe("notifications say counts and closed codes, nothing else", () => {
   it("renders every case in both languages", () => {
-    const events: NotificationEvent[] = [
-      { kind: "saved", files: 3 },
-      { kind: "saved-message" },
-      { kind: "attention" },
-      { kind: "failed" },
-      { kind: "link-ready" },
-      { kind: "incoming" },
-    ];
+    // TOTAL over the union by type, not a list somebody remembers to extend.
+    // As a plain array this covered six kinds and a seventh would have shipped
+    // with no copy in either language and nothing saying so — which is exactly
+    // what `incoming-text` was about to do.
+    const byKind = {
+      saved: { kind: "saved", files: 3 },
+      "saved-message": { kind: "saved-message" },
+      attention: { kind: "attention" },
+      failed: { kind: "failed" },
+      "link-ready": { kind: "link-ready" },
+      incoming: { kind: "incoming" },
+      "incoming-text": { kind: "incoming-text" },
+    } as const satisfies Record<NotificationEvent["kind"], NotificationEvent>;
+    const events: NotificationEvent[] = Object.values(byKind);
     for (const event of events) {
       for (const locale of ["en", "zh-Hans"] as const) {
         const content = present(event, translator(locale));
