@@ -510,7 +510,10 @@ func (h *serveHandler) serve(conn net.Conn) (ok bool) {
 	// Wrap in an idle-deadline conn: post-approval, a stalled peer must not hold a
 	// goroutine + concurrency slot forever (the handshake deadline was cleared
 	// above because large receives legitimately take long).
-	rep, err := xfer.Receive(&idleConn{Conn: tconn, idle: transferIdleTimeout}, h.dir, xfer.RecvOpts{NoResume: h.noResume, AllowDelete: h.allowDelete})
+	// AllowSync: this listener was started deliberately as a mirror target for
+	// fingerprint-authorized peers, so replacing files under --dir is its job.
+	// `receive`/`pull` do not set it.
+	rep, err := xfer.Receive(&idleConn{Conn: tconn, idle: transferIdleTimeout}, h.dir, xfer.RecvOpts{NoResume: h.noResume, AllowSync: true, AllowDelete: h.allowDelete})
 	if err != nil {
 		fmt.Fprintf(h.stderr, "receive from %s (%s): %v\n", fp, remote, err)
 		return false

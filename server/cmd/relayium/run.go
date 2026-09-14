@@ -92,6 +92,29 @@ type duplex struct {
 	io.Writer
 }
 
+// helperStdio is the stream the hidden `__recv`/`__send` helpers speak over: the
+// stdio of the SSH session that started them. A var so tests can drive those
+// handlers over a pipe.
+var helperStdio = func() io.ReadWriter { return duplex{Reader: os.Stdin, Writer: os.Stdout} }
+
+// sshDial is `pull`'s transport. A var so tests can drive runPull against a
+// remote sender on a pipe.
+var sshDial = func(e xfer.Endpoint, remoteCmd string, o sshx.Opts) (io.ReadWriteCloser, error) {
+	sess, err := sshx.Dial(e, remoteCmd, o)
+	if err != nil {
+		return nil, err
+	}
+	return sess, nil
+}
+
+// peerReceive is the receiving half of `receive` and `pull`: the two commands
+// whose bytes come from a process this side did not start. Neither authorizes
+// sync, so a peer's Hello.Sync is refused rather than obeyed. One function so
+// the two cannot drift apart.
+func peerReceive(rw io.ReadWriter, destDir string, noResume bool) (xfer.Report, error) {
+	return xfer.Receive(rw, destDir, xfer.RecvOpts{NoResume: noResume})
+}
+
 // Run dispatches a subcommand and returns a process exit code.
 func Run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
@@ -393,12 +416,12 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 	destDir := rest[1]
 	opts := sshx.Opts{IdentityFile: f.identity, Port: f.port}
 	// Pull requires relayium on the remote (it acts as the sender).
-	sess, err := sshx.Dial(src, "relayium __send "+sshx.ShellQuote(src.Path), opts)
+	sess, err := sshDial(src, "relayium __send "+sshx.ShellQuote(src.Path), opts)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	rep, err := xfer.Receive(sess, destDir, xfer.RecvOpts{NoResume: f.noResume})
+	rep, err := peerReceive(sess, destDir, f.noResume)
 	cerr := sess.Close()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -423,8 +446,10 @@ func runRecv(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "__recv needs <destDir>")
 		return 2
 	}
-	rw := duplex{Reader: os.Stdin, Writer: os.Stdout}
-	rep, err := xfer.Receive(rw, fs.Arg(0), xfer.RecvOpts{NoResume: noResume, AllowDelete: true})
+	// AllowSync: `__recv` is the receiver half of the user's own push/sync,
+	// started by their own SSH session and running as them. `sync` over SSH is
+	// this path.
+	rep, err := xfer.Receive(helperStdio(), fs.Arg(0), xfer.RecvOpts{NoResume: noResume, AllowSync: true, AllowDelete: true})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -443,8 +468,7 @@ func runSend(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	xfer.WarnIfEmpty(m, stderr)
-	rw := duplex{Reader: os.Stdin, Writer: os.Stdout}
-	if _, err := xfer.Send(rw, m, srcs, xfer.SendOpts{}); err != nil {
+	if _, err := xfer.Send(helperStdio(), m, srcs, xfer.SendOpts{}); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}

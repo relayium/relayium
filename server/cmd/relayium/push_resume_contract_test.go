@@ -82,16 +82,19 @@ func TestOrdinaryPushRefusesAPartialDestinationInsteadOfResuming(t *testing.T) {
 // people at. Asserted here so "push does not resume" cannot be read as
 // "resume does not exist".
 //
-// The discriminator is the same one internal/xfer uses: seed the destination
-// with the WRONG prefix. If the on-disk bytes are reused (resume), the merged
-// file cannot match the source SHA-256 and the file is reported failed; if they
-// were ignored, the transfer would simply succeed. Counting sent bytes would
-// not work — Progress reports the cumulative position, which ends at the file
-// size either way.
+// The discriminator is the bytes actually put on the wire: Progress reports a
+// cumulative position that ends at the file size whether the tail or the whole
+// file was sent. A matching prefix must send less; a prefix that turns out not
+// to be one must still end with the file correct on disk, because the receiver
+// answers the prefix proof by asking for the whole file (AUD-05).
+//
+// The file is deliberately larger than a chunk: a resume carries a fixed
+// ~80-byte prefix proof, so resuming a file smaller than that legitimately puts
+// MORE on the wire than sending it whole.
 func TestSyncResumesWherePushRefuses(t *testing.T) {
-	full := []byte("0123456789")
+	full := bytes.Repeat([]byte("0123456789"), 6<<10) // 60 KiB
 
-	run := func(t *testing.T, prefix []byte) (xfer.Report, []byte) {
+	run := func(t *testing.T, prefix []byte) (xfer.Report, []byte, int64) {
 		t.Helper()
 		srcRoot := t.TempDir()
 		if err := os.WriteFile(filepath.Join(srcRoot, "big.bin"), full, 0o644); err != nil {
@@ -106,17 +109,22 @@ func TestSyncResumesWherePushRefuses(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(dst, base), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(dst, base, "big.bin"), prefix, 0o644); err != nil {
-			t.Fatal(err)
+		if len(prefix) > 0 {
+			if err := os.WriteFile(filepath.Join(dst, base, "big.bin"), prefix, 0o644); err != nil {
+				t.Fatal(err)
+			}
 		}
 		cSend, cRecv := net.Pipe()
 		errc := make(chan error, 1)
+		counted := &countingWire{Conn: cSend}
 		go func() {
-			_, err := xfer.Send(cSend, m, srcs, xfer.SendOpts{Sync: true})
+			_, err := xfer.Send(counted, m, srcs, xfer.SendOpts{Sync: true})
 			cSend.Close()
 			errc <- err
 		}()
-		rep, rerr := xfer.Receive(cRecv, dst, xfer.RecvOpts{})
+		// A mirror listener (`serve`, or `__recv` over the user's own SSH
+		// session) is what authorizes sync; `receive`/`pull` refuse it.
+		rep, rerr := xfer.Receive(cRecv, dst, xfer.RecvOpts{AllowSync: true})
 		cRecv.Close()
 		if rerr != nil {
 			t.Fatalf("sync onto a partial destination: %v", rerr)
@@ -128,32 +136,53 @@ func TestSyncResumesWherePushRefuses(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return rep, got
+		return rep, got, counted.n
 	}
 
-	// A correct prefix: sync completes the file where push would have refused.
+	_, _, whole := run(t, nil) // the yardstick: nothing on disk, whole file sent
+
+	// A correct prefix: sync completes the file where push would have refused,
+	// and sends less than the whole file doing it.
 	t.Run("correct prefix completes", func(t *testing.T) {
-		rep, got := run(t, full[:4])
+		rep, got, sent := run(t, full[:40<<10])
 		if len(rep.Failed) != 0 {
 			t.Fatalf("sync reported failures: %v", rep.Failed)
 		}
-		if string(got) != string(full) {
-			t.Errorf("sync produced %q, want %q", got, full)
+		if !bytes.Equal(got, full) {
+			t.Errorf("sync produced %d bytes, want the %d-byte source", len(got), len(full))
+		}
+		if sent >= whole {
+			t.Errorf("sent %d bytes against %d for a full send: the matching prefix was not resumed", sent, whole)
 		}
 	})
 
-	// A wrong prefix: the bytes on disk were reused, so verification fails.
-	// That failure IS the proof that resume engaged.
-	t.Run("wrong prefix is reused and then caught", func(t *testing.T) {
-		rep, got := run(t, []byte("XXXX"))
-		if len(rep.Failed) != 1 {
-			t.Fatalf("sync reported %v failures, want exactly 1 — the on-disk prefix "+
-				"was not reused, so resume did not engage", rep.Failed)
+	// A prefix that is not one: the receiver refuses to reuse those bytes and
+	// takes the file whole, so the user ends up with the source content rather
+	// than a stale file that fails forever.
+	t.Run("mismatching prefix is refused and the file resent whole", func(t *testing.T) {
+		rep, got, sent := run(t, bytes.Repeat([]byte("X"), 40<<10))
+		if len(rep.Failed) != 0 {
+			t.Fatalf("sync reported %v as failed; a destination that is not a prefix must recover", rep.Failed)
 		}
-		if string(got) != "XXXX" {
-			t.Errorf("the destination is now %q; a file that fails verification must not be installed", got)
+		if !bytes.Equal(got, full) {
+			t.Errorf("the destination holds %d bytes, want the %d-byte source content", len(got), len(full))
+		}
+		if sent < whole {
+			t.Errorf("sent %d bytes, fewer than the %d a full send takes: the wrong prefix was reused", sent, whole)
 		}
 	})
+}
+
+// countingWire records what the sender actually wrote.
+type countingWire struct {
+	net.Conn
+	n int64
+}
+
+func (c *countingWire) Write(b []byte) (int, error) {
+	n, err := c.Conn.Write(b)
+	c.n += int64(n)
+	return n, err
 }
 
 // And the help must keep saying which is which.

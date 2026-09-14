@@ -30,6 +30,14 @@ func refuse(w io.Writer, code string, err error) error {
 type RecvOpts struct {
 	NoResume    bool
 	AllowDelete bool // sync mode: honor a Hello.Delete mirror request
+	// AllowSync authorizes the peer's Hello.Sync request against this
+	// destination: skipping unchanged files, resuming into an existing file,
+	// preserving the source mtime, and replacing a file that is already here.
+	//
+	// It is a property of the local invocation, never of the peer, so a peer's
+	// own flag can never widen what this side permits. `serve` and the `__recv`
+	// helper set it; `receive` and `pull` do not.
+	AllowSync bool
 }
 
 // Receive accepts a pushed batch into destDir. It reads the manifest, reports
@@ -58,10 +66,20 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 		}
 		return Report{}, err
 	}
+	// Hello.Sync asks to replace; AllowSync is this side's answer. An
+	// unauthorized sync fails closed for the whole transfer — before any resume
+	// offer and any byte of body — rather than downgrading silently. Past this
+	// point `sync` carries the authorization to every operation that can replace.
+	if hello.Sync && !opts.AllowSync {
+		return Report{}, refuse(rw, ErrCodeSyncNotAllowed,
+			errors.New("this receiver does not accept sync: it never replaces files that are already here"))
+	}
+	sync := hello.Sync && opts.AllowSync
+
 	// A one-shot receive must never silently replace files already owned by the
 	// user. `sync` is the explicit overwrite/mirror operation; ordinary push
 	// refuses collisions before telling the sender to stream any bytes.
-	if !hello.Sync {
+	if !sync {
 		for _, f := range m.Files {
 			dest, err := safeJoin(destDir, f.Path)
 			if err != nil {
@@ -79,11 +97,20 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 	}
 
 	rs := ResumeState{}
-	if hello.Sync && !opts.NoResume {
+	if sync && !opts.NoResume {
 		rs = syncStateFor(destDir, m)
 	} else if !opts.NoResume {
 		rs = resumeStateFor(destDir, m)
 	}
+	// An offset merges bytes already on this disk into the result, so it is only
+	// offered to a sender that will prove they are a prefix of what it is sending
+	// and restart from 0 when they are not. A sender that cannot do both gets the
+	// whole file: that costs bandwidth, never correctness. Skip (same size AND
+	// mtime) merges nothing and needs no proof.
+	if !hello.ResumeProof {
+		rs.Entries = nil
+	}
+	rs.ResumeProof = hello.ResumeProof
 	if err := WriteJSON(rw, MsgResume, rs); err != nil {
 		return Report{}, err
 	}
@@ -128,33 +155,35 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 		if err != nil {
 			return rep, err
 		}
-		sum, staged, werr := writeFileBody(rw, destDir, dest, f, fs.Offset)
-
-		var fh FileHash
-		if _, err := ReadJSON(rw, &fh); err != nil {
+		offset := fs.Offset
+		if hello.ResumeProof && offset > 0 {
+			// Bytes that are not a prefix of the file being sent (an ordinary edit
+			// that made the file longer looks exactly like this) would fail
+			// verification on this run and every retry after it. Take the whole
+			// file instead: one bounded resend, decided before any body byte is
+			// read, still installed only after it verifies.
+			//
+			// Redefining a negotiated offset is the receiver's move alone — a
+			// receiver without this protocol rejects an offset it did not offer.
+			resume := prefixMatches(dest, offset, fs.PrefixSHA256)
+			if err := WriteJSON(rw, MsgResumeVerdict, ResumeVerdict{Index: fs.Index, Resume: resume}); err != nil {
+				return rep, err
+			}
+			if !resume {
+				offset = 0
+			}
+		}
+		ok, err := receiveOneFile(rw, destDir, dest, f, offset, sync)
+		if err != nil {
 			return rep, err
 		}
-		if werr != nil || fh.SHA256 != sum {
-			if staged != "" {
-				_ = os.Remove(staged)
-			}
+		if !ok {
 			res.OK = false
 			res.Failed = append(res.Failed, f.Path)
-		} else {
-			if err := installStaged(staged, dest, hello.Sync); err != nil {
-				_ = os.Remove(staged)
-				res.OK = false
-				res.Failed = append(res.Failed, f.Path)
-				continue
-			}
-			if hello.Sync {
-				// Preserve the source mtime so a later sync can skip this file.
-				tm := time.Unix(f.ModTime, 0)
-				_ = os.Chtimes(dest, tm, tm)
-			}
-			rep.Files++
-			rep.Bytes += f.Size
+			continue
 		}
+		rep.Files++
+		rep.Bytes += f.Size
 	}
 
 	if hello.Delete && opts.AllowDelete && len(m.Files) == 0 {
@@ -191,6 +220,73 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 
 	rep.Failed = res.Failed
 	return rep, WriteJSON(rw, MsgResult, res)
+}
+
+// receiveOneFile streams one manifest entry into a temporary staging file,
+// verifies it against the sender's hash and installs it. Staging carries the
+// source's own permission bits (see writeFileBody), so "temporary" is about its
+// lifetime, not about it being unreadable to others.
+//
+// It owns that staging file on EVERY exit path, including the reads between a
+// complete body and a verified install: unverified content must never outlive
+// the transfer. Only the staging file this call created is removed; a file the
+// receiving user already had is never touched by the cleanup.
+//
+// ok=false with a nil error is ONE failed file, not a failed transfer.
+func receiveOneFile(rw io.ReadWriter, base, dest string, f FileEntry, offset int64, replace bool) (ok bool, err error) {
+	sum, staged, werr := writeFileBody(rw, base, dest, f, offset)
+	installed := false
+	defer func() {
+		if staged != "" && !installed {
+			_ = os.Remove(staged)
+		}
+	}()
+
+	var fh FileHash
+	if _, err := ReadJSON(rw, &fh); err != nil {
+		return false, err
+	}
+	if werr != nil || fh.SHA256 != sum {
+		return false, nil
+	}
+	if err := installStaged(staged, dest, replace); err != nil {
+		return false, nil
+	}
+	installed = true
+	if replace {
+		// Preserve the source mtime so a later sync can skip this file.
+		tm := time.Unix(f.ModTime, 0)
+		_ = os.Chtimes(dest, tm, tm)
+	}
+	return true, nil
+}
+
+// prefixMatches reports whether the first n bytes of path hash to want. Any
+// problem — gone, shortened, unreadable, no proof offered — answers false,
+// because the safe answer is always "send the whole file".
+//
+// It re-reads a prefix writeFileBody reads again: the answer must be known
+// before any body byte is accepted, and a local read is the cheap half of a
+// transfer that would otherwise fail and be retried in full.
+func prefixMatches(path string, n int64, want string) bool {
+	if want == "" || n <= 0 {
+		return false
+	}
+	// writeFileBody refuses a symlinked destination; never read through one here
+	// either, so this check can't become a way to ask about a file outside it.
+	if info, err := os.Lstat(path); err != nil || info.Mode()&os.ModeSymlink != 0 {
+		return false
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.CopyN(h, f, n); err != nil {
+		return false
+	}
+	return hex.EncodeToString(h.Sum(nil)) == want
 }
 
 // installStaged atomically installs a verified file. Sync is an explicit

@@ -25,7 +25,8 @@ func mirror(t *testing.T, dst string, allowDelete bool, srcRoots ...string) Repo
 	var rep Report
 	go func() {
 		defer wg.Done()
-		rep, recvErr = Receive(c2, dst, RecvOpts{AllowDelete: allowDelete})
+		// A mirror listener: `serve`/`__recv` is what authorizes sync here.
+		rep, recvErr = Receive(c2, dst, RecvOpts{AllowSync: true, AllowDelete: allowDelete})
 		c2.Close()
 	}()
 	_, serr := Send(c1, m, srcs, SendOpts{Sync: true, Delete: true})
@@ -370,7 +371,7 @@ func TestReceiveRefusesUnscopeableDelete(t *testing.T) {
 	var recvErr error
 	go func() {
 		defer wg.Done()
-		rep, recvErr = Receive(c2, dst, RecvOpts{AllowDelete: true})
+		rep, recvErr = Receive(c2, dst, RecvOpts{AllowSync: true, AllowDelete: true})
 		c2.Close()
 	}()
 	// Drive the sender by hand: BuildManifest cannot produce this shape.

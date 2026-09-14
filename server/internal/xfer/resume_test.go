@@ -40,7 +40,7 @@ func TestResumeSkipsAlreadyReceivedPrefix(t *testing.T) {
 		cSend.Close()
 		errc <- err
 	}()
-	rep, err := Receive(cRecv, dst, RecvOpts{})
+	rep, err := Receive(cRecv, dst, RecvOpts{AllowSync: true})
 	cRecv.Close()
 	if err != nil {
 		t.Fatalf("receive: %v", err)
@@ -94,7 +94,7 @@ func TestNoResumeForcesFullResend(t *testing.T) {
 		cSend.Close()
 		errc <- err
 	}()
-	rep, err := Receive(cRecv, dst, RecvOpts{NoResume: true})
+	rep, err := Receive(cRecv, dst, RecvOpts{AllowSync: true, NoResume: true})
 	cRecv.Close()
 	if err != nil {
 		t.Fatalf("receive: %v", err)

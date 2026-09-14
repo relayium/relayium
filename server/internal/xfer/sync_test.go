@@ -61,7 +61,9 @@ func TestSyncRoundTripSkipsUnchanged(t *testing.T) {
 	var rep Report
 	go func() {
 		defer wg.Done()
-		rep, recvErr = Receive(c2, dst, RecvOpts{})
+		// AllowSync is the listener's own authorization; without it a sender's
+		// Hello.Sync is refused (see TestOneShotReceiveRefusesPeerRequestedReplacement).
+		rep, recvErr = Receive(c2, dst, RecvOpts{AllowSync: true})
 		c2.Close()
 	}()
 	srep, serr := Send(c1, m, srcs, SendOpts{Sync: true})
@@ -138,7 +140,7 @@ func TestReceiveDeleteDeniedWhenNotAllowed(t *testing.T) {
 	var rep Report
 	go func() {
 		defer wg.Done()
-		rep, recvErr = Receive(c2, dst, RecvOpts{AllowDelete: false})
+		rep, recvErr = Receive(c2, dst, RecvOpts{AllowSync: true, AllowDelete: false})
 		c2.Close()
 	}()
 	_, serr := Send(c1, m, srcs, SendOpts{Sync: true, Delete: true})
@@ -177,7 +179,7 @@ func TestReceiveDeletesExtrasWhenAllowed(t *testing.T) {
 	var rep Report
 	go func() {
 		defer wg.Done()
-		rep, recvErr = Receive(c2, dst, RecvOpts{AllowDelete: true})
+		rep, recvErr = Receive(c2, dst, RecvOpts{AllowSync: true, AllowDelete: true})
 		c2.Close()
 	}()
 	_, serr := Send(c1, m, srcs, SendOpts{Sync: true, Delete: true})
@@ -214,7 +216,7 @@ func TestReceiveRefusesEmptyManifestDelete(t *testing.T) {
 	var rep Report
 	go func() {
 		defer wg.Done()
-		rep, recvErr = Receive(c2, dst, RecvOpts{AllowDelete: true})
+		rep, recvErr = Receive(c2, dst, RecvOpts{AllowSync: true, AllowDelete: true})
 		c2.Close()
 	}()
 	_, serr := Send(c1, m, srcs, SendOpts{Sync: true, Delete: true})

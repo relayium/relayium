@@ -203,6 +203,17 @@ func runSendCross(args []string, stdout, stderr io.Writer) int {
 	return reportExit(rep, stderr)
 }
 
+// crossnetReceiveDial is the transport `receive` runs over. It is a var so a
+// test can drive runReceiveCross itself — its argument handling, its RecvOpts
+// and its exit code — against a peer on a pipe.
+var crossnetReceiveDial = func(ctx context.Context, code string, f crossFlags, stderr io.Writer) (io.ReadWriteCloser, error) {
+	conn, err := crossnetConn(ctx, code, "receiver", f, stderr, rzvous.ModeFile)
+	if err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
 func runReceiveCross(args []string, stdout, stderr io.Writer) int {
 	if wantsHelpFS(crossFlagSet(&crossFlags{}), args) {
 		fmt.Fprint(stdout, receiveUsage)
@@ -224,13 +235,13 @@ func runReceiveCross(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	conn, err := crossnetConn(ctx, code, "receiver", f, stderr, rzvous.ModeFile)
+	conn, err := crossnetReceiveDial(ctx, code, f, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	defer conn.Close()
-	rep, err := xfer.Receive(conn, dest, xfer.RecvOpts{})
+	rep, err := peerReceive(conn, dest, false)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

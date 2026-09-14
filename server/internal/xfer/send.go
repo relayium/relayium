@@ -31,7 +31,7 @@ type Report struct {
 // Send transmits the manifest's files over rw (a duplex stream, typically the
 // SSH stdio pipe). srcs[i] is the local path for m.Files[i].
 func Send(rw io.ReadWriter, m Manifest, srcs []string, opts SendOpts) (Report, error) {
-	if err := WriteJSON(rw, MsgHello, Hello{Version: WireVersion, Mode: "push", Sync: opts.Sync, Delete: opts.Delete}); err != nil {
+	if err := WriteJSON(rw, MsgHello, Hello{Version: WireVersion, Mode: "push", Sync: opts.Sync, Delete: opts.Delete, ResumeProof: true}); err != nil {
 		return Report{}, err
 	}
 	if err := WriteJSON(rw, MsgManifest, m); err != nil {
@@ -62,7 +62,7 @@ func Send(rw io.ReadWriter, m Manifest, srcs []string, opts SendOpts) (Report, e
 			rep.Skipped++
 			continue
 		}
-		if err := sendFile(rw, i, f, srcs[i], offsets[i], opts); err != nil {
+		if err := sendFile(rw, i, f, srcs[i], offsets[i], rs.ResumeProof, opts); err != nil {
 			return rep, err
 		}
 		rep.Files++
@@ -79,27 +79,54 @@ func Send(rw io.ReadWriter, m Manifest, srcs []string, opts SendOpts) (Report, e
 	return rep, nil
 }
 
-func sendFile(rw io.ReadWriter, i int, f FileEntry, src string, offset int64, opts SendOpts) error {
+// sendFile streams one file. proof is the receiver's announced ability to check
+// a prefix proof and answer it (ResumeState.ResumeProof); without it this sends
+// exactly what it always did, because an older receiver would reject any offset
+// other than the one it negotiated.
+func sendFile(rw io.ReadWriter, i int, f FileEntry, src string, offset int64, proof bool, opts SendOpts) error {
 	file, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	if err := WriteJSON(rw, MsgFileStart, FileStart{Index: i, Offset: offset}); err != nil {
-		return err
-	}
-	if offset > 0 {
-		if _, err := file.Seek(offset, io.SeekStart); err != nil {
-			return err
-		}
-	}
-
-	// Hash the whole file (from 0) while streaming the tail [offset, Size).
+	// Hash the whole file (from 0) while streaming the tail [offset, Size). The
+	// head is hashed before MsgFileStart because its digest is the prefix proof;
+	// the same running hash continues over the tail, so nothing is read twice.
 	h := sha256.New()
+	start := FileStart{Index: i, Offset: offset}
 	if offset > 0 {
 		head := io.NewSectionReader(file, 0, offset)
 		if _, err := io.Copy(h, head); err != nil {
+			return err
+		}
+		if proof {
+			start.PrefixSHA256 = hex.EncodeToString(h.Sum(nil)) // Sum does not consume h
+		}
+	}
+	if err := WriteJSON(rw, MsgFileStart, start); err != nil {
+		return err
+	}
+	if proof && offset > 0 {
+		// Only the receiver can tell whether its own bytes match, and only the
+		// receiver may redefine the offset it negotiated. Wait for its verdict
+		// before sending anything.
+		var v ResumeVerdict
+		if err := readExpect(rw, &v); err != nil {
+			return err
+		}
+		if v.Index != i {
+			return fmt.Errorf("%s: resume verdict for file %d arrived while sending file %d", f.Path, v.Index, i)
+		}
+		if !v.Resume {
+			// Not a prefix of this file: send it whole. Bounded to this one
+			// restart — at offset 0 there is nothing left to disagree about.
+			offset = 0
+			h.Reset()
+		}
+	}
+	if offset > 0 {
+		if _, err := file.Seek(offset, io.SeekStart); err != nil {
 			return err
 		}
 	}

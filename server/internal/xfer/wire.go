@@ -22,6 +22,11 @@ const (
 	MsgFileHash  MsgType = 5
 	MsgResult    MsgType = 6
 	MsgError     MsgType = 7
+	// MsgResumeVerdict is the receiver's answer to the prefix proof carried in
+	// MsgFileStart. It is exchanged ONLY when both ends announced support
+	// (Hello.ResumeProof and ResumeState.ResumeProof), so a peer that predates
+	// it never sends one and is never waited for. See ResumeVerdict.
+	MsgResumeVerdict MsgType = 8
 )
 
 const maxFramePayload = 8 << 20 // 8 MiB guard for control frames
@@ -29,8 +34,18 @@ const maxFramePayload = 8 << 20 // 8 MiB guard for control frames
 type Hello struct {
 	Version int
 	Mode    string // "push" or "pull"
-	Sync    bool   // sync mode: receiver may skip unchanged files and preserve mtime
-	Delete  bool   // mirror: receiver may delete files not in the manifest (if permitted)
+	// Sync REQUESTS sync mode: skip unchanged files, resume into an existing
+	// file, replace what is already there, preserve the source mtime. It is a
+	// request only — whether any of it happens is the receiving side's decision
+	// (RecvOpts.AllowSync), never this flag's.
+	Sync   bool
+	Delete bool // mirror: receiver may delete files not in the manifest (if permitted)
+	// ResumeProof announces that this sender will prove, in MsgFileStart, that
+	// its own first Offset bytes hash to what the receiver has on disk, and will
+	// restart the file from 0 if the receiver's MsgResumeVerdict says they do
+	// not. A receiver only hands out a resume offset to a sender that can do
+	// both; absent (an older sender) it gets the whole file instead.
+	ResumeProof bool
 }
 
 type FileEntry struct {
@@ -50,11 +65,31 @@ type ResumeEntry struct {
 type ResumeState struct {
 	Entries []ResumeEntry
 	Skip    []int // sync mode: manifest indices already present & identical (not sent)
+	// ResumeProof echoes Hello.ResumeProof: this receiver will verify the
+	// sender's prefix proof and answer every non-zero offset with a
+	// MsgResumeVerdict. A sender waits for that verdict only when this is set,
+	// so an older receiver (which never sends one) cannot deadlock a new sender.
+	ResumeProof bool
 }
 
 type FileStart struct {
 	Index  int
 	Offset int64
+	// PrefixSHA256 is the hex SHA-256 of the sender's own [0,Offset) bytes: the
+	// proof that the receiver's shorter copy really is a prefix of this file.
+	// Set only when both ends announced ResumeProof and Offset > 0; an older
+	// receiver ignores the field, which leaves its behaviour exactly as it was.
+	PrefixSHA256 string
+}
+
+// ResumeVerdict is the receiver's answer to a prefix proof: Resume=false means
+// "those are not my bytes, send the file from 0", and the sender does exactly
+// that. It is the receiver, not the sender, that may redefine a negotiated
+// offset — an older receiver rejects any unannounced offset change, so a sender
+// must never make that decision on its own.
+type ResumeVerdict struct {
+	Index  int
+	Resume bool
 }
 
 type FileHash struct {
@@ -73,6 +108,7 @@ type Result struct {
 const (
 	ErrCodeManifestTooLarge  = "manifest_too_large"
 	ErrCodeDestinationExists = "destination_exists"
+	ErrCodeSyncNotAllowed    = "sync_not_allowed"
 )
 
 // WireError is the payload of a MsgError frame: why the receiver refused a
