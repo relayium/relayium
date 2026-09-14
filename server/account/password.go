@@ -8,7 +8,14 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const minPasswordLen = 8
+const (
+	minPasswordLen = 8
+	// maxPasswordBytes is bcrypt's hard input limit, not a product choice:
+	// GenerateFromPassword refuses anything longer, so a password over this size
+	// can never be stored. The limit is in BYTES, so a 25-character multibyte
+	// passphrase (75 bytes) also exceeds it.
+	maxPasswordBytes = 72
+)
 
 var (
 	// ErrEmailTaken 表示该邮箱已设置过密码。
@@ -17,6 +24,10 @@ var (
 	ErrBadCredentials = errors.New("account: invalid credentials")
 	// ErrWeakPassword 表示密码短于 minPasswordLen。
 	ErrWeakPassword = errors.New("account: password too short")
+	// ErrPasswordTooLong 表示密码超过 bcrypt 的 72 字节上限（按字节计，多字节口令
+	// 也会触发）。Must stay distinct from ErrWeakPassword: they are opposite
+	// problems, and reporting one as the other misdirects the user.
+	ErrPasswordTooLong = errors.New("account: password too long")
 	// ErrEmailUnverified 表示账密正确但邮箱尚未验证，禁止登录。
 	ErrEmailUnverified = errors.New("account: email not verified")
 	// ErrInvalidToken 表示验证/重置 token 无效或已过期。
@@ -30,14 +41,33 @@ var (
 // account-exists path and doesn't leak account existence. No password matches it.
 var dummyBcryptHash, _ = bcrypt.GenerateFromPassword([]byte("relayium-login-timing-equalizer"), bcrypt.DefaultCost)
 
+// validateNewPassword checks a password against both ends of the storable
+// range: our minimum and bcrypt's 72-byte maximum.
+//
+// Invariant: every caller that sets a password runs this BEFORE any durable or
+// irreversible step. bcrypt reports the upper bound only at hashing time, which
+// is too late for a caller that has already inserted a row or spent a token.
+func validateNewPassword(password string) error {
+	if len(password) < minPasswordLen {
+		return ErrWeakPassword
+	}
+	if len(password) > maxPasswordBytes {
+		return ErrPasswordTooLong
+	}
+	return nil
+}
+
 // Register 创建密码账号（初始未验证）并发送验证邮件。不发 session：用户须先验证。
 func (s *Service) Register(ctx context.Context, email, password, displayName string) (User, error) {
 	email = normEmail(email)
 	if _, err := mail.ParseAddress(email); err != nil {
 		return User{}, ErrInvalidEmail
 	}
-	if len(password) < minPasswordLen {
-		return User{}, ErrWeakPassword
+	// Invariant: a password that cannot be stored never reaches a durable write.
+	// An unhashable input must leave the address, its canonical form and every
+	// credential/identity row exactly as they were.
+	if err := validateNewPassword(password); err != nil {
+		return User{}, err
 	}
 	// Task 4: a pending-deletion account (DeletedAt>0) keeps its email/canonical
 	// slot reserved through the grace window — re-registering it would let a
@@ -61,27 +91,33 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 	// H2b: reject a new registration whose canonical form (strip +tag; gmail dot-fold)
 	// already belongs to an account, defeating "a+1@gmail / a.b@gmail" Sybil mint.
 	// The check and the insert happen atomically inside one transaction (see
-	// InsertUserDedupedByCanonical) — a separate check-then-insert pair here would
-	// leave a TOCTOU race letting N concurrent registrations for the same canonical
-	// form all pass. Same ErrEmailTaken → identical 409 response as an
-	// exact-duplicate, so existence is not leaked any differently.
-	u, taken, err := s.store.InsertUserDedupedByCanonical(ctx, email, displayName, canon)
+	// InsertPasswordUserDedupedByCanonical) — a separate check-then-insert pair
+	// here would leave a TOCTOU race letting N concurrent registrations for the
+	// same canonical form all pass. Same ErrEmailTaken → identical 409 response
+	// as an exact-duplicate, so existence is not leaked any differently.
+	//
+	// Hash after the read-only checks and before the insert: a hash failure
+	// leaves nothing durable. An exact duplicate or a frozen address is still
+	// answered above without hashing; only a canonical sibling now pays one
+	// hash before the transaction reports it taken.
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return User{}, err
+	}
+	// The users row, the password and the "password" identity are one fact and
+	// commit together. A users row without its credential owns the address
+	// without being usable or recoverable by whoever registered it.
+	u, taken, err := s.store.InsertPasswordUserDedupedByCanonical(ctx, email, displayName, canon, string(hash))
 	if err != nil {
 		return User{}, err
 	}
 	if taken {
 		return User{}, ErrEmailTaken
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return User{}, err
-	}
-	if err := s.store.SetPassword(ctx, u.ID, string(hash)); err != nil {
-		return User{}, err
-	}
-	if err := s.store.LinkIdentity(ctx, "password", email, u.ID); err != nil {
-		return User{}, err
-	}
+	// Mail stays outside that transaction: the account is committed and real, so
+	// a send failure is reported but never rolls it back. Recovery is resending
+	// verification (POST /api/auth/email/resend), which works because the
+	// credential committed with the user.
 	if err := s.SendVerifyEmail(ctx, u); err != nil {
 		return User{}, err
 	}
@@ -224,8 +260,10 @@ func (s *Service) ChangePassword(ctx context.Context, u User, currentSessionID, 
 			return ErrBadCredentials
 		}
 	}
-	if len(newPassword) < minPasswordLen {
-		return ErrWeakPassword
+	// Same storable-range check as registration and reset, so an unhashable
+	// input gets a usable answer rather than an opaque server error.
+	if err := validateNewPassword(newPassword); err != nil {
+		return err
 	}
 	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {

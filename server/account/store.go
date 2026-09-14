@@ -1510,6 +1510,15 @@ type Store interface {
 	// (any exact email) already owns this canonical form; nothing was written and
 	// the returned User is the zero value.
 	InsertUserDedupedByCanonical(ctx context.Context, email, displayName, canonical string) (u User, taken bool, err error)
+	// InsertPasswordUserDedupedByCanonical is the registration form of the above:
+	// the same canonical dedupe plus the password hash and the "password"
+	// identity, all in ONE transaction, because a users row without its
+	// credential owns the address without being usable or recoverable.
+	// passwordHash must already be computed — nothing here validates or hashes,
+	// so an input the hasher would reject must never reach this call. taken=true
+	// means an existing row already owns this canonical form, nothing was
+	// written, and the returned User is the zero value.
+	InsertPasswordUserDedupedByCanonical(ctx context.Context, email, displayName, canonical, passwordHash string) (u User, taken bool, err error)
 	HasPassword(ctx context.Context, userID string) (bool, error)
 	// ClaimTOTPStep atomically advances the admin TOTP replay guard to `step` iff
 	// step is strictly newer than the last committed one, in a single writer

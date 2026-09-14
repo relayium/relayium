@@ -912,6 +912,8 @@ func (s *Service) handleChangePassword(w http.ResponseWriter, r *http.Request, u
 		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "current password incorrect"})
 	case errors.Is(err, ErrWeakPassword):
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
+	case errors.Is(err, ErrPasswordTooLong):
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "password_too_long"})
 	case err != nil:
 		http.Error(w, "server error", http.StatusInternalServerError)
 	default:
@@ -958,6 +960,11 @@ func (s *Service) handleRegister(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, ErrWeakPassword):
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
+	case errors.Is(err, ErrPasswordTooLong):
+		// Its own code, never the short-password one: they are opposite problems.
+		// A client that does not know this code yet falls back to its generic
+		// server-error wording, which stays true.
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "password_too_long"})
 	case errors.Is(err, ErrPendingDeletion):
 		// Task 4: this email (or its canonical sibling) belongs to an account
 		// mid-grace-period. Refuse the new registration rather than silently
@@ -1136,6 +1143,11 @@ func (s *Service) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, ErrWeakPassword):
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "password too short"})
+		return
+	case errors.Is(err, ErrPasswordTooLong):
+		// Reached before the token is consumed, so a token that was valid is
+		// still valid for the retry.
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "password_too_long"})
 		return
 	case errors.Is(err, ErrInvalidToken):
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_token"})

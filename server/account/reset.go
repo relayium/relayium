@@ -49,8 +49,17 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email string) error 
 // the user's sessions, marks the email verified (receiving the mail proves
 // ownership), and issues a fresh session.
 func (s *Service) ResetPassword(ctx context.Context, rawToken, newPassword string) (Session, error) {
-	if len(newPassword) < minPasswordLen {
-		return Session{}, ErrWeakPassword
+	// Invariant: a password that cannot be stored never consumes the token.
+	// UseEmailToken below spends it irreversibly, so an input the hasher would
+	// reject must be rejected here — otherwise one bad submission burns the
+	// user's only recovery link and changes nothing.
+	//
+	// Hashing itself stays below the token check on purpose: this endpoint is
+	// unauthenticated and unthrottled, so bcrypt must not be reachable with a
+	// bogus token. With the range enforced here, the only remaining hash failure
+	// mode is a bad cost, and the cost is a constant.
+	if err := validateNewPassword(newPassword); err != nil {
+		return Session{}, err
 	}
 	tok, ok, err := s.store.UseEmailToken(ctx, authx.HashToken(rawToken), "reset", s.now().Unix())
 	if err != nil {
