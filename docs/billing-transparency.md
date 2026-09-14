@@ -183,10 +183,11 @@ would reasonably ask:
 
 - **Byte counts are the metered quantity, not access logs.** There's no table
   of "user X downloaded file Y at time Z from IP W" for ordinary transfers.
-  `download_receipts` (`sqlite.go:546`) exists, but it's a 24-hour dedup table
-  keyed by an opaque per-download nonce — its purpose is to stop a replayed
-  receipt from double-crediting a node's bandwidth accounting, not to log who
-  downloaded what.
+  `download_receipts` (`sqlite.go:546`) exists, but it is a 24-hour dedup table
+  keyed by an opaque per-download nonce, and it no longer receives new rows at
+  all: the node-direct download accounting it belonged to has been withdrawn,
+  so downloads are metered from the bytes the server itself served (see
+  `docs/direct-download-deploy.md`). It never logged who downloaded what.
 - **The `cli_device_auth.client_ip` column is a genuine exception** to "no
   general IP logging" — it exists specifically so the browser approval page
   can show "this login request came from `<IP>`" as an anti-phishing signal,

@@ -23,9 +23,12 @@ func postReceipt(t *testing.T, s *Service, bearer, body string) int {
 	return w.Code
 }
 
-// A partial direct download (node served fewer bytes than the file size) refunds
-// the owner the over-metered difference, exactly once.
-func TestDownloadReceiptRefundsPartial(t *testing.T) {
+// A receipt naming a real shared file, with a plausible partial byte count, is
+// still settled as nothing: usage the owner genuinely accrued is untouched and
+// the reply is the same 410 every other receipt gets. This is the shape the
+// withdrawn protocol trusted most — and the shape that made an unissued credit
+// indistinguishable from a real one.
+func TestDownloadReceiptSettlesNothingForAKnownFile(t *testing.T) {
 	s := nodeService(t, "fleet-secret")
 	ctx := context.Background()
 	owner, _ := s.store.UpsertUserByEmail(ctx, "recv@example.com", "")
@@ -35,32 +38,28 @@ func TestDownloadReceiptRefundsPartial(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// Simulate the 302 pre-charge: full size metered to the owner.
 	now := s.now().Unix()
 	period := periodOf(now)
+	// 200 bytes central really proxied and really billed for.
 	if err := s.store.RecordMeter(ctx, owner.ID, MeterDownload, 200, now); err != nil {
 		t.Fatal(err)
 	}
 
-	// Node reports it only served 120 bytes (client aborted).
-	if code := postReceipt(t, s, "fleet-secret", `{"blobKey":"bk","nonce":"n1","servedBytes":120}`); code != http.StatusOK {
-		t.Fatalf("receipt: got %d want 200", code)
-	}
-	if _, d, _ := s.store.MonthlyUsage(ctx, owner.ID, period); d != 120 {
-		t.Fatalf("after receipt: download = %d, want 120 (200 pre-charge minus 80 refund)", d)
-	}
-
-	// A re-sent receipt for the same download must NOT refund again.
-	if code := postReceipt(t, s, "fleet-secret", `{"blobKey":"bk","nonce":"n1","servedBytes":120}`); code != http.StatusOK {
-		t.Fatalf("duplicate receipt: got %d want 200", code)
-	}
-	if _, d, _ := s.store.MonthlyUsage(ctx, owner.ID, period); d != 120 {
-		t.Fatalf("duplicate receipt must not double-refund, download = %d want 120", d)
+	for _, served := range []string{"120", "200", "999999", "-5"} {
+		body := `{"blobKey":"bk","nonce":"n-` + served + `","servedBytes":` + served + `}`
+		if code := postReceipt(t, s, "fleet-secret", body); code != http.StatusGone {
+			t.Fatalf("receipt servedBytes=%s: got %d want 410", served, code)
+		}
+		if _, d, _ := s.store.MonthlyUsage(ctx, owner.ID, period); d != 200 {
+			t.Fatalf("receipt servedBytes=%s moved download usage to %d, want the real 200", served, d)
+		}
 	}
 }
 
-// A complete download (served == size) refunds nothing — the pre-charge was exact.
-func TestDownloadReceiptCompleteNoRefund(t *testing.T) {
+// A receipt for a blob key central has no file for gets the same answer as one
+// for a file it does know — the reply does not disclose whether the object
+// exists.
+func TestDownloadReceiptDoesNotDiscloseObjectExistence(t *testing.T) {
 	s := nodeService(t, "fleet-secret")
 	ctx := context.Background()
 	owner, _ := s.store.UpsertUserByEmail(ctx, "recv2@example.com", "")
@@ -68,33 +67,11 @@ func TestDownloadReceiptCompleteNoRefund(t *testing.T) {
 		ID: "f", UserID: owner.ID, BlobKey: "bk", EncManifest: []byte("m"), Size: 200,
 		NodeID: "fleetnode", CreatedAt: 1, ExpiresAt: 1 << 40,
 	})
-	now := s.now().Unix()
-	s.store.RecordMeter(ctx, owner.ID, MeterDownload, 200, now)
 
-	if code := postReceipt(t, s, "fleet-secret", `{"blobKey":"bk","nonce":"n2","servedBytes":200}`); code != http.StatusOK {
-		t.Fatalf("receipt: got %d want 200", code)
-	}
-	if _, d, _ := s.store.MonthlyUsage(ctx, owner.ID, periodOf(now)); d != 200 {
-		t.Fatalf("complete download must not refund, download = %d want 200", d)
-	}
-}
-
-// An over-reported servedBytes (> size) is clamped so it can never turn a refund
-// into a charge (a buggy/hostile node must not be able to inflate usage).
-func TestDownloadReceiptClampsOverReport(t *testing.T) {
-	s := nodeService(t, "fleet-secret")
-	ctx := context.Background()
-	owner, _ := s.store.UpsertUserByEmail(ctx, "recv3@example.com", "")
-	s.store.CreateStoredFile(ctx, StoredFile{
-		ID: "f", UserID: owner.ID, BlobKey: "bk", EncManifest: []byte("m"), Size: 200,
-		NodeID: "fleetnode", CreatedAt: 1, ExpiresAt: 1 << 40,
-	})
-	now := s.now().Unix()
-	s.store.RecordMeter(ctx, owner.ID, MeterDownload, 200, now)
-
-	postReceipt(t, s, "fleet-secret", `{"blobKey":"bk","nonce":"n3","servedBytes":999999}`)
-	if _, d, _ := s.store.MonthlyUsage(ctx, owner.ID, periodOf(now)); d != 200 {
-		t.Fatalf("over-reported servedBytes must clamp to size (no charge), download = %d want 200", d)
+	known := postReceipt(t, s, "fleet-secret", `{"blobKey":"bk","nonce":"a","servedBytes":1}`)
+	unknown := postReceipt(t, s, "fleet-secret", `{"blobKey":"no-such-key","nonce":"b","servedBytes":1}`)
+	if known != http.StatusGone || unknown != http.StatusGone {
+		t.Fatalf("known=%d unknown=%d, want both 410", known, unknown)
 	}
 }
 

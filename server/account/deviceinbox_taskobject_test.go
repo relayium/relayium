@@ -358,9 +358,11 @@ func TestTaskPurposeObjectIsExcludedFromTheAccountFileList(t *testing.T) {
 	}
 }
 
-// A fleet download receipt refunds metering for bytes a node served under a
-// central-issued 302. A task object is never redirected, so a receipt naming its
-// blob is either a mistake or a rogue node inventing a refund.
+// A task object is never redirected, so a receipt naming its blob is either a
+// mistake or a rogue node inventing a refund. Receipts settle nothing at all
+// now, but this object's meter is worth pinning separately: it is the purpose
+// the old handler's own eligibility check was the last thing standing between
+// an invented receipt and a negative meter.
 func TestDownloadReceiptRefusesATaskPurposeBlob(t *testing.T) {
 	h := newTaskObjectHarnessWithConfig(t, func(c *Config) { c.NodeToken = "fleet-token" })
 	u := h.user(t, "receipt@example.test")
@@ -374,8 +376,8 @@ func TestDownloadReceiptRefusesATaskPurposeBlob(t *testing.T) {
 	// observable form of the accounting hole.
 	period := periodOf(h.nowUnix())
 	if code := postReceipt(t, h.svc, "fleet-token",
-		fmt.Sprintf(`{"blobKey":%q,"nonce":"n1","servedBytes":0}`, key)); code != http.StatusOK {
-		t.Fatalf("receipt: got %d, want 200", code)
+		fmt.Sprintf(`{"blobKey":%q,"nonce":"n1","servedBytes":0}`, key)); code != http.StatusGone {
+		t.Fatalf("receipt: got %d, want 410", code)
 	}
 	if _, down, err := h.store.MonthlyUsage(context.Background(), u, period); err != nil {
 		t.Fatalf("monthly usage: %v", err)

@@ -187,6 +187,10 @@ func (s *Service) RegisterNodeRoutes(mux *http.ServeMux) {
 	}
 	mux.HandleFunc("POST /api/nodes/register", s.handleNodeRegister)
 	mux.HandleFunc("POST /api/nodes/heartbeat", s.handleNodeHeartbeat)
+	// Still mounted although it settles nothing: a node built against the
+	// withdrawn fleet-direct protocol must get an authenticated, stable answer
+	// rather than a 404 it would read as a routing fault. See
+	// handleDownloadReceipt.
 	mux.HandleFunc("POST /api/nodes/download-receipt", s.handleDownloadReceipt)
 	mux.HandleFunc("POST /api/nodes/update-check", s.handleUpdateCheck)
 	mux.HandleFunc("POST /api/nodes/deregister", s.handleNodeDeregister)
@@ -976,13 +980,33 @@ func firstNonEmpty(a, b string) string {
 	return b
 }
 
-// handleDownloadReceipt reconciles a direct-download's metering: central
-// pre-metered the whole file size when it issued the 302, so a fleet node
-// reports how many bytes it actually served and central refunds the owner the
-// over-metered difference (partial/aborted downloads). Idempotent per receipt
-// nonce so a re-sent receipt can't double-refund; servedBytes is clamped to the
-// file size so a receipt can only ever refund, never charge. Fleet-only (BYO
-// direct download and its receipts are a later phase).
+// handleDownloadReceipt answers the fleet-direct download receipt a node built
+// against a withdrawn protocol. It performs no accounting, receipt or
+// entitlement write.
+//
+// The receipt used to reconcile a pre-charge: central billed the whole file size
+// when it issued a 302, and a node later reported what it had really served so
+// the difference could be credited back. The request was fleet-authenticated,
+// but the credit itself was bound to nothing — central kept no record of which
+// redirects it had issued, and the receipt was not attributed to the node that
+// served the bytes. An unseen nonce was therefore indistinguishable from a real
+// one, so any holder of a fleet credential could drive a stranger's real usage
+// negative, without bound, since only the per-receipt amount was capped. No
+// validation here can repair that: there is nothing to validate against. See
+// docs/direct-download-deploy.md for what a receipt would have to carry before
+// one can be honoured again.
+//
+// Authentication is resolved FIRST and keeps its existing distinctions (401 for
+// an unknown bearer, 403 for a BYO node token). Past that, every fleet caller
+// gets the same 410 regardless of payload — the body is never read, so nothing
+// branches on attacker-controlled input. Nothing is logged per request; the
+// status reaches the existing access log like any other response.
+//
+// nodeOwner's own bookkeeping is unchanged and still updates a token's
+// last-used timestamp (TouchFleetTokenUsed/TouchNodeTokenUsed). That is auth
+// metadata, deliberately left alone rather than special-cased here: it moves no
+// balance and carries no entitlement, and diverging this endpoint's credential
+// handling from every other node route would be the riskier change.
 func (s *Service) handleDownloadReceipt(w http.ResponseWriter, r *http.Request) {
 	ownerType, _, ok := s.nodeOwner(r)
 	if !ok {
@@ -993,59 +1017,7 @@ func (s *Service) handleDownloadReceipt(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	var req struct {
-		BlobKey     string `json:"blobKey"`
-		Nonce       string `json:"nonce"`
-		ServedBytes int64  `json:"servedBytes"`
-	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	if req.Nonce == "" || req.BlobKey == "" {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	now := s.now().Unix()
-	// Idempotency: only the first receipt for this nonce reconciles.
-	first, err := s.store.ClaimDownloadReceipt(r.Context(), req.Nonce, now)
-	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-	if !first {
-		w.WriteHeader(http.StatusOK) // duplicate — already reconciled
-		return
-	}
-	sf, err := s.store.GetStoredFileByBlobKey(r.Context(), req.BlobKey)
-	if err != nil {
-		// File gone (deleted/expired) or unknown key: nothing to reconcile. The
-		// pre-charge stands (safe over-charge). ACK so the node stops retrying.
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	// Only an object central would ever hand a node a signed direct-download URL
-	// for can have been pre-metered and can owe a refund — the SAME predicate the
-	// issuing side reads (directDownloadEligible), never a second copy of the
-	// rule. A receipt naming any other purpose describes a download central never
-	// authorized; honouring it would let a node credit an account for bytes nobody
-	// was charged for. ACK so the node stops retrying, reconcile nothing.
-	if !directDownloadEligible(sf.Purpose) {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	served := req.ServedBytes
-	if served < 0 {
-		served = 0
-	}
-	if served > sf.Size {
-		served = sf.Size // clamp: a receipt can only refund, never charge
-	}
-	if refund := sf.Size - served; refund > 0 {
-		_ = s.store.RecordMeter(r.Context(), sf.UserID, MeterDownload, -refund, now)
-		_ = s.store.AddDownloadStat(r.Context(), sf.UserID, -refund)
-	}
-	w.WriteHeader(http.StatusOK)
+	http.Error(w, "direct-download receipts are no longer accepted", http.StatusGone)
 }
 
 // nodeOwner resolves the bearer token to a node owner: the shared fleet token,

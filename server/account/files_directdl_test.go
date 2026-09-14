@@ -11,21 +11,21 @@ import (
 	"github.com/relayium/relayium/internal/dltoken"
 )
 
-// TestDirectDownloadRedirectsToNode: when direct download is on and a file lives
-// on a fleet node advertising a DownloadURL, GET /api/files/{id}/blob 302s the
-// client straight to <DownloadURL>/dl/{key}?t=<token> (central out of the data
-// path), the token verifies under the node's secret, and the owner is metered
-// the file size (pre-charge, since central won't see the bytes).
-func TestDirectDownloadRedirectsToNode(t *testing.T) {
+// TestFleetNodeDownloadIsNeverRedirected: a fleet node that is online and
+// advertising a DownloadURL — every condition the withdrawn optimization
+// required — must still be proxied, and nothing may be billed before the bytes
+// are served. Central cannot observe a redirect's egress, so charging the file
+// size up front billed requests that delivered nothing and created the unissued
+// refund the node receipt then had to hand back.
+func TestFleetNodeDownloadIsNeverRedirected(t *testing.T) {
 	ts, svc, store, mail := newFileServer(t)
 	_ = mail
 	svc.SetDirectDownload(true)
 	ctx := context.Background()
 	owner, _ := store.UpsertUserByEmail(ctx, "dd@example.com", "")
-	const nodeSecret = "nodesecret"
 	if _, err := store.UpsertNode(ctx, Node{
 		ID: "fleetnode", OwnerType: "fleet", StorageEnabled: true,
-		StorageURL: "https://internal.node", StorageSecret: nodeSecret,
+		StorageURL: "https://internal.node", StorageSecret: "nodesecret",
 		DownloadURL: "https://node7.relayium.com", CreatedAt: 1, LastSeenAt: time.Now().Unix(),
 	}); err != nil {
 		t.Fatal(err)
@@ -45,26 +45,13 @@ func TestDirectDownloadRedirectsToNode(t *testing.T) {
 		t.Fatalf("get: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("want 302 direct-download redirect, got %d", resp.StatusCode)
+	if resp.StatusCode == http.StatusFound {
+		t.Fatalf("fleet-hosted download was redirected to %q; central must stay in the data path",
+			resp.Header.Get("Location"))
 	}
-	loc, err := url.Parse(resp.Header.Get("Location"))
-	if err != nil {
-		t.Fatalf("bad Location %q: %v", resp.Header.Get("Location"), err)
-	}
-	if got := loc.Scheme + "://" + loc.Host; got != "https://node7.relayium.com" {
-		t.Fatalf("redirect host = %q, want the node's DownloadURL", got)
-	}
-	if loc.Path != "/dl/"+bkey {
-		t.Fatalf("redirect path = %q, want /dl/%s", loc.Path, bkey)
-	}
-	tok := loc.Query().Get("t")
-	if !dltoken.Verify(nodeSecret, bkey, time.Now().Unix(), tok) {
-		t.Fatalf("redirect token must verify under the node secret for this key; got %q", tok)
-	}
-	// Owner pre-charged the file size (central won't observe the actual egress).
-	if _, d, _ := store.MonthlyUsage(ctx, owner.ID, periodOf(svc.now().Unix())); d != 200 {
-		t.Fatalf("direct download must pre-meter the file size against the owner, got %d want 200", d)
+	// The fake StorageURL is unreachable, so this request egressed nothing.
+	if _, d, _ := store.MonthlyUsage(ctx, owner.ID, periodOf(svc.now().Unix())); d != 0 {
+		t.Fatalf("a download that served no bytes metered %d against the owner, want 0", d)
 	}
 }
 
@@ -106,6 +93,14 @@ func TestByoOwnNodeDirectDownloadIsFree(t *testing.T) {
 	loc, _ := url.Parse(resp.Header.Get("Location"))
 	if loc.Host != "mynode.example.com" {
 		t.Fatalf("must redirect to the BYO node, got host %q", loc.Host)
+	}
+	if loc.Path != "/dl/bbk" {
+		t.Fatalf("redirect path = %q, want /dl/bbk", loc.Path)
+	}
+	// The node verifies this offline, against its own secret: a redirect central
+	// signs wrong is a download that simply fails at the node.
+	if tok := loc.Query().Get("t"); !dltoken.Verify("bs", "bbk", time.Now().Unix(), tok) {
+		t.Fatalf("redirect token must verify under the node secret for this key; got %q", tok)
 	}
 	// FREE: central pays nothing, so the owner is NOT metered.
 	if _, d, _ := store.MonthlyUsage(ctx, owner.ID, periodOf(svc.now().Unix())); d != 0 {

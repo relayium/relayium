@@ -1,6 +1,14 @@
 # 设计方案：存储下载去中央化（Direct-from-Node）
 
-状态：**P0–P3 全部实现完成（default-off，待真机部署验证）** · 作者：Relayium · 关联 bug：own-node 下载免流量（已由 A+B 修复，见 `c9c89f1`）
+状态：**机队直连（P0/P1）已撤回，当前不可用；BYO 自有节点直连（P2）仍在运行** · 作者：Relayium · 关联 bug：own-node 下载免流量（已由 A+B 修复，见 `c9c89f1`）
+
+> **本文记录的是设计意图，不是当前行为。** 机队节点上的存储下载现在**一律经中央代理**，
+> 与 `-direct-download` 开关无关；该开关如今只控制 §3.4 ①/§6 P2 的 BYO 自有节点 opt-in
+> 直连。原因是 §4.2 的「预扣 + 回执对账」模型不成立：预扣会对**没有传输的请求**计费，
+> 而回执的冲销**不绑定任何已签发记录、也不归属上报节点**，任何持有机队凭据者都能把他人
+> 的真实用量刷成负数——**回执端点从不读这个开关，所以关掉开关并不能关闭这条伪造冲销
+> 路径**。恢复直连的前置条件、以及**任何曾经接受过回执的部署在升级前必须完成的对账**，
+> 见 `docs/direct-download-deploy.md`。没有时间表。
 
 ---
 
@@ -123,10 +131,15 @@ t = base64url(exp ‖ nonce ‖ HMAC-SHA256(nodeSecret, "dl" ‖ key ‖ exp ‖
 
 现状按 `io.Copy` 实发字节记 `RecordMeter`。去中央化后中央不经手字节。
 
-**对策：预扣 + 回执对账。**
-- 签令牌时按整文件大小**预扣**（保证流量闸不被绕过）。
-- 节点回执带实际 egress 字节 → 中央按差额对账（断点续传/未下完的多退少补）。
-- 回执缺失：保留预扣（宁可略微多算，不可漏算——和现有"宁可多计不可漏计"的取向一致）。
+**原对策（预扣 + 回执对账）已撤回，不要据此实现。**
+- 曾经的做法：签令牌时按整文件大小预扣，节点回执带实际 egress 字节，中央按差额冲销；
+  回执缺失则保留预扣。
+- 撤回原因有两条，缺一不可修：预扣对**没有跟随跳转、一个字节都没传的请求**照样计费，
+  重复请求即可耗尽属主的月流量并使其分享被闸断；而冲销**不绑定任何已签发记录、也不
+  归属上报节点**，中央无从分辨伪造与真实回执，持有机队凭据者可把他人真实用量刷成负数。
+- 任何替代设计必须先有**持久化的已签发 grant**（nonce/对象/节点/属主/金额/账期/状态）、
+  **上报节点的身份归属**、**持久重试与对账**（过期不等于没传输），以及**原子幂等的按实
+  际字节结算**。细节见 `docs/direct-download-deploy.md`。
 
 ### 4.3 断点续传 / Range
 
@@ -167,15 +180,21 @@ CDN 对"唯一密文 + burn"基本无效，排除为主方案；可作为多下�
 
 ## 6. 分阶段落地
 
-1. ✅ **P0 — 令牌 + 节点 `/dl` + 中央 302（机队，无限次文件）**：预扣计量 + 代理保底 + per-IP 限速。
-2. ✅ **P1 — 回执对账**：节点服务后异步回执实际字节，中央退还多计（`size - served`，幂等去重，clamp 到 size 只退不扣）。
+1. ⛔ **P0 — 令牌 + 节点 `/dl` + 中央 302（机队，无限次文件）：已撤回。** 中央不再为机队
+   对象签发 302，预扣计量一并删除。节点的 `/dl` 端点与 `internal/dltoken` 保留，BYO 直连
+   仍在用。
+2. ⛔ **P1 — 回执对账：已撤回。** `POST /api/nodes/download-receipt` 仍按原有方式鉴权
+   （未知 bearer 401、BYO 节点令牌 403），机队调用方一律得到稳定的 `410`，不做任何计量、
+   回执或权益写入。`download_receipts` 表与其 24h GC 原样保留，本次不新增写入、也不清理
+   历史。
 3. ✅ **P2 — BYO 节点直连**：中央接受用户节点 DownloadURL；BYO 自有节点下载**免计量免流量闸**（走用户自己带宽）；计量按「谁掏带宽」自动区分。
 4. ✅ **P3 — 硬化（已做该做的）**：`download_receipts` 去重表 24h GC 防无界增长。以下原列项经评估**有意不做**：
    - **SW 流式下载 / CLI 走直连**：P0 已达成——两者原生跟随 302，无需额外改动。
    - **节点侧一次性 nonce**：与断点续传**冲突**（Range resume 会用同一 token 发多次 GET，一次性会打断续传），故**不做**。
    - **非对称令牌签名**：价值边际（节点只服务自己的 blob、只用自己的密钥验签，HMAC-节点密钥已够本威胁模型），却引入密钥分发复杂度，**暂不做**。
 
-每一阶段都可独立上线、可回退（关 `RELAYIUM_DIRECT_DOWNLOAD` 即回代理）。**P0–P3 全部完成并 push origin/main。**
+每一阶段都可独立上线、可回退。`RELAYIUM_DIRECT_DOWNLOAD` 默认 off，如今只控制 P2 的
+BYO 自有节点 opt-in 直连：**机队对象无论该开关取何值都走中央代理**。
 
 ## 7. 已决策（2026-07-21）
 
@@ -190,13 +209,16 @@ CDN 对"唯一密文 + burn"基本无效，排除为主方案；可作为多下�
 1. ✅ `internal/dltoken`：`Sign`/`Verify`（HMAC-SHA256，绑定 key/exp/nonce），全负例测试 + 守卫 mutation 验证。
 2. ✅ 节点二进制 `GET /dl/{key}?t=…`：令牌验签（不用 bearer 密钥）+ `Range` + CORS + 只吐密文。
 3. ✅ `Node.DownloadURL` 列（迁移/nodeCols/scan/UpsertNode 同步）；节点自报，中央**仅机队 + 仅 https**才采纳；节点二进制 `-download-url` / `RELAYIUM_NODE_DOWNLOAD_URL`。
-4. ✅ 中央 `handleFileBlob`：**无限次文件**（MaxDownloads==0）在机队直连节点上 → 限速 → 流量闸 → 按 size 预扣计量 → 签令牌 → `302`。限量/burn 文件继续走代理（语义不变，中央仍在服务后删除 blob）。
+4. ⛔ 中央 `handleFileBlob` 的机队分支**已删除**：机队对象一律走代理，按 `io.Copy` 实发字节计量。
+   限量/burn 文件本来就走代理（语义不变，中央仍在服务后删除 blob）。
 5. ✅ Kill-switch：`-direct-download` / `RELAYIUM_DIRECT_DOWNLOAD`（默认 off）。
 6. ✅ 测试全绿。
 
 7. ✅ **客户端跟随 302**：Web `downloadBlob` 的 fetch 与 CLI 的 Go http.Client 都原生跟随 302（Range 跨主机转发），无需改动；配套改了 **CSP `connect-src` 加 `https://*.relayium.com`**（否则 SPA 被自己的 CSP 拦住连不到节点子域名）+ 节点 `/dl` 的 **CORS 预检 + expose headers**。
 8. ✅ **自动化**：`internal/cfdns` 自动建 A 记录（proxied）；节点公开 `/dl` 监听（源站证书为 `dl.crt`，配 `dl-csr` 生成的 P-256 私钥，CF Full (strict) 会校验；没有可用证书就不起这个监听、也不上报 `DownloadURL`）；`install-node.sh` 升到 v0.8，透传 download/CF env + 按需授予 `CAP_NET_BIND_SERVICE`。部署手册在私有的 relayium-ops 仓库中，未公开。
 
-**仍需真机验证（给了 CF API token + 部署后）**：节点 `:443` TLS 监听 + CF 代理链路 + 自动 DNS upsert 的端到端；`RELAYIUM_DIRECT_DOWNLOAD=true` 开启后浏览器/CLI 实测。
+**这项真机验证已随 P0 撤回而作废**（机队 302 不再签发）：节点 `:443` TLS 监听 + CF 代理链路 +
+自动 DNS upsert 只在恢复机队直连时才需要重新验证。
 
-**后续阶段**：P1 回执对账（精确计量、限量/burn 也走直连）、P2 BYO 直连、P3 硬化（见 §6）。
+**后续阶段**：P2 BYO 直连与 P3 硬化已交付；P0/P1 已撤回，恢复条件见 §6 与
+`docs/direct-download-deploy.md`，没有时间表。

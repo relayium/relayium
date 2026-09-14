@@ -485,7 +485,10 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	// Resolve whether this download can be served DIRECT from the node holding it
 	// (central leaves the data path). Only for UNLIMITED files (burn/limited stay
 	// proxied so central still deletes the blob after serving); the node must
-	// advertise a public https DownloadURL and hold the shared secret.
+	// advertise a public https DownloadURL and hold the shared secret. The only
+	// direct route left is the BYO own-node one below: nothing central bills for
+	// leaves the data path, so this stays a free-path predicate, never a
+	// metered one. byoUpdateExempt reads the same predicate.
 	var directNode Node
 	directCapable := false
 	if s.directDownload && sf.MaxDownloads == 0 && directDownloadEligible(sf.Purpose) {
@@ -523,24 +526,23 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	// Per-plan traffic gate, charged to the file's OWNER (downloader identity is
 	// never read — zero-knowledge). Over quota → the owner's shares pause until
 	// the month rolls over or they upgrade. Fail-open on a read error. Applies to
-	// proxied downloads (central pays egress) AND fleet-direct (a fleet node's
-	// bandwidth is still an operator cost) — but NOT to the BYO own-node case above.
+	// every download central pays egress for, which since the fleet-direct
+	// withdrawal below is every download except the free BYO own-node case above.
 	if over, err := s.overTraffic(r.Context(), sf.UserID, sf.Size); err == nil && over {
 		http.Error(w, "this file's account has reached its monthly traffic limit", http.StatusTooManyRequests)
 		return
 	}
-	// Fleet-direct (P0/P1): hand the client a signed URL to fetch straight from the
-	// fleet node — central leaves the data path but the fleet node's bandwidth is
-	// our cost, so pre-meter the file size against the owner (a node download
-	// receipt later refunds any over-metering; see handleDownloadReceipt).
-	if directCapable && directNode.OwnerType == "fleet" {
-		mctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		_ = s.store.AddDownloadStat(mctx, sf.UserID, sf.Size)
-		_ = s.store.RecordMeter(mctx, sf.UserID, MeterDownload, sf.Size, s.now().Unix())
-		cancel()
-		s.redirectToNode(w, r, directNode, sf.BlobKey)
-		return
-	}
+	// A fleet-hosted blob is ALWAYS proxied from here down, even when
+	// s.directDownload is on and the node is online and advertising a
+	// DownloadURL. Redirecting takes central out of the data path and leaves it
+	// unable to observe the egress it pays for, so the withdrawn design charged
+	// the whole file size up front and relied on a node's receipt to give back
+	// whatever was never served. The pre-charge billed owners for bytes no
+	// request delivered, and the give-back was a credit bound to no issued
+	// grant and to no reporting node (see handleDownloadReceipt). What replaces
+	// both is the invariant below: only bytes central actually wrote are
+	// metered. The redirect may return once an issued, node-attributed,
+	// durably settled grant can carry actual-byte accounting across it.
 	bs, err := s.blobFor(r.Context(), sf.NodeID)
 	if err != nil {
 		http.Error(w, "storage node unavailable", http.StatusServiceUnavailable)

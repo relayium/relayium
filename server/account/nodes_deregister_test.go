@@ -68,17 +68,20 @@ func TestDeregisteredNodeReceivesNoNewUploads(t *testing.T) {
 // A deregistered node keeps heartbeating for up to a minute after it is told to
 // go away (the uninstaller deregisters, THEN stops the service), so its row
 // still looks online. Redirecting a downloader there hands them a dead origin.
-// Central must proxy instead — contrast TestDrainingNodeStillServesExistingDownloads,
-// where the node is alive and the 302 is exactly right.
+// Central must proxy instead.
+//
+// The owner's own BYO node is the remaining redirect target — fleet-hosted
+// downloads are always proxied now — so that is where the RemovedAt gate has to
+// be proven. It is the same predicate either way (directCapable in files.go).
 func TestDeregisteredNodeGetsNoDownloadRedirect(t *testing.T) {
 	ts, svc, store, _ := newFileServer(t)
 	svc.SetDirectDownload(true)
 	ctx := context.Background()
 	owner, _ := store.UpsertUserByEmail(ctx, "gone@example.com", "")
 	if _, err := store.UpsertNode(ctx, Node{
-		ID: "goingaway", OwnerType: "fleet", StorageEnabled: true,
+		ID: "goingaway", OwnerType: "user", OwnerUserID: owner.ID, StorageEnabled: true,
 		StorageURL: "https://internal.node", StorageSecret: "nodesecret",
-		DownloadURL: "https://node7.relayium.com", CreatedAt: 1,
+		DownloadURL: "https://mynode.example.com", CreatedAt: 1,
 		LastSeenAt: time.Now().Unix(),
 	}); err != nil {
 		t.Fatal(err)
@@ -93,11 +96,19 @@ func TestDeregisteredNodeGetsNoDownloadRedirect(t *testing.T) {
 
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	// Sanity: it redirects while installed.
-	resp, err := client.Get(ts.URL + "/api/files/" + fid + "/blob")
-	if err != nil {
-		t.Fatalf("get: %v", err)
+	get := func() *http.Response {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/files/"+fid+"/blob", nil)
+		req.Header.Set("X-Relayium-Direct-Download", "1") // the BYO opt-in
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		return resp
 	}
+
+	// Sanity: it redirects while installed.
+	resp := get()
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("before deregister: got %d, want a 302 (otherwise this test proves nothing)", resp.StatusCode)
@@ -107,10 +118,7 @@ func TestDeregisteredNodeGetsNoDownloadRedirect(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp2, err := client.Get(ts.URL + "/api/files/" + fid + "/blob")
-	if err != nil {
-		t.Fatalf("get: %v", err)
-	}
+	resp2 := get()
 	defer resp2.Body.Close()
 	if resp2.StatusCode == http.StatusFound {
 		t.Errorf("deregistered node still received a 302 to %q — the host is gone",

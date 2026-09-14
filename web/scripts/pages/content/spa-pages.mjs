@@ -16,11 +16,11 @@ export const pricing = {
   // title + " · Relayium", and pricingPage.subtitle) — see the note in shells.mjs.
   title: "Simple, honest pricing · Relayium",
   description:
-    "Same-network file and live-text transfers are always free. Cross-network browser relay and hosted storage draw on your plan's monthly traffic allowance, with a separate cap on how much you keep stored at once — every account gets both, and paid plans raise them. You can also stay 100% free by running your own node.",
+    "Same-network file and live-text transfers are always free. Cross-network browser relay and hosted storage draw on your plan's monthly traffic allowance, with a separate cap on how much you keep stored at once — every account gets both, and paid plans raise them. Uploads stored on your own node and bytes relayed through it do not use that allowance; downloads served through Relayium still count.",
   hero: {
     h1: "Simple, honest pricing",
     pitch:
-      "Same-network file and live-text transfers are always free. Cross-network browser relay and hosted storage draw on your plan's monthly traffic allowance, with a separate cap on how much you keep stored at once — every account gets both, and paid plans raise them. You can also stay 100% free by running your own node.",
+      "Same-network file and live-text transfers are always free. Cross-network browser relay and hosted storage draw on your plan's monthly traffic allowance, with a separate cap on how much you keep stored at once — every account gets both, and paid plans raise them. Uploads stored on your own node and bytes relayed through it do not use that allowance; downloads served through Relayium still count.",
     cta: "See the plans",
   },
   how: {
@@ -53,11 +53,11 @@ export const pricing = {
     ],
   },
   compare: {
-    heading: "Want 100% free? Run your own node",
+    heading: "Carry your own traffic: run your own node",
     items: [
       {
         title: "Bring your own node",
-        body: "Relayium is open source. Spin up your own relay + storage node on any machine you control — a VPS, a home server, an old laptop — with a single install command. Your transfers route through your own infrastructure, with no usage limits and nothing to pay. You bring the bandwidth; we provide the software.",
+        body: "Relayium is open source. Spin up your own relay + storage node on any machine you control — a VPS, a home server, an old laptop — with a single install command. What your node carries stops using your allowance: bytes relayed through it, and uploads stored on it. Downloads still use your allowance when Relayium carries them — they are free only when your client fetches them straight from your node. You bring the bandwidth; we provide the software.",
       },
     ],
   },
@@ -78,7 +78,7 @@ export const pricing = {
       },
       {
         q: "Can I avoid paying entirely?",
-        a: "Yes — run your own node. Because Relayium is open source, you can host your own relay and storage on hardware you control and route every transfer through it, with no limits and no fees. Add one from your account page.",
+        a: "Your own node can reduce metered traffic. Relayium is open source, so you can host relay and storage on hardware you control. Bytes relayed through it and uploads stored on it stop counting against your allowance, and a client that fetches a file straight from your node downloads free. Downloads Relayium carries still use your allowance. Add a node from your account page.",
       },
       {
         q: "Can I change plans later?",
