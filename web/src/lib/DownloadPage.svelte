@@ -471,9 +471,14 @@
 </main>
 
 <style>
+  /* box-sizing 两处都要：默认 content-box 下 max-width: 100% 只压内容盒，左右各
+     24px 的 padding 还会加在外面，于是窄屏上整页被顶宽（375px 视口量到 403px），
+     主题下拉和下方卡片被挤出屏幕。border-box 让 100% 就是外宽。
+     flex-wrap 是同一个问题的第二半：320px 上三个控件一行放不下，不换行就只能靠
+     flex-shrink 压扁 <select>，把选项文字截断。 */
   .dlnav {
-    width: 560px; max-width: 100%; margin: 0 auto;
-    display: flex; align-items: center; gap: var(--space-3);
+    width: 560px; max-width: 100%; box-sizing: border-box; margin: 0 auto;
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3);
     padding: var(--space-4) var(--space-5) 0;
   }
   .brand { display: inline-flex; align-items: center; gap: var(--space-2); margin-inline-end: auto; text-decoration: none; color: var(--text-h); font-weight: 600; }
@@ -490,7 +495,8 @@
   }
   .lang:hover { border-color: var(--accent-border); }
 
-  .dl { width: 560px; max-width: 100%; margin: 0 auto; padding: var(--space-5) var(--space-5) var(--space-7); text-align: start; }
+  /* 宽度声明的顺序别动：DownloadPage.test.ts 按 `.dl { width: 560px; max-width: 100%` 取匹配。 */
+  .dl { width: 560px; max-width: 100%; box-sizing: border-box; margin: 0 auto; padding: var(--space-5) var(--space-5) var(--space-7); text-align: start; }
   .head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin: var(--space-2) 0 var(--space-3); }
   .dl h2 { font-size: var(--fs-h3); margin: 0; }
   .summary { font-size: var(--fs-xs); color: var(--text); white-space: nowrap; }

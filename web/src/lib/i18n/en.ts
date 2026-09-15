@@ -1206,7 +1206,7 @@ const en: Messages = {
     notFound: "This link is invalid, expired, or already downloaded and deleted.",
     noKey: "Incomplete link: the decryption key (#k=) is missing.",
     decryptFail: "Decryption failed: wrong key or corrupted file.",
-    netFail: "Download interrupted — check your connection and try again.",
+    netFail: "Download interrupted. Please try again. If it keeps stopping around the same point and you use a VPN or proxy, try temporarily turning it off or connecting to Relayium directly.",
     swFail: "Saving to disk was interrupted — please try again.",
     cancelled: "Download cancelled. Nothing was saved — you can start it again.",
     limited: "Too many download requests right now, or the sender's monthly transfer allowance is used up. Wait a few minutes and open the link again — the file is still there.",
