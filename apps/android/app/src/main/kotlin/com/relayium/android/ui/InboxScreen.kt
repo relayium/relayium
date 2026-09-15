@@ -2,6 +2,7 @@
 
 package com.relayium.android.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -10,13 +11,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -33,11 +34,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -117,13 +120,13 @@ fun InboxScreen(
                     InitialCard(state, actions)
                 } else {
                     state.failure?.let { FailureCard(it, actions) }
-                    ReceivingCard(state, actions)
+                    StatusCard(state)
+                    PolicyCard(state, actions)
                     state.keyHealth?.let { KeyHealthCard(it, state.repairing, actions) }
                     if (state.awaitingAnswer.isNotEmpty()) PendingCard(state, actions)
                     DevicesCard(state, actions)
                     if (state.sends.isNotEmpty()) SendsCard(state, actions)
                     HistoryCard(state, actions)
-                    StorageNote()
                 }
             }
         }
@@ -194,10 +197,10 @@ private fun InitialCard(state: InboxModel.State, actions: InboxActions) {
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
-                Button(
+                PrimaryAction(
+                    label = stringResource(R.string.inbox_retry),
                     onClick = actions.retry,
-                    modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                ) { Text(stringResource(R.string.inbox_retry)) }
+                )
             } else {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -230,10 +233,10 @@ private fun FailureCard(failure: InboxModel.State.Failure, actions: InboxActions
             if (failure != InboxModel.State.Failure.UNSUPPORTED_BUILD &&
                 failure != InboxModel.State.Failure.SIGNED_OUT
             ) {
-                OutlinedButton(
+                SecondaryAction(
+                    label = stringResource(R.string.inbox_retry),
                     onClick = actions.retry,
-                    modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                ) { Text(stringResource(R.string.inbox_retry)) }
+                )
             }
         }
     }
@@ -254,52 +257,59 @@ private fun failureText(failure: InboxModel.State.Failure): String = stringResou
 
 // ── receiving ───────────────────────────────────────────────────────────────
 
+/**
+ * What this device IS doing. Separate from the policy below because "auto"
+ * while the app is closed receives nothing, and the two must not read as one
+ * claim.
+ */
 @Composable
-private fun ReceivingCard(state: InboxModel.State, actions: InboxActions) {
-    SectionCard {
-        run {
-            Text(
-                stringResource(R.string.inbox_receive_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
+private fun StatusCard(state: InboxModel.State) {
+    SectionCard(title = stringResource(R.string.inbox_status_title)) {
+        Column {
             state.deviceName?.let {
-                Text(
-                    stringResource(R.string.inbox_this_device, it),
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                GroupRow(label = stringResource(R.string.inbox_this_device, it))
+                GroupDivider()
             }
-            // A wrapping row rather than a fixed one: three labelled chips at
-            // the largest font scale do not fit across 320 dp.
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (policy in InboxAutoAccept.entries) {
-                    FilterChip(
-                        selected = state.policy == policy,
-                        onClick = { actions.setPolicy(policy) },
-                        label = { Text(policyLabel(policy)) },
-                        modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                    )
-                }
-            }
-            Text(policyHelp(state.policy), style = MaterialTheme.typography.bodyMedium)
+            // Left as a Text carrying the live region exactly as before: this is
+            // the node a screen reader announces, and it says which discrete
+            // state receiving is in rather than counting bytes.
             Text(
                 receivingText(state.receiving),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-            )
-            (state.directory as? InboxDirectoryState.Unavailable)?.let {
-                Text(
-                    directoryText(it.problem),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            // Stated wherever the policy is chosen, because "auto" reads like a
-            // promise this app cannot keep while it is closed.
-            Text(
-                stringResource(R.string.inbox_foreground_note),
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier
+                    .padding(vertical = Metrics.tight)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
+        (state.directory as? InboxDirectoryState.Unavailable)?.let {
+            InlineMessage(text = directoryText(it.problem), tone = MessageTone.ERROR)
+        }
+    }
+}
+
+/** What this device PERMITS. The foreground limit is the group's footnote, so
+ *  it is stated wherever the policy is chosen and can never be closed. */
+@Composable
+private fun PolicyCard(state: InboxModel.State, actions: InboxActions) {
+    SectionCard(
+        title = stringResource(R.string.inbox_receive_title),
+        footnote = stringResource(R.string.inbox_foreground_note),
+    ) {
+        // A wrapping row rather than a fixed one: three labelled chips at the
+        // largest font scale do not fit across 320 dp.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (policy in InboxAutoAccept.entries) {
+                FilterChip(
+                    selected = state.policy == policy,
+                    onClick = { actions.setPolicy(policy) },
+                    label = { Text(policyLabel(policy)) },
+                    modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
+                )
+            }
+        }
+        // The CHOSEN policy's meaning, never folded: it is what this device will
+        // do with somebody else's files.
+        Text(policyHelp(state.policy), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -350,12 +360,8 @@ private fun KeyHealthCard(
     actions: InboxActions,
 ) {
     var confirming by remember { mutableStateOf(false) }
-    SectionCard {
+    SectionCard(title = stringResource(R.string.inbox_key_title)) {
         run {
-            Text(
-                stringResource(R.string.inbox_key_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
             Text(keyHealthText(health), style = MaterialTheme.typography.bodyMedium)
             // No repair is offered for an ambiguous remote history: choosing one
             // of two active keys would mean this build naming an identity the
@@ -369,10 +375,10 @@ private fun KeyHealthCard(
                     style = MaterialTheme.typography.bodySmall,
                 )
             } else if (repairable) {
-                Button(
+                PrimaryAction(
+                    label = stringResource(R.string.inbox_key_repair_action),
                     onClick = { confirming = true },
-                    modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                ) { Text(stringResource(R.string.inbox_key_repair_action)) }
+                )
             }
         }
     }
@@ -417,14 +423,15 @@ private fun keyHealthText(health: InboxKeyHealth): String = when (health) {
  *  answers them automatically, which is the whole point of the `ask` policy. */
 @Composable
 private fun PendingCard(state: InboxModel.State, actions: InboxActions) {
-    SectionCard {
-        run {
-            Text(
-                stringResource(R.string.inbox_pending_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            for (task in state.awaitingAnswer) {
-                HorizontalDivider()
+    // ATTENTION, not plain: this is the one group on the surface asking the
+    // user a question, and the brand-tinted container is what says so.
+    SectionCard(title = stringResource(R.string.inbox_pending_title), tone = CardTone.ATTENTION) {
+        state.awaitingAnswer.forEachIndexed { index, task ->
+            // Central's own task id. Without it a task answered out of order
+            // would hand its row's remembered state to the one that moved up.
+            key(task.id) {
+                if (index > 0) GroupDivider()
+                val busy = task.id in state.answering
                 Text(
                     stringResource(
                         R.string.inbox_pending_body,
@@ -432,18 +439,19 @@ private fun PendingCard(state: InboxModel.State, actions: InboxActions) {
                         bytes(task.ciphertextBytes),
                     ),
                     style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
-                val busy = task.id in state.answering
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { actions.respond(task.id, true) },
                         enabled = !busy,
-                        modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                        modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
                     ) { Text(stringResource(R.string.inbox_pending_accept)) }
                     OutlinedButton(
                         onClick = { actions.respond(task.id, false) },
                         enabled = !busy,
-                        modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                        colors = accentOutlinedColors(),
+                        modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
                     ) { Text(stringResource(R.string.inbox_pending_decline)) }
                 }
             }
@@ -460,31 +468,35 @@ private fun DevicesCard(state: InboxModel.State, actions: InboxActions) {
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     val selected = state.devices.firstOrNull { it.deviceId == selectedId }
 
-    SectionCard {
-        run {
+    SectionCard(title = stringResource(R.string.inbox_devices_title)) {
+        if (state.devices.isEmpty() && state.blockedDevices.isEmpty()) {
             Text(
-                stringResource(R.string.inbox_devices_title),
-                style = MaterialTheme.typography.titleMedium,
+                stringResource(R.string.inbox_devices_empty),
+                style = MaterialTheme.typography.bodyMedium,
             )
-            if (state.devices.isEmpty() && state.blockedDevices.isEmpty()) {
-                Text(
-                    stringResource(R.string.inbox_devices_empty),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-            for (target in state.devices) {
-                DeviceRow(target, target.deviceId == selectedId) {
-                    selectedId = if (target.deviceId == selectedId) null else target.deviceId
+        }
+        Column {
+            state.devices.forEachIndexed { index, target ->
+                key(target.deviceId) {
+                    if (index > 0) GroupDivider()
+                    DeviceRow(target, target.deviceId == selectedId) {
+                        selectedId = if (target.deviceId == selectedId) null else target.deviceId
+                    }
                 }
             }
-            if (state.blockedDevices.isNotEmpty()) {
-                HorizontalDivider()
-                Text(
-                    stringResource(R.string.inbox_devices_blocked_title),
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                for ((row, block) in state.blockedDevices) {
-                    BlockedRow(row, block)
+        }
+        if (state.blockedDevices.isNotEmpty()) {
+            Text(
+                stringResource(R.string.inbox_devices_blocked_title),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Column {
+                state.blockedDevices.forEachIndexed { index, (row, block) ->
+                    key(row.id) {
+                        if (index > 0) GroupDivider()
+                        BlockedRow(row, block)
+                    }
                 }
             }
         }
@@ -492,21 +504,32 @@ private fun DevicesCard(state: InboxModel.State, actions: InboxActions) {
     selected?.let { SendCard(state, it, actions) }
 }
 
+/**
+ * One sendable device, chosen by tapping the row.
+ *
+ * A row rather than a chip per device: a column of chips is the repetitive
+ * container this layout exists to remove, and a full-width row is also the
+ * larger target. Selection is the tinted container and the semantics
+ * `selectable` carries; caveats stay inside the row, because a send that will
+ * not land unattended has to say so before the file is encrypted and uploaded.
+ */
 @Composable
 private fun DeviceRow(target: InboxSendTarget, selected: Boolean, onClick: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        FilterChip(
-            selected = selected,
-            onClick = onClick,
-            label = { Text(target.name) },
-            modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-        )
-        // Caveats are never suppressed: a send that will not land unattended has
-        // to say so BEFORE the file is encrypted and uploaded.
-        for (caveat in target.availability.caveats) {
-            Text(caveatText(caveat), style = MaterialTheme.typography.bodySmall)
-        }
-    }
+    val scheme = MaterialTheme.colorScheme
+    GroupRow(
+        modifier = Modifier
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .background(if (selected) scheme.secondaryContainer else Color.Transparent)
+            .padding(horizontal = Metrics.tight),
+        label = target.name,
+        // Resolved before joining: `joinToString`'s transform is a nullable
+        // function type and therefore not inlined, so a @Composable lookup
+        // cannot run inside it.
+        secondary = target.availability.caveats
+            .map { caveatText(it) }
+            .joinToString("\n")
+            .ifBlank { null },
+    )
 }
 
 @Composable
@@ -522,10 +545,7 @@ private fun caveatText(caveat: InboxTargetCaveat): String = stringResource(
  *  and a picker that silently omitted a device leaves the user hunting for it. */
 @Composable
 private fun BlockedRow(row: InboxDeviceRow, block: InboxTargetBlock) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(row.name, style = MaterialTheme.typography.bodyMedium)
-        Text(blockText(block), style = MaterialTheme.typography.bodySmall)
-    }
+    GroupRow(label = row.name, secondary = blockText(block))
 }
 
 @Composable
@@ -547,16 +567,14 @@ private fun SendCard(state: InboxModel.State, target: InboxSendTarget, actions: 
     // `rememberSaveable` would put it in a Bundle the system may persist.
     var message by remember(state.authority, target.deviceId) { mutableStateOf("") }
 
-    SectionCard {
+    SectionCard(title = stringResource(R.string.inbox_send_to, target.name)) {
         run {
-            Text(
-                stringResource(R.string.inbox_send_to, target.name),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Button(
+            // The one filled action in this group: choosing what to send is
+            // what the group is for.
+            PrimaryAction(
+                label = stringResource(R.string.inbox_send_choose_files),
                 onClick = { actions.chooseFiles(target) },
-                modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-            ) { Text(stringResource(R.string.inbox_send_choose_files)) }
+            )
 
             if (target.deviceId in state.textCapableDevices) {
                 OutlinedTextField(
@@ -566,11 +584,11 @@ private fun SendCard(state: InboxModel.State, target: InboxSendTarget, actions: 
                     colors = accentFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Button(
+                SecondaryAction(
+                    label = stringResource(R.string.inbox_send_message),
                     onClick = { actions.sendText(target, message); message = "" },
                     enabled = message.isNotBlank(),
-                    modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                ) { Text(stringResource(R.string.inbox_send_message)) }
+                )
             } else {
                 Text(
                     stringResource(R.string.inbox_send_no_text),
@@ -592,14 +610,12 @@ private fun SendCard(state: InboxModel.State, target: InboxSendTarget, actions: 
  */
 @Composable
 private fun SendsCard(state: InboxModel.State, actions: InboxActions) {
-    SectionCard {
-        run {
-            Text(
-                stringResource(R.string.inbox_sending_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            for (send in state.sends) {
-                HorizontalDivider()
+    SectionCard(title = stringResource(R.string.inbox_sending_title)) {
+        state.sends.forEachIndexed { index, send ->
+            // The job id: a cancel or a delivery removing one row must not hand
+            // its state to whichever job took its place.
+            key(send.jobId) {
+                if (index > 0) GroupDivider()
                 Text(
                     stringResource(
                         R.string.inbox_sending_to,
@@ -638,14 +654,16 @@ private fun SendsCard(state: InboxModel.State, actions: InboxActions) {
                     if (send.phase == InboxSendStatus.Phase.SENDING) {
                         OutlinedButton(
                             onClick = { actions.cancelSend(send.jobId) },
-                            modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                            colors = accentOutlinedColors(),
+                            modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
                         ) { Text(stringResource(R.string.inbox_sending_cancel)) }
                     } else if (
                         send.phase != InboxSendStatus.Phase.DELIVERED && !send.uploadUnknown
                     ) {
-                        Button(
+                        OutlinedButton(
                             onClick = { actions.send(send.jobId) },
-                            modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                            colors = accentOutlinedColors(),
+                            modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
                         ) { Text(stringResource(R.string.inbox_sending_retry)) }
                     }
                 }
@@ -690,24 +708,27 @@ private fun HistoryCard(state: InboxModel.State, actions: InboxActions) {
     var openPeer by rememberSaveable { mutableStateOf<String?>(null) }
     val conversation = state.conversations.firstOrNull { it.peerDeviceId == openPeer }
 
-    SectionCard {
-        run {
-            Text(
-                stringResource(R.string.inbox_history_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            if (conversation != null) {
-                ConversationDetail(state, conversation, actions) { openPeer = null }
-            } else {
-                if (state.conversations.isEmpty()) {
-                    Text(
-                        stringResource(R.string.inbox_history_empty),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-                for (item in state.conversations) {
-                    HorizontalDivider()
-                    ConversationRow(state, item) { openPeer = item.peerDeviceId }
+    // Where received files and messages actually live is a standing fact about
+    // everything in this group, and it is never folded away.
+    SectionCard(
+        title = stringResource(R.string.inbox_history_title),
+        footnote = stringResource(R.string.inbox_storage_note),
+    ) {
+        if (conversation != null) {
+            ConversationDetail(state, conversation, actions) { openPeer = null }
+        } else {
+            if (state.conversations.isEmpty()) {
+                Text(
+                    stringResource(R.string.inbox_history_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Column {
+                state.conversations.forEachIndexed { index, item ->
+                    key(item.peerDeviceId) {
+                        if (index > 0) GroupDivider()
+                        ConversationRow(state, item) { openPeer = item.peerDeviceId }
+                    }
                 }
             }
         }
@@ -720,26 +741,25 @@ private fun ConversationRow(
     conversation: InboxConversation,
     onOpen: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            deviceLabel(state, conversation.peerDeviceId),
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        if (conversation.unreadCount > 0) {
-            Text(
-                pluralStringResource(
-                    R.plurals.inbox_history_unread,
-                    conversation.unreadCount,
-                    conversation.unreadCount,
-                ),
-                style = MaterialTheme.typography.bodySmall,
+    GroupRow(
+        label = deviceLabel(state, conversation.peerDeviceId),
+        secondary = if (conversation.unreadCount > 0) {
+            pluralStringResource(
+                R.plurals.inbox_history_unread,
+                conversation.unreadCount,
+                conversation.unreadCount,
             )
-        }
-        OutlinedButton(
-            onClick = onOpen,
-            modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-        ) { Text(stringResource(R.string.inbox_history_open)) }
-    }
+        } else {
+            null
+        },
+        trailing = {
+            OutlinedButton(
+                onClick = onOpen,
+                colors = accentOutlinedColors(),
+                modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
+            ) { Text(stringResource(R.string.inbox_history_open)) }
+        },
+    )
 }
 
 @Composable
@@ -760,18 +780,23 @@ private fun ConversationDetail(
     }
     var deleting by remember { mutableStateOf<InboxConversationEntry?>(null) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            deviceLabel(state, conversation.peerDeviceId),
-            style = MaterialTheme.typography.bodyLarge,
+    Column(verticalArrangement = Arrangement.spacedBy(Metrics.cardGap)) {
+        GroupRow(
+            label = deviceLabel(state, conversation.peerDeviceId),
+            trailing = {
+                OutlinedButton(
+                    onClick = onBack,
+                    colors = accentOutlinedColors(),
+                    modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
+                ) { Text(stringResource(R.string.inbox_detail_back)) }
+            },
         )
-        OutlinedButton(
-            onClick = onBack,
-            modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-        ) { Text(stringResource(R.string.inbox_detail_back)) }
-        for (entry in conversation.entries) {
-            HorizontalDivider()
-            EntryRow(state, entry, actions) { deleting = entry }
+        conversation.entries.forEach { entry ->
+            // The entry id, which is also what scopes this row's test tag.
+            key(entry.id) {
+                GroupDivider()
+                EntryRow(state, entry, actions) { deleting = entry }
+            }
         }
     }
 
@@ -847,25 +872,29 @@ private fun EntryRow(
                 actions.open?.let {
                     OutlinedButton(
                         onClick = { it(entry) },
-                        modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                        colors = accentOutlinedColors(),
+                        modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
                     ) { Text(stringResource(R.string.inbox_action_open)) }
                 }
                 actions.export?.let {
                     OutlinedButton(
                         onClick = { it(entry) },
-                        modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                        colors = accentOutlinedColors(),
+                        modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
                     ) { Text(stringResource(R.string.inbox_action_export)) }
                 }
                 actions.share?.let {
                     OutlinedButton(
                         onClick = { it(entry) },
-                        modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                        colors = accentOutlinedColors(),
+                        modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
                     ) { Text(stringResource(R.string.inbox_action_share)) }
                 }
             }
             OutlinedButton(
                 onClick = onDelete,
-                modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                colors = accentOutlinedColors(),
+                modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
             ) { Text(stringResource(R.string.inbox_delete_action)) }
         }
     }
@@ -920,7 +949,8 @@ private fun MessageBody(
     }
     OutlinedButton(
         onClick = { clipboard.setText(AnnotatedString(body)) },
-        modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+        colors = accentOutlinedColors(),
+        modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
     ) { Text(stringResource(R.string.inbox_action_copy)) }
 }
 
@@ -937,14 +967,6 @@ private fun sentStateText(state: InboxConversationEntry.SentState): String = str
         InboxConversationEntry.SentState.STOPPED -> R.string.inbox_sent_stopped
     },
 )
-
-@Composable
-private fun StorageNote() {
-    Text(
-        stringResource(R.string.inbox_storage_note),
-        style = MaterialTheme.typography.bodySmall,
-    )
-}
 
 // ── labels ──────────────────────────────────────────────────────────────────
 

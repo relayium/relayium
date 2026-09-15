@@ -179,7 +179,7 @@
     <string name="account_frozen_title">该账户已排入删除计划</string>
     <string name="account_frozen_body">它将在 %1$s 之后被永久删除，恢复之前无法登录。请使用申请删除时邮件中的恢复链接。</string>
 
-    <string name="account_methods">登录方式：%1$s</string>
+    <string name="account_methods_label">登录方式</string>
     <string name="account_refresh">刷新</string>
     <string name="account_sign_out">退出登录</string>
     <string name="account_retry">重试</string>
@@ -192,11 +192,12 @@
     <string name="account_unreadable">本机保存了一份已无法读取的登录信息。恢复出厂设置或更改锁屏方式后会这样。请重新登录以替换它。</string>
     <string name="account_unreadable_discard">丢弃并重新登录</string>
 
+    <string name="account_identity_title">已登录</string>
     <string name="account_plan_title">套餐</string>
     <string name="account_quota_traffic">传输</string>
     <string name="account_quota_storage">存储</string>
-    <string name="account_quota_used">%1$s：%2$s / %3$s</string>
-    <string name="account_quota_unlimited">%1$s：已用 %2$s，不限量</string>
+    <string name="account_quota_used">%1$s / %2$s</string>
+    <string name="account_quota_unlimited">已用 %1$s，不限量</string>
     <string name="account_quota_resets">%1$s 重置</string>
 
     <string name="account_devices_title">设备</string>

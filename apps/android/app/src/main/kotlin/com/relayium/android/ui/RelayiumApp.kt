@@ -116,10 +116,10 @@ import kotlinx.coroutines.launch
 internal enum class Destination { TRANSFER, NEARBY, INBOX, CLOUD, ACCOUNT }
 
 /**
- * The shell: a destination bar, and one of two surfaces under it. The layout
- * constants follow the app-wide rhythm — 16dp card padding, 20dp between
- * sections, a readable max width on tablets, every tappable target at least
- * 48dp.
+ * The shell: a destination bar, and one of two surfaces under it. Every layout
+ * constant here comes from [Metrics] — the reading column, the side gutter and
+ * the gap between sections — so the shell and the surfaces inside it share one
+ * rhythm and every tappable target stays at least 48dp.
  *
  * ## Why the system pickers are launched from HERE
  *
@@ -403,11 +403,14 @@ fun RelayiumApp(viewModel: TransferViewModel) {
         ) {
             Column(
                 modifier = Modifier
-                    .widthIn(max = 520.dp)
+                    // The reading column, centred by the Box above: a phone
+                    // fills it, a tablet or landscape phone stops here rather
+                    // than stretching a settings row across the display.
+                    .widthIn(max = Metrics.reading)
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
+                    .padding(horizontal = Metrics.gutter, vertical = Metrics.gutter),
+                verticalArrangement = Arrangement.spacedBy(Metrics.section),
             ) {
                 // Session-level, above everything and on BOTH surfaces:
                 // leftovers are real whatever the user is looking at, and the

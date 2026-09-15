@@ -25,6 +25,7 @@
     <string name="inbox_error_unsupported_build">The server selected an Inbox protocol this version of Relayium cannot use. Update the app.</string>
     <string name="inbox_error_protocol">The server sent a response Relayium could not accept.</string>
 
+    <string name="inbox_status_title">Status</string>
     <string name="inbox_receive_title">Receiving</string>
     <string name="inbox_this_device">This device: %1$s</string>
     <string name="inbox_policy_off">Off</string>

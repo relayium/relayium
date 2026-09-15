@@ -221,7 +221,7 @@
     <string name="account_frozen_title">This account is scheduled for deletion</string>
     <string name="account_frozen_body">It will be permanently removed after %1$s, and cannot sign in until it is restored. Use the restore link in the email sent when the deletion was requested.</string>
 
-    <string name="account_methods">Sign-in methods: %1$s</string>
+    <string name="account_methods_label">Sign-in methods</string>
     <string name="account_refresh">Refresh</string>
     <string name="account_sign_out">Sign out</string>
     <string name="account_retry">Try again</string>
@@ -234,11 +234,12 @@
     <string name="account_unreadable">This device has a stored sign-in it can no longer read. That happens after a factory reset or a screen-lock change. Sign in again to replace it.</string>
     <string name="account_unreadable_discard">Discard it and sign in again</string>
 
+    <string name="account_identity_title">Signed in</string>
     <string name="account_plan_title">Plan</string>
     <string name="account_quota_traffic">Transfer</string>
     <string name="account_quota_storage">Storage</string>
-    <string name="account_quota_used">%1$s: %2$s of %3$s</string>
-    <string name="account_quota_unlimited">%1$s: %2$s used, no limit</string>
+    <string name="account_quota_used">%1$s of %2$s</string>
+    <string name="account_quota_unlimited">%1$s used, no limit</string>
     <string name="account_quota_resets">Resets on %1$s</string>
 
     <string name="account_devices_title">Devices</string>

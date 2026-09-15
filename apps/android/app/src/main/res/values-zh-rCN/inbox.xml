@@ -16,6 +16,7 @@
     <string name="inbox_error_unsupported_build">服务器选择的收件箱协议是此版本 Relayium 无法使用的。请更新应用。</string>
     <string name="inbox_error_protocol">服务器返回了 Relayium 无法接受的响应。</string>
 
+    <string name="inbox_status_title">状态</string>
     <string name="inbox_receive_title">接收</string>
     <string name="inbox_this_device">本设备：%1$s</string>
     <string name="inbox_policy_off">关闭</string>

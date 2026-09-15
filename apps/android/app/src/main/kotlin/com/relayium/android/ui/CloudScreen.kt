@@ -128,9 +128,8 @@ private fun SendCard(
     val burn by viewModel.cloudUpload.burnAfterRead.collectAsStateWithLifecycle()
     val signedIn = account is AccountState.Ready
 
-    SectionCard {
+    SectionCard(title = stringResource(R.string.cloud_send_title)) {
         run {
-            Text(stringResource(R.string.cloud_send_title), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.cloud_send_intro), style = MaterialTheme.typography.bodyMedium)
 
             if (!signedIn) {
@@ -599,9 +598,8 @@ private fun ReceiveCard(viewModel: TransferViewModel, pickers: CloudPickers) {
         if (link.isNotBlank()) viewModel.cloudDownload.open(link)
     }
 
-    SectionCard {
+    SectionCard(title = stringResource(R.string.cloud_receive_title)) {
         run {
-            Text(stringResource(R.string.cloud_receive_title), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.cloud_receive_intro), style = MaterialTheme.typography.bodyMedium)
 
             when (val current = state) {
@@ -769,9 +767,8 @@ private fun HistoryCard(viewModel: TransferViewModel) {
         if (signedIn && state is CloudHistoryModel.State.Idle) viewModel.cloudHistory.refresh()
     }
 
-    SectionCard {
+    SectionCard(title = stringResource(R.string.cloud_history_title)) {
         run {
-            Text(stringResource(R.string.cloud_history_title), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.cloud_history_intro), style = MaterialTheme.typography.bodyMedium)
 
             if (!signedIn) {
