@@ -70,15 +70,11 @@ struct DeviceConversationView: View {
     @State private var deletingConversation: Set<String>?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Metrics.section) {
-                headerSection
-                activeSection
-                composeSection
-                timelineSection
-            }
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
+        DestinationPage {
+            headerSection
+            activeSection
+            composeSection
+            timelineSection
         }
         .navigationTitle(peerName)
         .navigationBarTitleDisplayMode(.inline)

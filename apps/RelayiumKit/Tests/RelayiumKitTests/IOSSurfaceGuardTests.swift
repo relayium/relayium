@@ -4810,16 +4810,23 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(textClaim.lowerBound < textTask.lowerBound)
     }
 
-    /// The Nearby tab scrolls, like every other screen in this app.
+    /// The Nearby tab scrolls, like every other screen in this app — and now for
+    /// the same reason rather than by its own copy of the same four lines.
     ///
     /// It is the longest one: an explanation, a status card, a roster of
     /// unknown length, a staging section and a session. At the largest
     /// accessibility content sizes anything not in a `ScrollView` puts its own
-    /// action off the bottom of the screen with no way to reach it.
+    /// action off the bottom of the screen with no way to reach it. The scroller
+    /// is `Components/DestinationPage.swift`, so this asserts both halves: the
+    /// screen reaches for the scaffold, and the scaffold is still a scroller.
     func testTheNearbyTabScrollsAndStatesEveryResidencyState() throws {
         let view = try nearby()
-        XCTAssertTrue(view.text.contains("ScrollView"),
-                      "the longest screen in the app cannot be scrolled")
+        XCTAssertTrue(view.text.contains("DestinationPage {"),
+                      "the longest screen in the app is not on the shared page scaffold")
+        let page = try XCTUnwrap(
+            try sources().first { $0.name == "Components/DestinationPage.swift" }?.text)
+        XCTAssertTrue(page.contains("ScrollView"),
+                      "the page scaffold stopped scrolling, so no screen in the app does")
         XCTAssertTrue(view.text.contains("NearbyStatusPresentation.text(for: receive.state)"),
                       "the residency state must come from the shared, translated mapping")
         XCTAssertFalse(view.text.contains("ProgressView()\n"),
@@ -4905,7 +4912,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let all = try sources()
         for component in ["Components/DesignTokens.swift", "Components/SectionCard.swift",
                           "Components/InlineMessage.swift", "Components/EmptyStateView.swift",
-                          "Components/PathRail.swift"] {
+                          "Components/PathRail.swift", "Components/CardRows.swift",
+                          "Components/DestinationPage.swift"] {
             XCTAssertTrue(all.contains { $0.name == component },
                           "the shared layer lost \(component)")
         }
@@ -5769,10 +5777,13 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // Identity, devices, stored files and deletion are titled with the fact
         // each card is about; the two untitled ones would only repeat a heading
         // that is already inside them or the navigation bar.
-        XCTAssertTrue(summary.contains("SectionCard(profileTitle)"),
+        XCTAssertTrue(summary.contains("SectionCard(profileTitle,"),
                       "the identity card is not titled with whose account this is")
-        for titled in ["SectionCard(L10n.t(.accountDevicesHeading))",
-                       "SectionCard(L10n.t(.accountFilesHeading))",
+        // The first two are row groups now, so their titles are captions above
+        // the card and each carries the sentence about the list as the group's
+        // footnote — hence the open parenthesis rather than a closed call.
+        for titled in ["SectionCard(L10n.t(.accountDevicesHeading),",
+                       "SectionCard(L10n.t(.accountFilesHeading),",
                        "SectionCard(L10n.t(.accountDeleteAccountHeading))"] {
             XCTAssertTrue(summary.contains(titled), "the account surface lost \(titled)")
         }

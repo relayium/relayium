@@ -23,12 +23,8 @@ struct AccountTab: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
+            DestinationPage {
                 content
-                    .padding()
-                    // Leading, not centred: at the largest Dynamic Type sizes a
-                    // centred column becomes a ragged edge on both sides.
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .navigationTitle(L10n.t(.tabAccount))
         }

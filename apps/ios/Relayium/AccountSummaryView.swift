@@ -248,53 +248,72 @@ struct AccountSummaryView: View {
 
     @ViewBuilder
     private var profileSection: some View {
-        SectionCard(profileTitle) {
-            // Only when it adds something: with no display name the card is
-            // already titled with the address.
-            if !user.displayName.isEmpty {
-                Text(user.email)
-                    .font(.callout)
-                    .foregroundStyle(Palette.supportingLabel)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            HStack(spacing: Metrics.tight) {
-                Text(usage.plan.name).font(.subheadline.weight(.semibold))
-                // Both the "should this show at all" predicate and the
-                // wording live in UsagePresentation, where they are tested.
-                // A raw Stripe status must never reach this capsule.
-                if let badge = UsagePresentation.subscriptionBadge(
-                    for: usage.plan.subscriptionStatus) {
-                    Text(badge)
-                        .font(.caption)
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(.quaternary, in: Capsule())
+        // A row group: who this is, what the plan is, and what it has used are
+        // four facts of one kind, and the reset date is the one line that
+        // belongs under them rather than among them.
+        SectionCard(profileTitle,
+                    footnote: UsagePresentation.resetText(resetsAt: usage.resetsAt,
+                                                          now: Date()),
+                    rows: true) {
+            CardRows {
+                // Only when it adds something: with no display name the card is
+                // already titled with the address.
+                if !user.displayName.isEmpty {
+                    CardBlockRow {
+                        Text(user.email)
+                            .font(.callout)
+                            .foregroundStyle(Palette.supportingLabel)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-            }
-            // One spoken phrase: the tier and the state it is in belong
-            // together, and a badge read as its own element says "Past due"
-            // with nothing to attach it to.
-            .accessibilityElement(children: .combine)
 
-            if IOSAppleSubscriptions.channel.showsWebPlanHandoff {
-                Button(L10n.t(.accountManagePlan)) { openURL(AppEnvironment.plansWebURL) }
-                    .font(.callout)
-                    .textAction()
-            }
+                CardBlockRow {
+                    VStack(alignment: .leading, spacing: Metrics.tight) {
+                        HStack(spacing: Metrics.tight) {
+                            Text(usage.plan.name).font(.subheadline.weight(.semibold))
+                            // Both the "should this show at all" predicate and
+                            // the wording live in UsagePresentation, where they
+                            // are tested. A raw Stripe status must never reach
+                            // this capsule.
+                            if let badge = UsagePresentation.subscriptionBadge(
+                                for: usage.plan.subscriptionStatus) {
+                                Text(badge)
+                                    .font(.caption)
+                                    .padding(.horizontal, Metrics.caption)
+                                    .padding(.vertical, Metrics.hairline / 2)
+                                    .background(Palette.chip, in: Capsule())
+                            }
+                        }
+                        // One spoken phrase: the tier and the state it is in
+                        // belong together, and a badge read as its own element
+                        // says "Past due" with nothing to attach it to.
+                        .accessibilityElement(children: .combine)
 
-            meter(L10n.t(.accountTraffic), UsagePresentation.display(usage.traffic))
-            meter(L10n.t(.accountStorage), UsagePresentation.display(usage.storage))
+                        if IOSAppleSubscriptions.channel.showsWebPlanHandoff {
+                            Button(L10n.t(.accountManagePlan)) {
+                                openURL(AppEnvironment.plansWebURL)
+                            }
+                            .font(.callout)
+                            .textAction()
+                        }
+                    }
+                }
 
-            Text(UsagePresentation.resetText(resetsAt: usage.resetsAt, now: Date()))
-                .font(.caption).foregroundStyle(Palette.supportingLabel)
-                .fixedSize(horizontal: false, vertical: true)
+                CardBlockRow {
+                    meter(L10n.t(.accountTraffic), UsagePresentation.display(usage.traffic))
+                }
+                CardBlockRow {
+                    meter(L10n.t(.accountStorage), UsagePresentation.display(usage.storage))
+                }
 
-            // The figures above are the last ones that arrived, not the current
-            // ones. That is a caveat on the meters, so it stays inside their
-            // card — and it is the shared inline role, which is what makes it
-            // legible as a caveat rather than as a third meter.
-            if session.isStale {
-                InlineMessage(.warning, L10n.t(.accountStaleFigures))
+                // The figures above are the last ones that arrived, not the
+                // current ones. That is a caveat on the meters, so it stays in
+                // their group — a row of its own rather than a third meter.
+                if session.isStale {
+                    CardBlockRow {
+                        InlineMessage(.warning, L10n.t(.accountStaleFigures))
+                    }
+                }
             }
         }
 
@@ -325,29 +344,36 @@ struct AccountSummaryView: View {
 
     @ViewBuilder
     private var devicesSection: some View {
-        SectionCard(L10n.t(.accountDevicesHeading)) {
-            // Browsers are left out on purpose — see AccountDevice.holdsRevocableToken.
-            Text(L10n.t(.accountDevicesBody))
-                .font(.caption).foregroundStyle(Palette.supportingLabel)
-                .fixedSize(horizontal: false, vertical: true)
-
-            // A refresh must never replace a usable list with a spinner, which
-            // is why the model's `isLoading` is combined with "nothing on screen"
-            // rather than read alone. Labelled rather than bare: VoiceOver reads
-            // nothing from a spinner, and this screen has two lists loading.
-            if management.isLoading && management.devices.isEmpty {
-                ProgressView { Text(L10n.t(.accountLoadingDevices)) }
-            } else if management.devices.isEmpty {
-                // The shared empty-state role, so an account with no signed-in
-                // device meets the same designed state as an empty nearby
-                // roster: a landmark and the fact, with the remedy — Refresh —
-                // already on the screen below.
-                // nonlocalized: SF Symbol name
-                EmptyStateView(symbol: "iphone",
-                               message: L10n.t(.accountNoDevices))
-            } else {
-                ForEach(management.devices) { device in
-                    deviceRow(device)
+        // Browsers are left out on purpose — see AccountDevice.holdsRevocableToken
+        // — which is a fact about the list rather than part of it, so it is the
+        // group's footnote.
+        SectionCard(L10n.t(.accountDevicesHeading),
+                    footnote: L10n.t(.accountDevicesBody),
+                    rows: true) {
+            CardRows {
+                // A refresh must never replace a usable list with a spinner,
+                // which is why the model's `isLoading` is combined with "nothing
+                // on screen" rather than read alone. Labelled rather than bare:
+                // VoiceOver reads nothing from a spinner, and this screen has
+                // two lists loading.
+                if management.isLoading && management.devices.isEmpty {
+                    CardBlockRow { ProgressView { Text(L10n.t(.accountLoadingDevices)) } }
+                } else if management.devices.isEmpty {
+                    // The shared empty-state role, so an account with no
+                    // signed-in device meets the same designed state as an empty
+                    // nearby roster: a landmark and the fact, with the remedy —
+                    // Refresh — already on the screen below.
+                    // nonlocalized: SF Symbol name
+                    CardBlockRow {
+                        EmptyStateView(symbol: "iphone",
+                                       message: L10n.t(.accountNoDevices))
+                    }
+                } else {
+                    // Keyed by the server's own row id, so a device that is
+                    // revoked or reordered takes its row's state with it.
+                    CardRowList(management.devices) { device in
+                        CardBlockRow { deviceRow(device) }
+                    }
                 }
             }
         }
@@ -366,8 +392,9 @@ struct AccountSummaryView: View {
             if device.current {
                 Text(L10n.t(.accountThisMac))
                     .font(.caption2)
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(.quaternary, in: Capsule())
+                    .padding(.horizontal, Metrics.caption)
+                    .padding(.vertical, Metrics.hairline / 2)
+                    .background(Palette.chip, in: Capsule())
             }
             Text(AccountPresentation.deviceDetail(kind: device.kind,
                                                   lastSeenAt: device.lastSeenAt,
@@ -397,10 +424,10 @@ struct AccountSummaryView: View {
                 failureLine(error)
             }
         }
-        .padding(.vertical, Metrics.hairline)
         // One group per device, so VoiceOver moves device by device instead of
         // reading a name, a badge, a detail and a Revoke button as four peers
-        // of the next row's four.
+        // of the next row's four. The row's own insets and floor come from
+        // `CardBlockRow`.
         .accessibilityElement(children: .contain)
     }
 
@@ -408,20 +435,22 @@ struct AccountSummaryView: View {
 
     @ViewBuilder
     private var filesSection: some View {
-        SectionCard(L10n.t(.accountFilesHeading)) {
-            Text(L10n.t(.accountFilesBody))
-                .font(.caption).foregroundStyle(Palette.supportingLabel)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if management.isLoading && management.files.isEmpty {
-                ProgressView { Text(L10n.t(.accountLoadingFiles)) }
-            } else if management.files.isEmpty {
-                // nonlocalized: SF Symbol name
-                EmptyStateView(symbol: "externaldrive",
-                               message: L10n.t(.accountNoFiles))
-            } else {
-                ForEach(management.files) { row in
-                    fileRow(row)
+        SectionCard(L10n.t(.accountFilesHeading),
+                    footnote: L10n.t(.accountFilesBody),
+                    rows: true) {
+            CardRows {
+                if management.isLoading && management.files.isEmpty {
+                    CardBlockRow { ProgressView { Text(L10n.t(.accountLoadingFiles)) } }
+                } else if management.files.isEmpty {
+                    // nonlocalized: SF Symbol name
+                    CardBlockRow {
+                        EmptyStateView(symbol: "externaldrive",
+                                       message: L10n.t(.accountNoFiles))
+                    }
+                } else {
+                    CardRowList(management.files) { row in
+                        CardBlockRow { fileRow(row) }
+                    }
                 }
             }
         }
@@ -498,7 +527,6 @@ struct AccountSummaryView: View {
                 failureLine(error)
             }
         }
-        .padding(.vertical, Metrics.hairline)
         // One group per stored object, for the same reason as a device row:
         // these are repeated action sets, and only the id tells them apart.
         .accessibilityElement(children: .contain)

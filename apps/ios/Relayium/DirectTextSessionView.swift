@@ -36,7 +36,7 @@ struct DirectTextSessionView: View {
     @State private var confirmingDraftDiscard = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
             switch model.state {
             case .idle, .minting, .showingCode:
                 EmptyView()
@@ -98,7 +98,7 @@ struct DirectTextSessionView: View {
     private var overByteLimit: Bool { model.draftByteCount > TEXT_MAX_BYTES }
 
     private func verify(_ sas: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.snug) {
             Text(L10n.t(.textCheckMatches)).font(.headline)
             PairingCodeText(code: sas, style: .verification)
             Text(L10n.t(.textCheckMatchesBody))
@@ -117,7 +117,7 @@ struct DirectTextSessionView: View {
     }
 
     private func waiting(_ sas: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.snug) {
             // The label IS the heading: a spinner beside a line of text that
             // says the same thing is one element read twice.
             ProgressView { Text(L10n.t(.textWaitingAccept)) }
@@ -146,7 +146,7 @@ struct DirectTextSessionView: View {
     /// is the existing responder semantics and this view does not change it:
     /// nothing is decrypted any earlier either way.
     private func incomingRequest(_ sas: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.snug) {
             Text(L10n.t(.textIncomingHeading)).font(.headline)
             if verification.requiresSASConfirmation {
                 Text(L10n.t(.textVerifiedPhrase, [L10n.token(sas)]))
@@ -169,7 +169,7 @@ struct DirectTextSessionView: View {
     }
 
     private func session(_ sas: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.snug) {
             Text(L10n.t(.textSessionHeading)).font(.headline)
             if verification.requiresSASConfirmation {
                 Text(L10n.t(.textVerifiedPhrase, [L10n.token(sas)]))
@@ -190,7 +190,7 @@ struct DirectTextSessionView: View {
                     .font(.callout)
                     .foregroundStyle(Palette.supportingLabel)
             }
-            LazyVStack(alignment: .leading, spacing: 10) {
+            LazyVStack(alignment: .leading, spacing: Metrics.tight) {
                 ForEach(model.history) { messageRow($0) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -213,7 +213,7 @@ struct DirectTextSessionView: View {
     }
 
     private var composer: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Metrics.tight) {
             TextField(L10n.t(.textComposerLabel), text: $model.draft, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(2...6)
@@ -242,7 +242,7 @@ struct DirectTextSessionView: View {
     }
 
     private func messageRow(_ message: RealtimeTextMessage) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Metrics.caption) {
             HStack {
                 Text(L10n.t(message.direction == .outgoing ? .textSent : .textReceived))
                     .font(.caption.weight(.semibold))
@@ -286,8 +286,9 @@ struct DirectTextSessionView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(10)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
+        .padding(Metrics.snug)
+        .background(Palette.chip,
+                    in: RoundedRectangle(cornerRadius: Metrics.corner, style: .continuous))
     }
 
     /// The transcript after the session is over.
@@ -299,7 +300,7 @@ struct DirectTextSessionView: View {
     @ViewBuilder
     private var retainedDraft: some View {
         if !model.draft.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Metrics.tight) {
                 Text(L10n.t(.textUnsentDraftHeading)).font(.headline)
                 Text(L10n.t(.textUnsentDraftBody))
                     .font(.footnote)
@@ -309,8 +310,10 @@ struct DirectTextSessionView: View {
                     .font(.body.monospaced())
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
-                    .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+                    .padding(Metrics.snug)
+                    .background(Palette.chip,
+                                in: RoundedRectangle(cornerRadius: Metrics.corner,
+                                                     style: .continuous))
                 Button {
                     copyText(model.draft)
                     copiedMessageID = nil
@@ -327,13 +330,13 @@ struct DirectTextSessionView: View {
     @ViewBuilder
     private var retainedHistory: some View {
         if !model.history.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Metrics.snug) {
                 Text(L10n.t(.textLocalHistoryHeading)).font(.headline)
                 Text(L10n.t(.textLocalHistoryBody))
                     .font(.footnote)
                     .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
-                LazyVStack(alignment: .leading, spacing: 10) {
+                LazyVStack(alignment: .leading, spacing: Metrics.tight) {
                     ForEach(model.history) { messageRow($0) }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

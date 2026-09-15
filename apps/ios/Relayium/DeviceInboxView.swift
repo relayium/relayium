@@ -77,14 +77,8 @@ struct DeviceInboxView: View {
 
     var body: some View {
         NavigationStack(path: conversationPath) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Metrics.section) {
-                    content
-                }
-                .padding()
-                // Leading, not centred: at the largest Dynamic Type sizes a
-                // centred ragged column is unreadable.
-                .frame(maxWidth: .infinity, alignment: .leading)
+            DestinationPage {
+                content
             }
             .navigationTitle(L10n.t(.inboxTitle))
             .navigationDestination(for: String.self) { peerID in
@@ -188,51 +182,69 @@ struct DeviceInboxView: View {
     // MARK: - status, and the one limitation that defines this platform
 
     private var statusSection: some View {
-        SectionCard {
-            // The route, stated as a shape rather than as a claim about any one
-            // delivery — and ending at THIS device, not at a Mac.
-            PathRail(stops: PathRailPresentation.iosDeviceInbox())
+        // A row group, because these are separate facts about one question
+        // rather than one paragraph: the route, the state and its recovery, the
+        // limit, and where the bytes land.
+        //
+        // Only the mechanism folds. `inboxIOSExplain` is how this works and is
+        // read once; the foreground-only limit, the folder promise and any store
+        // failure are what a person needs before walking away from the device,
+        // so none of them is behind a tap.
+        SectionCard(rows: true) {
+            CardRows {
+                // The route, stated as a shape rather than as a claim about any
+                // one delivery — and ending at THIS device, not at a Mac.
+                CardBlockRow {
+                    PathRail(stops: PathRailPresentation.iosDeviceInbox())
+                }
 
-            Text(IOSInboxCopy.status(for: inbox.state))
-                .font(.callout)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("inbox-status")
+                CardBlockRow(explanation: L10n.t(.inboxIOSExplain)) {
+                    VStack(alignment: .leading, spacing: Metrics.tight) {
+                        Text(IOSInboxCopy.status(for: inbox.state))
+                            .font(.callout)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("inbox-status")
 
-            // Present only where there is something to do. `IOSInboxCopy`
-            // guarantees this can never be Choose Folder — the control this
-            // platform cannot draw — which is the whole reason it overrides the
-            // shared rule rather than reusing it.
-            if let recovery = IOSInboxCopy.recovery(for: inbox.state) {
-                Button(IOSInboxCopy.label(for: recovery)) { perform(recovery) }
-                    .borderedAction()
-                    .controlSize(.large)
-                    .accessibilityIdentifier("inbox-recovery")
-            }
+                        // Present only where there is something to do.
+                        // `IOSInboxCopy` guarantees this can never be Choose
+                        // Folder — the control this platform cannot draw — which
+                        // is the whole reason it overrides the shared rule
+                        // rather than reusing it.
+                        if let recovery = IOSInboxCopy.recovery(for: inbox.state) {
+                            Button(IOSInboxCopy.label(for: recovery)) { perform(recovery) }
+                                .borderedAction()
+                                .controlSize(.large)
+                                .accessibilityIdentifier("inbox-recovery")
+                        }
+                    }
+                }
 
-            // **The sentence that makes this screen honest on a phone**, and it
-            // is rendered in every state rather than only when something has
-            // gone wrong: "Ready to receive" is true and still incomplete, and
-            // the missing half is what a user needs before they walk away from
-            // the device expecting a file to arrive.
-            InlineMessage(.info, L10n.t(.inboxIOSForegroundOnly))
-                .accessibilityIdentifier("inbox-foreground-only")
+                // **The sentence that makes this screen honest on a phone**, and
+                // it is rendered in every state rather than only when something
+                // has gone wrong: "Ready to receive" is true and still
+                // incomplete, and the missing half is what a user needs before
+                // they walk away from the device expecting a file to arrive.
+                CardBlockRow {
+                    InlineMessage(.info, L10n.t(.inboxIOSForegroundOnly))
+                        .accessibilityIdentifier("inbox-foreground-only")
+                }
 
-            Text(L10n.t(.inboxIOSExplain))
-                .font(.footnote)
-                .foregroundStyle(Palette.supportingLabel)
-                .fixedSize(horizontal: false, vertical: true)
+                // Where the bytes go, named as the Files-app route the user can
+                // actually walk — the same route a stored-link receive names,
+                // built from the same two constants.
+                CardBlockRow {
+                    Text(IOSInboxCopy.folderExplanation())
+                        .font(.footnote)
+                        .foregroundStyle(Palette.supportingLabel)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("inbox-folder")
+                }
 
-            // Where the bytes go, named as the Files-app route the user can
-            // actually walk — the same route a stored-link receive names, built
-            // from the same two constants.
-            Text(IOSInboxCopy.folderExplanation())
-                .font(.footnote)
-                .foregroundStyle(Palette.supportingLabel)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("inbox-folder")
-
-            if inbox.conversationStoreIssue {
-                InlineMessage(.warning, L10n.t(.inboxConversationStoreIssue))
+                if inbox.conversationStoreIssue {
+                    CardBlockRow {
+                        InlineMessage(.warning, L10n.t(.inboxConversationStoreIssue))
+                    }
+                }
             }
         }
     }
@@ -411,16 +423,34 @@ struct DeviceInboxView: View {
     /// there and not here.
     private var conversationsSection: some View {
         SectionCard(L10n.t(.inboxConversationsHeading)) {
-            HStack(alignment: .firstTextBaseline) {
+            // **Stacked, not side by side.** This paragraph is 160 characters in
+            // English and 47 unspaced characters in Chinese; beside a control
+            // with a zero-minimum spacer its first line ends flush against the
+            // button, which rendered as "onto a Mac Refresh" on an iPhone. A
+            // first-baseline alignment also parked a one-line control on a
+            // four-line paragraph's FIRST line, so the action read as part of
+            // the sentence rather than as the group's.
+            VStack(alignment: .leading, spacing: Metrics.tight) {
                 Text(L10n.t(.sendDeviceExplain))
                     .font(.footnote)
                     .foregroundStyle(Palette.supportingLabel)
                     .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-                Button(L10n.t(.commonRefresh), action: refreshTargets)
-                    .textAction()
-                    .disabled(deliveries.directory == .loading)
-                    .accessibilityIdentifier("inbox-devices-refresh")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("inbox-devices-explain")
+                // The target is built INSIDE the label, so the button owns the
+                // 44pt rectangle rather than having one framed around it: a
+                // frame applied to the `Button` sizes the control, while the
+                // shape a tap actually resolves against is the label's.
+                Button(action: refreshTargets) {
+                    Text(L10n.t(.commonRefresh))
+                        .frame(minWidth: Metrics.hitTarget,
+                               minHeight: Metrics.hitTarget,
+                               alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .textAction()
+                .disabled(deliveries.directory == .loading)
+                .accessibilityIdentifier("inbox-devices-refresh")
             }
 
             // The directory's own state, when the list itself is not the answer.

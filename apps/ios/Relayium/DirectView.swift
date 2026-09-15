@@ -226,42 +226,36 @@ struct DirectView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Metrics.section) {
-                    // The other direct tab is presenting the session. Say so and
-                    // offer the way there rather than drawing a second copy of
-                    // it — both tabs drive the same two models, so a second copy
-                    // would be a second Cancel for one transfer.
-                    if let owner = presence.owner, owner != .pairingCode {
-                        busyElsewhere(owner)
-                    } else {
-                        // Only while there is still a choice to make. Both of
-                        // these say what a direct transfer IS, which is advice
-                        // about a decision — so once a code is being minted, is
-                        // waiting for a peer, or is carrying one, they are two
-                        // paragraphs of preamble above the thing the user is
-                        // actually watching. The large-file route directly below
-                        // has always been gated on exactly this, for exactly
-                        // this reason.
-                        if !isLocked { positioning }
+            DestinationPage {
+                // The other direct tab is presenting the session. Say so and
+                // offer the way there rather than drawing a second copy of
+                // it — both tabs drive the same two models, so a second copy
+                // would be a second Cancel for one transfer.
+                if let owner = presence.owner, owner != .pairingCode {
+                    busyElsewhere(owner)
+                } else {
+                    // Only while there is still a choice to make. Both of
+                    // these say what a direct transfer IS, which is advice
+                    // about a decision — so once a code is being minted, is
+                    // waiting for a peer, or is carrying one, they are two
+                    // paragraphs of preamble above the thing the user is
+                    // actually watching. The large-file route directly below
+                    // has always been gated on exactly this, for exactly
+                    // this reason.
+                    if !isLocked { positioning }
 
-                        if let notice = foreground.interruption { interruption(notice) }
+                    if let notice = foreground.interruption { interruption(notice) }
 
-                        modePicker
+                    modePicker
 
-                        switch modes.mode {
-                        case .files: filesMode
-                        case .text:  textMode
-                        }
-
-                        if !isLocked { largeFileRoute }
-                        verificationSetting
+                    switch modes.mode {
+                    case .files: filesMode
+                    case .text:  textMode
                     }
+
+                    if !isLocked { largeFileRoute }
+                    verificationSetting
                 }
-                .padding()
-                // Leading, not centred: at the largest Dynamic Type sizes a
-                // centred ragged column is unreadable.
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .navigationTitle(L10n.t(.tabDirect))
         }

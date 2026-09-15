@@ -24,16 +24,30 @@ import SwiftUI
 /// scales with the user's setting; the one deliberate exception is
 /// `PairingCodeText`, which states its own reason.
 enum Metrics {
-    /// Between top-level sections on a screen. The value the two refreshed
-    /// scroll views already used, kept so the rhythm did not change under the
-    /// screens that were not touched.
-    static let section: CGFloat = 20
-    /// Between the parts of one section, and the padding inside a card.
+    /// Between top-level sections on a screen. The owner's interface reference
+    /// puts 16 between groups, which is also the gutter a destination sits in —
+    /// so a group and the edge of the screen are one rhythm rather than two.
+    static let section: CGFloat = 16
+    /// The padding inside a card, and between two things inside it that are
+    /// separate intentions rather than two lines of one.
     static let inner: CGFloat = 16
+    /// Between the parts of one thought inside a card: a heading and its list,
+    /// a transcript's messages, the insets of a bubble. The step the session
+    /// views were already written at, named rather than repeated.
+    static let snug: CGFloat = 12
     /// Between a label and the thing it labels.
     static let tight: CGFloat = 8
     /// Between lines of the same thought.
     static let hairline: CGFloat = 4
+    /// Between a group's caption and its card, and between a card and the
+    /// footnote under it. Deliberately tighter than `section`: a caption that
+    /// floats as far from its card as the next group does belongs to neither.
+    static let caption: CGFloat = 6
+    /// The gutter around a destination's content, and the air above the first
+    /// group and below the last.
+    static let page: CGFloat = 16
+    static let pageTop: CGFloat = 12
+    static let pageBottom: CGFloat = 28
     /// One card's corner. Continuous, at the call site — a circular corner at
     /// this radius reads as a foreign control on iOS.
     static let corner: CGFloat = 12
@@ -45,6 +59,16 @@ enum Metrics {
     /// that a future compact control has a floor to fail against rather than a
     /// look to match.
     static let hitTarget: CGFloat = 44
+    /// A grouped row: the floor, and the insets inside it. The floor is
+    /// `hitTarget` rather than the reference's 40, because every row here is
+    /// something a finger has to land on.
+    static let rowMinHeight: CGFloat = hitTarget
+    static let rowVertical: CGFloat = 10
+    static let rowHorizontal: CGFloat = 16
+    /// The reading measure. At a regular width the column stops here and the
+    /// gutters take the rest; at a compact width the screen is narrower than
+    /// this, so the same rule serves both shells and neither can drift.
+    static let readingMeasure: CGFloat = 660
 }
 
 /// Where the brand violet is allowed to go.
@@ -79,8 +103,20 @@ enum Palette {
     /// grouped content in both appearances, and it tracks Increase Contrast on
     /// its own.
     static var cardBackground: Color { Color(uiColor: .secondarySystemBackground) }
-    /// A line that bounds or separates without being looked at.
+    /// The page a card sits on: the other half of the pair above, and the
+    /// separation iOS itself uses for grouped content in both appearances.
+    /// Named so a destination's surface is the token layer's decision rather
+    /// than whatever a `ScrollView` inherited.
+    static var pageBackground: Color { Color(uiColor: .systemBackground) }
+    /// A line that bounds or separates without being looked at — including the
+    /// rules BETWEEN a card's rows, which is where most of them are.
     static var hairline: Color { Color(uiColor: .separator) }
+    /// Behind a transcript bubble, a badge or a value that reads as a token
+    /// rather than as prose. One weight in place of the three hand-written
+    /// quaternary opacities the session views carried, and the system's lightest
+    /// fill, so supporting prose on it keeps the contrast
+    /// `IOSSupportingTextGuardTests` measured against the quaternary composite.
+    static var chip: Color { Color(uiColor: .quaternarySystemFill) }
     /// **Prose the eye reaches second.** Every explanation, caption, detail line,
     /// timestamp, byte count and empty-state sentence in the app.
     ///

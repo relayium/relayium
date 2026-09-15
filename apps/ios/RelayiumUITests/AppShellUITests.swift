@@ -1674,7 +1674,7 @@ final class AppShellUITests: XCTestCase {
         app.launch()
         if dark { assertAppearanceTookEffect() }
 
-        var unclassified: [String] = []
+        var unresolved: [Finding] = []
         var classified: [String] = []
         func audit(_ surface: String) throws {
             try app.performAccessibilityAudit(for: .all) { issue in
@@ -1685,7 +1685,11 @@ final class AppShellUITests: XCTestCase {
                 if let reason = self.classification(of: issue, dark: dark) {
                     classified.append("\(line) [\(reason)]")
                 } else {
-                    unclassified.append(line)
+                    unresolved.append(Finding(surface: surface,
+                                              isContrast: issue.auditType == .contrast,
+                                              label: issue.element?.label ?? "",
+                                              frame: issue.element?.frame ?? .zero,
+                                              line: line))
                 }
                 return true
             }
@@ -1701,16 +1705,111 @@ final class AppShellUITests: XCTestCase {
         // real screenshot once; keeping the list in the report is what lets the
         // next reader check that it still describes the same elements instead
         // of trusting that somebody did.
+        // The one finding this suite resolves by EXPERIMENT rather than by
+        // classification, and only when the whole unresolved set is that one
+        // finding. See `resolveVerificationLabelInEdgeBand`.
+        if let reason = try resolveVerificationLabelInEdgeBand(unresolved, dark: dark) {
+            classified.append("\(unresolved[0].line) [\(reason)]")
+            unresolved = []
+        }
+
         let record = XCTAttachment(string: classified.joined(separator: "\n"))
         record.name = "classified-accessibility-findings"
         record.lifetime = .keepAlways
         add(record)
 
-        XCTAssertTrue(unclassified.isEmpty,
+        XCTAssertTrue(unresolved.isEmpty,
                       "the system accessibility audit rejected what a user would "
                       + "meet, and none of these is a finding this suite has "
                       + "already measured and classified:\n"
-                      + unclassified.joined(separator: "\n"))
+                      + unresolved.map(\.line).joined(separator: "\n"))
+    }
+
+    /// One audit finding, kept with the geometry a deferral has to be judged on.
+    private struct Finding {
+        let surface: String
+        let isContrast: Bool
+        let label: String
+        let frame: CGRect
+        let line: String
+    }
+
+    /// The verification label, and the scroll-edge band iOS 26 fades.
+    private static let verificationLabel = "Compare verification codes with the other device"
+    /// Measured, not chosen: on a real Light capture one text role read 2.10:1
+    /// inside the band and 5.10:1 one line clear of it, and the rejected label
+    /// cleared the tab bar by about 11pt.
+    private static let edgeBand: CGFloat = 44
+
+    /// **Resolve the verification label by MOVING it, or preserve the failure.**
+    ///
+    /// iOS 26 fades scroll content approaching the navigation bar and the
+    /// floating tab bar, and the audit samples the composited result — so an
+    /// element resting in that band can fail contrast at a colour pairing that
+    /// measures about 15:1. That is a real reading of real pixels, so it is not
+    /// allowlisted by name: this brings the SAME `verify-toggle` clear of both
+    /// edges, re-audits `.contrast`, and resolves the finding only if the label
+    /// has stopped failing there.
+    ///
+    /// Deliberately narrow. It returns `nil` — preserving every failure — when
+    /// the unresolved set is anything other than exactly this one Nearby
+    /// contrast finding inside the band, when the target is missing, when it
+    /// cannot be positioned clear, or when the label still fails once it is.
+    /// The secondary audit's OTHER findings are recorded rather than acted on:
+    /// scrolling moves different prose into the band, which is the same effect
+    /// and not a licence to suppress anything.
+    @available(iOS 17.0, *)
+    private func resolveVerificationLabelInEdgeBand(_ unresolved: [Finding],
+                                                    dark: Bool) throws -> String? {
+        guard unresolved.count == 1, let finding = unresolved.first,
+              finding.surface == Shell.lanTransfer.id, finding.isContrast,
+              finding.label == Self.verificationLabel else { return nil }
+
+        // The walk ends on the presented stored-link sheet, so the shell has to
+        // be reachable again before Nearby can be opened.
+        let done = app.buttons["stored-receive-done"].firstMatch
+        if done.exists { done.tap() }
+        open(Shell.lanTransfer, in: app)
+        let toggle = app.descendants(matching: .any)["verify-toggle"].firstMatch
+        guard toggle.waitForExistence(timeout: 10) else { return nil }
+        let navBottom = app.navigationBars[Shell.lanTransfer.title].firstMatch.frame.maxY
+        let barTop = app.tabBars.firstMatch.exists
+            ? app.tabBars.firstMatch.frame.minY : app.windows.firstMatch.frame.maxY
+        // The finding has to be in the band for this path to apply at all.
+        guard finding.frame.maxY > barTop - Self.edgeBand
+            || finding.frame.minY < navBottom + Self.edgeBand else { return nil }
+
+        var clear = false
+        for _ in 0..<10 where !clear {
+            let frame = toggle.frame
+            if frame.minY > navBottom + Self.edgeBand,
+               frame.maxY < barTop - Self.edgeBand { clear = true; break }
+            if frame.maxY >= barTop - Self.edgeBand { app.swipeUp() } else { app.swipeDown() }
+        }
+        let moved = toggle.frame
+        var secondary: [String] = []
+        if clear {
+            try app.performAccessibilityAudit(for: .contrast) { issue in
+                secondary.append("\(issue.compactDescription) — label="
+                                 + "\(issue.element?.label ?? "") "
+                                 + "frame=\(issue.element?.frame ?? .zero)")
+                return true
+            }
+        }
+        let proof = XCTAttachment(string:
+            "appearance=\(dark ? "dark" : "light")\nlabel=\(finding.label)\n"
+            + "before=\(finding.frame)\nafter=\(moved)\npositioned=\(clear)\n"
+            + "navBottom=\(navBottom) barTop=\(barTop) band=\(Self.edgeBand)\n"
+            + "secondary .contrast audit clear of both edges:\n"
+            + (secondary.isEmpty ? "(none)" : secondary.joined(separator: "\n")))
+        proof.name = "verification-label-edge-band-differential"
+        proof.lifetime = .keepAlways
+        add(proof)
+
+        guard clear, !secondary.contains(where: { $0.contains(Self.verificationLabel) }) else {
+            return nil
+        }
+        return "scroll-edge fade, proven by differential: same element passed at \(moved)"
     }
 
     /// Why an audit finding is not a defect, or `nil` when it is one.

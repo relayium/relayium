@@ -127,8 +127,10 @@ struct RootView: View {
             .overlay {
                 if signOut.isSigningOut {
                     ProgressView { Text(L10n.t(.accountSigningOut)) }
-                        .padding(24)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        .padding(Metrics.section)
+                        .background(.regularMaterial,
+                                    in: RoundedRectangle(cornerRadius: Metrics.corner,
+                                                         style: .continuous))
                 }
             }
             // The one non-browseable surface, over whichever browseable one the

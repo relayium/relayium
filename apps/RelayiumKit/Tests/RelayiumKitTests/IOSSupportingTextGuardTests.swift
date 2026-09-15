@@ -421,9 +421,16 @@ final class IOSSupportingTextGuardTests: XCTestCase {
         // card's disclosure tint, and `SendView.ready` gained the purpose
         // sentence the iPad sidebar stopped printing. What a deletion could not
         // pass is the by-key coverage in `IOSSurfaceGuardTests`:
+        //
+        // The reference-layout pass moves it again, by one, and in the same
+        // direction the comment above describes: the sentences that became a
+        // group's `footnote:` or a row's `explanation:` are now styled once by
+        // `SectionCard` and `RowExplanation` instead of once each at the call
+        // site, and the three new primitives add their own. The by-key coverage
+        // is what holds, and it is unchanged.
         // `testTheVerificationSettingIsVisibleAndIsTheSharedPreference` and
         // `testTheIPadSidebarNamesDestinationsAndKeepsTheirPurposeAsAHint`.
-        XCTAssertEqual(supporting, 120,
+        XCTAssertEqual(supporting, 119,
                        "the supporting role should reach every one of the sentences the "
                        + "audit counted across both targets, plus the two disclosure tints")
         // The over-limit byte counter, the not-sent label, and the three

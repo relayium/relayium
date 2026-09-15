@@ -852,7 +852,7 @@ struct PairingScannerView: View {
                 InlineMessage(.warning, L10n.t(.pairingScanRejected))
             }
         }
-        .padding()
+        .padding(Metrics.page)
     }
 
     /// One shape for all four ways this cannot scan. The sentence differs; the
@@ -883,6 +883,6 @@ struct PairingScannerView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding()
+        .padding(Metrics.page)
     }
 }
