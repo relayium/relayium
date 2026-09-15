@@ -103,4 +103,44 @@
   .crosscta p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text); }
   .crosscta .btn { white-space: nowrap; }
   .crosscta .cc-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+
+  /* ── Settings-shell form ──────────────────────────────────────────────────
+     The fold-line sections live in the same 660px column as the transfer
+     surface above them, so they are re-cut to its rhythm: the three text facts
+     become three rows of one grouped card instead of a three-across grid that
+     would be 200px wide in here, and the cross-network prompt becomes a single
+     row. The copy, the limit line and both CTAs are unchanged. */
+  :global(.appshell.shell) .textsec { margin-block: var(--space-7) 0; }
+  :global(.appshell.shell) .textsec .head { margin-block-end: var(--space-3); }
+  :global(.appshell.shell) .textsec .head .sub { font-size: 13px; }
+  :global(.appshell.shell) .textsec .points {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    margin-block-end: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface);
+    overflow: clip;
+  }
+  :global(.appshell.shell) .textsec .points li {
+    border: 0;
+    border-block-end: 1px solid var(--border);
+    border-radius: 0;
+    background: none;
+    padding: var(--space-3) 14px;
+    padding-inline-start: calc(14px + 18px);
+    font-size: 12px;
+  }
+  :global(.appshell.shell) .textsec .points li:last-child { border-block-end: 0; }
+  :global(.appshell.shell) .textsec .points li::before { inset-inline-start: 14px; top: var(--space-3); }
+  :global(.appshell.shell) .textsec .limit { border-radius: 10px; font-size: 11.5px; }
+
+  :global(.appshell.shell) .crosscta {
+    margin-block: var(--space-6) 0;
+    padding: var(--space-4);
+    border-radius: var(--radius-card);
+    gap: var(--space-4);
+  }
+  :global(.appshell.shell) .crosscta h3 { font-size: 13px; }
+  :global(.appshell.shell) .crosscta p { font-size: 12px; }
 </style>

@@ -41,4 +41,18 @@
   footer .legal a { color: var(--text-h); text-decoration: none; }
   footer .legal a:hover { color: var(--accent-fg); }
   footer .fineprint { max-width: 60ch; }
+
+  /* ── Settings-shell form ──────────────────────────────────────────────────
+     Quiet 11px metadata at the foot of the 660px column, aligned with the rows
+     above it. Every link stays, in the same order. */
+  :global(.appshell.shell) footer {
+    margin-block-start: var(--space-7);
+    padding-block-start: var(--space-4);
+    align-items: flex-start;
+    gap: var(--space-2);
+    font-size: 11.5px;
+    text-align: start;
+  }
+  :global(.appshell.shell) footer .legal { justify-content: flex-start; gap: var(--space-2) var(--space-4); }
+  :global(.appshell.shell) footer .fineprint { max-width: 70ch; }
 </style>

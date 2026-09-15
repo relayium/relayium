@@ -58,6 +58,7 @@
   } from "./device-inbox-platforms";
   import CommandBlock from "./CommandBlock.svelte";
   import Icon from "./Icon.svelte";
+  import Help from "./ui/Help.svelte";
   import DeviceSendList from "./DeviceSendList.svelte";
   import releases from "../../native-releases.json";
 
@@ -459,13 +460,19 @@
     {/if}
   </div>
 
-  <!-- What it is -->
+  <!-- What it is.
+       The four-step explanation folds: it is read once, and a returning owner
+       scrolled past it on every visit. What does NOT fold is the callout under
+       it — "uploaded is not saved" is the one claim this page exists to keep
+       true, and a fact behind a click is a fact the reader has to already
+       suspect before they can find it. -->
   <div class="block">
-    <h2>{t.deviceInboxPage.howH2}</h2>
-    <p>{t.deviceInboxPage.howLead}</p>
-    <ol class="steps">
-      {#each t.deviceInboxPage.howSteps as s (s)}<li>{s}</li>{/each}
-    </ol>
+    <Help summary={t.deviceInboxPage.howH2} heading>
+      <p>{t.deviceInboxPage.howLead}</p>
+      <ol class="steps">
+        {#each t.deviceInboxPage.howSteps as s (s)}<li>{s}</li>{/each}
+      </ol>
+    </Help>
     <div class="callout" data-di="not-saved">
       <h3>{t.deviceInboxPage.notSavedH3}</h3>
       <p>{t.deviceInboxPage.notSavedBody}</p>
@@ -594,12 +601,17 @@
     {/each}
   </div>
 
-  <!-- Boundaries -->
+  <!-- Boundaries. Folded for the same reason the how-it-works steps are: these
+       describe the product's limits in general, and the two that bear on the
+       decision in front of the reader — what "saved" means, and that a share
+       link is not permission to write to a disk — are callouts above, in the
+       open. -->
   <div class="block">
-    <h2>{t.deviceInboxPage.safetyH2}</h2>
-    <ul class="safety">
-      {#each t.deviceInboxPage.safetyPoints as s (s)}<li>{s}</li>{/each}
-    </ul>
+    <Help summary={t.deviceInboxPage.safetyH2} heading>
+      <ul class="safety">
+        {#each t.deviceInboxPage.safetyPoints as s (s)}<li>{s}</li>{/each}
+      </ul>
+    </Help>
   </div>
 
   <!-- Further reading -->
@@ -1053,4 +1065,140 @@
     white-space: nowrap;
     border: 0;
   }
+
+  /* ── Settings-shell form ──────────────────────────────────────────────────
+     Inside `.appshell.shell` this page is the same five blocks in the same
+     order, rendered as the reference's grouped rows instead of as a centred
+     marketing page over a 1120px measure. Every sentence, command, status, link
+     and control still renders — the six platform disclosures still start closed
+     and still carry their honest status on the summary, and the operational
+     block is still first.
+
+     The `:global` ancestor belongs to App; everything these rules select is this
+     component's own markup. */
+  :global(.appshell.shell) .dinbox { max-width: none; padding: 0; }
+
+  /* The hero gives up the ceremony it already gives up on a phone: the badge
+     shrinks, the block aligns with the rows under it, and the heading is the
+     single 20px title the shell allows per screen (--fs-display is re-scaled on
+     the wrapper, so this needs no size of its own). */
+  :global(.appshell.shell) .hero { text-align: start; padding: 0 0 var(--space-4); }
+  :global(.appshell.shell) .logo {
+    inline-size: 34px; block-size: 34px;
+    margin: 0 0 var(--space-3);
+    border-radius: 9px;
+  }
+  :global(.appshell.shell) .logo :global(svg) { inline-size: 18px; block-size: 18px; }
+  :global(.appshell.shell) .hero h1 { letter-spacing: -0.3px; }
+  :global(.appshell.shell) .hero .sub { margin: 0; max-width: 62ch; font-size: 13px; line-height: 1.55; }
+  :global(.appshell.shell) .badges { justify-content: flex-start; margin-block-start: var(--space-3); }
+  :global(.appshell.shell) .badges li { font-size: 11px; padding: 3px 9px; }
+
+  /* Section headings become 11px/600 group labels in the gutter above their
+     card — they name the group, they are not a row in it. The <h2> element and
+     the page's outline are unchanged. */
+  :global(.appshell.shell) .block { margin-block-start: var(--space-5); }
+  :global(.appshell.shell) .block > h2 {
+    margin: 0 0 6px;
+    padding-inline: 2px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  :global(.appshell.shell) .block > p { font-size: 13px; line-height: 1.6; }
+  :global(.appshell.shell) .alt { font-size: 12px; margin-block-start: var(--space-2); }
+
+  /* The four prose lists become grouped rows: one fact per 40px row, hairline
+     between, none under the last. The numbered "how it works" list keeps its
+     numbers through a counter, because the row padding replaces the marker
+     gutter a list marker would need. */
+  :global(.appshell.shell) .steps,
+  :global(.appshell.shell) .prereq,
+  :global(.appshell.shell) .safety,
+  :global(.appshell.shell) .docs {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface);
+    overflow: clip;
+  }
+  :global(.appshell.shell) .steps { counter-reset: step; }
+  :global(.appshell.shell) .steps li,
+  :global(.appshell.shell) .prereq li,
+  :global(.appshell.shell) .safety li,
+  :global(.appshell.shell) .docs li {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    min-block-size: var(--row-min-h);
+    margin: 0;
+    padding: var(--space-2) 14px;
+    border-block-end: 1px solid var(--border);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  :global(.appshell.shell) .steps li:last-child,
+  :global(.appshell.shell) .prereq li:last-child,
+  :global(.appshell.shell) .safety li:last-child,
+  :global(.appshell.shell) .docs li:last-child { border-block-end: 0; }
+  :global(.appshell.shell) .steps li::before {
+    counter-increment: step;
+    content: counter(step);
+    flex: none;
+    inline-size: 1.2em;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--text-h);
+  }
+
+  /* The two statements the page exists to keep true stay a callout — they are
+     the one thing here that must not read as another row — but at the group's
+     radius and the column's scale. */
+  :global(.appshell.shell) .callout {
+    margin-block-start: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-card);
+  }
+  :global(.appshell.shell) .callout h3 { font-size: 13px; margin-block-end: 6px; }
+  :global(.appshell.shell) .callout p { font-size: 12px; line-height: 1.55; }
+
+  /* The operational block. Still the first card on the page and still the one
+     with the real controls in it; it just uses the group's padding. */
+  :global(.appshell.shell) .start { padding: var(--space-4); border-radius: var(--radius-card); }
+  :global(.appshell.shell) .start .lead,
+  :global(.appshell.shell) .start .next { font-size: 13px; }
+  :global(.appshell.shell) .devicesh { font-size: 13px; }
+  :global(.appshell.shell) .workspace-ref,
+  :global(.appshell.shell) .workspace-note,
+  :global(.appshell.shell) .stale { font-size: 12px; }
+
+  /* Six disclosures, one stack. Merging their rims is what turns a list of six
+     outlined boxes into the reference's single grouped card; the summary rows,
+     their statuses and their closed-by-default state are untouched. */
+  :global(.appshell.shell) .plat { margin-block-start: 0; border-radius: 0; }
+  :global(.appshell.shell) .plat + .plat { border-block-start: 0; }
+  :global(.appshell.shell) .plat:first-of-type {
+    border-start-start-radius: var(--radius-card);
+    border-start-end-radius: var(--radius-card);
+  }
+  :global(.appshell.shell) .plat:last-of-type {
+    border-end-start-radius: var(--radius-card);
+    border-end-end-radius: var(--radius-card);
+  }
+  :global(.appshell.shell) .plat > summary {
+    min-block-size: var(--row-min-h);
+    padding: var(--space-2) 14px;
+    border-radius: 0;
+  }
+  :global(.appshell.shell) .plat > summary:hover { background: var(--row-hover); }
+  :global(.appshell.shell) .plat h3 { font-size: 13px; gap: var(--space-2); }
+  :global(.appshell.shell) .plat h3 .g :global(svg) { inline-size: 17px; block-size: 17px; }
+  :global(.appshell.shell) .plat > dl { padding: var(--space-3) 14px var(--space-4); }
+  :global(.appshell.shell) .badge { font-size: 11px; padding: 2px 8px; }
+  :global(.appshell.shell) dt { font-size: 12px; }
+  :global(.appshell.shell) dd { font-size: 12px; line-height: 1.6; }
 </style>

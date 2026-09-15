@@ -61,10 +61,10 @@
   import { reveal } from "./lib/reveal";
   import Nav from "./lib/Nav.svelte";
   import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard, PRICING_PATH } from "./lib/router.svelte";
+  import { loginOpen } from "./lib/login.svelte";
   import { showsTransferSurface, showsPeerRoster } from "./lib/transfer-surface";
   import Hero from "./lib/Hero.svelte";
   import DeviceRadar from "./lib/DeviceRadar.svelte";
-  import PeerLink from "./lib/PeerLink.svelte";
   import LanPathRail from "./lib/LanPathRail.svelte";
   import QuotaNotice from "./lib/QuotaNotice.svelte";
   import ReceiveActions from "./lib/ReceiveActions.svelte";
@@ -847,6 +847,35 @@
         ? showTransfer
         : !unsupported,
   );
+
+  // The four transfer destinations — and only those — render inside the
+  // settings-style shell. The set is written out rather than derived from the
+  // route table because it is a PRODUCT statement, not a routing one: these are
+  // the four ways to move something, and /pricing, /me, /cli, /apps and the
+  // download page are deliberately not among them. Nav keeps its own copy of
+  // the same set for the sidebar half; one list per component is what keeps the
+  // two halves from being wrong independently.
+  const SHELL_ROUTES = ["lan", "cross", "offline", "device-inbox"] as const;
+  const shellRoute = $derived((SHELL_ROUTES as readonly string[]).includes(currentRoute()));
+  // The toolbar's label: the sidebar's own destination name, so the two never
+  // disagree. Never a new string — these are the four nav labels.
+  const shellTitle = $derived(
+    currentRoute() === "cross" ? t.nav.crossTab
+    : currentRoute() === "offline" ? t.nav.offlineTab
+    : currentRoute() === "device-inbox" ? t.nav.deviceInboxTab
+    : t.nav.lanTab,
+  );
+
+  // The neutral window surface, switched on <html> for the four shell routes.
+  // `body`'s two accent-tinted radial washes are the "满屏紫" the reference's §3
+  // warns about, and they are the one part of the old palette a wrapper class
+  // cannot paint over: they are wider than <main>. A root class is the smallest
+  // thing that can turn them off for four routes and leave them on for the rest
+  // (:root.shell-route body, app.css).
+  $effect(() => {
+    document.documentElement.classList.toggle("shell-route", shellRoute);
+    return () => document.documentElement.classList.remove("shell-route");
+  });
 
   // <head> upkeep, split in two on purpose. The meta/canonical/hreflang block
   // depends only on route + language, but it used to sit in the same effect as
@@ -2072,14 +2101,19 @@
         openWorkspace(p.id);
       } : undefined}
     >
-      <span class="pavatar" class:big={solo}>{p.name.slice(0, 1).toUpperCase()}</span>
+      <span class="pavatar">{p.name.slice(0, 1).toUpperCase()}</span>
       <span class="ptext">
         {#if unifiedPeer}
-          <!-- The lead must promise both lanes. "Click or drop files to send to
-               X" described a fork that no longer exists here, and would leave
-               the one action looking like it only sends files. -->
-          <span class="pname" id={`peer-target-${p.id}`}>{solo ? t.workspace.openWith(p.name) : p.name}</span>
-          <span class="pick">{t.workspace.openHint}</span>
+          <!-- Identity on the first line, description on the second. The two
+               used to be swapped for a single peer: the name line carried the
+               whole action sentence ("Open a shared workspace with X") and the
+               card grew into a large centred callout around it, which read as a
+               second, louder copy of the button beside it. The sentence is still
+               here — it is what this row's one action DOES, which is a
+               description — and the name is what the row IS. Both promise both
+               lanes; neither says "files". -->
+          <span class="pname" id={`peer-target-${p.id}`}>{p.name}</span>
+          <span class="pick">{solo ? t.workspace.openWith(p.name) : t.workspace.openHint}</span>
         {:else}
           <!-- Deliberately just the name. "Click or drop files to send to X" and
                "Click to choose files · or drop them here" are promises this card
@@ -2407,15 +2441,30 @@
     {#if currentRoute() === "lan"}
       {#if chooser === "empty"}
         <!-- The scanning signal lives inside the empty state rather than above a
-             second card repeating the same absence. -->
+             second card repeating the same absence — and it is a signal only
+             while it is TRUE. Discovery runs over the signalling socket, so with
+             that socket down there is no search in progress: the sweep stops
+             (it is not rendered at all), and the copy says the thing the
+             animation used to imply the opposite of. "No other devices yet,
+             open this page on another device" is the answer to a completed
+             look; it is not the answer to a look that never started. -->
+        {@const scanning = connState === "ready"}
         <div class="empty">
-          <DeviceRadar peers={[]} {selfName} selectedId="" onSelect={selectFromRadar} compact />
-          <p class="empty-lead">{t.emptyPeers}</p>
+          <DeviceRadar peers={[]} {selfName} selectedId="" onSelect={selectFromRadar} compact {scanning} />
+          <p class="empty-lead">{scanning ? t.emptyPeers : t.shell.notScanning}</p>
+          {#if scanning}<p class="empty-scan">{t.shell.scanning}</p>{/if}
           <button class="btn btn-ghost empty-cta" onclick={() => navigate("cross")}>{t.emptyCrossCta}</button>
         </div>
-      {:else if chooser === "link"}
-        <PeerLink {selfName} peerName={visiblePeers[0].name} />
-      {:else}
+      {:else if chooser === "radar"}
+        <!-- The multi-peer selector. A single peer draws NO selector here: with
+             one option there is nothing to select, `effectiveSelected` has
+             already picked it, and the card below is the actionable
+             representation. It used to draw a decorative `<PeerLink>` in that
+             case — "this device ── that device" — directly above the path
+             rail that states the same two names and the actual route label, so
+             one peer produced two connection diagrams. One truthful
+             representation is kept; `chooser` itself, and every selection,
+             session and drop path, is unchanged. -->
         <DeviceRadar
           peers={visiblePeers}
           {selfName}
@@ -2485,7 +2534,34 @@
       <DownloadPage id={downloadId(location.pathname)} />
     {/await}
   {:else}
+  <!-- The settings-style shell: a 216px sidebar (Nav, which becomes the rail on
+       its own), a 44px toolbar and a 660px content track. It wraps ONLY the four
+       transfer destinations — `shellRoute` — and is `display: contents` for
+       everything else and at every width below the breakpoint, so /pricing, /me,
+       /cli, /apps and every narrow viewport lay out exactly as they did.
+
+       The toolbar names the destination and nothing else. It carries no status
+       pill: on this route the connection state is already the identity rail's
+       first line, and on the other three the account state is already the
+       control in the sidebar — a second copy of either would be the same fact
+       said twice. -->
+  <div class="appshell" class:shell={shellRoute}>
   <Nav />
+  <!-- `inert` while the account dialog is open: the page behind a modal must not
+       be reachable by pointer, keyboard or assistive technology. It is bound to
+       the shared open state, so closing the dialog, Escape, the backdrop and a
+       route change all clear it by the same path. Nav marks its own background
+       halves; the account slot itself stays live so focus can return to it. -->
+  <div class="appshell-main" inert={loginOpen() ? true : undefined}>
+  {#if shellRoute}
+    <!-- Not a heading: every one of these four routes already renders its own
+         single <h1> in the column below, and this is the sidebar's selected row
+         echoed at the top of the pane (exactly as the reference does it). An
+         <h2> here would insert a second, higher-level title into each page's
+         outline for a word the page already says. -->
+    <div class="appshell-bar"><span class="appshell-bar-title">{shellTitle}</span></div>
+  {/if}
+  <div class="appshell-col">
 
   {#if currentRoute() === "cross"}
     {#await routePage("cross") then { default: CrossPage }}
@@ -2605,6 +2681,9 @@
     </footer>
   {/if}
   {/if}
+  </div><!-- /.appshell-col -->
+  </div><!-- /.appshell-main -->
+  </div><!-- /.appshell -->
   {/if}
 </main>
 
@@ -2650,6 +2729,97 @@
     text-align: start;
   }
 
+  /* ── The shell ────────────────────────────────────────────────────────────
+     Three wrappers that are `display: contents` until they are asked to be a
+     layout. That is the whole compatibility story: below 1180px, and on every
+     route that is not one of the four, the DOM renders with exactly the boxes it
+     had before this batch — the wrappers generate none. */
+  .appshell, .appshell-main, .appshell-col { display: contents; }
+  /* The toolbar belongs to the wide form. On a phone the destination is already
+     named by the active tab in the row above it, and a second copy of that word
+     would be the one duplication the reference's own rules forbid. */
+  .appshell-bar { display: none; }
+
+  /* Between a phone and the sidebar breakpoint there is no rail, but there is
+     still more width than a line of text should use: at 1000px these four pages
+     were setting 13px prose across ~960px. The column becomes a real box with a
+     measure here, and takes the reference's 660px track only once the sidebar
+     appears. Below 700px it stays `display: contents`, so the phone layout is
+     exactly the one that shipped. */
+  @media (min-width: 700px) {
+    .appshell.shell .appshell-col {
+      display: block;
+      box-sizing: border-box;
+      inline-size: 100%;
+      max-inline-size: 760px;
+      margin-inline: auto;
+    }
+  }
+
+  @media (min-width: 1180px) {
+    .appshell.shell {
+      display: grid;
+      grid-template-columns: var(--shell-side-w) minmax(0, 1fr);
+      align-items: start;
+      /* Cancel <main>'s 20px gutter for the rail only, so the sidebar runs to
+         the edge of the page frame the way a settings window's does. */
+      margin-inline: -20px;
+    }
+    /* The content pane, and the box that finally carries --shell-content: the
+       column wrapper inside it is `display: contents` and paints nothing, and
+       `body` is the window frame at this width. */
+    .appshell.shell .appshell-main {
+      display: flex;
+      flex-direction: column;
+      min-inline-size: 0;
+      min-block-size: 100svh;
+      background: var(--shell-content);
+    }
+    /* 44px, 1px bottom rule, 13px/600 title. */
+    /* The toolbar is part of the window chrome, not of the content it sits
+       over — the reference's own separation, and the reason the 1px rule under
+       it reads as an edge rather than as a hairline inside one surface. */
+    .appshell.shell .appshell-bar {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      box-sizing: border-box;
+      block-size: var(--shell-bar-h);
+      padding-inline: 22px;
+      border-block-end: 1px solid var(--shell-sep);
+      background: var(--shell-win);
+    }
+    /* The title sits on the SAME track as the column below it — the bar's rule
+       runs the full width of the pane, but its label starts where the rows
+       start. A toolbar title indented to its own arbitrary gutter is the tell
+       that a settings window was assembled rather than laid out. */
+    .appshell.shell .appshell-bar { padding-inline: 0; }
+    .appshell-bar-title {
+      box-sizing: border-box;
+      inline-size: 100%;
+      max-inline-size: calc(var(--shell-col-w) + 44px);
+      margin-inline: auto;
+      padding-inline: 22px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-h);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* The reading and operating track. The window may be any width; this is not
+       — which is the single biggest difference between the reference and a page
+       that merely stretches. */
+    .appshell.shell .appshell-col {
+      display: block;
+      box-sizing: border-box;
+      inline-size: 100%;
+      max-inline-size: calc(var(--shell-col-w) + 44px);
+      margin-inline: auto;
+      padding: 18px 22px var(--space-8);
+    }
+  }
+
   /* The desktop LAN route is an application workspace once there is enough room
      for a proven-wide activity column. Cross also renders transferSurface, so every
      chooser override stays anchored below .lan-workspace to prevent style leakage. */
@@ -2673,6 +2843,18 @@
       inline-size: 100%;
       max-inline-size: 640px;
     }
+    /* Inside the shell the task column IS the 660px track, so the old 340px
+       identity rail beside it would leave ~280px for the thing the page is for.
+       The two-column workspace folds back into one: identity first, task under
+       it, which is the order the reference uses and the order every narrower
+       viewport already used. The class stays on the element — the unsupported
+       branch still keys its single-column contract off its absence. */
+    .appshell.shell .lan-workspace.two-col {
+      display: block;
+      margin-block-start: 0;
+    }
+    .appshell.shell .lan-workspace.two-col .lan-title { margin-block-start: var(--space-5); }
+    .appshell.shell .lan-workspace.two-col .empty { max-inline-size: none; }
   }
 
   /* In-app section headings stay modest; marketing sections use the larger global --fs-h2. */
@@ -2833,13 +3015,21 @@
   /* Cross is already constrained by its 720px page card and benefits from using
      the full 672px inner measure; LAN keeps the Batch-3 560px action measure. */
   .peers.cross ul { max-inline-size: none; }
-  /* A single connected peer (typical cross-network) reads as one prominent send
-     target — which is a claim, so it is withheld from a peer that is not one.
-     `:not(.unreachable)`: the accent fill here is the SAME treatment the hover
-     rule below applies, so leaving it on a terminal-unsupported solo peer would
-     paint the card permanently in its own "you are about to act on this" state. */
-  .peers ul.solo .peer:not(.unreachable) { border-style: solid; border-color: var(--accent-border); background: var(--accent-bg); }
-  .peers ul.solo .peer .pcard { justify-content: center; padding: 20px; }
+  /* ONE ROW, not a callout. A single peer used to get a filled accent card with
+     a centred 20px-padded identity block and the button on its own line under
+     it — a second, louder copy of the action next to it, and the largest thing
+     on the page for a list of one. It is now the reference's grouped row:
+     identity and description at the start, the existing Open-workspace button
+     at the end, wrapping onto its own line only when the row genuinely runs out
+     of width. The accent fill is gone with it; `.solo` still exists and still
+     drives nothing else. */
+  .peer { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+  /* Border box on both halves: each takes `flex-basis: 100%` / `inline-size:
+     100%` when the row wraps, and in the default content box that 100% excluded
+     their own padding — the action half laid out 376px wide inside a 348px row
+     and pushed the document to 397 at a 390px viewport. */
+  .peer .pcard { flex: 1 1 200px; min-inline-size: 0; box-sizing: border-box; }
+  .peers ul.solo .peer .pcard { justify-content: flex-start; }
   /* --control-border, not --border: the peer card is an interactive drop/pick
      target, so its dashed outline is a control boundary and has to clear 3:1. */
   .peer {
@@ -2847,6 +3037,12 @@
     border: 1.5px dashed var(--control-border); border-radius: 14px;
     transition: border-color .15s, background .15s;
   }
+  /* A peer this page cannot reach is painted as a STATEMENT, not as a target:
+     the dashed rim is the drop affordance, and there is nothing to drop here.
+     It keeps its own rim and no surface, so it can never be mistaken for the
+     card beside it — the difference used to be an accent fill on the reachable
+     one, which made a single peer the loudest thing on the page. */
+  .peer.unreachable { border-style: solid; border-color: var(--border); background: none; }
   /* Hover-as-affordance, and therefore only for a card that HAS one. A terminal
      unsupported peer is excluded rather than merely unhandled: it used to light
      up on hover exactly like a reachable peer and carry `cursor: pointer`, so it
@@ -2867,26 +3063,29 @@
     border-radius: 50%; color: #fff; font-weight: 600;
     background: var(--grad-action);
   }
-  .pavatar.big { width: 48px; height: 48px; line-height: 48px; font-size: 20px; }
   .ptext { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .peers ul.solo .pname { font-size: 17px; }
-  .pname { color: var(--text-h); font-weight: 500; font-size: 16px; }
-  .pick { color: var(--text); font-size: 13px; }
+  .pname { color: var(--text-h); font-weight: 500; font-size: 15px; overflow-wrap: anywhere; }
+  .pick { color: var(--text); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
   /* Files is the stable primary row. Capability-gated secondary actions share a
      row only when both have enough room for the longest localized labels; flex
      naturally fills the row when folder or text is absent. */
+  /* The action sits at the END of the row. `flex: none` keeps it its own size
+     until the row wraps, at which point the basis below gives it a full line —
+     at 320px with a long localized label that is the honest layout, and it is
+     reached by wrapping rather than by a width query. */
   .peer-actions {
-    display: flex; flex-wrap: wrap; gap: 8px;
-    margin-block: 0 10px; margin-inline: 12px;
+    display: flex; flex-wrap: wrap; gap: 8px; flex: none;
+    box-sizing: border-box;
+    margin-block: 0; margin-inline: 0; padding-inline-end: 14px;
   }
-  .peer-actions > .btn { flex: 1 1 165px; min-block-size: 36px; }
+  .peer-actions > .btn { min-block-size: 36px; }
   .peer-actions .btn { gap: 6px; }
   /* The terminal-unsupported statement. Full width and set in the body colour
      rather than an error red: this is a fact about the other device, not a
      failure the user caused or can retry. It is the card's whole remaining
      content, so it must read as information and never as a pressable thing. */
   .pa-unsupported {
-    flex-basis: 100%; margin: 0;
+    flex-basis: 100%; margin: 0; padding-inline-start: 14px; padding-block-end: 10px;
     font-size: 0.9375rem; line-height: 1.5; color: var(--text);
   }
   .pa-icon { flex: none; }
@@ -2896,7 +3095,14 @@
   @media (pointer: coarse) {
     .peer-actions > .btn { min-block-size: 44px; }
   }
-  .peers ul.solo .peer-actions { max-inline-size: 360px; margin-inline: auto; }
+  /* Below this the identity and its action stop fitting on one line together in
+     the longer locale; the row wraps and the button takes a full-width line of
+     its own rather than being squeezed under its own label. */
+  @media (max-width: 480px) {
+    .peer .pcard { flex-basis: 100%; }
+    .peer-actions { inline-size: 100%; padding-inline: 14px 14px; padding-block-end: 12px; }
+    .peer-actions > .btn { flex: 1 1 auto; }
+  }
 
   .empty {
     display: flex; flex-direction: column; align-items: center; gap: var(--space-3);
@@ -2905,6 +3111,9 @@
     background: var(--surface-2);
   }
   .empty-lead { margin: 0; color: var(--text); font-size: 14px; max-width: 46ch; }
+  /* The live half of the empty state: on screen only while a search is actually
+     running, which is exactly when the sweep above it is drawn. */
+  .empty-scan { margin: 0; color: var(--text); font-size: 12px; }
   .empty-cta { margin-top: var(--space-1); }
   /* Passive availability/privacy information → the neutral shared callout.
      The surface stays neutral because the sentence asks nothing of the user;
@@ -2960,6 +3169,93 @@
      identical accent treatment to the same card, so the withholding above was
      invisible in the one state it was written for. */
   .peers ul.dragging .peer:not(.unreachable) { border-color: var(--accent-border); background: var(--accent-bg); }
+
+  /* ── Shell presentation for the LAN destination ───────────────────────────
+     Every rule below is anchored on `.appshell.shell`, so it reaches the four
+     transfer destinations and nothing else. The compact type scale and the 11px
+     radius arrive through the token overrides in app.css; what is left here is
+     the shape the reference asks for and a stylesheet cannot infer: prose cards
+     become grouped rows, and the two per-device preferences become disclosures
+     that open in place instead of two headed panels stacked under the task. */
+
+  /* The two per-device settings. Structurally they were already <details>; what
+     changes is that the summary becomes a 40px settings row with a chevron, and
+     the body reads as the row's expansion rather than as a second card. Their
+     class attributes are untouched on purpose — workspace-orchestration.test.ts
+     pins where in the template they sit, and where they sit has not moved. */
+  .appshell.shell .verify-pref,
+  .appshell.shell .history {
+    padding: 0;
+    overflow: clip;
+    background: var(--surface);
+  }
+  .appshell.shell .verify-pref > summary,
+  .appshell.shell .history summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-block-size: var(--row-min-h);
+    padding-block: var(--space-2);
+    padding-inline: 14px;
+    font-size: 13px;
+    list-style: none;
+    transition: background-color .12s ease;
+  }
+  .appshell.shell .verify-pref > summary::-webkit-details-marker,
+  .appshell.shell .history summary::-webkit-details-marker { display: none; }
+  .appshell.shell .verify-pref > summary::after,
+  .appshell.shell .history summary::after {
+    content: "";
+    flex: none;
+    margin-inline-start: auto;
+    inline-size: 7px;
+    block-size: 7px;
+    /* Physical borders: a chevron that points down points down in every
+       writing direction, and the logical pair would turn it sideways in RTL. */
+    border-right: 2px solid var(--text);
+    border-bottom: 2px solid var(--text);
+    transform: rotate(45deg);
+    transition: transform .15s ease;
+  }
+  .appshell.shell .verify-pref[open] > summary::after,
+  .appshell.shell .history details[open] summary::after { transform: rotate(-135deg); }
+  .appshell.shell .verify-pref > summary:hover,
+  .appshell.shell .history summary:hover { background: var(--row-hover); }
+  .appshell.shell .verify-pref > summary:focus-visible,
+  .appshell.shell .history summary:focus-visible { outline-offset: -2px; }
+  /* Everything after the summary is the expansion, so it carries the padding the
+     card gave up — and a hairline, so an open disclosure reads as a row that
+     grew rather than as an untitled block. */
+  .appshell.shell .verify-pref > :not(summary),
+  .appshell.shell .history details > :not(summary) {
+    margin-inline: 14px;
+  }
+  .appshell.shell .verify-pref > summary + *,
+  .appshell.shell .history details > summary + * {
+    padding-block-start: var(--space-3);
+    border-block-start: 1px solid var(--border);
+  }
+  .appshell.shell .verify-pref > :last-child,
+  .appshell.shell .history details > :last-child { margin-block-end: var(--space-3); }
+  @media (prefers-reduced-motion: reduce) {
+    .appshell.shell .verify-pref > summary,
+    .appshell.shell .history summary { transition: none; }
+    .appshell.shell .verify-pref > summary::after,
+    .appshell.shell .history summary::after { transition: none; }
+  }
+
+  /* The roster reads as one grouped surface. The dashed control boundary stays:
+     it is the drop affordance, and it is on --control-border for the 3:1 floor a
+     dashed rim still has to clear. What changes is that the card now has a
+     surface under it, so a row of devices reads as a list rather than as cut-out
+     outlines floating on the page background. */
+  .appshell.shell .peer { background: var(--surface); }
+  .appshell.shell .peer.unreachable { background: none; }
+  .appshell.shell .peers ul { max-inline-size: none; }
+  .appshell.shell .empty { background: var(--surface); border-radius: var(--radius-card); }
+  /* The home page's own footer: quiet 11px metadata at the foot of the column,
+     not a second section. */
+  .appshell.shell footer { margin-top: var(--space-7); font-size: 11.5px; }
 
   /* ?debug=1 connection diagnostics — fixed, unobtrusive, monospace. */
 </style>

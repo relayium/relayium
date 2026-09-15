@@ -207,7 +207,6 @@ describe("localized ephemeral-text retention boundaries", () => {
         messages.faq.cross[0].a,
         messages.faq.cross[1].a,
         messages.crossPitch,
-        messages.crossnet.realtimeTitle,
         messages.crossSell.realtime.cta,
         messages.methods.realtime.name,
         messages.howItWorks.realtime.title,

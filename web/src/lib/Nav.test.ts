@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount, unmount, flushSync } from "svelte";
 import Nav from "./Nav.svelte";
 import { loadLang, setLang, messages, dir, LANGS } from "./i18n.svelte";
+import { setLoginOpen } from "./login.svelte";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -56,34 +57,6 @@ const tabs = () => [...target.querySelectorAll<HTMLAnchorElement>(".tabs a.tab")
 const tools = () => [...target.querySelectorAll<HTMLAnchorElement>("nav.tools a.tool")];
 const current = () => target.querySelectorAll(".tabs [aria-current='page']");
 const currentTool = () => target.querySelectorAll("nav.tools [aria-current='page']");
-const railNav = () => target.querySelector(".rail-nav");
-const prevBtn = () => target.querySelector<HTMLButtonElement>(".rail-prev");
-const nextBtn = () => target.querySelector<HTMLButtonElement>(".rail-next");
-
-function rect(left: number, right: number): DOMRect {
-  return { left, right, top: 0, bottom: 40, width: right - left, height: 40, x: left, y: 0, toJSON: () => ({}) } as DOMRect;
-}
-
-/**
- * jsdom has no layout, so the rail's geometry is stated rather than measured.
- * `from`..`to` are the destination indices fully inside the 280px-wide rail;
- * everything before sits off the start edge and everything after off the end.
- * `overflowing: false` states a rail whose four chips genuinely fit.
- */
-function layoutRail(from: number, to: number, overflowing = true) {
-  const rail = target.querySelector<HTMLElement>(".tabs")!;
-  Object.defineProperty(rail, "scrollWidth", { configurable: true, value: overflowing ? 600 : 280 });
-  Object.defineProperty(rail, "clientWidth", { configurable: true, value: 280 });
-  rail.getBoundingClientRect = () => rect(0, 280);
-  tabs().forEach((a, i) => {
-    const box = i < from ? rect(-300, -200) : i > to ? rect(400, 500) : rect(10 + (i - from) * 60, 60 + (i - from) * 60);
-    a.getBoundingClientRect = () => box;
-  });
-  // The component re-measures whenever the rail scrolls; a scroll is exactly
-  // what changes which destinations are inside it.
-  rail.dispatchEvent(new Event("scroll"));
-  flushSync();
-}
 
 describe("Nav destinations", () => {
   it("renders the four transfer destinations as real links, never as fake tabs", () => {
@@ -151,278 +124,197 @@ describe("Nav destinations", () => {
     expect(tabs()[3].getAttribute("aria-current")).toBe("page");
   });
 
-  // The mobile rail scrolls, so the current destination can start offscreen.
-  // scrollIntoView (rather than scrollLeft arithmetic) is what makes this work
-  // in an RTL document, and the centre alignment is what makes it land — see
-  // the direct-load test below for what a minimal scroll did instead.
-  it("reveals the current link after a route change", () => {
+  // The mobile rail used to SCROLL, and the three cases here pinned the reveal
+  // that kept the active chip on screen: a route change, a direct load, and the
+  // no-overflow case that must not scroll at all. The narrow header is now four
+  // equal grid columns on their own row, so there is no scroll container for any
+  // of them to act on — and the defect they were guarding against (a
+  // destination off the edge) is prevented by the layout instead of corrected
+  // after the fact. What replaces them is the stronger statement: nothing
+  // scrolls, and all four are laid out.
+  it("never scrolls the destination row, because nothing can be off it", () => {
     const spy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
-    const rail = target.querySelector(".tabs")!;
-    Object.defineProperty(rail, "scrollWidth", { configurable: true, value: 400 });
+    const rail = target.querySelector<HTMLElement>(".tabs")!;
+    // State a rail that WOULD have overflowed under the old single-row layout.
+    Object.defineProperty(rail, "scrollWidth", { configurable: true, value: 600 });
     Object.defineProperty(rail, "clientWidth", { configurable: true, value: 280 });
     spy.mockClear();
     navigate("device-inbox");
     flushSync();
-    expect(spy).toHaveBeenCalled();
-    expect(spy.mock.instances.at(-1)).toBe(tabs()[3]);
-    expect(spy.mock.calls.at(-1)![0]).toEqual({ block: "nearest", inline: "center" });
+    expect(spy, "a grid row has nothing to scroll into view").not.toHaveBeenCalled();
+    // …and the destination that used to need revealing is simply present.
+    expect(current().length).toBe(1);
+    expect(current()[0]).toBe(tabs()[3]);
   });
 
-  // The case the route-change test cannot see: a reader who opens
-  // /device-inbox directly arrives with the rail at scroll 0 and the active
-  // chip off the end of it, and there is no navigation afterwards to put it
-  // right. This is where the defect was actually reported — at 390px the last
-  // chip sat 20px PAST the rail's end edge on first paint.
-  it("reveals the active destination on a direct load, not only after a route change", () => {
-    if (app) unmount(app);
-    app = null;
-    history.pushState({}, "", DEVICE_INBOX_PATH);
-    syncRouteFromLocation();
-
-    // The rail has to report overflow at the very first effect run, before any
-    // element exists to attach per-element geometry to — hence the prototype.
-    const sw = Object.getOwnPropertyDescriptor(Element.prototype, "scrollWidth")!;
-    const cw = Object.getOwnPropertyDescriptor(Element.prototype, "clientWidth")!;
-    Object.defineProperty(Element.prototype, "scrollWidth", { configurable: true, get: () => 600 });
-    Object.defineProperty(Element.prototype, "clientWidth", { configurable: true, get: () => 280 });
-    const spy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
-    spy.mockClear();
-    try {
-      app = mount(Nav, { target });
-      flushSync();
-      expect(spy, "a direct load must reveal the active destination").toHaveBeenCalled();
-      expect(spy.mock.instances.at(-1)).toBe(tabs()[3]);
-      expect(spy.mock.calls.at(-1)![0]).toEqual({ block: "nearest", inline: "center" });
-    } finally {
-      Object.defineProperty(Element.prototype, "scrollWidth", sw);
-      Object.defineProperty(Element.prototype, "clientWidth", cw);
-    }
-  });
-
-  it("does not reveal a link when the rail has no overflow", () => {
-    const spy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
-    const rail = target.querySelector(".tabs")!;
-    Object.defineProperty(rail, "scrollWidth", { configurable: true, value: 280 });
-    Object.defineProperty(rail, "clientWidth", { configurable: true, value: 280 });
-    spy.mockClear();
-    navigate("device-inbox");
-    flushSync();
-    expect(spy).not.toHaveBeenCalled();
-  });
 });
 
-// Four primary destinations still do not fit a 320px row in either maintained
-// language — two of the four carry the longest labels in the set — so the row
-// scrolls. A fade at its edges tells a sighted swiper that there is more; these
-// controls are what tell everyone else, and what makes the hidden destinations
-// reachable without a horizontal-scroll gesture at all.
-describe("Nav rail overflow controls", () => {
-  it("offers no controls while every destination already fits", () => {
-    layoutRail(0, 3, false);
-    expect(railNav()).toBeNull();
-    // …and the rail is not claiming an edge fade it does not need either.
-    expect(target.querySelector(".tabs")!.classList.contains("overflowing")).toBe(false);
-  });
-
-  it("appears only once the row overflows, as two real buttons", () => {
-    layoutRail(0, 1);
-    expect(railNav()).not.toBeNull();
-    for (const btn of [prevBtn()!, nextBtn()!]) {
-      expect(btn.tagName).toBe("BUTTON");
-      expect(btn.getAttribute("type")).toBe("button");
-      // Native buttons: focusable and Enter/Space-operable with no key handler
-      // of their own, which is the only version of this that cannot rot.
-      expect(btn.tabIndex).toBe(0);
-      // No visible copy — the row is already the tightest thing on the screen.
-      expect(btn.textContent!.trim()).toBe("");
+// The compact header. Four destinations under FULL labels do not fit a 320px
+// row in either maintained language, which is why this row used to be four rows
+// — toolbar, tabs, a pair of paging chevrons, and the tools links — spending
+// ~170px of an 844px phone screen before the reader reached the page.
+//
+// It is one row now: short labels (each a substring of the full accessible name,
+// so WCAG 2.5.3 still holds) and one disclosure for everything else. The
+// chevrons are gone with the row they paged. What is KEPT is the edge fade: a
+// chip wider than the rail is still possible, and a fade is the honest signal
+// for it — but only on an edge that is actually hiding something.
+describe("Nav compact header", () => {
+  // The label is ONE element carrying ONE string, chosen by width. Two elements
+  // with the unused one hidden would both land in `textContent`, so the LAN chip
+  // would read "LANLAN" to anything not using `innerText` — including this
+  // repo's own auth-landing browser step, which finds that link by its text.
+  it("carries the full destination name at desktop width, as both text and name", async () => {
+    for (const a of tabs()) {
+      const id = a.getAttribute("data-nav")!;
+      const full = a.getAttribute("aria-label")!;
+      expect(full, id).toBeTruthy();
+      // jsdom's matchMedia never matches, which is the wide form.
+      expect(a.textContent!.trim(), id).toBe(full);
     }
-  });
-
-  it("names both controls from the active locale, never from a hardcoded string", async () => {
-    layoutRail(0, 1);
-    expect(prevBtn()!.getAttribute("aria-label")).toBe(messages.en.nav.railPrev);
-    expect(nextBtn()!.getAttribute("aria-label")).toBe(messages.en.nav.railNext);
-
     await setLang("zh");
     flushSync();
-    layoutRail(0, 1);
-    expect(prevBtn()!.getAttribute("aria-label")).toBe(messages.zh.nav.railPrev);
-    expect(prevBtn()!.getAttribute("aria-label")).not.toBe(messages.en.nav.railPrev);
+    for (const a of tabs()) {
+      expect(a.textContent!.trim(), a.getAttribute("data-nav")!).toBe(a.getAttribute("aria-label"));
+    }
     await setLang("en");
     flushSync();
   });
 
-  it("disables the direction that has nothing left to reveal", () => {
-    layoutRail(0, 1);
-    expect(prevBtn()!.disabled).toBe(true);
-    expect(nextBtn()!.disabled).toBe(false);
-
-    layoutRail(1, 2);
-    expect(prevBtn()!.disabled).toBe(false);
-    expect(nextBtn()!.disabled).toBe(false);
-
-    layoutRail(2, 3);
-    expect(prevBtn()!.disabled).toBe(false);
-    expect(nextBtn()!.disabled).toBe(true);
+  // The compact form, driven through the same media query the component reads.
+  // WCAG 2.5.3: the visible label must be part of the accessible name, or speech
+  // input cannot address the control by what it says. Both languages, because
+  // the substring relation is a property of each translation pair.
+  it("shows a short label at narrow width, contained in the full accessible name", async () => {
+    const realMatchMedia = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: /max-width:\s*1099px/.test(query),
+      media: query,
+      addEventListener() {},
+      removeEventListener() {},
+    })) as unknown as typeof window.matchMedia;
+    try {
+      for (const code of ["en", "zh"] as const) {
+        await setLang(code);
+        if (app) unmount(app);
+        app = mount(Nav, { target });
+        flushSync();
+        for (const a of tabs()) {
+          const id = a.getAttribute("data-nav")!;
+          const full = a.getAttribute("aria-label")!;
+          const shown = a.textContent!.trim();
+          expect(shown, `${code}/${id} must show something`).toBeTruthy();
+          expect(full, `${code}/${id}: "${shown}" must be contained in "${full}"`).toContain(shown);
+        }
+        // Four, and only four: the tools links stay in the disclosure.
+        expect(tabs().length, code).toBe(4);
+      }
+    } finally {
+      window.matchMedia = realMatchMedia;
+      await setLang("en");
+      if (app) unmount(app);
+      app = mount(Nav, { target });
+      flushSync();
+    }
   });
 
-  it("reveals the next hidden destination in reading order, and the previous one going back", () => {
-    const spy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
-    layoutRail(1, 2);
-
-    spy.mockClear();
-    nextBtn()!.click();
-    flushSync();
-    expect(spy.mock.instances.at(-1)).toBe(tabs()[3]);
-    // Centre, not "nearest". The rail snaps its chips on their centres, so a
-    // minimal scroll is undone by proximity snapping and the control pages once
-    // and then freezes — reproduced in Chrome at 320px before this was fixed.
-    expect(spy.mock.calls.at(-1)![0]).toEqual({ block: "nearest", inline: "center" });
-
-    spy.mockClear();
-    prevBtn()!.click();
-    flushSync();
-    expect(spy.mock.instances.at(-1)).toBe(tabs()[0]);
+  it("offers no paging controls, because there is no row left to page", () => {
+    expect(target.querySelector(".rail-nav")).toBeNull();
+    expect(target.querySelectorAll("button.rail-prev, button.rail-next").length).toBe(0);
+    // …and every destination is still a real link, not an entry in a menu.
+    expect(tabs().length).toBe(4);
+    expect(tabs().every((a) => a.getAttribute("href"))).toBe(true);
   });
 
-  // The route reveal used to ask for the MINIMAL scroll here, on the reasoning
-  // that a route change should move the rail as little as possible. The browser
-  // disagreed: the chips snap on their centres, so a minimal scroll lands
-  // between two snap points and proximity snapping then pulls the rail onto
-  // whichever chip is nearest the middle — never the one being revealed. On a
-  // direct load that left the active chip 20px past the rail's end edge at
-  // 390px/CLI and 2px past it at 320px/Device Inbox, with an unrelated
-  // destination perfectly centred in both. Both operations now ask for the
-  // alignment the snap engine imposes anyway, which is the only way either of
-  // them lands where it was aimed.
-  it("reveals a route with the same snap-compatible alignment the controls use", () => {
-    const spy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
-    layoutRail(0, 1);
-    spy.mockClear();
-    navigate("device-inbox");
-    flushSync();
-    expect(spy.mock.calls.at(-1)![0]).toEqual({ block: "nearest", inline: "center" });
-
-    spy.mockClear();
-    nextBtn()!.click();
-    flushSync();
-    expect(spy.mock.calls.at(-1)![0]).toEqual({ block: "nearest", inline: "center" });
-  });
-
-  // A fade is a promise that there is more this way, so it may only be painted
-  // on an edge that is actually hiding something. Both flags are PHYSICAL,
-  // because a CSS gradient is — `hiddenBefore`/`hiddenAfter` are reading order
-  // and would fade the wrong edge in Arabic.
-  it("fades only the edges that are actually hiding a destination", () => {
-    const railEl = () => target.querySelector(".tabs")!;
-
-    // Scrolled to the start: nothing before, destinations after.
-    layoutRail(0, 1);
-    expect(railEl().classList.contains("fade-left")).toBe(false);
-    expect(railEl().classList.contains("fade-right")).toBe(true);
-
-    // Mid-row: hiding destinations on both sides.
-    layoutRail(1, 2);
-    expect(railEl().classList.contains("fade-left")).toBe(true);
-    expect(railEl().classList.contains("fade-right")).toBe(true);
-
-    // Scrolled to the end: nothing after it to promise.
-    layoutRail(2, 3);
-    expect(railEl().classList.contains("fade-left")).toBe(true);
-    expect(railEl().classList.contains("fade-right")).toBe(false);
-  });
-
-  // The regression this pair of flags exists for: at the row's maximum scroll
-  // the last chip is flush with the edge, so an unconditional fade dimmed a
-  // destination that no gesture could ever undim. Measured in Chrome, `/apps`
-  // ended 5.4px inside a 16px fade at both 320 and 390px, and `/` (LAN) sat 5px
-  // inside the start fade at every width.
-  it("leaves a rail with nothing hidden on either side completely unfaded", () => {
-    layoutRail(0, 3, false);
-    const rail = target.querySelector(".tabs")!;
-    expect(rail.classList.contains("overflowing")).toBe(false);
-    expect(rail.classList.contains("fade-left")).toBe(false);
-    expect(rail.classList.contains("fade-right")).toBe(false);
-  });
-
-  // The mask is one gradient with a switchable stop at each end, so the two
-  // classes cannot fade the wrong edge or drop the 16px ramp.
-  it("drives both fades from one gradient rather than a direction branch", () => {
-    const src = readFileSync(resolve(process.cwd(), "src/lib/Nav.svelte"), "utf8");
-    expect(src).toContain("--edge-l: #000;");
-    expect(src).toContain("--edge-r: #000;");
-    expect(src).toContain(".tabs.overflowing.fade-left { --edge-l: transparent; }");
-    expect(src).toContain(".tabs.overflowing.fade-right { --edge-r: transparent; }");
-    // Still one mask declaration per prefix, still the same 16px ramp.
-    expect(src.match(/mask-image: linear-gradient\(to right, var\(--edge-l\)/g)).toHaveLength(2);
-  });
-
-  // Everything positional in this component is a rect comparison. scrollLeft is
-  // the one measurement whose sign and origin engines disagree about under
-  // dir=rtl, so reading it is how this file would silently stop working in
-  // Arabic — the mention in a comment is the incident it must not repeat.
-  it("never does scrollLeft arithmetic", () => {
+  // Everything positional in this component was a rect comparison, because
+  // scrollLeft is the one measurement whose sign and origin engines disagree
+  // about under dir=rtl. The rects went with the scroller; what must not come
+  // back is scrollLeft arithmetic, and what must still be true is that `dir()`
+  // answers for a locale the product can restore.
+  it("never does scrollLeft arithmetic, and dir() still answers for Arabic", () => {
     const src = readFileSync(resolve(process.cwd(), "src/lib/Nav.svelte"), "utf8");
     expect(src).not.toMatch(/\.scrollLeft/);
-  });
-
-  // The whole point of doing this geometrically instead of with scrollLeft
-  // arithmetic: "previous" means the destination earlier in the row in BOTH
-  // directions, and engines disagree about the sign and origin of scrollLeft
-  // under dir=rtl. Only the chevrons flip.
-  // The Arabic half of this used to run here as a mounted RTL render. Since the
-  // 2026-08-14 language freeze neither maintained language is RTL, so there is
-  // no way to put this component into `dir="rtl"` through the product's own
-  // controls, and a test that did it some other way would be testing a state a
-  // user cannot reach.
-  //
-  // The RTL machinery is deliberately kept — restoring Arabic is a locale-level
-  // decision, and it should not also be a component rewrite (PROJECT-GOVERNANCE
-  // "preserve the localization architecture"). So what is pinned is the part
-  // that would silently rot: that the flip is still a function of `dir()` and
-  // not of a hardcoded direction, and that `dir()` still knows Arabic. See
-  // rtl-head-isolation.test.mjs for the archived Arabic pages, where RTL
-  // rendering is still live and still asserted end to end.
-  it("still derives the glyph flip from dir(), not from a hardcoded direction", () => {
-    layoutRail(1, 2);
-    expect(prevBtn()!.classList.contains("flip")).toBe(true);
-    expect(nextBtn()!.classList.contains("flip")).toBe(false);
-
-    const src = readFileSync(resolve(process.cwd(), "src/lib/Nav.svelte"), "utf8");
     expect(src, "Nav must read direction from dir(lang())").toMatch(
       /const rtl = \$derived\(dir\(lang\(\)\) === "rtl"\)/,
     );
-    expect(src, "prev flips in LTR, next flips in RTL").toContain("class:flip={!rtl}");
-    expect(src, "prev flips in LTR, next flips in RTL").toContain("class:flip={rtl}");
-    // And the reason the mounted half is gone: no language the product offers
-    // renders right to left today, while dir() still answers for Arabic.
     for (const { code } of LANGS) expect(dir(code), code).toBe("ltr");
     expect(dir("ar")).toBe("rtl");
   });
 
-  it("moves the rail by one destination in each direction", () => {
-    // The behaviour the Arabic case shared: prev/next mean the same two
-    // destinations regardless of which glyph is flipped.
-    const spy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
-    layoutRail(1, 2);
+  // Every box in the compact and sidebar forms is a LOGICAL property, so a
+  // restored RTL locale mirrors the header with no second rule. A physical
+  // left/right in either block is how that would silently stop being true.
+  it("lays both narrow and sidebar forms out in logical directions", () => {
+    const src = readFileSync(resolve(process.cwd(), "src/lib/Nav.svelte"), "utf8");
+    const css = src.slice(src.indexOf("<style>"));
+    expect(css).not.toMatch(/\b(?:margin|padding)-(?:left|right)\b/);
+    expect(css).not.toMatch(/\b(?:float|text-align)\s*:\s*(?:right|left)\b/);
+  });
+});
 
-    spy.mockClear();
-    nextBtn()!.click();
-    flushSync();
-    expect(spy.mock.instances.at(-1)).toBe(tabs()[3]);
+// The three rows that left the header: tools, language/theme, and the account
+// control. They did not leave the DOM — a disclosure that unmounted `<Account>`
+// would take a half-typed sign-in form with it on every rotation — so the panel
+// is one structure at every width, forced open above the desktop breakpoint.
+// jsdom reports `matchMedia(...).matches === false`, which is that wide state.
+describe("Nav utility disclosure", () => {
+  const more = () => target.querySelector<HTMLDetailsElement>("details.more")!;
 
-    spy.mockClear();
-    prevBtn()!.click();
+  it("is a real disclosure with a localized accessible name", async () => {
+    const summary = more().querySelector("summary")!;
+    expect(summary.getAttribute("aria-label")).toBe(messages.en.shell.more);
+    await setLang("zh");
     flushSync();
-    expect(spy.mock.instances.at(-1)).toBe(tabs()[0]);
+    expect(more().querySelector("summary")!.getAttribute("aria-label")).toBe(messages.zh.shell.more);
+    expect(more().querySelector("summary")!.getAttribute("aria-label")).not.toBe(messages.en.shell.more);
+    await setLang("en");
+    flushSync();
   });
 
-  it("still renders all four destinations as links while the controls are up", () => {
-    layoutRail(1, 2);
-    // The controls page the row; they never replace, collapse or hide a
-    // destination behind a menu.
-    expect(tabs().length).toBe(4);
-    expect(tabs().every((a) => a.getAttribute("href"))).toBe(true);
+  it("keeps tools, language and theme inside the panel", () => {
+    const panel = more().querySelector(".more-panel")!;
+    expect(panel.querySelector("nav.tools")).not.toBeNull();
+    expect(panel.querySelector("select.lang")).not.toBeNull();
+    expect(panel.querySelector(".util")).not.toBeNull();
+  });
+
+  // The regression this component shipped and root caught in a real browser:
+  // `<Account>` was inside this <details>, and a closed <details> hides its
+  // whole non-summary subtree — including the `position: fixed` sign-in dialog
+  // Account renders. A page's own "Sign in" button calls `setLoginOpen(true)`,
+  // so it opened a dialog that existed and could not be seen
+  // (login-menu-red.json: dialogCount 1, dialogVisible false, moreOpen false).
+  //
+  // Mounted-ness was never the property that mattered. This pins the structural
+  // cause — Account is a SIBLING of the disclosure, never a descendant — and
+  // e2e/page-shell.mjs's `shellLoginNavScenario` pins the behaviour in a real
+  // browser, where "visible" is something a layout engine answers.
+  it("renders the account control OUTSIDE the collapsing disclosure", () => {
+    navigate("cross");
+    flushSync();
+    const acct = target.querySelector(".acct-btn")!;
+    expect(acct, "the account control must exist on a login-gated route").not.toBeNull();
+    expect(more().contains(acct), "account must not be inside details.more").toBe(false);
+    expect(target.querySelector(".util-slot")!.contains(acct)).toBe(true);
+    // Exactly one instance: two would mean two dialogs and two sign-in states.
+    expect(target.querySelectorAll(".acct-btn").length).toBe(1);
+  });
+
+  it("puts the dialog outside the disclosure too, so opening it needs no menu", () => {
+    navigate("cross");
+    flushSync();
+    setLoginOpen(true);
+    flushSync();
+    const dialog = target.querySelector('[role="dialog"]')!;
+    expect(dialog, "setLoginOpen(true) must produce a dialog").not.toBeNull();
+    expect(more().contains(dialog), "the dialog must not be inside details.more").toBe(false);
+    setLoginOpen(false);
+    flushSync();
+  });
+
+  it("is open, with no summary to press, at desktop width", () => {
+    // jsdom's matchMedia never matches, so `narrow` is false — the wide form.
+    expect(more().open).toBe(true);
   });
 });
 
@@ -529,5 +421,86 @@ describe("Nav utility controls", () => {
     navigate("lan");
     flushSync();
     expect(target.querySelector(".account")).toBeNull();
+  });
+});
+
+// Focus return across the inert background. The dialog's own trap restores while
+// it is being torn down, when the background is still `inert`, so the restore is
+// a no-op and focus lands on <body>. Nav restores once the background is usable.
+describe("Nav returns focus to whatever opened the account dialog", () => {
+  function opener(): HTMLButtonElement {
+    const btn = document.createElement("button");
+    btn.textContent = "Sign in";
+    document.body.appendChild(btn);
+    return btn;
+  }
+
+  it("restores the element that had focus before the dialog opened", async () => {
+    navigate("cross");
+    flushSync();
+    const btn = opener();
+    try {
+      btn.dispatchEvent(new Event("focusin", { bubbles: true }));
+      setLoginOpen(true);
+      flushSync();
+      (document.querySelector('[role="dialog"] input') as HTMLElement | null)?.focus();
+      setLoginOpen(false);
+      flushSync();
+      await Promise.resolve();
+      expect(document.activeElement).toBe(btn);
+    } finally {
+      btn.remove();
+      setLoginOpen(false);
+      flushSync();
+    }
+  });
+
+  it("keeps the opener stable when the backdrop is what gets clicked", async () => {
+    navigate("cross");
+    flushSync();
+    const btn = opener();
+    const backdrop = document.createElement("button");
+    backdrop.className = "backdrop";
+    document.body.appendChild(backdrop);
+    try {
+      btn.dispatchEvent(new Event("focusin", { bubbles: true }));
+      setLoginOpen(true);
+      flushSync();
+      // The backdrop is a real <button> OUTSIDE [role=dialog]: pressing it used
+      // to overwrite the opener with a node detached a moment later.
+      backdrop.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      backdrop.dispatchEvent(new Event("focusin", { bubbles: true }));
+      backdrop.remove();
+      setLoginOpen(false);
+      flushSync();
+      await Promise.resolve();
+      expect(document.activeElement).toBe(btn);
+    } finally {
+      btn.remove();
+      setLoginOpen(false);
+      flushSync();
+    }
+  });
+
+  it("does not take focus from a newer target", async () => {
+    navigate("cross");
+    flushSync();
+    const btn = opener();
+    const later = opener();
+    try {
+      btn.dispatchEvent(new Event("focusin", { bubbles: true }));
+      setLoginOpen(true);
+      flushSync();
+      setLoginOpen(false);
+      flushSync();
+      later.focus();
+      await Promise.resolve();
+      expect(document.activeElement).toBe(later);
+    } finally {
+      btn.remove();
+      later.remove();
+      setLoginOpen(false);
+      flushSync();
+    }
   });
 });

@@ -698,4 +698,45 @@
     border: 1px solid var(--accent-border); border-radius: var(--radius-sm);
     padding: var(--space-2) var(--space-3); background: var(--code-bg);
   }
+
+  /* ── Settings-shell form ──────────────────────────────────────────────────
+     Inside `.appshell.shell` the pairing room keeps every control, state and
+     sentence it has; what changes is the shape. The code readback becomes
+     monospace — the reference sets every number, address and pairing code in
+     SF Mono, and this is the one place on the site where a person reads six
+     digits aloud to someone else. The staging box becomes the same inset dashed
+     drop target the stored upload uses, so "drop files here" looks the same
+     wherever it is offered. The explanatory lines drop to the 11px footnote
+     size rather than being folded away: an expiry rule and a "nothing has been
+     uploaded yet" statement are exactly the standing facts the reference keeps
+     on screen. */
+  :global(.appshell.shell) .code,
+  :global(.appshell.shell) input { font-family: var(--mono); }
+  :global(.appshell.shell) .code { font-size: 34px; letter-spacing: 8px; }
+  :global(.appshell.shell) .choices { justify-content: flex-start; }
+  :global(.appshell.shell) .signin { align-items: flex-start; padding-block: 0; }
+  :global(.appshell.shell) .signin .hint { text-align: start; }
+  :global(.appshell.shell) .staging {
+    max-inline-size: none;
+    padding: var(--space-4) var(--space-3);
+    border-width: 1.5px;
+    border-color: var(--control-border);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+  :global(.appshell.shell) .staging.dragover {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+  }
+  :global(.appshell.shell) .stage-lead { font-size: 13px; font-weight: 500; color: var(--text-h); }
+  :global(.appshell.shell) .stage-drop,
+  :global(.appshell.shell) .stage-note,
+  :global(.appshell.shell) .stage-progress,
+  :global(.appshell.shell) .ttl-note,
+  :global(.appshell.shell) .scan,
+  :global(.appshell.shell) .waiting { font-size: 11px; }
+  :global(.appshell.shell) .handoff { font-size: 13px; }
+  :global(.appshell.shell) .blocked,
+  :global(.appshell.shell) .quota-warn,
+  :global(.appshell.shell) .preupload-expired { max-inline-size: none; border-radius: 10px; }
 </style>

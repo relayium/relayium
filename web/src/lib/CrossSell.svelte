@@ -36,4 +36,18 @@
       white-space: normal; text-align: center;
     }
   }
+
+  /* ── Settings-shell form ──────────────────────────────────────────────────
+     A single row inside the column: the sentence at the start, its one action
+     at the end. Solid rim rather than dashed — nothing is dropped on it. */
+  :global(.appshell.shell) .xsell {
+    max-width: none;
+    margin-block-start: var(--space-5);
+    padding: var(--space-3) 14px;
+    border-style: solid;
+    border-radius: var(--radius-card);
+    background: var(--surface);
+    gap: var(--space-3);
+  }
+  :global(.appshell.shell) .xsell p { font-size: 12px; }
 </style>

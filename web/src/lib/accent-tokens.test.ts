@@ -206,3 +206,141 @@ describe("decorative accent stays out of text and solid actions", () => {
     expect(offenders, "these need --accent-action, not --accent").toEqual([]);
   });
 });
+
+// ── The settings shell's own accent pair ────────────────────────────────────
+//
+// The four transfer destinations re-tint themselves inside `.appshell.shell`,
+// to the reference's purple (`Relayium 设计规范` §3: #6d45f5 light, #8b6bff
+// dark) over the reference's neutral surfaces. Those overrides are written in
+// `rgb()` rather than hex ON PURPOSE — `token()` above counts exactly three hex
+// declarations per accent token, and a fourth would fail a contract these
+// values are not part of. That is also why they need their own check: written
+// in a notation the parser above cannot see, they would otherwise be the one
+// accent pair in the product that nothing measures.
+//
+// The reference's own accent is NOT accessible as written in dark: #8b6bff is
+// 4.27:1 as text on the dark content surface and 3.72:1 under white. So the
+// shell keeps the same three-role split the site already uses — decorative,
+// foreground, action — and only the decorative role is the literal reference
+// value.
+function rgbToken(block: string, name: string): string {
+  const m = new RegExp(`${name}:\\s*rgb\\((\\d+) (\\d+) (\\d+)\\)`).exec(block);
+  expect(m, `${name} should be declared as rgb() inside the shell block`).not.toBeNull();
+  const [, r, g, b] = m!;
+  return "#" + [r, g, b].map((v) => Number(v).toString(16).padStart(2, "0")).join("");
+}
+
+/** A `.appshell.shell` rule body, selected by its opening selector. */
+function shellBlock(selector: string): string {
+  const at = css.indexOf(selector + " {");
+  expect(at, `${selector} is no longer a declaration block in app.css`).toBeGreaterThan(-1);
+  return css.slice(at, css.indexOf("\n}", at));
+}
+
+/** A `--shell-*` surface token.
+ *
+ *  The three declaration blocks are located by their own first token rather than
+ *  by selector text: `:root[data-theme="dark"]` appears twice in this file (the
+ *  site palette, then the shell's), and slicing from the first one reads the
+ *  LIGHT shell values as if they were dark — which is a helper bug that shows up
+ *  as a contrast failure and sends the reader to the stylesheet. Order in the
+ *  file is light `:root`, the prefers-color-scheme block, then the explicit
+ *  attribute block; the last two must agree, which is checked below. */
+function shellBlocks(): string[] {
+  const at: number[] = [];
+  for (let i = css.indexOf("--shell-win:"); i !== -1; i = css.indexOf("--shell-win:", i + 1)) at.push(i);
+  expect(at.length, "--shell-win should be declared in the light root and both dark blocks").toBe(3);
+  return at.map((i) => css.slice(i, css.indexOf("\n}", i)));
+}
+function shellSurface(name: string, dark: boolean): string {
+  const [lightBlock, mediaDark, attrDark] = shellBlocks();
+  const read = (block: string) => {
+    const m = new RegExp(`${name}:\\s*(#[0-9a-f]{3,8})`, "i").exec(block);
+    expect(m, `${name} should be declared as a hex surface`).not.toBeNull();
+    return m![1];
+  };
+  if (!dark) return read(lightBlock);
+  // A token defined in only one of the two dark blocks leaves either "system
+  // dark" or "chose dark" on the light value, and nobody notices.
+  expect(read(mediaDark), `${name} must match in both dark blocks`).toBe(read(attrDark));
+  return read(attrDark);
+}
+
+describe("the settings shell's accent pair", () => {
+  const light = shellBlock(".appshell.shell");
+  const dark = shellBlock(':root[data-theme="dark"] .appshell.shell');
+  const lightContent = shellSurface("--shell-content", false);
+  const darkContent = shellSurface("--shell-content", true);
+
+  /** An `--accent-bg` tint composited over an opaque surface — the surface text
+   *  on a selected row, an active tag or the verification note actually sits on.
+   *  Checking only the card and the content surface is what let two foregrounds
+   *  ship under AA: 4.39:1 (light tag) and 4.34:1 (dark `.sas` note). */
+  function tinted(block: string, base: string): string {
+    const m = /--accent-bg:\s*rgb\((\d+) (\d+) (\d+) \/ ([\d.]+)\)/.exec(block);
+    expect(m, "--accent-bg should be declared as rgb(r g b / a) inside the shell").not.toBeNull();
+    const [, r, g, b, a] = m!;
+    const alpha = Number(a);
+    const raw = base.replace("#", "");
+    const under = (raw.match(/../g) ?? []).map((pair) => parseInt(pair, 16));
+    const mix = [Number(r), Number(g), Number(b)].map((c, i) => Math.round(alpha * c + (1 - alpha) * under[i]));
+    return "#" + mix.map((c) => c.toString(16).padStart(2, "0")).join("");
+  }
+
+  it("reads as text at AA on the accent-tinted surface, not only on the card", () => {
+    const lightCard = shellSurface("--shell-card", false);
+    const darkCard = shellSurface("--shell-card", true);
+    for (const [block, card, content, label] of [
+      [light, lightCard, lightContent, "light"],
+      [dark, darkCard, darkContent, "dark"],
+    ] as const) {
+      for (const base of [card, content]) {
+        const surface = tinted(block, base);
+        expect(contrast(rgbToken(block, "--accent-fg"), surface), `${label} accent-fg on ${surface}`)
+          .toBeGreaterThanOrEqual(4.5);
+        // The secondary body tier renders on these surfaces too (callouts, the
+        // homepage limit line). It is measured, not assumed.
+        const body = label === "light" ? token("--text").light : token("--text").dark[0];
+        expect(contrast(body, surface), `${label} --text (${body}) on ${surface}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it("reads as text at AA on the surface it actually sits on", () => {
+    expect(contrast(rgbToken(light, "--accent-fg"), lightContent)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(rgbToken(dark, "--accent-fg"), darkContent)).toBeGreaterThanOrEqual(4.5);
+    // The light card is white and the dark card is a translucent lift over the
+    // content surface, so the content surface is the harder of the two in dark
+    // and white is the harder one in light. Check both ends.
+    expect(contrast(rgbToken(light, "--accent-fg"), WHITE)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("carries white text at AA wherever it is a solid fill", () => {
+    for (const block of [light, dark]) {
+      expect(contrast(WHITE, rgbToken(block, "--accent-action"))).toBeGreaterThanOrEqual(4.5);
+      // The shell flattens the action gradient to one colour, so the selected
+      // sidebar row and the primary button are the same measured fill.
+      expect(contrast(WHITE, rgbToken(block, "--grad-action"))).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("is needed — the reference's own accent fails both roles in dark", () => {
+    // Pins why the split survives the re-tint. If someone "simplifies"
+    // --accent-fg and --accent-action back to the reference's --accent, these
+    // are the numbers that say what breaks.
+    const decorative = rgbToken(dark, "--accent");
+    expect(contrast(decorative, darkContent)).toBeLessThan(4.5);
+    expect(contrast(WHITE, decorative)).toBeLessThan(4.5);
+  });
+
+  it("keeps the reference's neutral surface hierarchy rather than the site's wash", () => {
+    // Four distinct steps, window → sidebar → content → card, in both themes.
+    for (const dark of [false, true]) {
+      const steps = ["--shell-win", "--shell-side", "--shell-content"].map((n) => shellSurface(n, dark));
+      expect(new Set(steps).size, dark ? "dark" : "light").toBe(3);
+    }
+    // And the wash is switched off rather than painted over: a class on <html>,
+    // because body's radial gradients are wider than <main>.
+    expect(css).toContain(":root.shell-route body {");
+  });
+});

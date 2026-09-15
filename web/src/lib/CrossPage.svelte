@@ -17,6 +17,8 @@
   import { setLoginOpen } from "./login.svelte";
   import PageFooter from "./PageFooter.svelte";
   import Icon from "./Icon.svelte";
+  import Group from "./ui/Group.svelte";
+  import Help from "./ui/Help.svelte";
 
   let { roomCode = "", linkDead = false, showTransfer = false, relayStatus = "ok", transferSurface }:
     { roomCode?: string; linkDead?: boolean; showTransfer?: boolean; relayStatus?: RelayAvailability; transferSurface?: Snippet } = $props();
@@ -47,44 +49,60 @@
 
 <section class="crosspage page-enter">
 
+  <!-- ONE title. This page used to print its name three times on one screen:
+       the toolbar echoes the destination, `crossTitle` was the <h1>, and
+       `methods.realtime.name` was the card heading directly under it — the same
+       words in both languages. The <h1> stays (it is the page), the card heading
+       is gone, and the group label below names the OPERATION instead.
+
+       `crossPitch` used to be two paragraphs between the title and the control.
+       They are still here, verbatim, inside the disclosure — the reference's §5
+       rule is that an explanation which does not fit on one line folds away by
+       default, not that it disappears. What does NOT fold: who needs an account,
+       who does not, and what the relay can and cannot read. -->
   <header class="ui-page-head">
     <h1>{t.crossTitle}</h1>
     <p class="tagline">{t.tagline}</p>
-    {#if !inRoom}
-      <p class="pitch">{t.crossPitch}</p>
-    {/if}
   </header>
 
   <div class="cards">
     {#if showTransfer && transferSurface}
-      <!-- Active realtime transfer — one focused card, regardless of how they connected -->
-      <section class="ui-card ui-card-raised ui-stack active">
-        <h2 class="realtime-heading"><span class="realtime-icon" aria-hidden="true"><Icon name="bolt" size={18} /></span><span>{t.crossnet.realtimeTitle}</span></h2>
-        <p class="ui-card-sub">{t.crossnet.realtimeSub}</p>
-        {@render transferSurface()}
-        <p class="foot">{t.crossnet.realtimeFoot}</p>
-        <button class="btn btn-ghost btn-sm startover" onclick={startOver}>{t.startOver}</button>
-      </section>
+      <!-- Active realtime transfer — one focused group, regardless of how they
+           connected. Its two standing facts stay on screen: what the link is
+           (sub) and who needs an account (foot). -->
+      <Group title={t.shell.liveGroup} foot={t.crossnet.realtimeFoot} flush>
+        {#snippet icon()}<Icon name="bolt" size={15} />{/snippet}
+        <div class="op">
+          <p class="op-sub">{t.crossnet.realtimeSub}</p>
+          {@render transferSurface()}
+          <button class="btn btn-ghost btn-sm startover" onclick={startOver}>{t.startOver}</button>
+        </div>
+      </Group>
     {:else if roomCode}
       <!-- In a code room (minter waiting, or recipient who joined via code/link) -->
-      <section class="ui-card ui-card-raised ui-stack active">
-        <div class="ui-card-head"><h2 class="realtime-heading"><span class="realtime-icon" aria-hidden="true"><Icon name="bolt" size={18} /></span><span>{t.methods.realtime.name}</span></h2></div>
-        <p class="ui-card-sub">{t.methods.realtime.sub}</p>
-        <CodePairing {roomCode} expired={linkDead} {relayStatus} />
-        <button class="btn btn-ghost btn-sm startover" onclick={startOver}>{t.startOver}</button>
-      </section>
+      <Group title={t.shell.pairGroup} note={t.methods.realtime.badge} flush>
+        {#snippet icon()}<Icon name="bolt" size={15} />{/snippet}
+        <div class="op">
+          <CodePairing {roomCode} expired={linkDead} {relayStatus} />
+          <button class="btn btn-ghost btn-sm startover" onclick={startOver}>{t.startOver}</button>
+        </div>
+      </Group>
     {:else}
-      <!-- Realtime transfer — the only method on this page (stored moved to /offline-transfer) -->
-      <section class="ui-card ui-card-raised ui-stack">
-        <div class="ui-card-head"><h2 class="realtime-heading"><span class="realtime-icon" aria-hidden="true"><Icon name="bolt" size={18} /></span><span>{t.methods.realtime.name}</span></h2><span class="ui-badge ui-badge-ok">{t.methods.realtime.badge}</span></div>
-        <p class="ui-card-sub">{t.methods.realtime.sub}</p>
-        <CodePairing requireLogin={() => setLoginOpen(true)} />
-      </section>
+      <Group title={t.shell.pairGroup} note={t.methods.realtime.badge} flush>
+        {#snippet icon()}<Icon name="bolt" size={15} />{/snippet}
+        <div class="op">
+          <CodePairing requireLogin={() => setLoginOpen(true)} />
+        </div>
+      </Group>
+      <Help summary={t.shell.howSummary}>
+        <p>{t.crossPitch}</p>
+        <p>{t.methods.realtime.sub}</p>
+      </Help>
     {/if}
   </div>
 
   {#if !inRoom && !session().user}
-    <WhyAccount />
+    <WhyAccount collapsible />
   {/if}
 
   {#if !inRoom}
@@ -100,23 +118,22 @@
 </section>
 
 <style>
-  /* Layout only. The page header, the card surface, its title/sub/badge and the
-     "start over" control are all shared primitives now (app.css): .ui-page-head,
-     .ui-card{,-raised,-head,-sub}, .ui-stack, .ui-badge, .btn. */
+  /* Layout only. The page header comes from app.css (.ui-page-head); the card,
+     its label, its qualifier and its footnote are `ui/Group.svelte`; the folded
+     explanation is `ui/Help.svelte`. Nothing in this file styles another
+     component's insides. */
   .crosspage { position: relative; }
   @media (max-width: 700px) {
-    /* Localized headings include long German/Portuguese compound words. At 320px
-       their min-content width used to push the whole document 9–13px sideways;
-       inherit a last-resort break opportunity only where it is needed, leaving
-       desktop flex/grid intrinsic sizing unchanged. */
+    /* Localized headings include long compound words. At 320px their min-content
+       width used to push the whole document sideways; inherit a last-resort
+       break opportunity only where it is needed. */
     .crosspage { overflow-wrap: anywhere; }
   }
 
-  .cards { display: grid; grid-template-columns: 1fr; gap: var(--space-4); max-inline-size: 720px; margin-inline: auto; align-items: stretch; }
+  .cards { display: flex; flex-direction: column; gap: var(--space-4); max-inline-size: 720px; margin-inline: auto; }
 
-  .realtime-heading { display: inline-flex; align-items: flex-start; gap: var(--space-2); min-inline-size: 0; }
-  .realtime-icon { flex: none; color: var(--accent); margin-block-start: 1px; }
-
-  .startover { align-self: center; margin-block-start: 2px; flex: none; }
-  .foot { margin-block: var(--space-1) 0; font-size: 12px; color: var(--text); text-align: center; }
+  /* The operation itself, inset to the group's own row padding. */
+  .op { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3) 14px; }
+  .op-sub { margin: 0; font-size: 12px; line-height: 1.55; color: var(--text); }
+  .startover { align-self: flex-start; flex: none; }
 </style>

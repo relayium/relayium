@@ -36,6 +36,7 @@ const SCENARIO_NAMES = [
   "pricingHierarchyScenario",
   "cliMobileScenario",
   "unsupportedLayoutScenario",
+  "shellLoginNavScenario",
 ];
 
 /** The `main()` body, so assertions about the run loop cannot be satisfied by
@@ -48,14 +49,14 @@ function mainBody() {
   return SOURCE.slice(start, end);
 }
 
-describe("the five page-shell scenarios are all present and all run", () => {
+describe("the six page-shell scenarios are all present and all run", () => {
   it("names every scenario as a top-level function", () => {
     for (const name of SCENARIO_NAMES) {
       expect(SOURCE, `${name} is no longer defined`).toMatch(new RegExp(`async function ${name}\\(`));
     }
   });
 
-  it("runs all five, and only these five, from one inventory array", () => {
+  it("runs all six, and only these six, from one inventory array", () => {
     const match = SOURCE.match(/const SCENARIOS = \[([^\]]*)\];/);
     expect(match, "SCENARIOS array is no longer declared as a plain literal").not.toBeNull();
     const listed = match[1].split(",").map((s) => s.trim()).filter(Boolean);
@@ -65,7 +66,7 @@ describe("the five page-shell scenarios are all present and all run", () => {
 
 describe("a dropped scenario cannot still report a false pass", () => {
   it("declares a fixed expected count, not a reference to SCENARIOS.length", () => {
-    expect(SOURCE).toMatch(/const EXPECTED_SCENARIO_COUNT = 5;/);
+    expect(SOURCE).toMatch(/const EXPECTED_SCENARIO_COUNT = 6;/);
   });
 
   it("checks the run count against that fixed constant", () => {
@@ -91,6 +92,68 @@ describe("a dropped scenario cannot still report a false pass", () => {
       /catch/,
     );
     expect(loopBody).toMatch(/ran\+\+/);
+  });
+});
+
+// The scenario added for the rework correction exists because two defects were
+// invisible to node-count assertions: a sign-in dialog inside a closed
+// <details> (present in the DOM, unrenderable), and a fourth destination pushed
+// off a scrolling rail (document did not overflow). Both are questions only a
+// layout engine can answer, so this pins that the scenario asks it — a future
+// edit that "simplifies" these back into querySelector counts would restore the
+// exact blind spot.
+describe("the sign-in / destination regression measures geometry, not nodes", () => {
+  function scenarioBody() {
+    const start = SOURCE.indexOf("async function shellLoginNavScenario(");
+    expect(start, "shellLoginNavScenario is no longer defined").toBeGreaterThan(-1);
+    const end = SOURCE.indexOf("\n// Fixed, not derived from SCENARIOS.length", start);
+    expect(end).toBeGreaterThan(start);
+    return SOURCE.slice(start, end);
+  }
+
+  it("asks the layout engine whether the dialog is visible", () => {
+    const body = scenarioBody();
+    expect(body, "the dialog check must consult checkVisibility()").toContain("checkVisibility()");
+    expect(body, "the dialog check must measure a real box").toContain("getBoundingClientRect()");
+    expect(body, "focus has to land inside the dialog").toContain("d.contains(document.activeElement)");
+    // The cause, pinned as well as the symptom.
+    expect(body).toContain("more.contains(d)");
+  });
+
+  it("opens the dialog with the utility menu CLOSED", () => {
+    const body = scenarioBody();
+    expect(body, "the scenario must assert the menu is shut before it clicks")
+      .toMatch(/!more\.open/);
+    expect(body, "and must fail if opening the dialog forced the menu open")
+      .toContain("opening the dialog forced the menu open");
+  });
+
+  it("measures every destination's box rather than counting anchors", () => {
+    const body = scenarioBody();
+    expect(body).toContain("clipped at a viewport edge");
+    expect(body, "the touch floor must use the shared comparison")
+      .toContain("undersizedTouchTarget(box.h)");
+    // A document-overflow check alone is what let the clipped destination pass.
+    expect(body, "document overflow is a supplement here, never the whole test")
+      .toContain("docOverflow");
+    expect(body).toContain("no laid-out label");
+  });
+
+  it("runs both narrow widths, both languages and all three gated routes", () => {
+    const body = scenarioBody();
+    expect(body).toMatch(/\[320, 390\]/);
+    expect(body).toMatch(/\["zh", "en"\]/);
+    for (const path of ["/cross-network", "/offline-transfer", "/device-inbox"]) {
+      expect(SOURCE, `${path} is no longer a sign-in target`).toContain(`"${path}"`);
+    }
+  });
+
+  it("uses in-page fixtures, never a real account or a write request", () => {
+    const body = scenarioBody();
+    expect(body).toContain("apiFixtureScript(LOGIN_ROUTES)");
+    expect(SOURCE).toMatch(/const LOGIN_ROUTES = \{ "\/api\/auth\/methods": AUTH_METHODS \};/);
+    // No sign-in is ever submitted: the scenario opens the dialog and closes it.
+    expect(body, "the scenario must not submit credentials").not.toMatch(/type=["']password["']/);
   });
 });
 

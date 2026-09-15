@@ -107,8 +107,7 @@ export interface Messages {
   langLabel: string;
   theme: { label: string; system: string; light: string; dark: string };
   tagline: string;
-  connected: (name: string) => string;
-  ipLabel: string; // prefix shown before the device's server-observed public IP
+  ipLabel: string; // row label for the device's server-observed public IP
   connecting: string;
   unavailable: string;
   unsupported: string;
@@ -167,7 +166,6 @@ export interface Messages {
   dragSendMany: string;
   pickHint: (max: number) => string;
   maxSize: (size: string) => string; // upload max-size hint shown near the file picker, e.g. "Max 200 MB"
-  pickSendTo: (name: string) => string; // prominent single-peer send label
   /**
    * The whole of what a device card says when this browser cannot reach that
    * peer at all.
@@ -809,12 +807,67 @@ export interface Messages {
      *  screen reader's landmark list can tell it from `primaryLabel` rather than
      *  announcing two unnamed navigations. */
     toolsLabel: string;
-    /** Accessible names for the two rail controls that appear only while the
-     *  mobile destination row actually overflows. They carry no visible copy —
-     *  the buttons are direction-aware chevrons — so these strings are the only
-     *  thing that names them, and they must say what the control does rather
-     *  than which way it points (the pointing flips in Arabic). */
-    railPrev: string; railNext: string;
+  };
+  /** Labels owned by the settings-style shell the four transfer destinations
+   *  render in (see App.svelte's `.appshell`). Two rules govern everything in
+   *  here:
+   *
+   *  1. **Every `*Short` label is a substring of its full `nav.*Tab` label.**
+   *     The compact header shows the short one and carries the full one as the
+   *     accessible name, and WCAG 2.5.3 requires the visible text to be part of
+   *     that name — otherwise speech input cannot address the control by what it
+   *     says. Check both languages when editing either side.
+   *  2. **Group labels name a concept, never the page.** They exist because the
+   *     page title, the toolbar and the card heading used to print the same
+   *     words three times; a group label that repeats the <h1> puts that defect
+   *     straight back. */
+  shell: {
+    /** Sidebar group titles — the real Direct / Links / your-own-devices
+     *  hierarchy of the reference, not one generic heading over all four
+     *  destinations. `groupThisDevice` must NOT equal `deviceGroup` below: the
+     *  first labels the group that holds Device Inbox (the machines you own),
+     *  the second labels this browser's identity card on the LAN page, and on
+     *  that page both are on screen at once. */
+    groupDirect: string;
+    groupLinks: string;
+    groupThisDevice: string;
+    /** The compact header's utility disclosure: tools, language, theme and the
+     *  account control. Its own accessible name. */
+    more: string;
+    /** Compact destination labels. See rule 1 above. */
+    lanShort: string;
+    crossShort: string;
+    offlineShort: string;
+    deviceInboxShort: string;
+    /** Summary of the optional "how does this work" disclosure that the long
+     *  explanatory paragraphs fold into. */
+    howSummary: string;
+    /** Concept labels for the operation groups on the two cross-network pages
+     *  and the identity group on the LAN page. */
+    pairGroup: string;
+    liveGroup: string;
+    linkGroup: string;
+    deviceGroup: string;
+    /** Settings-row labels inside the device group. */
+    nameRow: string;
+    statusRow: string;
+    /** Short status nouns for the device group's status row. The existing full
+     *  sentences (`connecting` / `reconnecting`) stay on screen as the note
+     *  under the group whenever the connection is not ready — the short noun is
+     *  the value, never a replacement for saying what is wrong. */
+    statusReady: string;
+    statusConnecting: string;
+    statusReconnecting: string;
+    /** The peer selector's action. It SELECTS a device; it does not send —
+     *  the copy it replaced ("Click or drop files to send to X") promised a
+     *  send that control never performed. Must contain the device's own name:
+     *  that name is the button's visible label. */
+    selectDevice: (name: string) => string;
+    /** Discovery state, stated rather than implied by an animation. `scanning`
+     *  accompanies a live sweep; `notScanning` replaces it — and the sweep —
+     *  whenever there is no signalling connection to be discovering over. */
+    scanning: string;
+    notScanning: string;
   };
   // Full page headings for the cross/offline pages. The nav.*Tab strings are the
   // short pill labels; these are the descriptive <h1> titles.
@@ -1135,7 +1188,6 @@ export interface Messages {
     };
   };
   crossnet: {
-    realtimeTitle: string;
     realtimeSub: string;
     realtimeFoot: string;
     signInToSend: string; // gate hint on the mint card when signed out

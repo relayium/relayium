@@ -177,9 +177,15 @@
 </script>
 
 <section class="stored">
+  <!-- The two link options are settings, so they are settings ROWS: label at the
+       start, control at the end, hairline between. They were a wrapped strip of
+       inline labels where the checkbox came before its own words and the select
+       floated wherever the line broke. The <label>-wraps-its-input structure is
+       unchanged — that is what gives each control its name — and so are `burn`
+       and `ttl`. -->
   <div class="opts">
-    <label class="opt"><input type="checkbox" bind:checked={burn} />{t.stored.burnLabel}</label>
-    <label class="opt">{t.stored.ttlLabel}
+    <label class="opt"><span class="opt-label">{t.stored.burnLabel}</span><input type="checkbox" bind:checked={burn} /></label>
+    <label class="opt"><span class="opt-label">{t.stored.ttlLabel}</span>
       <select bind:value={ttl}>
         {#each ttlChoices as secs (secs)}
           <option value={secs}>{ttlLabels[secs]}</option>
@@ -187,6 +193,7 @@
       </select>
     </label>
   </div>
+  <!-- A standing limit, not an explanation: it stays in the open. -->
   <p class="notbackup">{t.stored.notBackup}</p>
 
   <label
@@ -277,13 +284,53 @@
 
 <style>
   .stored { display: flex; flex-direction: column; }
-  .opts { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); margin-bottom: var(--space-3); font-size: var(--fs-xs); }
-  .opt { display: flex; align-items: center; gap: var(--space-2); }
-  .pick { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-4); border: 1.5px dashed var(--border); border-radius: var(--radius-sm); cursor: pointer; transition: border-color .13s, background .13s; }
+
+  /* One grouped card, two rows. `--shell-*` with a fallback: inside the four
+     transfer destinations these are the reference's neutral card and hairline;
+     anywhere else they fall back to the site's own tokens, so this component
+     still renders correctly if it is ever used outside the shell. */
+  .opts {
+    margin-block-end: var(--space-3);
+    border: 1px solid var(--shell-card-border, var(--border));
+    border-radius: var(--radius-card, var(--radius));
+    background: var(--shell-card, var(--surface));
+    overflow: clip;
+  }
+  .opt {
+    display: flex; align-items: center; gap: var(--space-3);
+    min-block-size: var(--row-min-h, 40px);
+    padding-block: var(--space-2); padding-inline: 14px;
+    border-block-end: 1px solid var(--shell-sep, var(--border));
+    font-size: var(--fs-xs); cursor: pointer;
+  }
+  .opt:last-child { border-block-end: 0; }
+  .opt:hover { background: var(--shell-row-hover, transparent); }
+  .opt-label { color: var(--text); }
+  /* The control is the row's value: it goes to the end, whichever it is. */
+  .opt input, .opt select { margin-inline-start: auto; flex: none; }
+  .opt input[type="checkbox"] { inline-size: 16px; block-size: 16px; }
+  @media (pointer: coarse) { .opt { min-block-size: 44px; } }
+
+  /* The picker is the reference's inset drop target: 1.5px dashed, its own
+     radius, lead line and hint stacked, and a real dragover state. */
+  .pick {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; text-align: center;
+    padding: var(--space-5) var(--space-4);
+    border: 1.5px dashed var(--control-border); border-radius: 10px;
+    background: var(--shell-card, transparent);
+    font-size: var(--fs-sm); font-weight: 500; color: var(--text-h);
+    cursor: pointer;
+    transition: border-color .15s ease, background-color .15s ease, transform .15s ease;
+  }
   .pick:hover { border-color: var(--accent-border); }
-  .pick.dragover { border-color: var(--accent); background: var(--code-bg); }
+  .pick.dragover { border-color: var(--accent); background: var(--accent-bg); transform: scale(1.01); }
   .pick.disabled { opacity: .6; cursor: not-allowed; }
-  .pick .drophint { width: 100%; font-size: var(--fs-xs); color: var(--text); }
+  .pick .drophint { inline-size: auto; font-size: var(--fs-xs); font-weight: 400; line-height: 1.5; color: var(--text); }
+  @media (prefers-reduced-motion: reduce) {
+    .pick { transition: none; }
+    .pick.dragover { transform: none; }
+  }
   .max-hint { display: block; margin-top: var(--space-2); font-size: var(--fs-xs); color: var(--text); }
   .notbackup { margin: var(--space-2) 0 0; font-size: var(--fs-xs); color: var(--text); }
   .bignote {
@@ -323,4 +370,5 @@
   .curlnote, .attest, .steps { font-size: var(--fs-xs); line-height: 1.55; color: var(--text); }
   .curlnote { padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--code-bg); }
   .steps { padding-inline-start: var(--space-5); }
+
 </style>

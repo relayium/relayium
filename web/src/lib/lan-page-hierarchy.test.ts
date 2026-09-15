@@ -111,16 +111,35 @@ describe("the LAN page has one heading, and it names the page", () => {
     expect(roster).not.toContain("t.peersTitle");
   });
 
-  it("keeps the tagline, the device status and the public IP that used to sit under the brand", () => {
+  // The identity block became the reference's "This device" GROUP: the sentence
+  // "Connected · this device Mac-938" is now a status row and a name row, and
+  // the tagline is the group's one standing footnote. What may not change is
+  // what it still has to say — so this pins the four facts and the rename
+  // control, not the shape they used to be arranged in.
+  it("keeps the tagline, the device status, the rename control and the public IP", () => {
     const hero = render(Hero, heroProps);
     expect(hero.querySelector("h1")).toBeNull();
     // No second brand mark either: Nav's is the only one on the screen now.
     expect(hero.querySelector(".hero .logo")).toBeNull();
-    expect(hero.querySelector(".tagline")!.textContent).toBe(messages.en.tagline);
-    expect(hero.querySelector(".statusbar")!.textContent).toContain("Mac-938");
-    // The rename control is a real button, not decoration on the status line.
+    // The privacy promise is the group's footnote; it is still said in full.
+    expect(hero.textContent).toContain(messages.en.tagline);
+    // Status is its own row, with a short noun rather than a whole sentence.
+    expect(hero.querySelector(".statusbar")!.textContent).toContain(messages.en.shell.statusReady);
+    // The rename control is a real button, and the name is the row's value.
     expect(hero.querySelector("button.name-btn")!.textContent).toBe("Mac-938");
     expect(hero.querySelector(".ip")!.textContent).toContain("203.0.113.9");
+    // Every row says which fact it is, rather than leaving a bare value.
+    expect(hero.textContent).toContain(messages.en.shell.nameRow);
+    expect(hero.textContent).toContain(messages.en.ipLabel);
+  });
+
+  // A short status noun may never be ALL that is said: "Reconnecting…" on its
+  // own does not tell anyone what is being reconnected to, so the existing full
+  // sentence stays on screen for as long as the connection is not ready.
+  it("keeps the full connection sentence whenever the status is not ready", () => {
+    const hero = render(Hero, { ...heroProps, connState: "reconnecting" as const });
+    expect(hero.querySelector(".statusbar")!.textContent).toContain(messages.en.shell.statusReconnecting);
+    expect(hero.textContent).toContain(messages.en.reconnecting);
   });
 });
 

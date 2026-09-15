@@ -34,7 +34,7 @@
  * `EXPECTED_SCENARIO_COUNT` 校验，删掉一项就会真的报错。
  */
 import { readFileSync } from "node:fs";
-import { apiFixtureScript, PRICING_ROUTES } from "./a11y-fixtures.mjs";
+import { apiFixtureScript, AUTH_METHODS, PRICING_ROUTES } from "./a11y-fixtures.mjs";
 import {
   argFlag, fail, launchBrowser, newTab, ok, setWideViewport, startPreview, withWatchdog,
 } from "./harness.mjs";
@@ -747,11 +747,271 @@ async function cliMobileScenario(browser, base) {
   await browser.send("Target.closeTarget", { targetId: tab.targetId });
 }
 
+/**
+ * 两个真实浏览器回归，对应 rework 里两个只有排版引擎能回答的缺陷。
+ *
+ * **一、关了 More 之后，页面自己的「登录」必须开出一个看得见的对话框。**
+ * Account 曾被放进 `<details class="more">`。DOM 里节点是在的，`querySelector`
+ * 找得到，组件也没有被卸载——可是收起的 `<details>` 会隐藏除 `<summary>` 以外的
+ * 整棵子树，`position: fixed` 也逃不出去。于是 /cross-network 上点「登录」得到
+ * dialogCount 1 / dialogVisible false：一个存在但没人看得见的登录框。
+ * 所以这里只认 `getBoundingClientRect()` 和 `checkVisibility()`，不认节点计数——
+ * 节点计数正是当初判绿的那种断言。焦点也要真的落在对话框里面，关闭按钮要真的
+ * 关得掉。
+ *
+ * **二、320px 下四个主目的地必须全部可见。**
+ * 之前是一条会横向滚动的单行，More 按钮把第四个目的地挤出了右边缘；
+ * `document.scrollWidth === clientWidth` 依然成立——文档没有溢出，被裁掉的是
+ * rail 内部的一个 chip。所以这里逐个量四个 `a.tab` 的矩形，要求它们都完整落在
+ * 视口内且高度够手指点，而不是去数有几个 `<a>`。
+ *
+ * 夹具全部在页面进程内（apiFixtureScript），不碰真账号、不发写请求：
+ * `/api/auth/methods` 让弹窗渲染出密码表单，`/api/me` 不提供，于是走登出分支。
+ */
+const LOGIN_ROUTES = { "/api/auth/methods": AUTH_METHODS };
+
+/** 三条登录门控路由各自「页面上的那个登录入口」。 */
+const SIGN_IN_TARGETS = [
+  { path: "/cross-network", container: ".crosspage", button: ".crosspage .signin button.btn-primary" },
+  { path: "/offline-transfer", container: ".offlinepage", button: ".offlinepage .signin button.btn-primary" },
+  { path: "/device-inbox", container: ".dinbox", button: '.dinbox [data-di="sign-in"]' },
+];
+
+async function shellLoginNavScenario(browser, base) {
+  const checked = [];
+  for (const width of [320, 390]) {
+    for (const code of ["zh", "en"]) {
+      for (const target of SIGN_IN_TARGETS) {
+        const tab = await newTab(
+          browser,
+          base + target.path,
+          `try { localStorage.setItem("relayium-lang", ${JSON.stringify(code)}); } catch {}\n`
+            + apiFixtureScript(LOGIN_ROUTES),
+        );
+        await tab.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+        await setWideViewport(tab, width, 844);
+        await tab.waitFor(
+          `!!document.querySelector('${target.container}')`,
+          `${target.path} at ${width}px in ${code}`,
+        );
+        await tab.waitFor(`document.documentElement.lang === ${JSON.stringify(code)}`, `${code} locale`);
+        await tab.waitFor(`!!document.querySelector('${target.button}')`, `${target.path}'s own sign-in control`);
+
+        // ── 1. More 是关的，然后点页面自己的登录 ──────────────────────────
+        const menuClosed = await tab.evaluate(`(() => {
+          const more = document.querySelector('details.more');
+          return !!more && !more.open;
+        })()`);
+        if (!menuClosed) throw new Error(`${code}/${width}${target.path}: the utility menu was not closed before signing in`);
+
+        await tab.evaluate(`(() => { document.querySelector('${target.button}').click(); return true; })()`);
+        await tab.waitFor(`!!document.querySelector('[role="dialog"]')`, "the sign-in dialog to exist", 5000);
+
+        const dialog = await tab.evaluate(`(() => {
+          const d = document.querySelector('[role="dialog"]');
+          const r = d.getBoundingClientRect();
+          const more = document.querySelector('details.more');
+          return {
+            // checkVisibility answers content-visibility and display:none on any
+            // ancestor, which is exactly what a closed <details> imposes — and
+            // exactly what a node-count assertion cannot see.
+            visible: typeof d.checkVisibility === 'function' ? d.checkVisibility() : null,
+            painted: r.width > 0 && r.height > 0,
+            // FULL inline containment, not intersection. The intersection
+            // form passed a dialog measured at x=-9 / right=329 in a 320px
+            // viewport — 9px of it off each edge, which is a modal whose
+            // close control and first field are partly unreachable. A
+            // content-box width plus padding and border is exactly how a
+            // "calc(100vw - 32px)" box ends up wider than the viewport, and
+            // an intersection test cannot see it.
+            left: Math.round(r.left), right: Math.round(r.right), vw: innerWidth,
+            insideViewport: r.left >= -0.5 && r.right <= innerWidth + 0.5,
+            // The block axis may legitimately scroll; it must still start on
+            // screen rather than above it.
+            blockOnScreen: r.top < innerHeight && r.bottom > 0,
+            focusInside: d.contains(document.activeElement),
+            insideMenu: !!more && more.contains(d),
+            menuOpen: !!more && more.open,
+            closeButtons: d.querySelectorAll('button.close-x').length,
+          };
+        })()`);
+        const bad = [];
+        if (dialog.visible === false) bad.push("checkVisibility() false");
+        if (!dialog.painted) bad.push("zero-sized box");
+        if (!dialog.insideViewport) {
+          bad.push(`laid out outside the viewport inline bounds (x=${dialog.left}..${dialog.right} in ${dialog.vw}px)`);
+        }
+        if (!dialog.blockOnScreen) bad.push("laid out off-viewport in the block axis");
+        if (!dialog.focusInside) bad.push("focus outside the dialog");
+        if (dialog.insideMenu) bad.push("dialog is inside details.more");
+        if (dialog.menuOpen) bad.push("opening the dialog forced the menu open");
+        if (dialog.closeButtons !== 1) bad.push(`${dialog.closeButtons} close controls`);
+        if (bad.length) {
+          throw new Error(`${code}/${width}${target.path}: sign-in dialog ${bad.join(", ")} — ${JSON.stringify(dialog)}`);
+        }
+
+        // The page behind the dialog must be unavailable while it is open —
+        // pointer, keyboard and assistive technology alike. Anything short of
+        // that is a modal you can tab out of, and it is also what made the
+        // background's own contrast part of the modal's scan.
+        const covered = await tab.evaluate(`(() => {
+          const named = ['.appshell-main', 'nav.topnav .brand', 'nav.topnav .tabs', 'nav.topnav details.more'];
+          return {
+            inert: named.map((sel) => {
+              const el = document.querySelector(sel);
+              return { sel, present: !!el, inert: !!el && el.hasAttribute('inert') };
+            }),
+            // The slot that owns the dialog stays live, or focus has nowhere to
+            // return to when it closes.
+            slotLive: !document.querySelector('.util-slot').hasAttribute('inert'),
+          };
+        })()`);
+        for (const region of covered.inert) {
+          if (region.present && !region.inert) {
+            throw new Error(`${code}/${width}${target.path}: ${region.sel} is still reachable behind the open dialog`);
+          }
+        }
+        if (!covered.slotLive) throw new Error(`${code}/${width}${target.path}: the account slot was made inert with its own dialog`);
+
+        // …and it closes again, from its own control.
+        await tab.evaluate(`(() => { document.querySelector('[role="dialog"] button.close-x').click(); return true; })()`);
+        await tab.waitFor(`!document.querySelector('[role="dialog"]')`, "the sign-in dialog to close", 5000);
+        const restored = await tab.evaluate(`(() => {
+          const stuck = ['.appshell-main', 'nav.topnav .brand', 'nav.topnav .tabs', 'nav.topnav details.more']
+            .filter((sel) => document.querySelector(sel)?.hasAttribute('inert'));
+          return { stuck, focusReturned: document.activeElement !== document.body };
+        })()`);
+        if (restored.stuck.length) {
+          throw new Error(`${code}/${width}${target.path}: still inert after close — ${restored.stuck.join(", ")}`);
+        }
+
+        // ── 2. 四个主目的地全部可见、可点 ────────────────────────────────
+        const rail = await tab.evaluate(`(() => {
+          const row = document.querySelector('.tabs');
+          const rowBox = row.getBoundingClientRect();
+          const links = [...document.querySelectorAll('.tabs a.tab')];
+          return {
+            count: links.length,
+            row: { left: Math.round(rowBox.left), right: Math.round(rowBox.right) },
+            boxes: links.map((a) => {
+              const r = a.getBoundingClientRect();
+              return {
+                nav: a.getAttribute('data-nav'),
+                name: a.getAttribute('aria-label'),
+                text: a.innerText.trim(),
+                left: Math.round(r.left), right: Math.round(r.right),
+                w: Math.round(r.width), h: Math.round(r.height),
+                clipped: r.left < -0.5 || r.right > innerWidth + 0.5,
+                // Containment in the ROW, not merely in the viewport: a
+                // border box wider than its own grid column sits inside the
+                // window and still spills over its neighbour.
+                outsideRow: r.left < rowBox.left - 0.5 || r.right > rowBox.right + 0.5,
+                visible: typeof a.checkVisibility === 'function' ? a.checkVisibility() : true,
+              };
+            }),
+            docOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          };
+        })()`);
+        if (rail.count !== 4) throw new Error(`${code}/${width}${target.path}: ${rail.count} destinations, expected 4`);
+        for (const box of rail.boxes) {
+          const faults = [];
+          if (!box.visible) faults.push("not visible");
+          if (box.clipped) faults.push("clipped at a viewport edge");
+          if (box.outsideRow) faults.push(`outside its own row (${box.left}..${box.right} vs row ${rail.row.left}..${rail.row.right})`);
+          if (box.w <= 0) faults.push("zero width");
+          // The same touch floor the rest of this file uses, with the same
+          // float-tail tolerance.
+          if (undersizedTouchTarget(box.h)) faults.push(`${box.h}px tall`);
+          // A destination whose own name is not laid out is hidden by another
+          // means: an empty innerText is what an `overflow: hidden` parent or a
+          // zero-height line box produces.
+          if (!box.text) faults.push("no laid-out label");
+          if (faults.length) {
+            throw new Error(`${code}/${width}${target.path}: destination ${box.nav} ${faults.join(", ")} — ${JSON.stringify(box)}`);
+          }
+          // The visible short label must still be part of the accessible name.
+          if (box.name && !box.name.includes(box.text)) {
+            throw new Error(`${code}/${width}${target.path}: "${box.text}" is not part of the accessible name "${box.name}"`);
+          }
+        }
+        // Adjacent destinations may not intersect. Four equal columns that each
+        // overflow their column by 10px still report four on-screen boxes and a
+        // document that does not overflow — and every one of them overlaps the
+        // next by 6px, so a tap near a boundary hits the wrong destination.
+        // Measured at 320px before this check existed: [20,97] [91,168]
+        // [162,239] [233,310].
+        for (let i = 1; i < rail.boxes.length; i++) {
+          const prev = rail.boxes[i - 1];
+          const next = rail.boxes[i];
+          if (next.left < prev.right - 0.5) {
+            throw new Error(
+              `${code}/${width}${target.path}: ${prev.nav} and ${next.nav} overlap by `
+                + `${Math.round(prev.right - next.left)}px — [${prev.left},${prev.right}] [${next.left},${next.right}]`,
+            );
+          }
+        }
+        if (rail.docOverflow !== 0) {
+          throw new Error(`${code}/${width}${target.path}: document overflowed by ${rail.docOverflow}px`);
+        }
+
+        // A route change while the dialog is open unmounts the control that
+        // owns it. Nothing may stay inert behind a dialog that no longer
+        // exists — the page would be permanently unusable.
+        await tab.evaluate(`(() => { document.querySelector('${target.button}').click(); return true; })()`);
+        await tab.waitFor(`!!document.querySelector('[role="dialog"]')`, "the dialog to reopen", 5000);
+        await tab.evaluate(`(() => { document.querySelector('.tabs a[data-nav="lan"]').click(); return true; })()`);
+        await tab.waitFor("location.pathname === '/'", "the route change out from under the dialog", 5000);
+        const afterRoute = await tab.evaluate(`(() => ({
+          dialog: !!document.querySelector('[role="dialog"]'),
+          stuck: ['.appshell-main', 'nav.topnav .brand', 'nav.topnav .tabs', 'nav.topnav details.more']
+            .filter((sel) => document.querySelector(sel)?.hasAttribute('inert')),
+        }))()`);
+        if (afterRoute.dialog) throw new Error(`${code}/${width}${target.path}: the dialog survived a route change`);
+        if (afterRoute.stuck.length) {
+          throw new Error(`${code}/${width}${target.path}: left inert after navigating away — ${afterRoute.stuck.join(", ")}`);
+        }
+
+        checked.push(`${code}/${width}${target.path}`);
+        const errs = tab.errors.filter((e) => !/401|404|Failed to load resource/.test(e));
+        if (errs.length) throw new Error(`${code}/${width}${target.path} logged errors:\n    ${errs.join("\n    ")}`);
+        await browser.send("Target.closeTarget", { targetId: tab.targetId });
+      }
+    }
+  }
+  // A wide viewport can still be a touch screen, and the sidebar's own 28px row
+  // height outranks the shared coarse floor on specificity — measured 29.5px at
+  // 1440px with `pointer: coarse` on a real browser. Narrow-only touch coverage
+  // could not see it.
+  {
+    const tab = await newTab(browser, base + "/cross-network", apiFixtureScript(LOGIN_ROUTES));
+    await tab.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+    await setWideViewport(tab, 1440, 1000);
+    await tab.waitFor("!!document.querySelector('nav.topnav.shell .tabs a.tab')", "the desktop sidebar");
+    const wide = await tab.evaluate(`(() => ({
+      coarse: matchMedia('(pointer: coarse)').matches,
+      sidebar: !!document.querySelector('nav.topnav.shell'),
+      rows: [...document.querySelectorAll('nav.topnav .tabs a.tab, nav.topnav nav.tools a.tool')]
+        .map((a) => ({ label: a.innerText.trim(), h: a.getBoundingClientRect().height })),
+    }))()`);
+    if (!wide.coarse) throw new Error("wide-coarse case did not actually report a coarse pointer");
+    if (!wide.sidebar) throw new Error("wide-coarse case did not reach the sidebar form");
+    const short = wide.rows.filter((r) => undersizedTouchTarget(r.h));
+    if (short.length) {
+      throw new Error(`1440px with a coarse pointer: ${short.map((r) => `${r.label} ${r.h}px`).join(", ")}`);
+    }
+    if (tab.errors.length) throw new Error(`wide-coarse case logged errors: ${tab.errors.join(" | ")}`);
+    ok(`sidebar kept the touch floor on a ${wide.rows.length}-row coarse-pointer desktop`);
+    await browser.send("Target.closeTarget", { targetId: tab.targetId });
+  }
+
+  ok(`sign-in stayed visible with the utility menu closed, the page behind it was unavailable, and all four destinations stayed on screen, across ${checked.length} narrow cells`);
+}
+
 // Fixed, not derived from SCENARIOS.length: a future edit that comments out or
 // otherwise drops an entry below must not still see its own shrunken array
 // length agree with itself and print a false N/N pass.
-const EXPECTED_SCENARIO_COUNT = 5;
-const SCENARIOS = [authLandingScenario, appsHierarchyScenario, pricingHierarchyScenario, cliMobileScenario, unsupportedLayoutScenario];
+const EXPECTED_SCENARIO_COUNT = 6;
+const SCENARIOS = [authLandingScenario, appsHierarchyScenario, pricingHierarchyScenario, cliMobileScenario, unsupportedLayoutScenario, shellLoginNavScenario];
 
 async function main() {
   const preview = await startPreview({ port: PREVIEW_PORT });

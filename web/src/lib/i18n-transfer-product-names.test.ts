@@ -94,7 +94,6 @@ function pairingNames(m: typeof en): Record<string, string> {
     "crossSell.realtime.cta": m.crossSell.realtime.cta,
     "homeCross.realtimeCta": m.homeCross.realtimeCta,
     "methods.realtime.name": m.methods.realtime.name,
-    "crossnet.realtimeTitle": m.crossnet.realtimeTitle,
     "compare.colRealtime": m.compare.colRealtime,
   };
 }

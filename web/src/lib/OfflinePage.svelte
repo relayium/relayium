@@ -14,6 +14,8 @@
   import { navigate, PRICING_PATH } from "./router.svelte";
   import PageFooter from "./PageFooter.svelte";
   import Icon from "./Icon.svelte";
+  import Group from "./ui/Group.svelte";
+  import Help from "./ui/Help.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
   const cloudGuideSlug = "guides/push-to-cloud-pull-on-another-computer";
@@ -23,43 +25,55 @@
 <section class="offlinepage page-enter">
   <!-- Sign-in for this login-gated flow lives in the top nav (Nav.svelte renders
        the Account control for cross/offline/me); the two free pages never show
-       an account concept at all. -->
+       an account concept at all.
+
+       One title, same correction as the pairing page: `offlineTitle` and
+       `methods.stored.name` are the same words, and both were on screen. The
+       <h1> keeps the page's name; the group label names what the card DOES. -->
   <header class="ui-page-head">
     <h1>{t.offlineTitle}</h1>
     <p class="tagline">{t.offline.tagline}</p>
-    <p class="pitch">{t.offline.pitch}</p>
   </header>
 
   <div class="cards">
-    <section class="ui-card ui-card-raised ui-stack">
-      <div class="ui-card-head">
-        <h2 class="mode-title"><Icon name="package" size={18} /><span>{t.methods.stored.name}</span></h2>
-        <span class="ui-badge">{t.methods.stored.badge}</span>
+    <!-- The badge is the recipient fact — "Offline OK" — and it stays on the
+         label row rather than folding away with the explanation: whether the
+         other person has to be there is the first thing this page answers. -->
+    <Group title={t.shell.linkGroup} note={t.methods.stored.badge} flush>
+      {#snippet icon()}<Icon name="package" size={18} />{/snippet}
+      <div class="op">
+        {#if session().user}
+          <StoredUpload />
+        {:else}
+          <div class="signin">
+            <button class="btn btn-primary" onclick={() => setLoginOpen(true)}>{t.account.signIn}</button>
+            <p class="hint">{t.offline.signIn}</p>
+          </div>
+        {/if}
       </div>
-      <p class="ui-card-sub">{t.methods.stored.sub}</p>
-      {#if session().user}
-        <StoredUpload />
-      {:else}
-        <div class="signin">
-          <button class="btn btn-primary" onclick={() => setLoginOpen(true)}>{t.account.signIn}</button>
-          <p class="hint">{t.offline.signIn}</p>
-        </div>
-      {/if}
-    </section>
+    </Group>
+
+    <!-- Quota and plan are not optional reading: what you may store, how much you
+       may move and how long a link lives are the limits this page operates
+       under, so they stay visible under the group they qualify. -->
+    <p class="cli-note">
+      {t.offline.cliNote}
+      <a href={cloudGuideHref}>{t.offline.cliLink}</a>
+    </p>
+
+    <p class="cli-note plan-note">
+      {t.offline.planNote}
+      <a href={PRICING_PATH} onclick={(e) => { e.preventDefault(); navigate("pricing"); }}>{t.pricingPage.navLink}</a>
+    </p>
+
+    <Help summary={t.shell.howSummary}>
+      <p>{t.offline.pitch}</p>
+      <p>{t.methods.stored.sub}</p>
+    </Help>
   </div>
 
-  <p class="cli-note">
-    {t.offline.cliNote}
-    <a href={cloudGuideHref}>{t.offline.cliLink}</a>
-  </p>
-
-  <p class="cli-note plan-note">
-    {t.offline.planNote}
-    <a href={PRICING_PATH} onclick={(e) => { e.preventDefault(); navigate("pricing"); }}>{t.pricingPage.navLink}</a>
-  </p>
-
   {#if !session().user}
-    <WhyAccount />
+    <WhyAccount collapsible />
   {/if}
 
   <CrossSell target="realtime" />
@@ -73,21 +87,26 @@
 </section>
 
 <style>
-  /* Layout only — the header, card surface, title row, sub-copy and badge come
-     from the shared primitives in app.css (same set CrossPage uses). */
+  /* Layout only — the header is app.css's .ui-page-head, the card is
+     `ui/Group.svelte`, the folded explanation is `ui/Help.svelte`. */
   .offlinepage { position: relative; }
 
-  .cards { max-inline-size: 720px; margin-inline: auto; }
+  .cards { display: flex; flex-direction: column; gap: var(--space-4); max-inline-size: 720px; margin-inline: auto; }
 
-  .mode-title { display: flex; align-items: center; gap: var(--space-2); }
+  .op { padding: var(--space-3) 14px; }
 
-  .signin { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding-block: var(--space-2); }
-  .signin .hint { margin: 0; font-size: var(--fs-xs); color: var(--text); text-align: center; }
+  .signin { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+  .signin .hint { margin: 0; font-size: var(--fs-xs); color: var(--text); }
 
+  /* The two standing limits. Aligned with the rows above them rather than
+     centred: they qualify the group, they are not a caption for the page. */
+  /* Inside the column now, so no measure or centring of its own: it is the
+     footnote of the group directly above it. */
   .cli-note {
-    max-inline-size: 720px; margin-block: var(--space-4) 0; margin-inline: auto; text-align: center;
+    margin-block: -4px 0; padding-inline: 2px;
     font-size: var(--fs-xs); color: var(--text); line-height: 1.55;
   }
+  .cli-note.plan-note { margin-block-start: -8px; }
   .cli-note a { color: var(--accent-fg); text-decoration: none; white-space: nowrap; }
   .cli-note a:hover { text-decoration: underline; }
 </style>

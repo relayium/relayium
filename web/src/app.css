@@ -607,3 +607,266 @@ label:has(> .file-pick-input:focus-visible) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   THE SETTINGS SHELL
+   ════════════════════════════════════════════════════════════════════════════
+   The four transfer destinations (/, /cross-network, /offline-transfer,
+   /device-inbox) render inside `.appshell.shell`. Everything below is anchored
+   on that class or on `:root.shell-route`, so /pricing, /me, /apps, /cli and
+   /d/<id> render the same components, with the same class names, unchanged.
+
+   Structure lives in components — `lib/ui/Group.svelte`, `Row.svelte`,
+   `Help.svelte` — not in a global `.row` / `.card` / `.list` layer. What is left
+   here is what only a stylesheet can do: the palette, the type scale, the
+   three-band geometry, and the handful of shared `.ui-*` primitives that the
+   four pages inherit from the rest of the site.
+
+   ── Palette ────────────────────────────────────────────────────────────────
+   Taken from `Relayium 设计规范` §3 as written. Neutral surfaces in a four-step
+   hierarchy (window → sidebar → content → card) and purple in exactly three
+   places: the selected sidebar row, the primary button, and status/progress.
+
+   The site's own `--bg`/`--surface` are NOT reused for these: they are a warm
+   off-white/near-black pair with an accent wash over them, and the reference is
+   a neutral grey scale. Both have to exist, so the shell's four surfaces get
+   their own names and are scoped to the wrapper. */
+:root {
+  --shell-win: #ffffff;
+  --shell-side: #ececed;
+  --shell-content: #f8f8fa;
+  --shell-card: #ffffff;
+  --shell-card-border: rgb(0 0 0 / 0.09);
+  --shell-sep: rgb(0 0 0 / 0.075);
+  --shell-row-hover: rgb(0 0 0 / 0.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --shell-win: #1e1e20;
+    --shell-side: #1a1a1c;
+    --shell-content: #232326;
+    /* The reference's card is `rgba(255,255,255,.045)` over the content surface.
+       This is that composite, FLATTENED — and the flattening is not cosmetic.
+       `.appshell.shell` re-points `--surface` at this token so every existing
+       `.ui-card` inherits the reference card, and `--surface` is also what the
+       account modal, the confirm dialog and the compact header's utility panel
+       paint themselves with. A translucent value there is a popover you can
+       read the page through: measured at 390px dark, the menu showed the page
+       title straight through its own panel. Opaque here, once, rather than a
+       per-overlay exception list. */
+    --shell-card: #2d2d30;
+    --shell-card-border: rgb(255 255 255 / 0.075);
+    --shell-sep: rgb(255 255 255 / 0.075);
+    --shell-row-hover: rgb(255 255 255 / 0.05);
+  }
+}
+:root[data-theme="dark"] {
+  --shell-win: #1e1e20;
+  --shell-side: #1a1a1c;
+  --shell-content: #232326;
+  --shell-card: #2d2d30;
+  --shell-card-border: rgb(255 255 255 / 0.075);
+  --shell-sep: rgb(255 255 255 / 0.075);
+  --shell-row-hover: rgb(255 255 255 / 0.05);
+}
+
+:root {
+  --shell-side-w: 216px;
+  --shell-bar-h: 44px;
+  --shell-col-w: 660px;
+  /* The reference's card radius. Its own name: --radius is 14px and is the rest
+     of the site's. */
+  --radius-card: 11px;
+  --row-min-h: 40px;
+}
+
+/* ── Painting the surfaces ───────────────────────────────────────────────────
+   Declaring the tokens was not enough, and the browser said so: `body` measured
+   `rgb(255,255,255)` and `.appshell` / `.appshell-main` / `.appshell-col` all
+   measured transparent, so `--shell-content` existed and painted nothing. The
+   four-step hierarchy only exists if four real boxes carry it.
+
+   Which box carries which role depends on the width, because the wrappers are
+   `display: contents` below the sidebar breakpoint and generate no box at all
+   there. So:
+
+     narrow  body → content     (the whole page IS the content pane)
+             .topnav → window   (the toolbar sits on the window surface)
+     wide    body → window      (the frame around the app)
+             .topnav.shell → sidebar   (in Nav.svelte)
+             .appshell-main → content
+             .appshell-bar  → window
+
+   All of it is behind `:root.shell-route`, the class App toggles on <html> for
+   the four destinations only — which is also what replaces `body`'s two
+   accent-tinted radial washes (the "满屏紫" the reference warns against). Those
+   washes are wider than <main>, so nothing inside it could have covered them,
+   and no other route loses them. */
+:root.shell-route body {
+  background: var(--shell-content);
+  background-attachment: scroll;
+}
+@media (min-width: 1180px) {
+  :root.shell-route body { background: var(--shell-win); }
+}
+
+/* ── Type scale and accent, as token overrides on the wrapper ────────────────
+   Descendants already read --fs-*, --accent* and --radius, so one block
+   re-scales and re-tints the four destinations and reaches nothing else.
+
+   The accent values are written in `rgb()` rather than hex on purpose: the light
+   `:root` and the two dark blocks above are parsed by accent-tokens.test.ts,
+   which counts exactly three hex declarations per accent token. A fourth would
+   make it fail on a shell override that is not part of the contract it guards.
+   The shell's own pair is checked by its own case in that same file.
+
+   Measured against the surfaces these actually sit on — INCLUDING the
+   accent-tinted ones. Checking only the card and the content surface is what
+   let two foregrounds ship under AA on `--accent-bg` composited over them:
+   4.39:1 on HowItWorks' active tag (light) and 4.34:1 on the `.sas`
+   verification note (dark). Both the tint and the foreground moved:
+     light --accent-fg #6640e6 → 5.75 content · 6.10 white · 5.00 on the tint
+     dark  --accent-fg #bda4ff → 7.40 content · 5.65 card  · 5.65 on the tint
+     --accent-action #6640e6 / #6d45f5 → 6.10 / 5.53 carrying white
+   --accent stays decorative (rims, glyphs, tints) and is the reference's own
+   #6d45f5 / #8b6bff. */
+.appshell.shell {
+  --fs-display: 20px;
+  --fs-page-title: 20px;
+  --fs-h2: 17px;
+  --fs-h3: 15px;
+  --fs-body: 15px;
+  --fs-sm: 13px;
+  --fs-xs: 12px;
+  --radius: var(--radius-card);
+  --radius-sm: 8px;
+
+  --accent: rgb(109 69 245);
+  --accent-deep: rgb(109 69 245);
+  --accent-fg: rgb(102 64 230);
+  --accent-action: rgb(102 64 230);
+  --accent-action-deep: rgb(102 64 230);
+  /* Flat, not a ramp. The reference has no gradient anywhere; a two-stop purple
+     under white text was the single most "designed-by-default" surface here. */
+  --grad-action: rgb(102 64 230);
+  --grad-accent: rgb(109 69 245);
+  --accent-bg: rgb(109 69 245 / 0.10);
+  --accent-border: rgb(109 69 245 / 0.42);
+
+  --surface: var(--shell-card);
+  --surface-2: var(--shell-content);
+  --border: var(--shell-card-border);
+  --callout-bg: var(--shell-content);
+  --callout-border: var(--shell-card-border);
+  --shadow-card: none;
+
+  font-size: 15px;
+  line-height: 1.5;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .appshell.shell {
+    --accent: rgb(139 107 255);
+    --accent-deep: rgb(139 107 255);
+    --accent-fg: rgb(189 164 255);
+    --accent-action: rgb(109 69 245);
+    --accent-action-deep: rgb(109 69 245);
+    --grad-action: rgb(109 69 245);
+    --grad-accent: rgb(139 107 255);
+    --accent-bg: rgb(139 107 255 / 0.12);
+    --accent-border: rgb(139 107 255 / 0.42);
+  }
+}
+:root[data-theme="dark"] .appshell.shell {
+  --accent: rgb(139 107 255);
+  --accent-deep: rgb(139 107 255);
+  --accent-fg: rgb(189 164 255);
+  --accent-action: rgb(109 69 245);
+  --accent-action-deep: rgb(109 69 245);
+  --grad-action: rgb(109 69 245);
+  --grad-accent: rgb(139 107 255);
+  --accent-bg: rgb(139 107 255 / 0.12);
+  --accent-border: rgb(139 107 255 / 0.42);
+}
+
+/* --fs-display's -1.68px tracking was tuned for 56px; at 20px it closes the
+   words up. Scoped to the wrapper, so the marketing hero keeps its own. */
+.appshell.shell h1 { letter-spacing: -0.3px; line-height: 1.25; margin-block: 0 var(--space-2); }
+.appshell.shell h2 { letter-spacing: -0.2px; }
+
+/* ── Shared `.ui-*` primitives, re-shaped inside the shell ───────────────────
+   The same classes /pricing, /me and the auth landings render. A settings window
+   has no centred masthead and no elevation on a card that already sits in its
+   own track. */
+.appshell.shell .ui-page-head { text-align: start; padding-block: 0 var(--space-4); }
+.appshell.shell .ui-page-head h1 { letter-spacing: -0.3px; }
+.appshell.shell .ui-page-head .tagline { max-inline-size: 64ch; margin-inline: 0; font-size: 13px; }
+.appshell.shell .ui-card { padding: var(--space-3) 14px; }
+.appshell.shell .ui-card-raised { padding: var(--space-3) 14px; box-shadow: none; }
+.appshell.shell .ui-card > h2,
+.appshell.shell .ui-card-head > h2 { font-size: 13px; font-weight: 600; letter-spacing: 0; }
+.appshell.shell .ui-card-sub { font-size: 12px; }
+.appshell.shell .ui-badge { font-size: 11px; }
+.appshell.shell .ui-callout { font-size: 12px; }
+/* Text on an accent-tinted surface takes the heading tier: the secondary tier is
+   still only 4.71:1 there in dark, and the verification note is the one sentence
+   on screen a person is asked to act on. Colour only — words, code and
+   visibility are unchanged. */
+.appshell.shell .sas,
+.appshell.shell .ui-callout-accent,
+.appshell.shell .ui-card.request { color: var(--text-h); }
+
+/* ── Below-the-fold sections, re-fitted to the 660px track ───────────────────
+   The explanatory sections these pages end in size their grids against the
+   VIEWPORT (`@media (max-width: 900px)` and friends), so inside a 660px track at
+   a 1440px window every one of those queries reports "wide" and lays 4, 3 or 2
+   prose columns into 150–320px each. Layout only: column count, and the
+   connector HowToSteps draws BETWEEN horizontal steps, which points at nothing
+   once they are stacked. A container query inside each component is the right
+   long-term shape and is a separate scope.
+
+   EVERY selector here is anchored on the component that owns the class. That is
+   not tidiness: `.row`, `.list`, `.tag` and `.step` are each used by several
+   components in this repo, and an override written as `.appshell.shell .row`
+   reached CodePairing's create/join control row, StoredUpload's finished
+   copy/share row, QuotaMeters and the account dialog's own rows — giving live
+   controls a comparison card's border, margin and `overflow: clip`. A layout
+   override for an explanatory section must not be able to restyle a control. */
+.appshell.shell .how .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* `.step` belongs to BOTH `.how .flow` (HowToSteps) and `.how .ways`
+   (HowItWorks) — the two share a root class. The connector is HowToSteps' and
+   only points at anything while its steps are side by side. */
+.appshell.shell .how .flow .step::after { display: none; }
+.appshell.shell .how .ways { grid-template-columns: minmax(0, 1fr); }
+/* `.features` is FeatureStrip's and unique; its root class (`.wrap`) is not. */
+.appshell.shell .features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* `.list` is also PendingFiles' and QueuedBatches' — both of which render
+   inside a live transfer. Only the FAQ's copy is re-fitted here. */
+.appshell.shell .faq .list { grid-template-columns: minmax(0, 1fr); }
+
+/* ModeCompare's four-column table is a comparison grid, not a flow: at 660px its
+   three prose columns are ~170px each. It already ships a complete stacked form
+   for narrow viewports, so the shell adopts that rather than inventing a third.
+   Anchored on `.compare`, which is ModeCompare's own root: `.row`, `.cell` and
+   `.tag` all collide with components that are not it. */
+.appshell.shell .compare .table { border: none; background: none; }
+.appshell.shell .compare .row.header { display: none; }
+.appshell.shell .compare .row {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  margin-block-end: var(--space-3);
+  border: 1px solid var(--shell-card-border);
+  border-radius: var(--radius-card);
+  overflow: clip;
+  background: var(--shell-card);
+}
+.appshell.shell .compare .cell { border-inline-start: none; border-block-start: 1px solid var(--shell-sep); }
+.appshell.shell .compare .cell.feat { border-block-start: none; background: var(--shell-row-hover); }
+.appshell.shell .compare .tag { display: block; color: var(--text-h); font-weight: 500; margin-block-end: 2px; }
+
+/* Primary controls keep the 44px touch floor at the compact scale: --fs-sm is
+   13px in here, which pulls a padding-sized control under it. Stated against
+   coarse pointers only, exactly like the global `.btn` floor. */
+@media (pointer: coarse) {
+  .appshell.shell .cta,
+  .appshell.shell .ui-input { min-block-size: 44px; }
+}

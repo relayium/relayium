@@ -1,13 +1,15 @@
-<!-- web/src/lib/WhyAccount.svelte
-     Shared "why an account?" explainer for the two login-gated feature pages
-     (/cross-network, /offline-transfer) and the /me login gate. Three points:
-     why login costs us (free allowance then paid), the free self-host escape
-     hatch (run your own node → traffic never touches us), and the privacy
-     promise. `compact` drops the eyebrow + trims padding for the /me gate. -->
 <script lang="ts">
   import { lang, messages, type Messages } from "./i18n.svelte";
+  import Help from "./ui/Help.svelte";
 
-  let { compact = false }: { compact?: boolean } = $props();
+  // `compact` drops the eyebrow and trims padding for the /me gate, unchanged.
+  // `collapsible` is what the two cross-network pages pass: there the block sits
+  // below a working control, it is three paragraphs long, and it answers a
+  // question ("why does this one need an account?") rather than stating a limit
+  // the reader has to know before acting. So it folds, with `why.heading` as the
+  // summary — the same words that were the eyebrow above it. The account gate
+  // itself is NOT in here: it is stated on the control, by the control.
+  let { compact = false, collapsible = false }: { compact?: boolean; collapsible?: boolean } = $props();
   const t = $derived<Messages>(messages[lang()]);
   // Language-prefixed guide URL so a non-English visitor lands on their locale's
   // prerendered article (en lives at the bare /guides/... path).
@@ -16,8 +18,7 @@
   );
 </script>
 
-<aside class="why" class:compact>
-  {#if !compact}<p class="eyebrow">{t.why.heading}</p>{/if}
+{#snippet points()}
   <dl>
     <div class="point">
       <dt>{t.why.costTitle}</dt>
@@ -35,7 +36,18 @@
       <dd>{t.why.privacyBody}</dd>
     </div>
   </dl>
-</aside>
+{/snippet}
+
+{#if collapsible}
+  <aside class="why folded">
+    <Help summary={t.why.heading}>{@render points()}</Help>
+  </aside>
+{:else}
+  <aside class="why" class:compact>
+    {#if !compact}<p class="eyebrow">{t.why.heading}</p>{/if}
+    {@render points()}
+  </aside>
+{/if}
 
 <style>
   .why {
@@ -44,6 +56,8 @@
     text-align: start;
   }
   .why.compact { margin-top: var(--space-3); padding: var(--space-3); background: none; }
+  /* Folded: the disclosure brings its own surface, so this is spacing only. */
+  .why.folded { max-width: 720px; padding: 0; border: 0; background: none; margin-top: var(--space-4); }
   .eyebrow {
     margin: 0 0 var(--space-3); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
     color: var(--text); opacity: .65;
