@@ -586,7 +586,8 @@ const en: Messages = {
     },
     chooser: {
       heading: "Web or a native app?",
-      lead: "Both move the same encrypted bytes over the same connection. What differs is how the app reaches the rest of your machine.",
+      lead:
+        "Open the web app and transfer without installing anything. Native apps add platform-specific conveniences, such as the macOS menu bar and system sharing. Which ones you get depends on the platform, so choose what fits your device and your workflow.",
       web: {
         title: "Use the web app",
         points: [

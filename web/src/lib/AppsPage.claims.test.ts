@@ -371,6 +371,37 @@ describe("the macOS advantages are ones this repository actually ships", () => {
   });
 });
 
+describe("the Web-versus-native lead sells the choice, not an identical pipe", () => {
+  it("drops the claims the product cannot support, and keeps the ones it can", async () => {
+    // Until 2026-09-15 this paragraph told the reader both surfaces "move the
+    // same encrypted bytes over the same connection" and differ only in "how
+    // the app reaches the rest of your machine". Neither is a claim Relayium
+    // makes: a browser transfer and a native one are not one transport object,
+    // and no client is granted the machine at large — the macOS app reaches
+    // what the Share extension, Open With and the chosen Device Inbox folder
+    // give it, which is what the cards below already say.
+    //
+    // The positives are what the paragraph is FOR, and they are required
+    // because deleting the false half leaves a lead that is merely empty and
+    // still passes: the web side is the zero-install one, and the native side
+    // is worth installing for what its own platform offers — a set that varies
+    // by platform, so the macOS examples cannot read as a promise for Android.
+    const STALE =
+      /same (?:encrypted )?(?:bytes|connection)|同一条连接|同一份加密|reaches? the rest of your|rest of your (?:machine|computer|system)|伸手到|你机器的其他地方/i;
+    const MEANS = {
+      en: [/without installing|nothing to install|no install/i, /platform/i, /macOS/],
+      zh: [/无需安装|不用安装/, /平台/, /macOS/],
+    } as const;
+    for (const code of LANGS.map((l) => l.code)) {
+      await loadLang(code);
+      const lead = messages[code].appsPage.chooser.lead;
+      expect(lead, `${code} lead revives a claim the product does not make`).not.toMatch(STALE);
+      for (const re of MEANS[code])
+        expect(lead, `${code} lead stops explaining the choice: ${re}`).toMatch(re);
+    }
+  });
+});
+
 describe("platform detection points every visitor at something they can use", () => {
   const CASES: { platform: Platform; marked: string[]; note: string | null }[] = [
     { platform: "windows", marked: ["app-cli"], note: "Windows" },
