@@ -12,7 +12,7 @@
     <string name="join_error_empty">请输入另一台设备上显示的六位数字码。</string>
     <string name="join_error_digits">配对码正好是六位数字，例如 004291。</string>
     <string name="join_error_origin">这不是 relayium.com 的传输链接。</string>
-    <string name="join_error_stored">这是已存储文件的链接。本应用连接的是两台设备同时在线的实时传输。</string>
+    <string name="join_error_stored">无法打开该存储文件链接——请检查是否复制完整，包括 # 后面的部分。</string>
     <string name="join_error_link">这个链接里没有配对码。</string>
 
     <string name="status_connecting">正在连接…</string>
@@ -277,7 +277,9 @@
     <string name="cloud_will_burn">这是一次性链接：在此保存后，服务器上的文件即被删除。</string>
     <string name="cloud_expires">%1$s 过期</string>
     <string name="cloud_choose_folder">选择文件夹并保存</string>
-    <string name="cloud_saving">正在保存… 已存 %1$s / %2$s</string>
+    <string name="cloud_saving">已存 %1$s / %2$s</string>
+    <string name="cloud_saving_status">正在保存…</string>
+    <string name="cloud_reconnecting">连接中断——正在从中断处继续…</string>
     <plurals name="cloud_saved">
         <item quantity="other">已保存 %1$d 个文件。</item>
     </plurals>

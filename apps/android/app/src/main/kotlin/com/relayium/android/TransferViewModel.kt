@@ -42,6 +42,7 @@ import com.relayium.android.integration.PickerLease
 import com.relayium.android.integration.RuntimeReceiving
 import com.relayium.android.integration.ShareEpoch
 import com.relayium.android.integration.SharedFileGrants
+import com.relayium.android.integration.TransferAwakePolicy
 import com.relayium.android.scan.ScannerController
 import com.relayium.android.storage.ProviderOps
 import com.relayium.android.storage.ReceiveStore
@@ -58,8 +59,11 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
@@ -894,6 +898,32 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Whether the window should hold the screen awake right now.
+     *
+     * The RULE is [TransferAwakePolicy]; this is only the wiring that feeds it
+     * the four live states — session, stored download, stored upload and the
+     * Device Inbox — and hands one boolean to [MainActivity]. Lazy and
+     * `WhileSubscribed`, so nothing combines while no window is collecting —
+     * the flag has no meaning without one.
+     *
+     * A ViewModel-owned flow rather than an Activity-owned observation because
+     * the models are here; the Activity owns the WINDOW, which is why it, and
+     * not this, decides when to stop listening.
+     */
+    val keepScreenAwake: StateFlow<Boolean> by lazy {
+        combine(
+            controller.state,
+            cloudDownload.state,
+            cloudUpload.state,
+            inbox,
+        ) { session, download, upload, inboxState ->
+            TransferAwakePolicy.keepAwake(session, download, upload, inboxState)
+        }
+            .distinctUntilChanged()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
+    }
+
     // ── joining ─────────────────────────────────────────────────────────────
 
     /**
@@ -920,8 +950,61 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
                 // never behave like the one that minted it.
                 controller.join(parsed.code, TransferController.Intent.JOINER)
             }
-            is JoinInput.Result.Rejected -> _joinError.value = parsed.reason
+            // A stored-file link is not a pairing code and never will be — but
+            // it IS something this app opens, on another surface, and the
+            // 0.2.2 build answered it with "this app joins live transfers
+            // between two devices that are both open". That sentence was false
+            // about the app it was shown in: `CloudScreen` receives exactly
+            // these links, anonymously. So the refusal is tried as a ROUTE
+            // first, and only a link that is not one this app can open falls
+            // through to the parser's own error.
+            is JoinInput.Result.Rejected ->
+                if (!routeStoredLink(raw)) _joinError.value = parsed.reason
         }
+    }
+
+    /**
+     * Send a pasted stored-file link to the surface that can open it.
+     *
+     * Returns whether it was one. The decision is NOT made here and is not made
+     * from [JoinInput.Result.Reason.STORED_LINK] either: that reason says only
+     * "the fragment began with `k=`", which a `/cross-network#k=…` or a link on
+     * somebody else's host would also produce. [IngressLinkPolicy] is asked
+     * instead, so a pasted link gets the same origin, route, credential and key
+     * checks a tapped one does, and the only outcome acted on is the one that
+     * names a stored link. Anything else — a refusal, a prefill — leaves this
+     * false and the user sees the join field's own error, unchanged.
+     *
+     * ## It does not download, and it cannot
+     *
+     * The request goes through [ingressCoordinator], so it inherits every
+     * property that path already has: a busy download or a live session RETAINS
+     * it rather than interrupting, navigation happens once, and the applied
+     * write is [applyIngressLink]'s — which resolves the link to its ENCRYPTED
+     * metadata and stops there. Saving stays a tap on a folder the user picks.
+     *
+     * The key stays in memory. The draft it is written into is
+     * [CloudLinkDraft], which is deliberately not `rememberSaveable` for exactly
+     * this reason, and the join field is cleared because the link has been
+     * consumed — leaving it would offer the user a second Join on a string this
+     * screen has already refused.
+     */
+    private fun routeStoredLink(raw: String): Boolean {
+        val outcome = com.relayium.android.ingress.IngressLinkPolicy.read(raw, backendOrigin)
+        val request = (outcome as? com.relayium.android.ingress.IngressOutcome.Accepted)
+            ?.request as? IngressRequest.OpenStoredLink
+            ?: return false
+        // Written BEFORE the coordinator navigates, for the reason
+        // [deliverIntent] states: the surface it selects must already have
+        // something truthful to show — including when the open FAILS and the
+        // user is looking at the field they pasted into.
+        cloudLinkDraft.set(raw.trim())
+        _joinError.value = null
+        _joinDraft.value = ""
+        ingressCoordinator.deliver(
+            com.relayium.android.ingress.IngressOutcome.Accepted(request),
+        )?.let(ingress::refuse)
+        return true
     }
 
     /**

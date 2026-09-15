@@ -18,7 +18,7 @@
     <string name="join_error_empty">Enter the six-digit code from your other device.</string>
     <string name="join_error_digits">A pairing code is exactly six digits, for example 004291.</string>
     <string name="join_error_origin">That link is not a relayium.com transfer link.</string>
-    <string name="join_error_stored">That is a stored-file link. This app joins live transfers between two devices that are both open.</string>
+    <string name="join_error_stored">That stored-file link could not be opened — check that you copied all of it, including the part after #.</string>
     <string name="join_error_link">That link has no pairing code in it.</string>
 
     <!-- Connection -->
@@ -331,7 +331,9 @@
     <string name="cloud_will_burn">This is a one-time link: saving it here deletes it from the server.</string>
     <string name="cloud_expires">Expires %1$s</string>
     <string name="cloud_choose_folder">Choose a folder and save</string>
-    <string name="cloud_saving">Saving… %1$s of %2$s</string>
+    <string name="cloud_saving">%1$s of %2$s</string>
+    <string name="cloud_saving_status">Saving…</string>
+    <string name="cloud_reconnecting">Connection lost — resuming where it stopped…</string>
     <plurals name="cloud_saved">
         <item quantity="one">Saved %1$d file.</item>
         <item quantity="other">Saved %1$d files.</item>
