@@ -160,6 +160,7 @@
 "hub.text" = "文本";
 "hub.transferTypeHint" = "选择这次会话要传输的内容。";
 "verify.toggle" = "与对方设备核对验证码";
+"verify.heading" = "验证";
 "verify.explainWhat" = "默认关闭。开启后，双方设备会在任何数据传输之前显示同一个六位验证码（SAS）；口头核对它可以发现被替换的信令端点。它不是你输入的配对码，而且只有真的有人去核对，它才起作用。";
 "verify.explainEncryption" = "这只改变显示什么、以及在哪里停下来等你确认 — 从不改变加密本身。密钥在这台设备上生成、绝不发送给 Relayium，中继只承载密文，被篡改的握手一定会失败。";
 "verify.howItWorks" = "验证码是怎么回事";
@@ -844,6 +845,8 @@
 "help.expandedValue" = "已展开";
 "help.expandHint" = "查看这个界面怎么用、Relayium 能看到什么，以及不成功时该怎么办";
 "help.collapseHint" = "收起详细说明";
+"row.explainLabel" = "说明";
+"row.explainHint" = "显示这一行的简短说明";
 
 "help.lan.purpose" = "在同一网络的两台设备之间传文件或发消息。不需要账户，服务器上也不会留下任何内容。";
 "help.lan.step1" = "在两台设备上打开 Relayium，并让它们保持在同一网络中。";

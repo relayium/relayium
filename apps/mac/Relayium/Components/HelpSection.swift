@@ -124,22 +124,22 @@ private struct HelpBlock: View {
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: Metrics.tight) {
                 Image(systemName: "questionmark.circle")
-                    .foregroundStyle(Palette.action)
+                    .foregroundStyle(Palette.actionLabel)
                     // The heading beside it already says "Help"; spoken, the
                     // symbol would be a second name for the same thing.
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: Metrics.hairline) {
                     Text(L10n.t(.helpHeading))
-                        .font(.subheadline.weight(.semibold))
+                        .font(.callout.weight(.semibold))
                     Text(L10n.t(topic.purpose))
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.leading)
                 }
                 Spacer(minLength: Metrics.tight)
                 Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                    .font(.caption.weight(.semibold))
+                    .font(.callout.weight(.semibold))
                     .foregroundStyle(.secondary)
                     // The direction is stated to VoiceOver as the button's
                     // VALUE below, which is the shape assistive technology
@@ -175,7 +175,7 @@ private struct HelpBlock: View {
     private var steps: some View {
         VStack(alignment: .leading, spacing: Metrics.hairline) {
             Text(L10n.t(.helpStepsHeading))
-                .font(.subheadline.weight(.semibold))
+                .font(.callout.weight(.semibold))
             ForEach(Array(topic.steps.enumerated()), id: \.offset) { index, text in
                 step(text, number: index + 1)
             }
@@ -191,7 +191,7 @@ private struct HelpBlock: View {
     private var trouble: some View {
         VStack(alignment: .leading, spacing: Metrics.hairline) {
             Text(L10n.t(.helpTroubleHeading))
-                .font(.subheadline.weight(.semibold))
+                .font(.callout.weight(.semibold))
             prose(topic.failure)
             prose(topic.recovery)
         }
@@ -202,7 +202,7 @@ private struct HelpBlock: View {
     private func block(heading: L10nKey, body: L10nKey) -> some View {
         VStack(alignment: .leading, spacing: Metrics.hairline) {
             Text(L10n.t(heading))
-                .font(.subheadline.weight(.semibold))
+                .font(.callout.weight(.semibold))
             prose(body)
         }
         .accessibilityElement(children: .combine)
@@ -210,7 +210,7 @@ private struct HelpBlock: View {
 
     private func prose(_ key: L10nKey) -> some View {
         Text(L10n.t(key))
-            .font(.caption)
+            .font(.subheadline)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -220,7 +220,7 @@ private struct HelpBlock: View {
     /// renders in both shipped languages.
     private func step(_ key: L10nKey, number: Int) -> some View {
         Text(L10n.t(.formatHelpStep, [L10n.number(number), L10n.t(key)]))
-            .font(.caption)
+            .font(.subheadline)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -233,7 +233,7 @@ private struct HelpBlock: View {
         if let guide = topic.guide {
             Link(L10n.t(.helpGuideLink),
                  destination: HelpPresentation.url(for: guide, language: L10n.current))
-                .font(.caption)
+                .font(.subheadline)
                 .accessibilityIdentifier("destination-help-guide")
         }
     }

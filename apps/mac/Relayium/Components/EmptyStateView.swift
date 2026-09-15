@@ -59,7 +59,7 @@ struct EmptyStateView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Image(systemName: symbol)
-                .font(.title)
+                .font(.title2)
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             // Both sentences are selectable. An empty state is where the reader
@@ -98,10 +98,12 @@ struct EmptyStateView: View {
                 // `.title3.weight(.semibold)` is this app's primary-VALUE type,
                 // the same as the announced device name on the LAN screen — and
                 // that is what an address to be read across a desk or typed
-                // into another device is. Above the `.headline` title on
-                // purpose: the title says what happened, this says what to do.
+                // into another device is. It reads as the action without
+                // being the largest thing on the card: a `Link` is already
+                // drawn in the one action colour, which is the signal, and the
+                // title above it is what happened.
                 Link(link.title, destination: link.url)
-                    .font(.title3.weight(.semibold))
+                    .font(.body.weight(.medium))
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityHint(link.accessibilityHint)
                     .accessibilityIdentifier(link.identifier)

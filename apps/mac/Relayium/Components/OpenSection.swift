@@ -37,7 +37,7 @@ struct OpenSection<Content: View>: View {
                     .padding(.bottom, Metrics.hairline)
             }
             Text(title)
-                .font(.subheadline.weight(.semibold))
+                .font(.callout.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
             content()
         }

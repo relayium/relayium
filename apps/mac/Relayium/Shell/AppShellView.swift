@@ -51,7 +51,13 @@ struct AppShellView: View {
     var body: some View {
         NavigationSplitView {
             SidebarView()
-                .navigationSplitViewColumnWidth(min: 208, ideal: 224, max: 288)
+                // 216pt is the reference's sidebar. Still draggable, because a
+                // sidebar a Mac user cannot resize costs more native feel than
+                // a locked width buys; 216 is where it opens and the narrowest
+                // it goes, so the three groups keep their measured layout.
+                .navigationSplitViewColumnWidth(min: Metrics.sidebar,
+                                                ideal: Metrics.sidebar,
+                                                max: Metrics.sidebarMax)
         } detail: {
             Group {
                 // Switched on the SURFACE rather than on the destination. The

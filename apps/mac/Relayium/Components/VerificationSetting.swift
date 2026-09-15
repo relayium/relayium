@@ -15,30 +15,36 @@ import RelayiumAppKit
 /// answer inverted, so a session owned by the OTHER transfer destination locks
 /// this one too. The setting is global; a screen that let it change while any
 /// session was live would be changing it for that session.
+///
+/// What the switch DOES folds behind the row's ⓘ. What it does not do — change
+/// the encryption — is the card's footnote and stays on the page, because that
+/// is the misreading a reader has to be stopped from making without pressing
+/// anything.
 struct VerificationSetting: View {
     let locked: Bool
     @ObservedObject var preference: VerificationPreference
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // The setter re-checks `locked` rather than trusting `.disabled`: a
-            // click delivered from the previous render can land after a claim.
-            Toggle(L10n.t(.verifyToggle), isOn: Binding(
-                get: { preference.requiresSASConfirmation },
-                set: { if !locked { preference.requiresSASConfirmation = $0 } }
-            ))
-                .disabled(locked)
-                .accessibilityIdentifier("transfer-verification-toggle")
-            Text(L10n.t(.verifyExplainWhat))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(L10n.t(.verifyExplainEncryption))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        SectionCard(title: L10n.t(.verifyHeading),
+                    footnote: L10n.t(.verifyExplainEncryption),
+                    rows: true) {
+            CardRows {
+                SettingsRow(label: L10n.t(.verifyToggle),
+                            explanation: L10n.t(.verifyExplainWhat)) {
+                    // The setter re-checks `locked` rather than trusting
+                    // `.disabled`: a click delivered from the previous render
+                    // can land after a claim.
+                    Toggle(L10n.t(.verifyToggle), isOn: Binding(
+                        get: { preference.requiresSASConfirmation },
+                        set: { if !locked { preference.requiresSASConfirmation = $0 } }
+                    ))
+                        .labelsHidden()
+                        .disabled(locked)
+                        .accessibilityLabel(L10n.t(.verifyToggle))
+                        .accessibilityIdentifier("transfer-verification-toggle")
+                }
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
     }
 }

@@ -16,7 +16,7 @@ struct StatusBadge: View {
                 .foregroundStyle(tint)
                 .accessibilityHidden(true)
             Text(label)
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)

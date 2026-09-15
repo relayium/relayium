@@ -50,7 +50,7 @@ struct DownloadPane: View {
                 let total = manifest.files.reduce(0) { $0 + $1.size }
                 Text(DownloadPresentation.manifestSummary(fileCount: manifest.files.count,
                                                           totalBytes: Int64(total)))
-                    .font(.subheadline.weight(.semibold))
+                    .font(.callout.weight(.semibold))
                 // By index, not by name: a folder upload keeps its hierarchy in
                 // `name`, so two entries can share a leaf and duplicate ids
                 // would silently drop a row from the list the user is deciding
@@ -64,7 +64,7 @@ struct DownloadPane: View {
                             .fixedSize(horizontal: false, vertical: true)
                         Text(L10n.bytes(Int64(f.size))).fixedSize()
                     }
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(.secondary)
                 }
                 if burn {
                     // Stated before it costs something, not as a footnote after.
@@ -74,7 +74,7 @@ struct DownloadPane: View {
                     L10n.date(Date(timeIntervalSince1970: TimeInterval(expiresAt)),
                               dateStyle: .medium, timeStyle: .short),
                 ]))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(.secondary)
                 Button(L10n.t(.downloadSave)) { chooseDestination() }
                     .buttonStyle(.borderedProminent)
             case .downloading(let received, let total):
@@ -83,12 +83,12 @@ struct DownloadPane: View {
                     .accessibilityValue(
                         L10n.percent(done: received, total: total) ?? L10n.t(.commonStarting))
                 Text(L10n.percent(done: received, total: total) ?? L10n.t(.downloadInProgress))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(.secondary)
                 PendingFileList(sessionFiles: model.sessionFiles)
                 Button(L10n.t(.commonCancel)) { model.cancel() }
             case .done(let urls):
                 Text(DownloadPresentation.savedSummary(fileCount: urls.count))
-                    .font(.subheadline.weight(.semibold))
+                    .font(.callout.weight(.semibold))
                 if let payload = model.received {
                     ReceivedResultView(payload: payload)
                 }

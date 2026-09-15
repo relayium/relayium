@@ -161,6 +161,7 @@
 "hub.text" = "Text";
 "hub.transferTypeHint" = "Choose what this session will transfer.";
 "verify.toggle" = "Compare verification codes with the other device";
+"verify.heading" = "Verification";
 "verify.explainWhat" = "Off by default. When on, both devices show the same six-digit verification code (SAS) before anything moves; comparing it out loud detects a substituted signalling endpoint. It is not the pairing code you typed in, and it only detects anything if someone actually compares the two.";
 "verify.explainEncryption" = "This changes what is shown and what stops for confirmation — never the encryption. Keys are generated on this device and never sent to Relayium, the relay carries only ciphertext, and a tampered handshake always fails.";
 "verify.howItWorks" = "How verification codes work";
@@ -862,6 +863,8 @@
 "help.expandedValue" = "Expanded";
 "help.expandHint" = "Show how this screen works, what Relayium can see, and what to do when it doesn't work";
 "help.collapseHint" = "Hide the details";
+"row.explainLabel" = "Explain";
+"row.explainHint" = "Show a short explanation of this row";
 
 "help.lan.purpose" = "Move files or send a message between two devices on the same network. No account, and nothing is stored on a server.";
 "help.lan.step1" = "Open Relayium on both devices and keep them on the same network.";

@@ -192,6 +192,10 @@ struct SidebarView: View {
         return HStack(spacing: Metrics.tight) {
             Label(title, systemImage: surface.symbol)
                 .lineLimit(2)
+                // The reference's sidebar glyph is a step larger than its
+                // label. `imageScale` rather than a point size, so it stays a
+                // step larger at every text size the user can choose.
+                .imageScale(.medium)
             if live {
                 Image(systemName: liveSessionSymbol)
                     .foregroundStyle(.tint)
@@ -201,7 +205,13 @@ struct SidebarView: View {
                     .accessibilityHidden(true)
             }
         }
-        .padding(.vertical, 3)
+        // A 28pt row, which is the reference's and System Settings' own. The
+        // constant is the ROW; a `List` adds its own insets above and below the
+        // content, so what the content asks for is the row minus them. A FLOOR
+        // rather than a fixed height: a longer locale or a larger text size
+        // wraps to two lines and takes the room it needs instead of clipping.
+        .frame(minHeight: Metrics.sidebarRowHeight - 2 * Metrics.hairline,
+               alignment: .leading)
         // The sentence that used to be printed under the title, kept where a
         // pointer can still reach it. This is the SAME string the row's
         // accessibility hint carries, so the tooltip and VoiceOver cannot drift

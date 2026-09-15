@@ -18,8 +18,7 @@ struct AccountDestination: View {
     var body: some View {
         DestinationScaffold(title: L10n.t(.navAccount),
                             surface: .account,
-                            purpose: L10n.t(.navAccountSubtitle),
-                            contentMaxWidth: nil) {
+                            purpose: L10n.t(.navAccountSubtitle)) {
             switch session.state {
             case .restoring:
                 // Launch only. There is no form to preserve here, so a branch of

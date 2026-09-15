@@ -2076,7 +2076,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the announced name is no longer the identity card's primary line")
         XCTAssertTrue(pane.contains("L10n.t(.nearbyAnnouncedNameCaption)"),
                       "the announced name is shown with nothing saying what it is")
-        XCTAssertTrue(pane.contains("SectionCard(title: L10n.t(.nearbyThisMacHeading))"),
+        XCTAssertTrue(pane.contains("SectionCard(title: L10n.t(.nearbyThisMacHeading),"),
                       "identity is filed back inside the receive status")
         // It is the FIRST thing under the route rail, above the card that holds
         // the roster: a first-viewport answer or it is not an answer.
@@ -3400,17 +3400,31 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// Lists and rosters use the available detail-column width; forms and prose
-    /// retain the 720pt reading measure. This is an opt-in on exactly the two
-    /// destinations with wide structured data, so making every screen stretch
-    /// cannot happen as an accidental scaffold edit.
+    /// **Every destination is one 660pt column, centred, and a wider window does
+    /// not set it wider.** That cap is the reference's own first rule, and the
+    /// per-destination opt-out that used to let rosters and lists stretch is
+    /// gone: a screen that took the whole detail pane was the difference between
+    /// this app and a page in a window.
+    ///
+    /// Exactly one destination still lays out its own column, and it is the one
+    /// whose content is a grouped `Form` — which insets and centres itself, so a
+    /// second column around it would be a column inside a column.
     func testOnlyStructuredDataDestinationsOptOutOfTheReadingMeasure() throws {
+        let fillers = try ["LanTransfer", "CrossNetworkTransfer", "StoredSend",
+                           "StoredReceive", "DeviceInbox", "Account"]
+            .filter { try source(named: "Destinations/\($0)Destination.swift")
+                .contains("fillsWidth: true") }
+        XCTAssertEqual(fillers, ["DeviceInbox"],
+                       "a destination lays out its own column instead of the scaffold's")
+        XCTAssertTrue(try source(named: "Components/DestinationScaffold.swift")
+            .contains("private var columnWidth: CGFloat { fillsWidth ? .infinity : Metrics.readingMeasure }"),
+            "the scaffold no longer caps its column at the reading measure")
         for file in [lanDestination, crossDestination,
                      "Destinations/AccountDestination.swift",
-                     // A grouped `Form` of controls, not prose.
-                     "Destinations/DeviceInboxDestination.swift"] {
-            XCTAssertTrue(try source(named: file).contains("contentMaxWidth: nil"),
-                          "\(file) must let its roster/list use the detail column")
+                     "Destinations/StoredSendDestination.swift",
+                     "Destinations/StoredReceiveDestination.swift"] {
+            XCTAssertFalse(try source(named: file).contains("contentMaxWidth"),
+                           "\(file) still carries the retired reading-measure opt-out")
         }
         // Exactly one destination supplies its own scrolling, and it is the one
         // whose content is a `Form` — which is already a scroll view. A second
@@ -3421,14 +3435,8 @@ final class MacSurfaceGuardTests: XCTestCase {
                 .contains("scrolls: false") }
         XCTAssertEqual(optedOut, ["DeviceInbox"],
                        "a destination opted out of the scaffold's scroll view")
-        for file in ["Destinations/StoredSendDestination.swift",
-                     "Destinations/StoredReceiveDestination.swift"] {
-            XCTAssertFalse(try source(named: file).contains("contentMaxWidth: nil"),
-                           "\(file) should keep the prose/form reading measure")
-        }
-        // LAN Transfer opts its ROSTER out and constrains its prose locally:
-        // the destination takes the width, and every paragraph on it is still
-        // capped at the reading measure.
+        // The LAN pane still caps its own prose, which is what keeps a
+        // paragraph at the measure if the scaffold around it ever changes.
         let connect = try source(named: lanConnect)
         XCTAssertTrue(connect.contains(".frame(maxWidth: .infinity, alignment: .leading)"),
                       "the roster's container must accept the available width")

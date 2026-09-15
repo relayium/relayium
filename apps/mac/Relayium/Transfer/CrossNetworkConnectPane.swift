@@ -88,7 +88,7 @@ struct CrossNetworkConnectPane: View {
     private let route = AppDestination.pairingCode
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Metrics.section) {
             // The same statement the LAN screen makes, and for the same reason:
             // a disabled control has to say why it is disabled. It describes
             // this module's own retained session — the other destination cannot
@@ -198,7 +198,7 @@ struct CrossNetworkConnectPane: View {
     private func liveCode(_ live: String) -> some View {
         SectionCard(title: L10n.t(.workspacePairingHeading)) {
             VStack(alignment: .leading, spacing: 12) {
-                Text(L10n.t(.directGiveCode)).font(.subheadline.weight(.semibold))
+                Text(L10n.t(.directGiveCode)).font(.callout.weight(.semibold))
                 SecurityCodeText(code: live, style: .pairing)
                 TimelineView(.periodic(from: .now, by: 1)) { tick in
                     let deadline = PairingCodeExpiry.presentation(
@@ -206,7 +206,7 @@ struct CrossNetworkConnectPane: View {
                     VStack(alignment: .leading, spacing: 12) {
                         if let countdown = deadline.countdown {
                             Text(L10n.t(.pairingCodeExpiresIn, [countdown]))
-                                .font(.caption)
+                                .font(.callout)
                                 .foregroundStyle(.secondary)
                                 // The digits do not reflow as they tick, which
                                 // is the one thing a proportional face gets
@@ -218,7 +218,7 @@ struct CrossNetworkConnectPane: View {
                                 .accessibilityIdentifier("pairing-code-countdown")
                         }
                         Text(L10n.t(.pairingCodeExpiryNote))
-                            .font(.caption)
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("pairing-code-expiry-note")
@@ -317,7 +317,7 @@ struct CrossNetworkConnectPane: View {
                 // legacy session pane; each states its actual connection shape.
                 Divider()
                 Text(L10n.t(.crossNetworkExplain))
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
@@ -339,7 +339,7 @@ struct CrossNetworkConnectPane: View {
                 .disabled(sessionLocked)
                 .accessibilityIdentifier("cross-network-create-code")
             Text(L10n.t(.workspaceCreatePairingCodeHint))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

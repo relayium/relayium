@@ -54,12 +54,12 @@ struct TransferStagingSection: View {
     var body: some View {
         OpenSection(title: L10n.t(.workspaceStagingHeading)) {
             Text(L10n.t(.workspaceStagingOptional))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("transfer-staging-optional")
             FileDropZone(store: selection, isBusy: isBusy) {
                 Text(selection.summary ?? L10n.t(.workspaceDropHint))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }

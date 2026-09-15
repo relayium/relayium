@@ -236,9 +236,9 @@ struct UploadPane: View {
                 .accessibilityValue(
                     L10n.percent(done: sent, total: total) ?? L10n.t(.commonStarting))
             Text(L10n.percent(done: sent, total: total) ?? L10n.t(.commonStarting))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(.secondary)
             Text(L10n.t(.uploadMacKeepOpen))
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             PendingFileList(sessionFiles: model.sessionFiles)
@@ -279,7 +279,7 @@ struct UploadPane: View {
                 }
                 if copiedLink == link {
                     Label(L10n.t(.pairingLinkCopied), systemImage: "checkmark")
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -288,7 +288,7 @@ struct UploadPane: View {
                 L10n.date(Date(timeIntervalSince1970: TimeInterval(expiresAt)),
                           dateStyle: .medium, timeStyle: .short),
             ]))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(.secondary)
             cliCommand(link: link)
             Button(L10n.t(.uploadSendAnother)) {
                 copiedLink = nil
@@ -319,7 +319,7 @@ struct UploadPane: View {
         let command = StoredLinkCommandPresentation.downCommand(link: link)
         return VStack(alignment: .leading, spacing: 8) {
             Text(L10n.t(.storedSendCliHeading))
-                .font(.subheadline.weight(.semibold))
+                .font(.callout.weight(.semibold))
             Text(L10n.token(command))
                 .font(.system(.body, design: .monospaced))
                 .textSelection(.enabled)
@@ -338,7 +338,7 @@ struct UploadPane: View {
                 .accessibilityIdentifier("storedSend.cliCopy")
                 if copiedCommand == command {
                     Label(L10n.t(.commonCopied), systemImage: "checkmark")
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -347,7 +347,7 @@ struct UploadPane: View {
             // capability key is written to a history file by default.
             InlineMessage(.warning, L10n.t(.storedSendCliWarning))
             Link(L10n.t(.storedSendCliDocs), destination: AppEnvironment.cliWebURL)
-                .font(.caption)
+                .font(.subheadline)
                 .accessibilityIdentifier("storedSend.cliDocs")
         }
         .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
@@ -369,7 +369,7 @@ struct UploadPane: View {
             InlineMessage(.warning, notice.text)
         } else {
             Text(notice.text)
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

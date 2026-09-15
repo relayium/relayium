@@ -190,13 +190,13 @@ struct TransferLinkPane: View {
                 .font(.headline)
                 .accessibilityIdentifier("link-session-peer")
             Text(L10n.t(.nearbySessionPeerDisclaimer))
-                .font(.caption2).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if link.connection.isOpen && !link.isVerificationPending {
                 // The claim the whole batch exists to make, and the one sentence
                 // that replaces the two one-lane notes.
                 Text(L10n.t(.linkOneConnectionNote))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("link-one-connection-note")
             }
@@ -239,14 +239,14 @@ struct TransferLinkPane: View {
     /// press would be swallowed is exactly the shape this pane must not have.
     private func verification(_ sas: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(L10n.t(.linkVerifyTitle)).font(.subheadline.weight(.semibold))
+            Text(L10n.t(.linkVerifyTitle)).font(.callout.weight(.semibold))
             SecurityCodeText(code: sas, style: .verification)
             Text(L10n.t(.linkVerifyBody))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if !link.armedFiles.isEmpty {
                 Text(L10n.t(.linkVerifyHoldingFiles))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("link-holding-files")
             }
@@ -341,14 +341,14 @@ struct TransferLinkPane: View {
                     .disabled(!link.canSendMessage || trimmedDraft.isEmpty)
                     .accessibilityIdentifier("link-send-message")
                 Text(L10n.t(.composerShortcutHint))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("link-composer-shortcut")
                 Spacer(minLength: 0)
             }
             if link.isWaitingForConversation {
                 Text(L10n.t(.linkWaitingForPeer))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("link-waiting-for-peer")
             }
@@ -385,7 +385,7 @@ struct TransferLinkPane: View {
             // hand. A hint that said only "drag files here" would be a promise
             // that letting go transmits them.
             Text(L10n.t(.dropSendHint))
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("link-drop-hint")
@@ -453,7 +453,7 @@ struct TransferLinkPane: View {
             VStack(alignment: .leading, spacing: Metrics.tight) {
                 if let summary = dropped.summary {
                     Text(summary)
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.subheadline).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("link-drop-summary")
                 }
@@ -533,7 +533,7 @@ struct TransferLinkPane: View {
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("link-leave-session")
             Text(L10n.t(.linkHistoryIsLocal))
-                .font(.caption2).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         // **Asked only when there is something to lose**, so an ordinary hangup
@@ -818,7 +818,7 @@ struct LinkTranscriptView: View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: message.direction == .outgoing
                   ? "arrow.up.right" : "arrow.down.left")
-                .font(.caption2)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
             // Verbatim, and never parsed: the body is peer-supplied text
             // and `Text(verbatim:)` is what stops it being read as
@@ -887,12 +887,12 @@ struct LinkTransferListView: View {
 
     private var list: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.t(.linkTransfersHeading)).font(.subheadline.weight(.semibold))
+            Text(L10n.t(.linkTransfersHeading)).font(.callout.weight(.semibold))
             if !link.armedFiles.isEmpty {
                 // A batch the lane has not seen. Named as its own state rather
                 // than drawn as queued: queued means the lane took it.
                 Text(L10n.t(.linkBatchArmed))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(.secondary)
                     .accessibilityIdentifier("link-batch-armed")
             }
             ForEach(model.batchesNewestFirst) { batch in
@@ -913,7 +913,7 @@ struct LinkTransferListView: View {
                     .foregroundStyle(.secondary)
                 Text(summary(batch)).font(.callout)
                 Spacer()
-                Text(stateText(batch.state)).font(.caption).foregroundStyle(.secondary)
+                Text(stateText(batch.state)).font(.subheadline).foregroundStyle(.secondary)
             }
             if let fraction = batch.fractionCompleted, !batch.isTerminal {
                 ProgressView(value: fraction).controlSize(.small)

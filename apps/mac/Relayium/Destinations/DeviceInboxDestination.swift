@@ -27,15 +27,15 @@ struct DeviceInboxDestination: View {
     @EnvironmentObject private var navigation: AppNavigationModel
 
     var body: some View {
-        // `contentMaxWidth: nil` and `scrolls: false` for one reason each. The
-        // surface is a grouped `Form` — structured controls rather than prose, so
-        // it takes the detail column like the roster and the account list do — and
-        // a `Form` scrolls itself, so wrapping it in the scaffold's `ScrollView`
-        // would nest two scroll views around one list of sections.
+        // `fillsWidth` and `scrolls: false` for one reason each. A grouped
+        // `Form` insets and centres its own column, so the scaffold hands it the
+        // detail pane rather than a second column inside one — and a `Form`
+        // scrolls itself, so wrapping it in the scaffold's `ScrollView` would
+        // nest two scroll views around one list of sections.
         DestinationScaffold(title: L10n.t(.inboxTitle),
                             surface: .deviceInbox,
                             purpose: L10n.t(.navDeviceInboxSubtitle),
-                            contentMaxWidth: nil,
+                            fillsWidth: true,
                             scrolls: false) {
             DeviceInboxSurface { intent in
                 navigation.selectAccount(intent: intent)

@@ -29,7 +29,7 @@ struct ReceivedResultView: View {
                     Image(systemName: isDirectory(url) ? "folder" : "doc")
                         .foregroundStyle(.secondary)
                     Text(url.lastPathComponent)
-                        .font(.caption)
+                        .font(.subheadline)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -57,7 +57,7 @@ struct ReceivedResultView: View {
             }
             .buttonStyle(.bordered)
             Text(L10n.t(.receivedDragHint))
-                .font(.caption2).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(.secondary)
         }
     }
 

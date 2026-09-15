@@ -685,6 +685,9 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case hubText = "hub.text"
     case hubTransferTypeHint = "hub.transferTypeHint"
     case verifyToggle = "verify.toggle"
+    /// The name of the group the toggle sits in. Short on purpose: a group
+    /// caption says what the rows are about, and the row says what it does.
+    case verifyHeading = "verify.heading"
     case verifyExplainWhat = "verify.explainWhat"
     case verifyExplainEncryption = "verify.explainEncryption"
     /// Names the disclosure the two `verify.explain*` paragraphs moved into on
@@ -2116,6 +2119,13 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case helpExpandedValue = "help.expandedValue"
     case helpExpandHint = "help.expandHint"
     case helpCollapseHint = "help.collapseHint"
+
+    /// The ⓘ on a settings row, which folds one row's optional explanation out
+    /// of the page and behind a press. Separate from the Help card's labels
+    /// because it explains ONE row rather than the whole screen, and because
+    /// VoiceOver reads a button's label and its hint for different reasons.
+    case rowExplainLabel = "row.explainLabel"
+    case rowExplainHint = "row.explainHint"
 
     case helpLanPurpose = "help.lan.purpose"
     case helpLanStep1 = "help.lan.step1"
