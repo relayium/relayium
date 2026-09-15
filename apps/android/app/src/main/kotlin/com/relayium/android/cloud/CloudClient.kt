@@ -637,12 +637,19 @@ class CloudClient(
     }
 
     /**
-     * Read the ciphertext and hand back authenticated plaintext chunks.
+     * Read the ciphertext and hand back authenticated plaintext chunks,
+     * resuming a transport interruption from the last AUTHENTICATED frame
+     * boundary.
      *
      * [onChunk] receives plaintext in stream order, and the manifest sizes say
      * where one file ends and the next begins — the stream itself has no
      * separator. It is called on the calling coroutine's thread, and a throw
-     * from it aborts the download.
+     * from it aborts the download terminally; see [BlobDownload].
+     *
+     * [onRecovery] reports the recovery WINDOW — true when an interrupted read
+     * is waiting to be resumed, false when a resumed read has been validated and
+     * is delivering again. It is state for a surface to render, never progress:
+     * the byte counters keep their own meaning throughout.
      *
      * The expected total comes from [manifest], so a stream truncated on a frame
      * boundary — every delivered frame perfectly authentic — is still refused.
@@ -650,79 +657,461 @@ class CloudClient(
     suspend fun downloadBlob(
         link: StoredLink,
         manifest: StoredManifest,
+        onRecovery: (Boolean) -> Unit = {},
         onChunk: (ByteArray) -> Unit,
     ): Unit = withContext(io) {
-        val expected = manifest.files.sumOf { it.size }
-        val decryptor = StoreDecryptor(link.key)
-        var url = base.newBuilder().addPathSegments("api/files/${link.id}/blob").build()
-        var hop = 0
-
-        while (true) {
-            val request = Request.Builder()
-                .url(url)
-                .header("Accept", "application/octet-stream")
-                .header("User-Agent", userAgent)
-                // Native clients opt into the BYO own-node redirect; the fleet
-                // one happens with or without this header.
-                .header("X-Relayium-Direct-Download", "1")
-                .build()
-            val call = anonymous.newCall(request)
-            // One hop, start to finish, inside one cancellation scope: the
-            // headers AND the body, because a stalled download is blocked in
-            // the body read and that is what has to be interruptible.
-            val next = try {
-                withCancellation(call) {
-                    call.execute().use { response ->
-                        readHop(response, url, hop, decryptor, onChunk)
-                    }
-                }
-            } catch (e: IOException) {
-                // A cancelled transfer unwinds as a cancellation, never as a
-                // network failure this app caused on purpose.
-                coroutineContext.ensureActive()
-                throw CloudException(transportFailure(e))
-            }
-            if (next == null) break
-            url = next
-            hop += 1
-        }
-        wireFailure { decryptor.end(expected) }
+        BlobDownload(link, manifest, onRecovery, onChunk).run()
     }
 
     /**
-     * One response: either a validated redirect to follow, or null once the
-     * whole body has been streamed through [onChunk].
+     * One stored download, across however many requests it takes — which is one
+     * unless the transport breaks and the server has said a resume is safe.
+     *
+     * ## Why this is not simply "retry the GET"
+     *
+     * A stored blob is framed AEAD ciphertext being fed to a single
+     * [StoreDecryptor] whose sequence number, plaintext total and consumed
+     * offset describe everything already delivered. Re-issuing the whole request
+     * would feed those bytes a second time and every frame after them would
+     * decode as rubbish; issuing a `Range` without checking what came back would
+     * do the same thing whenever a server answered it with a full body. So the
+     * recovery is defined by four rules, each of which refuses rather than
+     * guesses:
+     *
+     *  1. **Resume only where the server said it is supported.** The capability
+     *     is read from the first body's own `Accept-Ranges: bytes` and declared
+     *     length, never assumed. That one header is also, exactly, the rule that
+     *     a burn or download-limited object is never re-requested: central sends
+     *     it only for objects with no download limit and deliberately ignores
+     *     `Range` on the others, because a resume is several stateless GETs its
+     *     burn accounting cannot reconcile (`server/account/files.go`). A client
+     *     that guessed here would spend somebody's one-shot download on a retry.
+     *  2. **Resume from [StoreDecryptor.consumedCipher] and nothing else.** It
+     *     advances past a frame only once that frame has authenticated, so the
+     *     offset can neither re-feed a partial frame nor skip a whole one. The
+     *     buffered tail of the interrupted frame is dropped with
+     *     [StoreDecryptor.resetBuffer] at that point and only at that point.
+     *  3. **A continuation must prove it is one.** Exactly 206, with a
+     *     `Content-Range` whose start is the offset asked for, whose end is the
+     *     last byte, and whose total is the SAME total the first response
+     *     committed to. A 200, a shifted start, a changed total or a length that
+     *     disagrees is refused — never appended to what is already written.
+     *  4. **Only a transport interruption is recoverable.** Authentication,
+     *     decryption, the sink, a refused redirect, 404, 429 and every other
+     *     classified answer are terminal exactly as before. Retrying any of them
+     *     would be replaying a request the server has already answered.
+     *
+     * ## The sink is the one-way door
+     *
+     * [StoreDecryptor.push] returns whole frames and has ALREADY advanced
+     * `consumedCipher` past them before [onChunk] sees the first one. So a sink
+     * that throws leaves the offset ahead of what was actually written, and a
+     * resume from it would silently skip plaintext the user never received.
+     * There is no recovery from that which is not data loss, so a sink failure
+     * ends the download and can never be retried — [sinkFailed] is checked by
+     * [mayRetry] rather than left to the exception type, so a sink that one day
+     * throws an `IOException` is still not mistaken for a network drop.
+     *
+     * ## What it does not widen
+     *
+     * A resume re-enters at the SAME `/api/files/<id>/blob` route the first
+     * attempt used, with one header added, and every hop is re-validated by the
+     * unchanged [BlobRedirect] policy. It does not re-target a node URL directly
+     * — a fleet/BYO redirect carries a single-use token, so central is where a
+     * fresh one comes from — and it adds no credential: the request is anonymous
+     * before and after, and the key never leaves this device.
      */
-    private fun readHop(
-        response: okhttp3.Response,
-        url: HttpUrl,
-        hop: Int,
-        decryptor: StoreDecryptor,
-        onChunk: (ByteArray) -> Unit,
-    ): HttpUrl? {
-        if (response.code in 300..399) {
-            return when (val verdict = BlobRedirect.next(url, response.header("Location"), base, hop)) {
-                is BlobRedirect.Verdict.Follow -> verdict.url
-                is BlobRedirect.Verdict.Refuse ->
-                    throw CloudException(CloudFailure(CloudFailure.Kind.UNTRUSTED_REDIRECT))
+    private inner class BlobDownload(
+        private val link: StoredLink,
+        manifest: StoredManifest,
+        private val onRecovery: (Boolean) -> Unit,
+        private val onChunk: (ByteArray) -> Unit,
+    ) {
+
+        /** The manifest's plaintext total: the completeness proof, unchanged. */
+        private val expected = manifest.files.sumOf { it.size }
+
+        /** ONE decryptor for the whole download, across every attempt. */
+        private val decryptor = StoreDecryptor(link.key)
+
+        /**
+         * The ciphertext total the first body-serving response committed to,
+         * set only when that response ALSO declared `Accept-Ranges: bytes`.
+         *
+         * Null means this download is a single GET: no resume is attempted, no
+         * request is replayed, and the behaviour is exactly what it was before
+         * recovery existed.
+         */
+        private var resumableTotal: Long? = null
+
+        /**
+         * [onChunk] threw. The download is over; see the class note.
+         *
+         * A SECOND fence, not the primary one: [SinkFailure] already carries a
+         * callback's exception past the transport's `IOException` handling, so
+         * a sink error cannot reach the retry decision at all. This flag means
+         * that even if it somehow did, [mayRetry] still refuses. Two fences,
+         * because the failure this prevents is silent: a resume from an offset
+         * the sink never received skips plaintext without anything looking
+         * wrong.
+         */
+        private var sinkFailed = false
+
+        /**
+         * Ciphertext bytes this download has RECEIVED, whether or not they have
+         * authenticated yet.
+         *
+         * Distinct from [StoreDecryptor.consumedCipher], and the distinction is
+         * the one that decides whether a stream may be retried at all. A body
+         * whose final frame is cryptographically truncated — the length prefix
+         * promises bytes the object does not contain — delivers every byte the
+         * server advertised while leaving `consumedCipher` short of the total,
+         * because the dangling tail never authenticates. Retrying that is
+         * re-fetching a body that will fail identically every time.
+         *
+         * So completeness at the TRANSPORT layer is measured here, and integrity
+         * is left to `end`: all advertised bytes arrived means the answer is
+         * final, and fewer arrived means the connection stopped early and a
+         * resume may continue it.
+         */
+        private var rawReceived = 0L
+
+        /** The coroutine this download runs in, captured so the plaintext drain
+         *  below can be a cancellation point. See [readHop]. */
+        private var context: kotlin.coroutines.CoroutineContext = kotlin.coroutines.EmptyCoroutineContext
+
+        /** The transport failure the current recovery is recovering from, kept
+         *  so an unrecoverable answer can be reported as what actually went
+         *  wrong rather than as whatever the resume attempt looked like. */
+        private var interruption: CloudFailure? = null
+
+        private var attempts = 0
+
+        suspend fun run() {
+            context = coroutineContext
+            var recovering = false
+            while (true) {
+                coroutineContext.ensureActive()
+                val start = decryptor.consumedCipher
+                val failure = try {
+                    attempt(start, recovering)
+                    null
+                } catch (e: Interrupted) {
+                    e.failure
+                }
+                recovering = false
+                // Everything the server committed to has arrived. `end` is the
+                // authority on whether it is the right file, so a transport
+                // error raised after the last byte must not turn a complete,
+                // authenticated download into a reported failure.
+                if (allAdvertisedBytesArrived()) break
+                // No declared total to fall short of: this was a single GET and
+                // it ended. Whatever it delivered, `end` decides.
+                if (failure == null && resumableTotal == null) break
+                interruption = failure ?: interruption
+                if (!mayRetry()) {
+                    // The transfer was interrupted and could not be continued.
+                    // Reported as the transport failure it was — including for
+                    // a clean short read, which is a connection that stopped
+                    // early rather than ciphertext that failed to authenticate.
+                    // `DAMAGED` is reserved for the integrity verdict `end`
+                    // gives below, and saying it here would send a user to look
+                    // at a file when the thing that broke was the network.
+                    //
+                    // Reaching here always means the transfer stopped short: a
+                    // complete one broke out above, and a capability-less
+                    // download is complete by definition because there is no
+                    // declared total to fall short of.
+                    throw CloudException(
+                        interruption ?: CloudFailure(CloudFailure.Kind.NETWORK),
+                    )
+                }
+                // EVERY retry, including one that restarts at zero.
+                //
+                // The buffered tail of an interrupted frame has not
+                // authenticated and cannot be kept across a re-read: a resume
+                // prepends it to bytes that already contain it, and a
+                // zero-offset restart — which is what a drop before the FIRST
+                // complete frame produces, since there is no boundary to resume
+                // from — prepends it to the whole body. Gating this on a
+                // non-zero offset left exactly that case corrupting an
+                // otherwise valid download.
+                decryptor.resetBuffer()
+                attempts += 1
+                recovering = true
+                onRecovery(true)
+                backoff(attempts)
+            }
+            // Unchanged, and still the only thing that may declare this
+            // complete: a boundary-aligned truncation leaves every delivered
+            // frame authentic, so the manifest's total is what tells "the file
+            // ended" from "someone stopped it early".
+            wireFailure { decryptor.end(expected) }
+        }
+
+        /**
+         * Whether every ciphertext byte the server committed to has arrived.
+         *
+         * Measured on RECEIVED bytes, not authenticated ones — see
+         * [rawReceived]. False when no total was declared, because there is then
+         * nothing to have arrived in full; that case is handled separately.
+         */
+        private fun allAdvertisedBytesArrived(): Boolean {
+            val total = resumableTotal ?: return false
+            return rawReceived >= total
+        }
+
+        /**
+         * Whether another request may be issued.
+         *
+         * Three independent gates, and the download stops if any refuses: the
+         * server declared a resume safe, the sink is still intact, and the
+         * global attempt budget is not spent. Global rather than per-offset on
+         * purpose — a per-offset counter would let a connection that breaks
+         * every few frames run indefinitely.
+         */
+        private fun mayRetry(): Boolean {
+            val total = resumableTotal ?: return false
+            if (sinkFailed || attempts >= MAX_RESUME_ATTEMPTS) return false
+            // There is no tail left to ask for. `Range: bytes=<total>-` is
+            // outside the object, which central refuses as unsatisfiable — and
+            // a request that cannot succeed is not a recovery.
+            return decryptor.consumedCipher < total
+        }
+
+        /** Cancellable by construction: a user who leaves during the wait
+         *  unwinds here rather than after the next request has been issued. */
+        private suspend fun backoff(attempt: Int) {
+            val step = RESUME_BACKOFF_MS shl (attempt - 1)
+            kotlinx.coroutines.delay(step.coerceAtMost(RESUME_BACKOFF_MAX_MS))
+        }
+
+        /** One request and its redirect chain, start to finish. */
+        private suspend fun attempt(start: Long, recovering: Boolean) {
+            var url = base.newBuilder().addPathSegments("api/files/${link.id}/blob").build()
+            var hop = 0
+            while (true) {
+                coroutineContext.ensureActive()
+                val builder = Request.Builder()
+                    .url(url)
+                    .header("Accept", "application/octet-stream")
+                    .header("User-Agent", userAgent)
+                    // Native clients opt into the BYO own-node redirect; the
+                    // fleet one happens with or without this header.
+                    .header("X-Relayium-Direct-Download", "1")
+                    // The body is AEAD ciphertext: there is nothing in it to
+                    // compress, and a transfer encoding would break the one
+                    // thing a resume depends on — that a byte counted here is a
+                    // byte at that offset in the object. Stated rather than
+                    // left to OkHttp's transparent gzip, which would otherwise
+                    // negotiate an encoding and strip the declared length.
+                    .header("Accept-Encoding", "identity")
+                // The one open-ended shape central accepts, and the one the
+                // CLI already speaks. It rides every hop, which is what lets a
+                // redirected node answer the continuation.
+                if (start > 0) builder.header("Range", "bytes=$start-")
+                val call = anonymous.newCall(builder.build())
+                // One hop, start to finish, inside one cancellation scope: the
+                // headers AND the body, because a stalled download is blocked in
+                // the body read and that is what has to be interruptible.
+                val next = try {
+                    withCancellation(call) {
+                        call.execute().use { response ->
+                            readHop(response, url, hop, start, recovering)
+                        }
+                    }
+                } catch (e: SinkFailure) {
+                    // The CALLER's failure, rethrown exactly as it was thrown.
+                    // It is unwrapped here, before the `IOException` arm below,
+                    // because a sink that throws an `IOException` is not a
+                    // network drop and must not be classified — or retried — as
+                    // one. See [SinkFailure].
+                    throw e.thrown
+                } catch (e: IOException) {
+                    // A cancelled transfer unwinds as a cancellation, never as a
+                    // network failure this app caused on purpose.
+                    coroutineContext.ensureActive()
+                    throw Interrupted(transportFailure(e))
+                }
+                if (next == null) return
+                url = next
+                hop += 1
             }
         }
-        when (response.code) {
-            200, 206 -> Unit
-            404 -> throw CloudException(CloudFailure(CloudFailure.Kind.NOT_FOUND))
-            429 -> throw CloudException(CloudFailure(CloudFailure.Kind.DOWNLOAD_LIMITED))
-            else -> throw CloudException(
-                CloudFailure(CloudFailure.Kind.DOWNLOAD_UNAVAILABLE, response.code),
-            )
+
+        /**
+         * One response: either a validated redirect to follow, or null once this
+         * response's body has been streamed through [onChunk].
+         */
+        private fun readHop(
+            response: okhttp3.Response,
+            url: HttpUrl,
+            hop: Int,
+            start: Long,
+            recovering: Boolean,
+        ): HttpUrl? {
+            if (response.code in 300..399) {
+                return when (val verdict = BlobRedirect.next(url, response.header("Location"), base, hop)) {
+                    is BlobRedirect.Verdict.Follow -> verdict.url
+                    is BlobRedirect.Verdict.Refuse ->
+                        throw CloudException(CloudFailure(CloudFailure.Kind.UNTRUSTED_REDIRECT))
+                }
+            }
+            when (response.code) {
+                200, 206 -> Unit
+                404 -> throw CloudException(CloudFailure(CloudFailure.Kind.NOT_FOUND))
+                429 -> throw CloudException(CloudFailure(CloudFailure.Kind.DOWNLOAD_LIMITED))
+                else -> throw CloudException(
+                    CloudFailure(CloudFailure.Kind.DOWNLOAD_UNAVAILABLE, response.code),
+                )
+            }
+            if (start == 0L) {
+                if (response.code != 200) unusable(response)
+                // A retry that restarts at zero — which is what a drop before
+                // the first complete frame produces — must still be answering
+                // about the SAME object. The capability is validated against
+                // what the first response committed to rather than replaced by
+                // whatever this one says, because an object that changed size
+                // between two requests is not one this download can finish.
+                val known = resumableTotal
+                if (known == null) rememberResumeCapability(response)
+                else if (response.body.contentLength() != known || encoded(response)) unusable(response)
+                if (recovering) onRecovery(false)
+            } else {
+                val total = resumableTotal
+                if (response.code != 206 || total == null || !continues(response, start, total)) {
+                    // Not a continuation of what is already written. Nothing is
+                    // fed from it — splicing a fresh body into the middle of an
+                    // authenticated stream is the one mistake this whole class
+                    // exists to make impossible.
+                    unusable(response)
+                }
+                if (recovering) onRecovery(false)
+            }
+            rawReceived = start
+            val limit = resumableTotal
+            val source = response.body.source()
+            val buffer = ByteArray(READ_BUFFER_BYTES)
+            while (true) {
+                val read = source.read(buffer)
+                if (read == -1) return null
+                // BEFORE anything is decrypted or written. A server sending more
+                // than it committed to is not one whose extra bytes should reach
+                // a decryptor, let alone a document in the user's folder.
+                if (limit != null && rawReceived + read > limit) {
+                    throw CloudException(
+                        CloudFailure(CloudFailure.Kind.DOWNLOAD_UNAVAILABLE, response.code),
+                    )
+                }
+                rawReceived += read
+                for (chunk in wireFailure { decryptor.push(buffer.copyOf(read)) }) {
+                    // One network read can complete more than one frame, and
+                    // the drain between them blocks on nothing — so without
+                    // this a cancelled download would keep handing plaintext to
+                    // a sink the user has already left, until the next socket
+                    // read noticed. Cancellation is checked per chunk instead.
+                    context.ensureActive()
+                    try {
+                        onChunk(chunk)
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        // Cancellation is not a sink failure and is not
+                        // classified: it unwinds as itself.
+                        throw e
+                    } catch (t: Throwable) {
+                        // `consumedCipher` has already advanced past this frame,
+                        // so no resume from here could be honest. See the class
+                        // note.
+                        sinkFailed = true
+                        throw SinkFailure(t)
+                    }
+                }
+            }
         }
-        val source = response.body.source()
-        val buffer = ByteArray(READ_BUFFER_BYTES)
-        while (true) {
-            val read = source.read(buffer)
-            if (read == -1) return null
-            for (chunk in wireFailure { decryptor.push(buffer.copyOf(read)) }) onChunk(chunk)
+
+        /**
+         * This response cannot be used to continue the download.
+         *
+         * A typed service answer carrying the status, rather than the
+         * interruption that led here: "the server answered 200 to a Range
+         * request" or "it is now describing a different object" is a fact about
+         * the SERVICE, and the status code is the only diagnostic a report of it
+         * would otherwise have. It never feeds a byte, and it is never retried —
+         * repeating a request the server has already answered this way would
+         * produce the same answer.
+         */
+        private fun unusable(response: okhttp3.Response): Nothing = throw CloudException(
+            CloudFailure(CloudFailure.Kind.DOWNLOAD_UNAVAILABLE, response.code),
+        )
+
+        /** Any content coding other than identity. A body that arrived encoded
+         *  has a wire length that is not an offset into the object. */
+        private fun encoded(response: okhttp3.Response): Boolean {
+            val coding = response.header("Content-Encoding")?.trim() ?: return false
+            return !coding.equals("identity", ignoreCase = true)
+        }
+
+        /**
+         * Read the server's own statement that a resume is supported, and the
+         * total it commits to.
+         *
+         * Both or neither: a length with no `Accept-Ranges` is a server that may
+         * answer a `Range` with a full body, and `Accept-Ranges` with no length
+         * gives nothing to compare a continuation against.
+         */
+        private fun rememberResumeCapability(response: okhttp3.Response) {
+            val accepts = response.header("Accept-Ranges")
+                ?.split(',')
+                ?.any { it.trim().equals("bytes", ignoreCase = true) } == true
+            if (!accepts || encoded(response)) return
+            val declared = response.body.contentLength()
+            if (declared <= 0) return
+            resumableTotal = declared
+        }
+
+        /**
+         * Whether this 206 really continues the stream, by its own headers.
+         *
+         * `Content-Range` is required and parsed exactly: a server that answered
+         * a different offset, or that is now describing an object of a different
+         * size, is not continuing this download.
+         *
+         * The declared length must be present and exactly the remainder. An
+         * unknown length is refused rather than tolerated: without it there is
+         * no independent statement of how much is coming, so the body-overrun
+         * check in [readHop] would have nothing to bound and a chunked answer
+         * could run past the object while every header still looked right.
+         */
+        private fun continues(response: okhttp3.Response, start: Long, total: Long): Boolean {
+            if (encoded(response)) return false
+            val match = CONTENT_RANGE.matchEntire(response.header("Content-Range")?.trim().orEmpty())
+                ?: return false
+            val (first, last, whole) = match.destructured
+            if (first.toLongOrNull() != start) return false
+            if (whole.toLongOrNull() != total) return false
+            if (last.toLongOrNull() != total - 1) return false
+            return response.body.contentLength() == total - start
         }
     }
+
+    /** A transport interruption that a resume may be able to continue past.
+     *  Internal to [BlobDownload]; never seen by a caller. */
+    private class Interrupted(val failure: CloudFailure) : RuntimeException(null, null)
+
+    /**
+     * Whatever the caller's `onChunk` threw, carried across this file's own
+     * `IOException` handling so it can never be reclassified as a transport
+     * failure — and therefore never resumed.
+     *
+     * The distinction is load-bearing rather than tidy. `readHop` runs the sink
+     * callback INSIDE the body read, so a sink that raises an `IOException` —
+     * which a sink writing to a document provider genuinely can — would
+     * otherwise be caught by the arm that means "the network dropped", reported
+     * as a network failure the user cannot act on, and, now that recovery
+     * exists, retried from an offset the sink never received. Wrapping makes
+     * the two impossible to confuse; the exception reaches the caller exactly
+     * as it was thrown.
+     */
+    private class SinkFailure(val thrown: Throwable) : RuntimeException(null, null)
 
     /**
      * Run one call's ENTIRE lifetime with the coroutine's cancellation bound to
@@ -828,6 +1217,24 @@ class CloudClient(
         const val MAX_HISTORY_ROWS = 1000
 
         private const val READ_BUFFER_BYTES = 64 * 1024
+
+        /**
+         * How many times one download may be resumed, in total.
+         *
+         * Global rather than per-offset: a link that breaks every few frames
+         * must end as a reported failure rather than as a request loop. Five
+         * requests in all, which matches what `InboxReceiver` allows one
+         * delivery.
+         */
+        private const val MAX_RESUME_ATTEMPTS = 4
+
+        /** First wait before a resume; doubled per attempt, capped below. */
+        private const val RESUME_BACKOFF_MS = 250L
+        private const val RESUME_BACKOFF_MAX_MS = 2_000L
+
+        /** `bytes <first>-<last>/<total>`, and nothing looser: a `*` total or a
+         *  multipart answer is not a continuation this client can verify. */
+        private val CONTENT_RANGE = Regex("^bytes (\\d+)-(\\d+)/(\\d+)$")
 
         private val OCTETS = "application/octet-stream".toMediaType()
 

@@ -91,7 +91,27 @@ class CloudDownloadModel(
             val expiresAt: Long,
         ) : State
 
-        data class Saving(val received: Long, val total: Long) : State
+        /**
+         * Writing. [reconnecting] is true only inside a recovery window — the
+         * read was interrupted and a bounded resume is waiting or being
+         * validated.
+         *
+         * A field on the SAME state rather than a state of its own, because
+         * that is what it is: the batch is still open, the store still owns its
+         * documents, the counters still mean what they meant, and every caller
+         * that asks "is a download busy" must keep answering yes. A separate
+         * `Reconnecting` state would have made the busy predicate in
+         * `TransferViewModel.ingressBusy` — and the keep-awake rule — silently
+         * wrong the moment a connection hiccupped.
+         *
+         * It is cleared by the first byte that lands afterwards, because
+         * [received] is republished on every write.
+         */
+        data class Saving(
+            val received: Long,
+            val total: Long,
+            val reconnecting: Boolean = false,
+        ) : State
 
         data class Done(val files: Int) : State
 
@@ -285,7 +305,21 @@ class CloudDownloadModel(
             }
 
             try {
-                client.downloadBlob(job.link, job.manifest) { chunk ->
+                client.downloadBlob(
+                    job.link,
+                    job.manifest,
+                    // The recovery WINDOW, not progress: `received` and `total`
+                    // are carried through unchanged, so a surface renders the
+                    // same numbers it was already showing and adds one honest
+                    // sentence about why they have stopped moving. Fenced by
+                    // the same generation as every other publication here, so a
+                    // superseded worker cannot repaint a newer one's state.
+                    onRecovery = { reconnecting ->
+                        if (mine == generation) {
+                            _state.value = State.Saving(received, total, reconnecting)
+                        }
+                    },
+                ) { chunk ->
                     // Raised rather than returned, because this callback runs
                     // inside the transport's read loop: throwing is what stops
                     // the rest of a doomed transfer being pulled over the

@@ -67,6 +67,160 @@ the manifest says `available: false`, and every surface — the card, the
 static twins and the app itself — reports "no download is published" rather than
 inventing one.
 
+## Unreleased development changes since 0.2.2
+
+**These are in the source tree and in NO published build.** The APK offered at
+`/apps`, the `android-v0.2.2` tag and the update feed all still describe the
+artifact whose provenance is recorded above, byte for byte. Nothing below has
+been built into a signed release, and `versionName`/`versionCode` are unchanged
+at `0.2.2`/`5` — so a tree containing this work and the published 0.2.2 report
+the SAME version while differing in behaviour. Read the version as naming the
+release, never as naming the checkout.
+
+The status of this batch is an **engineering candidate awaiting owner testing**.
+It has passed focused JVM, compile and emulator gates (below); it has not been
+through release packaging, signing or any distribution gate, and none of it is
+claimed as launched.
+
+### An incoming stored-file link is no longer refused by the field that takes links
+
+Pasting `https://relayium.com/d/<id>#k=<key>` into **Code or link** answered
+"That is a stored-file link. This app joins live transfers between two devices
+that are both open." That sentence was false about the app it appeared in: the
+Cloud surface receives exactly those links, anonymously, in the same build. The
+user was told the app could not do the thing it does, and given no route to the
+screen that does it.
+
+The field now offers a refused input to `IngressLinkPolicy` — the same strict
+origin, route, credential and key checks a TAPPED link crosses — and routes an
+accepted stored link through the same `IngressCoordinator`. That inheritance is
+the point rather than a convenience:
+
+* it **cannot download**. The coordinator's vocabulary has no case that names a
+  transfer action; the applied write resolves the link to its ENCRYPTED metadata
+  and stops. Choosing a folder and saving stay taps.
+* a **busy download or a live session retains it** rather than being
+  interrupted, exactly as a tapped link is.
+* the key stays in memory: it lands in `CloudLinkDraft`, which is deliberately
+  not `rememberSaveable` so no decryption key reaches saved instance state.
+
+The decision is not keyed on the parser's `STORED_LINK` reason, which means only
+"the fragment began with `k=`" — `/cross-network#k=…` produces it too, and a
+`/d/` link on a self-hosted origin never reaches it. Acceptance requires the
+policy to say yes, so the two parsers can only ever agree to refuse.
+
+The Cloud screen puts the **receive card first while a transfer is incoming**
+and leaves the send card leading otherwise, and the link field's keyboard
+**Done** runs the same single explicit open the button runs. The English and
+Simplified Chinese copy for the stale refusal was replaced; it is now reached
+only by a `/d/` link this build genuinely cannot open.
+
+### A stored download resumes a dropped connection
+
+`CloudClient.downloadBlob` was one GET: any `IOException` was terminal, and
+`CloudDownloadModel` then rolled the batch back — so a drop at 95% of a ten-file
+receive discarded all ten completed files.
+
+It now recovers, under rules that refuse rather than guess:
+
+* **only where the server said it is safe.** The capability is read from the
+  first body's own `Accept-Ranges: bytes` and declared length. Central sends
+  that header only for objects with no download limit and deliberately ignores
+  `Range` on the others, because a resume is several stateless GETs its burn
+  accounting cannot reconcile — so that one header is also exactly the rule that
+  **a burn-after-read or download-limited object is never re-requested**.
+* **from the last authenticated frame boundary**, `StoreDecryptor.consumedCipher`
+  and nothing else, with the unauthenticated tail dropped before every retry.
+* **a continuation must prove it is one**: exactly 206, with a `Content-Range`
+  whose start, end and total match what the first response committed to, and an
+  exact remaining `Content-Length`. A 200, a shifted start, a changed total or a
+  content coding is refused and never appended to what is already written.
+* **bounded and cancellable**: four resumes for a whole download, with a
+  doubling backoff that a cancellation unwinds through.
+* **nothing else is retried.** Authentication, decryption, the sink, a refused
+  redirect, 404 and 429 stay terminal. A failure thrown by the chunk callback is
+  carried past the transport's own `IOException` handling so it can never be
+  reclassified as a network drop — `StoreDecryptor.push` has already advanced
+  the consumed offset before the callback runs, so a resume after a sink failure
+  would silently skip plaintext the user never received.
+
+A resume re-enters at this app's own `/api/files/<id>/blob` with one header
+added, and every hop is re-validated by the unchanged `BlobRedirect` policy. It
+does not re-target a node URL directly — a fleet or BYO redirect carries a
+single-use token, so central is where a fresh one comes from — and it adds no
+credential. The recovery window is visible as `Saving(reconnecting = true)`,
+which is still `Saving`, so every busy guard keeps answering yes.
+
+### The screen stays awake while a transfer is actually running
+
+A 15–30 second device timeout was ending live transfers. Screen-off delivers a
+bare `ON_STOP`, which `HostPresence` correctly reads as "the user really did
+leave", so Nearby stopped and the Inbox announced offline mid-transfer.
+
+`MainActivity` now holds `FLAG_KEEP_SCREEN_ON` — no permission, no wake lock —
+while the Activity is started and `TransferAwakePolicy` says there is real work:
+a session batch with progress, a stored download saving, a stored upload
+staging/sending/settling, or a Device Inbox delivery being worked or an outgoing
+attempt running. It is released on completion, on `ON_STOP` and on `onDestroy`.
+
+**`HostPresence` is unchanged, deliberately.** Teaching it that screen-off is
+not leaving would make this app advertise a sleeping device to a peer that then
+waits out a presence TTL — the lie the current design correctly refuses. Manual
+screen-off and Home still withdraw the claim immediately and run every existing
+teardown.
+
+**Known limit:** an idle CONNECTED session holds no claim, because it is not
+work and could sit for an hour. A screen timeout during one still ends it.
+
+### Download progress stops interrupting TalkBack
+
+`CloudDownloadModel` republishes `Saving` on every write — once per 192 KiB
+frame — and the byte counter carried `liveRegion = Polite`, so a 2 GB receive
+changed the live region about eleven thousand times and buried the announcement
+that mattered. The counter is no longer announced; one discrete polite status
+carries "Saving…" / "Reconnecting…" instead, matching every other live region in
+this app, and the bar beside it carries the continuous value as
+`ProgressBarRangeInfo` for a screen reader to read on demand. No throttle and no
+timer was introduced.
+
+### What this batch does NOT add
+
+No foreground service, no background delivery, and no protocol-level real-time
+session recovery: a dropped `link/1` connection still ends the link truthfully,
+and the Device Inbox still receives only while the app is in front. The remembered
+receive folder and an ICE-restart grace window were considered and are not in
+this work.
+
+### Gates this batch has passed, and the ones it has not
+
+Passed locally: `:protocol:test` (203) and `:app:testDebugUnitTest` (1141), both
+with no failures or skips, `:app:lintDebug`, `:app:assembleDebug`,
+`:app:assembleDebugAndroidTest`, and `:app:assembleRelease` — which produces an
+UNSIGNED APK by design, so it proves the release variant compiles and packages,
+nothing about signing. The recovery rules are
+asserted against a loopback HTTP server that cuts a body at exact ciphertext
+offsets and answers `Range` the ways a correct server never would
+(`CloudResumeTest`, `CloudDownloadRecoveryTest`); the keep-awake rule has its own
+JVM suite (`TransferAwakePolicyTest`).
+
+Passed on the AOSP 36 emulator against a real local server, in English and in
+Simplified Chinese: the 6 entry, card-ordering, IME and saving-status cases
+(`StoredEntryAwakeAcceptanceTest`) and the 6 existing stored-transfer cases
+(`CloudAcceptanceTest`) per language. The UI and window-flag cases publish a
+model state through a test-only reflection seam and prove WIRING, rendering and
+lifecycle — not transport; the real encrypted multi-file, empty-file, burn,
+hostile-manifest, recreation and system-picker round trips are the Cloud class's.
+A hand-driven Simplified-Chinese pass on the same emulator pasted a synthetic
+stored link into the home field over local HTTP and reached the receive card
+first with the folder-choice save visible; its screenshot and view hierarchy were
+reviewed independently. The complete 14-path diff also passed an independent
+source review.
+
+Not claimed and not done: any physical-device observation, including a real idle
+screen timeout; the emulator↔browser interop run; release packaging and signing;
+published distribution; and owner hands-on testing. This remains an engineering
+candidate, not a release.
+
 ## What the app can do today, honestly
 
 **Cross-network transfer, both directions.** The app can now CREATE a link as
