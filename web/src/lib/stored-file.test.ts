@@ -1710,3 +1710,389 @@ describe("uploadFile — body wire format", () => {
     expect(buf.byteLength).toBe(4 + manifestLen + 4 + frameCipherLen);
   });
 });
+
+// ── 断线自动续传 ──────────────────────────────────────────────────────────────
+//
+// 真实事故：256 MB 的分享链接经由代理下到 ~118 MB 就断，重试永远从 0 开始，于是这条
+// 链接根本下不完。这一组全部用**真密文**（store-crypto 出的帧）和**真 ReadableStream**
+// 跑：续传的正确性是"拼出来的字节是不是原文"，而不是"有没有再发一个请求"。
+//
+// 这里的每一条都盯着同一件事的不同侧面：续传只在**可验证**的时候发生，而且续上去的
+// 那一段必须正好是缺的那一段 —— 多一个字节、少一个字节、来自别处的一个字节，都要在
+// 它进 sink 之前被挡住。
+describe("downloadBlob 断线续传", () => {
+  /** 一个文件的真密文 + 它的明文。frames 之和就是服务端 blob 的字节。 */
+  async function fixture(sizes: number[]): Promise<{
+    key: CryptoKey;
+    cipher: Uint8Array;
+    plain: Uint8Array;
+    frames: Uint8Array[];
+  }> {
+    const sk = await generateStoreKey();
+    const files = sizes.map((n, i) => {
+      const bytes = new Uint8Array(n);
+      for (let j = 0; j < n; j++) bytes[j] = (i * 7 + j) & 0xff;
+      return new File([bytes], `f${i}.bin`);
+    });
+    const frames: Uint8Array[] = [];
+    for await (const fr of encryptFiles(files, sk.key)) frames.push(fr);
+    const plain = concat(await Promise.all(files.map(async (f) => new Uint8Array(await f.arrayBuffer()))));
+    return { key: sk.key, cipher: concat(frames), plain, frames };
+  }
+
+  /** 这一次响应该怎么答。默认：从请求的 start 开始，把剩下的全给完，干净结束。 */
+  interface Turn {
+    /** fetch 本身 reject（离线 / DNS / 连接被拒），根本没有响应。 */
+    reject?: boolean;
+    status?: number;
+    /** 覆盖/删除某个响应头。值为 null 表示删掉它。 */
+    headers?: Record<string, string | null>;
+    /** 这一次只给多少字节（默认全给）。 */
+    deliver?: number;
+    /** 给完之后怎么收场：cut = 流在中途 error（连接被掐），eof = 干净关闭。 */
+    end?: "cut" | "eof";
+    /** 在声明的长度之外多塞的字节数 —— 服务端/中间人说谎的形状。 */
+    overrun?: number;
+    /** 每次 enqueue 的大小，用来把一帧拆到多次 read 里。 */
+    piece?: number;
+  }
+
+  interface Served {
+    /** 每一次请求的 Range 头，没带就是 null —— 断言"续传正好从哪里接上"。 */
+    ranges: (string | null)[];
+    fetchMock: ReturnType<typeof vi.fn>;
+  }
+
+  /** 一个会说 HTTP 的假服务端：认 `bytes=N-`，答 206 + Content-Range，不认就答 200。
+   *  turns 逐次消费，用完之后一律"从 start 全给完并干净结束"。 */
+  function serve(cipher: Uint8Array, turns: Turn[] = []): Served {
+    const ranges: (string | null)[] = [];
+    let i = 0;
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const raw = (init?.headers as Record<string, string> | undefined)?.Range ?? null;
+      ranges.push(raw);
+      const t: Turn = turns[i++] ?? {};
+      if (t.reject) throw new TypeError("Failed to fetch");
+      const m = /^bytes=(\d+)-$/.exec(raw ?? "");
+      const start = m ? Number(m[1]) : 0;
+      const partial = start > 0;
+      const h: Record<string, string> = partial
+        ? {
+            "Content-Range": `bytes ${start}-${cipher.length - 1}/${cipher.length}`,
+            "Content-Length": String(cipher.length - start),
+          }
+        : { "Accept-Ranges": "bytes", "Content-Length": String(cipher.length) };
+      for (const [k, v] of Object.entries(t.headers ?? {})) {
+        if (v === null) delete h[k];
+        else h[k] = v;
+      }
+      const status = t.status ?? (partial ? 206 : 200);
+      const tail = cipher.subarray(start);
+      const give = t.deliver ?? tail.length;
+      const piece = t.piece ?? 64 * 1024;
+      // pull 而不是 start：controller.error() 会**清空队列**，一次性 enqueue 完再
+      // error 的流，消费方一个字节都读不到 —— 那考的就不是"流到一半被掐断"了。
+      let off = 0;
+      let extra = 0;
+      return {
+        ok: status >= 200 && status < 300,
+        status,
+        headers: new Headers(h),
+        body: new ReadableStream<Uint8Array>({
+          pull(c) {
+            if (off < give) {
+              c.enqueue(tail.slice(off, Math.min(off + piece, give)));
+              off += piece;
+              return;
+            }
+            // 声明之外的字节：帧本身完全合法，只有长度是假的 —— 认证解密挡不住它。
+            const over = t.overrun ?? 0;
+            if (extra < over) {
+              const n = Math.min(piece, over - extra);
+              c.enqueue(cipher.slice(0, n));
+              extra += n;
+              return;
+            }
+            if (t.end === "cut") c.error(new TypeError("network error"));
+            else c.close();
+          },
+        }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return { ranges, fetchMock };
+  }
+
+  /** 收下所有明文，顺便记下每一次交付 —— 重复的那一段会在这里露出来。 */
+  function collector() {
+    const parts: Uint8Array[] = [];
+    return { parts, onChunk: async (pt: Uint8Array) => { parts.push(pt); } };
+  }
+
+  /** 让所有退避一次走完。假时钟 + 反复推进，直到那个 promise 落定。 */
+  async function settle<T>(p: Promise<T>): Promise<T | Error> {
+    const done = p.then((v) => v as T | Error).catch((e: Error) => e);
+    for (let i = 0; i < 40; i++) {
+      await vi.advanceTimersByTimeAsync(1000);
+      const raced = await Promise.race([done, Promise.resolve("pending" as const)]);
+      if (raced !== "pending") return raced;
+    }
+    return done;
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("帧中间被掐断：从确切的密文偏移接上，拼出来的字节和原文逐字节相同", async () => {
+    const { key, cipher, plain, frames } = await fixture([300 * 1024]); // 2 帧
+    // 第一帧之后再走一点点 —— 断点落在第二帧中间，解密器手里正攥着半帧。
+    const cut = frames[0].length + 1000;
+    const { ranges } = serve(cipher, [{ deliver: cut, end: "cut", piece: 4096 }]);
+    vi.useFakeTimers();
+    const c = collector();
+    const phases: string[] = [];
+    const out = await settle(
+      downloadBlob("test-id", key, c.onChunk, undefined, plain.length, undefined, {
+        onRecovery: (r) => phases.push(r.phase),
+      }),
+    );
+    expect(out, String(out)).toBeUndefined();
+    expect(concat(c.parts), "续传拼出来的明文和原文不一致").toEqual(plain);
+    // 续传的起点是**已经喂进解密器并落过盘**的密文偏移 —— 也就是第一次真正收下的
+    // 那些字节，不是"最后一个完整帧"，更不是断点本身。
+    expect(ranges[0]).toBeNull();
+    expect(ranges[1]).toBe(`bytes=${cut}-`);
+    expect(ranges).toHaveLength(2);
+    expect(phases).toEqual(["waiting", "resuming", "streaming"]);
+  });
+
+  it("多文件 + 空文件：续传之后每个文件的边界仍然对得上", async () => {
+    // 空文件在密文里没有任何帧，边界完全由明文长度决定；续传把明文流接起来之后
+    // 这些边界必须一个不差。
+    const { key, cipher, plain } = await fixture([200 * 1024, 0, 50, 0, 120 * 1024]);
+    const { ranges } = serve(cipher, [
+      { deliver: 100 * 1024, end: "cut", piece: 8192 },
+      { deliver: 90 * 1024, end: "cut", piece: 8192 },
+    ]);
+    vi.useFakeTimers();
+    const c = collector();
+    const out = await settle(downloadBlob("test-id", key, c.onChunk, undefined, plain.length));
+    expect(out, String(out)).toBeUndefined();
+    expect(concat(c.parts)).toEqual(plain);
+    expect(ranges).toHaveLength(3);
+  });
+
+  it("干净但短的 EOF 也算中断：接上去下完，不当成完成", async () => {
+    // 连接没有报错，流就是提前关了。没有长度可以核对的时候这只能靠最后的认证长度
+    // 检查抓出来（那是一次失败）；这里 Content-Length 在，所以它是可以续的中断。
+    const { key, cipher, plain } = await fixture([400 * 1024]);
+    const { ranges } = serve(cipher, [{ deliver: 150 * 1024, end: "eof" }]);
+    vi.useFakeTimers();
+    const c = collector();
+    const out = await settle(downloadBlob("test-id", key, c.onChunk, undefined, plain.length));
+    expect(out, String(out)).toBeUndefined();
+    expect(concat(c.parts)).toEqual(plain);
+    expect(ranges[1]).toBe(`bytes=${150 * 1024}-`);
+  });
+
+  it("服务端不认 Range（答 200）：一个字节都不追加，报网络失败", async () => {
+    // 这是最危险的一种"成功"：整份文件又来了一遍。接上去的话前半段会被写第二次。
+    const { key, cipher, plain } = await fixture([300 * 1024]);
+    const { ranges } = serve(cipher, [
+      { deliver: 100 * 1024, end: "cut" },
+      { status: 200, headers: { "Content-Range": null } },
+    ]);
+    vi.useFakeTimers();
+    const c = collector();
+    const err = await settle(downloadBlob("test-id", key, c.onChunk, undefined, plain.length));
+    expect(err).toBeInstanceOf(DownloadNetworkError);
+    // 拿到的明文是断点之前那一段，一次不多 —— 没有任何重复交付。
+    const got = concat(c.parts);
+    expect(got.length).toBeLessThan(plain.length);
+    expect(got).toEqual(plain.subarray(0, got.length));
+    expect(ranges).toHaveLength(2);
+  });
+
+  it("206 的起点不对 / 总长变了 / Content-Range 畸形：一律拒绝", async () => {
+    for (const bad of [
+      { "Content-Range": "bytes 0-999999/999999" },
+      { "Content-Range": "bytes 4096-999998/999999" },
+      { "Content-Range": "bytes garbage" },
+      { "Content-Range": null },
+      { "Content-Length": "nonsense" },
+      { "Content-Encoding": "gzip" },
+    ] as Record<string, string | null>[]) {
+      const { key, cipher, plain } = await fixture([300 * 1024]);
+      const { ranges } = serve(cipher, [
+        { deliver: 4096, end: "cut" },
+        { headers: bad },
+      ]);
+      vi.useFakeTimers();
+      const c = collector();
+      const err = await settle(downloadBlob("test-id", key, c.onChunk, undefined, plain.length));
+      expect(err, `坏头 ${JSON.stringify(bad)} 被接受了`).toBeInstanceOf(DownloadNetworkError);
+      expect(ranges).toHaveLength(2);
+      vi.useRealTimers();
+    }
+  });
+
+  it("身子比声明的长：在喂给解密器之前就挡掉，不靠认证解密去兜底", async () => {
+    // 多出来的那一段是**合法的密文帧**（同一份 blob 的开头），所以 AEAD 一个字节都
+    // 挑不出毛病。能识破它的只有"长度对不上"这一条。
+    const { key, cipher, plain } = await fixture([200 * 1024]);
+    const { fetchMock } = serve(cipher, [{ overrun: 4096 }]);
+    vi.useFakeTimers();
+    const c = collector();
+    const err = await settle(downloadBlob("test-id", key, c.onChunk, undefined, plain.length));
+    expect(err, "超长的身子被当成了一次成功").toBeInstanceOf(DownloadNetworkError);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // 不是可续的中断，不该重连
+  });
+
+  it("没有 Accept-Ranges（受限 / burn 文件）：绝不第二次 GET", async () => {
+    // 受限文件的每一次 GET 都**消耗一次下载**，而且它压根不支持 Range。自动重连
+    // 在这里等于替用户烧掉一次下载机会。
+    const { key, cipher, plain } = await fixture([300 * 1024]);
+    const { fetchMock } = serve(cipher, [
+      { headers: { "Accept-Ranges": null }, deliver: 100 * 1024, end: "cut" },
+    ]);
+    vi.useFakeTimers();
+    const c = collector();
+    const err = await settle(downloadBlob("test-id", key, c.onChunk, undefined, plain.length));
+    expect(err).toBeInstanceOf(DownloadNetworkError);
+    expect(fetchMock, "受限文件被自动重下了一次").toHaveBeenCalledTimes(1);
+  });
+
+  it("续传请求本身 reject：花掉一次预算继续等，下一次 206 成功", async () => {
+    // 断线之后网络往往还要几百毫秒才回来 —— 第一次重连 fetch 直接 reject 是常态，
+    // 它是同一次中断的延续，不该当场结束一次还剩三次机会的下载。
+    const { key, cipher, plain } = await fixture([400 * 1024]);
+    const { ranges } = serve(cipher, [
+      { deliver: 120 * 1024, end: "cut" },
+      { reject: true },
+      { reject: true },
+      {},
+    ]);
+    vi.useFakeTimers();
+    const c = collector();
+    const out = await settle(downloadBlob("test-id", key, c.onChunk, undefined, plain.length));
+    expect(out, String(out)).toBeUndefined();
+    expect(concat(c.parts)).toEqual(plain);
+    expect(ranges).toHaveLength(4);
+    // 没产出身子的那两次不推进偏移：三次续传问的是同一个位置。
+    expect(ranges[1]).toBe(`bytes=${120 * 1024}-`);
+    expect(ranges[2]).toBe(ranges[1]);
+    expect(ranges[3]).toBe(ranges[1]);
+  });
+
+  it("预算是全局的：一直有进展也只有 1 + 4 次请求", async () => {
+    // "每次都往前走了一点"正是代理掐流的样子。按中断次数发预算的话，一个大文件可以
+    // 无限重连下去。
+    const { key, cipher, plain } = await fixture([2 * 1024 * 1024]);
+    const cuts: Turn[] = Array.from({ length: 9 }, () => ({ deliver: 64 * 1024, end: "cut" as const }));
+    const { fetchMock } = serve(cipher, cuts);
+    vi.useFakeTimers();
+    const c = collector();
+    const err = await settle(downloadBlob("test-id", key, c.onChunk, undefined, plain.length));
+    expect(err, "预算被进展刷新了").toBeInstanceOf(DownloadNetworkError);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    // 报出去的还是原本那次传输故障，不是"重试用完了"。
+    expect((err as DownloadNetworkError).cause).toBeDefined();
+  });
+
+  it("全程连不上：1 + 4 次请求之后以网络失败收场", async () => {
+    const { key, cipher, plain } = await fixture([300 * 1024]);
+    const { fetchMock } = serve(cipher, [
+      { deliver: 8192, end: "cut" },
+      { reject: true },
+      { reject: true },
+      { reject: true },
+      { reject: true },
+      { reject: true },
+    ]);
+    vi.useFakeTimers();
+    const c = collector();
+    const err = await settle(downloadBlob("test-id", key, c.onChunk, undefined, plain.length));
+    expect(err).toBeInstanceOf(DownloadNetworkError);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it("续传时服务端说 404：原样报出来，不再重连", async () => {
+    // 对象在中途没了（TTL / 被 burn / GC）。把它说成"下载中断了，再试一次"会把用户
+    // 送去重试一条已经不存在的链接。
+    const { key, cipher, plain } = await fixture([300 * 1024]);
+    const { fetchMock } = serve(cipher, [
+      { deliver: 8192, end: "cut" },
+      { status: 404 },
+    ]);
+    vi.useFakeTimers();
+    const c = collector();
+    const err = await settle(downloadBlob("test-id", key, c.onChunk, undefined, plain.length));
+    expect(err).toBeInstanceOf(StoredDownloadHttpError);
+    expect((err as StoredDownloadHttpError).status).toBe(404);
+    expect((err as StoredDownloadHttpError).phase).toBe("blob");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("密文被篡改：当场失败，一次都不重连，并且把流关掉", async () => {
+    const { key, cipher, plain } = await fixture([200 * 1024]);
+    const tampered = cipher.slice();
+    tampered[tampered.length - 5] ^= 0xff; // 动 tag
+    const { fetchMock } = serve(tampered);
+    vi.useFakeTimers();
+    const c = collector();
+    const err = await settle(downloadBlob("test-id", key, c.onChunk, undefined, plain.length));
+    // 认证失败必须仍然是认证失败：既不能被说成网络问题，也不能被自动重试掩盖。
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(DownloadNetworkError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("落盘失败：不重连，且这条还开着的流会被关掉", async () => {
+    const { key, cipher, plain } = await fixture([300 * 1024]);
+    let cancelled = 0;
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "Accept-Ranges": "bytes", "Content-Length": String(cipher.length) }),
+      body: new ReadableStream<Uint8Array>({
+        start(c) {
+          for (let off = 0; off < cipher.length; off += 4096) c.enqueue(cipher.slice(off, off + 4096));
+          c.close();
+        },
+        cancel() { cancelled++; },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.useFakeTimers();
+    const err = await settle(
+      downloadBlob("test-id", key, async () => { throw new Error("disk full"); }, undefined, plain.length),
+    );
+    expect((err as Error).message).toBe("disk full");
+    expect(fetchMock, "落盘失败被当成可重试的中断").toHaveBeenCalledTimes(1);
+    // 还在流的身子必须被放掉：否则浏览器会继续往一个没人要的下载里灌字节。
+    expect(cancelled, "失败之后流还开着").toBe(1);
+  });
+
+  it("退避等待里取消：立刻结束，不再发请求", async () => {
+    const { key, cipher, plain } = await fixture([300 * 1024]);
+    const { fetchMock } = serve(cipher, [{ deliver: 8192, end: "cut" }]);
+    vi.useFakeTimers();
+    const ac = new AbortController();
+    const phases: string[] = [];
+    const c = collector();
+    const run = downloadBlob("test-id", key, c.onChunk, undefined, plain.length, ac.signal, {
+      onRecovery: (r) => phases.push(r.phase),
+    });
+    const settled = run.then(() => null).catch((e: Error) => e);
+    // 推进到"正在等退避"，但不到下一次请求。
+    await vi.advanceTimersByTimeAsync(100);
+    expect(phases).toEqual(["waiting"]);
+    ac.abort();
+    const err = await settled;
+    expect((err as DOMException).name).toBe("AbortError");
+    expect(fetchMock, "取消之后还去发了续传请求").toHaveBeenCalledTimes(1);
+    // 取消之后不该再往界面上写"正在重连"。
+    expect(phases).toEqual(["waiting"]);
+  });
+});

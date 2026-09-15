@@ -1302,6 +1302,11 @@ export interface Messages {
     accept: string;
     reject: string;
     receiving: string;
+    // 这一批的传输断了，正在原地重连并从断点续传。和 download.resuming 是同一个事实
+    // 的两个说法，各自成键而不是共用一个：这张卡片说的是"对方预传的这一批"，下载页
+    // 说的是"你打开的这条链接"，两边的措辞可以独立演化。attempt/max 同样是那次下载
+    // 的全局预算，不是"每次中断都能再来 N 次"。
+    reconnecting: (attempt: number, max: number) => string;
     done: string;
     dismiss: string;
     retry: string; // try a retryably-failed batch again, without a reconnect
@@ -1358,6 +1363,10 @@ export interface Messages {
     sendCta: string; // reverse-acquisition button
     downloadBtn: string;
     downloading: string;
+    // 传输断了，正在原地重连并从断点续传（downloadBlob 自己完成，页面只是说出来）。
+    // 进度停在断点的数值上、既不清零也不跳到 100%，因为那些字节是真的已经落盘了。
+    // attempt/max 是这次下载的**全局**重试预算，不是"每次中断都能再来 N 次"。
+    resuming: (attempt: number, max: number) => string;
     done: string;
     notFound: string;
     noKey: string;

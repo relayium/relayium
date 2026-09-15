@@ -1675,3 +1675,110 @@ describe("completion: a continuation never outlives its room", () => {
     expect(server.completions).toHaveLength(0);
   });
 });
+
+// 断线之后原地续传，以及这张卡片怎么把它说出来。
+//
+// 续传发生在 downloadBlob 内部，这一层看不见 —— 而"看不见"必须意味着"没受影响"：
+// 同一个解密器、同一个 sink、同一批文件边界。这里用真密文 + 真 ReadableStream 跑，
+// 服务端替身会认 `bytes=N-` 并答 206，和生产的 /blob 一样。
+describe("pre-upload receive across a dropped connection", () => {
+  /** 一个会说 Range 的 /blob：第一次交付 `cutAt` 字节然后掐断，之后从请求的偏移续。 */
+  function installResumableServer(o: Obj, cutAt: number) {
+    const ranges: (string | null)[] = [];
+    let first = true;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const m = /^\/api\/files\/([^/]+)\/(meta|blob|complete)$/.exec(url);
+      if (!m) throw new Error(`unexpected fetch ${url}`);
+      if (m[2] === "complete") return { ok: true, status: 204 } as unknown as Response;
+      if (m[2] === "meta") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ encManifest: o.encManifest, size: o.blob.length, burnAfterRead: false, expiresAt: 0 }),
+        } as unknown as Response;
+      }
+      const raw = (init?.headers as Record<string, string> | undefined)?.Range ?? null;
+      ranges.push(raw);
+      const rm = /^bytes=(\d+)-$/.exec(raw ?? "");
+      const start = rm ? Number(rm[1]) : 0;
+      const tail = o.blob.subarray(start);
+      const cut = first && start === 0;
+      first = false;
+      const give = cut ? Math.min(cutAt, tail.length) : tail.length;
+      let off = 0;
+      return {
+        ok: true,
+        status: start > 0 ? 206 : 200,
+        headers: new Headers(
+          start > 0
+            ? {
+                "Content-Range": `bytes ${start}-${o.blob.length - 1}/${o.blob.length}`,
+                "Content-Length": String(o.blob.length - start),
+              }
+            : { "Accept-Ranges": "bytes", "Content-Length": String(o.blob.length) },
+        ),
+        // controller.error() 会清空队列，所以必须 pull 式交付，否则"流到一半被掐断"
+        // 根本没有字节流出去过。
+        body: new ReadableStream<Uint8Array>({
+          pull(c) {
+            if (off < give) {
+              c.enqueue(tail.slice(off, Math.min(off + 4096, give)));
+              off += 4096;
+              return;
+            }
+            if (cut) c.error(new TypeError("network error"));
+            else c.close();
+          },
+        }),
+      } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return { ranges };
+  }
+
+  it("接收到一半断线：从断点续上，文件内容仍然逐字节正确", async () => {
+    // 断点落在第二帧中间（帧是 192 KiB 的明文块），所以断的时候解密器手里正攥着半帧，
+    // 而前面已经有整帧落过盘 —— 续传要同时守住这两件事。
+    const body = "x".repeat(500 * 1024);
+    const o = await makeObject("resume1", [{ name: "a.txt", body }, { name: "b.txt", body: "tail" }]);
+    const { ranges } = installResumableServer(o, 250 * 1024);
+    const r = make();
+    r.offer([o.item]);
+    await until(() => r.status === "prompt");
+    const running = r.accept();
+    // 退避是真的 setTimeout（0.5s 起），所以这里等的是真实时间。
+    await until(() => r.recovery !== null, 8_000);
+    // 重连期间：不是失败，进度也不回退。
+    expect(r.status).toBe("receiving");
+    expect(r.errorKey).toBe("");
+    expect(r.recovery).toEqual({ attempt: 1, max: expect.any(Number) });
+    expect(r.received).toBeGreaterThan(0);
+    await running;
+    await settle();
+    expect(r.status).toBe("done");
+    expect(r.recovery, "结束了还在说正在重连").toBeNull();
+    expect(text(target.output.get("a.txt"))).toBe(body);
+    expect(text(target.output.get("b.txt"))).toBe("tail");
+    expect(target.doneCalls).toBe(1);
+    expect(ranges[0]).toBeNull();
+    expect(ranges[1]).toBe(`bytes=${250 * 1024}-`);
+    expect(ranges).toHaveLength(2);
+  }, 20_000);
+
+  it("离开房间会清掉重连状态，下一批不会继承它", async () => {
+    const o = await makeObject("resume2", [{ name: "a.txt", body: "y".repeat(80 * 1024) }]);
+    installResumableServer(o, 20 * 1024);
+    const r = make();
+    r.offer([o.item]);
+    await until(() => r.status === "prompt");
+    const running = r.accept();
+    await until(() => r.recovery !== null, 8_000);
+    // 退避还在走的时候离开房间：那次下载被掐断，这句"正在重连"也就不再属于任何人。
+    r.reset();
+    await running;
+    await settle();
+    expect(r.recovery).toBeNull();
+    expect(r.status).toBe("idle");
+    expect(target.doneCalls, "离开房间之后还收尾了这一批").toBe(0);
+  }, 20_000);
+});

@@ -626,7 +626,7 @@ async function uploadChunk(
       if (from >= end) return from;
       // 服务端偏移退到我们保留的字节之前 —— 那些字节已经丢了，重放不出来。
       if (from < start) throw new UploadError(0);
-      await uploadSleep(uploadBackoff(attempt), signal);
+      await abortableSleep(uploadBackoff(attempt), signal);
       continue;
     }
     if (res.status === 409) {
@@ -672,7 +672,7 @@ async function uploadJSON(
     } catch (e) {
       if (signal?.aborted) throw new DOMException("aborted", "AbortError");
       if (attempt >= maxAttempts) throw new UploadError(0);
-      await uploadSleep(uploadBackoff(attempt), signal);
+      await abortableSleep(uploadBackoff(attempt), signal);
       continue;
     }
     if (!res.ok) throw new UploadError(res.status);
@@ -684,7 +684,12 @@ function uploadBackoff(attempt: number): number {
   return Math.min(300 * 2 ** (attempt - 1), 5000);
 }
 
-function uploadSleep(ms: number, signal?: AbortSignal): Promise<void> {
+/** `setTimeout` as an awaitable that a cancellation ends immediately, rejecting
+ *  with the same AbortError every other await in this module speaks. Shared by
+ *  the upload retry loop above and `downloadBlob`'s reconnect backoff below —
+ *  a pause is the one place a cancelled transfer would otherwise sit idle for
+ *  seconds after the user has left. */
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(new DOMException("aborted", "AbortError"));
@@ -821,6 +826,128 @@ async function expectedPlaintextBytes(id: string, key: CryptoKey, signal?: Abort
   return manifest.files.reduce((n, f) => n + f.size, 0);
 }
 
+/** Where one `downloadBlob` call is in its own recovery: `waiting` is the
+ *  backoff pause, `resuming` the continuation request, `streaming` the moment a
+ *  verified tail starts landing.
+ *
+ *  Reported rather than inferred from a gap in `onProgress`: a stalled
+ *  connection and a reconnect look identical from outside — no progress in
+ *  either — and that difference is what the user is owed. `attempt`/`max` are
+ *  the call's GLOBAL budget, so a page showing them cannot promise more tries
+ *  than remain. */
+export type DownloadRecoveryPhase = "waiting" | "resuming" | "streaming";
+
+export interface DownloadRecovery {
+  phase: DownloadRecoveryPhase;
+  /** 1-based, monotonic for the life of the call. */
+  attempt: number;
+  max: number;
+  /** Ciphertext bytes safely consumed — diagnostics, never a completion claim. */
+  at: number;
+}
+
+export interface DownloadBlobOptions {
+  onRecovery?: (r: DownloadRecovery) => void;
+}
+
+/** Reconnects ONE download may spend. Global to the call and deliberately not
+ *  reset by progress: a path that drops every few megabytes would otherwise earn
+ *  fresh budget with every megabyte it did deliver, and a big file behind it
+ *  would reconnect for as long as the user stayed. */
+const RESUME_ATTEMPTS = 4;
+
+/** Delay before the Nth (1-based) attempt: 0.5s doubling to a 4s cap, ~7.5s of
+ *  waiting across the whole budget — short enough that the sink stays live
+ *  underneath (the service-worker stream's keepalive is 10s) and the page is not
+ *  saying "reconnecting" for a minute. */
+function resumeBackoff(attempt: number): number {
+  return Math.min(500 * 2 ** (attempt - 1), 4000);
+}
+
+/** One header, from a real `Response` or anything shaped like one. A response
+ *  with no headers at all must read as "said nothing about ranges" — which
+ *  disables resume and leaves the old single-GET behaviour exactly as it was —
+ *  never as a TypeError thrown mid-download. */
+function header(res: Response, name: string): string | null {
+  const h = (res as { headers?: Headers }).headers;
+  return h?.get(name) ?? null;
+}
+
+/** A header as a byte count, or null for anything else. Strict because this
+ *  number decides where a resumed request starts and what a complete body is:
+ *  `"12, 12"` (a duplicated header), `"1e3"`, a float, a sign or anything past
+ *  2^53 is "no trustworthy length", not a number JavaScript happens to coerce. */
+function byteCount(v: string | null): number | null {
+  if (v === null) return null;
+  const s = v.trim();
+  if (!/^\d+$/.test(s)) return null;
+  const n = Number(s);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+/** Whether the bytes we read are the bytes the length headers describe. A
+ *  non-identity `Content-Encoding` means `fetch` decoded them, so `Content-Length`
+ *  counts different bytes and a `Range` would name a different coordinate system.
+ *  Relayium's own server never encodes ciphertext, but an intermediary — a proxy,
+ *  a VPN client, exactly the population this resume exists for — may. */
+function identityBody(res: Response): boolean {
+  const e = header(res, "Content-Encoding");
+  return e === null || e.trim().toLowerCase() === "identity";
+}
+
+/** The object's ciphertext length if THIS response makes continuing it
+ *  verifiable, else null. All three conditions come from the response in hand:
+ *
+ *  - **200**, because a tail is only ever appended to a body that started at 0;
+ *  - **`Accept-Ranges: bytes`**, which on this server also separates an
+ *    unlimited object from a limited/burn one — those never advertise it, and a
+ *    second GET for one SPENDS a download the recipient never asked for. The
+ *    header is therefore two checks at once: "this object supports Range" and
+ *    "a second GET consumes no download SLOT". Slot only — the server meters
+ *    the bytes each request actually egresses against the owner either way, so
+ *    a continuation is not free bandwidth. It requests only the missing tail
+ *    instead of fetching the whole object again;
+ *  - **a trustworthy `Content-Length`**, without which a body that ended early
+ *    cannot be told from a complete one. */
+function resumableTotal(res: Response): number | null {
+  if (res.status !== 200) return null;
+  if ((header(res, "Accept-Ranges") ?? "").trim().toLowerCase() !== "bytes") return null;
+  if (!identityBody(res)) return null;
+  const total = byteCount(header(res, "Content-Length"));
+  return total !== null && total > 0 ? total : null;
+}
+
+const CONTENT_RANGE = /^bytes (\d+)-(\d+)\/(\d+)$/;
+
+/** Whether `res` is exactly the tail this download is missing: a 206 starting at
+ *  `start` and ending at the last byte of the SAME `total` the first response
+ *  advertised, parsed rather than pattern-matched.
+ *
+ *  Each rejection is a body that must not be appended to plaintext already on
+ *  the user's disk: a **200** is the whole object again (an old server, a
+ *  limited object, a cache) and would duplicate everything saved; a **different
+ *  start** is a tail from elsewhere in the file; a **changed total** is a
+ *  different object wearing the same id; a **malformed or re-encoded** response
+ *  cannot be verified at all. The frame chain would catch most of it afterwards
+ *  — but afterwards is after the sink took bytes. This runs before the body is
+ *  read. */
+function continuesAt(res: Response, start: number, total: number): boolean {
+  if (res.status !== 206) return false;
+  if (!identityBody(res)) return false;
+  const m = CONTENT_RANGE.exec((header(res, "Content-Range") ?? "").trim());
+  if (!m) return false;
+  if (byteCount(m[1]) !== start || byteCount(m[3]) !== total || byteCount(m[2]) !== total - 1) return false;
+  return byteCount(header(res, "Content-Length")) === total - start;
+}
+
+/** Let go of a response body this download will never read — a spent-token 403,
+ *  a refused status, a 206 that failed verification. Awaited so the connection is
+ *  actually released before the caller sees the outcome, and its own failure
+ *  swallowed so it can never replace that outcome. */
+async function discard(res: Response): Promise<void> {
+  await Promise.resolve(res.body?.cancel?.()).catch(() => {});
+}
+
 /** Stream the ciphertext, decrypt chunk-by-chunk, and hand plaintext to onChunk.
  *  The decrypted total is checked against `expectedBytes` (defaulting to the
  *  manifest's summed file sizes) so a truncated download fails instead of being
@@ -830,16 +957,50 @@ async function expectedPlaintextBytes(id: string, key: CryptoKey, signal?: Abort
  *  lets a caller skip the metadata lookup entirely, so nothing upstream can be
  *  relied on to have looked at `id` first.
  *
+ *  ## Interruptions
+ *
+ *  A dropped connection is continued IN PLACE — same decryptor, same partial
+ *  frame, same sink — instead of becoming a failure the user restarts from zero.
+ *  A 256 MB link behind a proxy that severs the stream at 118 MB was
+ *  unfinishable before: every retry began at byte 0 and met the same wall. What
+ *  makes continuing safe:
+ *
+ *  - **One decryptor.** The AEAD chain is sequential (nonce = frame index) and
+ *    may be holding half a frame when the connection dies; a second decryptor
+ *    would restart the sequence and drop that half.
+ *  - **The offset is ciphertext this call consumed** — counted only once a
+ *    network chunk has been fed to the decryptor AND every frame it yielded came
+ *    back from the sink. Uncounted bytes are re-delivered by the continuation;
+ *    double-counted ones would splice a gap into a file that still passed its
+ *    own length check.
+ *  - **Only transport interruption is retried**: a failed read, a fetch that
+ *    rejects, or an EOF verifiably short of the advertised length. Decrypt
+ *    failures, sink failures, cancellation and HTTP statuses are not — two of
+ *    them would be actively wrong to repeat.
+ *  - **The first request is never replayed**, and no `Range` is sent until a 200
+ *    advertised `Accept-Ranges: bytes` — which on this server also means the
+ *    object is unlimited, so the extra GET cannot spend a burn/limited download
+ *    slot. It is not exempt from metering: the owner is charged for the bytes
+ *    every request egresses, which is exactly why the continuation asks for the
+ *    tail and nothing already consumed.
+ *  - **Nothing is appended before verification**: the 206 must continue at the
+ *    exact offset within the same total (`continuesAt`), and no body may deliver
+ *    more than that total leaves.
+ *  - **The budget is global** and progress never refills it.
+ *
+ *  Exhausting it — or being interrupted where none of this is verifiable — ends
+ *  in DownloadNetworkError: the honest "the network stopped this", never a
+ *  completion and never the decrypt failure it is not. `StoreDecryptor.end` is
+ *  unchanged and remains the only thing that decides a download succeeded.
+ *
  *  `signal` cancels the whole thing, and it is the ONLY way to stop a download
- *  that has started streaming. A caller that owns the lifetime of a transfer —
- *  the pre-upload receiver, whose room can end at any moment — cannot do this
- *  from outside: once the response body is live, every remaining chunk is read,
- *  decrypted and handed to `onChunk` by the loop below, with no await the caller
- *  gets to interpose a check on. Checking a token after this function returns
- *  stops the NEXT object, never the bytes still landing from this one. So the
- *  check has to live at each of the three points where cancellation can be
- *  observed: before a request is made, around the read that may resolve after
- *  the signal fired, and between two plaintext deliveries. */
+ *  that has started streaming: once the body is live, every remaining chunk is
+ *  read, decrypted and handed to `onChunk` by the loop below with no await the
+ *  caller can interpose a check on. So the check lives at each point a
+ *  cancellation can be observed — before a request, around a read that may
+ *  resolve after the signal fired, between two plaintext deliveries, and inside
+ *  the backoff, which ends immediately rather than making a user who has left
+ *  wait out a reconnect. */
 export async function downloadBlob(
   id: string,
   key: CryptoKey,
@@ -847,108 +1008,211 @@ export async function downloadBlob(
   onProgress?: (received: number) => void,
   expectedBytes?: number,
   signal?: AbortSignal,
+  opts?: DownloadBlobOptions,
 ): Promise<void> {
   // First statement, before the metadata lookup, the blob request and any
   // onChunk/onProgress callback: a refused id must cost zero requests and must
   // never hand a caller a byte or a progress tick it would have to un-report.
-  // `checked` is then the only value composed into either URL below.
   const checked = checkedStoredObjectId(id);
   throwIfAborted(signal);
   const expected = expectedBytes ?? (await expectedPlaintextBytes(checked, key, signal));
+  const url = `/api/files/${encodeURIComponent(checked)}/blob`;
   let res: Response;
   // A direct-download 302 hands us a one-shot token, so a request the browser
   // itself replayed (a retried idle connection, say) comes back 403 from the
-  // storage node. Nothing has been streamed at that point, so just ask central
-  // again — it mints a fresh token. Bounded to one extra attempt: a persistent
-  // 403 is a real failure, not something to spin on.
+  // storage node. Nothing has streamed yet, so ask central again for a fresh
+  // token — bounded to one extra attempt, since a persistent 403 is a real
+  // failure rather than something to spin on.
   for (let attempt = 0; ; attempt++) {
-    // The replay is a SECOND request, so the cancellation has to be honoured
-    // here as well: a room that ended during the first attempt must not be the
-    // reason central mints another one-shot token.
+    // The replay is a SECOND request: a room that ended during the first must
+    // not be the reason central mints another token.
     throwIfAborted(signal);
     try {
-      res = await fetch(`/api/files/${encodeURIComponent(checked)}/blob`, { signal });
+      res = await fetch(url, { signal });
     } catch (e) {
       throwIfAborted(signal); // cancelled, not a transport fault — see fetchMetaChecked
-      throw new DownloadNetworkError(e); // fetch rejected — offline / DNS / connection refused
+      throw new DownloadNetworkError(e); // offline / DNS / connection refused
     }
     if (res.status !== 403 || attempt > 0) break;
+    await discard(res); // the refused body is never read; release it before asking again
   }
   // A response that arrives after the cancellation is not news about the
-  // transfer any more, whatever its status. Checked before it is read so a
-  // caller is handed the cancellation it caused rather than, say, a 503 it
-  // would then have to decide whether to retry.
+  // transfer any more, whatever its status.
   throwIfAborted(signal);
-  // After the bounded 403 replay above, so a spent-token retry still happens
-  // before any status is reported as final.
-  if (!res.ok) throw new StoredDownloadHttpError(res.status, "blob");
+  if (!res.ok) {
+    await discard(res);
+    throw new StoredDownloadHttpError(res.status, "blob");
+  }
   if (!res.body) throw new Error("streaming not supported");
+  // Decided ONCE, from the response that started this download, and never
+  // re-read from a later one: a continuation that changes the terms is what
+  // `continuesAt` exists to refuse.
+  const total = resumableTotal(res);
+  let body: ReadableStream<Uint8Array> = res.body;
   const decryptor = new StoreDecryptor(key);
-  const reader = res.body.getReader();
-  let received = 0;
-  try {
-    for (;;) {
+  let received = 0; // plaintext delivered to the sink
+  // Ciphertext fed to the decryptor, drained, and seen through the sink. This is
+  // where a continuation must start, so it moves at exactly one place below.
+  let consumed = 0;
+  let reconnects = 0;
+  for (;;) {
+    // The fault this body ended with, kept as the cause a failed recovery
+    // ultimately reports: the original transport failure, not "the retries ran
+    // out". `undefined` means the body ended cleanly.
+    let interrupted: unknown;
+    let stopped = false;
+    let ended = false; // the reader reported done — nothing left to release
+    const reader = body.getReader();
+    try {
+      for (;;) {
+        throwIfAborted(signal);
+        let chunk: ReadableStreamReadResult<Uint8Array>;
+        try {
+          chunk = await reader.read(); // a mid-stream drop rejects here — network, not decrypt
+        } catch (e) {
+          throwIfAborted(signal); // our own abort tearing the stream down
+          interrupted = e;
+          stopped = true;
+          break;
+        }
+        // Re-checked AFTER the read: the case that matters is the read in flight
+        // WHEN the signal fired, resolving afterwards with a chunk whose
+        // plaintext is about to reach the user's disk.
+        throwIfAborted(signal);
+        const { done, value } = chunk;
+        if (done) {
+          ended = true;
+          // The only short end provable here: fewer bytes than the first
+          // response advertised. Without that length the stream is left to the
+          // authenticated end-of-stream check, which is where a truncation on a
+          // frame boundary has always been caught.
+          if (total !== null && consumed < total) {
+            interrupted = new Error(`ciphertext stream ended at ${consumed} of ${total} bytes`);
+            stopped = true;
+          }
+          break;
+        }
+        // Before the decryptor, before the sink: a body longer than the length
+        // its own headers advertise is a response nothing here can verify, and
+        // the authenticated frame chain cannot stand in for that check — an
+        // overrun made of otherwise-valid frames decrypts perfectly. Refusing at
+        // the boundary keeps `consumed <= total`, which is what makes a clean
+        // EOF at `total` mean "complete" rather than "at least complete".
+        if (total !== null && consumed + value.length > total) {
+          throw new DownloadNetworkError(
+            new Error(`ciphertext stream overran its advertised ${total} bytes`),
+          );
+        }
+        for await (const pt of decryptor.push(value)) {
+          // One network chunk can carry several frames, so several deliveries —
+          // each an await into the caller's sink, and each a place the signal can
+          // fire between.
+          throwIfAborted(signal);
+          await onChunk(pt);
+          received += pt.length;
+          // Re-checked AFTER the delivery, the longest await here: a cancellation
+          // landing inside it resumes to a caller that has torn its surface down,
+          // and the progress tick would be a bigger number pushed at a transfer
+          // that is over.
+          throwIfAborted(signal);
+          onProgress?.(received);
+        }
+        // Only here: the decryptor has taken ALL of these bytes — including the
+        // part of a frame it is still holding — and every frame they completed
+        // has come back from the sink. Anything that threw above (tamper, a
+        // failed write, a cancellation) leaves the chunk uncounted, which is
+        // right twice over: none of those are resumed, and a chunk credited
+        // without being consumed would start a continuation past bytes the
+        // decryptor never saw.
+        consumed += value.length;
+      }
+    } finally {
+      // Every exit that leaves bytes in this body: cancellation, a fault, a
+      // failed read whose stream is being replaced. A body left open keeps its
+      // connection and buffers alive and, on a real one, goes on downloading
+      // into nothing. A reader that reached `done` is skipped — there is nothing
+      // to release, and cancelling a finished stream is a claim about it we
+      // should not make.
+      //
+      // AWAITED, so "the caller was told" and "the connection is really gone"
+      // are not two moments with an unbounded gap between them (a caller that
+      // leaves and rejoins could otherwise be streaming twice), and its own
+      // failure swallowed so cleanup can never REPLACE the cancellation or fault
+      // this run is actually about — an errored reader rejects `cancel()` with
+      // the very error we are propagating.
+      if (!ended) await Promise.resolve(reader.cancel?.()).catch(() => {});
+    }
+    if (!stopped) break; // clean EOF at the advertised length, or one nothing here can dispute
+    // Not one byte reaches the sink between here and a verified continuation.
+    // Each condition is a reason this interruption cannot be continued safely,
+    // and all of them end the download as what it is — the network stopped it:
+    //   • no verifiable length / `Accept-Ranges` (which also means the object may
+    //     be limited or burn-after-read, where a second GET spends a download);
+    //   • nothing consumed — that is replaying the first request, not continuing
+    //     it, and `bytes=0-` is answered with a 200 anyway;
+    //   • already at the advertised end, so there is no tail to ask for.
+    if (total === null || consumed === 0 || consumed >= total) {
+      throw new DownloadNetworkError(interrupted);
+    }
+    // The tail's body, not the response: it is the only thing the next round
+    // needs, and capturing it where `continuesAt` accepted it keeps "verified"
+    // and "read" from drifting apart.
+    let tail: ReadableStream<Uint8Array> | null = null;
+    // Reconnect, retrying the REQUEST itself within the same budget. A fetch that
+    // rejects is the same interruption we are recovering from — the network is
+    // still down — so it costs one attempt and waits again, instead of ending a
+    // download that had three tries left. The offset never moves: nothing was
+    // consumed by an attempt that never produced a body.
+    while (tail === null) {
+      if (reconnects >= RESUME_ATTEMPTS) throw new DownloadNetworkError(interrupted);
+      // Before the first word of "reconnecting": a cancellation that arrived with
+      // the interruption must not put a recovery state in front of a user who has
+      // left, nor spend a backoff nobody is waiting out.
       throwIfAborted(signal);
-      let chunk: ReadableStreamReadResult<Uint8Array>;
+      reconnects++;
+      const state = { attempt: reconnects, max: RESUME_ATTEMPTS, at: consumed };
+      opts?.onRecovery?.({ phase: "waiting", ...state });
+      await abortableSleep(resumeBackoff(reconnects), signal); // rejects the moment the signal fires
+      throwIfAborted(signal);
+      opts?.onRecovery?.({ phase: "resuming", ...state });
+      let r: Response;
       try {
-        chunk = await reader.read(); // a mid-stream drop rejects here — a network fault, not a decrypt fault
-      } catch (e) {
-        throwIfAborted(signal); // our own abort tearing the stream down
-        throw new DownloadNetworkError(e);
-      }
-      // Re-checked AFTER the read. The check before it only covers a signal that
-      // had already fired; the case that matters is the read that was in flight
-      // WHEN it fired and resolves afterwards, holding a chunk whose plaintext
-      // is about to be written to the user's disk. On a real stream the abort
-      // rejects the read and the catch above handles it; on a reader that
-      // resolves the pending read instead, this stops the chunk before it is
-      // even decrypted. (The per-delivery check below is the backstop for
-      // anything that reaches `onChunk`.)
-      throwIfAborted(signal);
-      const { done, value } = chunk;
-      if (done) break;
-      for await (const pt of decryptor.push(value)) {
-        // One network chunk can carry several frames, so several deliveries —
-        // each an `await` into the caller's sink, and each a place the signal
-        // can fire between.
+        r = await fetch(url, { signal, headers: { Range: `bytes=${consumed}-` } });
+      } catch {
         throwIfAborted(signal);
-        await onChunk(pt);
-        received += pt.length;
-        // Re-checked AFTER the delivery, which is the longest await here: it is
-        // the caller writing to a disk. A cancellation that lands inside it
-        // resumes to a caller that has already torn its surface down, and a
-        // progress tick published there is a bigger number pushed at a transfer
-        // that is over.
-        throwIfAborted(signal);
-        onProgress?.(received);
+        continue; // still unreachable — spend another attempt at the same offset
       }
-    }
-    // end() throws on trailing bytes or a length shortfall — an incomplete file
-    // must surface as an error, never as a successful download.
-    for await (const pt of decryptor.end(expected)) {
       throwIfAborted(signal);
-      await onChunk(pt);
-      received += pt.length;
-      throwIfAborted(signal);
-      onProgress?.(received);
+      // A status is reported as itself: the object being gone (404) or a limit
+      // coming down (429) means something specific to the user, and burying it in
+      // "the download was interrupted" would send them to retry a link that no
+      // longer exists. Never retried here — the budget is for dropped
+      // connections, not for statuses.
+      if (!r.ok) {
+        await discard(r);
+        throw new StoredDownloadHttpError(r.status, "blob");
+      }
+      if (!r.body || !continuesAt(r, consumed, total)) {
+        await discard(r);
+        throw new DownloadNetworkError(interrupted);
+      }
+      tail = r.body;
     }
-  } finally {
-    // Only on the cancellation path. A stream left un-cancelled keeps its
-    // connection and its buffers alive for a transfer nobody is waiting for,
-    // and on a real body the browser goes on downloading into it. The error
-    // paths deliberately do NOT cancel: a reader that already rejected is
-    // errored, and cancelling it there would replace an honest network/decrypt
-    // failure with whatever cancel() decides to reject with.
-    //
-    // AWAITED, and its own failure swallowed. `cancel()` is asynchronous, so
-    // dispatching it and walking away means the caller is handed its
-    // AbortError while the stream may still be open — "the room is over" and
-    // "the connection is actually gone" become two moments with an unbounded
-    // gap between them, and a caller that leaves and rejoins can be streaming
-    // twice. Waiting closes the gap; the `.catch` is what keeps waiting from
-    // ever REPLACING the cancellation (or the fault) this run is really about,
-    // which is the reason it was fire-and-forget in the first place.
-    if (signal?.aborted) await Promise.resolve(reader.cancel?.()).catch(() => {});
+    body = tail;
+    // Verified and about to be read: the page can stop saying "reconnecting"
+    // without waiting for the first frame of it to clear the sink.
+    opts?.onRecovery?.({ phase: "streaming", attempt: reconnects, max: RESUME_ATTEMPTS, at: consumed });
+  }
+  // end() throws on trailing bytes or a length shortfall — an incomplete file
+  // must surface as an error, never as a successful download. Unchanged by the
+  // reconnects above, deliberately: however many responses the ciphertext
+  // arrived in, THIS decides it is complete and authentic.
+  for await (const pt of decryptor.end(expected)) {
+    throwIfAborted(signal);
+    await onChunk(pt);
+    received += pt.length;
+    throwIfAborted(signal);
+    onProgress?.(received);
   }
 }
 

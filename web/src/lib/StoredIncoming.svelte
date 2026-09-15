@@ -73,7 +73,16 @@
         onReject={() => receiver.reject()}
       />
     {:else if receiver.status === "resolving" || receiver.status === "receiving"}
-      <p class="si-lead">{t.storedRecv.receiving}</p>
+      <!-- 重连期间进度条停在断点上不动（那些字节已经落盘了），所以这句话是必须说出
+           来的另一半：不说的话，"停住的进度条"和"这次接收已经死了"在屏幕上完全一样。
+           role="status" 只播报这一次状态切换，百分比本身仍由下面的 progress 传达。 -->
+      {#if receiver.recovery}
+        <p class="si-lead si-recovering" role="status">
+          {t.storedRecv.reconnecting(receiver.recovery.attempt, receiver.recovery.max)}
+        </p>
+      {:else}
+        <p class="si-lead">{t.storedRecv.receiving}</p>
+      {/if}
       {#if receiver.status === "receiving" && total > 0}
         <progress class="si-progress" max="100" value={pct} aria-label={t.storedRecv.receiving}></progress>
         <span class="si-pct">{pct}%</span>
@@ -111,6 +120,8 @@
   .stored-incoming { display: grid; gap: 0.6rem; }
   .si-lead { margin: 0; font-weight: 600; }
   .si-error { font-weight: 500; }
+  /* 不是错误：这是一次还在进行中的恢复，用强调色而不是危险色。 */
+  .si-recovering { font-weight: 500; color: var(--accent-fg); }
   .si-note { margin: 0; font-size: 0.86rem; opacity: 0.8; }
   .si-more { margin: 0; font-size: 0.86rem; opacity: 0.8; }
   .si-files { margin: 0; padding-inline-start: 1.1rem; display: grid; gap: 0.2rem; font-size: 0.9rem; }

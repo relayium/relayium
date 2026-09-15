@@ -206,6 +206,18 @@ export interface StoredReceiver {
   /** Whether `retry()` would do anything: a failed batch whose failure a second
    *  attempt could survive. What the card's retry control renders on. */
   readonly retryable: boolean;
+  /**
+   * The running batch's transport dropped and is being reconnected, or null
+   * while bytes are flowing. `downloadBlob` owns the recovery; this only makes
+   * it visible.
+   *
+   * Needed because the honest thing to do during a reconnect is NOTHING else:
+   * `received` holds its value (those bytes are on the disk), so the card would
+   * otherwise be indistinguishable from a transfer that has silently died. It
+   * is per-generation state — cleared when the batch ends and when the epoch is
+   * invalidated — so a new room never inherits an old room's "reconnecting".
+   */
+  readonly recovery: { attempt: number; max: number } | null;
   /** Fold a freshly received handoff in. Ids already settled are no-ops. */
   offer(items: readonly HandoffItem[]): void;
   /** MUST be called from the user's own click: the save picker needs the gesture. */
@@ -233,6 +245,7 @@ export function createStoredReceiver(deps: StoredReceiveDeps = {}): StoredReceiv
   let waitingCount = $state(0);
   let savedCount = $state(0);
   let retryable = $state(false);
+  let recovery = $state<{ attempt: number; max: number } | null>(null);
 
   /** What has been decided about each id this room offered. See Disposition. */
   const decided = new Map<string, Disposition>();
@@ -311,6 +324,10 @@ export function createStoredReceiver(deps: StoredReceiveDeps = {}): StoredReceiv
     epoch++;
     live.abort();
     live = new AbortController();
+    // Presentation state that belongs to the generation being ended: the run it
+    // described is cancelled, and a stale "reconnecting" on the next batch's
+    // card would be a claim about a transfer that no longer exists.
+    recovery = null;
   }
 
   /**
@@ -596,6 +613,7 @@ export function createStoredReceiver(deps: StoredReceiveDeps = {}): StoredReceiv
     get waitingCount() { return waitingCount; },
     get savedCount() { return savedCount; },
     get retryable() { return retryable; },
+    get recovery() { return recovery; },
 
     offer(items) {
       let fresh = 0;
@@ -647,6 +665,7 @@ export function createStoredReceiver(deps: StoredReceiveDeps = {}): StoredReceiv
       status = "receiving";
       received = 0;
       savedCount = 0;
+      recovery = null;
       let base = 0;
       let filesClosed = 0;
       const written: HandoffItem[] = [];
@@ -659,6 +678,12 @@ export function createStoredReceiver(deps: StoredReceiveDeps = {}): StoredReceiv
             target,
             specs: obj.specs,
             onProgress: (n) => { if (mine === epoch) received = base + n; },
+            // Same epoch gate as progress: a reconnect belonging to a room the
+            // user has already left must not put "reconnecting" on the new one.
+            onRecovery: (r) => {
+              if (mine !== epoch) return;
+              recovery = r.phase === "streaming" ? null : { attempt: r.attempt, max: r.max };
+            },
             onFileClosed: () => { filesClosed++; },
             // One target for the whole batch, so only the last object may end it.
             finalize: false,
@@ -725,7 +750,12 @@ export function createStoredReceiver(deps: StoredReceiveDeps = {}): StoredReceiv
         // ran), which is exactly what `perFile` already says.
         if (perFile && target.delivery === "localCommit") void queueCompletions(written);
       } finally {
-        if (mine === epoch) accepting = false;
+        // Every terminal path of the batch — delivered, failed, or returned from
+        // early — stops claiming a reconnect is under way.
+        if (mine === epoch) {
+          accepting = false;
+          recovery = null;
+        }
       }
     },
 

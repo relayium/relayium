@@ -45,6 +45,7 @@ function fakeReceiver(over: Partial<StoredReceiver> = {}): StoredReceiver {
     waitingCount: 0,
     savedCount: 0,
     retryable: false,
+    recovery: null,
     offer: vi.fn(),
     accept: vi.fn(async () => {}),
     reject: vi.fn(),
@@ -120,5 +121,43 @@ describe("the pre-uploaded batch's consent card", () => {
     open(none);
     expect(text()).toContain(t().nothingSaved);
     expect(text()).not.toContain(t().savedSome(1));
+  });
+});
+
+// 断线重连期间这张卡片说什么。
+//
+// 传输断了的时候进度条会停在断点上不动 —— 那些字节是真的已经落盘了，退回去或者清零
+// 都是谎。但"停住的进度条"和"这次接收已经死了"在屏幕上一模一样，所以必须有一句话把
+// 两者分开，而且它不能长得像一次失败。
+describe("StoredIncoming 的重连状态", () => {
+  it("正在重连时说出重连和第几次，并保留已有进度", () => {
+    open(fakeReceiver({
+      status: "receiving" as StoredReceiveStatus,
+      files: [{ name: "a.bin", size: 1000 }] as readonly FileMetaLite[],
+      total: 1000,
+      received: 400,
+      recovery: { attempt: 2, max: 4 },
+    }));
+    const text = target.textContent ?? "";
+    expect(text).toContain(messages.en.storedRecv.reconnecting(2, 4));
+    expect(text, "重连时还在说『正在下载』").not.toContain(messages.en.storedRecv.receiving);
+    // 进度既不清零也不跳到 100：断点的值就是用户手上真有的东西。
+    expect(text).toContain("40%");
+    // 这不是一次失败：不能渲染成错误，也不能出现重试按钮。
+    expect(target.querySelector(".si-error")).toBeNull();
+    expect(target.querySelector(".si-retry")).toBeNull();
+  });
+
+  it("恢复之后回到普通的接收文案", () => {
+    open(fakeReceiver({
+      status: "receiving" as StoredReceiveStatus,
+      files: [{ name: "a.bin", size: 1000 }] as readonly FileMetaLite[],
+      total: 1000,
+      received: 400,
+      recovery: null,
+    }));
+    const text = target.textContent ?? "";
+    expect(text).toContain(messages.en.storedRecv.receiving);
+    expect(target.querySelector(".si-recovering")).toBeNull();
   });
 });

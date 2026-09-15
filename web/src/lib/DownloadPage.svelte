@@ -46,11 +46,31 @@
    */
   let fragKey = $state("");
   let progress = $state(0); // 0..100
+  /**
+   * 正在重连的那一段。null = 字节在正常流动。
+   *
+   * 断线重连期间进度条**一个字节都不退**：那些字节已经落盘了，清零会让用户以为要从
+   * 头再来。停住不动的进度条又和"卡死了"看不出区别，所以这句话是必须说出来的那一半。
+   */
+  let recovery = $state<{ attempt: number; max: number } | null>(null);
   let expiresAt = $state(0); // unix seconds; 0 until meta loads
   let burnAfterRead = $state(false);
   let now = $state(Math.floor(Date.now() / 1000)); // ticks so the countdown stays live
 
   let ticker: ReturnType<typeof setInterval> | undefined;
+  /**
+   * 页面被拆掉时用来掐断还在跑的那次下载。
+   *
+   * 以前没有：`writeStoredObject` 不带 signal，于是页面卸载之后，取字节、解密、落盘
+   * 的那个循环照样跑到底 —— 连接开着、sink 收着、进度往一个不存在的界面上写。断线
+   * 自动重连之后这件事更要紧：重连本身要**等**（退避），一个没人看的页面不该在那儿
+   * 等着再开一条连接。
+   *
+   * signal 负责停下来；`destroyed` 管另一半 —— 已经在 await 里的那一步回来之后不再
+   * 写状态。两者都要：只有 signal 的话，卸载会被当成一次失败归因。
+   */
+  let run: AbortController | null = null;
+  let destroyed = false;
   onMount(async () => {
     ticker = setInterval(() => (now = Math.floor(Date.now() / 1000)), 30_000);
     if (!window.isSecureContext || !crypto.subtle) { pageState = "error"; errKey = "unsupported"; return; }
@@ -65,7 +85,15 @@
     fragKey = k;
     await loadMeta();
   });
-  onDestroy(() => clearInterval(ticker));
+  onDestroy(() => {
+    destroyed = true;
+    clearInterval(ticker);
+    // 真正掐断正在流的那次下载（为什么外面没有别的办法，见 downloadBlob），连同
+    // 重连之间的退避一起。sink 一律是"丢掉"而不是 close() —— close() 就是提交，在
+    // 这里提交等于把半个文件交给用户（见 stored-download 的 openSink）。
+    run?.abort();
+    run = null;
+  });
 
   /** 读元数据、解出清单，走到「可以下载」那一屏。重试也走这里，所以它不读地址栏
    *  ——密钥从 fragKey 来（见那里的注释）。先把状态打回 loading：错误屏连同重试
@@ -79,8 +107,12 @@
       burnAfterRead = meta.burnAfterRead;
       key = await keyFromFragment(fragKey);
       manifest = await decryptManifest(key, base64ToBytes(meta.encManifest));
+      // 元数据这一段也有三个 await，页面同样可能在它们中间被拆掉。晚到的结果不再
+      // 写状态 —— 没有观众，而且那次写会把一次卸载记成一屏内容或一屏错误。
+      if (destroyed) return;
       pageState = "ready";
     } catch (e) {
+      if (destroyed) return;
       pageState = "error";
       errKey = classifyError(e);
     }
@@ -262,10 +294,29 @@
    *  finally 上，而不用给下面每一条 return / catch 各补一次。 */
   async function runDownload() {
     if (!manifest || !key) return;
+    // 闸门在**选保存位置之前**就开。那一步是系统对话框（或 SW 握手），是这一页最长
+    // 的一个 await —— 它开着的时候页面完全可能被拆掉（返回、切走、SPA 导航）。开在
+    // 它后面的话，onDestroy 看到的是 run === null，掐不到任何东西；等对话框回来，
+    // 一次全新的下载就在一个已经不存在的页面上开跑了。
+    const ac = new AbortController();
+    run = ac;
+    try {
+      await runWith(ac);
+    } finally {
+      // 这一次的句柄只归这一次：重试会开一个新的 AbortController，晚落地的 finally
+      // 不能把新那次的句柄清掉。
+      if (run === ac) run = null;
+    }
+  }
+
+  /** runDownload 的正文，句柄的生命周期由上面那一层统一收口。 */
+  async function runWith(ac: AbortController) {
+    if (!manifest || !key) return;
     let target: SaveTarget;
     try {
       target = await pickSaveTarget(saveSpecs, SAVE_OPTS);
     } catch (e) {
+      if (destroyed) return;
       // 用户自己取消保存位置：什么都没发生，回到按钮那一屏就是最诚实的表达。
       if (e instanceof SaveCancelledError) return;
       // 保存这一段用不了（选择器坏了，而这一批大到不能安全塞进内存）。这时静默
@@ -274,8 +325,13 @@
       errKey = "swFail";
       return;
     }
+    // 对话框落定时页面可能已经没了、或者这次运行已经被掐断。target 是一个通往磁盘的
+    // 写入端，但没有人在等这些文件：一个字节都不取，也**不** close / done() —— 未提交
+    // 地丢掉它就是这里的「中止」（理由见 stored-download 的 openSink）。
+    if (destroyed || ac.signal.aborted) return;
     pageState = "downloading";
     progress = 0;
+    recovery = null;
     try {
       // The whole "plaintext is the concatenation, split it by the manifest"
       // job — including the zero-byte tail and the sink-open failure mode —
@@ -288,11 +344,30 @@
         target,
         specs: saveSpecs,
         onProgress: (received) => {
-          progress = totalBytes > 0 ? Math.round((received / totalBytes) * 100) : 0;
+          // 封顶 99。这条数字是"收到的明文字节"，而"下载完成"还差两件事：最后一帧的
+          // 认证校验（StoreDecryptor.end）和把文件真正交给磁盘（close / done()）。
+          // 最后一块交付完、这两件事还没做的那一瞬间，四舍五入出来的 100% 就是一句
+          // 提前说出口的"好了"——这时候失败，用户会以为文件已经到手。100% 只由
+          // pageState = "done" 那一屏来说。
+          progress = totalBytes > 0 ? Math.min(99, Math.floor((received / totalBytes) * 100)) : 0;
+        },
+        // 页面被拆掉时真的停下来，包括还卡在退避里的那次重连。
+        signal: ac.signal,
+        // 重连由 downloadBlob 完成，这一页只负责把它说出来 —— 退避期间没有任何字节
+        // 到达，沉默和"这次下载已经死了"在界面上完全一样。
+        onRecovery: (r) => {
+          if (destroyed) return;
+          recovery = r.phase === "streaming" ? null : { attempt: r.attempt, max: r.max };
         },
       });
+      if (destroyed) return;
+      recovery = null;
       pageState = "done";
     } catch (e) {
+      // 页面已经没了：这里的 e 多半就是我们自己 abort 出来的 AbortError，而且没有任何
+      // 界面在等着被写。照常归因只会把一次卸载说成一次失败。
+      if (destroyed) return;
+      recovery = null;
       pageState = "error";
       // 和加载阶段同一个 classifyError。这一段是每一条归因的第二个入口：清单读出来
       // 了、文件列表都显示了，故障才发生 —— 对象在按下下载的那一刻没了（TTL 到期、
@@ -368,7 +443,13 @@
       <div class="progress-bar" role="progressbar" aria-label={t.download.downloading} aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style:width="{progress}%"></div></div>
       <!-- 不加 aria-live：百分比每块都在变，读屏会被刷屏（进度本身已由上面的
            role="progressbar" + aria-valuenow 如实传达）。aria-live 只留给状态切换。 -->
-      <p>{t.download.downloading} {progress}%</p>
+      {#if recovery}
+        <!-- aria-live 只留给状态切换，这正是一次状态切换（而百分比本身仍然只由上面
+             的 progressbar 传达，不会被读屏刷屏）。 -->
+        <p class="recovering" role="status">{t.download.resuming(recovery.attempt, recovery.max)} {progress}%</p>
+      {:else}
+        <p>{t.download.downloading} {progress}%</p>
+      {/if}
     {:else if pageState === "done"}
       <p class="ok">{t.download.done}</p>
     {:else if memWarn}
@@ -525,6 +606,9 @@
   }
   .memwarn p { margin: 0 0 var(--space-2); }
   .memwarn .how { color: var(--text); }
+  /* 不是错误色：这不是一次失败，而是一次还在进行中的恢复。用和"快过期了"同一个
+     强调色，和下面的 .error 明确分开。 */
+  .recovering { color: var(--accent-fg); }
   .error { color: var(--danger); } .ok { color: var(--ok); }
 
   /* 终端那条路。

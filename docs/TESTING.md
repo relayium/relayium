@@ -2240,6 +2240,50 @@ head -c 70000 /dev/zero | tr '\0' a | relayium text 483920; echo "exit=$?"
 65 536-byte limit, and pointing at `relayium send`. Nothing is sent — the peer sees
 no message at all.
 
+## Interrupted stored download resumes in place `[AUTOMATED + MANUAL]`
+
+A share link that keeps dying at the same point — a proxy or VPN severing the
+stream, a phone changing networks — used to be unfinishable: every retry started
+again at byte 0 and met the same wall. `downloadBlob` now continues the SAME
+download instead, with one decryptor, one partial frame and one save sink across
+the reconnect.
+
+```bash
+cd web && npx vitest run src/lib/stored-file.test.ts src/lib/stored-download.test.ts src/lib/DownloadPage.test.ts
+```
+
+Those cover, with real AES-GCM frames and real `ReadableStream`s: a cut in the
+middle of a frame; multi-file and zero-byte manifests; a clean but short EOF; a
+server that answers the `Range` with a 200; a 206 with the wrong start, a changed
+total, a malformed `Content-Range`, a non-identity `Content-Encoding`, or a body
+longer than it advertised; tampered ciphertext; a failing sink; a 404 mid-resume;
+cancellation inside the backoff; and the global retry budget (1 initial GET + at
+most 4 reconnects, never refilled by progress).
+
+Manual, in a real browser, because fault injection between a socket and a save
+sink is the one thing the unit tests stand in for:
+
+1. Serve a stored object of ≥ 100 MB and open its `/d/<id>#k=…` link.
+2. Kill the connection mid-transfer (proxy, `tc`, or dropping the socket).
+   **Expect:** the page keeps the progress it had, says it is reconnecting with
+   the attempt number, and — when the network returns — finishes with the exact
+   original bytes (compare SHA-256). The second request must carry
+   `Range: bytes=<n>-` and be answered `206`.
+3. Repeat with the network left down. **Expect:** exactly 5 blob requests, then
+   the "download interrupted" copy (which already names VPN/proxy as a cause).
+   No file is committed and no "complete" is shown.
+4. Burn-after-read / limited link, interrupted once. **Expect:** exactly ONE
+   blob request — a limited object must never be re-fetched automatically,
+   because each GET spends a download.
+5. Navigate away (browser Back) while the save-location dialog is open, then
+   let the dialog resolve. **Expect:** no bytes fetched, no file written, no
+   download committed.
+6. Same interruption on the pairing-room receive card (a peer pre-uploads, you
+   join and accept). **Expect:** the card says it is reconnecting with the
+   attempt number, keeps its percentage, and is never rendered as a failure —
+   no error text and no retry button while the recovery is under way. Leaving
+   the room during the backoff clears it and finalises nothing.
+
 ## Android client `[AUTOMATED + MANUAL]`
 
 The native Android client (`apps/android/`, public preview at 0.2.2) has its

@@ -12,7 +12,7 @@
 // CLASSIFICATION stays with each caller, because what a failure means to a user
 // differs between "the link you opened" and "the device you paired with".
 
-import { downloadBlob, throwIfAborted } from "./stored-file";
+import { downloadBlob, throwIfAborted, type DownloadRecovery } from "./stored-file";
 import { SinkTransportError, type FileSink, type FileMetaLite, type SaveTarget } from "./filesink";
 import { safeSegments } from "./zip";
 import type { StoredManifest } from "./store-crypto";
@@ -63,9 +63,15 @@ export function storedTotalBytes(manifest: StoredManifest): number {
  * silently truncated file, which is worse than the thing it looks like it is
  * cleaning up. Dropping the reference is what "abort" means for all four:
  * nothing is committed, nothing is downloaded, nothing is added, and the
- * garbage collector takes the buffers. (The one target with real teardown state
- * is the service-worker stream, and it is unreachable from here — `swStream` is
- * off for every receive path, see SaveOptions.)
+ * garbage collector takes the buffers.
+ *
+ * The one target with real teardown state IS reachable here: the download page
+ * passes `swStream: true` (the pre-upload receiver does not), so a single-file
+ * save may be a service-worker stream. It is still dropped rather than closed,
+ * for the same reason — `close()` is what makes the browser's download finish,
+ * so closing a stream this function never filled hands the user a truncated
+ * file. Its own failure paths (`fail()` in filesink) tell the service worker to
+ * abandon the stream; that is teardown's job, not this one's.
  */
 async function openSink(target: SaveTarget, specs: FileMetaLite[], i: number): Promise<FileSink> {
   try {
@@ -129,6 +135,18 @@ export async function writeStoredObject(
      *  behind, and `downloadBlob` for why a caller cannot stop one from the
      *  outside once the response body has started streaming. */
     signal?: AbortSignal;
+    /**
+     * The transport dropped and is being reconnected — see `downloadBlob`, which
+     * owns the whole recovery and resumes into the SAME sink this run already
+     * opened.
+     *
+     * Passed straight through rather than interpreted, because what it means to
+     * a user belongs to the caller, exactly like error classification does. It
+     * is the only signal a surface has that a stalled progress bar is being
+     * worked on: bytes stop arriving during a reconnect, and silence there is
+     * indistinguishable from a transfer that has quietly died.
+     */
+    onRecovery?: (r: DownloadRecovery) => void;
   },
 ): Promise<void> {
   const { id, key, manifest, target, onProgress, signal } = opts;
@@ -206,6 +224,7 @@ export async function writeStoredObject(
     // object, and one fewer place the transfer can fail after it has started.
     storedTotalBytes(manifest),
     signal,
+    { onRecovery: opts.onRecovery },
   );
   // Finish the manifest entries the plaintext stream never reached.
   //

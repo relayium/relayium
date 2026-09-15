@@ -1398,3 +1398,199 @@ describe("终端那一段在窄屏下不撑破页面", () => {
     expect(page).toMatch(/\.dl\s*\{\s*width: 560px; max-width: 100%/);
   });
 });
+
+// 页面的生命周期与"完成"这两个字的诚实度。
+//
+// 两件事以前都不成立：页面被拆掉之后那次下载还在跑（没人给它 signal），以及进度条
+// 在真正落盘之前就能显示 100%。断线自动重连把两件事都放大了 —— 重连会**等**，等的
+// 那几秒里页面可能已经没了；而 100% 之后紧跟着的恰恰是最容易失败的一步。
+describe("DownloadPage 的下载生命周期", () => {
+  /** 把 writeStoredObject 传给 downloadBlob 的那几个参数抓出来：
+   *  (id, key, onChunk, onProgress, expectedBytes, signal, opts)。 */
+  function captureRun() {
+    const captured: {
+      onProgress?: (n: number) => void;
+      signal?: AbortSignal;
+      release?: () => void;
+    } = {};
+    downloadBlob.mockImplementation(
+      async (
+        _id: unknown,
+        _k: unknown,
+        _onPt: unknown,
+        onProgress: (n: number) => void,
+        _expected: unknown,
+        signal: AbortSignal,
+      ) => {
+        captured.onProgress = onProgress;
+        captured.signal = signal;
+        // 一直挂着：这条路要考的就是"下载还在跑的时候"。
+        await new Promise<void>((r) => (captured.release = r));
+      },
+    );
+    return captured;
+  }
+
+  it("卸载页面会真的掐断还在跑的那次下载", async () => {
+    const files = [{ name: "a.bin", size: 1024 }];
+    await mountPage({ canStream: true, files });
+    const run = captureRun();
+    await clickDownload();
+    expect(run.signal, "下载没有拿到可以掐断它的 signal").toBeDefined();
+    expect(run.signal!.aborted).toBe(false);
+    unmount(app as never);
+    app = null;
+    // 页面没了，那条连接、那次解密、那段退避等待都必须跟着停 —— 否则它会继续往一个
+    // 已经不存在的界面写进度，重连还会在退避之后再开一条连接。
+    expect(run.signal!.aborted, "页面卸载了，下载还在跑").toBe(true);
+    run.release?.();
+  });
+
+  it("字节全收到了也不显示 100%：那两个字只属于真正落盘之后", async () => {
+    // 收完最后一块明文之后还差两件事：最后一帧的认证校验，和把文件交给磁盘。
+    // 这一瞬间显示 100%，失败时用户会以为文件已经到手。
+    const files = [{ name: "a.bin", size: 1000 }];
+    await mountPage({ canStream: true, files });
+    const run = captureRun();
+    await clickDownload();
+    run.onProgress?.(1000);
+    flushSync();
+    const text = target.textContent ?? "";
+    expect(text, "落盘之前就说了 100%").not.toContain("100%");
+    expect(text).toContain("99%");
+    expect(text).not.toContain(messages.en.download.done);
+    run.release?.();
+  });
+
+  it("卸载之后到达的失败不再写任何界面状态", async () => {
+    const files = [{ name: "a.bin", size: 1024 }];
+    await mountPage({ canStream: true, files });
+    let fail!: (e: Error) => void;
+    downloadBlob.mockImplementation(() => new Promise((_r, rj) => (fail = rj)));
+    await clickDownload();
+    unmount(app as never);
+    app = null;
+    const dom = target.innerHTML;
+    fail(new DownloadNetworkError("gone"));
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    // 卸载之后的 DOM 不该因为一次晚到的失败再动 —— 那次失败没有观众。
+    expect(target.innerHTML).toBe(dom);
+  });
+});
+
+// 保存位置对话框开着的那一段。系统对话框可以开几分钟，这一页在那段时间里完全可能
+// 被拆掉（返回、切走、SPA 导航）。对话框回来之后不能当作什么都没发生过。
+describe("DownloadPage 在选保存位置时被拆掉", () => {
+  it("对话框落定时页面已经没了：一个字节都不取，也不碰那个写入端", async () => {
+    const files = [{ name: "a.bin", size: 1024 }];
+    await mountPage({ canStream: true, files });
+    // 受控的对话框：点下载之后一直开着，由这条用例决定它什么时候返回。
+    let give!: (t: unknown) => void;
+    injectedTarget = new Promise((r) => (give = r));
+    const opened: string[] = [];
+    let closed = 0;
+    let finished = 0;
+    (target.querySelector(".btn-primary") as HTMLButtonElement).click();
+    flushSync();
+    await new Promise((r) => setTimeout(r, 0));
+    // 对话框还开着的时候页面被拆掉。
+    unmount(app as never);
+    app = null;
+    give({
+      label: "受控目标",
+      file: async (name: string) => {
+        opened.push(name);
+        return { write: async () => {}, close: async () => { closed++; } };
+      },
+      done: async () => { finished++; },
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    await new Promise((r) => setTimeout(r, 0));
+    // 一次全新的下载在一个不存在的页面上开跑，是这一段最糟的形状：它会取完整份
+    // 密文、写满磁盘、甚至触发一次浏览器下载，而没有任何人在等这些文件。
+    expect(downloadBlob, "页面没了还去取字节").not.toHaveBeenCalled();
+    expect(opened, "页面没了还开了写入端").toEqual([]);
+    expect(closed, "页面没了还提交了文件").toBe(0);
+    expect(finished, "页面没了还收尾了这一批").toBe(0);
+  });
+});
+
+// 断线重连期间这一页说什么。
+//
+// 退避那几秒里一个字节都不会到达，进度条完全静止 —— 和"这次下载已经死了"在屏幕上
+// 一模一样。所以恢复状态必须被说出来，而且：进度不许清零（那些字节真的已经落盘），
+// 也不许因此显示成一次失败。
+describe("DownloadPage 的重连提示", () => {
+  /** 一次挂在半路的下载：恢复回调、进度回调都交出来，release 之后再把清单声明的
+   *  字节交付完（见 deliverDeclaredBytes：少交付就是替身违反它自己依赖的契约）。 */
+  function runWithRecovery(total: number) {
+    const cap: { recover?: (r: { phase: string; attempt: number; max: number; at: number }) => void;
+                 progress?: (n: number) => void; release?: () => void } = {};
+    downloadBlob.mockImplementation(
+      async (
+        _id: unknown,
+        _k: unknown,
+        onPt: (p: Uint8Array) => Promise<void>,
+        onProgress: (n: number) => void,
+        _expected: unknown,
+        _signal: unknown,
+        opts: { onRecovery?: (r: { phase: string; attempt: number; max: number; at: number }) => void },
+      ) => {
+        cap.progress = onProgress;
+        cap.recover = opts?.onRecovery;
+        await new Promise<void>((r) => (cap.release = r));
+        if (total > 0) await onPt(new Uint8Array(total));
+      },
+    );
+    return cap;
+  }
+
+  it("重连期间说出第几次、共几次，并保留已有进度", async () => {
+    const files = [{ name: "a.bin", size: 1000 }];
+    await mountPage({ canStream: true, files });
+    const cap = runWithRecovery(1000);
+    await clickDownload();
+    expect(cap.recover, "没有把恢复状态交给页面").toBeDefined();
+    cap.progress?.(400);
+    flushSync();
+    cap.recover?.({ phase: "waiting", attempt: 2, max: 4, at: 123 });
+    flushSync();
+    const text = target.textContent ?? "";
+    expect(text).toContain(messages.en.download.resuming(2, 4));
+    expect(text, "重连时还在说『正在下载』").not.toContain(messages.en.download.downloading);
+    expect(text, "重连把进度清零了").toContain("40%");
+    // 这不是失败：错误屏和重试按钮都不该出现。
+    expect(target.querySelector(".error")).toBeNull();
+    cap.release?.();
+  });
+
+  it("续上之后回到普通文案；下载完成时不再残留重连状态", async () => {
+    const files = [{ name: "a.bin", size: 1000 }];
+    await mountPage({ canStream: true, files });
+    const cap = runWithRecovery(1000);
+    await clickDownload();
+    cap.recover?.({ phase: "waiting", attempt: 1, max: 4, at: 0 });
+    flushSync();
+    cap.recover?.({ phase: "streaming", attempt: 1, max: 4, at: 500 });
+    flushSync();
+    expect(target.textContent ?? "").toContain(messages.en.download.downloading);
+    expect(target.querySelector(".recovering")).toBeNull();
+    cap.release?.();
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    expect(target.textContent ?? "").toContain(messages.en.download.done);
+  });
+
+  it("中文下同样有这句话（维护中的两种语言都要有）", async () => {
+    const files = [{ name: "a.bin", size: 1000 }];
+    await mountPage({ canStream: true, files, lang: "zh" });
+    const cap = runWithRecovery(1000);
+    await clickDownload();
+    cap.recover?.({ phase: "resuming", attempt: 3, max: 4, at: 9 });
+    flushSync();
+    expect(target.textContent ?? "").toContain(messages.zh.download.resuming(3, 4));
+    cap.release?.();
+  });
+});
