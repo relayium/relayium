@@ -213,10 +213,16 @@ final class DeviceInboxUITests: XCTestCase {
         func settle(_ seconds: TimeInterval) {
             _ = XCTWaiter.wait(for: [XCTestExpectation(description: "settle")], timeout: seconds)
         }
+        // The probe's trace arrives in its label (its AXValue reads empty at
+        // runtime); a non-empty value is still taken first if a platform
+        // exposes one, so either transport is reported rather than lost.
         func appTrace() -> String {
             let probe = element("uitest-inbox-open-trace", in: window)
             guard probe.exists else { return "app trace absent" }
-            return "app trace [\((probe.value as? String) ?? "nil")]"
+            if let value = probe.value as? String, !value.isEmpty {
+                return "app trace value [\(value)]"
+            }
+            return probe.label.isEmpty ? "app trace empty" : "app trace label [\(probe.label)]"
         }
         trail.append("first click: not opened after 20s; control \(state(control)); "
                      + "window \(window.frame); app state \(app.state.rawValue); \(appTrace())")

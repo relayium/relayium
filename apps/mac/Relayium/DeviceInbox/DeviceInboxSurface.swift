@@ -1101,6 +1101,12 @@ final class InboxOpenTrace: ObservableObject {
 }
 
 /// The one-point element the UI test reads the trace from.
+///
+/// **The trace travels in the LABEL.** A runtime read of this probe on
+/// macOS 27 (root runtime38, `trace-probe-finding.md`) found it exposed as
+/// `AXUnknown` with its description present and its `AXValue` empty, so a
+/// value written here never reached the test. The description is the field
+/// that demonstrably arrives, so it carries a fixed prefix and the whole trace.
 private struct InboxOpenTraceProbe: View {
     @ObservedObject private var trace = InboxOpenTrace.shared
 
@@ -1109,8 +1115,7 @@ private struct InboxOpenTraceProbe: View {
             .frame(width: 1, height: 1)
             .accessibilityElement()
             // nonlocalized: UI-test diagnostic, never shown and absent from Release
-            .accessibilityLabel("UI test open trace")
-            .accessibilityValue(trace.text)
+            .accessibilityLabel("UI test open trace: \(trace.text)")
             .accessibilityIdentifier("uitest-inbox-open-trace")
     }
 }

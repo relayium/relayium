@@ -2491,6 +2491,14 @@ final class AppShellUITests: XCTestCase {
                     attachDiagnostics(named: "audit-\(destination)-\(pass)")
                 }
             }
+            // EVIDENCE, kept whether the audit passes or not: the window as it
+            // stands after the settled pass. The title bar over the toolbar is a
+            // visual property no assertion here reads, and a green run otherwise
+            // keeps no picture of it. It asserts nothing and changes no outcome.
+            let chrome = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            chrome.name = "chrome-\(destination)-settled-screenshot"
+            chrome.lifetime = .keepAlways
+            add(chrome)
         }
 
         let identified = headers.sorted { $0.key < $1.key }
