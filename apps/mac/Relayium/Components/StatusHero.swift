@@ -58,8 +58,12 @@ struct StatusHero<Trailing: View>: View {
         .padding(.bottom, 18)
         .padding(.horizontal, Metrics.heroPadding)
         .background(HeroSurface())
+        #if DEBUG
+        .modifier(UITestSwitchAudit.GroupSemantics(label: title))
+        #else
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
+        #endif
     }
 }
 

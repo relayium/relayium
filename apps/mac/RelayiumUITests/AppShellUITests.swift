@@ -2510,6 +2510,146 @@ final class AppShellUITests: XCTestCase {
                       + "id=frame(collection/type): " + identified)
     }
 
+    /// **DIAGNOSTIC MATRIX — not a gate, and it forgives nothing.**
+    ///
+    /// `testEveryDestinationPassesTheSystemAccessibilityAudit` above is unchanged
+    /// and still fails on hosted macOS 15 while the Parent/Child finding stands.
+    /// This test relaunches once per `UITestSwitchAudit` variant
+    /// (`--relayium-ui-testing-switch-variant=v0…v4`), opens LAN Transfer, runs the
+    /// same audit types immediately and after the same two-second settle, and
+    /// records every issue, the Parent/Child count, both switches as XCTest sees
+    /// them, a screenshot per pass, and the app's own AppKit parent/child walk
+    /// read from its named pasteboard after the audit. It fails only when the
+    /// comparison itself is invalid: the control `v0` must reproduce the two
+    /// Parent/Child findings in each pass, and the native `v3` verification
+    /// switch must actually toggle when clicked.
+    func testSwitchAuditMatrixDiagnostic() throws {
+        guard #available(macOS 14.0, *) else {
+            throw XCTSkip("the system accessibility audit needs macOS 14")
+        }
+        // nonlocalized: the app's test-only pasteboard name, see UITestSwitchAudit
+        let board = NSPasteboard(name: NSPasteboard.Name("com.relayium.uitest.switch-audit"))
+        var summary: [String] = []
+        var invalid: [String] = []
+
+        for variant in ["v0", "v1", "v2", "v3", "v4"] {
+            var report: [String] = ["== \(variant)"]
+            board.clearContents()
+            app.terminate()
+            app.launchArguments = offlineLaunchArguments
+                + ["--relayium-ui-testing-switch-variant=\(variant)"]
+            app.launch()
+            ensureProductWindowIsOpen()
+            let window = mainWindow
+            XCTAssertTrue(window.waitForExistence(timeout: 20))
+            let row = sidebarDestination("LAN Transfer", in: window)
+            XCTAssertTrue(row.waitForExistence(timeout: 10), "the sidebar has no LAN Transfer row")
+            row.click()
+            expectation(for: NSPredicate(format: "title == %@", "LAN Transfer"),
+                        evaluatedWith: window)
+            waitForExpectations(timeout: 15)
+
+            let bounds = window.frame
+            var parentChild: [String: Int] = [:]
+            for pass in ["immediate", "settled"] {
+                if pass == "settled" {
+                    _ = XCTWaiter.wait(for: [XCTestExpectation(description: "settle")], timeout: 2)
+                }
+                var count = 0
+                var total = 0
+                try app.performAccessibilityAudit(for: Self.auditedTypes) { issue in
+                    total += 1
+                    if issue.auditType == Self.parentAndChildAuditType { count += 1 }
+                    let owned = Self.frameworkOwnedContainer(issue.element, in: bounds, around: [:])
+                    report.append("  [\(pass)] "
+                                  + Self.describe(issue, on: "LAN Transfer", against: [:])
+                                  + (owned.map { " {framework-owned: \($0)}" } ?? ""))
+                    return true
+                }
+                parentChild[pass] = count
+                report.append("  \(pass): parentChild=\(count) total=\(total)")
+                let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+                shot.name = "switch-matrix-\(variant)-\(pass)-screenshot"
+                shot.lifetime = .keepAlways
+                add(shot)
+            }
+
+            func switchState(_ id: String) -> String {
+                guard let element = Self.switchElement(id, in: window) else {
+                    return "\(id): absent from checkBoxes, switches and otherElements"
+                }
+                return "\(id): type=\(element.elementType.rawValue) label=\(element.label) "
+                    + "value=\(String(describing: element.value)) frame=\(element.frame) "
+                    + "enabled=\(element.isEnabled) hittable=\(element.isHittable)"
+            }
+            report.append("  " + switchState("transfer-verification-toggle"))
+            report.append("  " + switchState("lan-receiving-switch"))
+
+            // The app's own walk, published every two seconds after LAN appears.
+            var walk = ""
+            let deadline = Date().addingTimeInterval(8)
+            repeat {
+                walk = board.string(forType: .string) ?? ""
+                if walk.hasPrefix("variant=\(variant)") { break }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+            } while Date() < deadline
+            report.append(walk.hasPrefix("variant=\(variant)")
+                          ? "  native walk:\n" + walk
+                          : "  native walk: NOT RECEIVED (pasteboard read \(walk.isEmpty ? "empty" : "stale"))")
+
+            if variant == "v0", parentChild["immediate"] != 2 || parentChild["settled"] != 2 {
+                invalid.append("v0 did not reproduce 2+2 Parent/Child on LAN "
+                               + "(immediate=\(parentChild["immediate"] ?? -1) "
+                               + "settled=\(parentChild["settled"] ?? -1)); the comparison is invalid")
+            }
+            if variant == "v3" {
+                // A real click on the AppKit switch, twice, back to where it began.
+                let toggle = Self.switchElement("transfer-verification-toggle", in: window)
+                func value() -> Int? { (toggle?.value as? NSNumber)?.intValue }
+                let before = value()
+                toggle?.click()
+                let flipped = XCTWaiter.wait(for: [XCTNSPredicateExpectation(
+                    predicate: NSPredicate { _, _ in value() != nil && value() != before },
+                    object: nil)], timeout: 5) == .completed
+                report.append("  v3 click: before=\(String(describing: before)) "
+                              + "after=\(String(describing: value())) flipped=\(flipped)")
+                if flipped { toggle?.click() }
+                if !flipped {
+                    invalid.append("v3 native verification switch did not toggle on click "
+                                   + "(before=\(String(describing: before)))")
+                }
+            }
+
+            summary.append("\(variant): immediate=\(parentChild["immediate"] ?? -1) "
+                           + "settled=\(parentChild["settled"] ?? -1)")
+            let record = XCTAttachment(string: report.joined(separator: "\n"))
+            record.name = "switch-matrix-\(variant)-report"
+            record.lifetime = .keepAlways
+            add(record)
+        }
+
+        let overall = XCTAttachment(string: "LAN Transfer Parent/Child by variant\n"
+                                    + summary.joined(separator: "\n"))
+        overall.name = "switch-matrix-summary"
+        overall.lifetime = .keepAlways
+        add(overall)
+        XCTAssertTrue(invalid.isEmpty, invalid.joined(separator: "; ")
+                      + " | summary: " + summary.joined(separator: "; "))
+    }
+
+    /// The Parent/Child audit type, by its bit, for COUNTING findings in the
+    /// matrix above. The audit itself still runs `auditedTypes`; nothing here
+    /// narrows what is audited.
+    @available(macOS 14.0, *)
+    private static let parentAndChildAuditType = XCUIAccessibilityAuditType(rawValue: 1 << 33)
+
+    /// A switch by identifier, asked of the typed collections a switch can be
+    /// exposed in — never a window-wide `.any` query, which times out on macOS.
+    private static func switchElement(_ id: String, in window: XCUIElement) -> XCUIElement? {
+        [window.checkBoxes[id], window.switches[id], window.otherElements[id]]
+            .first { $0.exists }
+    }
+
     /// The element carrying `id` and the name of the typed collection that
     /// answered, or `nil` once all four have been asked and the caller's shared
     /// budget is spent.

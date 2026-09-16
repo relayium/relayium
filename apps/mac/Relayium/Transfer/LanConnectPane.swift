@@ -228,7 +228,20 @@ struct LanConnectPane: View {
                        title: NearbyStatusPresentation.text(for: receive.state),
                        detail: heroDetail,
                        isActive: isListening) {
+                #if DEBUG
+                // Diagnostic variants only; see `UITestSwitchAudit`.
+                UITestSwitchAudit.Slot(
+                    title: L10n.t(.nearbyA11yReceiving),
+                    identifier: "lan-receiving-switch",
+                    help: receivingAction,
+                    isOn: Binding(get: { receive.state != .paused && receive.state != .off },
+                                  set: { setReceiving($0) })) {
+                    receivingSwitch
+                }
+                .disabled(receive.state != .paused && receive.state != .off && sessionLocked)
+                #else
                 receivingSwitch
+                #endif
             }
             // The consent stays on the page rather than folding: a listening
             // Mac accepts a stranger's transfer without asking first, and a
@@ -250,10 +263,26 @@ struct LanConnectPane: View {
                     .padding(.horizontal, Metrics.caption)
             }
         }
+        #if DEBUG
+        .modifier(UITestSwitchAudit.GroupSemantics(label: L10n.t(.nearbyA11yReceiving)))
+        .environment(\.uiTestHoldsAuditedSwitch, true)
+        #else
         .accessibilityElement(children: .contain)
         .accessibilityLabel(L10n.t(.nearbyA11yReceiving))
+        #endif
         .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
     }
+
+    #if DEBUG
+    /// The receiving switch's hint, for the diagnostic variants only.
+    private var receivingAction: String {
+        switch receive.state {
+        case .paused: return L10n.t(.nearbyResumeReceiving)
+        case .connecting, .ready, .reconnecting, .active: return L10n.t(.nearbyPauseReceiving)
+        case .off: return L10n.t(.nearbyStartReceiving)
+        }
+    }
+    #endif
 
     /// The reference's one supporting line while listening; what pausing
     /// leaves working while not.

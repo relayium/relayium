@@ -77,8 +77,12 @@ struct SectionCard<Content: View, Accessory: View>: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        #if DEBUG
+        .modifier(UITestSwitchAudit.GroupSemantics(label: title))
+        #else
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
+        #endif
     }
 
     @ViewBuilder

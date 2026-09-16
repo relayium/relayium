@@ -792,15 +792,19 @@ final class DeviceInboxUITests: XCTestCase {
         func waiting(_ words: String) -> NSPredicate {
             NSPredicate(format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@", words, words)
         }
-        func size(_ words: String) -> XCUIElement {
-            window.descendants(matching: .any).matching(waiting(words)).firstMatch
+        /// The row's size line, asked of the window's static texts only. A
+        /// window-wide `.any` descendant query filtered by a text predicate timed
+        /// out on hosted macOS 15 before anything was pressed. The typed
+        /// collection is bounded, and its match is taken by index from that query
+        /// rather than re-narrowed with `.firstMatch`.
+        func size(_ words: String) -> XCUIElement? {
+            window.staticTexts.matching(waiting(words)).allElementsBoundByIndex.first
         }
         /// The size line sits in the same row as the answer control: their
         /// vertical centres are within one row of each other.
         func sameRow(_ control: XCUIElement, _ words: String) -> Bool {
-            let text = size(words)
-            return control.exists && text.exists
-                && abs(control.frame.midY - text.frame.midY) < 30
+            guard control.exists, let text = size(words) else { return false }
+            return abs(control.frame.midY - text.frame.midY) < 30
         }
         func settles(_ predicate: NSPredicate, on object: Any, within seconds: TimeInterval) -> Bool {
             XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: object)],
@@ -822,7 +826,7 @@ final class DeviceInboxUITests: XCTestCase {
             attachDiagnostics(named: "ask-decline-first-click")
             return XCTFail("Decline did not answer the 1.0 KB delivery on its first on-screen click")
         }
-        XCTAssertFalse(size("1.0 KB").exists, "the declined delivery is still listed")
+        XCTAssertNil(size("1.0 KB"), "the declined delivery is still listed")
         XCTAssertFalse(element("inbox-ask-decline-1", in: window).exists,
                        "a second answer row is still listed after one was declined")
         let acceptRemaining = element("inbox-ask-accept-0", in: window)
@@ -837,7 +841,7 @@ final class DeviceInboxUITests: XCTestCase {
         // still listed would return here.
         for _ in 0..<8 {
             RunLoop.current.run(until: Date().addingTimeInterval(1))
-            XCTAssertFalse(size("1.0 KB").exists, "the declined delivery came back")
+            XCTAssertNil(size("1.0 KB"), "the declined delivery came back")
             XCTAssertTrue(waiting("1 delivery waiting for your answer").evaluate(with: status),
                           "the waiting count changed after the decline was given")
         }
@@ -851,7 +855,7 @@ final class DeviceInboxUITests: XCTestCase {
         for _ in 0..<8 {
             RunLoop.current.run(until: Date().addingTimeInterval(1))
             XCTAssertFalse(askList.exists, "an answered delivery was listed again")
-            XCTAssertFalse(size("8.0 KB").exists, "the accepted delivery is still listed")
+            XCTAssertNil(size("8.0 KB"), "the accepted delivery is still listed")
         }
         XCTAssertFalse(waiting("waiting for your answer").evaluate(with: status),
                        "the status still counts a delivery waiting after both were answered")
