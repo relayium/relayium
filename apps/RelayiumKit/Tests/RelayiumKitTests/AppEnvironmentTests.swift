@@ -606,9 +606,7 @@ final class AppEnvironmentTests: XCTestCase {
     /// already per-bundle, so it is the isolation, not a weakening of it.
     func testPersistentDefaultsAreTheRunningBundlesOwnDomain() throws {
         XCTAssertTrue(AppEnvironment.persistentDefaults === UserDefaults.standard)
-        let source = try String(contentsOf: URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("Sources/RelayiumAppKit/AppEnvironment.swift"), encoding: .utf8)
+        let source = try RepoRoot.text("apps/RelayiumKit/Sources/RelayiumAppKit/AppEnvironment.swift")
         let factory = try XCTUnwrap(source.components(
             separatedBy: "public static var persistentDefaults: UserDefaults {").dropFirst().first?
             .components(separatedBy: "\n    }").first)
