@@ -74,6 +74,31 @@ final class SubscriptionUITests: XCTestCase {
             .allElementsBoundByIndex.first { $0.frame.midX < dividing } ?? stable
     }
 
+    /// **A `SectionCard` heading, found the way it is exposed rather than the way it is written.**
+    ///
+    /// The redesigned card caption is drawn with `.textCase(.uppercase)` and the
+    /// `.isHeader` trait. Root's macOS 27 runtime tree (engineering build 35,
+    /// `root-validation/ui-runtime/`) shows the profile caption as an `AXHeading`
+    /// whose words are `PERSON@EXAMPLE.COM`; the enclosing card is an `AXGroup`
+    /// whose description is the original `person@example.com`. The heading is
+    /// the text a person reads, the group is only its container, so only the
+    /// two element types a heading can have are asked — `staticTexts` on older
+    /// macOS, and `otherElements`, which is where an `AXHeading` role lands —
+    /// and never `groups`. The words must match exactly, case aside.
+    ///
+    /// Bounded and never by sleeping: every `exists` resolves a fresh snapshot.
+    /// A zero timeout is one sweep, which is what an absence check needs.
+    private func sectionHeadingExists(_ words: String, in window: XCUIElement,
+                                      timeout: TimeInterval = 0) -> Bool {
+        let match = NSPredicate(format: "label ==[c] %@ OR value ==[c] %@", words, words)
+        let queries = [window.staticTexts.matching(match), window.otherElements.matching(match)]
+        let deadline = Date(timeIntervalSinceNow: timeout)
+        repeat {
+            if queries.contains(where: { $0.firstMatch.exists }) { return true }
+        } while Date() < deadline
+        return false
+    }
+
     /// Launch signed in with the purchase surface injected, and land on Account.
     @discardableResult
     private func openAccount(_ extraArguments: [String] = []) -> XCUIElement {
@@ -98,7 +123,7 @@ final class SubscriptionUITests: XCTestCase {
         let account = sidebarAccount(in: window)
         XCTAssertTrue(account.waitForExistence(timeout: 10), "the account destination is unreachable")
         account.click()
-        XCTAssertTrue(window.staticTexts["person@example.com"].waitForExistence(timeout: 20),
+        XCTAssertTrue(sectionHeadingExists("person@example.com", in: window, timeout: 20),
                       "the signed-in account did not render")
         return window
     }
@@ -115,7 +140,7 @@ final class SubscriptionUITests: XCTestCase {
     func testTheServerCatalogAndTheStorePricesRenderAsPurchasableRows() {
         let window = openAccount()
 
-        XCTAssertTrue(window.staticTexts["Subscription"].waitForExistence(timeout: 20),
+        XCTAssertTrue(sectionHeadingExists("Subscription", in: window, timeout: 20),
                       "the purchase surface never appeared")
         let monthly = element("subscription-buy-uitest.subscription.month", in: window)
         XCTAssertTrue(monthly.waitForExistence(timeout: 20),
@@ -145,7 +170,7 @@ final class SubscriptionUITests: XCTestCase {
     /// moved elsewhere on the card still fails.
     func testAPurchasingBuildOffersNoWebPricingCallToAction() {
         let window = openAccount()
-        XCTAssertTrue(window.staticTexts["Subscription"].waitForExistence(timeout: 20))
+        XCTAssertTrue(sectionHeadingExists("Subscription", in: window, timeout: 20))
 
         XCTAssertEqual(window.buttons.matching(
             NSPredicate(format: "label == %@", "Manage plan")).count, 0,
@@ -164,7 +189,7 @@ final class SubscriptionUITests: XCTestCase {
     /// key, and are hittable.
     func testTheLegalLinksAreVisibleBesideThePurchase() {
         let window = openAccount()
-        XCTAssertTrue(window.staticTexts["Subscription"].waitForExistence(timeout: 20))
+        XCTAssertTrue(sectionHeadingExists("Subscription", in: window, timeout: 20))
 
         for identifier in ["subscription-privacy", "subscription-terms"] {
             let link = element(identifier, in: window)

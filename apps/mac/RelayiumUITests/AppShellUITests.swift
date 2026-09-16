@@ -213,6 +213,45 @@ final class AppShellUITests: XCTestCase {
         return stable
     }
 
+    /// DIAGNOSTIC: keep a screenshot and the full accessibility hierarchy of the
+    /// running app in the result bundle, under a name that says what was being
+    /// looked at. Evidence only — it asserts nothing and changes no outcome.
+    private func attachDiagnostics(named name: String) {
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "\(name)-screenshot"
+        shot.lifetime = .keepAlways
+        add(shot)
+        let tree = XCTAttachment(string: app.debugDescription)
+        tree.name = "\(name)-hierarchy"
+        tree.lifetime = .keepAlways
+        add(tree)
+    }
+
+    /// **A `SectionCard` heading, found the way it is exposed rather than the way it is written.**
+    ///
+    /// The redesigned card caption is drawn with `.textCase(.uppercase)` and the
+    /// `.isHeader` trait. Root's macOS 27 runtime tree (engineering build 35,
+    /// `root-validation/ui-runtime/`) shows the profile caption as an `AXHeading`
+    /// whose words are `PERSON@EXAMPLE.COM`; the enclosing card is an `AXGroup`
+    /// whose description is the original `person@example.com`. The heading is
+    /// the text a person reads, the group is only its container, so only the
+    /// two element types a heading can have are asked — `staticTexts` on older
+    /// macOS, and `otherElements`, which is where an `AXHeading` role lands —
+    /// and never `groups`. The words must match exactly, case aside.
+    ///
+    /// Bounded and never by sleeping: every `exists` resolves a fresh snapshot.
+    /// A zero timeout is one sweep, which is what an absence check needs.
+    private func sectionHeadingExists(_ words: String, in window: XCUIElement,
+                                      timeout: TimeInterval = 0) -> Bool {
+        let match = NSPredicate(format: "label ==[c] %@ OR value ==[c] %@", words, words)
+        let queries = [window.staticTexts.matching(match), window.otherElements.matching(match)]
+        let deadline = Date(timeIntervalSinceNow: timeout)
+        repeat {
+            if queries.contains(where: { $0.firstMatch.exists }) { return true }
+        } while Date() < deadline
+        return false
+    }
+
     /// macOS 15 frequently drops SwiftUI's accessibility identifier from a
     /// combined Text while retaining its visible value. Prefer the stable id,
     /// then fall back to the exact English copy this runtime suite launches.
@@ -761,7 +800,12 @@ final class AppShellUITests: XCTestCase {
             .firstMatch
         XCTAssertTrue(generatedCode.waitForExistence(timeout: 10),
                       "the generated pairing code was not visible")
-        XCTAssertEqual(generatedCode.label, "4 8 3 9 2 0",
+        // The tiles are one static-text element, and macOS reports a static
+        // text's words as its value with an empty label. Read whichever carries
+        // them; the digit-by-digit wording itself is unchanged.
+        let spoken = [generatedCode.label, generatedCode.value as? String ?? ""]
+            .first { !$0.isEmpty } ?? ""
+        XCTAssertEqual(spoken, "4 8 3 9 2 0",
                        "VoiceOver no longer reads the pairing code digit by digit")
         // The QR and join link are folded behind one labelled disclosure so
         // the code's hero stays compact. Folded first; opened, every handoff
@@ -1306,9 +1350,9 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(account.waitForExistence(timeout: 10))
         account.click()
 
-        XCTAssertTrue(window.staticTexts["person@example.com"].waitForExistence(timeout: 20),
+        XCTAssertTrue(sectionHeadingExists("person@example.com", in: window, timeout: 20),
                       "a signed-in launch did not render the account it holds")
-        XCTAssertTrue(window.staticTexts["Signed-in devices"].exists,
+        XCTAssertTrue(sectionHeadingExists("Signed-in devices", in: window),
                       "the signed-in account has no device section")
 
         XCTAssertTrue(window.staticTexts["Studio Mac"].waitForExistence(timeout: 10),
@@ -1473,7 +1517,7 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(account.waitForExistence(timeout: 10))
         account.click()
 
-        XCTAssertTrue(window.staticTexts["person@example.com"].waitForExistence(timeout: 20),
+        XCTAssertTrue(sectionHeadingExists("person@example.com", in: window, timeout: 20),
                       "the signed-in launch did not render the account it holds")
         let signOut = window.buttons["Sign out"]
         XCTAssertTrue(signOut.waitForExistence(timeout: 10),
@@ -1489,7 +1533,7 @@ final class AppShellUITests: XCTestCase {
         // assertion that cannot fail is worse than none, because it reads as
         // coverage. Whether the model drops the account is
         // `AccountSignOutCoordinatorTests`' subject, driven directly.
-        XCTAssertFalse(window.staticTexts["person@example.com"].exists,
+        XCTAssertFalse(sectionHeadingExists("person@example.com", in: window),
                        "signing out left the account address on screen")
 
         let send = sidebarDestination("Share a link", in: window)
@@ -1665,9 +1709,9 @@ final class AppShellUITests: XCTestCase {
                        "the completed form cannot be submitted")
         signIn.click()
 
-        XCTAssertTrue(window.staticTexts["person@example.com"].waitForExistence(timeout: 20),
+        XCTAssertTrue(sectionHeadingExists("person@example.com", in: window, timeout: 20),
                       "signing in did not open the account")
-        XCTAssertTrue(window.staticTexts["Signed-in devices"].exists,
+        XCTAssertTrue(sectionHeadingExists("Signed-in devices", in: window),
                       "the opened account has no device section")
         XCTAssertFalse(window.staticTexts["Welcome back"].exists,
                        "the sign-in form survived a successful sign-in")
@@ -2056,7 +2100,9 @@ final class AppShellUITests: XCTestCase {
             let row = window.descendants(matching: .any)["sidebar-lanTransfer"].firstMatch
             XCTAssertTrue(row.waitForExistence(timeout: 10),
                           "\(code) produced a window with no LAN Transfer destination")
-            let shown = (row.value as? String) ?? row.label
+            // The row is a Button: its words are its label, and its value is an
+            // empty STRING rather than nil, so `value ?? label` never fell back.
+            let shown = [row.label, row.value as? String ?? ""].first { !$0.isEmpty } ?? ""
             XCTAssertEqual(shown, lanTransfer,
                            "\(code) rendered a shell that is not in \(code)")
         }
@@ -2097,7 +2143,7 @@ final class AppShellUITests: XCTestCase {
                           "the \(code) window has no LAN Transfer destination")
 
             // English words, not the archived translation and not a raw key.
-            let shown = (row.value as? String) ?? row.label
+            let shown = [row.label, row.value as? String ?? ""].first { !$0.isEmpty } ?? ""
             XCTAssertEqual(shown, "LAN Transfer",
                            "a \(code) launch did not render the English shell")
             XCTAssertFalse(shown.hasPrefix("nav."),
@@ -2224,7 +2270,7 @@ final class AppShellUITests: XCTestCase {
         password.typeText("correct horse battery")
         app.typeKey(.return, modifierFlags: [])
 
-        XCTAssertTrue(window.staticTexts["person@example.com"].waitForExistence(timeout: 20),
+        XCTAssertTrue(sectionHeadingExists("person@example.com", in: window, timeout: 20),
                       "Return in the sign-in form did not submit it")
     }
 
@@ -2250,6 +2296,13 @@ final class AppShellUITests: XCTestCase {
         create.click()
         XCTAssertTrue(window.descendants(matching: .any)["pairing-code-value"]
             .firstMatch.waitForExistence(timeout: 20))
+
+        // Share lives behind the pairing handoff disclosure, folded by default,
+        // exactly as a person meets it; open it first.
+        let shareToggle = window.descendants(matching: .any)["pairing-share-toggle"].firstMatch
+        XCTAssertTrue(shareToggle.waitForExistence(timeout: 10),
+                      "the generated code has no way to share its link")
+        shareToggle.click()
 
         let share = window.buttons["Share"]
         XCTAssertTrue(share.waitForExistence(timeout: 10),
@@ -2408,12 +2461,35 @@ final class AppShellUITests: XCTestCase {
             // framework's own report is "Element has no description", which is
             // true and unactionable.
             let bounds = window.frame
-            try app.performAccessibilityAudit(for: Self.auditedTypes) { issue in
-                if Self.frameworkOwnedContainer(issue.element,
-                                                in: bounds,
-                                                around: headers) != nil { return true }
-                found.append(Self.describe(issue, on: destination, against: headers))
-                return true
+            // DIAGNOSTIC (UI CI run 35105452536, Parent/Child mismatch with no
+            // element identity): each destination is audited TWICE — at once, and
+            // again after the page has had two seconds to settle. Both passes
+            // count; nothing is excluded or forgiven. What the second pass adds
+            // is the discriminator the stored snapshots could not give: a finding
+            // present only in the first pass is render churn at navigation time
+            // (a view re-created under the audit), one present in both is a
+            // stable structure in the product's tree. Every finding also carries
+            // XCTest's detailed description and the element's own debug
+            // description, and a destination with findings attaches its
+            // screenshot and full hierarchy, taken at the moment of the audit.
+            for pass in ["immediate", "settled"] {
+                if pass == "settled" {
+                    // A bounded two-second settle: an expectation nothing fulfils.
+                    _ = XCTWaiter.wait(for: [XCTestExpectation(description: "settle")], timeout: 2)
+                }
+                let before = found.count
+                let auditedTitle = window.title
+                try app.performAccessibilityAudit(for: Self.auditedTypes) { issue in
+                    if Self.frameworkOwnedContainer(issue.element,
+                                                    in: bounds,
+                                                    around: headers) != nil { return true }
+                    found.append(Self.describe(issue, on: destination, against: headers)
+                                 + " {pass=\(pass) auditedWindowTitle=\(auditedTitle)}")
+                    return true
+                }
+                if found.count > before {
+                    attachDiagnostics(named: "audit-\(destination)-\(pass)")
+                }
             }
         }
 
@@ -2736,6 +2812,10 @@ final class AppShellUITests: XCTestCase {
             + "type=\(Self.name(for: element?.elementType)) "
             + "id=\(element?.identifier ?? "") "
             + "label=\(element?.label ?? "") frame=\(frame) [\(owner)]"
+            // DIAGNOSTIC: what XCTest itself knows about the issue and element.
+            + " auditType=\(issue.auditType.rawValue)"
+            + " detailed=\(issue.detailedDescription)"
+            + " element=\(element.map { String(describing: $0.debugDescription) } ?? "nil")"
     }
 
     /// `XCUIElement.ElementType` prints as a bare number, and a number in a

@@ -146,6 +146,128 @@ final class DeviceInboxUITests: XCTestCase {
         return found
     }
 
+    /// **Press a control the way a person does: brought on screen first.**
+    ///
+    /// A macOS XCUITest click synthesizes an event at the element's frame and does
+    /// not scroll an `NSScrollView` to it, so a control that is merely present in
+    /// the tree is not proof that anybody could press it. The control is walked
+    /// into view, asserted drawn inside the window and hittable, and only then
+    /// clicked — reachability is an assertion rather than an assumption. This is
+    /// a generic precondition, not an explanation of any particular failure.
+    private func pressOnScreen(_ control: XCUIElement, _ name: String,
+                               in window: XCUIElement,
+                               file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(control.exists, "\(name) is not on the destination at all",
+                      file: file, line: line)
+        XCTAssertTrue(scrollToReveal(control, in: window),
+                      "\(name) cannot be brought on screen", file: file, line: line)
+        assertOnScreen(control, name, in: window, file: file, line: line)
+        control.click()
+    }
+
+    /// The device page is up: its own way back is on screen. Asserted after every
+    /// open so a click that landed nowhere fails HERE, naming the navigation,
+    /// rather than as a missing section further down.
+    ///
+    /// **DIAGNOSTIC, and red whatever it finds.** Hosted macOS 15 (UI CI run
+    /// 35105452536) recorded the click squarely on the visible Open button and
+    /// the list staying put; a real mouse on macOS 27 opens the page. When the
+    /// first click does not navigate, this runs ONE ordered set of counterfactual
+    /// presses on the same control, recording after each whether the page opened
+    /// and attaching a screenshot and the full hierarchy, and then FAILS with that
+    /// trail. None of it can turn the test green: the outcome is `XCTFail` on every
+    /// path that reaches it. What the trail discriminates:
+    ///
+    ///  1. the same click again — first-event/activation effects;
+    ///  2. hover, a settle, then click — the reference button style re-renders on
+    ///     hover, so a press cancelled by that re-render opens here, and the
+    ///     screenshot shows whether the hover fill reached the button at all;
+    ///  3. a 0.4 s press — a press recognizer that a quick synthetic click races;
+    ///  4. away to LAN Transfer and back — and the page checked BEFORE any second
+    ///     Open lookup or click. A page present then means the earlier press DID
+    ///     focus the peer and the surface only failed to refresh; only if it is
+    ///     absent is the rebuilt Open clicked.
+    ///
+    /// If none of them opens the page, the press reaches the button and the page
+    /// still does not render: the next step is product-side (focus state or the
+    /// page's presentation), not the test.
+    private func requireDevicePageOpened(after control: XCUIElement, in window: XCUIElement,
+                                         file: StaticString = #filePath, line: UInt = #line) {
+        if revealed("inbox-send-back", in: window, timeout: 20).exists { return }
+
+        var trail: [String] = []
+        func opened(_ timeout: TimeInterval) -> Bool {
+            element("inbox-send-back", in: window).waitForExistence(timeout: timeout)
+        }
+        func state(_ element: XCUIElement) -> String {
+            "exists=\(element.exists) hittable=\(element.exists && element.isHittable) "
+                + "enabled=\(element.exists && element.isEnabled) frame=\(element.frame)"
+        }
+        func settle(_ seconds: TimeInterval) {
+            _ = XCTWaiter.wait(for: [XCTestExpectation(description: "settle")], timeout: seconds)
+        }
+        trail.append("first click: not opened after 20s; control \(state(control)); "
+                     + "window \(window.frame); app state \(app.state.rawValue)")
+        attachDiagnostics(named: "open-0-first-click")
+
+        var outcome = "none opened"
+        repeat {
+            if control.exists { control.click() }
+            if opened(5) { outcome = "step 1 (repeat click) opened"; break }
+            trail.append("step 1 repeat click: not opened; control \(state(control))")
+            attachDiagnostics(named: "open-1-repeat-click")
+
+            if control.exists { control.hover() }
+            settle(1.5)
+            attachDiagnostics(named: "open-2-hovered")
+            if control.exists { control.click() }
+            if opened(5) { outcome = "step 2 (hover, settle, click) opened"; break }
+            trail.append("step 2 hover+settle+click: not opened; control \(state(control))")
+
+            if control.exists { control.press(forDuration: 0.4) }
+            if opened(5) { outcome = "step 3 (0.4s press) opened"; break }
+            trail.append("step 3 press 0.4s: not opened; control \(state(control))")
+            attachDiagnostics(named: "open-3-press")
+
+            sidebarRow("lanTransfer", named: "LAN Transfer", in: window).click()
+            _ = element("destination-lanTransfer", in: window).waitForExistence(timeout: 20)
+            sidebarDeviceInbox(in: window).click()
+            _ = element("destination-deviceInbox", in: window).waitForExistence(timeout: 20)
+            attachDiagnostics(named: "open-4-rebuilt-before-click")
+            // Checked before anything else is looked up or pressed: a page here was
+            // opened by an EARLIER press whose focus persisted while the surface did
+            // not redraw, which a click on the rebuilt Open would hide.
+            if opened(5) {
+                outcome = "navigation rebuild revealed already focused peer WITHOUT another Open click"
+                break
+            }
+            trail.append("step 4 rebuild alone: not opened")
+            let rebuilt = revealed("inbox-conversation-open", in: window, timeout: 30)
+            trail.append("step 4 rebuilt destination: control \(state(rebuilt))")
+            if rebuilt.exists { rebuilt.click() }
+            if opened(5) { outcome = "step 4 (rebuilt destination, click) opened"; break }
+            trail.append("step 4 click: not opened")
+        } while false
+        attachDiagnostics(named: "open-final")
+        XCTFail("opening the conversation did not open its device page on the first on-screen "
+                + "click — DIAGNOSTIC outcome: \(outcome); trail: "
+                + trail.joined(separator: " | "), file: file, line: line)
+    }
+
+    /// DIAGNOSTIC: keep a screenshot and the full accessibility hierarchy in the
+    /// result bundle under a name that says what was being looked at. Evidence
+    /// only — it asserts nothing and changes no outcome.
+    private func attachDiagnostics(named name: String) {
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "\(name)-screenshot"
+        shot.lifetime = .keepAlways
+        add(shot)
+        let tree = XCTAttachment(string: app.debugDescription)
+        tree.name = "\(name)-hierarchy"
+        tree.lifetime = .keepAlways
+        add(tree)
+    }
+
     /// Scroll the destination's own scroll view down by a third of a window.
     ///
     /// **Two things here were measured rather than assumed, and both had to
@@ -756,7 +878,8 @@ final class DeviceInboxUITests: XCTestCase {
                       "the sender conversation does not summarize the committed files")
         XCTAssertTrue(home.contains("1 unread"),
                       "the newly committed delivery is not marked unread")
-        openConversation.click()
+        pressOnScreen(openConversation, "the conversation's Open action", in: window)
+        requireDevicePageOpened(after: openConversation, in: window)
 
         let conversationReveal = element("inbox-conversation-reveal", in: window)
         XCTAssertTrue(conversationReveal.waitForExistence(timeout: 20),
@@ -787,7 +910,8 @@ final class DeviceInboxUITests: XCTestCase {
         let window = openDeviceInboxDestination()
         let openConversation = revealed("inbox-conversation-open", in: window, timeout: 60)
         XCTAssertTrue(openConversation.exists, "no conversation was rendered")
-        openConversation.click()
+        pressOnScreen(openConversation, "the conversation's Open action", in: window)
+        requireDevicePageOpened(after: openConversation, in: window)
 
         // The history half.
         XCTAssertTrue(revealed("inbox-timeline", in: window, timeout: 20).exists,
@@ -824,12 +948,14 @@ final class DeviceInboxUITests: XCTestCase {
     func testDeletingOneItemIsConfirmedSaysItIsLocalAndCanBeRefused() {
         launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-result"])
         let window = openDeviceInboxDestination()
-        revealed("inbox-conversation-open", in: window, timeout: 60).click()
+        let openConversation = revealed("inbox-conversation-open", in: window, timeout: 60)
+        pressOnScreen(openConversation, "the conversation's Open action", in: window)
+        requireDevicePageOpened(after: openConversation, in: window)
         XCTAssertTrue(revealed("inbox-timeline", in: window, timeout: 20).exists)
 
         let menu = revealed("inbox-entry-menu", in: window, timeout: 20)
         XCTAssertTrue(menu.exists, "the timeline row has no visible command menu")
-        menu.click()
+        pressOnScreen(menu, "the timeline row's command menu", in: window)
         let delete = app.descendants(matching: .any)["inbox-entry-delete"].firstMatch
         XCTAssertTrue(delete.waitForExistence(timeout: 10),
                       "the row menu offers no Delete")
@@ -878,7 +1004,8 @@ final class DeviceInboxUITests: XCTestCase {
         // proved: the list is back, the row is gone, the page it sat on is
         // gone, and the conversation it was the last item of is no longer
         // offered — deletion, not a redraw that merely hid it.
-        revealed("inbox-entry-menu", in: window, timeout: 20).click()
+        pressOnScreen(revealed("inbox-entry-menu", in: window, timeout: 20),
+                      "the timeline row's command menu", in: window)
         app.descendants(matching: .any)["inbox-entry-delete"].firstMatch.click()
         let second = app.descendants(matching: .any)["inbox-entry-delete-confirm"].firstMatch
         XCTAssertTrue(second.waitForExistence(timeout: 10))
@@ -1397,7 +1524,7 @@ final class DeviceInboxUITests: XCTestCase {
     /// `sidebarDeviceInbox` uses and for the same macOS 15 reason.
     private func sidebarRow(_ surface: String, named label: String,
                             in window: XCUIElement) -> XCUIElement {
-        let stable = element("sidebar\(surface)", in: window)
+        let stable = element("sidebar-\(surface)", in: window)
         if stable.exists { return stable }
         let dividing = window.frame.midX
         let visible = NSPredicate(format: "label == %@ OR value == %@", label, label)
