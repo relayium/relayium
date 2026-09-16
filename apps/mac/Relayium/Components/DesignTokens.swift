@@ -62,8 +62,6 @@ enum Metrics {
     static let sidebarRowHeight: CGFloat = 28
     static let sidebarRowCorner: CGFloat = 7
     static let sidebarInset: CGFloat = 10
-    /// The search field above the rows.
-    static let searchHeight: CGFloat = 24
     /// The detail column's unified toolbar.
     static let toolbarHeight: CGFloat = 44
     /// The space the window's traffic lights take when the sidebar is hidden

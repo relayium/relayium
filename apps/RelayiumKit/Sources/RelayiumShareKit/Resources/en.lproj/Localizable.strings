@@ -1054,10 +1054,6 @@
 /* macOS reference shell (2026-09-16) */
 "nav.hideSidebar" = "Hide Sidebar";
 "nav.showSidebar" = "Show Sidebar";
-"nav.searchPlaceholder" = "Search";
-"nav.searchLabel" = "Search destinations";
-"nav.searchClear" = "Clear search";
-"nav.searchNoResults" = "No matching destinations";
 "nav.crossNetworkShort" = "Cross-network";
 "nav.lanTransferTagline" = "Same network · no account";
 "nav.crossNetworkTagline" = "Anywhere · six-digit code";

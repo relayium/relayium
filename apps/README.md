@@ -250,9 +250,9 @@ File ▸ New Window. Minimum window: **860×560**.
 Its content follows the owner's reference design. The shell is a flat split, not a
 `NavigationSplitView`: a 216 pt sidebar, then a hairline, then the detail column,
 with the content running under a transparent title bar. **⌃⌘S**, or the button
-beside the window controls, hides and shows the sidebar. The sidebar opens with a
-working search field that filters rows by their title and purpose sentence,
-followed by three sections of compact rows naming five destinations. Each row shows the destination's
+beside the window controls, hides and shows the sidebar. The sidebar has no
+search field — since the private 1.4.0 (35) preview it shows three sections of
+compact rows naming five destinations directly. Each row shows the destination's
 name and symbol, plus a badge while that destination owns a running session. The
 purpose sentence is the row's `.help` tooltip and its accessibility hint, not a
 printed second line:

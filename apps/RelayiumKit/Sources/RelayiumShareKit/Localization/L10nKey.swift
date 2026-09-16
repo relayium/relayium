@@ -2332,10 +2332,6 @@ public enum L10nKey: String, CaseIterable, Sendable {
     // MARK: macOS reference shell (2026-09-16)
     case navHideSidebar = "nav.hideSidebar"
     case navShowSidebar = "nav.showSidebar"
-    case navSearchPlaceholder = "nav.searchPlaceholder"
-    case navSearchLabel = "nav.searchLabel"
-    case navSearchClear = "nav.searchClear"
-    case navSearchNoResults = "nav.searchNoResults"
     case navCrossNetworkShort = "nav.crossNetworkShort"
     case navLanTransferTagline = "nav.lanTransferTagline"
     case navCrossNetworkTagline = "nav.crossNetworkTagline"

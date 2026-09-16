@@ -1,7 +1,7 @@
 import SwiftUI
 import RelayiumAppKit
 
-/// Five rows, all visible at once, in three sections, under a destination search.
+/// Five rows, all visible at once, in three sections.
 ///
 /// **The sidebar names the destinations; the screen it opens explains the one
 /// you are on.** For one round it did both: every row printed its full
@@ -72,13 +72,10 @@ struct SidebarView: View {
     /// says nothing at all under a colour filter or in Increase Contrast.
     private let liveSessionSymbol = "arrow.left.arrow.right.circle.fill"
 
-    /// The destination filter. View state only: what somebody typed to find a
-    /// row is not remembered, stored or sent anywhere.
-    @State private var query = ""
     @State private var hovered: MacSurface?
     @Environment(\.shellChrome) private var chrome
 
-    /// One row of the sidebar: which surface, and the words it is found by.
+    /// One row of the sidebar: which surface, its title and its purpose sentence.
     private struct Entry: Identifiable {
         let surface: MacSurface
         let title: String
@@ -122,40 +119,12 @@ struct SidebarView: View {
         ]
     }
 
-    /// **Search is real.** It matches the localized row title and the row's own
-    /// purpose sentence, ignoring case and diacritics, and a section with no
-    /// match disappears with its heading. An empty query shows everything.
-    private var visibleGroups: [SidebarSection] {
-        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty else { return groups }
-        return groups.compactMap { group in
-            let matches = group.entries.filter {
-                $0.title.localizedStandardContains(needle)
-                    || $0.subtitle.localizedStandardContains(needle)
-            }
-            return matches.isEmpty ? nil : SidebarSection(header: group.header, entries: matches)
-        }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             controlRow
-            searchField
-                .padding(.horizontal, 12)
-                .padding(.bottom, Metrics.tight)
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
-                    let shown = visibleGroups
-                    if shown.isEmpty {
-                        Text(L10n.t(.navSearchNoResults))
-                            .font(.callout)
-                            .foregroundStyle(Palette.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.horizontal, 20)
-                            .padding(.top, Metrics.tight)
-                            .accessibilityIdentifier("sidebar-search-empty")
-                    }
-                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, group in
+                    ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
                         sectionHeader(group.header)
                             .padding(.top, index == 0 ? 6 : 12)
                         VStack(alignment: .leading, spacing: 2) {
@@ -184,43 +153,6 @@ struct SidebarView: View {
         }
         .frame(height: height)
         .background(WindowDragArea())
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .font(.subheadline)
-                .foregroundStyle(Palette.textTertiary)
-                .accessibilityHidden(true)
-            TextField(L10n.t(.navSearchPlaceholder), text: $query)
-                .textFieldStyle(.plain)
-                .font(.callout)
-                // Return opens the first match, so search is a way to get
-                // somewhere rather than only a way to hide rows.
-                .onSubmit {
-                    if let first = visibleGroups.first?.entries.first {
-                        navigation.select(first.surface.route)
-                    }
-                }
-                .accessibilityLabel(L10n.t(.navSearchLabel))
-                .accessibilityIdentifier("sidebar-search")
-            if !query.isEmpty {
-                Button {
-                    query = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.subheadline)
-                        .foregroundStyle(Palette.textTertiary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(L10n.t(.navSearchClear))
-                .accessibilityIdentifier("sidebar-search-clear")
-            }
-        }
-        .padding(.horizontal, 8)
-        .frame(minHeight: Metrics.searchHeight)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Palette.field))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Palette.cardBorder, lineWidth: 1))
     }
 
     /// Each section heading is a real heading element with a stable identity,

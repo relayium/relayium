@@ -60,6 +60,10 @@ final class BundleVersionTests: XCTestCase {
         // release of the same app through two channels, and a user who installs
         // one after the other must not see the version go backwards.
         //
+        // `1.4.0 (35)`: the preview that removes the sidebar's destination
+        // search. `1.3.14 (34)` was the private Device Inbox check-now preview,
+        // so this candidate takes the next build and its own marketing version.
+        //
         // `1.3.14 (34)`: the Device Inbox check-now preview. `1.3.13 (33)` was
         // the private all-surface alignment preview, so this candidate takes the
         // next build and its own marketing version.
@@ -84,8 +88,8 @@ final class BundleVersionTests: XCTestCase {
         // approved and awaiting release on the App Store — so a candidate that
         // carries the newer cross-platform navigation work cannot reuse that
         // number without making the version string stop identifying a build.
-        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.3.14", occurrences: 10)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "34", occurrences: 10)
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.0", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "35", occurrences: 10)
     }
 
     /// iOS: the app and its Share extension, both Debug and Release.

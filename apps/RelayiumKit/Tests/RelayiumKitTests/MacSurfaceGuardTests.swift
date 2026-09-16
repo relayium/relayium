@@ -3209,16 +3209,14 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(occurrences(of: "subtitle: L10n.t(", in: sidebar),
                        MacSurface.browseable.count,
                        "a sidebar row lost the sentence its hint and tooltip are made of")
-        // **Search is real, and it finds rows by the words they are known by.**
-        // It filters on the localized title and the row's own sentence, drops
-        // a section with nothing left, says so when nothing matches, and Return
-        // goes to the first match through the one selection path.
-        for real in ["$0.title.localizedStandardContains(needle)",
-                     "$0.subtitle.localizedStandardContains(needle)",
-                     "L10n.t(.navSearchNoResults)",
-                     "navigation.select(first.surface.route)",
-                     ".accessibilityIdentifier(\"sidebar-search\")"] {
-            XCTAssertTrue(sidebar.contains(real), "the sidebar search is decorative: \(real)")
+        // **There is no destination search.** The owner removed it for 1.4.0:
+        // five rows in three sections need no filter, so every group renders
+        // directly and nothing can hide a row or its heading.
+        XCTAssertTrue(sidebar.contains("ForEach(Array(groups.enumerated())"),
+                      "the sidebar no longer renders every group directly")
+        for gone in ["TextField(", "@State private var query", "visibleGroups",
+                     "localizedStandardContains", "sidebar-search"] {
+            XCTAssertFalse(sidebar.contains(gone), "the sidebar search came back: \(gone)")
         }
         // Each destination's toolbar carries a short subtitle; the long sentence
         // stays on the row's tooltip and hint above rather than being repeated.

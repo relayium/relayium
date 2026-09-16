@@ -1034,10 +1034,6 @@
 /* macOS reference shell (2026-09-16) */
 "nav.hideSidebar" = "隐藏边栏";
 "nav.showSidebar" = "显示边栏";
-"nav.searchPlaceholder" = "搜索";
-"nav.searchLabel" = "搜索功能页";
-"nav.searchClear" = "清除搜索";
-"nav.searchNoResults" = "没有匹配的功能页";
 "nav.crossNetworkShort" = "跨网络";
 "nav.lanTransferTagline" = "同一网络 · 无需账户";
 "nav.crossNetworkTagline" = "任意网络 · 六位配对码";
