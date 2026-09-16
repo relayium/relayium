@@ -149,7 +149,13 @@ describe("cross-network keeps its own hierarchy", () => {
     const h1s = [...page.querySelectorAll("h1")];
     expect(h1s).toHaveLength(1);
     expect(h1s[0].textContent!.trim()).toBe(messages.en.crossTitle);
-    expect(page.querySelector(".ui-page-head .tagline")!.textContent).toBe(messages.en.tagline);
+    // Two lines under the name, in this order. `crossSubtitle` is the page's
+    // own answer to "what is this" and takes the lede slot; the encryption
+    // promise follows as the secondary line. It is asserted to still BE on the
+    // first screen rather than folded into the disclosure — losing it there is
+    // the failure mode of adding a subtitle above it.
+    expect(page.querySelector(".ui-page-head .tagline")!.textContent).toBe(messages.en.crossSubtitle);
+    expect(page.querySelector(".ui-page-head .pitch")!.textContent).toBe(messages.en.tagline);
   });
 
   it("still renders its roster heading as an h2 under that title", () => {

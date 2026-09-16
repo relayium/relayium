@@ -201,6 +201,10 @@ describe("localized ephemeral-text retention boundaries", () => {
       for (const field of [
         messages.nav.crossTab,
         messages.crossTitle,
+        // The first-screen subtitle. New copy on the most-read surface this
+        // destination has, and it talks about networks — exactly where the
+        // "direct" claim kept coming back.
+        messages.crossSubtitle,
         messages.compare.sub,
         messages.compare.colRealtime,
         messages.faq.items[2].a,

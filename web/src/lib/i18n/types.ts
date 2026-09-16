@@ -161,7 +161,7 @@ export interface Messages {
   peersTitle: string;
   crossPeersTitle: string; // heading for the single connected peer on the cross-network page
   emptyPeers: string;
-  emptyCrossCta: string; // LAN empty-state escape hatch → the pairing destination
+  emptyCrossCta: string; // LAN empty-state escape hatch → cross-network transfer
   dragSendOne: (name: string) => string;
   dragSendMany: string;
   pickHint: (max: number) => string;
@@ -869,9 +869,17 @@ export interface Messages {
     scanning: string;
     notScanning: string;
   };
-  // Full page headings for the cross/offline pages. The nav.*Tab strings are the
-  // short pill labels; these are the descriptive <h1> titles.
+  // Full page headings for the cross/offline pages. `shell.*Short` carries the
+  // compact label; these are the descriptive <h1> titles.
   crossTitle: string;
+  /** The <h1>'s one-line answer to "what is this page". It has to say the three
+   *  things a person needs before they read any control: both devices are
+   *  present at the same time, they are joined by a pairing code, and they do
+   *  not have to share a network. The last one is a CAPABILITY, not a
+   *  restriction — this destination also works with both devices on one
+   *  network, and copy that says "only across networks" is wrong. The pairing
+   *  code stays what it is here: the operation, not the product's name. */
+  crossSubtitle: string;
   offlineTitle: string;
   cli: { subtitle: string };
   cliCallout: { heading: string; blurb: string; cta: string };

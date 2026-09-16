@@ -59,10 +59,23 @@
        They are still here, verbatim, inside the disclosure — the reference's §5
        rule is that an explanation which does not fit on one line folds away by
        default, not that it disappears. What does NOT fold: who needs an account,
-       who does not, and what the relay can and cannot read. -->
+       who does not, and what the relay can and cannot read.
+
+       Under the <h1>, `crossSubtitle` answers "what IS this page" before any
+       control does. The name says WHERE you are; the subtitle says what the
+       destination requires — both devices present at once, joined by a pairing
+       code — and what it does NOT require, a shared network. That last one is a
+       capability and must not be written as a restriction: this destination
+       also works with both devices on one network.
+
+       `tagline`, the encryption promise, follows as the secondary line rather
+       than being demoted into the disclosure. It is the standing claim the
+       product is sold on, and a folded `crossPitch` is not somewhere a reader
+       should have to open to find it. -->
   <header class="ui-page-head">
     <h1>{t.crossTitle}</h1>
-    <p class="tagline">{t.tagline}</p>
+    <p class="tagline">{t.crossSubtitle}</p>
+    <p class="pitch">{t.tagline}</p>
   </header>
 
   <div class="cards">
@@ -129,6 +142,16 @@
        break opportunity only where it is needed. */
     .crosspage { overflow-wrap: anywhere; }
   }
+
+  /* The shell's left-aligned header resets `.tagline`'s centring
+     (app.css `.appshell.shell .ui-page-head .tagline`) but has no `.pitch`
+     counterpart — that selector had no user until this page gained one. Left to
+     the global rule, the 52ch privacy line centres itself under a left-aligned
+     <h1> and subtitle and reads as a stray element. Its LEFT edge belongs on
+     theirs. Scoped here, not added to app.css: this is the only `.pitch` inside
+     a shell header, and the centred form is still correct on the pages that use
+     `.ui-page-head` outside the shell. */
+  .ui-page-head .pitch { margin-inline: 0; }
 
   .cards { display: flex; flex-direction: column; gap: var(--space-4); max-inline-size: 720px; margin-inline: auto; }
 

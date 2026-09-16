@@ -20,7 +20,7 @@ const LINKS = [
   // stale URL is most likely to be followed — while the labels say what the app
   // says, so a reader who clicks through does not arrive at a differently named
   // screen. The path's old vocabulary is not a reason to keep printing it.
-  ["/cross-network", "Pairing transfer — a 6-digit code, across networks"],
+  ["/cross-network", "Cross-network transfer — both online, joined by a 6-digit code"],
   ["/offline-transfer", "Share a link — encrypted download links"],
   ["/device-inbox", "Device Inbox — send to your own computer or server"],
   ["/apps", "Apps: web, CLI, macOS, iOS"],
