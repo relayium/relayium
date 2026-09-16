@@ -27,15 +27,12 @@ struct StoredReceiveDestination: View {
     @EnvironmentObject private var model: CloudDownloadModel
 
     var body: some View {
-        // No `purpose:`, and the one header in the app that still prints its
-        // destination's name. Both follow from the same fact: this is the one
-        // destination with no sidebar row. There is no compact sentence of its
-        // own to have moved here — the pane below states what an opened link is
-        // and what to do with it — and nothing else in the window names the
-        // screen, so `DetailHeader` does. `MacSurface.isBrowseable` is where
-        // that is decided; this file does not restate it.
+        // The one destination with no sidebar row. The toolbar names it like
+        // every other screen, so arriving here from a link still says where
+        // the user is.
         DestinationScaffold(title: L10n.t(.navStoredReceive),
-                            surface: .storedReceive) {
+                            surface: .storedReceive,
+                            subtitle: L10n.t(.navStoredReceiveTagline)) {
             SectionCard(title: L10n.t(.downloadHeading)) {
                 DownloadPane(model: model)
             }

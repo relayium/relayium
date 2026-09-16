@@ -1,33 +1,20 @@
 import RelayiumAppKit
 import SwiftUI
 
-/// **Origin → encrypted middle → destination, drawn once and true everywhere.**
+/// The route a transfer takes, drawn as the three places it passes through.
 ///
-/// The one shared visual signature these screens have. It is also the easiest
-/// thing in the app to make dishonest, so the rules are in the type that feeds
-/// it (`PathRailPresentation`) and enforced here:
-///
-///  - **A stop with no `progress` claims nothing.** Most rails are standing
-///    routes rather than tasks with a position, and those render as plain
-///    outlines with no tick and no "current" marker anywhere.
-///  - **Nothing that has not finished is drawn as finished.** `reached` is the
-///    only state that gets a checkmark, and `PathRailPresentation` sets it only
-///    from a model that has published completion.
-///  - **No animation, at all.** Not "reduced when Reduce Motion is on" — none.
-///    A rail whose meaning lives in a moving dash is a rail that means nothing
-///    on a still screen, in a screenshot, or to somebody who has asked the
-///    system to stop moving things. State is carried by shape (filled versus
-///    outline, solid versus dashed) and by the words under each stop, both of
-///    which survive with motion off, colour filters on, and Increase Contrast.
-///  - **No direction glyph.** The connector is a rule, not an arrow, so the rail
-///    mirrors correctly in Arabic with the `HStack` and nothing points the wrong
-///    way. Order is the direction.
+/// It may not say more than the model knows, and it may not say it with motion.
+/// Every stop comes from `PathRailPresentation`, a tick appears only for a step
+/// that was actually `.reached`, and the state a stop claims is also said in
+/// words rather than in a private vocabulary for VoiceOver. It draws a rule
+/// rather than an arrow, so it mirrors with the `HStack` in a right-to-left
+/// layout instead of pointing the wrong way, and it never animates — its
+/// meaning survives a still screen, a screenshot and a motion-sensitive reader
+/// identically.
 struct PathRail: View {
     let stops: [PathStop]
 
-    /// The badge's diameter. The connector is centred on it, so the two numbers
-    /// are related rather than separately tuned.
-    private let badge: CGFloat = 22
+    private let badge: CGFloat = 28
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -39,97 +26,73 @@ struct PathRail: View {
             }
         }
         .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
-        // One group. Read stop by stop, three fragments announce as three
-        // unrelated labels between the controls above and below them.
         .accessibilityElement(children: .contain)
         .accessibilityLabel(PathRailPresentation.routeLabel())
         .accessibilityIdentifier("path-rail")
     }
 
-    // MARK: - one stop
-
     private func stopColumn(_ stop: PathStop) -> some View {
-        VStack(alignment: .leading, spacing: Metrics.hairline) {
+        VStack(alignment: .leading, spacing: Metrics.caption) {
             marker(stop)
             Text(stop.title)
-                .font(.caption.weight(.medium))
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Palette.text)
                 .fixedSize(horizontal: false, vertical: true)
             if let detail = stop.detail {
                 Text(detail)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(Palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: 168, alignment: .leading)
+        // A stop says what it IS as well as what it says: collapsing the column
+        // into one element leaves it with words and no role, which the system
+        // audit reports as `Unknown role`. Descriptive text — no action, no
+        // value to change, nothing to focus.
         .accessibilityElement(children: .ignore)
-        // **A stop says what it IS, not only what it says.** Collapsing the
-        // column into one element leaves it with words and no role: the
-        // 2026-08-15 system audit reported `Unknown role` on all three stops of
-        // every rail (`WORK-QUEUE.md` Q9, class 6), which is an element VoiceOver
-        // reads out without being able to say what kind of thing it read. A stop
-        // is descriptive text — it has no action, no value to change and nothing
-        // to focus — so that is the role it states. macOS only: the same iOS rail
-        // is not reported, and its audit is already green.
         .accessibilityAddTraits(.isStaticText)
         .accessibilityLabel(stop.detail.map { L10n.detail([stop.title, $0]) } ?? stop.title)
-        // The only state said in words, and it is an existing one. `current` and
-        // `pending` are deliberately silent: the surface that owns a rail with
-        // real progress already states what it is doing in a sentence, and a
-        // second vocabulary for the same fact is how the two drift apart.
         .accessibilityValue(stop.progress == .reached ? L10n.t(.commonDone) : "")
     }
 
-    /// Filled and ticked when it is finished, ringed while it is happening,
-    /// outlined when it is not — and plainly outlined, with no state at all,
-    /// when the rail is a route rather than a task.
+    /// A rounded chip rather than a circle: it is the reference's node, and it
+    /// reads as a place rather than as a radio button next to a roster of them.
     private func marker(_ stop: PathStop) -> some View {
-        ZStack {
-            Circle()
-                .fill(stop.progress == .current ? Palette.actionSurface : Color.clear)
-            Circle()
-                .strokeBorder(stop.progress == nil || stop.progress == .pending
-                              ? Palette.hairline : Palette.action,
-                              lineWidth: stop.progress == .current ? 2 : 1)
-            if stop.progress == .reached {
-                Circle().fill(Palette.action)
-                // nonlocalized: SF Symbol name
+        let reached = stop.progress == .reached
+        let current = stop.progress == .current
+        return ZStack {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(reached ? Palette.action
+                      : current ? Palette.actionSurface : Palette.chip)
+            if reached {
                 Image(systemName: "checkmark")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(Color(nsColor: .controlBackgroundColor))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Color.white)
             } else {
                 Image(systemName: stop.symbol)
-                    .font(.caption)
-                    .foregroundStyle(stop.progress == .current ? Palette.action
-                                     : Color.secondary)
+                    .font(.callout)
+                    .foregroundStyle(current ? Palette.actionLabel : Palette.textSecondary)
             }
         }
         .frame(width: badge, height: badge)
         .accessibilityHidden(true)
     }
 
-    // MARK: - between two stops
-
-    /// Solid once the path up to here has actually been travelled, dashed
-    /// otherwise — including for every stop of a rail that makes no progress
-    /// claim, which is what stops a standing route reading as a stalled task.
     private func connector(before stop: PathStop) -> some View {
-        RailRule(dashed: stop.progress != .reached && stop.progress != .current)
-            .stroke(stop.progress == .reached ? Palette.action : Palette.hairline,
-                    style: StrokeStyle(lineWidth: 1,
-                                       dash: stop.progress == .reached ? [] : [2, 3]))
-            .frame(height: 1)
+        RailRule()
+            .stroke(stop.progress == .reached ? Palette.actionLabel : Palette.hairline,
+                    style: StrokeStyle(lineWidth: 2,
+                                       lineCap: .round,
+                                       dash: stop.progress == .reached ? [] : [2, 4]))
+            .frame(height: 2)
             .frame(minWidth: Metrics.inner, maxWidth: .infinity)
             .padding(.top, badge / 2)
             .padding(.horizontal, Metrics.tight)
             .accessibilityHidden(true)
     }
 
-    /// A horizontal rule as a `Shape`, so the dash pattern is a stroke style
-    /// rather than a row of hand-placed dots that would not mirror in Arabic.
     private struct RailRule: Shape {
-        let dashed: Bool
-
         func path(in rect: CGRect) -> Path {
             var path = Path()
             path.move(to: CGPoint(x: rect.minX, y: rect.midY))

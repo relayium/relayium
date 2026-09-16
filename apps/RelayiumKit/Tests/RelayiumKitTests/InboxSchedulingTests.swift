@@ -66,6 +66,59 @@ final class InboxSchedulingTests: XCTestCase {
         sleeper.wake()
     }
 
+    /// A wake that lands after the caller read its mark but before the sleep
+    /// registered is honoured, not lost. This is the hop from the main actor into
+    /// the sleeper, where "check now" used to be dropped and the loop waited out
+    /// its whole idle interval.
+    func testAWakeBeforeTheSleepRegistersIsNotLost() async {
+        let sleeper = InboxTaskSleeper()
+        let started = Date()
+        let mark = sleeper.wakeMark()
+        sleeper.wake()
+        // Bounded: a lost wake costs this test 10 s, not a minute.
+        await sleeper.sleep(10, unlessWokenSince: mark)
+        XCTAssertLessThan(Date().timeIntervalSince(started), 5,
+                          "a wake between the mark and the sleep was lost")
+    }
+
+    /// A wake from BEFORE the mark is not replayed. Otherwise every control that
+    /// wakes a loop mid-pass would make the next sleep return at once, turning
+    /// each press into an extra round trip to central.
+    func testAWakeBeforeTheMarkDoesNotShortenTheNextSleep() async {
+        let sleeper = InboxTaskSleeper()
+        sleeper.wake()
+        sleeper.wake()
+        let started = Date()
+        await sleeper.sleep(0.3, unlessWokenSince: sleeper.wakeMark())
+        XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(started), 0.25,
+                                    "a stale wake ended a later sleep")
+        // And the plain `sleep` other callers use is unaffected by old wakes.
+        let plain = Date()
+        await sleeper.sleep(0.3)
+        XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(plain), 0.25)
+    }
+
+    /// The race itself, many times: a wake fired from another thread at the same
+    /// instant the sleep registers must end that sleep in every ordering.
+    ///
+    /// Bounded in total: each sleep is 2 s and the loop stops at the first one
+    /// that was not ended by its wake, so a broken sleeper costs one interval,
+    /// not two hundred.
+    func testConcurrentWakesAreNeverLost() async {
+        let sleeper = InboxTaskSleeper()
+        for round in 0..<200 {
+            let started = Date()
+            let mark = sleeper.wakeMark()
+            let waker = Task.detached { sleeper.wake() }
+            await sleeper.sleep(2, unlessWokenSince: mark)
+            await waker.value
+            if Date().timeIntervalSince(started) >= 1.5 {
+                XCTFail("the concurrent wake in round \(round) was lost")
+                return
+            }
+        }
+    }
+
     /// A zero or negative interval returns immediately rather than registering a
     /// sleep nothing will ever wake.
     func testANonPositiveIntervalReturnsAtOnce() async {

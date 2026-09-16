@@ -186,8 +186,8 @@ struct AppleSignInSection: View {
             HStack(spacing: 8) {
                 line
                 Text(L10n.t(.loginAppleDivider))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(Palette.textTertiary)
                 line
             }
             // Hidden from VoiceOver: the button below is the control, and the
@@ -224,11 +224,11 @@ struct AppleSignInSection: View {
         }
     }
 
-    /// The rule either side of "or". The system's own separator colour rather
-    /// than a chosen opacity, so it tracks Increase Contrast.
+    /// The rule either side of "or", in the app's hairline colour, which has
+    /// its own Increase Contrast variant.
     private var line: some View {
         Rectangle()
-            .fill(Color.primary.opacity(0.10))
+            .fill(Palette.hairline)
             .frame(height: 1)
             .frame(maxWidth: 120)
     }

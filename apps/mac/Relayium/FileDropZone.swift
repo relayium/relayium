@@ -206,9 +206,15 @@ struct FileDropZone<Label: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
+            // The accepted LAN workspace's zone: a dashed edge in the button
+            // border colour at rest, violet and washed while a drag can land.
             RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6]))
-                .foregroundStyle(isTargeted && !isBusy() ? Color.accentColor : Color.secondary)
+                .fill(isTargeted && !isBusy() ? Palette.actionSurface : Color.clear)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                        .foregroundStyle(isTargeted && !isBusy() ? Palette.action : Palette.buttonBorder)
+                )
                 .frame(minHeight: 96)
                 .overlay(label().padding(8))
                 .contentShape(Rectangle())
@@ -225,8 +231,23 @@ struct FileDropZone<Label: View>: View {
                                  context: { .fixed },
                                  isTargeted: $isTargeted,
                                  onRefusal: { refusal = $0 })
+                // **One element that owns its name, its hint and its click.**
+                // A label on this composite — shapes with the caller's content
+                // laid over them — has no element of its own to land on, so
+                // SwiftUI synthesized one per child, and on macOS 26 reading
+                // that synthesized node's AXTitle recursed through
+                // `AccessibilityNode.accessibilityLabel` until the stack guard
+                // killed the app (stored send, root AX probe node 25). Ignoring
+                // the children makes the zone a single button-like element:
+                // the label and hint are unchanged, the press action is the
+                // same guarded chooser the click runs, and the drop modifiers
+                // above are untouched. The staged files stay readable to
+                // assistive technology through `PendingFileList`, beside it.
+                .accessibilityElement(children: .ignore)
+                .accessibilityAddTraits(.isButton)
                 .accessibilityLabel(L10n.t(.dropA11yLabel))
                 .accessibilityHint(L10n.t(.dropA11yHint))
+                .accessibilityAction { if !isBusy() { chooseFilesOrFolders(into: store) } }
             if let refusal {
                 InlineMessage(.failure, refusal)
                     .accessibilityIdentifier("file-drop-refusal")

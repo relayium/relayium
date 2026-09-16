@@ -38,6 +38,14 @@ enum UITestInbox {
     static let workingArgument = "--relayium-ui-testing-inbox-working"
     static let resultArgument = "--relayium-ui-testing-inbox-result"
     static let askArgument = "--relayium-ui-testing-inbox-ask"
+    /// Check now, end to end, with no network.
+    ///
+    /// The automatic schedule is stretched to an hour so that every pass after
+    /// the first is one the user asked for, and each asked-for pending read is
+    /// held for a moment so Checking… is a state a person can see. The first
+    /// check finds nothing; the second finds one delivery, built and committed
+    /// through the same production path as the result fixture.
+    static let checkArgument = "--relayium-ui-testing-inbox-check"
 
     /// Notification authorization the platform will not produce on demand.
     ///
@@ -74,13 +82,14 @@ enum UITestInbox {
     static let showsWorking = ProcessInfo.processInfo.arguments.contains(workingArgument)
     static let showsResult = ProcessInfo.processInfo.arguments.contains(resultArgument)
     static let showsAsk = ProcessInfo.processInfo.arguments.contains(askArgument)
+    static let showsCheck = ProcessInfo.processInfo.arguments.contains(checkArgument)
     static let deniesNotifications = ProcessInfo.processInfo.arguments
         .contains(notificationsDeniedArgument)
     static let recoversNotifications = ProcessInfo.processInfo.arguments
         .contains(notificationsRecoverArgument)
 
     static var isActive: Bool {
-        showsReady || showsAttention || showsWorking || showsResult || showsAsk
+        showsReady || showsAttention || showsWorking || showsResult || showsAsk || showsCheck
     }
 
     /// One private root for this app process.
@@ -200,7 +209,9 @@ enum UITestInbox {
             openNotificationSettings: { banners?.open() ?? false },
             platform: AppEnvironment.inboxPlatform,
             appVersion: "uitest",  // nonlocalized: a build label, never displayed
-            backoff: InboxBackoff(idle: 1, afterWork: 1, first: 1, cap: 2, blocked: 1)))
+            backoff: showsCheck
+                ? InboxBackoff(idle: 3600, afterWork: 3600, first: 1, cap: 2, blocked: 3600)
+                : InboxBackoff(idle: 1, afterWork: 1, first: 1, cap: 2, blocked: 1)))
         box.controller = controller
         return controller
     }
@@ -213,13 +224,14 @@ enum UITestInbox {
     // nonlocalized: the server-authenticated sender row for every fixture task
     static let senderDeviceID = "dev_sender_uitest"
 
-    enum Mode { case ready, attention, working, result, ask }
+    enum Mode { case ready, attention, working, result, ask, check }
 
     static var mode: Mode {
         if showsAttention { return .attention }
         if showsWorking { return .working }
         if showsResult { return .result }
         if showsAsk { return .ask }
+        if showsCheck { return .check }
         return .ready
     }
 
@@ -327,6 +339,8 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
     /// person has to be able to LOOK at, which means the pass has to still be in
     /// it when the assertion runs.
     private var heldStream: BoundedDataStream?
+    /// How many pending reads the check fixture has answered.
+    private var pendingReads = 0
 
     init(mode: UITestInbox.Mode) { self.mode = mode }
 
@@ -349,6 +363,16 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
     private func sync<T>(_ body: () -> T) -> T {
         lock.lock(); defer { lock.unlock() }
         return body()
+    }
+
+    /// Whether central holds the fixture delivery. For the check fixture, only
+    /// from the SECOND check on, so the first one is genuinely empty.
+    private var offersDelivery: Bool {
+        switch mode {
+        case .working, .result: return true
+        case .check:            return sync { pendingReads } >= 3
+        case .ready, .attention, .ask: return false
+        }
     }
 
     func currentDevice() async throws -> InboxDeviceRow {
@@ -401,13 +425,19 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
                           ciphertextBytes: 8_192, expiresAt: 4_102_444_800)
             ]
         }
-        guard mode == .working || mode == .result, !sync({ delivered }) else { return [] }
+        if mode == .check {
+            let read = sync { () -> Int in pendingReads += 1; return pendingReads }
+            // The first read is the automatic pass at launch; every later one is
+            // a check the user pressed, held long enough to be seen.
+            if read > 1 { try await Task.sleep(nanoseconds: 1_500_000_000) }
+        }
+        guard offersDelivery, !sync({ delivered }) else { return [] }
         return [InboxTask(id: Self.taskID, sourceDeviceID: UITestInbox.senderDeviceID,
                           state: .queued)]
     }
 
     func claim(max: Int) async throws -> (deliveries: [InboxDelivery], leaseSeconds: Int) {
-        guard mode == .working || mode == .result, !sync({ delivered }) else {
+        guard offersDelivery, !sync({ delivered }) else {
             return (deliveries: [], leaseSeconds: 300)
         }
         guard let encoded = sync({ publicKey.isEmpty ? nil : publicKey }),

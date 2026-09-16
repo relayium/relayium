@@ -115,7 +115,7 @@
 "nav.pairingCodeSubtitle" = "Text and small files across networks — both sides online";
 "nav.lanTransfer" = "LAN Transfer";
 "nav.lanTransferSubtitle" = "Messages and files with a device on this network — no account; both sides online";
-"nav.crossNetwork" = "Pairing Transfer";
+"nav.crossNetwork" = "Cross-network Transfer";
 "nav.crossNetworkSubtitle" = "Messages and files with a device anywhere, using a six-digit code — same network not required; both sides online";
 "nav.storedSend" = "Share a link";
 "nav.storedSendSubtitle" = "Large files, picked up later — sign in; plan limits apply";
@@ -161,6 +161,7 @@
 "hub.text" = "Text";
 "hub.transferTypeHint" = "Choose what this session will transfer.";
 "verify.toggle" = "Compare verification codes with the other device";
+"verify.heading" = "Verification";
 "verify.explainWhat" = "Off by default. When on, both devices show the same six-digit verification code (SAS) before anything moves; comparing it out loud detects a substituted signalling endpoint. It is not the pairing code you typed in, and it only detects anything if someone actually compares the two.";
 "verify.explainEncryption" = "This changes what is shown and what stops for confirmation — never the encryption. Keys are generated on this device and never sent to Relayium, the relay carries only ciphertext, and a tampered handshake always fails.";
 "verify.howItWorks" = "How verification codes work";
@@ -257,7 +258,7 @@
 "share.itemCount.one" = "%@ item";
 "share.itemCount.other" = "%@ items";
 "share.savedTitle" = "Saved to Relayium on this device";
-"share.savedBody" = "Nothing has been uploaded. Open Relayium and press Send on the Send tab when you're ready.";
+"share.savedBody" = "Nothing has been uploaded. Open Relayium and send the files when you're ready.";
 "share.waitingTitle" = "Shared from another app";
 "share.waitingBody" = "%@ waiting to be sent.";
 "share.staysHere" = "They stay on this device until you send or discard them. Relayium never sends them on its own.";
@@ -862,6 +863,8 @@
 "help.expandedValue" = "Expanded";
 "help.expandHint" = "Show how this screen works, what Relayium can see, and what to do when it doesn't work";
 "help.collapseHint" = "Hide the details";
+"row.explainLabel" = "Explain";
+"row.explainHint" = "Show a short explanation of this row";
 
 "help.lan.purpose" = "Move files or send a message between two devices on the same network. No account, and nothing is stored on a server.";
 "help.lan.step1" = "Open Relayium on both devices and keep them on the same network.";
@@ -870,7 +873,7 @@
 "help.lan.boundary" = "Files are encrypted end to end: encrypted on this Mac before they leave and decrypted only on the other device, so Relayium never has the key. What Relayium's service does is introduce the two devices to each other. Depending on the network the connection may run between the two devices, or a Relayium relay may carry it, and this Mac cannot tell which — it makes no difference to what Relayium can read.";
 "help.lan.where" = "Files you receive are saved to your Downloads folder. A conversation lives only on the two devices and is discarded when the connection ends; nothing is kept on a server.";
 "help.lan.failure" = "The other device is not in the list. Devices are grouped by the network path Relayium's service observes, so a guest network, a VPN, or a router that keeps clients apart can put two devices on the same cable into different groups.";
-"help.lan.recovery" = "Check that both devices are receiving, turn off any VPN, and join the same network. If they still can't see each other, use a pairing code on the Cross-network screen instead — that one needs no shared network.";
+"help.lan.recovery" = "Check that both devices are receiving, turn off any VPN, and join the same network. If they still can't see each other, use a pairing code on the Cross-network Transfer screen instead — that one needs no shared network.";
 
 "help.cross.purpose" = "Reach a device anywhere by passing on a six-digit code. The two devices do not have to be on the same network.";
 "help.cross.step1" = "Create a pairing code, then pass on the code or the link beside it.";
@@ -1047,3 +1050,60 @@
 "send.discardMayArrive" = "Nobody knows whether this delivery was created. Discarding removes your copy and stops this screen following it, but it may still arrive on the other device.";
 "send.outstandingHeading" = "Deliveries to your devices";
 "send.outstandingExplain" = "Uploading needs Relayium to stay open. Once a delivery is waiting, the other device takes it on its own, even after you close Relayium.";
+
+/* macOS reference shell (2026-09-16) */
+"nav.hideSidebar" = "Hide Sidebar";
+"nav.showSidebar" = "Show Sidebar";
+"nav.crossNetworkShort" = "Cross-network";
+"nav.lanTransferTagline" = "Same network · no account";
+"nav.crossNetworkTagline" = "Anywhere · six-digit code";
+"nav.storedSendTagline" = "Large files · picked up later";
+"nav.storedReceiveTagline" = "Download what someone shared";
+"nav.deviceInboxTagline" = "Your own devices · works with the window closed";
+"toolbar.statusReceiving" = "Receiving";
+"toolbar.statusJoining" = "Joining…";
+"toolbar.statusReconnecting" = "Reconnecting…";
+"toolbar.statusPaused" = "Paused";
+"toolbar.statusOff" = "Off";
+"toolbar.statusConnecting" = "Connecting…";
+"toolbar.statusConnected" = "Connected";
+"toolbar.statusEnded" = "Ended";
+"toolbar.statusReady" = "Ready";
+"toolbar.statusCreatingCode" = "Creating code…";
+"toolbar.statusWaiting" = "Waiting";
+"toolbar.statusCodeExpired" = "Code expired";
+"toolbar.statusFailed" = "Failed";
+"nearby.encryptedNoAccount" = "end-to-end encrypted · no account needed";
+"nearby.namesDisclaimerShort" = "Names come from the device, not proof of identity";
+"nearby.visibleNameLabel" = "Visible name";
+"nearby.addressLabel" = "Address";
+"nearby.deviceOnline" = "Online · can connect";
+"nearby.deviceNeedsUpdate" = "Online · needs a newer Relayium";
+"verify.securityHeading" = "Security";
+"verify.toggleShort" = "Compare verification codes";
+"verify.toggleDetail" = "Both devices show the same six digits before anything moves";
+"verify.encryptionLabel" = "Encryption";
+"verify.encryptionValue" = "Keys stay on this device · relay sees ciphertext only";
+"pairing.copyCode" = "Copy code";
+"pairing.newCodeShort" = "New code";
+"pairing.passItOn" = "pass it on, and the other device connects from anywhere. Both sides just have to be online.";
+"pairing.codePlaceholder" = "000 000";
+"workspace.joinHeading" = "Join a code";
+"direct.joinNoAccountShort" = "No account needed to join";
+"nearby.devicesNearby.one" = "%@ device nearby";
+"nearby.devicesNearby.other" = "%@ devices nearby";
+"nearby.listeningConsentShort" = "Devices sharing this public address can send to this Mac without asking — pause to stop.";
+"nearby.addressesPrivacyShort" = "Addresses are shown only here — never stored or logged.";
+"nearby.savedToDownloadsShort" = "Incoming files go to Downloads.";
+"pairing.shareLinkToggle" = "QR code and link";
+"settings.startupHeading" = "Startup";
+"settings.shareMenuHeading" = "Share menu";
+"settings.checkingHeading" = "Checking for updates";
+"settings.thisVersionHeading" = "This version";
+"inbox.notificationsHeading" = "Notifications";
+"inbox.conversationsEmpty" = "Nothing has been sent or received on this Mac yet.";
+"inbox.checkNow" = "Check now";
+"inbox.checking" = "Checking…";
+"inbox.checkNothingNew" = "Nothing new. A delivery appears here only after the sender's upload has finished.";
+"inbox.checkDone" = "Check complete.";
+"inbox.checkFailed" = "The check didn't finish. The status above says why.";

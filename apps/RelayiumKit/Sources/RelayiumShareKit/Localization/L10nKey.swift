@@ -685,6 +685,9 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case hubText = "hub.text"
     case hubTransferTypeHint = "hub.transferTypeHint"
     case verifyToggle = "verify.toggle"
+    /// The name of the group the toggle sits in. Short on purpose: a group
+    /// caption says what the rows are about, and the row says what it does.
+    case verifyHeading = "verify.heading"
     case verifyExplainWhat = "verify.explainWhat"
     case verifyExplainEncryption = "verify.explainEncryption"
     /// Names the disclosure the two `verify.explain*` paragraphs moved into on
@@ -2117,6 +2120,13 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case helpExpandHint = "help.expandHint"
     case helpCollapseHint = "help.collapseHint"
 
+    /// The ⓘ on a settings row, which folds one row's optional explanation out
+    /// of the page and behind a press. Separate from the Help card's labels
+    /// because it explains ONE row rather than the whole screen, and because
+    /// VoiceOver reads a button's label and its hint for different reasons.
+    case rowExplainLabel = "row.explainLabel"
+    case rowExplainHint = "row.explainHint"
+
     case helpLanPurpose = "help.lan.purpose"
     case helpLanStep1 = "help.lan.step1"
     case helpLanStep2 = "help.lan.step2"
@@ -2318,6 +2328,65 @@ public enum L10nKey: String, CaseIterable, Sendable {
 
     case sendOutstandingHeading = "send.outstandingHeading"
     case sendOutstandingExplain = "send.outstandingExplain"
+
+    // MARK: macOS reference shell (2026-09-16)
+    case navHideSidebar = "nav.hideSidebar"
+    case navShowSidebar = "nav.showSidebar"
+    case navCrossNetworkShort = "nav.crossNetworkShort"
+    case navLanTransferTagline = "nav.lanTransferTagline"
+    case navCrossNetworkTagline = "nav.crossNetworkTagline"
+    case navStoredSendTagline = "nav.storedSendTagline"
+    case navStoredReceiveTagline = "nav.storedReceiveTagline"
+    case navDeviceInboxTagline = "nav.deviceInboxTagline"
+    case toolbarStatusReceiving = "toolbar.statusReceiving"
+    case toolbarStatusJoining = "toolbar.statusJoining"
+    case toolbarStatusReconnecting = "toolbar.statusReconnecting"
+    case toolbarStatusPaused = "toolbar.statusPaused"
+    case toolbarStatusOff = "toolbar.statusOff"
+    case toolbarStatusConnecting = "toolbar.statusConnecting"
+    case toolbarStatusConnected = "toolbar.statusConnected"
+    case toolbarStatusEnded = "toolbar.statusEnded"
+    case toolbarStatusReady = "toolbar.statusReady"
+    case toolbarStatusCreatingCode = "toolbar.statusCreatingCode"
+    case toolbarStatusWaiting = "toolbar.statusWaiting"
+    case toolbarStatusCodeExpired = "toolbar.statusCodeExpired"
+    case toolbarStatusFailed = "toolbar.statusFailed"
+    case nearbyEncryptedNoAccount = "nearby.encryptedNoAccount"
+    case nearbyNamesDisclaimerShort = "nearby.namesDisclaimerShort"
+    case nearbyVisibleNameLabel = "nearby.visibleNameLabel"
+    case nearbyAddressLabel = "nearby.addressLabel"
+    case nearbyDeviceOnline = "nearby.deviceOnline"
+    case nearbyDeviceNeedsUpdate = "nearby.deviceNeedsUpdate"
+    case verifySecurityHeading = "verify.securityHeading"
+    case verifyToggleShort = "verify.toggleShort"
+    case verifyToggleDetail = "verify.toggleDetail"
+    case verifyEncryptionLabel = "verify.encryptionLabel"
+    case verifyEncryptionValue = "verify.encryptionValue"
+    case pairingCopyCode = "pairing.copyCode"
+    case pairingNewCodeShort = "pairing.newCodeShort"
+    case pairingPassItOn = "pairing.passItOn"
+    case pairingCodePlaceholder = "pairing.codePlaceholder"
+    case workspaceJoinHeading = "workspace.joinHeading"
+    case directJoinNoAccountShort = "direct.joinNoAccountShort"
+    case nearbyListeningConsentShort = "nearby.listeningConsentShort"
+    case nearbyAddressesPrivacyShort = "nearby.addressesPrivacyShort"
+    case nearbySavedToDownloadsShort = "nearby.savedToDownloadsShort"
+    case pairingShareLinkToggle = "pairing.shareLinkToggle"
+
+    // MARK: macOS all-surface alignment (2026-09-16)
+    case settingsStartupHeading = "settings.startupHeading"
+    case settingsShareMenuHeading = "settings.shareMenuHeading"
+    case settingsCheckingHeading = "settings.checkingHeading"
+    case settingsThisVersionHeading = "settings.thisVersionHeading"
+    case inboxNotificationsHeading = "inbox.notificationsHeading"
+    case inboxConversationsEmpty = "inbox.conversationsEmpty"
+
+    // MARK: macOS Device Inbox check now (2026-09-16)
+    case inboxCheckNow = "inbox.checkNow"
+    case inboxChecking = "inbox.checking"
+    case inboxCheckNothingNew = "inbox.checkNothingNew"
+    case inboxCheckDone = "inbox.checkDone"
+    case inboxCheckFailed = "inbox.checkFailed"
 }
 
 /// Keys whose value depends on a count.
@@ -2327,6 +2396,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
 /// and the integrity test has to check a different thing for them: exactly the
 /// categories `PluralRule` says the language can produce, no more and no fewer.
 public enum PluralKey: String, CaseIterable, Sendable {
+    /// %@ — how many devices the same-network roster shows right now.
+    case nearbyDevicesNearby = "nearby.devicesNearby"
     /// %@ — the count.
     case selectionFiles = "selection.files"
     /// %@ — the count.

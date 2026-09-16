@@ -203,7 +203,8 @@ final class SupportedVersionSurfaceTests: XCTestCase {
         // modifier at the body's own level applies to the whole stack.
         XCTAssertTrue(screen.contains(
             "Text(L10n.t(.updateRequiredTitle))\n"
-            + "                .font(.title2)\n"
+            + "                .font(.title2.weight(.semibold))\n"
+            + "                .foregroundStyle(Palette.text)\n"
             + "                .multilineTextAlignment(.center)\n"
             + "                .fixedSize(horizontal: false, vertical: true)\n"
             + "                .accessibilityIdentifier(\"version-blocked\")"),

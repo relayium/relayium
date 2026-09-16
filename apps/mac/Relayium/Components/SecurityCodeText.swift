@@ -38,6 +38,8 @@ struct SecurityCodeText: View {
         case pairing
         /// The short-authentication-string phrase compared with the peer.
         case verification
+        /// The pairing code as the reference draws it: one tile per digit.
+        case tiles
 
     }
 
@@ -50,11 +52,15 @@ struct SecurityCodeText: View {
     /// choosing afterwards is the form that actually tracks the setting.
     @ScaledMetric(relativeTo: .largeTitle) private var pairingSize: CGFloat = 34
     @ScaledMetric(relativeTo: .title) private var verificationSize: CGFloat = 26
+    /// The reference's tile digit. The tile's own 44×56 box scales with it, so
+    /// a larger text size grows the tiles rather than crowding the digit.
+    @ScaledMetric(relativeTo: .title) private var tileSize: CGFloat = 26
 
     private var scaledSize: CGFloat {
         switch style {
         case .pairing: return pairingSize
         case .verification: return verificationSize
+        case .tiles: return tileSize
         }
     }
 
@@ -68,6 +74,16 @@ struct SecurityCodeText: View {
             // explicit accessibility element collapses that AppKit split.
             codeText
                 .accessibilityElement(children: .ignore)
+                .accessibilityIdentifier("pairing-code-value")
+                .accessibilityLabel(spokenCode)
+        case .tiles:
+            // One element for all six tiles, with the identifier and the
+            // spoken digits on it, exactly as the single-string code had.
+            // Separate tiles cannot be text-selected as one string, so the
+            // pane beside them offers Copy code instead.
+            tiles
+                .accessibilityElement(children: .ignore)
+                .accessibilityAddTraits(.isStaticText)
                 .accessibilityIdentifier("pairing-code-value")
                 .accessibilityLabel(spokenCode)
         case .verification:
@@ -88,6 +104,28 @@ struct SecurityCodeText: View {
             // width it is offered, so no container can wrap or truncate it.
             .fixedSize(horizontal: true, vertical: false)
             .textSelection(.enabled)
+    }
+
+    /// Six tiles that never wrap and never shrink: the row is laid out at its
+    /// full width whatever the container offers.
+    private var tiles: some View {
+        HStack(spacing: tileSize * 10 / 26) {
+            ForEach(Array(code.enumerated()), id: \.offset) { _, digit in
+                Text(L10n.token(String(digit)))
+                    .font(.system(size: scaledSize, weight: .semibold, design: .monospaced))
+                    .lineLimit(1)
+                    .frame(width: tileSize * 44 / 26, height: tileSize * 56 / 26)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Palette.codeTile)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .strokeBorder(Palette.cardBorder, lineWidth: 1)
+                    )
+            }
+        }
+        .fixedSize(horizontal: true, vertical: true)
     }
 
     /// Digits one at a time; a phrase left as the words it already is.

@@ -60,8 +60,15 @@ struct CrossNetworkTransferDestination: View {
     var body: some View {
         DestinationScaffold(title: L10n.t(.navCrossNetwork),
                             surface: .crossNetworkTransfer,
-                            purpose: L10n.t(.navCrossNetworkSubtitle),
-                            contentMaxWidth: nil) {
+                            subtitle: L10n.t(.navCrossNetworkTagline),
+                            status: { now in
+                                TransferToolbarStatus.crossNetwork(
+                                    connection: link.connection,
+                                    code: module.code.state,
+                                    unsupportedPeer: link.unsupportedPairingPeer,
+                                    now: now)
+                            },
+                            statusFollowsClock: true) {
             switch pane {
             case .link:
                 TransferLinkPane(link: link)

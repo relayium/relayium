@@ -84,11 +84,13 @@ struct CrossNetworkConnectPane: View {
     @EnvironmentObject private var navigation: AppNavigationModel
 
     @State private var actionError: String?
+    /// Whether Copy code just acknowledged a copy. View state only.
+    @State private var codeCopied = false
 
     private let route = AppDestination.pairingCode
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Metrics.section) {
             // The same statement the LAN screen makes, and for the same reason:
             // a disabled control has to say why it is disabled. It describes
             // this module's own retained session — the other destination cannot
@@ -98,12 +100,9 @@ struct CrossNetworkConnectPane: View {
                     .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
                     .accessibilityIdentifier("transfer-busy-elsewhere")
             }
-            // Two ends and an encrypted middle, and no claim about what shape
-            // the middle takes: this build cannot tell a direct connection from
-            // a relayed one, so the rail says encrypted and stops. There is no
-            // peer yet either, so no stop is marked reached or current — see
-            // `PathRailPresentation.crossNetwork`.
-            PathRail(stops: PathRailPresentation.crossNetwork())
+            // No route rail: the hero says what this is — a code, from
+            // anywhere — and the Security group below says what the relay can
+            // and cannot see, without claiming a direct path.
             // **The peer turned up and could not speak `link/1`.**
             //
             // Above the controls, because it is the answer to the action the
@@ -115,7 +114,7 @@ struct CrossNetworkConnectPane: View {
                     InlineMessage(.warning, L10n.t(.errorRealtimeLegacyPeer))
                         .accessibilityIdentifier("pairing-peer-unsupported")
                     Button(L10n.t(.commonDismiss)) { link.dismissUnsupportedPairingPeer() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.referenceSecondary)
                         .accessibilityIdentifier("pairing-peer-unsupported-dismiss")
                 }
                 .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
@@ -128,16 +127,15 @@ struct CrossNetworkConnectPane: View {
                 // greyed out. The mint is a real round trip; showing the button
                 // that started it, disabled, says "you cannot do this" when the
                 // truth is "it is happening".
-                SectionCard(title: L10n.t(.workspacePairingHeading)) {
-                    VStack(alignment: .leading, spacing: Metrics.inner) {
-                        ProgressView(L10n.t(.directCreatingCode)).controlSize(.small)
-                        Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }
-                            .buttonStyle(.bordered)
-                            .accessibilityIdentifier("pairing-code-minting-cancel")
-                    }
+                PairingHero {
+                    ProgressView(L10n.t(.directCreatingCode)).controlSize(.small)
+                    Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }
+                        .buttonStyle(.referenceSecondary)
+                        .accessibilityIdentifier("pairing-code-minting-cancel")
                 }
             case .idle, .failed:
                 pairingCode
+                joinSection
             }
             if case let .failed(message) = code.state {
                 // **A failed mint needs a way out of itself.**
@@ -157,7 +155,7 @@ struct CrossNetworkConnectPane: View {
                     InlineMessage(.failure, message)
                         .accessibilityIdentifier("pairing-code-failed")
                     Button(L10n.t(.commonDismiss)) { module.cancelPairingCode() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.referenceSecondary)
                         .accessibilityIdentifier("pairing-code-failed-dismiss")
                 }
                 .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
@@ -196,52 +194,101 @@ struct CrossNetworkConnectPane: View {
     /// legible, because the person looking at it is trying to work out whether
     /// the number they just read out was the right one.
     private func liveCode(_ live: String) -> some View {
-        SectionCard(title: L10n.t(.workspacePairingHeading)) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(L10n.t(.directGiveCode)).font(.subheadline.weight(.semibold))
-                SecurityCodeText(code: live, style: .pairing)
-                TimelineView(.periodic(from: .now, by: 1)) { tick in
-                    let deadline = PairingCodeExpiry.presentation(
-                        expiresAt: expiresAt, now: tick.date)
-                    VStack(alignment: .leading, spacing: 12) {
-                        if let countdown = deadline.countdown {
-                            Text(L10n.t(.pairingCodeExpiresIn, [countdown]))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                // The digits do not reflow as they tick, which
-                                // is the one thing a proportional face gets
-                                // wrong here.
-                                .monospacedDigit()
-                                // LAST, so the identifier lands on the text
-                                // element itself rather than on the wrapper
-                                // `.monospacedDigit()` introduces.
-                                .accessibilityIdentifier("pairing-code-countdown")
-                        }
-                        Text(L10n.t(.pairingCodeExpiryNote))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+        PairingHero {
+            // Tiles and actions on one line when they fit, the actions under
+            // the tiles when they do not. The tiles themselves never wrap.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 10) {
+                    SecurityCodeText(code: live, style: .tiles)
+                    Spacer(minLength: Metrics.inner)
+                    codeActions(live)
+                }
+                VStack(alignment: .leading, spacing: Metrics.inner) {
+                    SecurityCodeText(code: live, style: .tiles)
+                    codeActions(live)
+                }
+            }
+            TimelineView(.periodic(from: .now, by: 1)) { tick in
+                let deadline = PairingCodeExpiry.presentation(
+                    expiresAt: expiresAt, now: tick.date)
+                VStack(alignment: .leading, spacing: 6) {
+                    if let countdown = deadline.countdown {
+                        Text(L10n.detail([L10n.t(.pairingCodeExpiresIn, [countdown]),
+                                          L10n.t(.pairingPassItOn)]))
+                            .font(.callout)
+                            .foregroundStyle(Palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("pairing-code-expiry-note")
-                        if deadline.isUsable {
-                            // **The wait and its escape live in the handoff card,
-                            // and nowhere else on this page.** A second copy sat
-                            // here until the offline suite could not click either:
-                            // `PairingCodeHandoffView` already renders the same
-                            // "waiting for the other device" status and the same
-                            // Cancel, so the page drew both twice. Matched by
-                            // label that is two elements and an ambiguous click;
-                            // read by a person it is the screen saying the same
-                            // thing to itself.
-                            if let joinURL = transferPairingJoinURL(code: live) {
-                                PairingCodeHandoffView(url: joinURL,
-                                                       cancel: { module.cancelPairingCode() })
-                            }
-                        } else {
-                            expiredCode
+                            // The digits do not reflow as they tick, which
+                            // is the one thing a proportional face gets
+                            // wrong here.
+                            .monospacedDigit()
+                            // LAST, so the identifier lands on the text
+                            // element itself rather than on the wrapper
+                            // `.monospacedDigit()` introduces.
+                            .accessibilityIdentifier("pairing-code-countdown")
+                    } else {
+                        Text(L10n.t(.directGiveCode))
+                            .font(.callout)
+                            .foregroundStyle(Palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Text(L10n.t(.pairingCodeExpiryNote))
+                        .font(.subheadline)
+                        .foregroundStyle(Palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("pairing-code-expiry-note")
+                    if deadline.isUsable {
+                        Color.clear.frame(height: 4).accessibilityHidden(true)
+                        // **The wait and its escape live in the handoff card,
+                        // and nowhere else on this page.** A second copy made
+                        // two identically labelled elements and an ambiguous
+                        // click for the offline suite.
+                        if let joinURL = transferPairingJoinURL(code: live) {
+                            PairingCodeHandoffView(url: joinURL,
+                                                   cancel: { module.cancelPairingCode() })
                         }
+                    } else {
+                        expiredCode
                     }
                 }
             }
+        }
+    }
+
+    /// **New code and Copy code, and both are real.**
+    ///
+    /// New code mints a replacement through the same account-gated path an
+    /// expired code uses, so it is offered only where minting can work and only
+    /// for a code this Mac minted — a code typed in from somebody else is not
+    /// this Mac's to replace. Copy code writes the six digits.
+    @ViewBuilder
+    private func codeActions(_ live: String) -> some View {
+        // Read against the same deadline as the countdown: an expired code
+        // offers its replacement in the expired notice below, and a dead code
+        // is not something to copy, so neither action outlives the deadline.
+        TimelineView(.periodic(from: .now, by: 1)) { tick in
+            if PairingCodeExpiry.presentation(expiresAt: expiresAt, now: tick.date).isUsable {
+                HStack(spacing: 7) {
+                    if case .allowed = gate, expiresAt > 0 {
+                        Button(L10n.t(.pairingNewCodeShort)) { regenerate() }
+                            .buttonStyle(.referenceSecondary)
+                            .accessibilityIdentifier("pairing-code-new")
+                    }
+                    Button(L10n.t(codeCopied ? .commonCopied : .pairingCopyCode)) { copyCode(live) }
+                        .buttonStyle(.referencePrimary)
+                        .accessibilityIdentifier("pairing-code-copy")
+                }
+            }
+        }
+    }
+
+    private func copyCode(_ live: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(live, forType: .string)
+        codeCopied = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            codeCopied = false
         }
     }
 
@@ -275,11 +322,11 @@ struct CrossNetworkConnectPane: View {
                 // screen.
                 if case .allowed = gate {
                     Button(L10n.t(.pairingNewCode)) { regenerate() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.referencePrimary)
                         .accessibilityIdentifier("pairing-code-regenerate")
                 }
                 Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.referenceSecondary)
                     .accessibilityIdentifier("pairing-code-expired-cancel")
             }
         }
@@ -287,91 +334,96 @@ struct CrossNetworkConnectPane: View {
 
     // MARK: - pairing code
 
-    /// **The code first, the explanation last.**
+    /// **The code first, the explanation last**, in the reference's hero.
     ///
-    /// The card used to open with `crossNetwork.explain` — five lines about the
-    /// rendezvous service — above the two verbs that actually mint a code. The
-    /// destination's header now carries the one-sentence version of the same
-    /// fact ("same network not required"), so the paragraph is a footnote to the
+    /// The toolbar's subtitle carries the one-line version of the premise
+    /// ("anywhere · six-digit code"), so the paragraph is a footnote to the
     /// controls rather than a preface to them. It keeps its identifier: a
     /// runtime check that this screen states its own premise must go on
     /// passing.
     private var pairingCode: some View {
-        SectionCard(title: L10n.t(.workspacePairingHeading)) {
-            VStack(alignment: .leading, spacing: Metrics.inner) {
-                if case .allowed = gate {
-                    createControls
-                } else {
-                    // No greyed Create button. The gate names what is true and
-                    // renders the one action that resolves it.
-                    CapabilityGateView(gate: gate,
-                                       title: L10n.t(.gateCreateCodeTitle),
-                                       body: L10n.t(.gateCreateCodeBody),
-                                       onAccount: { navigation.selectAccount(intent: $0) })
-                }
-                Divider()
-                joinControls
-                // The peer is not known yet, so neither the unified-link claim
-                // nor the legacy one-lane warning is true here. Once a peer
-                // appears, capability negotiation selects the link pane or the
-                // legacy session pane; each states its actual connection shape.
-                Divider()
-                Text(L10n.t(.crossNetworkExplain))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
-                    .accessibilityIdentifier("cross-network-explain")
+        PairingHero {
+            if case .allowed = gate {
+                createControls
+            } else {
+                // No greyed Create button. The gate names what is true and
+                // renders the one action that resolves it.
+                CapabilityGateView(gate: gate,
+                                   title: L10n.t(.gateCreateCodeTitle),
+                                   body: L10n.t(.gateCreateCodeBody),
+                                   onAccount: { navigation.selectAccount(intent: $0) })
             }
+            Text(L10n.t(.crossNetworkExplain))
+                .font(.callout)
+                .foregroundStyle(Palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
+                .accessibilityIdentifier("cross-network-explain")
         }
     }
 
     /// **One action, and there is nothing it could need.**
     ///
     /// The code is what the other person is waiting for, and it is the first and
-    /// only thing this half of the screen produces. There is no batch to assemble
-    /// during the wait any more: what the connection carries is chosen once it
-    /// exists, in the workspace this code opens.
+    /// only thing this half of the screen produces. What the connection carries
+    /// is chosen once it exists, in the workspace this code opens.
     private var createControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        HStack(alignment: .center, spacing: Metrics.inner) {
+            Text(L10n.t(.workspaceCreatePairingCodeHint))
+                .font(.callout)
+                .foregroundStyle(Palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: Metrics.tight)
             Button(L10n.t(.workspaceCreatePairingCode)) { createCode() }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.referencePrimary)
                 .disabled(sessionLocked)
                 .accessibilityIdentifier("cross-network-create-code")
-            Text(L10n.t(.workspaceCreatePairingCodeHint))
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// The join half, as its own group: it needs no account and is rendered
+    /// and enabled identically signed out, outside the gate above.
+    private var joinSection: some View {
+        SectionCard(title: L10n.t(.workspaceJoinHeading), rows: true) {
+            CardRows {
+                CardBlockRow {
+                    joinControls
+                }
+            }
         }
     }
 
     /// One field, one verb, and one place the typed code lives.
-    ///
-    /// It used to write BOTH legacy models, because either might end up running
-    /// the connection and a code typed into one only would leave the other about
-    /// to join a different room. There is one holder now, so there is nothing
-    /// left to keep in step.
     private var joinControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                TextField(L10n.t(.commonCode), text: normalizedJoinCode)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 140)
-                    .accessibilityLabel(L10n.t(.commonCode))
-                    .accessibilityIdentifier("pairing.joinCode")
-                // **The one keyboard default on this surface.** Create and
-                // connect sit on screen together, and two `.defaultAction`
-                // buttons is an undefined Return that SwiftUI resolves without
-                // telling anyone which it picked. Connect takes it: its whole
-                // precondition is one field, so the default is inert until
-                // Return can only mean one thing, and it is the keystroke that
-                // naturally ends typing a code.
-                Button(L10n.t(.workspaceConnectWithCode)) { join() }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!code.canJoin || sessionLocked)
-                    .accessibilityIdentifier("cross-network-join-code")
-            }
-            InlineMessage(.info, L10n.t(.directJoinNoAccountNeeded))
+        HStack(alignment: .center, spacing: 10) {
+            TextField(L10n.t(.pairingCodePlaceholder), text: normalizedJoinCode)
+                .textFieldStyle(.plain)
+                .font(.body.monospaced())
+                .padding(.horizontal, 10)
+                .frame(width: 140)
+                .frame(minHeight: 26)
+                .background(RoundedRectangle(cornerRadius: Metrics.buttonCorner)
+                    .fill(Palette.field))
+                .overlay(RoundedRectangle(cornerRadius: Metrics.buttonCorner)
+                    .strokeBorder(Palette.buttonBorder, lineWidth: 1))
+                .accessibilityLabel(L10n.t(.commonCode))
+                .accessibilityIdentifier("pairing.joinCode")
+            Text(L10n.t(.directJoinNoAccountShort))
+                .font(.subheadline)
+                .foregroundStyle(Palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+                .help(L10n.t(.directJoinNoAccountNeeded))
+            Spacer(minLength: 0)
+            // **The one keyboard default on this surface.** Create and
+            // connect sit on screen together, and two `.defaultAction`
+            // buttons is an undefined Return. Connect takes it: its whole
+            // precondition is one field, so the default is inert until
+            // Return can only mean one thing.
+            Button(L10n.t(.workspaceConnectWithCode)) { join() }
+                .buttonStyle(.referencePrimary)
+                .keyboardShortcut(.defaultAction)
+                .disabled(!code.canJoin || sessionLocked)
+                .accessibilityIdentifier("cross-network-join-code")
         }
     }
 
@@ -437,5 +489,28 @@ struct CrossNetworkConnectPane: View {
     /// at all.
     private func mintAndWatch(token: String) async {
         await PairingCodeStart(module: module).createAndWatch(token: token)
+    }
+}
+
+/// The pairing code's hero: the reference's violet-washed card with its
+/// capitalised caption, holding whichever phase the code is in.
+private struct PairingHero<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(L10n.t(.workspacePairingHeading))
+                .font(.callout.weight(.semibold))
+                .textCase(.uppercase)
+                .foregroundStyle(Palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Metrics.heroPadding)
+        .background(HeroSurface())
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(L10n.t(.workspacePairingHeading))
     }
 }

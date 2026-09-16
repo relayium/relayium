@@ -37,12 +37,16 @@ struct SettingsView: View {
                 .tabItem { Label(L10n.t(.settingsGeneral), systemImage: "gearshape") }
             AppUpdatesSettingsTab(updates: updates)
         }
-        // A settings window sizes to its largest tab and then keeps that size,
-        // so the width is set once here rather than per tab — otherwise the
-        // window jumps when the user switches tabs. Height is left to the
-        // content: these panes wrap explanatory text, and a fixed height would
-        // clip it in the languages whose sentences are longest.
-        .frame(width: 520)
+        // One size for every tab, set here rather than per tab, so the window
+        // never jumps when the user switches between General and Updates. The
+        // height is a bound, not a fit: each tab is a `ReferencePage`, which
+        // scrolls inside it, so the longest language, a larger text size or a
+        // login-item remedy reaches its last action by scrolling instead of
+        // growing the window past a small screen or clipping its bottom.
+        .frame(width: 520, height: 460)
+        // The reference action colour for the switches and any picker, rather
+        // than the catalog's older accent.
+        .tint(Palette.action)
     }
 }
 
@@ -52,8 +56,8 @@ struct GeneralSettingsView: View {
     @EnvironmentObject private var verification: VerificationPreference
 
     var body: some View {
-        Form {
-            Section {
+        ReferencePage {
+            SectionCard(title: L10n.t(.settingsStartupHeading)) {
                 // The whole residency control — switch, status, and the remedy
                 // for every state that has no switch — lives in one component,
                 // because the Device Inbox destination offers the same control
@@ -73,8 +77,10 @@ struct GeneralSettingsView: View {
             // nothing was the alternative, and it is the worse one: the feature
             // is simply absent from the Share menu, with nothing anywhere
             // explaining why, which reads as broken rather than as off.
-            Section {
+            SectionCard(title: L10n.t(.settingsShareMenuHeading)) {
                 Text(L10n.t(.settingsShareExtension))
+                    .font(.body)
+                    .foregroundStyle(Palette.text)
                 caption(L10n.t(.settingsShareExtensionBody))
                 Button(L10n.t(.settingsOpenExtensionSettings)) {
                     // nonlocalized: a System Settings pane identifier, not user copy
@@ -84,13 +90,22 @@ struct GeneralSettingsView: View {
                 }
                 .buttonStyle(.link)
             }
-            Section {
-                Toggle(L10n.t(.verifyToggle), isOn: $verification.requiresSASConfirmation)
+            SectionCard(title: L10n.t(.verifySecurityHeading)) {
+                HStack(spacing: 10) {
+                    Text(L10n.t(.verifyToggle))
+                        .font(.body)
+                        .foregroundStyle(Palette.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityHidden(true)
+                    Spacer(minLength: Metrics.tight)
+                    Toggle(L10n.t(.verifyToggle), isOn: $verification.requiresSASConfirmation)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                }
                 caption(L10n.t(.verifyExplainWhat))
                 caption(L10n.t(.verifyExplainEncryption))
             }
         }
-        .formStyle(.grouped)
         // The user can change this in System Settings while the app runs and
         // nothing notifies it, so the window re-asks every time it appears
         // rather than trusting what it last wrote.
@@ -99,8 +114,8 @@ struct GeneralSettingsView: View {
 
     private func caption(_ text: String) -> some View {
         Text(text)
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .font(.subheadline)
+            .foregroundStyle(Palette.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
     }
 }

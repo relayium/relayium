@@ -60,8 +60,10 @@ final class AppUpdates {
     let controller = SPUStandardUpdaterController(
         // The engineering candidate has no update channel. In particular it
         // must never read the production appcast embedded in the ordinary
-        // direct-download Info.plist.
-        startingUpdater: !AppEnvironment.isEngineeringCandidate,
+        // direct-download Info.plist. UI acceptance also skips automatic
+        // startup: Sparkle consent can otherwise change the installed app's
+        // automatic-update preference. UITestMode is always false in Release.
+        startingUpdater: !AppEnvironment.isEngineeringCandidate && !UITestMode.isActive,
         updaterDelegate: nil,
         userDriverDelegate: nil
     )
@@ -83,9 +85,11 @@ final class AppUpdates {
         #if DEBUG
         // **Observation, and it is compiled out of every Release build.**
         //
-        // It records that this function ran, AFTER the line above has started
-        // Sparkle's check — so acceptance can assert that the blocked screen's
-        // Update button reaches the shipped update path without waiting on an
+        // It records that this function reached Sparkle's check entry point.
+        // During UI acceptance the updater is not started, so Sparkle returns
+        // without checking; the witness proves routing, not a live update.
+        // Acceptance can assert that the blocked screen's Update button reaches
+        // the shipped update path without waiting on an
         // appcast fetch, a signature verification or a download, none of which a
         // UI test may depend on. It publishes nothing unless the process is an
         // acceptance launch.
@@ -172,24 +176,36 @@ struct UpdateSettingsView: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                Toggle(L10n.t(.settingsAutomaticUpdates), isOn: $automatic)
-                    .onChange(of: automatic) { updater.automaticallyChecksForUpdates = $0 }
+        ReferencePage {
+            SectionCard(title: L10n.t(.settingsCheckingHeading)) {
+                HStack(spacing: 10) {
+                    Text(L10n.t(.settingsAutomaticUpdates))
+                        .font(.body)
+                        .foregroundStyle(Palette.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityHidden(true)
+                    Spacer(minLength: Metrics.tight)
+                    Toggle(L10n.t(.settingsAutomaticUpdates), isOn: $automatic)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        .onChange(of: automatic) { updater.automaticallyChecksForUpdates = $0 }
+                }
                 Text(L10n.t(.settingsAutomaticUpdatesBody))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(Palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
-            }
-            Section {
+                Rectangle()
+                    .fill(Palette.hairline)
+                    .frame(height: 1)
+                    .accessibilityHidden(true)
                 HStack {
                     // Said outright rather than shown as an empty field. "Never
                     // checked" is a real state on a fresh install, and a blank
                     // line reads as a bug.
                     Text(lastCheck.map { L10n.t(.settingsLastChecked, [formatted($0)]) }
                         ?? L10n.t(.settingsNeverChecked))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.callout)
+                        .foregroundStyle(Palette.textSecondary)
                     Spacer()
                     Button(L10n.t(.settingsCheckNow)) {
                         updater.checkForUpdates()
@@ -198,19 +214,19 @@ struct UpdateSettingsView: View {
                         // at the permission prompt did not.
                         lastCheck = updater.lastUpdateCheckDate
                     }
+                    .buttonStyle(.referenceSecondary)
                 }
             }
             // What the user is running. It belongs on this pane and not in the
             // About box alone, because "am I up to date" is the question this
             // whole tab answers, and it cannot be answered without it.
-            Section {
+            SectionCard(title: L10n.t(.settingsThisVersionHeading)) {
                 Text(L10n.t(.settingsVersion, [Self.marketingVersion, Self.buildNumber]))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(Palette.text)
                     .textSelection(.enabled)
             }
         }
-        .formStyle(.grouped)
         .task {
             automatic = updater.automaticallyChecksForUpdates
             lastCheck = updater.lastUpdateCheckDate

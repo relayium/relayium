@@ -18,15 +18,14 @@ struct AccountDestination: View {
     var body: some View {
         DestinationScaffold(title: L10n.t(.navAccount),
                             surface: .account,
-                            purpose: L10n.t(.navAccountSubtitle),
-                            contentMaxWidth: nil) {
+                            subtitle: L10n.t(.navAccountSubtitle)) {
             switch session.state {
             case .restoring:
                 // Launch only. There is no form to preserve here, so a branch of
                 // its own is free.
                 ProgressView { Text(L10n.t(.accountRestoring)) }
                     .controlSize(.small)
-                .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
+                    .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
 
             case .loggedOut, .authenticating, .registering, .failed:
                 // ONE branch for all four. Each branch of a ViewBuilder `switch`
@@ -54,6 +53,7 @@ struct AccountDestination: View {
                     InlineMessage(.failure, message)
                     HStack {
                         Button(L10n.t(.commonTryAgain)) { Task { await session.refresh() } }
+                            .buttonStyle(.referencePrimary)
                             .keyboardShortcut(.defaultAction)
                         Button(L10n.t(.commonSignOut)) { Task { await session.logOut() } }
                             .buttonStyle(.link)
@@ -98,7 +98,7 @@ struct AccountDestination: View {
         SectionCard(title: L10n.t(.contentCheckEmailTitle)) {
             // The address is the user's own and is isolated, not translated.
             Text(L10n.t(.contentCheckEmailBody, [L10n.token(email)]))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             switch session.resendState {
@@ -124,6 +124,7 @@ struct AccountDestination: View {
                     Button(L10n.t(.contentResendVerification)) {
                         Task { await session.resendVerification(email: email) }
                     }
+                    .buttonStyle(.referencePrimary)
                     .keyboardShortcut(.defaultAction)
                 }
                 Button(L10n.t(.contentBackToSignIn)) {
@@ -151,10 +152,11 @@ struct AccountDestination: View {
                         url: URL) -> some View {
         SectionCard(title: title) {
             Text(body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button(actionTitle) { NSWorkspace.shared.open(url) }
+                    .buttonStyle(.referencePrimary)
                     .keyboardShortcut(.defaultAction)
                 Button(L10n.t(.contentBackToSignIn)) { Task { await session.logOut() } }
                     .buttonStyle(.link)

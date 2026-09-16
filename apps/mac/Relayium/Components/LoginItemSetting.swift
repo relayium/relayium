@@ -66,17 +66,30 @@ struct LoginItemSetting: View {
         // Enabling can legitimately land on `needsApproval`, and a switch that
         // snapped to on would assert something macOS has not agreed to.
         if loginItem.offersToggle {
-            Toggle(L10n.t(.settingsOpenAtLogin), isOn: Binding(
-                get: { loginItem.state == .on },
-                set: { loginItem.set($0) }
-            ))
-            .accessibilityIdentifier("login-item-toggle")
+            // The reference's settings row: the name leading, the switch
+            // trailing. The label is hidden visually, not removed, so the
+            // switch is still spoken by its name.
+            HStack(spacing: 10) {
+                Text(L10n.t(.settingsOpenAtLogin))
+                    .font(.body)
+                    .foregroundStyle(Palette.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityHidden(true)
+                Spacer(minLength: Metrics.tight)
+                Toggle(L10n.t(.settingsOpenAtLogin), isOn: Binding(
+                    get: { loginItem.state == .on },
+                    set: { loginItem.set($0) }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .accessibilityIdentifier("login-item-toggle")
+            }
         } else {
             // The state indicator that replaces the switch. Non-interactive by
             // construction rather than a disabled control: there is nothing here
             // to press, and a control that looks pressable and is not is the
             // thing being avoided.
-            StatusBadge(symbol: "power", tint: .secondary,
+            StatusBadge(symbol: "power", tint: Palette.textSecondary,
                         label: L10n.t(.settingsLoginNotRegistered))
                 .accessibilityIdentifier("login-item-status")
         }
@@ -139,7 +152,7 @@ struct LoginItemSetting: View {
             InlineMessage(.warning, L10n.t(.settingsLoginUnconfirmed))
                 .accessibilityIdentifier("login-item-unconfirmed")
             Button(L10n.t(.settingsLoginTryRegistration)) { loginItem.attemptRegistration() }
-                .buttonStyle(.bordered)
+                .buttonStyle(.referenceSecondary)
                 .accessibilityIdentifier("login-item-register")
             // The outcome with no obvious next step, said outright. It is not a
             // failure — nothing threw — and it is not success, so it borrows
@@ -175,8 +188,8 @@ struct LoginItemSetting: View {
 
     private func caption(_ text: String) -> some View {
         Text(text)
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .font(.subheadline)
+            .foregroundStyle(Palette.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
     }
 }

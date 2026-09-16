@@ -154,6 +154,7 @@ struct UploadPane: View {
                 } else {
                     Text(selection.summary ?? L10n.t(.uploadReady))
                         .font(.callout)
+                        .foregroundStyle(Palette.text)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -164,9 +165,10 @@ struct UploadPane: View {
             }
             HStack {
                 Button(L10n.t(.commonChooseFilesOrFolders)) { chooseFilesOrFolders(into: selection) }
+                    .buttonStyle(.referenceSecondary)
                 if !selection.isEmpty {
                     Button(L10n.t(.commonClear)) { selection.clear() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.referenceSecondary)
                 }
             }
             if showsOptions { options }
@@ -209,11 +211,12 @@ struct UploadPane: View {
                 .labelsHidden()
                 .frame(maxWidth: 220)
                 Toggle(L10n.t(.uploadBurnAfterRead), isOn: $model.burnAfterRead)
+                    .toggleStyle(.switch)
             }
             // No `.disabled`: reaching this group at all means a file is chosen
             // and the gate is `.allowed`, so there is nothing left to be missing.
             Button(L10n.t(.commonSend)) { send() }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.referencePrimary)
                 .keyboardShortcut(.defaultAction)
         }
     }
@@ -236,13 +239,15 @@ struct UploadPane: View {
                 .accessibilityValue(
                     L10n.percent(done: sent, total: total) ?? L10n.t(.commonStarting))
             Text(L10n.percent(done: sent, total: total) ?? L10n.t(.commonStarting))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.callout.weight(.medium)).foregroundStyle(Palette.text)
+                .monospacedDigit()
             Text(L10n.t(.uploadMacKeepOpen))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.subheadline)
+                .foregroundStyle(Palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             PendingFileList(sessionFiles: model.sessionFiles)
             Button(L10n.t(.commonCancel)) { model.cancel() }
+                .buttonStyle(.referenceSecondary)
         }
     }
 
@@ -260,9 +265,7 @@ struct UploadPane: View {
             keyNotice(UploadPresentation.keyNotice(warning: keyWarning))
             // A capability result is not incidental metadata: show the entire
             // host, object id and fragment key before it is copied or shared.
-            Text(link)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
+            CodeBlock(text: link)
                 // One stable address for the result. A window-wide predicate
                 // over every descendant times out on macOS — the same limit
                 // batches 94 and 102 hit — and this also gives assistive
@@ -274,28 +277,29 @@ struct UploadPane: View {
                     NSPasteboard.general.setString(link, forType: .string)
                     copiedLink = link
                 }
+                .buttonStyle(.referencePrimary)
                 ShareLink(item: link) {
                     Label(L10n.t(.commonShare), systemImage: "square.and.arrow.up")
                 }
+                .buttonStyle(.referenceSecondary)
                 if copiedLink == link {
                     Label(L10n.t(.pairingLinkCopied), systemImage: "checkmark")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.subheadline)
+                        .foregroundStyle(Palette.textSecondary)
                 }
             }
-            .buttonStyle(.bordered)
             Text(L10n.t(.commonExpires, [
                 L10n.date(Date(timeIntervalSince1970: TimeInterval(expiresAt)),
                           dateStyle: .medium, timeStyle: .short),
             ]))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(Palette.textTertiary)
             cliCommand(link: link)
             Button(L10n.t(.uploadSendAnother)) {
                 copiedLink = nil
                 copiedCommand = nil
                 model.reset()
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.referenceSecondary)
         }
     }
 
@@ -319,11 +323,9 @@ struct UploadPane: View {
         let command = StoredLinkCommandPresentation.downCommand(link: link)
         return VStack(alignment: .leading, spacing: 8) {
             Text(L10n.t(.storedSendCliHeading))
-                .font(.subheadline.weight(.semibold))
-            Text(L10n.token(command))
-                .font(.system(.body, design: .monospaced))
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(Palette.text)
+            CodeBlock(text: L10n.token(command))
                 .accessibilityIdentifier("storedSend.cliCommand")
             HStack {
                 // Its own button and its own acknowledgement. The clipboard now
@@ -334,12 +336,12 @@ struct UploadPane: View {
                     NSPasteboard.general.setString(command, forType: .string)
                     copiedCommand = command
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.referenceSecondary)
                 .accessibilityIdentifier("storedSend.cliCopy")
                 if copiedCommand == command {
                     Label(L10n.t(.commonCopied), systemImage: "checkmark")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.subheadline)
+                        .foregroundStyle(Palette.textSecondary)
                 }
             }
             // Both halves are things the reader cannot see for themselves: why
@@ -347,7 +349,7 @@ struct UploadPane: View {
             // capability key is written to a history file by default.
             InlineMessage(.warning, L10n.t(.storedSendCliWarning))
             Link(L10n.t(.storedSendCliDocs), destination: AppEnvironment.cliWebURL)
-                .font(.caption)
+                .font(.subheadline)
                 .accessibilityIdentifier("storedSend.cliDocs")
         }
         .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
@@ -360,6 +362,7 @@ struct UploadPane: View {
             // `reset` rather than `clearSelection`: a failure must not make the
             // user choose every file again.
             Button(L10n.t(.commonTryAgain)) { model.reset() }
+                .buttonStyle(.referencePrimary)
         }
     }
 
@@ -369,7 +372,7 @@ struct UploadPane: View {
             InlineMessage(.warning, notice.text)
         } else {
             Text(notice.text)
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

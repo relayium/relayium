@@ -86,10 +86,11 @@ struct CapabilityGateView: View {
                 exit(L10n.t(.commonTryAgain)) { Task { await session.refresh() } }
 
             case let .verifyEmail(email):
-                Text(L10n.t(.contentCheckEmailTitle)).font(.headline)
+                Text(L10n.t(.contentCheckEmailTitle)).font(.body.weight(.semibold))
+                    .foregroundStyle(Palette.text)
                 // The address is the user's own and is isolated, not translated.
                 Text(L10n.t(.contentCheckEmailBody, [L10n.token(email)]))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 // To the Account destination, which owns the resend action and
                 // the way back — not to a website, and not to a second copy of
@@ -98,12 +99,13 @@ struct CapabilityGateView: View {
                 exit(L10n.t(.gateOpenAccount)) { onAccount(.signIn) }
 
             case let .pendingDeletion(purgeAfter, reactivateToken):
-                Text(L10n.t(.contentPendingDeletionTitle)).font(.headline)
+                Text(L10n.t(.contentPendingDeletionTitle)).font(.body.weight(.semibold))
+                    .foregroundStyle(Palette.text)
                 Text(L10n.t(.contentPendingDeletionBody, [
                     L10n.date(Date(timeIntervalSince1970: TimeInterval(purgeAfter)),
                               dateStyle: .medium, timeStyle: .none),
                 ]))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 // The token is the whole button: it is what makes reactivation
                 // one click on a web session the frozen account cannot create.
@@ -132,9 +134,10 @@ struct CapabilityGateView: View {
     private func exit(_ title: String, action: @escaping () -> Void) -> some View {
         if isWholeSurface {
             Button(title, action: action)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.referencePrimary)
         } else {
             Button(title, action: action)
+                .buttonStyle(.referenceSecondary)
         }
     }
 }

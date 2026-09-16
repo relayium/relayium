@@ -17,6 +17,27 @@ public protocol InboxSleeping: AnyObject, Sendable {
     func sleep(_ seconds: TimeInterval) async
     /// End the current sleep now. Safe to call when nothing is sleeping.
     func wake()
+    /// A counter of wakes so far, read immediately before deciding to sleep.
+    ///
+    /// **The half that makes a wake reliable.** `wake()` ends a sleep that is
+    /// already registered; a wake that lands after the caller decided to sleep but
+    /// before the sleep registered — the hop from the main actor into `sleep` —
+    /// would otherwise be lost, and the loop would wait out the whole interval
+    /// the wake existed to skip.
+    func wakeMark() -> UInt64
+    /// Sleep as `sleep(_:)` does, but return at once if any `wake()` happened
+    /// after `mark` was read. Wakes from BEFORE the mark are not remembered, so a
+    /// stale wake cannot make every later sleep return immediately.
+    func sleep(_ seconds: TimeInterval, unlessWokenSince mark: UInt64) async
+}
+
+/// Defaults for sleepers that have no wake window to close — test doubles whose
+/// `sleep` either never suspends or registers synchronously.
+public extension InboxSleeping {
+    func wakeMark() -> UInt64 { 0 }
+    func sleep(_ seconds: TimeInterval, unlessWokenSince mark: UInt64) async {
+        await sleep(seconds)
+    }
 }
 
 /// The real one.
@@ -28,16 +49,37 @@ public protocol InboxSleeping: AnyObject, Sendable {
 public final class InboxTaskSleeper: InboxSleeping, @unchecked Sendable {
     private let lock = NSLock()
     private var current: Task<Void, Never>?
+    /// Incremented by every `wake()`. Compared, under the same lock that
+    /// registers a sleep, against the mark the caller read before sleeping.
+    private var wakes: UInt64 = 0
 
     public init() {}
 
     public func sleep(_ seconds: TimeInterval) async {
+        await suspend(seconds, unlessWokenSince: nil)
+    }
+
+    public func wakeMark() -> UInt64 {
+        lock.lock(); defer { lock.unlock() }
+        return wakes
+    }
+
+    public func sleep(_ seconds: TimeInterval, unlessWokenSince mark: UInt64) async {
+        await suspend(seconds, unlessWokenSince: mark)
+    }
+
+    private func suspend(_ seconds: TimeInterval, unlessWokenSince mark: UInt64?) async {
         guard seconds > 0 else { return }
         let nanoseconds = UInt64(min(seconds, 86_400) * 1_000_000_000)
         let task = Task<Void, Never> {
             do { try await Task.sleep(nanoseconds: nanoseconds) } catch {}
         }
-        adopt(task)
+        guard adopt(task, unlessWokenSince: mark) else {
+            // A wake landed between the mark and this registration. Honour it
+            // rather than waiting out an interval nobody can now interrupt.
+            task.cancel()
+            return
+        }
         await task.value
         retire(task)
     }
@@ -46,9 +88,15 @@ public final class InboxTaskSleeper: InboxSleeping, @unchecked Sendable {
 
     /// The three below are non-`async` on purpose: taking an `NSLock` directly
     /// inside an `async` function is an error under the Swift 6 language mode.
-    private func adopt(_ task: Task<Void, Never>) {
+    ///
+    /// Check-and-register is one critical section, so a concurrent `wake()`
+    /// either sees this sleep registered and cancels it, or has already moved the
+    /// counter past `mark` and this refuses to register. There is no third order.
+    private func adopt(_ task: Task<Void, Never>, unlessWokenSince mark: UInt64?) -> Bool {
         lock.lock(); defer { lock.unlock() }
+        if let mark, wakes != mark { return false }
         current = task
+        return true
     }
 
     /// Clear only if the finished sleep is still the registered one, so a sleep
@@ -60,6 +108,7 @@ public final class InboxTaskSleeper: InboxSleeping, @unchecked Sendable {
 
     private func take() -> Task<Void, Never>? {
         lock.lock(); defer { lock.unlock() }
+        wakes &+= 1
         let previous = current
         current = nil
         return previous

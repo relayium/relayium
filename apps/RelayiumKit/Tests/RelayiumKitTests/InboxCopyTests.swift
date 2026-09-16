@@ -257,4 +257,67 @@ final class InboxCopyTests: XCTestCase {
                               "the accessible name is the bare visible label in \(language)")
         }
     }
+
+    // MARK: - check now
+
+    /// "Check now" is offered only in healthy waiting states — never beside a
+    /// recovery a problem state already carries, and never while a pass is known
+    /// to be running.
+    func testCheckNowIsOfferedOnlyInHealthyWaitingStates() {
+        for state in allStates {
+            let offered = InboxManualCheckPresentation.offersCheck(in: state)
+            switch state {
+            case .ready, .asking, .saved, .savedMessage:
+                XCTAssertTrue(offered, "\(state) does not offer check now")
+            default:
+                XCTAssertFalse(offered, "\(state) offers check now")
+                if let recovery = InboxStatusPresentation.recovery(for: state) {
+                    XCTAssertNotEqual(recovery, .answer,
+                                      "\(state) would put check now beside Answer")
+                }
+            }
+        }
+    }
+
+    /// Every answer renders in both maintained languages, the four are distinct,
+    /// and none of them claims something arrived or bypasses the sender's upload.
+    func testCheckNowCopyIsTruthfulInEnglishAndSimplifiedChinese() {
+        for language in [AppLanguage.en, .zh] {
+            let label = InboxManualCheckPresentation.label(isChecking: false, language: language)
+            let busy = InboxManualCheckPresentation.label(isChecking: true, language: language)
+            XCTAssertNotEqual(label, busy)
+            XCTAssertNil(InboxManualCheckPresentation.feedback(for: .none, language: language))
+            XCTAssertNil(InboxManualCheckPresentation.feedback(for: .checking,
+                                                               language: language))
+            let answers = [InboxManualCheck.nothingNew, .checked, .failed].compactMap {
+                InboxManualCheckPresentation.feedback(for: $0, language: language)
+            }
+            XCTAssertEqual(Set(answers).count, 3, "\(language) check answers are not distinct")
+            for text in answers + [label, busy] {
+                XCTAssertFalse(text.isEmpty)
+                XCTAssertFalse(text.hasPrefix("inbox."), "\(language) fell through to a key")
+            }
+            let readySentences = InboxAutoAccept.allCases.map {
+                InboxStatusPresentation.text(for: .ready($0), language: language)
+            }
+            XCTAssertFalse(answers.contains(where: readySentences.contains))
+        }
+        let en = { (check: InboxManualCheck) in
+            InboxManualCheckPresentation.feedback(for: check, language: .en) ?? ""
+        }
+        for claim in ["saved", "received", "arrived"] {
+            XCTAssertFalse(en(.nothingNew).lowercased().contains(claim))
+            XCTAssertFalse(en(.checked).lowercased().contains(claim))
+        }
+        XCTAssertTrue(en(.nothingNew).contains("upload has finished"),
+                      "the empty answer does not say a delivery needs a finished upload")
+        let zh = InboxManualCheckPresentation.feedback(for: .nothingNew, language: .zh) ?? ""
+        XCTAssertTrue(zh.contains("上传完成"))
+        XCTAssertFalse(zh.contains("已保存") || zh.contains("已接收"))
+        XCTAssertEqual(InboxManualCheckPresentation.label(isChecking: false, language: .en),
+                       "Check now")
+        XCTAssertEqual(InboxManualCheckPresentation.label(isChecking: false, language: .zh),
+                       "立即检查")
+    }
+
 }

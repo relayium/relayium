@@ -39,7 +39,8 @@ final class InboxControllerTests: XCTestCase {
         var controller: InboxController!
     }
 
-    private func makeHarness(bookmarking: InboxFolderBookmarking? = nil) throws -> Harness {
+    private func makeHarness(bookmarking: InboxFolderBookmarking? = nil,
+                             sleeper: InboxSleeping? = nil) throws -> Harness {
         let harness = Harness()
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("relayium-controller-\(UUID().uuidString)")
@@ -86,7 +87,7 @@ final class InboxControllerTests: XCTestCase {
             messageStore: { _ in messages },
             conversationStore: { _ in conversations },
             deviceDirectory: { _ in [InboxDeviceRow(id: "sender-device", name: "Sender Mac")] },
-            sleeper: harness.sleeper,
+            sleeper: sleeper ?? harness.sleeper,
             reveal: { [revealed = harness.revealed] urls in revealed.record(urls) },
             platform: "macos", appVersion: "test",
             backoff: InboxBackoff(idle: 30, afterWork: 2, first: 5, cap: 300, blocked: 60)))
@@ -959,6 +960,469 @@ final class InboxControllerTests: XCTestCase {
         }
     }
 
+    // MARK: - check now
+
+    private func count(_ transport: GatedInboxTransport,
+                       _ matches: (FakeInboxTransport.Call) -> Bool) -> Int {
+        transport.calls.filter(matches).count
+    }
+
+    private func heartbeats(_ transport: GatedInboxTransport) -> Int {
+        count(transport) { if case .heartbeat = $0 { return true } else { return false } }
+    }
+
+    private func pendingReads(_ transport: GatedInboxTransport) -> Int {
+        count(transport) { if case .pending = $0 { return true } else { return false } }
+    }
+
+    private func enrolments(_ transport: GatedInboxTransport) -> Int {
+        count(transport) { if case .enrol = $0 { return true } else { return false } }
+    }
+
+    /// A sleeping, healthy inbox checks at once when asked, and an empty answer
+    /// says nothing new rather than anything about a delivery.
+    ///
+    /// Two properties beyond "it woke": the loop was NOT restarted — a restart
+    /// re-enrols, and a restart is what cancels a delivery in flight — and the
+    /// wait after the check is the ordinary idle interval, so a check buys one
+    /// pass and does not shorten the schedule after it.
+    func testCheckNowWakesASleepingInboxWithoutRestartingIt() async throws {
+        let harness = try makeHarness()
+        try await seedKey(harness, account: accountA)
+        try enable(harness, account: accountA, policy: .auto)
+        let transport = transport(harness, accountA)
+        harness.controller.session(identity(accountA))
+        await waitForSleep(harness, atLeast: 1)
+        XCTAssertEqual(harness.controller.state, .ready(.auto))
+        XCTAssertEqual(harness.sleeper.delays, [30])
+        XCTAssertTrue(harness.controller.canCheckNow)
+
+        XCTAssertTrue(harness.controller.checkNow())
+        XCTAssertEqual(harness.controller.manualCheck, .checking)
+        await waitUntil({ harness.controller.manualCheck == .nothingNew },
+                        "a check of an empty inbox was never answered")
+        await waitForSleep(harness, atLeast: 2)
+
+        XCTAssertEqual(pendingReads(transport), 2, "the check did not read pending once")
+        XCTAssertEqual(heartbeats(transport), 2)
+        XCTAssertEqual(enrolments(transport), 1,
+                       "check now restarted the generation instead of waking it")
+        XCTAssertEqual(harness.sleeper.delays, [30, 30],
+                       "a check changed the schedule after it")
+        XCTAssertEqual(harness.controller.state, .ready(.auto))
+        XCTAssertTrue(harness.controller.results.isEmpty,
+                      "an empty check produced a result")
+        XCTAssertTrue(harness.notifier.delivered.isEmpty,
+                      "an empty check announced something")
+        harness.controller.signedOut()
+    }
+
+    /// Pressed while a pass is already running — repeatedly — the check is
+    /// answered by exactly ONE following pass, serially. The running pass is not
+    /// cancelled and no second pass runs beside it.
+    ///
+    /// The wake here arrives while nothing is sleeping, which is the window the
+    /// sleeper alone used to lose: this is the controller-level half of that fix.
+    func testChecksDuringAPassCoalesceIntoOneFollowingPass() async throws {
+        let harness = try makeHarness()
+        try await seedKey(harness, account: accountA)
+        try enable(harness, account: accountA, policy: .auto)
+        let transport = transport(harness, accountA)
+        transport.pendingGate.close()
+        harness.controller.session(identity(accountA))
+        await waitUntil({ transport.pendingGate.isWaiting }, "the pass never reached pending")
+
+        XCTAssertTrue(harness.controller.checkNow())
+        XCTAssertTrue(harness.controller.checkNow())
+        XCTAssertTrue(harness.controller.checkNow())
+        XCTAssertEqual(harness.controller.manualCheck, .checking)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertEqual(heartbeats(transport), 1,
+                       "a check started a pass beside the one already running")
+
+        transport.pendingGate.open()
+        await waitUntil({ harness.controller.manualCheck == .nothingNew },
+                        "the check was never answered by a following pass")
+        await waitForSleep(harness, atLeast: 1)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertEqual(heartbeats(transport), 2,
+                       "three presses produced more than one extra pass")
+        XCTAssertEqual(pendingReads(transport), 2)
+        XCTAssertEqual(harness.sleeper.delays, [30],
+                       "the loop slept between the running pass and the requested one")
+        XCTAssertEqual(enrolments(transport), 1)
+        harness.controller.signedOut()
+    }
+
+    /// Pressed during preparation, the check is answered by the first pass — it
+    /// started after the press — and costs no extra pass at all.
+    func testACheckDuringPreparationIsAnsweredByTheFirstPass() async throws {
+        let harness = try makeHarness()
+        try await seedKey(harness, account: accountA)
+        try enable(harness, account: accountA, policy: .auto)
+        let transport = transport(harness, accountA)
+        transport.enrolGate.close()
+        harness.controller.session(identity(accountA))
+        await waitUntil({ transport.enrolGate.isWaiting }, "preparation never started")
+        XCTAssertEqual(harness.controller.state, .loading)
+
+        XCTAssertTrue(harness.controller.checkNow())
+        transport.enrolGate.open()
+        await waitUntil({ harness.controller.manualCheck == .nothingNew },
+                        "a check during preparation was never answered")
+        await waitForSleep(harness, atLeast: 1)
+        XCTAssertEqual(heartbeats(transport), 1, "a check during preparation added a pass")
+        harness.controller.signedOut()
+    }
+
+    /// The same wake, through the PRODUCTION sleeper and real time.
+    ///
+    /// Repeated, because the window it covers is the hop between the loop
+    /// deciding to sleep and the sleep registering, and a single press lands in
+    /// it only sometimes. Each check must be answered well inside the 30 s idle
+    /// interval; one lost wake would wait that interval out and fail the bound.
+    func testEveryCheckIsAnsweredPromptlyThroughTheRealSleeper() async throws {
+        let sleeper = InboxTaskSleeper()
+        let harness = try makeHarness(sleeper: sleeper)
+        try await seedKey(harness, account: accountA)
+        try enable(harness, account: accountA, policy: .auto)
+        let transport = transport(harness, accountA)
+        harness.controller.session(identity(accountA))
+        await waitUntil({ harness.controller.state == .ready(.auto) }, "never became ready")
+
+        for round in 1...25 {
+            XCTAssertTrue(harness.controller.checkNow())
+            await waitUntil({ harness.controller.manualCheck == .nothingNew },
+                            "check \(round) was lost")
+            if harness.controller.manualCheck != .nothingNew { break }
+        }
+        XCTAssertEqual(heartbeats(transport), 26, "checks were not one pass each")
+        harness.controller.signedOut()
+    }
+
+    /// **Nothing new means central listed nothing — not that nothing was claimed.**
+    ///
+    /// The engine returns `.idle` both for an empty pending list and for a
+    /// non-empty one whose claim leased nothing (another worker took it, or it
+    /// expired between the two calls), and the controller then publishes
+    /// `ready`. That check SAW work, so "nothing new" would be false.
+    func testACheckThatSawPendingWorkButClaimedNothingIsNotNothingNew() async throws {
+        let harness = try makeHarness()
+        try await seedKey(harness, account: accountA)
+        try enable(harness, account: accountA, policy: .auto)
+        let transport = transport(harness, accountA)
+        harness.controller.session(identity(accountA))
+        await waitForSleep(harness, atLeast: 1)
+        XCTAssertEqual(harness.controller.state, .ready(.auto))
+
+        transport.pendingResults = [.success([InboxTask(id: "raced", state: .queued)])]
+        transport.claimResult = .success((deliveries: [], leaseSeconds: 300))
+        XCTAssertTrue(harness.controller.checkNow())
+        await waitUntil({ harness.controller.manualCheck != .checking },
+                        "the check was never answered")
+        await waitForSleep(harness, atLeast: 2)
+
+        XCTAssertTrue(transport.calls.contains(.claim(max: InboxProtocol.claimBatch)),
+                      "the pass did not reach the claim this test is about")
+        XCTAssertEqual(harness.controller.state, .ready(.auto))
+        XCTAssertEqual(harness.controller.manualCheck, .checked,
+                       "a check that listed pending work reported nothing new")
+        XCTAssertTrue(harness.controller.results.isEmpty, "an unclaimed task produced a result")
+        XCTAssertTrue(harness.notifier.delivered.isEmpty)
+        harness.controller.signedOut()
+    }
+
+    /// **A check pressed during a real download is serialized behind it.**
+    ///
+    /// The pass is held inside the ciphertext stream — past the claim, with the
+    /// lease taken — which is exactly where a restart would cancel the transfer.
+    /// Repeated presses there must not restart the generation, must not start a
+    /// second pass, and must leave the delivery to finish and be receipted
+    /// exactly once. The check is then answered by the one pass that follows.
+    func testACheckDuringAnActualDownloadIsSerializedAndTheDeliveryLandsOnce() async throws {
+        let harness = try makeHarness()
+        try await seedKey(harness, account: accountA)
+        try enable(harness, account: accountA, policy: .auto)
+        try queueDelivery(harness, account: accountA)
+        let transport = transport(harness, accountA)
+        transport.blobGate.close()
+        harness.controller.session(identity(accountA))
+        await waitUntil({ transport.blobGate.isWaiting }, "the download never started")
+        await waitUntil({ harness.controller.state == .working }, "the download was not shown")
+
+        XCTAssertTrue(harness.controller.canCheckNow)
+        XCTAssertTrue(harness.controller.checkNow())
+        XCTAssertTrue(harness.controller.checkNow())
+        XCTAssertEqual(harness.controller.manualCheck, .checking)
+        try? await Task.sleep(nanoseconds: 30_000_000)
+        XCTAssertEqual(heartbeats(transport), 1, "a check started a pass beside the download")
+        XCTAssertEqual(enrolments(transport), 1, "a check restarted the receiver mid-download")
+        XCTAssertEqual(harness.controller.state, .working, "a check interrupted the download")
+
+        transport.blobGate.open()
+        await waitUntil({ harness.controller.manualCheck == .nothingNew },
+                        "the follow-up check was never answered")
+        await waitForSleep(harness, atLeast: 1)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        let saved = transport.calls.filter {
+            if case .report(_, .saved, _, _) = $0 { return true } else { return false }
+        }
+        XCTAssertEqual(saved.count, 1, "the delivery was not reported saved exactly once")
+        XCTAssertEqual(transport.calls.filter { if case .claim = $0 { return true }
+                                                return false }.count, 1,
+                       "the follow-up check claimed again")
+        XCTAssertEqual(harness.controller.results.map(\.taskID), ["task1"],
+                       "the delivery was not receipted exactly once")
+        XCTAssertEqual(harness.notifier.delivered, [.saved(files: 1)])
+        XCTAssertEqual(heartbeats(transport), 2, "two presses produced more than one extra pass")
+        XCTAssertEqual(enrolments(transport), 1)
+        XCTAssertEqual(harness.sleeper.delays, [30],
+                       "the loop slept between the download and the requested check")
+        XCTAssertEqual(try Data(contentsOf: harness.root.appendingPathComponent("a.txt")),
+                       Data([1, 2, 3]), "the delivery did not land intact")
+        harness.controller.signedOut()
+    }
+
+    /// A check that finds a delivery says only that the check completed; the
+    /// saved claim is the status line's, from the durable receipt. Once the loop
+    /// moves on, the answer is withdrawn rather than left describing the past.
+    func testACheckThatFindsADeliveryDefersToTheReceipt() async throws {
+        let harness = try makeHarness()
+        try await seedKey(harness, account: accountA)
+        try enable(harness, account: accountA, policy: .auto)
+        harness.controller.session(identity(accountA))
+        await waitForSleep(harness, atLeast: 1)
+
+        try queueDelivery(harness, account: accountA)
+        XCTAssertTrue(harness.controller.checkNow())
+        await waitUntil({ harness.controller.manualCheck == .checked },
+                        "a check that worked a delivery was not answered")
+        XCTAssertEqual(harness.controller.state, .saved(files: 1))
+        XCTAssertEqual(harness.controller.results.count, 1)
+        await waitForSleep(harness, atLeast: 2)
+        XCTAssertEqual(harness.sleeper.delays.last, 2, "after work the schedule is unchanged")
+
+        harness.sleeper.wake()
+        await waitUntil({ harness.controller.state == .ready(.auto) },
+                        "the loop did not return to ready")
+        XCTAssertEqual(harness.controller.manualCheck, .none,
+                       "a check answer outlived the state it described")
+        harness.controller.signedOut()
+    }
+
+    /// A check whose pass fails says so, keeps the bounded backoff, and does not
+    /// turn a failing central into a busy loop.
+    func testAFailedCheckSaysSoAndKeepsTheBackoff() async throws {
+        let harness = try makeHarness()
+        try await seedKey(harness, account: accountA)
+        try enable(harness, account: accountA, policy: .auto)
+        let transport = transport(harness, accountA)
+        harness.controller.session(identity(accountA))
+        await waitForSleep(harness, atLeast: 1)
+
+        transport.heartbeatResult = .failure(InboxError.network)
+        XCTAssertTrue(harness.controller.checkNow())
+        await waitUntil({ harness.controller.manualCheck == .failed },
+                        "a failed check was not reported")
+        XCTAssertEqual(harness.controller.state, .offline(retryInSeconds: 5))
+        await waitForSleep(harness, atLeast: 2)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertEqual(harness.sleeper.delays, [30, 5])
+        XCTAssertEqual(heartbeats(transport), 2, "a failed check spun")
+        // Offline is a problem state with its own Try again, so the surface does
+        // not offer a second button beside it.
+        XCTAssertFalse(InboxManualCheckPresentation.offersCheck(in: harness.controller.state))
+        harness.controller.signedOut()
+    }
+
+    /// A failure BEFORE the pass — here, enrolment — answers the check as failed
+    /// and backs off along the same curve rather than retrying at once.
+    func testAFailureDuringPreparationAnswersTheCheckWithoutSpinning() async throws {
+        let harness = try makeHarness()
+        try await seedKey(harness, account: accountA)
+        try enable(harness, account: accountA, policy: .auto)
+        let transport = transport(harness, accountA)
+        let working = transport.enrolResult
+        transport.enrolResult = .failure(InboxError.network)
+        harness.controller.session(identity(accountA))
+        await waitForSleep(harness, atLeast: 1)
+        XCTAssertEqual(harness.sleeper.delays, [5])
+
+        XCTAssertTrue(harness.controller.checkNow())
+        await waitUntil({ harness.controller.manualCheck == .failed },
+                        "a check whose preparation failed was not answered")
+        await waitForSleep(harness, atLeast: 2)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertEqual(harness.sleeper.delays, [5, 10], "the failed check reset or skipped backoff")
+        XCTAssertEqual(enrolments(transport), 2)
+        transport.enrolResult = working
+        harness.controller.signedOut()
+    }
+
+    /// Under Ask, a check refreshes the questions and answers none of them —
+    /// with SEVERAL held, which is where a check that accepted "the pending
+    /// work" would do the most damage.
+    func testACheckUnderAskAnswersNoQuestion() async throws {
+        let harness = try makeHarness()
+        try await seedKey(harness, account: accountA)
+        try enable(harness, account: accountA, policy: .ask)
+        let transport = transport(harness, accountA)
+        transport.pendingResults = [.success([
+            InboxTask(id: "held1", state: .attentionRequired, ciphertextBytes: 1_024),
+            InboxTask(id: "held2", state: .attentionRequired, ciphertextBytes: 8_192),
+            InboxTask(id: "held3", state: .attentionRequired, ciphertextBytes: 4_096)
+        ])]
+        transport.claimResult = .success((deliveries: [], leaseSeconds: 300))
+        harness.controller.session(identity(accountA))
+        await waitUntil({ harness.controller.asking.count == 3 }, "no questions appeared")
+        await waitForSleep(harness, atLeast: 1)
+
+        XCTAssertTrue(harness.controller.canCheckNow)
+        XCTAssertTrue(harness.controller.checkNow())
+        await waitUntil({ harness.controller.manualCheck == .checked },
+                        "a check with held deliveries was not answered")
+        XCTAssertNotEqual(harness.controller.manualCheck, .nothingNew,
+                          "held deliveries were reported as nothing new")
+        XCTAssertEqual(harness.controller.state, .asking(count: 3))
+        XCTAssertEqual(harness.controller.asking.map(\.id), ["held1", "held2", "held3"])
+        XCTAssertFalse(transport.calls.contains {
+            if case .accept = $0 { return true } else { return false }
+        }, "a check answered a question that was asked of the owner")
+        XCTAssertTrue(harness.controller.results.isEmpty)
+        XCTAssertTrue(transport.calls.filter { if case .blob = $0 { return true }
+                                               return false }.isEmpty,
+                      "a check downloaded a held delivery")
+        harness.controller.signedOut()
+    }
+
+    /// Every gate the loop applies, the check applies too — and a refused check
+    /// neither shows as checking nor talks to central.
+    func testCheckNowIsRefusedWhereverTheLoopWouldNotReceive() async throws {
+        // Off.
+        do {
+            let harness = try makeHarness()
+            try await seedKey(harness, account: accountA)
+            harness.controller.session(identity(accountA))
+            await waitForSleep(harness, atLeast: 1)
+            XCTAssertFalse(harness.controller.canCheckNow)
+            XCTAssertFalse(harness.controller.checkNow())
+            XCTAssertEqual(harness.controller.manualCheck, .none)
+            try? await Task.sleep(nanoseconds: 20_000_000)
+            XCTAssertTrue(transport(harness, accountA).calls.isEmpty, "an Off inbox checked")
+            harness.controller.signedOut()
+        }
+        // On, with no folder.
+        do {
+            let harness = try makeHarness()
+            try await seedKey(harness, account: accountA)
+            harness.store.setReceivePolicy(.auto, account: accountA)
+            harness.controller.session(identity(accountA))
+            await waitForSleep(harness, atLeast: 1)
+            XCTAssertEqual(harness.controller.state, .folderMissing)
+            XCTAssertFalse(harness.controller.checkNow())
+            XCTAssertEqual(harness.controller.manualCheck, .none)
+            harness.controller.signedOut()
+        }
+        // Paused, in the background, signed out, and stopped for good.
+        let harness = try makeHarness()
+        try await seedKey(harness, account: accountA)
+        try enable(harness, account: accountA, policy: .auto)
+        let transport = transport(harness, accountA)
+        harness.controller.session(identity(accountA))
+        await waitForSleep(harness, atLeast: 1)
+
+        harness.controller.pause()
+        let beforePause = transport.calls.count
+        XCTAssertFalse(harness.controller.checkNow())
+        XCTAssertEqual(harness.controller.manualCheck, .none)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertEqual(transport.calls.count, beforePause, "a paused inbox checked")
+        harness.controller.resume()
+        await waitUntil({ harness.controller.state == .ready(.auto) }, "resume did not recover")
+
+        harness.controller.foreground(false)
+        XCTAssertFalse(harness.controller.checkNow(), "a backgrounded inbox accepted a check")
+        harness.controller.foreground(true)
+        await waitUntil({ harness.controller.state == .ready(.auto) }, "foreground did not recover")
+
+        transport.enrolResult = .failure(InboxEnrolment.Failure.registrationMismatch)
+        harness.controller.retryNow()
+        await waitUntil({ harness.controller.state == .failed(.enrolmentRefused) },
+                        "the refusal did not stop the loop")
+        XCTAssertFalse(harness.controller.checkNow(),
+                       "a stopped loop accepted a check it will never answer")
+
+        harness.controller.signedOut()
+        XCTAssertFalse(harness.controller.checkNow())
+    }
+
+    /// Withdrawn, not answered, when something stops it: a pause, a policy
+    /// change, a sign-out, or another account. The pass that was running must
+    /// not answer for a generation it no longer belongs to.
+    func testAnOutstandingCheckIsWithdrawnByEveryStopAndNeverAnsweredLate() async throws {
+        // Pause while the check is outstanding.
+        do {
+            let harness = try makeHarness()
+            try await seedKey(harness, account: accountA)
+            try enable(harness, account: accountA, policy: .auto)
+            let transport = transport(harness, accountA)
+            harness.controller.session(identity(accountA))
+            await waitForSleep(harness, atLeast: 1)
+            transport.pendingGate.close()
+            XCTAssertTrue(harness.controller.checkNow())
+            await waitUntil({ transport.pendingGate.isWaiting }, "the check never ran")
+            harness.controller.pause()
+            XCTAssertEqual(harness.controller.manualCheck, .none)
+            transport.pendingGate.open()
+            await waitForSleep(harness, atLeast: 2)
+            XCTAssertEqual(harness.controller.state, .paused)
+            XCTAssertEqual(harness.controller.manualCheck, .none,
+                           "a paused inbox reported the answer to a withdrawn check")
+            harness.controller.signedOut()
+        }
+        // Policy switched Off mid-check.
+        do {
+            let harness = try makeHarness()
+            try await seedKey(harness, account: accountA)
+            try enable(harness, account: accountA, policy: .auto)
+            let transport = transport(harness, accountA)
+            harness.controller.session(identity(accountA))
+            await waitForSleep(harness, atLeast: 1)
+            transport.pendingGate.close()
+            XCTAssertTrue(harness.controller.checkNow())
+            await waitUntil({ transport.pendingGate.isWaiting }, "the check never ran")
+            harness.controller.setPolicy(.off)
+            XCTAssertEqual(harness.controller.manualCheck, .none)
+            transport.pendingGate.open()
+            await waitUntil({ harness.controller.state == .disabled }, "Off did not settle")
+            XCTAssertEqual(harness.controller.manualCheck, .none)
+            harness.controller.signedOut()
+        }
+        // Account switch mid-check: account A's pass returns under account B.
+        let harness = try makeHarness()
+        try await seedKey(harness, account: accountA)
+        try await seedKey(harness, account: accountB)
+        try enable(harness, account: accountA, policy: .auto)
+        let transportA = transport(harness, accountA)
+        harness.controller.session(identity(accountA))
+        await waitForSleep(harness, atLeast: 1)
+        transportA.pendingGate.close()
+        XCTAssertTrue(harness.controller.checkNow())
+        await waitUntil({ transportA.pendingGate.isWaiting }, "the check never ran")
+
+        harness.controller.session(identity(accountB, bearer: "bearer-b"))
+        XCTAssertEqual(harness.controller.manualCheck, .none)
+        transportA.pendingGate.open()
+        await waitUntil({ harness.controller.state == .disabled },
+                        "account B did not settle on its own answer")
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertEqual(harness.controller.manualCheck, .none,
+                       "account A's check was answered under account B")
+        harness.controller.signedOut()
+        XCTAssertEqual(harness.controller.manualCheck, .none)
+    }
+
     // MARK: - helpers
 
     private func enable(_ harness: Harness, account: InboxAccountID,
@@ -1057,9 +1521,15 @@ final class InboxGate: @unchecked Sendable {
 /// `FakeInboxTransport` with three gates, so a pass can be suspended before the
 /// pending read, mid-download, or after the commit but before its report.
 final class GatedInboxTransport: FakeInboxTransport, @unchecked Sendable {
+    let enrolGate = InboxGate()
     let pendingGate = InboxGate()
     let blobGate = InboxGate()
     let reportGate = InboxGate()
+
+    override func enrol(_ request: InboxEnrolRequest) async throws -> InboxEnrolResult {
+        await enrolGate.pass()
+        return try await super.enrol(request)
+    }
 
     override func pending(limit: Int) async throws -> [InboxTask] {
         await pendingGate.pass()

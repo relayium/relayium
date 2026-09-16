@@ -48,34 +48,47 @@ struct AppShellView: View {
     /// away.
     @EnvironmentObject private var signOut: AccountSignOutCoordinator
 
+    /// Whether the sidebar is showing. View state: hiding it is a window
+    /// arrangement, not a preference anything else reads.
+    @State private var sidebarVisible = true
+    /// Where AppKit put the traffic lights, so the drawn chrome lines up.
+    @State private var controls = WindowControlsMetrics()
+
     var body: some View {
-        NavigationSplitView {
-            SidebarView()
-                .navigationSplitViewColumnWidth(min: 208, ideal: 224, max: 288)
-        } detail: {
+        // **A flat split rather than `NavigationSplitView`.** The reference is
+        // a full-height 216pt sidebar in its own colour, flush with the window
+        // edge, under the window's real traffic lights, beside a detail column
+        // whose toolbar carries the title, a subtitle and the live status.
+        // `NavigationSplitView` on current macOS draws an inset glass sidebar
+        // and its own title, which is the system-default styling the owner
+        // rejected; the routing below is unchanged.
+        HStack(spacing: 0) {
+            if sidebarVisible {
+                SidebarView()
+                    .frame(width: Metrics.sidebar)
+                    .frame(maxHeight: .infinity)
+                    .background(Palette.sidebar)
+                Rectangle()
+                    .fill(Palette.hairline)
+                    .frame(width: 1)
+                    .accessibilityHidden(true)
+            }
             Group {
-                // Switched on the SURFACE rather than on the destination. The
-                // two are one-to-one today, and the indirection still earns its
-                // place: `MacSurface` is where macOS says which screens exist
-                // and which of them the sidebar offers, and `storedReceive` is
-                // the case that proves it — it has an arm here and no row there.
+                // Switched on the SURFACE rather than on the destination.
+                // `MacSurface` is where macOS says which screens exist and which
+                // of them the sidebar offers, and `storedReceive` is the case
+                // that proves it — it has an arm here and no row there.
                 //
                 // No `default`: a seventh macOS surface is a compile error here
-                // rather than a sidebar row that opens nothing, and a seventh
-                // destination is a compile error in `AppDestination.macSurface`
-                // rather than a screen that never opens.
+                // rather than a sidebar row that opens nothing.
                 switch navigation.selection.macSurface {
                 // Each transfer destination is handed ONE module, by name, and
-                // holds no way to reach the other. That is what makes "cancel
-                // here cancels only this" a property of the composition rather
-                // than a rule the views have to keep.
+                // holds no way to reach the other.
                 case .lanTransfer:          LanTransferDestination(module: modules.nearby)
                 case .crossNetworkTransfer: CrossNetworkTransferDestination(module: modules.direct)
                 case .storedSend:           StoredSendDestination()
-                // Reachable, never browseable. A `relayium.com` download link
-                // the OS handed this app selects `.storedReceive`, and this is
-                // the arm that draws it; removing the sidebar row removed the
-                // way to WANDER here, not the way to arrive.
+                // Reachable, never browseable: a download link the OS handed
+                // this app selects `.storedReceive`, and this arm draws it.
                 case .storedReceive:        StoredReceiveDestination()
                 case .deviceInbox:          DeviceInboxDestination()
                 case .account:              AccountDestination()
@@ -83,11 +96,21 @@ struct AppShellView: View {
             }
             // Stable and nonlocalized. The UI suite must observe the detail
             // surface itself, not mistake the identically titled sidebar row
-            // for proof that a destination rendered. Keyed on the surface, so
-            // a pairing-code deep link and a nearby session both prove the ONE
-            // screen they actually land on.
+            // for proof that a destination rendered.
             .accessibilityIdentifier("destination-\(navigation.selection.macSurface.rawValue)")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Palette.pageBackground)
         }
+        // Under the transparent title bar, so the sidebar colour and the
+        // toolbar run to the window's top edge as they do in the reference.
+        .ignoresSafeArea(.container, edges: .top)
+        .foregroundStyle(Palette.text)
+        .tint(Palette.action)
+        .environment(\.shellChrome, ShellChrome(
+            sidebarVisible: sidebarVisible,
+            controls: controls,
+            toggleSidebar: { sidebarVisible.toggle() }))
+        .background(WindowChrome(metrics: $controls))
         .frame(minWidth: 860, minHeight: 560)
         // A modifier ON the split view, never a branch around it: the structure
         // still renders unconditionally, which is what keeps every signed-out
@@ -103,7 +126,12 @@ struct AppShellView: View {
                 ProgressView { Text(L10n.t(.accountSigningOut)) }
                     .controlSize(.small)
                     .padding(20)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    // The reference card, so the one transient panel the shell
+                    // draws is the same kind of thing as every group below it.
+                    .background(RoundedRectangle(cornerRadius: Metrics.corner)
+                        .fill(Palette.cardBackground))
+                    .overlay(RoundedRectangle(cornerRadius: Metrics.corner)
+                        .strokeBorder(Palette.cardBorder, lineWidth: 1))
             }
         }
         // A link the OS handed this app. `AppDeepLinkRouter` has already

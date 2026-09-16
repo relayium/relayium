@@ -259,7 +259,11 @@ struct RelayiumApp: App {
     /// `makeSharedDraftStore()` is nil on an un-provisioned build, and the inbox
     /// takes that in its stride: nothing can arrive, so nothing does, and the
     /// rest of the app is unaffected.
-    private let sharedDrafts = SharedDraftInbox(store: AppEnvironment.makeSharedDraftStore())
+    // UI acceptance must not adopt or retire drafts belonging to the installed
+    // app. The ternary is lazy: a test launch never even opens the App Group.
+    // UITestMode.isActive is always false in Release builds.
+    private let sharedDrafts = SharedDraftInbox(
+        store: UITestMode.isActive ? nil : AppEnvironment.makeSharedDraftStore())
     /// The app's one in-app purchase model, or `nil` in a build that does not
     /// sell — which is what the direct download's seam returns.
     ///

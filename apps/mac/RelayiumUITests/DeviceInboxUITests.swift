@@ -49,7 +49,7 @@ final class DeviceInboxUITests: XCTestCase {
         } ?? app.windows.firstMatch
     }
 
-    /// The settings scene, identified by the shipped `.frame(width: 520)`
+    /// The settings scene, identified by its shipped 520pt width
     /// contract rather than by index: with the product window closed the
     /// settings window is the ONLY window, so "the second window" does not
     /// identify it, and the MenuBarExtra's own status-item window is smaller.
@@ -127,8 +127,8 @@ final class DeviceInboxUITests: XCTestCase {
 
     /// A control that may be below the fold of a long form.
     ///
-    /// The Device Inbox surface is seven sections tall in the main window, and a
-    /// SwiftUI `Form` creates its rows lazily. Scrolling once and re-asking is the
+    /// The Device Inbox surface is seven groups tall in the main window, and a
+    /// control below the fold is not on screen yet. Scrolling once and re-asking is the
     /// difference between "this control is missing" and "this window is 700 points
     /// high", and only one of those is a product defect.
     ///
@@ -669,6 +669,62 @@ final class DeviceInboxUITests: XCTestCase {
                        "the in-progress surface named the file being received")
     }
 
+    // MARK: - check now
+
+    /// **Check now is observable end to end: Checking…, an empty answer that
+    /// claims nothing, then a found delivery whose saved claim is the status
+    /// line's.**
+    ///
+    /// The fixture stretches the automatic schedule to an hour, so nothing
+    /// below can be explained by the loop's own timer: each pass after launch is
+    /// one this test pressed for, and each is held for a moment so Checking… is
+    /// on screen long enough to read. No network is involved.
+    func testCheckNowShowsCheckingThenNothingNewThenDefersToTheReceipt() {
+        launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-check"])
+        let window = openDeviceInboxDestination()
+
+        let status = element("inbox-status", in: window)
+        XCTAssertTrue(status.waitForExistence(timeout: 15))
+        let ready = NSPredicate(format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@",
+                                "Ready to receive", "Ready to receive")
+        expectation(for: ready, evaluatedWith: status, handler: nil)
+        waitForExpectations(timeout: 20)
+
+        let check = revealed("inbox-check-now", in: window, timeout: 10)
+        assertOnScreen(check, "Check now", in: window)
+        XCTAssertTrue(check.isEnabled)
+        XCTAssertFalse(element("inbox-check-result", in: window).exists,
+                       "an answer was shown before anything was checked")
+
+        check.click()
+        let busy = NSPredicate(format: "isEnabled == false")
+        expectation(for: busy, evaluatedWith: check, handler: nil)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(text(of: check).contains("Checking"),
+                      "a running check does not say so")
+
+        let answer = element("inbox-check-result", in: window)
+        XCTAssertTrue(answer.waitForExistence(timeout: 15), "the check was never answered")
+        XCTAssertTrue(text(of: answer).contains("Nothing new"))
+        XCTAssertTrue(text(of: status).contains("Ready to receive"),
+                      "an empty check changed what the inbox says it is")
+        XCTAssertFalse(visibleText(in: window).contains("files saved"),
+                       "an empty check was presented as a delivery")
+
+        let enabled = NSPredicate(format: "isEnabled == true")
+        expectation(for: enabled, evaluatedWith: check, handler: nil)
+        waitForExpectations(timeout: 5)
+        check.click()
+        let saved = NSPredicate(format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@",
+                                "3 files saved", "3 files saved")
+        expectation(for: saved, evaluatedWith: status, handler: nil)
+        waitForExpectations(timeout: 30)
+        let done = NSPredicate(format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@",
+                               "Check complete", "Check complete")
+        expectation(for: done, evaluatedWith: answer, handler: nil)
+        waitForExpectations(timeout: 10)
+    }
+
     // MARK: - a completed result
 
     /// A real delivery, decrypted and committed during this launch, appears in
@@ -842,13 +898,12 @@ final class DeviceInboxUITests: XCTestCase {
     /// **The whole Help section is readable with every preceding section
     /// present.**
     ///
-    /// The owner's report, as a runtime property. `DestinationScaffold` gives the
-    /// grouped `Form` an exact height inside a `GeometryReader`, and the header
-    /// is a `safeAreaInset` — which does not draw OVER the modified view, it
-    /// reports a size that includes itself. Applied to the already-framed Form
-    /// the composite came out taller than the window by the header's height, so
-    /// the bottom of the Form's own viewport hung below the window's edge: the
-    /// last section could be scrolled to and never finished.
+    /// The owner's report, as a runtime property. `DestinationScaffold` once gave
+    /// a grouped `Form` an exact height with its header as a `safeAreaInset`,
+    /// and the composite came out taller than the window by the header's height,
+    /// so the last section could be scrolled to and never finished. The page is
+    /// now cards in the scaffold's own scroll view; this keeps the property
+    /// honest for that shape too.
     ///
     /// This is driven in the state with the MOST content above Help — signed in,
     /// a completed delivery, and blocked banners adding their own section — which
@@ -1396,11 +1451,11 @@ final class DeviceInboxUITests: XCTestCase {
 
         // Away, into a live pairing, and back. This is the whole reproduction:
         // the destination on the right is rebuilt, the send model is not.
-        sidebarRow("crossNetworkTransfer", named: "Pairing Transfer",
+        sidebarRow("crossNetworkTransfer", named: "Cross-network Transfer",
                    in: window).click()
         XCTAssertTrue(element("destination-crossNetworkTransfer", in: window)
             .waitForExistence(timeout: 20),
-                      "the sidebar did not reach Pairing Transfer")
+                      "the sidebar did not reach Cross-network Transfer")
         sidebarRow("deviceInbox", named: "Device Inbox", in: window).click()
         XCTAssertTrue(element("destination-deviceInbox", in: window)
             .waitForExistence(timeout: 20),

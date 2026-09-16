@@ -28,14 +28,15 @@ struct PendingFileList: View {
                         let size = L10n.bytes(Int64(file.size))
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
                             Text(name)
+                                .foregroundStyle(Palette.text)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .textSelection(.enabled)
                             Text(size)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Palette.textTertiary)
                                 .fixedSize()
                         }
-                        .font(.caption)
+                        .font(.subheadline)
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("\(name), \(size)")
                         .accessibilityIdentifier("pendingFile.\(index)")
@@ -44,7 +45,9 @@ struct PendingFileList: View {
                 .padding(10)
             }
             .frame(maxHeight: 200)
-            .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
+            .background(RoundedRectangle(cornerRadius: 8).fill(Palette.field))
+            .overlay(RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Palette.hairline, lineWidth: 1))
             .accessibilityElement(children: .contain)
         }
     }

@@ -187,16 +187,17 @@ struct TransferLinkPane: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(L10n.t(.linkOpenWith, [L10n.token(link.peerLabel ?? "")]))
-                .font(.headline)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Palette.text)
                 .accessibilityIdentifier("link-session-peer")
             Text(L10n.t(.nearbySessionPeerDisclaimer))
-                .font(.caption2).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             if link.connection.isOpen && !link.isVerificationPending {
                 // The claim the whole batch exists to make, and the one sentence
                 // that replaces the two one-lane notes.
                 Text(L10n.t(.linkOneConnectionNote))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("link-one-connection-note")
             }
@@ -239,23 +240,24 @@ struct TransferLinkPane: View {
     /// press would be swallowed is exactly the shape this pane must not have.
     private func verification(_ sas: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(L10n.t(.linkVerifyTitle)).font(.subheadline.weight(.semibold))
+            Text(L10n.t(.linkVerifyTitle)).font(.callout.weight(.semibold))
+                .foregroundStyle(Palette.text)
             SecurityCodeText(code: sas, style: .verification)
             Text(L10n.t(.linkVerifyBody))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             if !link.armedFiles.isEmpty {
                 Text(L10n.t(.linkVerifyHoldingFiles))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("link-holding-files")
             }
             HStack {
                 Button(L10n.t(.linkVerifyMatches)) { link.confirmSAS() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.referencePrimary)
                     .accessibilityIdentifier("link-verify-matches")
                 Button(L10n.t(.linkVerifyDiffers), role: .destructive) { link.rejectSAS() }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.referenceSecondary)
                     .accessibilityIdentifier("link-verify-differs")
             }
         }
@@ -330,7 +332,7 @@ struct TransferLinkPane: View {
 
             HStack(spacing: Metrics.tight) {
                 Button(L10n.t(.linkSend)) { sendDraft() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.referencePrimary)
                     // NOT `.defaultAction`: that is plain Return, and plain
                     // Return belongs to the editor above.
                     .keyboardShortcut(.return, modifiers: .command)
@@ -341,14 +343,14 @@ struct TransferLinkPane: View {
                     .disabled(!link.canSendMessage || trimmedDraft.isEmpty)
                     .accessibilityIdentifier("link-send-message")
                 Text(L10n.t(.composerShortcutHint))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("link-composer-shortcut")
                 Spacer(minLength: 0)
             }
             if link.isWaitingForConversation {
                 Text(L10n.t(.linkWaitingForPeer))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("link-waiting-for-peer")
             }
@@ -373,11 +375,11 @@ struct TransferLinkPane: View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
             HStack(spacing: 8) {
                 Button(L10n.t(.linkSendFile)) { pick(directories: false) }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.referenceSecondary)
                     .disabled(!link.acceptsWork)
                     .accessibilityIdentifier("link-send-file")
                 Button(L10n.t(.linkSendFolder)) { pick(directories: true) }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.referenceSecondary)
                     .disabled(!link.acceptsWork)
                     .accessibilityIdentifier("link-send-folder")
             }
@@ -385,25 +387,29 @@ struct TransferLinkPane: View {
             // hand. A hint that said only "drag files here" would be a promise
             // that letting go transmits them.
             Text(L10n.t(.dropSendHint))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.subheadline)
+                .foregroundStyle(Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("link-drop-hint")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        // VERTICAL only. Padding the sides too would inset the two buttons from
-        // the composer above them, so gaining a drop target would have moved
-        // controls that have nothing to do with dragging.
-        .padding(.vertical, Metrics.tight)
-        .contentShape(Rectangle())
-        // Drawn only while a drag is actually over it, so the resting pane keeps
-        // two buttons and a sentence rather than gaining a box.
-        .overlay(
-            RoundedRectangle(cornerRadius: Metrics.corner)
-                .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6]))
-                .foregroundStyle(isDropTargeted && link.acceptsWork
-                                 ? Color.accentColor : Color.clear)
+        // The reference's drop zone: a spacious dashed area that is visible at
+        // rest, so a connected workspace says where a drag can land before one
+        // starts, and turns violet while a drag that can land is over it. It
+        // exists only here, inside a real connection — never before one.
+        .padding(.vertical, 18)
+        .padding(.horizontal, Metrics.rowHorizontal)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(isDropTargeted && link.acceptsWork ? Palette.actionSurface : Color.clear)
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                .foregroundStyle(isDropTargeted && link.acceptsWork
+                                 ? Palette.action : Palette.buttonBorder)
+        )
+        .contentShape(Rectangle())
         // **The attempt, not just the state.** `acceptsWork` alone would let a
         // drag that began on a link which ended mid-load stage onto whatever
         // link is open in its place: this pane is rendered for `.ended` too, so
@@ -453,20 +459,20 @@ struct TransferLinkPane: View {
             VStack(alignment: .leading, spacing: Metrics.tight) {
                 if let summary = dropped.summary {
                     Text(summary)
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.subheadline).foregroundStyle(Palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("link-drop-summary")
                 }
                 PendingFileList(files: dropped.files)
                 HStack(spacing: 8) {
                     Button(L10n.t(.commonSend)) { sendDropped() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.referencePrimary)
                         .disabled(!link.acceptsWork)
                         .accessibilityIdentifier("link-drop-send")
                     // A task mutation, never navigation: it discards the batch
                     // the user dragged in.
                     Button(L10n.t(.commonClear)) { clearDropped() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.referenceSecondary)
                         .accessibilityIdentifier("link-drop-clear")
                 }
             }
@@ -530,10 +536,10 @@ struct TransferLinkPane: View {
     private var exit: some View {
         VStack(alignment: .leading, spacing: 4) {
             Button(leaveTitle) { leaveOrConfirmLocalTextDiscard() }
-                .buttonStyle(.bordered)
+                .buttonStyle(.referenceSecondary)
                 .accessibilityIdentifier("link-leave-session")
             Text(L10n.t(.linkHistoryIsLocal))
-                .font(.caption2).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         // **Asked only when there is something to lose**, so an ordinary hangup
@@ -818,8 +824,8 @@ struct LinkTranscriptView: View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: message.direction == .outgoing
                   ? "arrow.up.right" : "arrow.down.left")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(.subheadline)
+                .foregroundStyle(Palette.textSecondary)
             // Verbatim, and never parsed: the body is peer-supplied text
             // and `Text(verbatim:)` is what stops it being read as
             // markup.
@@ -887,12 +893,13 @@ struct LinkTransferListView: View {
 
     private var list: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.t(.linkTransfersHeading)).font(.subheadline.weight(.semibold))
+            Text(L10n.t(.linkTransfersHeading)).font(.callout.weight(.semibold))
+                .foregroundStyle(Palette.text)
             if !link.armedFiles.isEmpty {
                 // A batch the lane has not seen. Named as its own state rather
                 // than drawn as queued: queued means the lane took it.
                 Text(L10n.t(.linkBatchArmed))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Palette.textSecondary)
                     .accessibilityIdentifier("link-batch-armed")
             }
             ForEach(model.batchesNewestFirst) { batch in
@@ -910,22 +917,34 @@ struct LinkTransferListView: View {
             HStack {
                 Image(systemName: batch.direction == .outbound
                       ? "arrow.up.doc" : "arrow.down.doc")
-                    .foregroundStyle(.secondary)
-                Text(summary(batch)).font(.callout)
+                    .foregroundStyle(Palette.textSecondary)
+                Text(summary(batch)).font(.callout).foregroundStyle(Palette.text)
                 Spacer()
-                Text(stateText(batch.state)).font(.caption).foregroundStyle(.secondary)
+                Text(stateLine(batch)).font(.subheadline).foregroundStyle(Palette.textSecondary)
             }
             if let fraction = batch.fractionCompleted, !batch.isTerminal {
-                ProgressView(value: fraction).controlSize(.small)
+                // **Named, and spoken as a percentage** — the pair `UploadPane`
+                // and `DownloadPane` have always given theirs. A bare
+                // `ProgressView(value:)` announces a fraction with nothing
+                // saying what is moving, and this is the one surface where two
+                // batches can be running at once in both directions: "62%" with
+                // no subject is the least useful of the three. The manifest
+                // summary is the label because it is what tells two live rows
+                // apart; `commonStarting` is the value until the peer's manifest
+                // gives a total to divide by.
+                ProgressView(value: fraction)
+                    .controlSize(.small)
+                    .accessibilityLabel(summary(batch))
+                    .accessibilityValue(percent(batch) ?? L10n.t(.commonStarting))
             }
             if batch.state == .offered {
                 HStack {
                     Button(L10n.t(.linkAcceptFiles)) { link.acceptInboundBatch() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.referencePrimary)
                         .disabled(!link.acceptsWork)
                         .accessibilityIdentifier("link-accept-files")
                     Button(L10n.t(.linkDeclineFiles)) { link.rejectInboundBatch() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.referenceSecondary)
                 }
             }
             // **Queued is neutral; transferring is destructive.** Nothing has
@@ -937,11 +956,11 @@ struct LinkTransferListView: View {
             // transport it was written for.
             if case .queued = batch.state, batch.direction == .outbound {
                 Button(L10n.t(.commonCancel)) { link.cancelQueuedBatch(batch.id) }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.referenceSecondary)
             }
             if case .transferring = batch.state, batch.direction == .outbound {
                 Button(L10n.t(.commonCancel), role: .destructive) { link.cancelOutboundBatch() }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.referenceSecondary)
             }
             if let files = batch.receivedFiles, !files.isEmpty {
                 // Built by the same function the legacy receive uses, so a
@@ -959,6 +978,35 @@ struct LinkTransferListView: View {
         let count = L10n.plural(.selectionFiles, batch.files.count)
         guard batch.totalBytes > 0 else { return count }
         return L10n.detail([count, L10n.bytes(Int64(batch.totalBytes))])
+    }
+
+    /// The state word, and the figure behind it while bytes are actually
+    /// moving.
+    ///
+    /// On the trailing end of the row the bar sits under, rather than on a line
+    /// of its own: a batch list that can hold a dozen finished transfers must not
+    /// gain a row per running one. Only `.transferring` takes a percentage —
+    /// "Queued · 0%" would be a number about a batch the lane has not started.
+    private func stateLine(_ batch: LinkFileBatch) -> String {
+        let state = stateText(batch.state)
+        guard case .transferring = batch.state, let percent = percent(batch) else { return state }
+        return L10n.detail([state, percent])
+    }
+
+    /// The figure the bar is drawn from, in this language's number format. Nil
+    /// while the manifest has no total, which is the same condition
+    /// `fractionCompleted` draws no bar for.
+    ///
+    /// Taken from `fractionCompleted` rather than dividing the bytes again here.
+    /// `LinkFilePresentationModel` keeps `transferredBytes` exactly as the driver
+    /// reported it — a peer whose manifest disagrees with the bytes that actually
+    /// moved is a fact it deliberately preserves — and clamps only the fraction,
+    /// because a bar past its own end renders as garbage. A percentage computed
+    /// from the raw pair would reintroduce exactly that: "104%" printed beside a
+    /// full bar, with the label and the value of one control disagreeing.
+    private func percent(_ batch: LinkFileBatch) -> String? {
+        guard let fraction = batch.fractionCompleted else { return nil }
+        return L10n.percent(Int(fraction * 100))
     }
 
     private func stateText(_ state: LinkFileBatchState) -> String {

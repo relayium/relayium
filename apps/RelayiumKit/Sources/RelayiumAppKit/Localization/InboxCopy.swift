@@ -159,6 +159,45 @@ public enum InboxStatusPresentation {
     }
 }
 
+/// "Check now": where it is offered, what it is called, and what it reports.
+public enum InboxManualCheckPresentation {
+
+    /// Whether a state offers the control.
+    ///
+    /// Only the healthy, waiting states. Every problem state already carries its
+    /// own recovery — Try again, Choose folder, Resume — and a second button
+    /// beside it would be two answers to one question. `working` and `loading`
+    /// are absent because a pass is already running; a check requested there
+    /// would only queue the pass that follows.
+    public static func offersCheck(in state: InboxRuntimeState) -> Bool {
+        switch state {
+        case .ready, .asking, .saved, .savedMessage:
+            return true
+        case .signedOut, .loading, .disabled, .folderMissing, .paused, .working,
+             .attention, .offline, .failed:
+            return false
+        }
+    }
+
+    public static func label(isChecking: Bool, language: AppLanguage? = nil) -> String {
+        L10n.t(isChecking ? .inboxChecking : .inboxCheckNow, language: language)
+    }
+
+    /// The sentence under the control once a check has been answered, or nil.
+    ///
+    /// `checking` has no sentence: the button's own label says it. None of these
+    /// says anything arrived — that is the status line's, from a durable receipt.
+    public static func feedback(for check: InboxManualCheck,
+                                language: AppLanguage? = nil) -> String? {
+        switch check {
+        case .none, .checking: return nil
+        case .nothingNew:      return L10n.t(.inboxCheckNothingNew, language: language)
+        case .checked:         return L10n.t(.inboxCheckDone, language: language)
+        case .failed:          return L10n.t(.inboxCheckFailed, language: language)
+        }
+    }
+}
+
 /// The three answers, named the way the user chose them.
 public enum InboxPolicyPresentation {
     public static func label(for policy: InboxAutoAccept,

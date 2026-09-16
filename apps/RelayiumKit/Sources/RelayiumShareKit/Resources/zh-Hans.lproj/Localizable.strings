@@ -114,7 +114,7 @@
 "nav.pairingCodeSubtitle" = "跨网络发送文本和小文件——双方须同时在线";
 "nav.lanTransfer" = "局域网传输";
 "nav.lanTransferSubtitle" = "与同一网络内的设备互传消息和文件——无需账户；双方须同时在线";
-"nav.crossNetwork" = "配对传输";
+"nav.crossNetwork" = "跨网络传输";
 "nav.crossNetworkSubtitle" = "用六位配对码与任意位置的设备互传消息和文件——不要求同一网络；双方须同时在线";
 "nav.storedSend" = "分享链接";
 "nav.storedSendSubtitle" = "大文件，稍后再取——需登录，受套餐限制";
@@ -160,6 +160,7 @@
 "hub.text" = "文本";
 "hub.transferTypeHint" = "选择这次会话要传输的内容。";
 "verify.toggle" = "与对方设备核对验证码";
+"verify.heading" = "验证";
 "verify.explainWhat" = "默认关闭。开启后，双方设备会在任何数据传输之前显示同一个六位验证码（SAS）；口头核对它可以发现被替换的信令端点。它不是你输入的配对码，而且只有真的有人去核对，它才起作用。";
 "verify.explainEncryption" = "这只改变显示什么、以及在哪里停下来等你确认 — 从不改变加密本身。密钥在这台设备上生成、绝不发送给 Relayium，中继只承载密文，被篡改的握手一定会失败。";
 "verify.howItWorks" = "验证码是怎么回事";
@@ -255,7 +256,7 @@
 "share.copying" = "正在复制到 Relayium — 已复制 %@";
 "share.itemCount.other" = "%@ 个项目";
 "share.savedTitle" = "已保存到本机的 Relayium";
-"share.savedBody" = "尚未上传任何内容。准备好后，请打开 Relayium，在“发送”标签页按下发送。";
+"share.savedBody" = "尚未上传任何内容。准备好后，请打开 Relayium 发送这些文件。";
 "share.waitingTitle" = "来自其他 App 的分享";
 "share.waitingBody" = "%@ 正在等待发送。";
 "share.staysHere" = "在你发送或丢弃之前，它们一直留在本机。Relayium 不会自行发送。";
@@ -844,6 +845,8 @@
 "help.expandedValue" = "已展开";
 "help.expandHint" = "查看这个界面怎么用、Relayium 能看到什么，以及不成功时该怎么办";
 "help.collapseHint" = "收起详细说明";
+"row.explainLabel" = "说明";
+"row.explainHint" = "显示这一行的简短说明";
 
 "help.lan.purpose" = "在同一网络的两台设备之间传文件或发消息。不需要账户，服务器上也不会留下任何内容。";
 "help.lan.step1" = "在两台设备上打开 Relayium，并让它们保持在同一网络中。";
@@ -852,7 +855,7 @@
 "help.lan.boundary" = "文件是端到端加密的：在离开这台 Mac 之前就已加密，只有对方设备能解开，Relayium 始终没有密钥。Relayium 的服务做的是把两台设备互相引荐。根据网络状况，连接可能在两台设备之间建立，也可能由 Relayium 的中继承载，这台 Mac 无法分辨是哪一种——而这对 Relayium 能读到什么毫无影响。";
 "help.lan.where" = "收到的文件会保存到你的“下载”文件夹。对话只存在于这两台设备上，连接结束即丢弃，服务器上不留任何内容。";
 "help.lan.failure" = "另一台设备不在列表里。设备是按 Relayium 服务观察到的网络路径分组的，因此访客网络、VPN，或者会隔离客户端的路由器，都可能把同一条网线上的两台设备分到不同的组。";
-"help.lan.recovery" = "确认两台设备都在接收，关闭 VPN，并加入同一个网络。若仍然互相看不到，改用“跨网络”界面的配对码——那条路不需要共享网络。";
+"help.lan.recovery" = "确认两台设备都在接收，关闭 VPN，并加入同一个网络。若仍然互相看不到，改用“跨网络传输”界面的配对码——那条路不需要共享网络。";
 
 "help.cross.purpose" = "把六位配对码交给对方，就能连上任何地方的设备。两台设备不必在同一网络。";
 "help.cross.step1" = "创建配对码，然后把配对码或旁边的链接交给对方。";
@@ -1027,3 +1030,59 @@
 "send.discardMayArrive" = "没有人知道这次投递是否已经创建。删除会移除你本机的副本，本页也不再跟踪它，但它仍可能送达对方设备。";
 "send.outstandingHeading" = "发往你设备的投递";
 "send.outstandingExplain" = "上传期间需要保持 Relayium 打开。一旦投递进入等待状态，对方设备会自行取走，即使你关闭 Relayium 也一样。";
+
+/* macOS reference shell (2026-09-16) */
+"nav.hideSidebar" = "隐藏边栏";
+"nav.showSidebar" = "显示边栏";
+"nav.crossNetworkShort" = "跨网络";
+"nav.lanTransferTagline" = "同一网络 · 无需账户";
+"nav.crossNetworkTagline" = "任意网络 · 六位配对码";
+"nav.storedSendTagline" = "大文件 · 稍后取件";
+"nav.storedReceiveTagline" = "下载别人分享的文件";
+"nav.deviceInboxTagline" = "你自己的设备 · 关闭窗口也能接收";
+"toolbar.statusReceiving" = "接收中";
+"toolbar.statusJoining" = "正在加入…";
+"toolbar.statusReconnecting" = "正在重连…";
+"toolbar.statusPaused" = "已暂停";
+"toolbar.statusOff" = "已关闭";
+"toolbar.statusConnecting" = "正在连接…";
+"toolbar.statusConnected" = "已连接";
+"toolbar.statusEnded" = "已结束";
+"toolbar.statusReady" = "就绪";
+"toolbar.statusCreatingCode" = "正在创建配对码…";
+"toolbar.statusWaiting" = "等待中";
+"toolbar.statusCodeExpired" = "配对码已过期";
+"toolbar.statusFailed" = "失败";
+"nearby.encryptedNoAccount" = "端到端加密 · 无需账户";
+"nearby.namesDisclaimerShort" = "名称由设备提供，不能证明身份";
+"nearby.visibleNameLabel" = "显示名称";
+"nearby.addressLabel" = "地址";
+"nearby.deviceOnline" = "在线 · 可以连接";
+"nearby.deviceNeedsUpdate" = "在线 · 需要更新 Relayium";
+"verify.securityHeading" = "安全";
+"verify.toggleShort" = "核对验证码";
+"verify.toggleDetail" = "开始传输前，两台设备会显示相同的六位数字";
+"verify.encryptionLabel" = "加密";
+"verify.encryptionValue" = "密钥只留在本机 · 中继只能看到密文";
+"pairing.copyCode" = "复制配对码";
+"pairing.newCodeShort" = "新配对码";
+"pairing.passItOn" = "把它告诉对方，对方在任何网络都能连接。双方只需同时在线。";
+"pairing.codePlaceholder" = "000 000";
+"workspace.joinHeading" = "加入配对码";
+"direct.joinNoAccountShort" = "加入无需账户";
+"nearby.devicesNearby.other" = "附近有 %@ 台设备";
+"nearby.listeningConsentShort" = "共用这个公网地址的设备可以不经询问向这台 Mac 发送——暂停即可停止。";
+"nearby.addressesPrivacyShort" = "地址只在这里显示——从不存储或记录。";
+"nearby.savedToDownloadsShort" = "收到的文件存入“下载”文件夹。";
+"pairing.shareLinkToggle" = "二维码和链接";
+"settings.startupHeading" = "启动";
+"settings.shareMenuHeading" = "共享菜单";
+"settings.checkingHeading" = "检查更新";
+"settings.thisVersionHeading" = "当前版本";
+"inbox.notificationsHeading" = "通知";
+"inbox.conversationsEmpty" = "这台 Mac 上还没有收发记录。";
+"inbox.checkNow" = "立即检查";
+"inbox.checking" = "正在检查…";
+"inbox.checkNothingNew" = "暂无新内容。发送方上传完成后，投递才会出现在这里。";
+"inbox.checkDone" = "检查完成。";
+"inbox.checkFailed" = "检查未完成，原因见上方状态。";

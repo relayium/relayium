@@ -59,7 +59,7 @@ struct AppleSubscriptionCard: View {
     var body: some View {
         SectionCard(title: L10n.t(.subscriptionHeading)) {
             Text(L10n.t(.subscriptionBody))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(Palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             if let renewalNotice { InlineMessage(.info, renewalNotice) }
 
@@ -88,7 +88,7 @@ struct AppleSubscriptionCard: View {
                 // a false statement about the product, on the screen whose whole
                 // job is to sell it.
                 Text(L10n.t(.subscriptionNone))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Palette.textTertiary)
                     // nonlocalized: an accessibility identifier
                     .accessibilityIdentifier("subscription-none")
             }
@@ -126,6 +126,7 @@ struct AppleSubscriptionCard: View {
                 Button(L10n.t(.subscriptionRestore)) {
                     Task { await model.restore() }
                 }
+                .buttonStyle(.referenceSecondary)
                 .disabled(isBusy)
                 // nonlocalized: an accessibility identifier
                 .accessibilityIdentifier("subscription-restore")
@@ -149,7 +150,7 @@ struct AppleSubscriptionCard: View {
             if AppleSubscriptionPresentation.showsAppleManagement(
                 entitlementProvider: entitlementProvider) {
                 Text(L10n.t(.subscriptionManagedByApple))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -191,7 +192,7 @@ struct AppleSubscriptionCard: View {
                 .accessibilityIdentifier("subscription-terms")
             Spacer()
         }
-        .font(.caption)
+        .font(.subheadline)
     }
 
     private var rows: [AppleSubscriptionOfferRow] {
@@ -208,34 +209,30 @@ struct AppleSubscriptionCard: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(row.title).font(.subheadline.weight(.semibold))
+                    Text(row.title).font(.body.weight(.semibold)).foregroundStyle(Palette.text)
                     // The billing period, beside the name rather than only
                     // inside the price sentence: with two rows per tier, this
                     // is the field the reader is choosing between.
                     if !row.cycleLabel.isEmpty {
-                        Text(row.cycleLabel)
-                            .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(.quaternary, in: Capsule())
+                        TagChip(text: row.cycleLabel)
                             // nonlocalized: an accessibility identifier
                             .accessibilityIdentifier("subscription-cycle-\(row.productID)")
                     }
                     if row.isCurrentPlan {
-                        Text(L10n.t(.subscriptionCurrent))
-                            .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(.quaternary, in: Capsule())
+                        TagChip(text: L10n.t(.subscriptionCurrent))
                             // nonlocalized: an accessibility identifier
                             .accessibilityIdentifier("subscription-current-\(row.productID)")
                     }
                 }
                 // The store's own price, in this language's per-period sentence.
                 // Nothing here reformats the number or the currency.
-                Text(row.price).font(.caption).foregroundStyle(.secondary)
+                Text(row.price).font(.callout).foregroundStyle(Palette.textSecondary)
                 let effect = AppleSubscriptionPresentation.effectText(row.changeEffect)
-                if !effect.isEmpty { Text(effect).font(.caption).foregroundStyle(.secondary) }
+                if !effect.isEmpty { Text(effect).font(.subheadline).foregroundStyle(Palette.textTertiary) }
                 // What the tier actually grants, from the server's own plan row.
                 // Absent only against a deployment that does not send it.
                 if let entitlements = row.entitlements {
-                    Text(entitlements).font(.caption).foregroundStyle(.secondary)
+                    Text(entitlements).font(.subheadline).foregroundStyle(Palette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                         // nonlocalized: an accessibility identifier
                         .accessibilityIdentifier("subscription-entitlements-\(row.productID)")
@@ -254,6 +251,7 @@ struct AppleSubscriptionCard: View {
                 Button(L10n.t(.subscriptionSubscribe)) {
                     Task { await model.purchase(productID: row.productID) }
                 }
+                .buttonStyle(.referencePrimary)
                 // Disabled by the SERVER's answer as well as by the app being
                 // busy. The model refuses again at the point of sale — this is
                 // the visible half of the same rule, not a substitute for it.

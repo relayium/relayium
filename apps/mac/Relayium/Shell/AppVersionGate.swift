@@ -101,14 +101,9 @@ struct UnsupportedVersionView: View {
 
     var body: some View {
         VStack(spacing: Metrics.section) {
-            // `.title`, like every other symbol in this app draws itself. A
-            // display size here would be this file inventing a page heading —
-            // `MacSurfaceGuardTests` refuses one anywhere in the tree, and the
-            // reason applies to the one screen that IS the whole window too.
-            Image(systemName: "arrow.up.circle")
-                .font(.title)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
+            // The brand radar at rest: the same mark the transfer screens open
+            // with, quiet because nothing here is running.
+            BrandRadar(symbol: "arrow.up", isActive: false)
             // The heading carries the surface identifier: stable and
             // nonlocalized, so the acceptance suite can assert the blocked
             // surface itself rather than the absence of a destination. It is
@@ -117,7 +112,8 @@ struct UnsupportedVersionView: View {
             // buttons this screen exists to offer unreachable to the suite that
             // has to click one.
             Text(L10n.t(.updateRequiredTitle))
-                .font(.title2)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(Palette.text)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("version-blocked")
@@ -126,17 +122,18 @@ struct UnsupportedVersionView: View {
             // message from a Mac whose app will not open.
             Text(UpdateRequirementPresentation.requiredBody(current: current, policy: policy))
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.textSecondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
             HStack(spacing: Metrics.inner) {
                 Button(UpdateRequirementPresentation
                     .updateActionLabel(channel: AppDistribution.channel), action: update)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.referencePrimary)
                     .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("version-blocked-update")
                 Button(L10n.t(.updateActionQuit), action: quit)
+                    .buttonStyle(.referenceSecondary)
                     .accessibilityIdentifier("version-blocked-quit")
             }
             #if DEBUG
@@ -173,13 +170,23 @@ struct UpdateRecommendationBanner: View {
             Spacer(minLength: Metrics.tight)
             Button(UpdateRequirementPresentation
                 .updateActionLabel(channel: AppDistribution.channel), action: update)
+                .buttonStyle(.referencePrimary)
                 .accessibilityIdentifier("version-recommendation-update")
             Button(L10n.t(.updateActionDismiss), action: dismiss)
+                .buttonStyle(.referenceSecondary)
                 .accessibilityIdentifier("version-recommendation-dismiss")
         }
         .padding(.horizontal, Metrics.page)
         .padding(.vertical, Metrics.tight)
-        .background(.regularMaterial)
+        // The toolbar's own wash and hairline, so the strip reads as part of
+        // the window's chrome rather than as a floating material.
+        .background(Palette.toolbar)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Palette.hairline)
+                .frame(height: 1)
+                .accessibilityHidden(true)
+        }
         .accessibilityIdentifier("version-recommendation")
     }
 }

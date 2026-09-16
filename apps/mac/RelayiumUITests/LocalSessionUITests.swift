@@ -543,7 +543,8 @@ final class LocalSessionUITests: XCTestCase {
     private func assertNearbyScreenReleased() {
         let window = mainWindow
         assertModuleReleasedItsSession("same-network", connectPhase: [
-            { window.buttons["Start receiving"].waitForExistence(timeout: 5) },
+            { window.descendants(matching: .any)["lan-receiving-switch"].firstMatch
+                .waitForExistence(timeout: 5) },
             { self.element("lan-connect-device").waitForExistence(timeout: 5) },
         ])
     }

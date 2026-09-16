@@ -53,9 +53,11 @@ struct PairingJoinLinkView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L10n.t(.pairingJoinLink))
-                .font(.caption.weight(.semibold))
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(Palette.text)
             Text(url.absoluteString)
-                .font(.caption.monospaced())
+                .font(.subheadline.monospaced())
+                .foregroundStyle(Palette.textSecondary)
                 // A generated link is the result the sender hands off. Keep
                 // every component visible instead of replacing its middle with
                 // an ellipsis when the detail pane is narrow.
@@ -75,12 +77,11 @@ struct PairingJoinLinkView: View {
                 }
                 if copied {
                     Label(L10n.t(.pairingLinkCopied), systemImage: "checkmark")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.subheadline)
+                        .foregroundStyle(Palette.textSecondary)
                 }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .buttonStyle(.referenceSecondary)
         }
         // SwiftUI may preserve this subtree while the model publishes a later
         // code. Copy feedback belongs to one URL, never the component slot.
@@ -88,33 +89,57 @@ struct PairingJoinLinkView: View {
     }
 }
 
-/// The complete handoff stays above the fold at the app's minimum window size:
-/// scan on the left; inspect/copy/share, current status and Cancel on the right.
-/// File and text pairing use this exact component so one cannot quietly lose an
-/// affordance the other has.
+/// The handoff under a live code: the named wait, the way to share it, and
+/// Cancel — on one compact line, so the pairing hero stays the reference's size.
+///
+/// **The QR and the join link are one press away, not gone.** They sit behind
+/// an explicitly labelled disclosure that starts collapsed and announces its
+/// expanded state; opening it shows the QR, the whole link, Copy and Share
+/// exactly as before. Cancel and the wait are never behind it. File and text
+/// pairing use this one component so neither can lose an affordance.
 struct PairingCodeHandoffView: View {
     let url: URL
     let cancel: () -> Void
 
-    var body: some View {
-        HStack(alignment: .top, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                QRCodeView(url: url.absoluteString, side: 144)
-                Text(L10n.t(.directScanOnPhone))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(width: 160, alignment: .leading)
+    @State private var sharing = false
 
-            VStack(alignment: .leading, spacing: 12) {
-                PairingJoinLinkView(url: url)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 10) {
                 ProgressView(L10n.t(.directWaitingForDevice))
                     .controlSize(.small)
+                Spacer(minLength: 8)
+                Button {
+                    sharing.toggle()
+                } label: {
+                    Label(L10n.t(.pairingShareLinkToggle),
+                          systemImage: sharing ? "chevron.up" : "qrcode")
+                }
+                .buttonStyle(.referenceSecondary)
+                .accessibilityLabel(L10n.t(.pairingShareLinkToggle))
+                .accessibilityValue(L10n.t(sharing ? .helpExpandedValue : .helpCollapsedValue))
+                .accessibilityIdentifier("pairing-share-toggle")
                 Button(L10n.t(.commonCancel), action: cancel)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.referenceSecondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            if sharing {
+                HStack(alignment: .top, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        QRCodeView(url: url.absoluteString, side: 144)
+                        Text(L10n.t(.directScanOnPhone))
+                            .font(.subheadline)
+                            .foregroundStyle(Palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(width: 160, alignment: .leading)
+                    PairingJoinLinkView(url: url)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("pairing-share-details")
+            }
         }
+        // A replacement code starts with its sharing folded again.
+        .onChange(of: url) { _ in sharing = false }
     }
 }

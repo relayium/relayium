@@ -58,10 +58,7 @@ struct EmptyStateView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: symbol)
-                .font(.title)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
+            GlyphChip(symbol: symbol)
             // Both sentences are selectable. An empty state is where the reader
             // is told what to do somewhere ELSE — on another device, in another
             // app, to somebody else — and text they cannot select is text they
@@ -69,13 +66,14 @@ struct EmptyStateView: View {
             // neither line is inside a control, and the link and the button
             // below are their own hit targets.
             Text(title)
-                .font(.headline)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Palette.text)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
             if let message {
                 Text(message)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
@@ -98,10 +96,12 @@ struct EmptyStateView: View {
                 // `.title3.weight(.semibold)` is this app's primary-VALUE type,
                 // the same as the announced device name on the LAN screen — and
                 // that is what an address to be read across a desk or typed
-                // into another device is. Above the `.headline` title on
-                // purpose: the title says what happened, this says what to do.
+                // into another device is. It reads as the action without
+                // being the largest thing on the card: a `Link` is already
+                // drawn in the one action colour, which is the signal, and the
+                // title above it is what happened.
                 Link(link.title, destination: link.url)
-                    .font(.title3.weight(.semibold))
+                    .font(.body.weight(.medium))
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityHint(link.accessibilityHint)
                     .accessibilityIdentifier(link.identifier)
@@ -115,9 +115,10 @@ struct EmptyStateView: View {
                 // typing in, and this view is rendered inside several.
                 if actionIsProminent {
                     Button(actionTitle, action: action)
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.referencePrimary)
                 } else {
                     Button(actionTitle, action: action)
+                        .buttonStyle(.referenceSecondary)
                 }
             }
         }
