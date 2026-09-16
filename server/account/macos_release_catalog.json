@@ -49,6 +49,11 @@
       "version": "1.3.10",
       "build": 28,
       "tag": "macos-v1.3.10"
+    },
+    {
+      "version": "1.4.0",
+      "build": 38,
+      "tag": "macos-v1.4.0"
     }
   ]
 }

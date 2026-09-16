@@ -32,7 +32,7 @@
 // of this page.
 //
 // The macOS app sits outside that list on purpose: it is released publicly under
-// its own tag namespace (currently `macos-v1.3.10`, a Developer ID-signed and
+// its own tag namespace (currently `macos-v1.4.0`, a Developer ID-signed and
 // Apple-notarized DMG attached to that GitHub Release) and, on an independent
 // version line, on the Mac App Store. See releases.test.mjs, which also keeps
 // the `v*` list from being failed by the `macos-v*` tag it must not contain.
@@ -173,8 +173,8 @@ const en = {
   otherDocLabel: "Privacy Policy",
   lead: [
     ANDROID_AVAILABLE
-      ? `Relayium ships in four rhythms, and this page is honest about all four: the web app is deployed continuously, the command-line tools are numbered and tagged, the macOS app is released on its own — macOS 1.3.10 is a signed download from GitHub, and the Mac App Store carries it on a version line of its own — and the Android app is a direct-APK preview released under ${ANDROID_TAG}.`
-      : "Relayium ships in three rhythms, and this page is honest about all three: the web app is deployed continuously, the command-line tools are numbered and tagged, and the macOS app is released on its own — macOS 1.3.10 is a signed download from GitHub, and the Mac App Store carries it on a version line of its own.",
+      ? `Relayium ships in four rhythms, and this page is honest about all four: the web app is deployed continuously, the command-line tools are numbered and tagged, the macOS app is released on its own — macOS 1.4.0 is a signed download from GitHub, and the Mac App Store carries it on a version line of its own — and the Android app is a direct-APK preview released under ${ANDROID_TAG}.`
+      : "Relayium ships in three rhythms, and this page is honest about all three: the web app is deployed continuously, the command-line tools are numbered and tagged, and the macOS app is released on its own — macOS 1.4.0 is a signed download from GitHub, and the Mac App Store carries it on a version line of its own.",
     "Every version below was tagged automatically from the main branch, and only after the checks on that exact commit passed. A version's complete notes — every commit it contains — are one click away on GitHub.",
   ],
   sections: [
@@ -185,7 +185,7 @@ const en = {
       ],
       bullets: [
         "The web app has no version number. Verified commits are selected for production independently of the version tags below, so what you use in a browser does not correspond to any row here and is usually ahead of the newest one.",
-        `The macOS app is released under its own tag, macos-v1.3.10: a Developer ID-signed, Apple-notarized direct download from GitHub. The separately versioned Mac App Store release is currently ${APP_STORE.version}. No version below ships that app.`,
+        `The macOS app is released under its own tag, macos-v1.4.0: a Developer ID-signed, Apple-notarized direct download from GitHub. The separately versioned Mac App Store release is currently ${APP_STORE.version}. No version below ships that app.`,
         "A node does not follow this list by itself: it asks the server it belongs to which version to run, so a new version changes nothing until someone starts a rollout. The command-line tool updates with relayium update.",
         ...(ANDROID_AVAILABLE
           ? [`The Android app is released under its own tag, ${ANDROID_TAG}: a direct APK, distributed from GitHub with no Google Play listing. It is a public preview, it is versioned independently of everything else on this page, and no version below ships it.`]
@@ -228,8 +228,8 @@ const zh = {
   otherDocLabel: "隐私政策",
   lead: [
     ANDROID_AVAILABLE
-      ? `Relayium 有四种发布节奏，这一页对四种都如实说明：网页版持续部署，命令行工具带版本号打标签发布，macOS 应用单独发布——macOS 1.3.10 已可从 GitHub 下载，同时也在 Mac App Store 上架，版本号自成一条线——Android 应用则以 APK 直接分发的预览版形式，用 ${ANDROID_TAG} 标签发布。`
-      : "Relayium 有三种发布节奏，这一页对三种都如实说明：网页版持续部署，命令行工具带版本号打标签发布，macOS 应用单独发布——macOS 1.3.10 已可从 GitHub 下载，同时也在 Mac App Store 上架，版本号自成一条线。",
+      ? `Relayium 有四种发布节奏，这一页对四种都如实说明：网页版持续部署，命令行工具带版本号打标签发布，macOS 应用单独发布——macOS 1.4.0 已可从 GitHub 下载，同时也在 Mac App Store 上架，版本号自成一条线——Android 应用则以 APK 直接分发的预览版形式，用 ${ANDROID_TAG} 标签发布。`
+      : "Relayium 有三种发布节奏，这一页对三种都如实说明：网页版持续部署，命令行工具带版本号打标签发布，macOS 应用单独发布——macOS 1.4.0 已可从 GitHub 下载，同时也在 Mac App Store 上架，版本号自成一条线。",
     "下面每一个版本都是从 main 分支自动打标签的，而且只在该提交的检查全部通过之后才发布。某个版本的完整说明——它包含的每一条提交——在 GitHub 上一点即达。",
   ],
   sections: [
@@ -240,7 +240,7 @@ const zh = {
       ],
       bullets: [
         "网页版没有版本号。上线的是经过验证后被选定投产的提交，与下面的版本标签相互独立，所以你在浏览器里用到的并不对应这里的任何一行，通常也比最新的一行更新。",
-        `macOS 应用用自己的标签 macos-v1.3.10 单独发布：这是一份经过 Developer ID 签名、通过 Apple 公证、直接从 GitHub 下载的安装包。独立维护版本号的 Mac App Store 版本当前为 ${APP_STORE.version}。下面任何一个版本都不包含这个应用。`,
+        `macOS 应用用自己的标签 macos-v1.4.0 单独发布：这是一份经过 Developer ID 签名、通过 Apple 公证、直接从 GitHub 下载的安装包。独立维护版本号的 Mac App Store 版本当前为 ${APP_STORE.version}。下面任何一个版本都不包含这个应用。`,
         "节点不会自己跟着这个列表走：它会向所属的服务器询问该运行哪个版本，所以在有人发起灰度更新之前，新版本什么也不会改变。命令行工具用 relayium update 更新。",
         ...(ANDROID_AVAILABLE
           ? [`Android 应用用自己的标签 ${ANDROID_TAG} 单独发布：以 APK 直接分发，不在 Google Play 上架。它是公开预览版，版本号与本页其他内容互相独立，下面任何一个版本都不包含它。`]
