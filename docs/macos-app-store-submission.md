@@ -17,7 +17,7 @@ or releasing a version. Relayium uses manual App Store release.
 | Platforms | macOS only |
 | Bundle ID | `com.relayium.mac` |
 | SKU | `relayium-macos` |
-| Current published version | `1.3.8` (build `26`), public since 2026-08-26 — from `web/mac-app-store-release.json` |
+| Current published version | `1.3.10` (build `28`), public since 2026-09-14 — from `web/mac-app-store-release.json` |
 | Release method | Manual |
 | Primary category | Utilities |
 | Secondary category | Productivity |
@@ -27,50 +27,152 @@ or releasing a version. Relayium uses manual App Store release.
 
 ### Current release state
 
-**`1.3.8` (build `26`) is PUBLISHED on the Mac App Store, public since
-2026-08-26.** It is not a pending submission and must not be described as the
+**`1.3.10` (build `28`) is PUBLISHED on the Mac App Store, public since
+2026-09-14.** It is not a pending submission and must not be described as the
 next release. The canonical record is `web/mac-app-store-release.json`
 (`version`, `publishedAt`, `appleId`, `url`); every other surface that prints
 the App Store version — the root `README.md`, `apps/README.md`, the nine
 `/releases` pages — interpolates or is checked against that file, and
 `web/scripts/pages/app-store-release.test.mjs` holds this document to it too.
 
+Evidence for that state, read on 2026-09-16 and retained in the workspace
+release artifact `artifacts/macos-1.4.0-release-20260916/provider/`: the
+authenticated App Store Connect read-back (`store-before.json`) returns the
+macOS `1.3.10` version, attached to build `28`, in `READY_FOR_SALE`, above
+`1.3.8`, `1.3.6`, `1.3.1` and `1.3.0`; Apple's public lookup
+(`store-public-before.json`) returns version `1.3.10` with
+`currentVersionReleaseDate` `2026-09-14T15:57:27Z`. Until that read-back,
+`web/mac-app-store-release.json` still named `1.3.8` (public since
+2026-08-26), two days after Apple had moved on; the record was corrected with
+the `1.4.0 (36)` preparation below, not backdated.
+
 Build numbers consumed so far, none of which may be rebuilt or re-uploaded:
 `5`, `6`, `7`, `11`, `12`, `24` (`1.3.6`), `25` (`1.3.7`), `26` (`1.3.8`),
-`27` (`1.3.9`), `28` (`1.3.10`) and `29` (`1.3.11`). **The next archive of any
-version needs a build number strictly above `29`.** The published minimum is macOS 13.0, and the
-published build does not remove compatibility with older Relayium clients.
-
-**A `1.3.10` version does exist on the record and it is further along than any
-statement previously kept here.** An authenticated App Store Connect API
-read-back on **2026-09-07T08:40:12Z** returned the macOS `1.3.10` version in
-`PENDING_DEVELOPER_RELEASE` — submitted, reviewed and **approved**, waiting only
-on a manual release action — alongside `1.3.8` in `READY_FOR_SALE`. Two earlier
-paragraphs in this document said no version had been added for review and that
-build `28` had not been archived or uploaded; both were stale and are corrected
-here rather than left standing.
-
-That same read-back enumerated the uploaded macOS builds and returned `1.3.10`
-(build `28`) as `VALID`, uploaded 2026-09-05, above `1.3.9` (build `27`).
-**Build `28` is therefore consumed.**
-
-None of that changes what customers have. `1.3.8` (build `26`) is still the
-build Apple is serving, because `PENDING_DEVELOPER_RELEASE` means nobody has
-pressed release — approval is not publication, an upload is not a submission,
-and a TestFlight build is not a public release. Releasing `1.3.10` is a
-deliberate owner-authorized action that this document does not authorize and
-that no work in the current batch performs.
-
-The repository source is at `1.3.11` (build `29`), which **has** been archived,
-uploaded and accepted into internal TestFlight — see the checkpoint in its own
-section below. It is not a submission and not a release: nothing in this
-document authorizes adding it for review, submitting it, or releasing it, and it
-does not release the approved `1.3.10` either.
+`27` (`1.3.9`), `28` (`1.3.10`) and `29` (`1.3.11`). The 2026-09-16 read-back
+(`builds-before.json`) returns `29` as the highest macOS build on the record.
+Builds `30` to `35` were signed only as private Developer ID owner-preview
+packages and were never uploaded, but they are spent all the same: each one
+names a distinct artifact. **The next archive of any version needs a build
+number strictly above `35`, and `36` is allocated to the `1.4.0` preparation
+below.** The published minimum is macOS 13.0, and the published build does not
+remove compatibility with older Relayium clients.
 
 The Developer ID/GitHub download channel is versioned, released and verified
 separately from this record. Its state is never evidence about what the Mac App
 Store is serving, in either direction, even when the two version numbers happen
-to agree.
+to agree — as they do today, both at `1.3.10`.
+
+#### `1.4.0` (build `36`) — PREPARING for GitHub and internal TestFlight
+
+**Status: preparing. Nothing below has been built, signed, notarized,
+uploaded, submitted or published.** The owner accepted the private
+arm64 Developer ID preview `1.4.0 (35)` on 2026-09-16 and asked for a public
+GitHub release and an internal TestFlight build. Build `35` is spent by that
+private package, so both newly signed distribution artifacts — the universal
+Developer ID build for GitHub and the Mac App Store build for TestFlight — use
+build `36` under the same marketing version.
+
+Scope of the request, and nothing wider: internal TestFlight in the existing
+**Relayium Internal** group only. No external beta group, beta review, App Store
+version, App Review submission, App Store metadata or screenshot edit, and no
+public App Store release is part of it; `1.3.10` stays what Apple is serving.
+Until the release workflow actually publishes `macos-v1.4.0`, the public
+Developer ID/GitHub release also stays `1.3.10`.
+
+**What it changes on macOS**, relative to the public `1.3.10`, from the accepted
+private previews `1.3.11 (30)`, `1.3.12 (31, 32)`, `1.3.13 (33)`,
+`1.3.14 (34)` and `1.4.0 (35)`, plus the navigation renames and Device Inbox
+ordering already described for the internal-TestFlight-only `1.3.11 (29)` below
+(never public on either channel):
+
+- **One visual system across the app.** A flat 216 pt sidebar with the five
+  destinations in three sections, a unified detail toolbar, status heroes,
+  cards, buttons and text hierarchy replace the grouped system forms, on the
+  transfer destinations, account and sign-in, stored links and download
+  results, Device Inbox and its device pages, and the General and Updates
+  settings (the Mac App Store build has General only; Updates exists only in
+  the Developer ID build). Settings scroll inside a fixed window. The Share
+  extension follows the same layout. System file pickers, dialogs, Sign in with Apple, menus and the
+  Sparkle update window keep the system appearance.
+- **No duplicated page titles.** Switching destinations no longer repeats the
+  title in the system title bar.
+- **No destination search.** The sidebar search field, its filter, Return-to-
+  open and empty state are removed; the five destinations are listed directly.
+  Hiding and showing the sidebar (its button and ⌃⌘S) is unchanged.
+- **Device Inbox "Check now".** The status card can check for completed
+  deliveries immediately instead of waiting for the next scheduled check. It
+  does not accept a delivery waiting for an answer, does not bypass pause,
+  switched-off receiving, sign-out or a missing receive folder, and does not
+  restart a transfer in progress. The automatic interval is unchanged.
+- A crash when accessibility read the stored-link drop area is fixed.
+
+**What it does not change.** Since the public `1.3.10` tag there is no change
+under the package's `RelayiumKit` (wire, crypto, signaling) or
+`RelayiumStoreKit` sources, so no wire byte, protocol generation, encryption or
+StoreKit transaction handling moves. Shared `RelayiumAppKit` model changes in
+that range are the Device Inbox Check now scheduling above; iOS-driven seams
+(injected Local Nearby copy and connection preparation, the iOS Device Inbox
+receive surface) that the macOS composition does not use or uses with its
+previous defaults; and one change that does apply on macOS — the same-network
+room now ignores a roster update delivered before one it has already applied,
+the ordering rule `1.3.10` introduced for pairing rooms. The
+subscription card and Apple sign-in section changed only fonts, colours and
+button styles: no subscription product, price, entitlement, purchase or restore
+transition, or provider configuration changes. The minimum remains macOS 13.0.
+The Mac App Store target still links no Sparkle and ships no updater.
+
+What to Test for `1.4.0` (drafted, English):
+
+> This build redesigns the app's layout. Transfers, encryption, accounts and
+> subscriptions work as before.
+>
+> 1. New layout. Open every sidebar destination and Settings, in
+>    English and again with the Mac set to Simplified Chinese, in Light and Dark
+>    Mode. Each page should use the new cards and buttons, scroll inside the
+>    window, and show its title once — never repeated in the title bar.
+> 2. No search. The sidebar has no search field; all five destinations are
+>    listed directly. Hide and show the sidebar with its button and with
+>    Control-Command-S.
+> 3. Device Inbox "Check now". With receiving on, send something from another of
+>    your devices, then press Check now: it shows that it is checking, cannot be
+>    pressed twice, and ends with either nothing new or the file saved to your
+>    receive folder.
+> 4. Ask each time. Set the Inbox to ask each time and send again: Check now must
+>    not accept for you, and the delivery must wait for your Accept or Decline.
+> 5. Pause. Pause receiving: Check now must be unavailable, and resuming must
+>    restore it.
+> 6. Transfers. Pair with a browser using a pairing code and send text and then
+>    a file in both directions; send to a device on the same network; share a
+>    file with Share a link. Everything must arrive complete.
+> 7. Share menu. Send a file to Relayium from Finder's Share menu.
+>
+> Also try an enlarged system text size, and report anything you cannot reach
+> or read.
+
+What to Test for `1.4.0` (drafted, Simplified Chinese):
+
+> 本次更新重新设计了 App 的界面布局，传输、加密、账户与订阅的行为保持不变。
+>
+> 1. 新布局。分别在英文和简体中文、浅色和深色模式下，打开侧边栏中的每个页面以及
+>    设置窗口。每页都应使用新的卡片与按钮，在窗口内滚动，标题只出现一次，
+>    不会在标题栏重复显示。
+> 2. 没有搜索。侧边栏不再有搜索框，五个页面入口直接列出。用侧边栏按钮和
+>    Control-Command-S 收起并展开侧边栏。
+> 3. 设备收件箱“立即检查”。在接收已开启时，用你的另一台设备发送内容，然后点击
+>    “立即检查”：应显示正在检查、不能重复点击，最后显示暂无新内容，或文件已保存到
+>    接收文件夹。
+> 4. 每次询问。将收件箱设为每次询问后再次发送：“立即检查”不得替你接受，该投递必须
+>    等待你点击接受或拒绝。
+> 5. 暂停。暂停接收后，“立即检查”应不可用；恢复接收后应重新可用。
+> 6. 传输。用配对码与浏览器连接，在两个方向上都先发送文本再发送文件；向同一网络中
+>    的设备发送；通过“分享链接”分享一个文件。所有内容都应完整送达。
+> 7. 共享菜单。在访达中通过共享菜单把文件发送给 Relayium。
+>
+> 也请在放大的系统字号下试用，并反馈任何无法点到或看不清的地方。
+
+The copy above is drafted for build `36` and has **not** been entered on any
+build. Record the upload, processing, export-compliance answer, group
+assignment and entered test information here only after they are read back.
 
 #### `1.3.9` (build `27`) — uploaded to TestFlight, never released
 
@@ -90,11 +192,15 @@ ever received that repair**, which is why `1.3.10` carries it forward and why
 the drafted copy below covers it as well as the newer correction. Build `27` may
 not be rebuilt or re-uploaded under any version number.
 
-#### `1.3.10` (build `28`) — uploaded, approved, awaiting manual release
+#### `1.3.10` (build `28`) — released on the Mac App Store, 2026-09-14
 
-**`1.3.8` (build `26`) is what Apple is serving.** The Xcode project in this
-branch builds `1.3.11` (build `29`); that is the only thing that has moved in
-source. `web/mac-app-store-release.json` still reads `1.3.8` and must keep
+> **Superseded status, 2026-09-16.** `1.3.10` (build `28`) went public on
+> 2026-09-14 and is what Apple is serving; see "Current release state" above.
+> The paragraph below records the state as of the 2026-09-07 read-back.
+
+**`1.3.8` (build `26`) was what Apple was serving then.** The Xcode project in
+that branch built `1.3.11` (build `29`); that was the only thing that had moved
+in source. `web/mac-app-store-release.json` still reads `1.3.8` and must keep
 reading `1.3.8` until Apple actually publishes a later build, so the root
 `README.md`, `apps/README.md` and the nine `/releases` pages correctly continue
 to name `1.3.8` as the published App Store version. Do not "synchronize" them to
@@ -183,7 +289,7 @@ What to Test for `1.3.10` (drafted, Simplified Chinese):
 > 一次跨网络传输：一次由浏览器发起，一次由 Mac 发起，每次都先发送文本再发送
 > 文件，确认都能完整送达。
 
-#### `1.3.11` (build `29`) — on internal TestFlight, NOT submitted
+#### `1.3.11` (build `29`) — internal TestFlight, never submitted
 
 `1.3.11` is the cross-platform navigation and task-hierarchy work accepted on
 2026-09-07, prepared from exact product `main` commit
@@ -412,7 +518,7 @@ version `1.2.4` on 2026-08-15, and build `12` at public version `1.2.5` on
 Consuming a number is a fact about the upload alone — see "TestFlight state"
 below for what has and has not been observed downstream of it. Builds `24`,
 `25` and `26` were consumed after these, so the live floor is the one stated at
-the top of this section (strictly above `26`), not the `12` this paragraph
+the top of this document, not the `12` this paragraph
 recorded when it was written.
 
 Nothing here changes an already-published artifact. `web/native-releases.json`,
@@ -551,8 +657,9 @@ is still unapproved and unwritten.
 ## TestFlight state and information draft
 
 > **Historical, as observed in the `1.2.x` cycle (2026-08-13 to 2026-08-16).**
-> The Mac App Store listing has since gone public and is at `1.3.8` (build
-> `26`), so nothing below describes the current store state. It is retained
+> The Mac App Store listing has since gone public (see "Current release
+> state" for its current version), so nothing below describes the current store
+> state. It is retained
 > because the build-number and export-compliance facts it records are still
 > binding, and because the upload-versus-readiness distinction it draws is the
 > procedure a later operator has to repeat. Read it as evidence of what was

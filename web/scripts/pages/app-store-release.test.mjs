@@ -94,7 +94,7 @@ describe("the canonical Mac App Store release record", () => {
     const nativeKeys = JSON.stringify(native);
     expect(nativeKeys).not.toMatch(/appStore|appleId|apps\.apple\.com/i);
     // Deliberately NOT an inequality against the direct version. The two
-    // channels are at the same version today (both 1.3.8) and that is an
+    // channels are at the same version today (both 1.3.10) and that is an
     // ordinary, expected state — asserting they differ would encode a
     // coincidence as a rule and fail the next time they converge.
     expect(typeof native.macos.version).toBe("string");
@@ -176,7 +176,7 @@ describe("the release operator's document agrees with the canonical record", () 
     expect(text, "the app-record table must name the published version")
       .toContain(`| Current published version | \`${record.version}\``);
     expect(text, "the current-state section must say the version is published, not pending")
-      .toContain(`**\`${record.version}\` (build \`26\`) is PUBLISHED on the Mac App Store, public since ${record.publishedAt}.**`);
+      .toContain(`**\`${record.version}\` (build \`28\`) is PUBLISHED on the Mac App Store, public since ${record.publishedAt}.**`);
     expect(text, "the document must point at the canonical record rather than restate it")
       .toContain("web/mac-app-store-release.json");
   });

@@ -6236,7 +6236,8 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// from each other agree no matter what Apple is actually serving.
     ///
     /// The version is required INSIDE the product link rather than merely
-    /// somewhere in the file. Since 2026-08-26 both channels are at 1.3.8, so a
+    /// somewhere in the file. Both channels were at 1.3.8 from 2026-08-26, and
+    /// are both at 1.3.10 since the App Store release of 2026-09-14, so a
     /// bare `contains(version)` is satisfied by the Developer ID sentence alone
     /// and would stay green through a rewrite that erased the App Store version
     /// entirely — which is exactly what `bumpReleaseDocs` would do to an

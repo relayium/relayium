@@ -131,7 +131,7 @@ build as GitHub Release
 a universal, Developer ID-signed, Apple-notarized and stapled `Relayium.dmg`
 with its SHA-256 alongside. Distribution is that direct download and Sparkle
 updates from it. The separately versioned Mac App Store channel is also public,
-currently at [1.3.8](https://apps.apple.com/app/id6801142976) under App Apple ID
+currently at [1.3.10](https://apps.apple.com/app/id6801142976) under App Apple ID
 `6801142976`. [`web/mac-app-store-release.json`](../web/mac-app-store-release.json)
 is the record of that version and the day Apple published it. The generated
 release pages interpolate it; the two READMEs state it in prose, and the macOS

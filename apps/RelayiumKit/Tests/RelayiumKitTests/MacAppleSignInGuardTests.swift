@@ -284,19 +284,23 @@ final class MacAppleSignInGuardTests: XCTestCase {
     /// forward are still in place.
     ///
     /// The version read here is the one the project is BUILT at, which is not
-    /// the same fact as the version Apple is currently serving: `1.3.8` stays
-    /// the published Mac App Store release until a later build is actually
-    /// submitted and released. `1.3.9` is why those are two facts rather than
+    /// the same fact as the version Apple is currently serving: `1.3.10`
+    /// (build `28`), released on 2026-09-14, stays the published Mac App Store
+    /// release until a later build is actually submitted and released; before
+    /// that it was `1.3.8`. `1.3.9` is why those are two facts rather than
     /// one — it was built and consumed build 27 in TestFlight, but was never
     /// released, so the previous BUILT version moved while the published one
     /// did not. `1.3.10` then made the gap wider in both directions: it is
     /// public on the Developer ID/GitHub channel AND, on a 2026-09-07 read-back,
-    /// approved and `PENDING_DEVELOPER_RELEASE` on the Mac App Store — still not
-    /// what Apple is serving. `web/mac-app-store-release.json` owns that
-    /// published fact, and `MacSurfaceGuardTests` is what reads it. `1.3.11`
-    /// (build 30), `1.3.12` (builds 31 and 32), `1.3.13` (build 33) and
-    /// `1.3.14` (build 34) were private owner-preview candidates only, and
-    /// were neither submitted nor published on either channel.
+    /// approved and `PENDING_DEVELOPER_RELEASE` on the Mac App Store, which it
+    /// stayed until it went public on 2026-09-14.
+    /// `web/mac-app-store-release.json` owns that published fact, and
+    /// `MacSurfaceGuardTests` is what reads it. `1.3.11` (build 30), `1.3.12`
+    /// (builds 31 and 32), `1.3.13` (build 33), `1.3.14` (build 34) and
+    /// `1.4.0` (build 35) were private owner-preview candidates only, and
+    /// were neither submitted nor published on either channel. `1.4.0`
+    /// (build 36) is being prepared for GitHub and internal TestFlight; it is
+    /// not an App Store release.
     func testTheReleaseIsVersionOnePointFourPointZero() throws {
         let project = projectText
         XCTAssertTrue(project.contains("MARKETING_VERSION = 1.4.0;"))
