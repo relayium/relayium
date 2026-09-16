@@ -247,29 +247,60 @@ menu bar, the receive socket and any running transfer alive
 (`applicationShouldTerminateAfterLastWindowClosed` returns `false`). There is no
 File ▸ New Window. Minimum window: **860×560**.
 
-Its content is a `NavigationSplitView` whose sidebar names five destinations at
-once. Each row is compact — the destination's name and its symbol, plus a badge
-while that destination owns a running session — and the purpose sentence is the
-row's `.help` tooltip and its accessibility hint rather than a printed second
-line:
+Its content follows the owner's reference design. The shell is a flat split, not a
+`NavigationSplitView`: a 216 pt sidebar, then a hairline, then the detail column,
+with the content running under a transparent title bar. **⌃⌘S**, or the button
+beside the window controls, hides and shows the sidebar. The sidebar opens with a
+working search field that filters rows by their title and purpose sentence,
+followed by three sections of compact rows naming five destinations. Each row shows the destination's
+name and symbol, plus a badge while that destination owns a running session. The
+purpose sentence is the row's `.help` tooltip and its accessibility hint, not a
+printed second line:
 
 | section | destination | purpose (tooltip and hint) | account |
 |---|---|---|---|
 | Live transfers | LAN Transfer | messages and files with a device on this network — both sides online | not needed |
-| Live transfers | Cross-network Transfer | messages and files with a device anywhere, using a six-digit code — same network not required; both sides online | needed to *create* a code, not to join one |
+| Live transfers | Cross-network | messages and files with a device anywhere, using a six-digit code — same network not required; both sides online | needed to *create* a code, not to join one |
 | Links | Share a link | large files, picked up later — plan limits apply | needed |
 | This Mac | Device Inbox | files from your own account land in a folder you choose — works with the window closed | needed |
-| — | Account | plan, devices and stored files | is the sign-in *and* the sign-up |
+| This Mac | Account | plan, devices and stored files | is the sign-in *and* the sign-up |
 
-**The row carries the name; the destination carries the explanation.** No screen
-opens with a page heading repeating the row that was just clicked: the row is on
-screen at the same time, highlighted, so the heading said nothing the reader was
-not already looking at. The purpose sentence is not printed under the title
-either — five of them wrapping in one column explained four screens the reader
-was not looking at — so a pointer reaches it as a tooltip, VoiceOver reads it as
-the row's hint, and the selected destination states its own purpose in its
-content. The window still carries a `navigationTitle`, and section labels inside
-a screen — which say what a *part* of it is — stay.
+**The detail column says the name once, in one toolbar.** Each destination
+opens with a single 44 pt toolbar that holds:
+
+- its title;
+- a short subtitle;
+- a status chip where it has live state.
+
+No page heading follows it. The window keeps its `navigationTitle` for Mission
+Control, the Window menu and VoiceOver, but does not draw it a second time.
+
+Every destination, the Device Inbox included, is one centred 660 pt column in
+the scaffold's single scroll view. The column is built from the same small
+vocabulary:
+
+- captioned cards;
+- at most one violet status head;
+- reference primary and secondary buttons;
+- an asset-catalog palette with light, dark and Increase Contrast variants.
+
+Section captions inside a screen, which say what a *part* of it is, stay. The
+⌘, Settings window (General and, in the direct build, Updates) uses the same
+cards. It is one fixed size, and each tab scrolls inside it.
+
+Some surfaces deliberately keep native system styling:
+
+- the menu bar extra and app menus;
+- confirmation dialogs and alerts;
+- file panels;
+- the share picker;
+- browser and Apple sign-in;
+- Sparkle's windows;
+- the Settings tabs;
+- functional controls: text fields, pickers, switches and progress views.
+
+The Share extension follows the same card layout, but uses system colours,
+because it cannot reach the app's colour assets.
 
 **Open a link is reachable, not browseable.** It has no row: opening a stored
 link somebody sent is something the OS hands this app, not somewhere a person
@@ -303,8 +334,9 @@ legacy session renders the lane it actually has and says in one sentence that th
 other kind needs a session of its own. A peer that announces exact `link/1` gets
 one connection for both, and the sentence with it.
 
-A sidebar footer reports whether this Mac can be reached right now; pause and
-resume stay on LAN Transfer and in the menu bar rather than gaining a third site.
+There is no sidebar footer. Whether this Mac can be reached right now is stated
+once, in LAN Transfer's status head, beside the switch that pauses and resumes
+receiving. The menu bar keeps its own status line.
 
 The shell itself never reads the account session — `MacSurfaceGuardTests`
 asserts that by name, and asserts that the stored-receive and LAN Transfer

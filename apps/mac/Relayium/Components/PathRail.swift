@@ -36,11 +36,12 @@ struct PathRail: View {
             marker(stop)
             Text(stop.title)
                 .font(.subheadline.weight(.medium))
+                .foregroundStyle(Palette.text)
                 .fixedSize(horizontal: false, vertical: true)
             if let detail = stop.detail {
                 Text(detail)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -71,7 +72,7 @@ struct PathRail: View {
             } else {
                 Image(systemName: stop.symbol)
                     .font(.callout)
-                    .foregroundStyle(current ? Palette.actionLabel : Color.secondary)
+                    .foregroundStyle(current ? Palette.actionLabel : Palette.textSecondary)
             }
         }
         .frame(width: badge, height: badge)

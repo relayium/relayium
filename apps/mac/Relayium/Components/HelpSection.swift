@@ -27,10 +27,11 @@ import SwiftUI
 ///    chrome; this was the exception, and it was the one aimed at whoever
 ///    understood the screen least.
 ///
-/// So it is a full-row `.bordered` button: the whole row is the target, it is at
-/// least `Metrics.hitTarget` tall, it takes a focus ring under Full Keyboard
-/// Access, it hovers, and the system draws all of that correctly in light mode,
-/// dark mode and Increase Contrast without this file naming a colour. The
+/// So it is a full-row button in `HelpRowStyle`: the whole row is the target,
+/// it is at least `Metrics.hitTarget` tall, it takes a focus ring under Full
+/// Keyboard Access, and it hovers. It is drawn in the reference's quiet
+/// secondary-button colours — the button fill and edge, violet on hover — which
+/// answer light, dark and Increase Contrast through the asset catalog. The
 /// chevron says which way it will go; the accessible value says which way it
 /// currently is.
 ///
@@ -50,12 +51,8 @@ import SwiftUI
 /// on the row they are about to open anyway. So the numbered path starts at one
 /// inside, in one piece, instead of being split across the fold.
 ///
-/// ## Two shapes, one body
-///
-/// Four destinations are stacks of `SectionCard`s inside the scaffold's scroll
-/// view; the Device Inbox is a grouped `Form`. A card dropped into a `Form`
-/// draws a box inside a box, and a `Section` outside one draws nothing at all —
-/// so the container differs and the content does not.
+/// Every destination, the Device Inbox included, is a stack of `SectionCard`s
+/// in the scaffold's scroll view, so there is one shape and it ends each of them.
 struct HelpCard: View {
     let surface: MacSurface
 
@@ -71,25 +68,7 @@ struct HelpCard: View {
     }
 }
 
-/// The Device Inbox's shape: a `Form` section, and the LAST one.
-///
-/// Last because help below the controls is the whole arrangement, and because
-/// this surface has three account/status branches that render different sets of
-/// sections above it — putting it anywhere else would move it depending on
-/// whether the user happens to be signed in.
-struct HelpFormSection: View {
-    let surface: MacSurface
-
-    var body: some View {
-        if let topic = HelpPresentation.topic(for: surface) {
-            Section {
-                HelpBlock(topic: topic)
-            }
-        }
-    }
-}
-
-/// The content both shapes render: one button, and everything behind it.
+/// One button, and everything behind it.
 private struct HelpBlock: View {
     let topic: HelpTopic
 
@@ -131,16 +110,17 @@ private struct HelpBlock: View {
                 VStack(alignment: .leading, spacing: Metrics.hairline) {
                     Text(L10n.t(.helpHeading))
                         .font(.callout.weight(.semibold))
+                        .foregroundStyle(Palette.text)
                     Text(L10n.t(topic.purpose))
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.leading)
                 }
                 Spacer(minLength: Metrics.tight)
                 Image(systemName: expanded ? "chevron.up" : "chevron.down")
                     .font(.callout.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.textTertiary)
                     // The direction is stated to VoiceOver as the button's
                     // VALUE below, which is the shape assistive technology
                     // expects for an expandable control. Read as a glyph name
@@ -150,7 +130,7 @@ private struct HelpBlock: View {
             .frame(maxWidth: .infinity, minHeight: Metrics.hitTarget, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(HelpRowStyle())
         // On the button, which IS the accessibility element: it combines its
         // label into one, so there is no child left for an identifier to rename.
         .accessibilityIdentifier("destination-help")
@@ -176,6 +156,7 @@ private struct HelpBlock: View {
         VStack(alignment: .leading, spacing: Metrics.hairline) {
             Text(L10n.t(.helpStepsHeading))
                 .font(.callout.weight(.semibold))
+                .foregroundStyle(Palette.text)
             ForEach(Array(topic.steps.enumerated()), id: \.offset) { index, text in
                 step(text, number: index + 1)
             }
@@ -192,6 +173,7 @@ private struct HelpBlock: View {
         VStack(alignment: .leading, spacing: Metrics.hairline) {
             Text(L10n.t(.helpTroubleHeading))
                 .font(.callout.weight(.semibold))
+                .foregroundStyle(Palette.text)
             prose(topic.failure)
             prose(topic.recovery)
         }
@@ -203,6 +185,7 @@ private struct HelpBlock: View {
         VStack(alignment: .leading, spacing: Metrics.hairline) {
             Text(L10n.t(heading))
                 .font(.callout.weight(.semibold))
+                .foregroundStyle(Palette.text)
             prose(body)
         }
         .accessibilityElement(children: .combine)
@@ -211,7 +194,7 @@ private struct HelpBlock: View {
     private func prose(_ key: L10nKey) -> some View {
         Text(L10n.t(key))
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Palette.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -221,7 +204,7 @@ private struct HelpBlock: View {
     private func step(_ key: L10nKey, number: Int) -> some View {
         Text(L10n.t(.formatHelpStep, [L10n.number(number), L10n.t(key)]))
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Palette.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -235,6 +218,36 @@ private struct HelpBlock: View {
                  destination: HelpPresentation.url(for: guide, language: L10n.current))
                 .font(.subheadline)
                 .accessibilityIdentifier("destination-help-guide")
+        }
+    }
+}
+
+/// The help row's chrome: the reference's quiet secondary button, at the size
+/// of the whole row. Deliberately not a card — help stays the quietest thing on
+/// a screen — and never violet at rest.
+private struct HelpRowStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HelpRow(configuration: configuration)
+    }
+
+    private struct HelpRow: View {
+        let configuration: ButtonStyleConfiguration
+        @State private var hovering = false
+
+        var body: some View {
+            configuration.label
+                .padding(.horizontal, Metrics.rowHorizontal)
+                .padding(.vertical, Metrics.hairline)
+                .background(
+                    RoundedRectangle(cornerRadius: Metrics.buttonCorner + 2)
+                        .fill(hovering ? Palette.actionSurface : Palette.button)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: Metrics.buttonCorner + 2)
+                        .strokeBorder(Palette.buttonBorder, lineWidth: 1)
+                )
+                .opacity(configuration.isPressed ? 0.85 : 1)
+                .onHover { hovering = $0 }
         }
     }
 }

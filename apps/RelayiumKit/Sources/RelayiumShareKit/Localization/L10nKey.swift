@@ -2376,6 +2376,14 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case nearbyAddressesPrivacyShort = "nearby.addressesPrivacyShort"
     case nearbySavedToDownloadsShort = "nearby.savedToDownloadsShort"
     case pairingShareLinkToggle = "pairing.shareLinkToggle"
+
+    // MARK: macOS all-surface alignment (2026-09-16)
+    case settingsStartupHeading = "settings.startupHeading"
+    case settingsShareMenuHeading = "settings.shareMenuHeading"
+    case settingsCheckingHeading = "settings.checkingHeading"
+    case settingsThisVersionHeading = "settings.thisVersionHeading"
+    case inboxNotificationsHeading = "inbox.notificationsHeading"
+    case inboxConversationsEmpty = "inbox.conversationsEmpty"
 }
 
 /// Keys whose value depends on a count.

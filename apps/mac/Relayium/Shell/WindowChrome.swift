@@ -45,12 +45,30 @@ struct WindowChrome: NSViewRepresentable {
     final class ChromeView: NSView {
         var onMetrics: ((WindowControlsMetrics) -> Void)?
         private var observers: [NSObjectProtocol] = []
+        /// SwiftUI writes the window's title whenever the selected destination's
+        /// `navigationTitle` changes, and that write makes AppKit draw the title
+        /// again above the toolbar. Hiding it only when this representable
+        /// updates missed every later write, so the window itself is watched.
+        private var titleObservations: [NSKeyValueObservation] = []
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             observers.forEach(NotificationCenter.default.removeObserver)
             observers = []
+            titleObservations = []
             guard let window else { return }
+            // The semantic title stays exactly what SwiftUI set — Mission
+            // Control, the Window menu and VoiceOver still read it — and only
+            // its drawing is put back to hidden, on the next turn so the write
+            // that triggered this has finished.
+            titleObservations = [
+                window.observe(\.title, options: [.new]) { [weak self] _, _ in
+                    DispatchQueue.main.async { self?.hideDrawnTitle() }
+                },
+                window.observe(\.titleVisibility, options: [.new]) { [weak self] _, _ in
+                    DispatchQueue.main.async { self?.hideDrawnTitle() }
+                },
+            ]
             for name in [NSWindow.didResizeNotification,
                          NSWindow.didEnterFullScreenNotification,
                          NSWindow.didExitFullScreenNotification] {
@@ -64,6 +82,11 @@ struct WindowChrome: NSViewRepresentable {
 
         deinit {
             observers.forEach(NotificationCenter.default.removeObserver)
+        }
+
+        private func hideDrawnTitle() {
+            guard let window, window.titleVisibility != .hidden else { return }
+            window.titleVisibility = .hidden
         }
 
         func apply() {

@@ -60,7 +60,7 @@ struct AccountView: View {
         // it: `deviceToRevoke`/`fileToDelete`, both confirmations and both
         // `.task(id:)`s live on this view, and splitting it would restart the
         // load and drop a dialog mid-question.
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: Metrics.section) {
             profileCard
                 .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
             // Directly under the plan it changes, and only in a build that has
@@ -109,12 +109,14 @@ struct AccountView: View {
                 // there: it is idempotent, and the alternative on this screen
                 // signs the user out.
                 Button(L10n.t(.commonRefresh)) { refresh() }
+                    .buttonStyle(.referenceSecondary)
                     .keyboardShortcut(.defaultAction)
                 Spacer()
                 // Handed to the coordinator rather than performed here. Doing it
                 // here would be a second logout path racing the self-revoke one,
                 // and it would die with this destination.
                 Button(L10n.t(.commonSignOut)) { signOut.signOut(scope: scope) }
+                    .buttonStyle(.referenceSecondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -252,52 +254,67 @@ struct AccountView: View {
 
     @ViewBuilder
     private var profileCard: some View {
-        SectionCard(title: profileTitle) {
-            // Only when it adds something: with no display name the card is
-            // already titled with the address.
-            if !user.displayName.isEmpty {
-                Text(user.email).foregroundStyle(.secondary)
-            }
-
-            HStack {
-                Text(usage.plan.name).font(.subheadline.weight(.semibold))
-                // Both the "should this show at all" predicate and the wording live
-                // in UsagePresentation, where they are tested. A raw Stripe status
-                // must never reach this capsule.
-                if let badge = UsagePresentation.subscriptionBadge(for: usage.plan.subscriptionStatus) {
-                    Text(badge)
-                        .font(.caption).padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(.quaternary, in: Capsule())
+        SectionCard(title: profileTitle, rows: true) {
+            CardRows {
+                CardBlockRow {
+                    HStack(alignment: .center, spacing: 11) {
+                        GlyphChip(symbol: "person.fill")
+                        VStack(alignment: .leading, spacing: 1) {
+                            HStack(spacing: 6) {
+                                Text(usage.plan.name)
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(Palette.text)
+                                // Both the "should this show at all" predicate and
+                                // the wording live in UsagePresentation, where they
+                                // are tested. A raw Stripe status must never reach
+                                // this chip.
+                                if let badge = UsagePresentation.subscriptionBadge(for: usage.plan.subscriptionStatus) {
+                                    TagChip(text: badge)
+                                }
+                            }
+                            // Only when it adds something: with no display name
+                            // the card is already titled with the address.
+                            if !user.displayName.isEmpty {
+                                Text(user.email)
+                                    .font(.subheadline)
+                                    .foregroundStyle(Palette.textTertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        Spacer(minLength: Metrics.tight)
+                        // The direct download is billed on the web, so it shows
+                        // the tier read-only and hands off to the plans page,
+                        // which is where a change of plan is actually made.
+                        //
+                        // **The App Store build must not show this**, and the
+                        // condition is deliberately doubled. `channel` is the
+                        // compliance rule: an App Store app may not send a user
+                        // to a website to buy what it sells, and that must hold
+                        // even if the purchase model failed to build.
+                        // `subscription == nil` is the coherence rule: a screen
+                        // that offered both an in-app purchase and a web page to
+                        // make the same change would be asking the user to choose
+                        // a billing relationship they have no way to reason
+                        // about. Either alone leaves one of the two wrong.
+                        if showsWebPlanHandoff {
+                            Button(L10n.t(.accountManagePlan)) { NSWorkspace.shared.open(AppEnvironment.plansWebURL) }
+                                .buttonStyle(.referenceSecondary)
+                        }
+                    }
                 }
-                Spacer()
-                // The direct download is billed on the web, so it shows the tier
-                // read-only and hands off to the plans page, which is where a
-                // change of plan is actually made.
-                //
-                // **The App Store build must not show this**, and the condition
-                // is deliberately doubled. `channel` is the compliance rule: an
-                // App Store app may not send a user to a website to buy what it
-                // sells, and that must hold even if the purchase model failed to
-                // build. `subscription == nil` is the coherence rule: a screen
-                // that offered both an in-app purchase and a web page to make
-                // the same change would be asking the user to choose a billing
-                // relationship they have no way to reason about. Either alone
-                // leaves one of the two wrong.
-                if showsWebPlanHandoff {
-                    Button(L10n.t(.accountManagePlan)) { NSWorkspace.shared.open(AppEnvironment.plansWebURL) }
+                CardBlockRow { meter(L10n.t(.accountTraffic), UsagePresentation.display(usage.traffic)) }
+                CardBlockRow { meter(L10n.t(.accountStorage), UsagePresentation.display(usage.storage)) }
+                CardBlockRow {
+                    VStack(alignment: .leading, spacing: Metrics.tight) {
+                        SupportingText(UsagePresentation.resetText(resetsAt: usage.resetsAt, now: Date()))
+                        // The figures above are the last ones that arrived, not
+                        // the current ones. That is a caveat on the meters, so it
+                        // sits inside their card.
+                        if session.isStale {
+                            InlineMessage(.warning, L10n.t(.accountStaleFigures))
+                        }
+                    }
                 }
-            }
-
-            meter(L10n.t(.accountTraffic), UsagePresentation.display(usage.traffic))
-            meter(L10n.t(.accountStorage), UsagePresentation.display(usage.storage))
-
-            Text(UsagePresentation.resetText(resetsAt: usage.resetsAt, now: Date()))
-                .font(.caption).foregroundStyle(.secondary)
-
-            // The figures above are the last ones that arrived, not the current
-            // ones. That is a caveat on the meters, so it sits inside their card.
-            if session.isStale {
-                InlineMessage(.warning, L10n.t(.accountStaleFigures))
             }
         }
     }
@@ -306,32 +323,38 @@ struct AccountView: View {
 
     @ViewBuilder
     private var devicesCard: some View {
-        SectionCard(title: L10n.t(.accountDevicesHeading)) {
-            // Browsers are left out on purpose — see AccountDevice.holdsRevocableToken.
-            Text(L10n.t(.accountDevicesBody))
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            // Said once, here, rather than as a caveat on every row: the rows
-            // carry the address, and this is what the address means. Without it
-            // an IP under a device name reads as "where that machine is", which
-            // a NAT or VPN address is not.
-            Text(L10n.t(.accountDevicesAddressNote))
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                // On the leaf, never on the card: an identifier on the enclosing
-                // stack propagates down and renames every control inside it.
-                // nonlocalized: an accessibility identifier
-                .accessibilityIdentifier("devices-address-note")
-
-            if management.isLoading && management.devices.isEmpty {
-                ProgressView { Text(L10n.t(.accountLoadingDevices)) }
-                    .controlSize(.small)
-            } else if management.devices.isEmpty {
-                Text(L10n.t(.accountNoDevices))
-                    .font(.caption).foregroundStyle(.secondary)
-            } else {
-                ForEach(management.devices) { device in
-                    deviceRow(device)
+        SectionCard(title: L10n.t(.accountDevicesHeading), rows: true) {
+            CardRows {
+                CardBlockRow {
+                    VStack(alignment: .leading, spacing: Metrics.hairline) {
+                        // Browsers are left out on purpose — see AccountDevice.holdsRevocableToken.
+                        SupportingText(L10n.t(.accountDevicesBody))
+                        // Said once, here, rather than as a caveat on every row:
+                        // the rows carry the address, and this is what the
+                        // address means. Without it an IP under a device name
+                        // reads as "where that machine is", which a NAT or VPN
+                        // address is not.
+                        SupportingText(L10n.t(.accountDevicesAddressNote))
+                            // On the leaf, never on the card: an identifier on
+                            // the enclosing stack propagates down and renames
+                            // every control inside it.
+                            // nonlocalized: an accessibility identifier
+                            .accessibilityIdentifier("devices-address-note")
+                    }
+                }
+                if management.isLoading && management.devices.isEmpty {
+                    CardBlockRow {
+                        ProgressView { Text(L10n.t(.accountLoadingDevices)) }
+                            .controlSize(.small)
+                    }
+                } else if management.devices.isEmpty {
+                    CardBlockRow { SupportingText(L10n.t(.accountNoDevices)) }
+                } else {
+                    // Keyed by each device's own id, so a revoke that removes a
+                    // row cannot hand its busy state or its error to a neighbour.
+                    CardRowList(management.devices) { device in
+                        deviceRow(device)
+                    }
                 }
             }
         }
@@ -339,26 +362,29 @@ struct AccountView: View {
 
     @ViewBuilder
     private func deviceRow(_ device: AccountDevice) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: Metrics.tight) {
+            HStack(alignment: .center, spacing: 11) {
+                GlyphChip(symbol: "laptopcomputer.and.iphone")
+                VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 6) {
                         Text(AccountPresentation.deviceName(device))
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(Palette.text)
                             .lineLimit(1).truncationMode(.middle)
                         if device.current {
-                            Text(L10n.t(.accountThisMac))
-                                .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
-                                .background(.quaternary, in: Capsule())
+                            TagChip(text: L10n.t(.accountThisMac))
                         }
                     }
                     Text(deviceDetail(device))
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.subheadline)
+                        .foregroundStyle(Palette.textTertiary)
                         .lineLimit(2)
                 }
-                Spacer(minLength: 8)
+                Spacer(minLength: Metrics.tight)
                 // Only the row being changed is disabled: a slow revoke on one
                 // device must not freeze the rest of the list.
                 Button(L10n.t(.commonRevoke)) { deviceToRevoke = device }
+                    .buttonStyle(.referenceSecondary)
                     .disabled(management.isBusy(row: device.id))
                     // The visible label is one word on every row, which is right
                     // to look at and useless to hear: two devices of the same
@@ -374,6 +400,9 @@ struct AccountView: View {
                 InlineMessage(.failure, error)
             }
         }
+        .padding(.vertical, Metrics.rowVertical)
+        .padding(.horizontal, Metrics.rowHorizontal)
+        .frame(maxWidth: .infinity, minHeight: Metrics.rowMinHeight, alignment: .leading)
     }
 
     /// The address comes from the row the server sent and from nowhere else.
@@ -391,20 +420,20 @@ struct AccountView: View {
 
     @ViewBuilder
     private var filesCard: some View {
-        SectionCard(title: L10n.t(.accountFilesHeading)) {
-            Text(L10n.t(.accountFilesBody))
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if management.isLoading && management.files.isEmpty {
-                ProgressView { Text(L10n.t(.accountLoadingFiles)) }
-                    .controlSize(.small)
-            } else if management.files.isEmpty {
-                Text(L10n.t(.accountNoFiles))
-                    .font(.caption).foregroundStyle(.secondary)
-            } else {
-                ForEach(management.files) { row in
-                    fileRow(row)
+        SectionCard(title: L10n.t(.accountFilesHeading), rows: true) {
+            CardRows {
+                CardBlockRow { SupportingText(L10n.t(.accountFilesBody)) }
+                if management.isLoading && management.files.isEmpty {
+                    CardBlockRow {
+                        ProgressView { Text(L10n.t(.accountLoadingFiles)) }
+                            .controlSize(.small)
+                    }
+                } else if management.files.isEmpty {
+                    CardBlockRow { SupportingText(L10n.t(.accountNoFiles)) }
+                } else {
+                    CardRowList(management.files) { row in
+                        fileRow(row)
+                    }
                 }
             }
         }
@@ -412,13 +441,21 @@ struct AccountView: View {
 
     @ViewBuilder
     private func fileRow(_ row: StoredFileRow) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(row.file.id)
-                .font(.caption.monospaced()).textSelection(.enabled)
-                .lineLimit(1).truncationMode(.middle)
-            Text(fileDetail(row.file))
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: Metrics.tight) {
+            HStack(alignment: .center, spacing: 11) {
+                GlyphChip(symbol: "doc")
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(row.file.id)
+                        .font(.callout.monospaced())
+                        .foregroundStyle(Palette.text)
+                        .textSelection(.enabled)
+                        .lineLimit(1).truncationMode(.middle)
+                    Text(fileDetail(row.file))
+                        .font(.subheadline)
+                        .foregroundStyle(Palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
 
             switch row.link {
             case .available(let link):
@@ -428,6 +465,7 @@ struct AccountView: View {
                     } label: {
                         Label(L10n.t(.downloadOpen), systemImage: "arrow.down.circle")
                     }
+                    .buttonStyle(.referenceSecondary)
                     .accessibilityLabel(
                         AccountPresentation.openActionLabel(fileId: row.file.id))
                     Button {
@@ -440,15 +478,18 @@ struct AccountView: View {
                               systemImage: copiedStoredFileID == row.id
                                   ? "checkmark" : "doc.on.doc")
                     }
+                    .buttonStyle(.referenceSecondary)
                     .accessibilityLabel(AccountPresentation.copyActionLabel(
                         fileId: row.file.id, copied: copiedStoredFileID == row.id))
                     ShareLink(item: link) {
                         Label(L10n.t(.commonShare), systemImage: "square.and.arrow.up")
                     }
+                    .buttonStyle(.referenceSecondary)
                     .accessibilityLabel(
                         AccountPresentation.shareActionLabel(fileId: row.file.id))
                     Spacer()
                     Button(L10n.t(.commonDelete), role: .destructive) { fileToDelete = row.file }
+                        .buttonStyle(.referenceSecondary)
                         .disabled(management.isBusy(row: row.id))
                         // One word on every row, like Revoke above: what has to
                         // be heard is WHICH stored object this destroys. iOS has
@@ -471,6 +512,7 @@ struct AccountView: View {
                 HStack {
                     Spacer()
                     Button(L10n.t(.commonDelete), role: .destructive) { fileToDelete = row.file }
+                        .buttonStyle(.referenceSecondary)
                         .disabled(management.isBusy(row: row.id))
                         // One word on every row, like Revoke above: what has to
                         // be heard is WHICH stored object this destroys. iOS has
@@ -486,6 +528,7 @@ struct AccountView: View {
                 HStack {
                     Spacer()
                     Button(L10n.t(.commonDelete), role: .destructive) { fileToDelete = row.file }
+                        .buttonStyle(.referenceSecondary)
                         .disabled(management.isBusy(row: row.id))
                         // One word on every row, like Revoke above: what has to
                         // be heard is WHICH stored object this destroys. iOS has
@@ -499,6 +542,9 @@ struct AccountView: View {
                 InlineMessage(.failure, error)
             }
         }
+        .padding(.vertical, Metrics.rowVertical)
+        .padding(.horizontal, Metrics.rowHorizontal)
+        .frame(maxWidth: .infinity, minHeight: Metrics.rowMinHeight, alignment: .leading)
     }
 
     private func fileDetail(_ file: StoredFileSummary) -> String {
@@ -525,7 +571,7 @@ struct AccountView: View {
         SectionCard(title: L10n.t(.accountDeleteAccountHeading)) {
             // The address is the user's own: isolated, never translated.
             Text(L10n.t(.accountDeleteAccountBody, [L10n.token(user.email)]))
-                .font(.callout).foregroundStyle(.secondary)
+                .font(.callout).foregroundStyle(Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Link(L10n.t(.subscriptionManage), destination: URL(string: "https://apps.apple.com/account/subscriptions")!)
@@ -556,6 +602,7 @@ struct AccountView: View {
                     Button(L10n.t(.accountDeleteAccount), role: .destructive) {
                         confirmingAccountDeletion = true
                     }
+                    .buttonStyle(.referenceSecondary)
                 }
                 Spacer()
             }
@@ -573,10 +620,11 @@ struct AccountView: View {
     private func meter(_ title: String, _ d: MeterDisplay) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(title).font(.subheadline)
+                Text(title).font(.callout).foregroundStyle(Palette.text)
                 Spacer()
                 Text(L10n.t(.accountMeterOf, [d.usedText, d.capText]))
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.callout).foregroundStyle(Palette.textSecondary)
+                    .monospacedDigit()
             }
             // No bar when unlimited: there is no ratio to draw.
             if let fraction = d.fraction {

@@ -1100,3 +1100,9 @@
 "nearby.addressesPrivacyShort" = "Addresses are shown only here — never stored or logged.";
 "nearby.savedToDownloadsShort" = "Incoming files go to Downloads.";
 "pairing.shareLinkToggle" = "QR code and link";
+"settings.startupHeading" = "Startup";
+"settings.shareMenuHeading" = "Share menu";
+"settings.checkingHeading" = "Checking for updates";
+"settings.thisVersionHeading" = "This version";
+"inbox.notificationsHeading" = "Notifications";
+"inbox.conversationsEmpty" = "Nothing has been sent or received on this Mac yet.";

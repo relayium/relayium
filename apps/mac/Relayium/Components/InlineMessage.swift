@@ -23,7 +23,7 @@ struct InlineMessage: View {
 
         var tint: Color {
             switch self {
-            case .info: return .secondary
+            case .info: return Palette.textSecondary
             case .warning: return .orange
             case .failure: return .red
             }
@@ -45,8 +45,7 @@ struct InlineMessage: View {
                 .accessibilityHidden(true)
             Text(text)
                 .font(.callout)
-                .foregroundStyle(kind == .info ? AnyShapeStyle(.secondary)
-                                               : AnyShapeStyle(kind.tint))
+                .foregroundStyle(kind == .info ? Palette.textSecondary : kind.tint)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)

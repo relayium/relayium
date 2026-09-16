@@ -215,11 +215,17 @@ struct ReferenceButtonStyle: ButtonStyle {
                 .onHover { hovering = $0 }
         }
 
+        /// A destructive button keeps the platform's warning red on its label,
+        /// so a Revoke or Delete never reads as an ordinary action.
+        private var isDestructive: Bool { configuration.role == .destructive }
+
         private var foreground: Color {
             guard isEnabled else { return Palette.textTertiary }
             switch kind {
             case .primary: return .white
-            case .secondary: return hovering ? Palette.actionLabel : Palette.text
+            case .secondary:
+                if isDestructive { return InlineMessage.Kind.failure.tint }
+                return hovering ? Palette.actionLabel : Palette.text
             }
         }
 
@@ -227,7 +233,8 @@ struct ReferenceButtonStyle: ButtonStyle {
             guard isEnabled else { return Palette.chip }
             switch kind {
             case .primary: return Palette.action
-            case .secondary: return hovering ? Palette.actionSurface : Palette.button
+            case .secondary:
+                return hovering && !isDestructive ? Palette.actionSurface : Palette.button
             }
         }
 

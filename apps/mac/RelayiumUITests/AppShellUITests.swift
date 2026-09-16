@@ -2131,11 +2131,10 @@ final class AppShellUITests: XCTestCase {
         // Every destination, at that size, still renders its own surface and
         // keeps its primary control inside the window rather than past the edge.
         //
-        // Device Inbox is in this list for the reason it was added to the sidebar
-        // at all: it is the one destination whose content is a grouped `Form`
-        // rather than a stack of cards, so it is the one whose height the
-        // scaffold's non-scrolling mode has to carry, and the minimum window is
-        // where that would clip first.
+        // Device Inbox is in this list because it is the tallest page: it used
+        // to be a grouped `Form` in a non-scrolling scaffold mode, and is now the
+        // longest stack of cards in the scaffold's scroll view — the minimum
+        // window is where either shape would clip first.
         for destination in ["LAN Transfer", "Cross-network Transfer", "Share a link",
                             "Device Inbox", "Account"] {
             let row = sidebarDestination(destination, in: window)

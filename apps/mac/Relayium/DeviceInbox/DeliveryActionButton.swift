@@ -33,7 +33,7 @@ struct DeliveryActionButton: View {
     /// Drawn as the screen's primary control rather than as one of a row.
     ///
     /// Used by the open device's screen for the single action that STOPS what is
-    /// happening now: a running send whose Cancel is one bordered button among
+    /// happening now: a running send whose Cancel is one ordinary button among
     /// four is a Cancel somebody cannot find while they are watching their files
     /// go to the wrong machine.
     var isProminent = false
@@ -124,9 +124,9 @@ private struct DeliveryButtonWeight: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if isProminent {
-            content.buttonStyle(.borderedProminent)
+            content.buttonStyle(.referencePrimary)
         } else {
-            content.buttonStyle(.bordered)
+            content.buttonStyle(.referenceSecondary)
         }
     }
 }

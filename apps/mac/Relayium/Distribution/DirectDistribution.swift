@@ -176,24 +176,36 @@ struct UpdateSettingsView: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                Toggle(L10n.t(.settingsAutomaticUpdates), isOn: $automatic)
-                    .onChange(of: automatic) { updater.automaticallyChecksForUpdates = $0 }
+        ReferencePage {
+            SectionCard(title: L10n.t(.settingsCheckingHeading)) {
+                HStack(spacing: 10) {
+                    Text(L10n.t(.settingsAutomaticUpdates))
+                        .font(.body)
+                        .foregroundStyle(Palette.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityHidden(true)
+                    Spacer(minLength: Metrics.tight)
+                    Toggle(L10n.t(.settingsAutomaticUpdates), isOn: $automatic)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        .onChange(of: automatic) { updater.automaticallyChecksForUpdates = $0 }
+                }
                 Text(L10n.t(.settingsAutomaticUpdatesBody))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(Palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
-            }
-            Section {
+                Rectangle()
+                    .fill(Palette.hairline)
+                    .frame(height: 1)
+                    .accessibilityHidden(true)
                 HStack {
                     // Said outright rather than shown as an empty field. "Never
                     // checked" is a real state on a fresh install, and a blank
                     // line reads as a bug.
                     Text(lastCheck.map { L10n.t(.settingsLastChecked, [formatted($0)]) }
                         ?? L10n.t(.settingsNeverChecked))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.callout)
+                        .foregroundStyle(Palette.textSecondary)
                     Spacer()
                     Button(L10n.t(.settingsCheckNow)) {
                         updater.checkForUpdates()
@@ -202,19 +214,19 @@ struct UpdateSettingsView: View {
                         // at the permission prompt did not.
                         lastCheck = updater.lastUpdateCheckDate
                     }
+                    .buttonStyle(.referenceSecondary)
                 }
             }
             // What the user is running. It belongs on this pane and not in the
             // About box alone, because "am I up to date" is the question this
             // whole tab answers, and it cannot be answered without it.
-            Section {
+            SectionCard(title: L10n.t(.settingsThisVersionHeading)) {
                 Text(L10n.t(.settingsVersion, [Self.marketingVersion, Self.buildNumber]))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(Palette.text)
                     .textSelection(.enabled)
             }
         }
-        .formStyle(.grouped)
         .task {
             automatic = updater.automaticallyChecksForUpdates
             lastCheck = updater.lastUpdateCheckDate

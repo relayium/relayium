@@ -18,8 +18,11 @@ import SwiftUI
 /// `children: .contain` with the caption as label is what makes VoiceOver
 /// announce the group's name once and then navigate into it, instead of reading
 /// every control as a peer of everything else on the screen.
-struct SectionCard<Content: View>: View {
+struct SectionCard<Content: View, Accessory: View>: View {
     let title: String
+    /// An accessibility identifier for the caption itself, so a group can be
+    /// addressed without the identifier reaching the controls inside it.
+    let titleIdentifier: String?
     /// A short qualifier on the caption line, right-aligned. For a fact about
     /// the whole group that is not worth a row.
     let note: String?
@@ -33,21 +36,28 @@ struct SectionCard<Content: View>: View {
     /// Whether the content is a flush row list rather than padded content.
     let rows: Bool
     @ViewBuilder let content: () -> Content
+    /// Controls about the whole group, trailing on the caption line — Reveal
+    /// in Finder over a history, not an action on one of its rows.
+    @ViewBuilder let accessory: () -> Accessory
 
     @State private var explaining = false
 
     init(title: String,
+         titleIdentifier: String? = nil,
          note: String? = nil,
          footnote: String? = nil,
          explanation: String? = nil,
          rows: Bool = false,
-         @ViewBuilder content: @escaping () -> Content) {
+         @ViewBuilder content: @escaping () -> Content,
+         @ViewBuilder accessory: @escaping () -> Accessory) {
         self.title = title
+        self.titleIdentifier = titleIdentifier
         self.note = note
         self.footnote = footnote
         self.explanation = explanation
         self.rows = rows
         self.content = content
+        self.accessory = accessory
     }
 
     var body: some View {
@@ -71,17 +81,27 @@ struct SectionCard<Content: View>: View {
         .accessibilityLabel(title)
     }
 
+    @ViewBuilder
+    private var captionTitle: some View {
+        let text = Text(title)
+            .font(.callout.weight(.semibold))
+            .textCase(.uppercase)
+            .foregroundStyle(Palette.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityAddTraits(.isHeader)
+        if let titleIdentifier {
+            text.accessibilityIdentifier(titleIdentifier)
+        } else {
+            text
+        }
+    }
+
     private var caption: some View {
         HStack(alignment: .firstTextBaseline, spacing: Metrics.tight) {
             // The reference sets group names in capitals. `textCase` rather
             // than uppercased copy, so the key stays the sentence it is and a
             // script without case is untouched.
-            Text(title)
-                .font(.callout.weight(.semibold))
-                .textCase(.uppercase)
-                .foregroundStyle(Palette.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
+            captionTitle
             if explanation != nil {
                 RowExplainButton(explaining: $explaining, subject: title)
             }
@@ -92,6 +112,10 @@ struct SectionCard<Content: View>: View {
                     .foregroundStyle(Palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.trailing)
+            }
+            if Accessory.self != EmptyView.self {
+                Spacer(minLength: Metrics.tight)
+                accessory()
             }
         }
         .padding(.horizontal, Metrics.hairline)
@@ -110,5 +134,19 @@ struct SectionCard<Content: View>: View {
             RoundedRectangle(cornerRadius: Metrics.corner)
                 .strokeBorder(Palette.cardBorder, lineWidth: 1)
         )
+    }
+}
+
+extension SectionCard where Accessory == EmptyView {
+    init(title: String,
+         titleIdentifier: String? = nil,
+         note: String? = nil,
+         footnote: String? = nil,
+         explanation: String? = nil,
+         rows: Bool = false,
+         @ViewBuilder content: @escaping () -> Content) {
+        self.init(title: title, titleIdentifier: titleIdentifier, note: note,
+                  footnote: footnote, explanation: explanation, rows: rows,
+                  content: content, accessory: { EmptyView() })
     }
 }

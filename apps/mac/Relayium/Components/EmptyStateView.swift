@@ -58,10 +58,7 @@ struct EmptyStateView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: symbol)
-                .font(.title2)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
+            GlyphChip(symbol: symbol)
             // Both sentences are selectable. An empty state is where the reader
             // is told what to do somewhere ELSE — on another device, in another
             // app, to somebody else — and text they cannot select is text they
@@ -69,13 +66,14 @@ struct EmptyStateView: View {
             // neither line is inside a control, and the link and the button
             // below are their own hit targets.
             Text(title)
-                .font(.headline)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Palette.text)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
             if let message {
                 Text(message)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
@@ -117,9 +115,10 @@ struct EmptyStateView: View {
                 // typing in, and this view is rendered inside several.
                 if actionIsProminent {
                     Button(actionTitle, action: action)
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.referencePrimary)
                 } else {
                     Button(actionTitle, action: action)
+                        .buttonStyle(.referenceSecondary)
                 }
             }
         }

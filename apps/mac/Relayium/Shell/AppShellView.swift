@@ -126,7 +126,12 @@ struct AppShellView: View {
                 ProgressView { Text(L10n.t(.accountSigningOut)) }
                     .controlSize(.small)
                     .padding(20)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    // The reference card, so the one transient panel the shell
+                    // draws is the same kind of thing as every group below it.
+                    .background(RoundedRectangle(cornerRadius: Metrics.corner)
+                        .fill(Palette.cardBackground))
+                    .overlay(RoundedRectangle(cornerRadius: Metrics.corner)
+                        .strokeBorder(Palette.cardBorder, lineWidth: 1))
             }
         }
         // A link the OS handed this app. `AppDeepLinkRouter` has already

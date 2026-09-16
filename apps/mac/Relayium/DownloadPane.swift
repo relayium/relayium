@@ -32,6 +32,7 @@ struct DownloadPane: View {
                     // model already owns a writer and Cancel handle, so another
                     // Open must wait rather than replace them.
                     Button(L10n.t(.downloadOpen)) { model.resolve() }
+                        .buttonStyle(.referencePrimary)
                         .keyboardShortcut(.defaultAction)
                         .disabled(model.linkText.isEmpty || model.isBusy)
                 }
@@ -45,12 +46,13 @@ struct DownloadPane: View {
             case .resolving:
                 ProgressView(L10n.t(.downloadResolving)).controlSize(.small)
                 Button(L10n.t(.commonCancel)) { model.cancel() }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.referenceSecondary)
             case .ready(let manifest, let expiresAt, let burn):
                 let total = manifest.files.reduce(0) { $0 + $1.size }
                 Text(DownloadPresentation.manifestSummary(fileCount: manifest.files.count,
                                                           totalBytes: Int64(total)))
                     .font(.callout.weight(.semibold))
+                    .foregroundStyle(Palette.text)
                 // By index, not by name: a folder upload keeps its hierarchy in
                 // `name`, so two entries can share a leaf and duplicate ids
                 // would silently drop a row from the list the user is deciding
@@ -62,9 +64,11 @@ struct DownloadPane: View {
                             // The manifest is the user's confirmation before
                             // Save. A long relative path must remain inspectable.
                             .fixedSize(horizontal: false, vertical: true)
-                        Text(L10n.bytes(Int64(f.size))).fixedSize()
+                        Text(L10n.bytes(Int64(f.size)))
+                            .foregroundStyle(Palette.textTertiary)
+                            .fixedSize()
                     }
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Palette.textSecondary)
                 }
                 if burn {
                     // Stated before it costs something, not as a footnote after.
@@ -74,21 +78,24 @@ struct DownloadPane: View {
                     L10n.date(Date(timeIntervalSince1970: TimeInterval(expiresAt)),
                               dateStyle: .medium, timeStyle: .short),
                 ]))
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Palette.textTertiary)
                 Button(L10n.t(.downloadSave)) { chooseDestination() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.referencePrimary)
             case .downloading(let received, let total):
                 ProgressView(value: total > 0 ? Double(received) / Double(total) : 0)
                     .accessibilityLabel(L10n.t(.downloadInProgress))
                     .accessibilityValue(
                         L10n.percent(done: received, total: total) ?? L10n.t(.commonStarting))
                 Text(L10n.percent(done: received, total: total) ?? L10n.t(.downloadInProgress))
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.callout.weight(.medium)).foregroundStyle(Palette.text)
+                    .monospacedDigit()
                 PendingFileList(sessionFiles: model.sessionFiles)
                 Button(L10n.t(.commonCancel)) { model.cancel() }
+                    .buttonStyle(.referenceSecondary)
             case .done(let urls):
                 Text(DownloadPresentation.savedSummary(fileCount: urls.count))
                     .font(.callout.weight(.semibold))
+                    .foregroundStyle(Palette.text)
                 if let payload = model.received {
                     ReceivedResultView(payload: payload)
                 }
@@ -99,7 +106,7 @@ struct DownloadPane: View {
                 // and proves it does NOT delete what was saved — must be able to
                 // name this button rather than whichever Done a query found.
                 Button(L10n.t(.commonDone)) { model.dismissResult() }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.referenceSecondary)
                     .accessibilityIdentifier("download.done")
             case .failed(let message):
                 InlineMessage(.failure, message)
@@ -118,6 +125,7 @@ struct DownloadPane: View {
                 // button at all: the field and its Open action are always there.
                 if model.canRetry {
                     Button(L10n.t(.commonTryAgain)) { model.retry() }
+                        .buttonStyle(.referencePrimary)
                 }
             }
         }

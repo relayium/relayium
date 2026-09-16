@@ -167,7 +167,7 @@ struct DeviceConversationPage: View {
     // MARK: - which device, and the way back
 
     private var headerSection: some View {
-        Section {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
             // The way out, first in reading order and first in the tab order —
             // a page that can only be left by pressing the thing that sends is
             // not a page somebody explores.
@@ -176,41 +176,57 @@ struct DeviceConversationPage: View {
             } label: {
                 Label(L10n.t(.sendBackToDevices), systemImage: "chevron.left")
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.referenceSecondary)
             .keyboardShortcut(.cancelAction)
             .accessibilityIdentifier("inbox-send-back")
-            VStack(alignment: .leading, spacing: Metrics.hairline) {
-                Text(peerName)
-                    .font(.title3.weight(.semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("inbox-send-device-name")
-                if let target {
-                    Text(InboxSendPresentation.detail(for: target))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("inbox-send-device-detail")
+            // The device, as this page's one summary: the reference's status
+            // head with the device glyph in the radar.
+            VStack(alignment: .leading, spacing: Metrics.inner) {
+                HStack(alignment: .center, spacing: Metrics.rowHorizontal) {
+                    BrandRadar(symbol: "laptopcomputer.and.iphone", isActive: target != nil)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(peerName)
+                            .font(.title2.weight(.semibold))
+                            .foregroundStyle(Palette.text)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityAddTraits(.isHeader)
+                            .accessibilityIdentifier("inbox-send-device-name")
+                        if let target {
+                            Text(InboxSendPresentation.detail(for: target))
+                                .font(.callout)
+                                .foregroundStyle(Palette.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("inbox-send-device-detail")
+                        }
+                    }
+                    Spacer(minLength: Metrics.tight)
+                }
+                // **Why the last attempt was refused, under the device it names
+                // and above both composers.** Most of these — staging failed, the
+                // credential went away, the target changed under the send,
+                // something is already being prepared — belong to neither kind,
+                // and rendering one under each Send button would be the same
+                // failure said twice. The two reasons a Send is disabled BEFORE it
+                // is pressed are said beside that button instead: the byte counter
+                // and the capability.
+                if let refusal = deliveries.refusal {
+                    InlineMessage(.failure, InboxSendPresentation.text(for: refusal))
+                        .accessibilityIdentifier("inbox-send-refusal")
+                }
+                if inbox.conversationStoreIssue {
+                    InlineMessage(.failure, L10n.t(.inboxConversationStoreIssue))
+                        .accessibilityIdentifier("inbox-conversation-store-issue")
                 }
             }
-            // **Why the last attempt was refused, under the device it names and
-            // above both composers.** Most of these — staging failed, the
-            // credential went away, the target changed under the send, something
-            // is already being prepared — belong to neither kind, and rendering
-            // one under each Send button would be the same failure said twice.
-            // The two reasons a Send is disabled BEFORE it is pressed are said
-            // beside that button instead: the byte counter and the capability.
-            if let refusal = deliveries.refusal {
-                InlineMessage(.failure, InboxSendPresentation.text(for: refusal))
-                    .accessibilityIdentifier("inbox-send-refusal")
-            }
-            if inbox.conversationStoreIssue {
-                InlineMessage(.failure, L10n.t(.inboxConversationStoreIssue))
-                    .accessibilityIdentifier("inbox-conversation-store-issue")
-            }
-        } footer: {
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, Metrics.heroPadding)
+            .padding(.bottom, 18)
+            .padding(.horizontal, Metrics.heroPadding)
+            .background(HeroSurface())
             // The consequence, before anything is encrypted: sealed to one
             // device, no link, nobody else can open it.
             caption(L10n.t(.sendDeviceExplain))
+                .padding(.horizontal, Metrics.caption)
         }
     }
 
@@ -225,7 +241,9 @@ struct DeviceConversationPage: View {
     @ViewBuilder
     private var activeSection: some View {
         if let item = InboxSendActions.current(in: deliveries.items, for: peerID) {
-            Section {
+            SectionCard(title: L10n.t(.sendActiveHeading),
+                        titleIdentifier: "inbox-send-active",
+                        footnote: L10n.t(.sendOutstandingExplain)) {
                 if case let .uploading(sent, total) = item.activity {
                     ProgressView(value: Double(sent), total: Double(max(total, 1)))
                         .accessibilityLabel(L10n.t(.sendActiveHeading))
@@ -233,7 +251,8 @@ struct DeviceConversationPage: View {
                             L10n.percent(done: sent, total: total) ?? L10n.t(.commonStarting))
                 }
                 Text(InboxSendPresentation.status(for: item.activity))
-                    .font(.caption)
+                    .font(.callout)
+                    .foregroundStyle(Palette.text)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("inbox-delivery-status")
                 PendingFileList(sessionFiles: item.files)
@@ -246,7 +265,7 @@ struct DeviceConversationPage: View {
                 }
                 // **Prominent, and it is the one control on this page that is.**
                 // A send that is preparing or uploading is the state a person
-                // most urgently wants out of, and a Cancel drawn as one bordered
+                // most urgently wants out of, and a Cancel drawn as one ordinary
                 // button among four is a Cancel they hunt for while their files
                 // are moving. Which action that IS — stop this device's attempt,
                 // or ask central to drop the delivery — is
@@ -267,11 +286,6 @@ struct DeviceConversationPage: View {
                                              deliveries: deliveries, onAccount: onAccount)
                     }
                 }
-            } header: {
-                Text(L10n.t(.sendActiveHeading))
-                    .accessibilityIdentifier("inbox-send-active")
-            } footer: {
-                caption(L10n.t(.sendOutstandingExplain))
             }
         }
     }
@@ -301,15 +315,13 @@ struct DeviceConversationPage: View {
         } else {
             // A disabled composer would be a control the user can neither use
             // nor understand. This is the sentence instead.
-            Section {
+            SectionCard(title: L10n.t(.inboxComposeHeading),
+                        titleIdentifier: "inbox-compose-group") {
                 Text(L10n.t(.inboxComposeUnavailable))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.callout)
+                    .foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("inbox-compose-unavailable")
-            } header: {
-                Text(L10n.t(.inboxComposeHeading))
-                    .accessibilityIdentifier("inbox-compose-group")
             }
         }
     }
@@ -337,11 +349,9 @@ struct DeviceConversationPage: View {
     /// missing or unwritable folder is a truthful caveat about FILES and has
     /// nothing to say about whether a message can land.
     private func messageSection(_ target: InboxSendCandidate) -> some View {
-        Section {
+        SectionCard(title: InboxSendPresentation.label(for: .message),
+                    titleIdentifier: "inbox-send-message-group") {
             messageControls(target)
-        } header: {
-            Text(InboxSendPresentation.label(for: .message))
-                .accessibilityIdentifier("inbox-send-message-group")
         }
     }
 
@@ -376,25 +386,27 @@ struct DeviceConversationPage: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .background(Palette.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: Metrics.corner))
-        .overlay(RoundedRectangle(cornerRadius: Metrics.corner)
-            .strokeBorder(Palette.cardBorder, lineWidth: 1))
+        // A field inside the card, so the field colour and a hairline edge —
+        // the card's own fill would make the editor invisible against it.
+        .background(Palette.field)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8)
+            .strokeBorder(Palette.hairline, lineWidth: 1))
         Text(InboxSendPresentation.size(of: draftSize))
-            .font(.caption)
+            .font(.subheadline)
             .monospacedDigit()
             // The one state the counter has to be impossible to miss in: past
             // the bound, where the button is disabled and this line is the whole
             // explanation of why.
             .foregroundStyle(draftSize.isTooLong ? InlineMessage.Kind.failure.tint
-                                                 : Color.secondary)
+                                                 : Palette.textTertiary)
             .accessibilityIdentifier("inbox-send-message-size")
         if let refusal = InboxSendPresentation.textRefusal(for: target) {
             InlineMessage(.warning, refusal)
                 .accessibilityIdentifier("inbox-send-text-unsupported")
         }
         Button(L10n.t(.sendMessageAction)) { sendMessage() }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.referencePrimary)
             // NOT `.defaultAction`: that is plain Return, and plain Return
             // belongs to the editor above. ⌘Return is what the app's other
             // composers already use.
@@ -420,12 +432,12 @@ struct DeviceConversationPage: View {
     /// inside it a `relativePath`, and that path is what the sealed manifest
     /// carries to the other device.
     ///
-    /// **A third way in, and it is the same batch: a Finder drag.** No dashed
-    /// box — this page is a grouped `Form`, and a drop rectangle inside a form
-    /// row reads as a control the row does not have. The two buttons and the
-    /// hint beneath them ARE the target, so the affordance is a sentence rather
-    /// than a shape, and `FileDropReceiver` puts what is dropped through
-    /// `SelectionStore.add` exactly as both pickers do.
+    /// **A third way in, and it is the same batch: a Finder drag.** The two
+    /// buttons and the hint beneath them sit in the reference's dashed drop
+    /// zone — the same one the connected LAN and Cross-network workspace draws —
+    /// which turns violet while a drag that can land is over it, and
+    /// `FileDropReceiver` puts what is dropped through `SelectionStore.add`
+    /// exactly as both pickers do.
     ///
     /// **It cannot send and it cannot choose a device.** Send is the button at
     /// the bottom of this group, unchanged, and the device is `target` — which
@@ -441,25 +453,37 @@ struct DeviceConversationPage: View {
                 Button(L10n.t(.commonChooseFilesOrFolders)) {
                     chooseFilesOrFolders(into: selection)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.referenceSecondary)
                 .accessibilityIdentifier("inbox-send-choose-files")
                 Button(L10n.t(.sendChooseFolders)) { chooseFolders(into: selection) }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.referenceSecondary)
                     .accessibilityIdentifier("inbox-send-choose-folder")
                 if !selection.isEmpty {
                     Button(L10n.t(.commonClear)) { selection.clear(); dropRefusal = nil }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.referenceSecondary)
                         .accessibilityIdentifier("inbox-send-clear")
                 }
             }
             // Both halves: a drag stages, and Send is still pressed by hand.
             Text(L10n.t(.dropSendHint))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.subheadline)
+                .foregroundStyle(Palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("inbox-send-drop-hint")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 18)
+        .padding(.horizontal, Metrics.rowHorizontal)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(isDropTargeted && target != nil ? Palette.actionSurface : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                .foregroundStyle(isDropTargeted && target != nil
+                                 ? Palette.action : Palette.buttonBorder)
+        )
         .contentShape(Rectangle())
         // **The device, named rather than assumed.** `target == nil` answers
         // whether this page may send at all; it does not answer WHICH device the
@@ -495,17 +519,15 @@ struct DeviceConversationPage: View {
         // renders — names and sizes, never a container path.
         PendingFileList(files: selection.files)
         Button(L10n.t(.commonSend)) { sendFiles() }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.referencePrimary)
             .disabled(selection.files.isEmpty)
             .accessibilityIdentifier("inbox-send-start")
     }
 
     private var filesSection: some View {
-        Section {
+        SectionCard(title: InboxSendPresentation.label(for: .files),
+                    titleIdentifier: "inbox-send-files-group") {
             fileControls
-        } header: {
-            Text(InboxSendPresentation.label(for: .files))
-                .accessibilityIdentifier("inbox-send-files-group")
         }
     }
 
@@ -518,24 +540,29 @@ struct DeviceConversationPage: View {
     /// status poll about an outgoing delivery unable to move a row somebody is
     /// reading.
     private var timelineSection: some View {
-        Section {
-            if let conversation, !conversation.entries.isEmpty {
-                ForEach(conversation.entries) { entry in
-                    entryRow(entry)
+        SectionCard(title: L10n.t(.inboxTimelineHeading),
+                    titleIdentifier: "inbox-timeline",
+                    rows: true) {
+            CardRows {
+                if let conversation, !conversation.entries.isEmpty {
+                    CardRowList(conversation.entries) { entry in
+                        entryRow(entry)
+                    }
+                } else {
+                    CardBlockRow {
+                        Text(L10n.t(.inboxTimelineEmpty))
+                            .font(.callout)
+                            .foregroundStyle(Palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("inbox-timeline-empty")
+                    }
                 }
-            } else {
-                Text(L10n.t(.inboxTimelineEmpty))
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("inbox-timeline-empty")
             }
-        } header: {
-            HStack {
-                Text(L10n.t(.inboxTimelineHeading))
-                    .accessibilityIdentifier("inbox-timeline")
-                Spacer()
+        } accessory: {
+            HStack(spacing: Metrics.tight) {
                 if let conversation, !conversation.receivedFileURLs.isEmpty {
                     Button(L10n.t(.inboxRevealFolder)) { inbox.reveal(conversation) }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.referenceSecondary)
                         .accessibilityIdentifier("inbox-conversation-reveal")
                 }
                 if let conversation, !conversation.entries.isEmpty {
@@ -545,7 +572,7 @@ struct DeviceConversationPage: View {
                     Button(L10n.t(.inboxConversationDelete)) {
                         deletingConversation = conversation.entryIDs
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.referenceSecondary)
                     .accessibilityIdentifier("inbox-conversation-delete")
                 }
             }
@@ -613,9 +640,11 @@ struct DeviceConversationPage: View {
                 // it and the glyph is hidden.
                 HStack(spacing: 4) {
                     Image(systemName: InboxTimelinePresentation.directionSymbol(of: entry))
+                        .foregroundStyle(Palette.actionLabel)
                         .accessibilityHidden(true)
                     Text(InboxTimelinePresentation.direction(of: entry, peerName: peerName))
-                        .font(.caption.weight(.semibold))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Palette.textSecondary)
                         .accessibilityIdentifier("inbox-entry-direction")
                 }
                 entryBody(entry)
@@ -625,13 +654,13 @@ struct DeviceConversationPage: View {
                             Image(systemName: symbol).accessibilityHidden(true)
                         }
                         Text(state)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.subheadline)
+                            .foregroundStyle(Palette.textSecondary)
                             .accessibilityIdentifier("inbox-entry-state")
                     }
                 }
                 Text(InboxTimelinePresentation.at(entry))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Palette.textTertiary)
             }
             .accessibilityElement(children: .contain)
             .accessibilityLabel(InboxTimelinePresentation.accessibilityLabel(
@@ -652,6 +681,9 @@ struct DeviceConversationPage: View {
                                                                     peerName: peerName))
             .accessibilityIdentifier("inbox-entry-menu")
         }
+        .padding(.vertical, Metrics.rowVertical)
+        .padding(.horizontal, Metrics.rowHorizontal)
+        .frame(maxWidth: .infinity, minHeight: Metrics.rowMinHeight, alignment: .leading)
         .contextMenu { deleteButton(entry) }
     }
 
@@ -668,16 +700,18 @@ struct DeviceConversationPage: View {
     private func entryBody(_ entry: InboxTimelineEntry) -> some View {
         if entry.kind == .message, let message = messageBody(entry) {
             Text(message.text).textSelection(.enabled)
+                .foregroundStyle(Palette.text)
                 .fixedSize(horizontal: false, vertical: true)
             Button(L10n.t(copiedEntryID == entry.id ? .commonCopied : .commonCopy)) {
                 copyReceivedMessage(message.text)
                 copiedEntryID = entry.id
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.referenceSecondary)
             .accessibilityLabel(InboxMessagePresentation.copyActionLabel(
                 copied: copiedEntryID == entry.id))
         } else if entry.kind == .files {
             Text(InboxTimelinePresentation.fileNames(of: entry))
+                .foregroundStyle(Palette.text)
                 .textSelection(.enabled)
         } else if entry.direction == .sent {
             // A body this Mac no longer holds — the process died between the
@@ -767,8 +801,8 @@ struct DeviceConversationPage: View {
 
     private func caption(_ text: String) -> some View {
         Text(text)
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .font(.subheadline)
+            .foregroundStyle(Palette.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
     }
 }

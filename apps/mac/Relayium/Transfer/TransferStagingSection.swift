@@ -54,12 +54,12 @@ struct TransferStagingSection: View {
     var body: some View {
         OpenSection(title: L10n.t(.workspaceStagingHeading)) {
             Text(L10n.t(.workspaceStagingOptional))
-                .font(.subheadline).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("transfer-staging-optional")
             FileDropZone(store: selection, isBusy: isBusy) {
                 Text(selection.summary ?? L10n.t(.workspaceDropHint))
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Palette.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -71,13 +71,14 @@ struct TransferStagingSection: View {
                 Button(L10n.t(.commonChooseFilesOrFolders)) {
                     chooseFilesOrFolders(into: selection)
                 }
+                .buttonStyle(.referenceSecondary)
                 .accessibilityIdentifier("transfer-choose-files")
                 .disabled(isBusy())
                 if !selection.isEmpty {
                     // A task mutation, never navigation: it drops the batch the
                     // user picked.
                     Button(L10n.t(.commonClear)) { selection.clear() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.referenceSecondary)
                         .disabled(isBusy())
                 }
             }

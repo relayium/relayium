@@ -187,16 +187,17 @@ struct TransferLinkPane: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(L10n.t(.linkOpenWith, [L10n.token(link.peerLabel ?? "")]))
-                .font(.headline)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Palette.text)
                 .accessibilityIdentifier("link-session-peer")
             Text(L10n.t(.nearbySessionPeerDisclaimer))
-                .font(.subheadline).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             if link.connection.isOpen && !link.isVerificationPending {
                 // The claim the whole batch exists to make, and the one sentence
                 // that replaces the two one-lane notes.
                 Text(L10n.t(.linkOneConnectionNote))
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("link-one-connection-note")
             }
@@ -240,22 +241,23 @@ struct TransferLinkPane: View {
     private func verification(_ sas: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(L10n.t(.linkVerifyTitle)).font(.callout.weight(.semibold))
+                .foregroundStyle(Palette.text)
             SecurityCodeText(code: sas, style: .verification)
             Text(L10n.t(.linkVerifyBody))
-                .font(.subheadline).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             if !link.armedFiles.isEmpty {
                 Text(L10n.t(.linkVerifyHoldingFiles))
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("link-holding-files")
             }
             HStack {
                 Button(L10n.t(.linkVerifyMatches)) { link.confirmSAS() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.referencePrimary)
                     .accessibilityIdentifier("link-verify-matches")
                 Button(L10n.t(.linkVerifyDiffers), role: .destructive) { link.rejectSAS() }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.referenceSecondary)
                     .accessibilityIdentifier("link-verify-differs")
             }
         }
@@ -330,7 +332,7 @@ struct TransferLinkPane: View {
 
             HStack(spacing: Metrics.tight) {
                 Button(L10n.t(.linkSend)) { sendDraft() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.referencePrimary)
                     // NOT `.defaultAction`: that is plain Return, and plain
                     // Return belongs to the editor above.
                     .keyboardShortcut(.return, modifiers: .command)
@@ -341,14 +343,14 @@ struct TransferLinkPane: View {
                     .disabled(!link.canSendMessage || trimmedDraft.isEmpty)
                     .accessibilityIdentifier("link-send-message")
                 Text(L10n.t(.composerShortcutHint))
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("link-composer-shortcut")
                 Spacer(minLength: 0)
             }
             if link.isWaitingForConversation {
                 Text(L10n.t(.linkWaitingForPeer))
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("link-waiting-for-peer")
             }
@@ -373,11 +375,11 @@ struct TransferLinkPane: View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
             HStack(spacing: 8) {
                 Button(L10n.t(.linkSendFile)) { pick(directories: false) }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.referenceSecondary)
                     .disabled(!link.acceptsWork)
                     .accessibilityIdentifier("link-send-file")
                 Button(L10n.t(.linkSendFolder)) { pick(directories: true) }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.referenceSecondary)
                     .disabled(!link.acceptsWork)
                     .accessibilityIdentifier("link-send-folder")
             }
@@ -386,7 +388,7 @@ struct TransferLinkPane: View {
             // that letting go transmits them.
             Text(L10n.t(.dropSendHint))
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("link-drop-hint")
         }
@@ -457,20 +459,20 @@ struct TransferLinkPane: View {
             VStack(alignment: .leading, spacing: Metrics.tight) {
                 if let summary = dropped.summary {
                     Text(summary)
-                        .font(.subheadline).foregroundStyle(.secondary)
+                        .font(.subheadline).foregroundStyle(Palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("link-drop-summary")
                 }
                 PendingFileList(files: dropped.files)
                 HStack(spacing: 8) {
                     Button(L10n.t(.commonSend)) { sendDropped() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.referencePrimary)
                         .disabled(!link.acceptsWork)
                         .accessibilityIdentifier("link-drop-send")
                     // A task mutation, never navigation: it discards the batch
                     // the user dragged in.
                     Button(L10n.t(.commonClear)) { clearDropped() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.referenceSecondary)
                         .accessibilityIdentifier("link-drop-clear")
                 }
             }
@@ -534,10 +536,10 @@ struct TransferLinkPane: View {
     private var exit: some View {
         VStack(alignment: .leading, spacing: 4) {
             Button(leaveTitle) { leaveOrConfirmLocalTextDiscard() }
-                .buttonStyle(.bordered)
+                .buttonStyle(.referenceSecondary)
                 .accessibilityIdentifier("link-leave-session")
             Text(L10n.t(.linkHistoryIsLocal))
-                .font(.subheadline).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         // **Asked only when there is something to lose**, so an ordinary hangup
@@ -823,7 +825,7 @@ struct LinkTranscriptView: View {
             Image(systemName: message.direction == .outgoing
                   ? "arrow.up.right" : "arrow.down.left")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.textSecondary)
             // Verbatim, and never parsed: the body is peer-supplied text
             // and `Text(verbatim:)` is what stops it being read as
             // markup.
@@ -892,11 +894,12 @@ struct LinkTransferListView: View {
     private var list: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L10n.t(.linkTransfersHeading)).font(.callout.weight(.semibold))
+                .foregroundStyle(Palette.text)
             if !link.armedFiles.isEmpty {
                 // A batch the lane has not seen. Named as its own state rather
                 // than drawn as queued: queued means the lane took it.
                 Text(L10n.t(.linkBatchArmed))
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Palette.textSecondary)
                     .accessibilityIdentifier("link-batch-armed")
             }
             ForEach(model.batchesNewestFirst) { batch in
@@ -914,10 +917,10 @@ struct LinkTransferListView: View {
             HStack {
                 Image(systemName: batch.direction == .outbound
                       ? "arrow.up.doc" : "arrow.down.doc")
-                    .foregroundStyle(.secondary)
-                Text(summary(batch)).font(.callout)
+                    .foregroundStyle(Palette.textSecondary)
+                Text(summary(batch)).font(.callout).foregroundStyle(Palette.text)
                 Spacer()
-                Text(stateLine(batch)).font(.subheadline).foregroundStyle(.secondary)
+                Text(stateLine(batch)).font(.subheadline).foregroundStyle(Palette.textSecondary)
             }
             if let fraction = batch.fractionCompleted, !batch.isTerminal {
                 // **Named, and spoken as a percentage** — the pair `UploadPane`
@@ -937,11 +940,11 @@ struct LinkTransferListView: View {
             if batch.state == .offered {
                 HStack {
                     Button(L10n.t(.linkAcceptFiles)) { link.acceptInboundBatch() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.referencePrimary)
                         .disabled(!link.acceptsWork)
                         .accessibilityIdentifier("link-accept-files")
                     Button(L10n.t(.linkDeclineFiles)) { link.rejectInboundBatch() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.referenceSecondary)
                 }
             }
             // **Queued is neutral; transferring is destructive.** Nothing has
@@ -953,11 +956,11 @@ struct LinkTransferListView: View {
             // transport it was written for.
             if case .queued = batch.state, batch.direction == .outbound {
                 Button(L10n.t(.commonCancel)) { link.cancelQueuedBatch(batch.id) }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.referenceSecondary)
             }
             if case .transferring = batch.state, batch.direction == .outbound {
                 Button(L10n.t(.commonCancel), role: .destructive) { link.cancelOutboundBatch() }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.referenceSecondary)
             }
             if let files = batch.receivedFiles, !files.isEmpty {
                 // Built by the same function the legacy receive uses, so a

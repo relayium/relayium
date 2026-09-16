@@ -27,9 +27,10 @@ struct ReceivedResultView: View {
             ForEach(Array(payload.dragURLs.enumerated()), id: \.element) { index, url in
                 HStack(spacing: 6) {
                     Image(systemName: isDirectory(url) ? "folder" : "doc")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.actionLabel)
                     Text(url.lastPathComponent)
                         .font(.subheadline)
+                        .foregroundStyle(Palette.text)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -55,9 +56,9 @@ struct ReceivedResultView: View {
                 }
                 .accessibilityIdentifier("received.share")
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.referenceSecondary)
             Text(L10n.t(.receivedDragHint))
-                .font(.subheadline).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(Palette.textTertiary)
         }
     }
 

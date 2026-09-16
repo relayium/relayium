@@ -54,15 +54,20 @@ struct LoginView: View {
     var body: some View {
         VStack(spacing: 20) {
             VStack(spacing: 6) {
+                // The brand radar the transfer screens open with, still: an
+                // account form is a way in, not a live state.
+                BrandRadar(symbol: "person.fill", isActive: true)
+                    .padding(.bottom, Metrics.hairline)
                 // The product name, not copy. nonlocalized: brand.
                 Text("Relayium")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.tint)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Palette.actionLabel)
                 Text(L10n.t(mode.titleKey))
                     .font(.title2.weight(.semibold))
+                    .foregroundStyle(Palette.text)
                 Text(L10n.t(mode.bodyKey))
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 320)
@@ -94,6 +99,7 @@ struct LoginView: View {
             // and the label names the operation that is actually running.
             ZStack {
                 Button(L10n.t(mode.submitTitleKey), action: submit)
+                    .buttonStyle(.referencePrimary)
                     .keyboardShortcut(.defaultAction)
                     .disabled(!canSubmit)
                     .opacity(form.isBusy ? 0 : 1)
@@ -128,7 +134,11 @@ struct LoginView: View {
             // not a second way to create one, and offering it beside the
             // create-account fields would imply it was.
             if mode == .signIn {
-                Divider().frame(maxWidth: 280)
+                Rectangle()
+                    .fill(Palette.hairline)
+                    .frame(height: 1)
+                    .frame(maxWidth: 280)
+                    .accessibilityHidden(true)
 
                 // Named for what it does. It used to say "Sign in with Apple",
                 // which was a claim about a mechanism this app does not
@@ -141,6 +151,7 @@ struct LoginView: View {
                 // route there.** In the Mac App Store build the native control
                 // above is an ADDITION beside this, never a replacement for it.
                 Button(L10n.t(.loginBrowserSignIn)) { startBrowserLogin() }
+                    .buttonStyle(.referenceSecondary)
                     .disabled(form.isBusy || browserBusy)
 
                 if case let .failed(message) = browserLogin.state {
@@ -156,11 +167,9 @@ struct LoginView: View {
         }
         .padding(28)
         .frame(maxWidth: 380)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 20))
-        .overlay {
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.primary.opacity(0.10), lineWidth: 1)
-        }
+        // The reference hero's surface: this form is the one summary on the
+        // Account screen while nobody is signed in.
+        .background(HeroSurface())
         // Opens the sheet as soon as the model publishes an approval URL, and
         // only then — the URL is not known until /api/cli/device/start returns.
         // `task(id:)` rather than `onChange(of:initial:)`, which needs macOS 14

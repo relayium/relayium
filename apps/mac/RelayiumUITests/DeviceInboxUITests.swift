@@ -49,7 +49,7 @@ final class DeviceInboxUITests: XCTestCase {
         } ?? app.windows.firstMatch
     }
 
-    /// The settings scene, identified by the shipped `.frame(width: 520)`
+    /// The settings scene, identified by its shipped 520pt width
     /// contract rather than by index: with the product window closed the
     /// settings window is the ONLY window, so "the second window" does not
     /// identify it, and the MenuBarExtra's own status-item window is smaller.
@@ -127,8 +127,8 @@ final class DeviceInboxUITests: XCTestCase {
 
     /// A control that may be below the fold of a long form.
     ///
-    /// The Device Inbox surface is seven sections tall in the main window, and a
-    /// SwiftUI `Form` creates its rows lazily. Scrolling once and re-asking is the
+    /// The Device Inbox surface is seven groups tall in the main window, and a
+    /// control below the fold is not on screen yet. Scrolling once and re-asking is the
     /// difference between "this control is missing" and "this window is 700 points
     /// high", and only one of those is a product defect.
     ///
@@ -842,13 +842,12 @@ final class DeviceInboxUITests: XCTestCase {
     /// **The whole Help section is readable with every preceding section
     /// present.**
     ///
-    /// The owner's report, as a runtime property. `DestinationScaffold` gives the
-    /// grouped `Form` an exact height inside a `GeometryReader`, and the header
-    /// is a `safeAreaInset` — which does not draw OVER the modified view, it
-    /// reports a size that includes itself. Applied to the already-framed Form
-    /// the composite came out taller than the window by the header's height, so
-    /// the bottom of the Form's own viewport hung below the window's edge: the
-    /// last section could be scrolled to and never finished.
+    /// The owner's report, as a runtime property. `DestinationScaffold` once gave
+    /// a grouped `Form` an exact height with its header as a `safeAreaInset`,
+    /// and the composite came out taller than the window by the header's height,
+    /// so the last section could be scrolled to and never finished. The page is
+    /// now cards in the scaffold's own scroll view; this keeps the property
+    /// honest for that shape too.
     ///
     /// This is driven in the state with the MOST content above Help — signed in,
     /// a completed delivery, and blocked banners adding their own section — which

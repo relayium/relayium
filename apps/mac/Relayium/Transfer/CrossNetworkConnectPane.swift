@@ -114,7 +114,7 @@ struct CrossNetworkConnectPane: View {
                     InlineMessage(.warning, L10n.t(.errorRealtimeLegacyPeer))
                         .accessibilityIdentifier("pairing-peer-unsupported")
                     Button(L10n.t(.commonDismiss)) { link.dismissUnsupportedPairingPeer() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.referenceSecondary)
                         .accessibilityIdentifier("pairing-peer-unsupported-dismiss")
                 }
                 .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
@@ -130,7 +130,7 @@ struct CrossNetworkConnectPane: View {
                 PairingHero {
                     ProgressView(L10n.t(.directCreatingCode)).controlSize(.small)
                     Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.referenceSecondary)
                         .accessibilityIdentifier("pairing-code-minting-cancel")
                 }
             case .idle, .failed:
@@ -155,7 +155,7 @@ struct CrossNetworkConnectPane: View {
                     InlineMessage(.failure, message)
                         .accessibilityIdentifier("pairing-code-failed")
                     Button(L10n.t(.commonDismiss)) { module.cancelPairingCode() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.referenceSecondary)
                         .accessibilityIdentifier("pairing-code-failed-dismiss")
                 }
                 .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
@@ -322,11 +322,11 @@ struct CrossNetworkConnectPane: View {
                 // screen.
                 if case .allowed = gate {
                     Button(L10n.t(.pairingNewCode)) { regenerate() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.referencePrimary)
                         .accessibilityIdentifier("pairing-code-regenerate")
                 }
                 Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.referenceSecondary)
                     .accessibilityIdentifier("pairing-code-expired-cancel")
             }
         }

@@ -53,9 +53,11 @@ struct PairingJoinLinkView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L10n.t(.pairingJoinLink))
-                .font(.caption.weight(.semibold))
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(Palette.text)
             Text(url.absoluteString)
-                .font(.caption.monospaced())
+                .font(.subheadline.monospaced())
+                .foregroundStyle(Palette.textSecondary)
                 // A generated link is the result the sender hands off. Keep
                 // every component visible instead of replacing its middle with
                 // an ellipsis when the detail pane is narrow.
@@ -75,12 +77,11 @@ struct PairingJoinLinkView: View {
                 }
                 if copied {
                     Label(L10n.t(.pairingLinkCopied), systemImage: "checkmark")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.subheadline)
+                        .foregroundStyle(Palette.textSecondary)
                 }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .buttonStyle(.referenceSecondary)
         }
         // SwiftUI may preserve this subtree while the model publishes a later
         // code. Copy feedback belongs to one URL, never the component slot.
@@ -126,8 +127,8 @@ struct PairingCodeHandoffView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         QRCodeView(url: url.absoluteString, side: 144)
                         Text(L10n.t(.directScanOnPhone))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.subheadline)
+                            .foregroundStyle(Palette.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .frame(width: 160, alignment: .leading)

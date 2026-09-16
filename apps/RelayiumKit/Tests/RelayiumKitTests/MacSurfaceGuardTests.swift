@@ -891,7 +891,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                 separatedBy: "Button(L10n.t(.commonClear)) { selection.clear() }").dropFirst().first,
                 "\(pane) lost its staged-selection Clear action")
                 .components(separatedBy: "}").first ?? ""
-            XCTAssertTrue(clear.contains(".buttonStyle(.bordered)"),
+            XCTAssertTrue(clear.contains(".buttonStyle(.referenceSecondary)"),
                           "\(pane) does not present Clear as a secondary action")
             XCTAssertFalse(clear.contains(".buttonStyle(.link)"),
                            "\(pane) presents a task mutation as navigation")
@@ -918,7 +918,7 @@ final class MacSurfaceGuardTests: XCTestCase {
             .dropFirst().first?.components(separatedBy: "private var leaveTitle").first)
         XCTAssertTrue(exit.contains("accessibilityIdentifier(\"link-leave-session\")"),
                       "a retained terminal session has no explicit cleanup boundary")
-        XCTAssertTrue(exit.contains(".buttonStyle(.bordered)"),
+        XCTAssertTrue(exit.contains(".buttonStyle(.referenceSecondary)"),
                       "the exit is not shaped as a task boundary")
         XCTAssertFalse(exit.contains("buttonStyle(.link)"),
                        "a task mutation is presented as navigation")
@@ -1045,7 +1045,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(
             minting.contains("Button(L10n.t(.commonCancel)) { module.cancelPairingCode() }"),
             "a mint in flight cannot be abandoned")
-        XCTAssertTrue(minting.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(minting.contains(".buttonStyle(.referenceSecondary)"))
     }
 
     /// **Every creator-side code exit is the SAME operation, and no surface
@@ -1595,7 +1595,7 @@ final class MacSurfaceGuardTests: XCTestCase {
             .dropFirst().first?.components(separatedBy: "case .ready").first)
         XCTAssertTrue(resolving.contains("Button(L10n.t(.commonCancel)) { model.cancel() }"),
                       "a stalled manifest resolution has no user exit")
-        XCTAssertTrue(resolving.contains(".buttonStyle(.bordered)"),
+        XCTAssertTrue(resolving.contains(".buttonStyle(.referenceSecondary)"),
                       "Cancel is not presented as a task action")
     }
 
@@ -1625,7 +1625,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         let done = try XCTUnwrap(pane.components(separatedBy: "case .done").dropFirst().first)
             .components(separatedBy: "case .failed").first ?? ""
         XCTAssertTrue(done.contains("Button(L10n.t(.commonDone)) { model.dismissResult() }"))
-        XCTAssertTrue(done.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(done.contains(".buttonStyle(.referenceSecondary)"))
 
         let result = try source(named: "ReceivedResultView.swift")
         XCTAssertTrue(result.contains("ShareLink(items: payload.dragURLs)"),
@@ -1650,7 +1650,11 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "Copy gives no visible acknowledgement")
         XCTAssertTrue(terminal.contains("copiedLink == link"),
                       "copy acknowledgement can leak into a later result")
-        XCTAssertTrue(terminal.contains(".fixedSize(horizontal: false, vertical: true)"))
+        // The whole link, in the code block every copied value uses — which
+        // wraps and never truncates.
+        XCTAssertTrue(terminal.contains("CodeBlock(text: link)"),
+                      "the stored capability result is not shown whole")
+        try assertCodeBlockShowsItsWholeValue()
         XCTAssertFalse(terminal.contains(".lineLimit(1)"),
                        "the stored capability result is visually truncated")
         XCTAssertTrue(terminal.contains("Button(L10n.t(.uploadSendAnother))"))
@@ -1671,7 +1675,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         let exit = try XCTUnwrap(source.components(separatedBy: "private var exit: some View")
             .dropFirst().first?.components(separatedBy: "private var leaveTitle").first)
 
-        XCTAssertTrue(exit.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(exit.contains(".buttonStyle(.referenceSecondary)"))
         XCTAssertFalse(exit.contains(".buttonStyle(.link)"),
                        "the exit is exposed as a navigation Link")
         XCTAssertTrue(exit.contains(".accessibilityIdentifier(\"link-leave-session\")"),
@@ -1801,36 +1805,38 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// The Device Inbox's help is a `Form` section, it is the LAST one, and it
-    /// is outside the account/status branch — so all three branches end with it.
+    /// The Device Inbox's help is the same `HelpCard` as every destination, it
+    /// is the LAST group, and it is outside the account/status branch — so all
+    /// three branches end with it.
     ///
-    /// It must also not arrive with a scroll view: this surface is the one
-    /// destination that supplies its own (`scrolls: false`), because a grouped
-    /// `Form` already is one, and nesting a second swallows the gesture.
-    func testTheDeviceInboxHelpIsItsLastFormSectionInEveryBranch() throws {
+    /// The surface is a stack of cards in the scaffold's one scroll view. A
+    /// grouped `Form` here is the old second vocabulary — system section chrome
+    /// beside the reference cards — and a scroll view of the surface's own would
+    /// nest two scrollers over one page.
+    func testTheDeviceInboxHelpIsItsLastGroupInEveryBranch() throws {
         let surface = try source(named: "DeviceInbox/DeviceInboxSurface.swift")
-        XCTAssertTrue(surface.contains("HelpFormSection(surface: .deviceInbox)"),
+        XCTAssertTrue(surface.contains("HelpCard(surface: .deviceInbox)"),
                       "the Device Inbox offers no help")
-        XCTAssertFalse(surface.contains("HelpCard("),
-                       "a card inside a grouped Form draws a box inside a box")
         guard let lastBranch = surface.range(of: "accountSection(gate)"),
-              let help = surface.range(of: "HelpFormSection(surface:"),
-              let style = surface.range(of: ".formStyle(.grouped)") else {
+              let help = surface.range(of: "HelpCard(surface: .deviceInbox)"),
+              let tasks = surface.range(of: ".task {") else {
             return XCTFail("the Device Inbox surface no longer has the shape this guards")
         }
         XCTAssertLessThan(lastBranch.upperBound, help.lowerBound,
                           "help is inside the account branch, so two branches lack it")
-        XCTAssertLessThan(help.upperBound, style.lowerBound,
-                          "help is not the last section of the Form")
-        // No second scroll view, on the surface or on its host.
+        XCTAssertLessThan(help.upperBound, tasks.lowerBound,
+                          "help is not the last group of the surface")
         for file in ["DeviceInbox/DeviceInboxSurface.swift",
+                     "DeviceInbox/DeviceConversationPage.swift",
+                     "DeviceInbox/DeviceSendSection.swift",
                      "Destinations/DeviceInboxDestination.swift"] {
-            XCTAssertFalse(try source(named: file).contains("ScrollView"),
-                           "\(file) nests a scroll view around a Form")
+            let text = try source(named: file)
+            XCTAssertFalse(text.contains("ScrollView"),
+                           "\(file) nests a scroll view inside the scaffold's")
+            XCTAssertFalse(text.contains("Form {") || text.contains(".formStyle(")
+                           || text.contains("Section {"),
+                           "\(file) is back on system form sections")
         }
-        XCTAssertTrue(try source(named: "Destinations/DeviceInboxDestination.swift")
-            .contains("scrolls: false"),
-            "the Device Inbox stopped supplying its own scrolling")
     }
 
     /// **Help is a control, and it is the size of a control.**
@@ -1860,8 +1866,12 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "help no longer starts collapsed, or is no longer collapsible")
         XCTAssertTrue(help.contains("Button {\n            expanded.toggle()\n        } label: {"),
                       "help is not a button the reader can press anywhere on")
-        XCTAssertTrue(help.contains(".buttonStyle(.bordered)"),
+        XCTAssertTrue(help.contains(".buttonStyle(HelpRowStyle())"),
                       "the help control has no chrome, so it does not read as a control")
+        // The chrome is the reference's secondary button, never a card's.
+        XCTAssertTrue(help.contains(".fill(hovering ? Palette.actionSurface : Palette.button)")
+                      && help.contains(".strokeBorder(Palette.buttonBorder, lineWidth: 1)"),
+                      "the help row lost its button chrome")
         XCTAssertTrue(help.contains(
             ".frame(maxWidth: .infinity, minHeight: Metrics.hitTarget, alignment: .leading)"),
             "the help control is not a full row at the minimum hit height")
@@ -1894,10 +1904,12 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertTrue(help.contains(required),
                           "the opened help block lost \(required)")
         }
-        // Both shapes render the same body, so the Form surface cannot drift
-        // into a second, permanently open version.
-        XCTAssertEqual(occurrences(of: "HelpBlock(topic: topic", in: help), 2,
-                       "the card and the Form section no longer share one help body")
+        // One shape now: every destination, the Device Inbox included, ends with
+        // the same card, so no second, permanently open version can drift.
+        XCTAssertEqual(occurrences(of: "HelpBlock(topic: topic", in: help), 1,
+                       "help grew a second rendering")
+        XCTAssertFalse(help.contains("HelpFormSection"),
+                       "the grouped-Form help shape came back")
     }
 
     /// **One affordance, five destinations, and it survives the smallest window
@@ -2192,6 +2204,21 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// `StoredLinkCommandPresentationTests` holds it against the web's own
     /// cases. What this guards is that the view did not compose the command
     /// itself, which is exactly how the two clients would drift.
+    /// A copied value — a stored link, a command — is monospaced, selectable
+    /// and wraps rather than truncating.
+    private func assertCodeBlockShowsItsWholeValue(file: StaticString = #filePath,
+                                                   line: UInt = #line) throws {
+        let forms = try source(named: "Components/ReferenceForms.swift")
+        let block = try XCTUnwrap(forms.components(separatedBy: "struct CodeBlock: View")
+            .dropFirst().first?.components(separatedBy: "struct ReferencePage").first,
+            "the code block component is gone", file: file, line: line)
+        XCTAssertTrue(block.contains(".font(.callout.monospaced())"), file: file, line: line)
+        XCTAssertTrue(block.contains(".textSelection(.enabled)"), file: file, line: line)
+        XCTAssertTrue(block.contains(".fixedSize(horizontal: false, vertical: true)"),
+                      "a copied value can be truncated", file: file, line: line)
+        XCTAssertFalse(block.contains(".lineLimit("), file: file, line: line)
+    }
+
     func testTheStoredSendResultShowsTheEquivalentQuotedCommand() throws {
         let upload = try source(named: "UploadPane.swift")
         let terminal = try XCTUnwrap(upload.components(
@@ -2207,10 +2234,9 @@ final class MacSurfaceGuardTests: XCTestCase {
 
         // Monospaced, selectable, and left-to-right through the app's own
         // isolate rather than by overriding a scene's layout direction.
-        XCTAssertTrue(terminal.contains("Text(L10n.token(command))"),
+        XCTAssertTrue(terminal.contains("CodeBlock(text: L10n.token(command))"),
                       "the command is not isolated, so Arabic would reorder it")
-        XCTAssertTrue(terminal.contains(".font(.system(.body, design: .monospaced))"))
-        XCTAssertTrue(terminal.contains(".textSelection(.enabled)"))
+        try assertCodeBlockShowsItsWholeValue()
         XCTAssertFalse(terminal.contains(".lineLimit(1)"),
                        "the command is visually truncated")
 
@@ -3354,6 +3380,28 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// Every assertion here has a matching negative: removing the tab must not
     /// remove the feature, its resident behaviour or its way back into the
     /// window.
+    /// **Settings keeps its last action reachable.** The tabs are card pages in
+    /// a window of one bounded size, so content taller than the window — a long
+    /// translation, a large text size, a login-item remedy — has to scroll. A
+    /// page that only grows would either clip its bottom or push the window
+    /// past a small screen.
+    func testSettingsPagesScrollInsideOneBoundedWindow() throws {
+        let settings = try source(named: "Settings/SettingsView.swift")
+        XCTAssertTrue(settings.contains(".frame(width: 520, height:"),
+                      "the settings window is no longer one bounded size across tabs")
+        let forms = try source(named: "Components/ReferenceForms.swift")
+        let page = try XCTUnwrap(forms.components(separatedBy: "struct ReferencePage")
+            .dropFirst().first, "the settings page component is gone")
+        XCTAssertTrue(page.contains("ScrollView {"),
+                      "a settings page that cannot scroll clips its last action")
+        XCTAssertFalse(page.contains(".fixedSize(horizontal: false, vertical: true)"),
+                       "a settings page sized to its content outgrows a small screen")
+        for pane in ["Settings/SettingsView.swift", "Distribution/DirectDistribution.swift"] {
+            XCTAssertFalse(try source(named: pane).contains("Form {"),
+                           "\(pane) is back on a grouped Form beside the card pages")
+        }
+    }
+
     func testSettingsLostTheDeviceInboxTabAndNothingElseLostTheDeviceInbox() throws {
         let settings = try source(named: "Settings/SettingsView.swift")
         // ONE `.tabItem` here now, and that is not a lost tab. This file is
@@ -3426,19 +3474,24 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// gone: a screen that took the whole detail pane was the difference between
     /// this app and a page in a window.
     ///
-    /// Exactly one destination still lays out its own column, and it is the one
-    /// whose content is a grouped `Form` — which insets and centres itself, so a
-    /// second column around it would be a column inside a column.
-    func testOnlyStructuredDataDestinationsOptOutOfTheReadingMeasure() throws {
-        let fillers = try ["LanTransfer", "CrossNetworkTransfer", "StoredSend",
-                           "StoredReceive", "DeviceInbox", "Account"]
-            .filter { try source(named: "Destinations/\($0)Destination.swift")
-                .contains("fillsWidth: true") }
-        XCTAssertEqual(fillers, ["DeviceInbox"],
-                       "a destination lays out its own column instead of the scaffold's")
-        XCTAssertTrue(try source(named: "Components/DestinationScaffold.swift")
-            .contains("private var columnWidth: CGFloat { fillsWidth ? .infinity : Metrics.readingMeasure }"),
-            "the scaffold no longer caps its column at the reading measure")
+    /// No destination lays out its own column or its own scrolling any more: the
+    /// Device Inbox was the last, and it left with its grouped `Form`.
+    func testEveryDestinationUsesTheScaffoldColumnAndScroll() throws {
+        let scaffold = try source(named: "Components/DestinationScaffold.swift")
+        XCTAssertTrue(scaffold.contains(".frame(maxWidth: Metrics.readingMeasure, alignment: .leading)"),
+                      "the scaffold no longer caps its column at the reading measure")
+        XCTAssertTrue(scaffold.contains("ScrollView {"),
+                      "the scaffold no longer supplies the page's scroll view")
+        for opt in ["fillsWidth", "scrolls:", "GeometryReader"] {
+            XCTAssertFalse(scaffold.contains(opt),
+                           "the scaffold grew a per-destination opt-out again: \(opt)")
+        }
+        for name in ["LanTransfer", "CrossNetworkTransfer", "StoredSend",
+                     "StoredReceive", "DeviceInbox", "Account"] {
+            let text = try source(named: "Destinations/\(name)Destination.swift")
+            XCTAssertFalse(text.contains("fillsWidth") || text.contains("scrolls:"),
+                           "\(name) opts out of the scaffold's column or scroll view")
+        }
         for file in [lanDestination, crossDestination,
                      "Destinations/AccountDestination.swift",
                      "Destinations/StoredSendDestination.swift",
@@ -3446,15 +3499,6 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertFalse(try source(named: file).contains("contentMaxWidth"),
                            "\(file) still carries the retired reading-measure opt-out")
         }
-        // Exactly one destination supplies its own scrolling, and it is the one
-        // whose content is a `Form` — which is already a scroll view. A second
-        // opt-out is a screen whose content silently stops scrolling at all.
-        let optedOut = try ["LanTransfer", "CrossNetworkTransfer", "StoredSend",
-                            "StoredReceive", "DeviceInbox", "Account"]
-            .filter { try source(named: "Destinations/\($0)Destination.swift")
-                .contains("scrolls: false") }
-        XCTAssertEqual(optedOut, ["DeviceInbox"],
-                       "a destination opted out of the scaffold's scroll view")
         // The LAN pane still caps its own prose, which is what keeps a
         // paragraph at the measure if the scaffold around it ever changes.
         let connect = try source(named: lanConnect)
@@ -5768,12 +5812,17 @@ final class MacSurfaceGuardTests: XCTestCase {
         // 1. No section calls itself after the whole destination.
         XCTAssertFalse(surface.contains("L10n.t(.inboxTitle)"),
                        "a Device Inbox section still repeats the destination's name")
-        XCTAssertTrue(surface.contains("Text(L10n.t(.inboxStatusHeading))"),
-                      "the status section lost its own heading")
-        let signedOutHeader = "Text(L10n.t(.navAccount))\n"
-            + "                .accessibilityIdentifier(\"inbox-signed-out\")"
+        XCTAssertTrue(surface.contains(".accessibilityLabel(L10n.t(.inboxStatusHeading))"),
+                      "the status head lost its own name")
+        let signedOutHeader = "title: L10n.t(.navAccount),\n"
+            + "                    titleIdentifier: \"inbox-signed-out\""
         XCTAssertTrue(surface.contains(signedOutHeader),
-                      "the signed-out header lost its leaf identifier or its own name")
+                      "the signed-out group lost its caption identifier or its own name")
+        // A group's identifier lands on its caption LEAF, never on the card: a
+        // container identifier renames every control inside it.
+        let card = try source(named: "Components/SectionCard.swift")
+        XCTAssertTrue(card.contains("text.accessibilityIdentifier(titleIdentifier)"),
+                      "the group identifier is no longer on the caption leaf")
 
         // 2. The picker's label is hidden, not removed — a picker with no label
         //    at all reads as "radio group" and nothing else.
@@ -5781,10 +5830,10 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the policy picker lost the accessibility label it is named by")
         XCTAssertTrue(surface.contains(".labelsHidden()"),
                       "the policy picker prints its title under a header saying the same word")
-        let policyHeader = "Text(L10n.t(.inboxPolicyHeading))\n"
-            + "                .accessibilityIdentifier(\"inbox-policy\")"
+        let policyHeader = "title: L10n.t(.inboxPolicyHeading),\n"
+            + "                    titleIdentifier: \"inbox-policy\""
         XCTAssertTrue(surface.contains(policyHeader),
-                      "the policy section header lost its name or its identifier")
+                      "the policy group caption lost its name or its identifier")
 
         // 3. The rail states the route; the folder section states the folder.
         XCTAssertTrue(surface.contains("PathRailPresentation.deviceInbox()"),
@@ -5809,6 +5858,41 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// through it, and it swaps the security-scoped access set and the roots
     /// together. What is asserted is that no macOS entry point for a
     /// user-supplied file calls it.
+    /// **The drop target is one accessibility element.** Its label and hint sat
+    /// on a composite with no element of its own; macOS 26 synthesized one per
+    /// child and reading that node's AXTitle recursed until the app crashed
+    /// (root AX probe on stored send). The zone must own its label, keep its
+    /// press action for assistive technology, and keep its drop admission.
+    func testTheDropZoneIsOneAccessibilityElementWithItsOwnAction() throws {
+        let zone = try source(named: "FileDropZone.swift")
+        guard let drop = zone.range(of: ".acceptsFileDrop(into: store, isBusy: isBusy,"),
+              let element = zone.range(of: ".accessibilityElement(children: .ignore)",
+                                       range: drop.upperBound..<zone.endIndex),
+              let label = zone.range(of: ".accessibilityLabel(L10n.t(.dropA11yLabel))",
+                                     range: element.upperBound..<zone.endIndex) else {
+            return XCTFail("the drop zone's label is not on an element of its own")
+        }
+        XCTAssertLessThan(element.lowerBound, label.lowerBound)
+        XCTAssertTrue(zone.contains(".accessibilityHint(L10n.t(.dropA11yHint))"))
+        XCTAssertTrue(zone.contains(
+            ".accessibilityAction { if !isBusy() { chooseFilesOrFolders(into: store) } }"),
+            "assistive technology cannot open the chooser the click opens")
+    }
+
+    /// **The drawn window title stays hidden after navigation.** SwiftUI rewrites
+    /// the window title on every destination change and AppKit draws it again;
+    /// the chrome watches the window rather than trusting its own update pass,
+    /// and never clears the semantic title.
+    func testTheDrawnWindowTitleStaysHiddenAcrossNavigation() throws {
+        let chrome = try source(named: "Shell/WindowChrome.swift")
+        XCTAssertTrue(chrome.contains("window.observe(\\.title")
+                      && chrome.contains("window.observe(\\.titleVisibility"),
+                      "a later navigationTitle write can draw the title again")
+        XCTAssertTrue(chrome.contains("window.titleVisibility = .hidden"))
+        XCTAssertFalse(chrome.contains("window.title = "),
+                       "the chrome must hide the title, never replace it")
+    }
+
     func testEveryStagingEntryPointAppendsAndOnlyClearDiscards() throws {
         let zone = try source(named: "FileDropZone.swift")
         XCTAssertTrue(zone.contains("if panel.runModal() == .OK { store.add(panel.urls) }"),
@@ -5887,8 +5971,8 @@ final class MacSurfaceGuardTests: XCTestCase {
         let empty = try source(named: "Components/EmptyStateView.swift")
         XCTAssertTrue(empty.contains("actionIsProminent: Bool = false"),
                       "an empty state is prominent by default, so every one of them shouts")
-        XCTAssertTrue(empty.contains(".buttonStyle(.borderedProminent)"),
-                      "the primary exit is drawn as an ordinary bordered button")
+        XCTAssertTrue(empty.contains(".buttonStyle(.referencePrimary)"),
+                      "the primary exit is drawn as an ordinary secondary button")
     }
 
     /// **The empty roster's address is a link, and the address is not typed
@@ -6077,15 +6161,16 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "requesting a deletion must not sign the user out")
     }
 
-    /// Two files may name the failure colour, and it is the one that always draws
-    /// a symbol beside it. Everywhere else, red on its own is the whole message —
+    /// One file may name the failure colour, and it is the one that always draws
+    /// a symbol beside it. The Device Inbox status used to be the second; its
+    /// state is now carried by words and the radar's glyph. Everywhere else, red on its own is the whole message —
     /// which is no message at all under a colour filter, in Increase Contrast, or
     /// to a reader who cannot distinguish it. Counting the files is what keeps
     /// that a rule rather than an intention, exactly as for `.system(size:`.
     func testExactlyOneFileNamesTheFailureColour() throws {
         XCTAssertEqual(try sources(under: try macRoot, atLeast: 20)
             .filter { namesTheFailureColour($0.text) }.map(\.name),
-                       ["Components/InlineMessage.swift", "DeviceInbox/DeviceInboxSurface.swift"])
+                       ["Components/InlineMessage.swift"])
     }
 
     /// `.red` as a colour, not as the first four characters of `.reduce`.

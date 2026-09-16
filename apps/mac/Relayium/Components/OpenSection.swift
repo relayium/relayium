@@ -33,11 +33,15 @@ struct OpenSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
             if showsRule {
-                Divider()
+                Rectangle()
+                    .fill(Palette.hairline)
+                    .frame(height: 1)
                     .padding(.bottom, Metrics.hairline)
+                    .accessibilityHidden(true)
             }
             Text(title)
                 .font(.callout.weight(.semibold))
+                .foregroundStyle(Palette.text)
                 .fixedSize(horizontal: false, vertical: true)
             content()
         }

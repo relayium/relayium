@@ -73,7 +73,12 @@ struct DeviceSendSection: View {
     // MARK: - the account's own devices
 
     private var devicesSection: some View {
-        Section {
+        // The footnote is what opening a device leads to, and the consequence
+        // of the send it leads to: sealed to one device, no link, nobody else
+        // can open it.
+        SectionCard(title: L10n.t(.sendMyDevicesHeading),
+                    titleIdentifier: "inbox-send",
+                    footnote: L10n.t(.sendMyDevicesExplain)) {
             // The list's own state, when the list itself is not the answer.
             // `unavailable` is deliberately not an empty list: "you have no
             // device that can receive" and "we could not ask" have different
@@ -92,12 +97,12 @@ struct DeviceSendSection: View {
             }
             if deliveries.directory == .loaded && deliveries.candidates.isEmpty {
                 Text(L10n.t(.sendDeviceNone))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("inbox-send-no-devices")
                 Text(L10n.t(.sendDeviceNoneHelp))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(Palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let current = deliveries.devices.first(where: \.isCurrent) {
@@ -114,8 +119,8 @@ struct DeviceSendSection: View {
             let blocked = deliveries.candidates.filter { !$0.isSendable }
             if !blocked.isEmpty {
                 Text(L10n.t(.sendDeviceBlockedHeading))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Palette.textSecondary)
                     .accessibilityIdentifier("inbox-send-blocked")
                 ForEach(blocked) { candidate in
                     blockedRow(candidate)
@@ -129,19 +134,9 @@ struct DeviceSendSection: View {
                     .accessibilityIdentifier("inbox-send-refusal")
             }
             Button(L10n.t(.commonRefresh)) { refresh() }
-                .buttonStyle(.bordered)
+                .buttonStyle(.referenceSecondary)
                 .disabled(deliveries.directory == .loading)
                 .accessibilityIdentifier("inbox-send-refresh")
-        } header: {
-            Text(L10n.t(.sendMyDevicesHeading))
-                .accessibilityIdentifier("inbox-send")
-        } footer: {
-            // What opening a device leads to, and the consequence of the send it
-            // leads to: sealed to one device, no link, nobody else can open it.
-            Text(L10n.t(.sendMyDevicesExplain))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
         // Read when the surface appears, and by the refresh control. Never on a
         // timer: this is the account's device list, not a presence feed.
@@ -156,13 +151,14 @@ struct DeviceSendSection: View {
     /// rather than about managing credentials. Pressing either is one call to
     /// `selectTarget`, so there is no second path into the child state.
     private func deviceRow(_ candidate: InboxSendCandidate) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: Metrics.inner) {
-            VStack(alignment: .leading, spacing: Metrics.hairline) {
+        HStack(alignment: .center, spacing: 11) {
+            GlyphChip(symbol: "laptopcomputer.and.iphone")
+            VStack(alignment: .leading, spacing: 1) {
                 editableName(id: candidate.id,
                              name: InboxSendPresentation.name(of: candidate))
                 Text(InboxSendPresentation.detail(for: candidate))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(Palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: Metrics.inner)
@@ -172,7 +168,7 @@ struct DeviceSendSection: View {
             // controls — the propagation defect the receive pane has already
             // lost two controls to.
             Button(L10n.t(.sendContentAction)) { open(candidate) }
-                .buttonStyle(.bordered)
+                .buttonStyle(.referencePrimary)
                 .accessibilityLabel(InboxSendPresentation.openLabel(for: candidate))
                 .accessibilityIdentifier("inbox-send-open.\(candidate.id)")
         }
@@ -184,14 +180,16 @@ struct DeviceSendSection: View {
         // Not a Button, and it opens nothing: a row whose screen could only
         // refuse every send is a dead end the user has to discover by pressing
         // it. The detail line names the one thing that would have to change.
-        HStack(alignment: .firstTextBaseline, spacing: Metrics.inner) {
-            VStack(alignment: .leading, spacing: Metrics.hairline) {
+        HStack(alignment: .center, spacing: 11) {
+            GlyphChip(symbol: "laptopcomputer.and.iphone")
+                .opacity(0.6)
+            VStack(alignment: .leading, spacing: 1) {
                 editableName(id: candidate.id,
-                             name: InboxSendPresentation.name(of: candidate))
-                    .foregroundStyle(.secondary)
+                             name: InboxSendPresentation.name(of: candidate),
+                             dimmed: true)
                 Text(InboxSendPresentation.detail(for: candidate))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(Palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: Metrics.inner)
@@ -201,10 +199,11 @@ struct DeviceSendSection: View {
     }
 
     private func managementRow(id: String, name: String, detail: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: Metrics.inner) {
-            VStack(alignment: .leading, spacing: Metrics.hairline) {
+        HStack(alignment: .center, spacing: 11) {
+            GlyphChip(symbol: "desktopcomputer")
+            VStack(alignment: .leading, spacing: 1) {
                 editableName(id: id, name: name)
-                Text(detail).font(.caption).foregroundStyle(.secondary)
+                TagChip(text: detail)
             }
             Spacer(minLength: Metrics.inner)
             renameButton(id: id, name: name)
@@ -213,7 +212,7 @@ struct DeviceSendSection: View {
     }
 
     @ViewBuilder
-    private func editableName(id: String, name: String) -> some View {
+    private func editableName(id: String, name: String, dimmed: Bool = false) -> some View {
         if editingDeviceID == id {
             TextField(name, text: $renameDraft)
                 .textFieldStyle(.roundedBorder)
@@ -223,7 +222,10 @@ struct DeviceSendSection: View {
                 InlineMessage(.failure, L10n.t(.sendDeviceRenameFailed))
             }
         } else {
-            Text(name).fixedSize(horizontal: false, vertical: true)
+            Text(name)
+                .font(.body.weight(.medium))
+                .foregroundStyle(dimmed ? Palette.textSecondary : Palette.text)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -233,6 +235,7 @@ struct DeviceSendSection: View {
                 HStack(spacing: Metrics.hairline) {
                     Button(L10n.t(.commonCancel)) { editingDeviceID = nil }
                     Button(L10n.t(.commonDone)) { saveRename(id: id) }
+                        .buttonStyle(.referencePrimary)
                         .disabled(renameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                   || deliveries.renamingDeviceIDs.contains(id))
                 }
@@ -247,7 +250,7 @@ struct DeviceSendSection: View {
                 .accessibilityIdentifier("inbox-device-rename.\(id)")
             }
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.referenceSecondary)
     }
 
     private func saveRename(id: String) {
@@ -287,20 +290,19 @@ struct DeviceSendSection: View {
     @ViewBuilder
     private var deliveriesSection: some View {
         if !deliveries.items.isEmpty {
-            Section {
+            SectionCard(title: L10n.t(.sendOutstandingHeading),
+                        titleIdentifier: "inbox-send-outstanding") {
                 // Both halves of the truth, and the second is the one that
                 // matters: this app has no background transfer, but once a
                 // delivery is waiting the OTHER device is what fetches it.
                 Text(L10n.t(.sendOutstandingExplain))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(Palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(deliveries.items) { item in
+                    CardRowRule()
                     card(item)
                 }
-            } header: {
-                Text(L10n.t(.sendOutstandingHeading))
-                    .accessibilityIdentifier("inbox-send-outstanding")
             }
         }
     }
@@ -308,11 +310,12 @@ struct DeviceSendSection: View {
     private func card(_ item: InboxSendItem) -> some View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
             Text(InboxSendPresentation.targetName(of: item))
-                .font(.callout.weight(.semibold))
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Palette.text)
                 .fixedSize(horizontal: false, vertical: true)
             Text(InboxSendPresentation.summary(of: item))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.subheadline)
+                .foregroundStyle(Palette.textTertiary)
             // Safe manifest identities only — no staged URL, no container path.
             // A recovered card offers Send for files chosen in a session the
             // user may not remember, and "3 files" is not enough to decide that.
@@ -328,7 +331,8 @@ struct DeviceSendSection: View {
                         L10n.percent(done: sent, total: total) ?? L10n.t(.commonStarting))
             }
             Text(InboxSendPresentation.status(for: item.activity))
-                .font(.caption)
+                .font(.subheadline)
+                .foregroundStyle(Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("inbox-delivery-status")
             // An action that did not do what it said, on the card it belongs to.
