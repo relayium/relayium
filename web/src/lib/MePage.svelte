@@ -465,8 +465,9 @@
 
 <section class="me page-enter">
 
+  <!-- No back control: the shell's sidebar / compact header is the way out of
+       every page, and this one is no exception. -->
   <header class="me-head">
-    <button class="back" onclick={() => navigate("lan")}>{t.me.back}</button>
     <h1>{t.me.title}</h1>
   </header>
 
@@ -727,23 +728,16 @@
 
   .me { position: relative; max-width: 1120px; margin: 0 auto; }
 
-  .me-head { text-align: center; padding: var(--space-2) 0 var(--space-5); position: relative; }
+  .me-head { text-align: center; padding: var(--space-2) 0 var(--space-5); }
   .me-head h1 { font-size: 30px; margin: 0; letter-spacing: -.5px; }
-  .back {
-    position: absolute; inset-inline-start: 0; top: var(--space-2);
-    font: inherit; font-size: var(--fs-xs); background: none; border: 0; color: var(--text); cursor: pointer;
-    padding: var(--space-1) 0;
-  }
-  .back:hover { color: var(--text-h); }
-
-  /* Narrow screens: the centred title is wide enough to collide with the
-     absolutely-positioned back link. Drop out of that overlay layout — back
-     link on its own line, title left-aligned below it. */
   @media (max-width: 560px) {
     .me-head { text-align: start; padding-top: 0; }
-    .me-head .back { position: static; display: inline-block; margin-bottom: var(--space-3); }
     .me-head h1 { font-size: 24px; }
   }
+  /* Settings-shell form: the page title sits on the track's left edge like
+     every other shell page, at the shell's page-title size. */
+  :global(.appshell.shell) .me-head { text-align: start; padding-block: 0 var(--space-4); }
+  :global(.appshell.shell) .me-head h1 { font-size: var(--fs-page-title); letter-spacing: -0.3px; }
 
   .gate {
     display: flex; flex-direction: column; align-items: center; gap: var(--space-3);

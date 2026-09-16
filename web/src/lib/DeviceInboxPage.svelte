@@ -479,15 +479,20 @@
     </div>
   </div>
 
-  <!-- Prerequisites + the permission boundary -->
+  <!-- Prerequisites + the permission boundary. The four prerequisites fold
+       (设计规范 §5: an explanation that does not fit on one line starts closed);
+       the boundary callout under them stays open, because "a link is not
+       permission to write to a disk" is a fact the reader must not have to
+       suspect before they can find it. -->
   <div class="block">
-    <h2>{t.deviceInboxPage.prereqH2}</h2>
-    <ul class="prereq">
-      <li>{t.deviceInboxPage.prereqAccount}</li>
-      <li>{t.deviceInboxPage.prereqSameAccount}</li>
-      <li>{t.deviceInboxPage.prereqEnable}</li>
-      <li>{t.deviceInboxPage.prereqOffline}</li>
-    </ul>
+    <Help summary={t.deviceInboxPage.prereqH2} heading>
+      <ul class="prereq">
+        <li>{t.deviceInboxPage.prereqAccount}</li>
+        <li>{t.deviceInboxPage.prereqSameAccount}</li>
+        <li>{t.deviceInboxPage.prereqEnable}</li>
+        <li>{t.deviceInboxPage.prereqOffline}</li>
+      </ul>
+    </Help>
     <div class="callout" data-di="link-boundary">
       <h3>{t.deviceInboxPage.linkBoundaryH3}</h3>
       <p>{t.deviceInboxPage.linkBoundary}</p>
@@ -717,13 +722,16 @@
 
   /* The two statements this page exists to keep true get a visual home of their
      own so they cannot be skimmed past as body copy. */
+  /* Neutral, not accent-rimmed: purple is for selection, the primary action
+     and status (设计规范 §3). The accent left border this used to carry was
+     also the pricing page's "Always free" decoration — one shape saying both
+     "careful" and "good news". */
   .callout {
     margin-top: var(--space-5);
     padding: var(--space-4) var(--space-5);
-    border: 1px solid var(--accent-border);
-    border-inline-start: 3px solid var(--accent);
+    border: 1px solid var(--border);
     border-radius: var(--radius);
-    background: var(--surface);
+    background: var(--surface-2);
   }
   .callout h3 {
     font-size: var(--fs-h3);

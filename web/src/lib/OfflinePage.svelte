@@ -3,7 +3,6 @@
   import StoredUpload from "./StoredUpload.svelte";
   import HowItWorks from "./HowItWorks.svelte";
   import CrossSell from "./CrossSell.svelte";
-  import ModeCompare from "./ModeCompare.svelte";
   import FeatureStrip from "./FeatureStrip.svelte";
   import UseCases from "./UseCases.svelte";
   import Faq from "./Faq.svelte";
@@ -11,7 +10,7 @@
   import { session } from "./auth.svelte";
   import { setLoginOpen } from "./login.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
-  import { navigate, PRICING_PATH } from "./router.svelte";
+  import { navigate, currentRoute, PRICING_PATH, CROSS_PATH } from "./router.svelte";
   import PageFooter from "./PageFooter.svelte";
   import Icon from "./Icon.svelte";
   import Group from "./ui/Group.svelte";
@@ -20,6 +19,20 @@
   const t = $derived<Messages>(messages[lang()]);
   const cloudGuideSlug = "guides/push-to-cloud-pull-on-another-computer";
   const cloudGuideHref = $derived(lang() === "en" ? `/${cloudGuideSlug}` : `/${lang()}/${cloudGuideSlug}`);
+
+  // The comparison table lives ONCE, on the cross-network page. This page used
+  // to render an identical copy; it now links to the one that exists. The hash
+  // rides on the same in-app navigation, and the cross page opens and scrolls
+  // to it on mount.
+  const compareHref = `${CROSS_PATH}#compare`;
+  function goCompare(e: MouseEvent) {
+    e.preventDefault();
+    navigate("cross");
+    // The navigation guard may defer the switch behind a confirm (an upload in
+    // flight); the hash is added only once the route has actually moved, so a
+    // deferred or declined navigation never leaves it on THIS page's entry.
+    if (currentRoute() === "cross") history.replaceState(history.state, "", compareHref);
+  }
 </script>
 
 <section class="offlinepage page-enter">
@@ -77,11 +90,25 @@
   {/if}
 
   <CrossSell target="realtime" />
-  <HowItWorks variant="offline" />
-  <ModeCompare />
-  <FeatureStrip />
-  <UseCases />
-  <Faq variant="offline" />
+  <!-- Same rule as the cross-network page: read once signed out, folded once
+       signed in. The mode comparison is a link to its single copy either way. -->
+  {#if session().user}
+    <div class="learn">
+      <Help summary={t.shell.learnMore}>
+        <HowItWorks variant="offline" />
+        <p class="compare-link"><a href={compareHref} onclick={goCompare}>{t.compare.link}</a></p>
+        <FeatureStrip />
+        <UseCases />
+        <Faq variant="offline" />
+      </Help>
+    </div>
+  {:else}
+    <HowItWorks variant="offline" />
+    <p class="compare-link"><a href={compareHref} onclick={goCompare}>{t.compare.link}</a></p>
+    <FeatureStrip />
+    <UseCases />
+    <Faq variant="offline" />
+  {/if}
 
   <PageFooter fineprint={t.offlineFooter} />
 </section>
@@ -92,6 +119,11 @@
   .offlinepage { position: relative; }
 
   .cards { display: flex; flex-direction: column; gap: var(--space-4); max-inline-size: 720px; margin-inline: auto; }
+  .learn { max-inline-size: 720px; margin: var(--space-5) auto 0; }
+  .compare-link { margin: var(--space-5) 0 0; font-size: var(--fs-sm); }
+  .compare-link a { color: var(--accent-fg); text-decoration: none; }
+  .compare-link a:hover { text-decoration: underline; }
+  :global(.appshell.shell) .compare-link { font-size: 12px; margin-block-start: var(--space-4); }
 
   .op { padding: var(--space-3) 14px; }
 

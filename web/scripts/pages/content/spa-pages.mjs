@@ -16,11 +16,11 @@ export const pricing = {
   // title + " · Relayium", and pricingPage.subtitle) — see the note in shells.mjs.
   title: "Simple, honest pricing · Relayium",
   description:
-    "Same-network file and live-text transfers are always free. Cross-network browser relay and hosted storage draw on your plan's monthly traffic allowance, with a separate cap on how much you keep stored at once — every account gets both, and paid plans raise them. Uploads stored on your own node and bytes relayed through it do not use that allowance; downloads served through Relayium still count.",
+    "Same-network file and live-text transfers are always free. Cross-network relay and hosted links draw on your plan's monthly traffic allowance and storage cap; bytes your own node carries do not, though downloads served through Relayium still count.",
   hero: {
     h1: "Simple, honest pricing",
     pitch:
-      "Same-network file and live-text transfers are always free. Cross-network browser relay and hosted storage draw on your plan's monthly traffic allowance, with a separate cap on how much you keep stored at once — every account gets both, and paid plans raise them. Uploads stored on your own node and bytes relayed through it do not use that allowance; downloads served through Relayium still count.",
+      "Same-network file and live-text transfers are always free. Cross-network relay and hosted links draw on your plan's monthly traffic allowance and storage cap; bytes your own node carries do not, though downloads served through Relayium still count.",
     cta: "See the plans",
   },
   how: {

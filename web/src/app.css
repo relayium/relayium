@@ -674,6 +674,8 @@ label:has(> .file-pick-input:focus-visible) {
   --shell-side-w: 216px;
   --shell-bar-h: 44px;
   --shell-col-w: 660px;
+  /* The decision-width track for /pricing, /cli, /apps and /me. */
+  --shell-col-wide: 1040px;
   /* The reference's card radius. Its own name: --radius is 14px and is the rest
      of the site's. */
   --radius-card: 11px;
@@ -800,6 +802,7 @@ label:has(> .file-pick-input:focus-visible) {
 .appshell.shell .ui-page-head { text-align: start; padding-block: 0 var(--space-4); }
 .appshell.shell .ui-page-head h1 { letter-spacing: -0.3px; }
 .appshell.shell .ui-page-head .tagline { max-inline-size: 64ch; margin-inline: 0; font-size: 13px; }
+.appshell.shell .ui-page-head .pitch { margin-inline: 0; }
 .appshell.shell .ui-card { padding: var(--space-3) 14px; }
 .appshell.shell .ui-card-raised { padding: var(--space-3) 14px; box-shadow: none; }
 .appshell.shell .ui-card > h2,

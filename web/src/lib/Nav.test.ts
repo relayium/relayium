@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   navigate, syncRouteFromLocation,
-  CROSS_PATH, OFFLINE_PATH, CLI_PATH, APPS_PATH, DEVICE_INBOX_PATH,
+  CROSS_PATH, OFFLINE_PATH, CLI_PATH, APPS_PATH, DEVICE_INBOX_PATH, PRICING_PATH,
 } from "./router.svelte";
 
 let target: HTMLDivElement;
@@ -345,10 +345,10 @@ describe("Nav downloads and tools", () => {
     flushSync();
   });
 
-  it("keeps both hrefs, as real anchors that are reachable from the keyboard", () => {
+  it("keeps all three hrefs, as real anchors that are reachable from the keyboard", () => {
     const links = tools();
-    expect(links.length).toBe(2);
-    expect(links.map((a) => new URL(a.href).pathname)).toEqual([CLI_PATH, APPS_PATH]);
+    expect(links.length).toBe(3);
+    expect(links.map((a) => new URL(a.href).pathname)).toEqual([CLI_PATH, APPS_PATH, PRICING_PATH]);
     for (const a of links) {
       expect(a.tagName).toBe("A");
       expect(a.getAttribute("role")).toBeNull();

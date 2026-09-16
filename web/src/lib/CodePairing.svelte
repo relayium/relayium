@@ -566,11 +566,17 @@
       <button class="btn btn-ghost" onclick={() => (mode = "receive")}>{t.pair.enterCode}</button>
     </div>
   {:else}
+    <!-- Two ways in, side by side and equal in rank: the sender signs in, the
+         receiver enters a code and never needs an account. The receive control
+         used to sit under the sign-in card as an afterthought, so the page read
+         as a login wall to the one visitor it was open to. -->
     <div class="signin">
-      <button class="btn btn-primary" onclick={() => requireLogin?.()}>{t.account.signIn}</button>
+      <div class="choices">
+        <button class="btn btn-primary" onclick={() => requireLogin?.()}>{t.account.signIn}</button>
+        <button class="btn btn-ghost" onclick={() => (mode = "receive")}>{t.pair.enterCode}</button>
+      </div>
       <p class="hint">{t.crossnet.signInToSend}</p>
     </div>
-    <button class="btn btn-ghost" onclick={() => (mode = "receive")}>{t.pair.enterCode}</button>
   {/if}
   <!-- Outside every branch on purpose. The room's deadline runs from the last
        uploaded byte and the on-screen countdown runs from the mint, so a 410
@@ -602,7 +608,7 @@
   .pairing { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; }
   .choices { display: flex; gap: var(--space-3); flex-wrap: wrap; justify-content: center; }
   .signin { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
-  .signin .hint { margin: 0; font-size: var(--fs-xs); color: var(--text); text-align: center; max-width: 34ch; }
+  .signin .hint { margin: 0; font-size: var(--fs-xs); color: var(--text); text-align: center; max-width: 44ch; }
   .qr { margin-top: var(--space-1); border-radius: var(--radius-sm); background: #fff; padding: 6px; }
   .scan { margin: 0; font-size: 12px; color: var(--text); text-align: center; max-width: 30ch; }
   .lead { margin: 0; font-size: var(--fs-sm); color: var(--text); text-align: center; }

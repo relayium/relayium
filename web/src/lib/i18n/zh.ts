@@ -45,7 +45,7 @@ const zh: Messages = {
   tooManyFiles: (max: number) => `该选择包含的文件超过 ${String(max)} 个。请减少文件数量，或先把文件夹压缩。`,
   peerUnsupported: "对方的 Relayium 版本太旧，连不上。两端都更新之后才能发送文件或消息。",
   generating: "生成中…",
-  emptyPeers: "还没有其他设备。请在同一网络下的另一台设备 / 另一个浏览器窗口打开本页面。",
+  emptyPeers: "还没有其他设备。",
   emptyCrossCta: "设备不在同一网络？改用「跨网络传输」→",
   dragSendOne: (name) => `松手发送给 ${name}`,
   dragSendMany: "拖到某台设备上发送",
@@ -207,7 +207,7 @@ const zh: Messages = {
   pricingPage: {
     navLink: "定价",
     title: "简单、诚实的定价",
-    subtitle: "同一网络内的文件与实时文本传输始终免费。浏览器跨网络中继与托管存储会占用套餐的每月流量额度，而同时存放的数据量另有一项独立上限——每个账号两者都有额度，付费套餐更高。存放在你自己节点上的上传、以及经它中继的字节，都不占用该额度；经 Relayium 转发的下载仍会计入。",
+    subtitle: "同一网络内的文件与实时文本传输始终免费。跨网络中继与托管链接占用套餐的每月流量额度和存储上限；经你自己节点承载的字节不占用，经 Relayium 转发的下载仍会计入。",
     signedOutCta: "登录即可订阅或更改套餐。",
     freeTitle: "始终免费",
     freeLead: "通过直连零成本传输文件与临时文本，永远免费：",
@@ -237,7 +237,6 @@ const zh: Messages = {
     a5: "随时可以。升级立即生效（按比例计费）；降级会在当前计费周期结束时生效，你也可以随时取消待生效的降级——不退款，也不会有意外扣费。",
     q6: "结算和取消是如何进行的？",
     a6: "付款由 Stripe 安全处理。你可以随时在「管理账单」中取消；套餐在已付费周期结束前保持有效，之后自动恢复为免费版。",
-    back: "← 返回 Relayium",
   },
   quota: {
     title: "本月用量",
@@ -276,7 +275,6 @@ const zh: Messages = {
   },
   me: {
     title: "个人中心",
-    back: "← 返回首页",
     loginRequired: "登录后查看你的传输统计与文件。",
     signIn: "登录",
     plan: {
@@ -526,6 +524,10 @@ const zh: Messages = {
     offlineShort: "链接",
     deviceInboxShort: "收件箱",
     howSummary: "这是怎么运作的",
+    learnMore: "指南：步骤、模式对比、特性与常见问题",
+    inviteTitle: "在同一网络下的另一台设备上打开本页",
+    inviteHint: "那台设备一打开 Relayium 就会出现在这里 —— 不需要账号，也不用安装。",
+    inviteScan: "本页二维码",
     pairGroup: "配对码",
     liveGroup: "实时会话",
     linkGroup: "下载链接",
@@ -1270,6 +1272,7 @@ const zh: Messages = {
       { label: "中断怎么办", lan: "文件连接短暂中断可续传；任一端关闭或刷新页面则需重新发起", realtime: "文件连接短暂中断可续传；任一端关闭或刷新页面则需重新发起", stored: "发送方须保持页面打开直到上传完成；之后链接在有效期内可用" },
       { label: "适合场景", lan: "同一 Wi-Fi 下的手机 ↔ 电脑，完全不用账号", realtime: "跨网络快速递送小文件和文本——一条命令、一个链接、一段备注", stored: "大文件，以及现在先发、之后再取" },
     ],
+    link: "不确定用哪种方式发？对比三种模式 →",
   },
   useCases: {
     title: "适合这些场景",

@@ -60,11 +60,12 @@
   import { folderUploadSupported } from "./lib/platform";
   import { reveal } from "./lib/reveal";
   import Nav from "./lib/Nav.svelte";
-  import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard, PRICING_PATH } from "./lib/router.svelte";
+  import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard, PRICING_PATH, CROSS_PATH } from "./lib/router.svelte";
   import { loginOpen } from "./lib/login.svelte";
   import { showsTransferSurface, showsPeerRoster } from "./lib/transfer-surface";
   import Hero from "./lib/Hero.svelte";
   import DeviceRadar from "./lib/DeviceRadar.svelte";
+  import LanInvite from "./lib/LanInvite.svelte";
   import LanPathRail from "./lib/LanPathRail.svelte";
   import QuotaNotice from "./lib/QuotaNotice.svelte";
   import ReceiveActions from "./lib/ReceiveActions.svelte";
@@ -849,20 +850,40 @@
   );
 
   // The four transfer destinations — and only those — render inside the
-  // settings-style shell. The set is written out rather than derived from the
-  // route table because it is a PRODUCT statement, not a routing one: these are
-  // the four ways to move something, and /pricing, /me, /cli, /apps and the
-  // download page are deliberately not among them. Nav keeps its own copy of
-  // the same set for the sidebar half; one list per component is what keeps the
-  // two halves from being wrong independently.
-  const SHELL_ROUTES = ["lan", "cross", "offline", "device-inbox"] as const;
+  // settings-style shell. Every route except the recipient's download page:
+  // the first cut wrapped only the four transfer destinations, and the result
+  // was two products — a sidebar app on those four and the old top-bar site on
+  // /pricing, /cli, /apps and /me, with a "Back to Relayium" link to get out.
+  // The set is written out rather than derived from the route table because
+  // the exception is a PRODUCT statement: /d/<id> is what a recipient opens
+  // from a link, and it must not hand them the app's navigation. Nav keeps its
+  // own copy of the same set for the sidebar half; one list per component is
+  // what keeps the two halves from being wrong independently.
+  const SHELL_ROUTES = [
+    "lan", "cross", "offline", "device-inbox",
+    "pricing", "cli", "apps", "me", "verify-email", "reset-password", "magic-link",
+  ] as const;
   const shellRoute = $derived((SHELL_ROUTES as readonly string[]).includes(currentRoute()));
-  // The toolbar's label: the sidebar's own destination name, so the two never
-  // disagree. Never a new string — these are the four nav labels.
+  // Pages built for a decision width — four pricing tiers side by side, the CLI
+  // reference with its contents rail, the account page's two-column stats and
+  // the apps grid — get a wider track than the 660px reading column the four
+  // transfer destinations and the auth landings use.
+  const WIDE_ROUTES = ["pricing", "cli", "apps", "me"] as const;
+  const shellWide = $derived((WIDE_ROUTES as readonly string[]).includes(currentRoute()));
+  // The toolbar's label: the sidebar's own name for the page, so the two never
+  // disagree. Never a new string — every one of these is already a nav label
+  // or the page's own title.
   const shellTitle = $derived(
     currentRoute() === "cross" ? t.nav.crossTab
     : currentRoute() === "offline" ? t.nav.offlineTab
     : currentRoute() === "device-inbox" ? t.nav.deviceInboxTab
+    : currentRoute() === "pricing" ? t.pricingPage.navLink
+    : currentRoute() === "cli" ? t.nav.cliTab
+    : currentRoute() === "apps" ? t.nav.appsTab
+    : currentRoute() === "me" ? t.me.title
+    : currentRoute() === "verify-email" ? t.verifyEmail.title
+    : currentRoute() === "reset-password" ? t.resetPassword.title
+    : currentRoute() === "magic-link" ? t.magicLink.title
     : t.nav.lanTab,
   );
 
@@ -2453,7 +2474,15 @@
           <DeviceRadar peers={[]} {selfName} selectedId="" onSelect={selectFromRadar} compact {scanning} />
           <p class="empty-lead">{scanning ? t.emptyPeers : t.shell.notScanning}</p>
           {#if scanning}<p class="empty-scan">{t.shell.scanning}</p>{/if}
-          <button class="btn btn-ghost empty-cta" onclick={() => navigate("cross")}>{t.emptyCrossCta}</button>
+          <!-- The instruction the old sentence buried — "open this page on another
+               device" — is now the one thing a first visitor can DO here: the
+               address to type, a copy control and a QR to scan. Drawn only while
+               the search is running; with the socket down there is nothing for
+               a second device to appear in. -->
+          {#if scanning}<LanInvite />{/if}
+          <!-- Demoted from the empty state's only button to a text link: the one
+               control in an empty state should not lead away from the page. -->
+          <a class="empty-cta" href={CROSS_PATH} onclick={(e) => { e.preventDefault(); navigate("cross"); }}>{t.emptyCrossCta}</a>
         </div>
       {:else if chooser === "radar"}
         <!-- The multi-peer selector. A single peer draws NO selector here: with
@@ -2535,17 +2564,18 @@
     {/await}
   {:else}
   <!-- The settings-style shell: a 216px sidebar (Nav, which becomes the rail on
-       its own), a 44px toolbar and a 660px content track. It wraps ONLY the four
-       transfer destinations — `shellRoute` — and is `display: contents` for
-       everything else and at every width below the breakpoint, so /pricing, /me,
-       /cli, /apps and every narrow viewport lay out exactly as they did.
+       its own), a 44px toolbar and a 660px content track (1040px on the
+       decision-width pages — `shellWide`). It wraps every route but the
+       recipient's download page — `shellRoute` — and is `display: contents`
+       there and at every width below the breakpoint, so /d/<id> and every
+       narrow viewport lay out exactly as they did.
 
        The toolbar names the destination and nothing else. It carries no status
        pill: on this route the connection state is already the identity rail's
        first line, and on the other three the account state is already the
        control in the sidebar — a second copy of either would be the same fact
        said twice. -->
-  <div class="appshell" class:shell={shellRoute}>
+  <div class="appshell" class:shell={shellRoute} class:wide={shellWide}>
   <Nav />
   <!-- `inert` while the account dialog is open: the page behind a modal must not
        be reachable by pointer, keyboard or assistive technology. It is bound to
@@ -2731,9 +2761,9 @@
 
   /* ── The shell ────────────────────────────────────────────────────────────
      Three wrappers that are `display: contents` until they are asked to be a
-     layout. That is the whole compatibility story: below 1180px, and on every
-     route that is not one of the four, the DOM renders with exactly the boxes it
-     had before this batch — the wrappers generate none. */
+     layout. That is the whole compatibility story: below 1180px, and on the
+     download route, the DOM renders with exactly the boxes it had before this
+     batch — the wrappers generate none. */
   .appshell, .appshell-main, .appshell-col { display: contents; }
   /* The toolbar belongs to the wide form. On a phone the destination is already
      named by the active tab in the row above it, and a second copy of that word
@@ -2754,6 +2784,10 @@
       max-inline-size: 760px;
       margin-inline: auto;
     }
+    /* The decision-width pages keep the measure they were laid out for; the
+       760px reading cap would fold four pricing tiers into a 2×2 at a width
+       that fits them in a row. */
+    .appshell.shell.wide .appshell-col { max-inline-size: calc(var(--shell-col-wide) + 44px); }
   }
 
   @media (min-width: 1180px) {
@@ -2818,6 +2852,8 @@
       margin-inline: auto;
       padding: 18px 22px var(--space-8);
     }
+    .appshell.shell.wide .appshell-col,
+    .appshell.shell.wide .appshell-bar-title { max-inline-size: calc(var(--shell-col-wide) + 44px); }
   }
 
   /* The desktop LAN route is an application workspace once there is enough room
@@ -3114,7 +3150,12 @@
   /* The live half of the empty state: on screen only while a search is actually
      running, which is exactly when the sweep above it is drawn. */
   .empty-scan { margin: 0; color: var(--text); font-size: 12px; }
-  .empty-cta { margin-top: var(--space-1); }
+  .empty-cta {
+    margin-top: var(--space-1);
+    font-size: 12px; color: var(--accent-fg);
+    text-decoration: underline 1px transparent; text-underline-offset: 3px;
+  }
+  .empty-cta:hover { text-decoration-color: currentColor; }
   /* Passive availability/privacy information → the neutral shared callout.
      The surface stays neutral because the sentence asks nothing of the user;
      only its small workflow glyph uses the accent. It now trails the peer card

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import type { Snippet } from "svelte";
   import type { RelayAvailability } from "./ice";
   import CodePairing from "./CodePairing.svelte";
@@ -45,6 +46,27 @@
     // up that would need suppressing as well.
     enterRoom({});
   }
+
+  // The share-link page links to `#compare` on this page (it no longer carries
+  // its own copy of the table). A signed-in visitor has the comparison folded
+  // into the disclosure below, so that disclosure mounts OPEN when the hash
+  // names its content (`scrollIntoView` inside a closed <details> is a no-op),
+  // and the scroll re-runs when the session lands: on a fresh load of the URL
+  // the page chunk can mount before `/api/me` answers, and the branch below
+  // then swaps the open table for the folded one — the viewport must follow it
+  // rather than be left pointing at where the table was.
+  const compareHash = typeof location !== "undefined" && location.hash === "#compare";
+  $effect(() => {
+    void session().user;
+    if (!compareHash) return;
+    void tick().then(() => {
+      const target = document.getElementById("compare");
+      if (!target) return;
+      const fold = target.closest("details");
+      if (fold) fold.open = true;
+      target.scrollIntoView({ block: "start" });
+    });
+  });
 </script>
 
 <section class="crosspage page-enter">
@@ -120,11 +142,27 @@
 
   {#if !inRoom}
     <CrossSell target="offline" />
-    <HowItWorks variant="realtime" />
-    <ModeCompare />
-    <FeatureStrip />
-    <UseCases />
-    <Faq variant="cross" />
+    <!-- Signed out, the explanation is the page: a visitor deciding whether to
+         make an account reads it once. Signed in, they have read it, and five
+         sections of it under the control they came for is a cost paid per
+         visit — so it folds (设计规范 §5), still on the page, still findable. -->
+    {#if session().user}
+      <div class="learn">
+        <Help summary={t.shell.learnMore} open={compareHash}>
+          <HowItWorks variant="realtime" />
+          <ModeCompare />
+          <FeatureStrip />
+          <UseCases />
+          <Faq variant="cross" />
+        </Help>
+      </div>
+    {:else}
+      <HowItWorks variant="realtime" />
+      <ModeCompare />
+      <FeatureStrip />
+      <UseCases />
+      <Faq variant="cross" />
+    {/if}
   {/if}
 
   <PageFooter fineprint={t.footer} />
@@ -154,6 +192,7 @@
   .ui-page-head .pitch { margin-inline: 0; }
 
   .cards { display: flex; flex-direction: column; gap: var(--space-4); max-inline-size: 720px; margin-inline: auto; }
+  .learn { max-inline-size: 720px; margin: var(--space-5) auto 0; }
 
   /* The operation itself, inset to the group's own row padding. */
   .op { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3) 14px; }

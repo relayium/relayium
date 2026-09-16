@@ -160,8 +160,8 @@ export interface Messages {
   startOver: string; // leave the current room and return to the method choices
   peersTitle: string;
   crossPeersTitle: string; // heading for the single connected peer on the cross-network page
-  emptyPeers: string;
-  emptyCrossCta: string; // LAN empty-state escape hatch → cross-network transfer
+  emptyPeers: string; // LAN empty state: the one-line "nobody here yet"
+  emptyCrossCta: string; // LAN empty-state escape hatch → cross-network transfer, a text link under the invite
   dragSendOne: (name: string) => string;
   dragSendMany: string;
   pickHint: (max: number) => string;
@@ -404,7 +404,6 @@ export interface Messages {
     q4: string; a4: string; // can I avoid paying entirely? (self-host)
     q5: string; a5: string; // can I change plans later?
     q6: string; a6: string; // billing / cancellation
-    back: string; // link back to the app/home
   };
   // 当月用量表（个人中心）与接近上限时的提醒条（传输界面）。cap === 0 表示无限。
   quota: {
@@ -456,7 +455,6 @@ export interface Messages {
   };
   me: {
     title: string;
-    back: string; // link back to the home page
     loginRequired: string; // shown when /me is opened without a session
     signIn: string; // sign-in button on the login-required state
     // 个人中心的会员卡（PlanCard）。等级名与升级/管理订阅按钮复用 billing.* 的
@@ -842,6 +840,15 @@ export interface Messages {
     /** Summary of the optional "how does this work" disclosure that the long
      *  explanatory paragraphs fold into. */
     howSummary: string;
+    /** Summary of the disclosure the below-the-fold explanation (how it
+     *  works, mode comparison, features, use cases, FAQ) folds into once the
+     *  visitor is signed in and has read it. */
+    learnMore: string;
+    /** LAN empty state: the invite card that makes "open this page on another
+     *  device" an action — the address, a copy control and a QR code. */
+    inviteTitle: string;
+    inviteHint: string;
+    inviteScan: string; // accessible name of the QR image
     /** Concept labels for the operation groups on the two cross-network pages
      *  and the identity group on the LAN page. */
     pairGroup: string;
@@ -1493,6 +1500,9 @@ export interface Messages {
     colRealtime: string; // live pairing code, small files and text
     colStored: string; // encrypted upload + download link, the large-file path
     rows: { label: string; lan: string; realtime: string; stored: string }[];
+    /** One-line pointer to the comparison, rendered on the page that no longer
+     *  carries its own copy of the table. */
+    link: string;
   };
   useCases: {
     title: string;

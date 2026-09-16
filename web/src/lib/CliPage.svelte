@@ -307,6 +307,8 @@
     padding-block: var(--space-6) var(--space-5);
     border-block-end: 1px solid var(--border);
   }
+  :global(.appshell.shell) .hero { padding-block-start: 0; }
+  :global(.appshell.shell) .cli { padding-block-start: 0; }
   .hero h1 {
     font-size: var(--fs-display);
     letter-spacing: -1.2px;

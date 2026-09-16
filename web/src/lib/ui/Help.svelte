@@ -11,8 +11,11 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
 
-  let { summary, heading = false, children }: {
+  let { summary, heading = false, open = false, children }: {
     summary: string;
+    /** Start expanded. For a caller that knows the reader arrived at something
+     *  inside — a fragment link — and must not hand them a closed box. */
+    open?: boolean;
     /** Render the summary as the section's own <h2>. `<summary>` accepts
      *  heading content, so a folded section keeps its place in the page outline
      *  instead of the caller printing the same words twice — once as a heading
@@ -22,7 +25,7 @@
   } = $props();
 </script>
 
-<details class="h">
+<details class="h" {open}>
   <summary>{#if heading}<h2 class="h-heading">{summary}</h2>{:else}{summary}{/if}</summary>
   <div class="h-body">{@render children()}</div>
 </details>

@@ -45,7 +45,7 @@ const en: Messages = {
   tooManyFiles: (max: number) => `That selection holds more than ${String(max)} files. Send fewer files, or zip the folder first.`,
   peerUnsupported: "That device's Relayium is too old to connect. Update Relayium on both devices to send files or messages.",
   generating: "Creating…",
-  emptyPeers: "No other devices yet. Open this page on another device or browser window on the same network.",
+  emptyPeers: "No other devices yet.",
   emptyCrossCta: "Not on the same network? Try cross-network transfer →",
   dragSendOne: (name) => `Release to send to ${name}`,
   dragSendMany: "Drop onto a device to send",
@@ -224,7 +224,7 @@ const en: Messages = {
   pricingPage: {
     navLink: "Pricing",
     title: "Simple, honest pricing",
-    subtitle: "Same-network file and live-text transfers are always free. Cross-network browser relay and hosted storage draw on your plan's monthly traffic allowance, with a separate cap on how much you keep stored at once — every account gets both, and paid plans raise them. Uploads stored on your own node and bytes relayed through it do not use that allowance; downloads served through Relayium still count.",
+    subtitle: "Same-network file and live-text transfers are always free. Cross-network relay and hosted links draw on your plan's monthly traffic allowance and storage cap; bytes your own node carries do not, though downloads served through Relayium still count.",
     signedOutCta: "Sign in to subscribe or change your plan.",
     freeTitle: "Always free",
     freeLead: "Move files and ephemeral text at zero cost on direct paths, forever:",
@@ -254,7 +254,6 @@ const en: Messages = {
     a5: "Anytime. Upgrades apply immediately (prorated); downgrades take effect at the end of your current billing period, and you can cancel a pending downgrade whenever you like — no refunds or surprise charges.",
     q6: "How does billing and cancellation work?",
     a6: "Payments are handled securely by Stripe. Cancel anytime from Manage billing; your plan stays active until the end of the paid period, then reverts to Free.",
-    back: "← Back to Relayium",
   },
   quota: {
     title: "This month's usage",
@@ -293,7 +292,6 @@ const en: Messages = {
   },
   me: {
     title: "Personal center",
-    back: "← Back to home",
     loginRequired: "Sign in to see your transfer stats and files.",
     signIn: "Sign in",
     plan: {
@@ -543,6 +541,10 @@ const en: Messages = {
     offlineShort: "Share",
     deviceInboxShort: "Inbox",
     howSummary: "How this works",
+    learnMore: "Guide: steps, modes compared, features and FAQ",
+    inviteTitle: "Open this page on another device on the same network",
+    inviteHint: "It appears here as soon as that device opens Relayium — no account, no install.",
+    inviteScan: "QR code for this page",
     pairGroup: "Pairing code",
     liveGroup: "Live session",
     linkGroup: "Download link",
@@ -1309,6 +1311,7 @@ const en: Messages = {
       { label: "If it's interrupted", lan: "Temporary file-connection drops can resume; closing or reloading either page means start again", realtime: "Temporary file-connection drops can resume; closing or reloading either page means start again", stored: "Keep the sender page open until upload finishes; after that the link works until expiry" },
       { label: "Best for", lan: "Phone ↔ laptop on the same Wi-Fi, with no account at all", realtime: "Quick small files and text across networks — a command, a link, a note", stored: "Large files, and send now / fetch later" },
     ],
+    link: "Not sure which way to send? Compare the three modes →",
   },
   useCases: {
     title: "Built for these moments",

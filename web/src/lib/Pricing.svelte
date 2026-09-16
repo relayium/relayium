@@ -327,11 +327,14 @@
               <span class="tier-suffix">{cycle === "monthly" ? t.billing.perMonth : t.billing.perYear}</span>
             </div>
           {/if}
-          <ul class="tier-caps">
-            <li>{t.billing.storage}: {formatSize(tier.storageBytes)}</li>
-            <li>{t.billing.traffic}: {formatSize(tier.trafficBytes)}</li>
-            <li>{t.billing.retention}: {formatRetention(tier.retentionSecs)}</li>
-          </ul>
+          <!-- Label/value rows, not "Storage: 1.0 GB" sentences: four cards side
+               by side are compared down a column, and a right-aligned tabular
+               value is what makes that possible at a glance. -->
+          <dl class="tier-caps">
+            <div class="cap"><dt>{t.billing.storage}</dt><dd>{formatSize(tier.storageBytes)}</dd></div>
+            <div class="cap"><dt>{t.billing.traffic}</dt><dd>{formatSize(tier.trafficBytes)}</dd></div>
+            <div class="cap"><dt>{t.billing.retention}</dt><dd>{formatRetention(tier.retentionSecs)}</dd></div>
+          </dl>
 
           {#if relation(tier) === "current"}
             <div class="current-badge">{isFree(tier) ? t.billing.currentFree : t.billing.current}</div>
@@ -439,9 +442,28 @@
     font-variant-numeric: tabular-nums;
   }
   .tier-suffix { font-size: var(--fs-xs); font-weight: 400; color: var(--text); }
-  .tier-caps { list-style: none; margin: 0; padding: 0; font-size: var(--fs-xs); color: var(--text); display: flex; flex-direction: column; gap: 2px; }
+  .tier-caps { margin: 0; padding: 0; font-size: var(--fs-xs); color: var(--text); display: flex; flex-direction: column; }
+  .cap {
+    display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2);
+    padding-block: 5px; border-block-start: 1px solid var(--border);
+  }
+  .cap:last-child { border-block-end: 1px solid var(--border); }
+  .cap dt { margin: 0; }
+  .cap dd { margin: 0; color: var(--text-h); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .tier-note { font-size: var(--fs-xs); color: var(--text); }
-  .current-badge { font-size: var(--fs-xs); font-weight: 600; color: var(--text-h); padding: var(--space-1) 0; }
+  /* Same box as the Upgrade button beside it — padding, radius, line-height —
+     so the four cards end on one line. A bare grey label here left the Free
+     card 20px shorter than its neighbours. It is still not a button: there is
+     nothing to do on the plan you are on. */
+  .current-badge {
+    display: flex; align-items: center; justify-content: center; box-sizing: border-box;
+    padding: 10px 18px; line-height: 1;
+    border: 1px solid var(--control-border); border-radius: var(--radius-sm);
+    background: var(--control-bg);
+    font-size: var(--fs-sm); font-weight: 600; color: var(--text-h);
+  }
+  /* The price is the decision; the shell's 17px h2 token is too small for it. */
+  :global(.appshell.shell) .tier-price { font-size: 24px; }
   .err { color: var(--danger); margin: 0; }
   .ok-note { color: var(--text-h); margin: 0; }
   .sched-banner {

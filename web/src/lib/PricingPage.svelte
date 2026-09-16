@@ -19,9 +19,11 @@
 <!-- A <section>, not a <main>: every SPA route renders inside App.svelte's single
      <main>, so a second one here nested two "main" landmarks inside each other —
      which leaves a screen reader with no unambiguous "skip to the content". -->
+<!-- No "Back to Relayium" control: this page renders inside the same shell as
+     every other route, and the sidebar (or the compact header) is the way
+     back — a second, page-specific one was the tell that /pricing was a
+     different product from the page it was reached from. -->
 <section class="pricing-page page-enter">
-  <button class="back" onclick={() => navigate("lan")}>{p.back}</button>
-
   <header class="head ui-page-head">
     <h1>{p.title}</h1>
     <p class="sub">{p.subtitle}</p>
@@ -92,17 +94,6 @@
     flex-direction: column;
     gap: var(--space-6);
   }
-  .back {
-    align-self: flex-start;
-    background: none;
-    border: none;
-    color: var(--text);
-    font: inherit;
-    font-size: var(--fs-xs);
-    cursor: pointer;
-    padding: 0;
-  }
-  .back:hover { color: var(--accent-fg); }
   /* .ui-page-head owns the centering, padding and h1 size; the subtitle is
      longer than the 44ch .tagline primitive is meant for, so it keeps its own
      measure. */
@@ -111,7 +102,9 @@
   .head .signed-out { margin: 0; font-size: var(--fs-xs); color: var(--accent-fg); }
 
   .explainer { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-4); }
-  .card.free { border-inline-start: 3px solid var(--accent); }
+  /* No accent rim on the free card: the same left-border treatment is a
+     WARNING on Device Inbox, and here it decorated the good news. Purple is
+     for selection, the primary action and status (设计规范 §3). */
   .card .lead { margin: 0; font-size: var(--fs-sm); color: var(--text); }
   .card ul { margin: 0; padding-inline-start: 1.1em; display: flex; flex-direction: column; gap: var(--space-1); }
   .card li { font-size: var(--fs-sm); color: var(--text); }
@@ -126,4 +119,10 @@
   .qa { display: flex; flex-direction: column; gap: 4px; }
   .qa h3 { margin: 0; font-size: var(--fs-sm); color: var(--text-h); }
   .qa p { margin: 0; font-size: var(--fs-sm); color: var(--text); max-inline-size: 72ch; }
+
+  /* ── Settings-shell form ──────────────────────────────────────────────────
+     The column already carries the track's top padding and the header is
+     left-aligned by app.css; only the page's own centring and top gap go. */
+  :global(.appshell.shell) .pricing-page { padding-block-start: 0; gap: var(--space-5); }
+  :global(.appshell.shell) .head .sub { margin-inline: 0; font-size: 13px; }
 </style>

@@ -205,16 +205,17 @@ async function reachFromHome(browser, base, view) {
   if (JSON.stringify(current) !== JSON.stringify(["device-inbox"])) {
     throw new Error(`${view.id}: aria-current is on ${JSON.stringify(current)}`);
   }
-  // The secondary group, on the same real viewport: both tools links present,
-  // visible without a gesture, and focusable. A menu would have satisfied the
-  // first of those and failed the other two on a 320px screen.
+  // The secondary group, on the same real viewport: all three tools links
+  // present, visible without a gesture, and focusable. A menu would have
+  // satisfied the first of those and failed the other two on a 320px screen.
+  // Pricing joined the group when the sidebar became the way to reach it.
   const tools = await tab.evaluate(
     `[...document.querySelectorAll("nav.tools a.tool")].map((a) => [a.getAttribute("data-nav"), new URL(a.href).pathname])`,
   );
-  if (JSON.stringify(tools) !== JSON.stringify([["cli", "/cli"], ["apps", "/apps"]])) {
+  if (JSON.stringify(tools) !== JSON.stringify([["cli", "/cli"], ["apps", "/apps"], ["pricing", "/pricing"]])) {
     throw new Error(`${view.id}: the downloads-and-tools links are ${JSON.stringify(tools)}`);
   }
-  for (const id of ["cli", "apps"]) {
+  for (const id of ["cli", "apps", "pricing"]) {
     const hidden = await tab.evaluate(VISIBLE(`nav.tools [data-nav="${id}"]`));
     if (hidden) throw new Error(`${view.id}: the ${id} tools link is ${hidden}`);
   }

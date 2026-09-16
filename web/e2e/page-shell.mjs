@@ -135,7 +135,9 @@ async function authLandingScenario(browser, base) {
   }))()`);
   if (
     magic.path !== "/magic-link" || magic.search !== "" ||
-    JSON.stringify(magic.h1) !== JSON.stringify(["Sign in"]) || magic.headingPx !== 30 ||
+    // 20px: the auth landings render inside the application shell now, whose
+    // page-title token is 20px on every route (app.css `.appshell.shell`).
+    JSON.stringify(magic.h1) !== JSON.stringify(["Sign in"]) || magic.headingPx !== 20 ||
     !magic.sharedCard || magic.canonical !== null || magic.alternates !== 0 ||
     magic.robots !== "noindex, nofollow"
   ) throw new Error(`magic-link landing contract failed: ${JSON.stringify(magic)}`);
@@ -574,8 +576,11 @@ async function pricingHierarchyScenario(browser, base) {
       pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
     };
   })()`);
+  // 20px title / 24px price: /pricing renders inside the application shell,
+  // whose page-title token is 20px on every route; the tier price keeps its own
+  // 24px so it stays the largest figure on the page after the title.
   if (
-    desktop.firstTierY >= 700 || desktop.pricePx !== 30 || desktop.titlePx !== 34 ||
+    desktop.firstTierY >= 700 || desktop.pricePx !== 24 || desktop.titlePx !== 20 ||
     !desktop.pricingBeforeExplainer || !desktop.accountControl || desktop.pageOverflow !== 0
   ) {
     throw new Error(`desktop pricing hierarchy contract failed: ${JSON.stringify(desktop)}`);

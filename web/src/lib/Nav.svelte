@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     currentRoute, navigate,
-    LAN_PATH, CROSS_PATH, OFFLINE_PATH, CLI_PATH, APPS_PATH, DEVICE_INBOX_PATH,
+    LAN_PATH, CROSS_PATH, OFFLINE_PATH, CLI_PATH, APPS_PATH, DEVICE_INBOX_PATH, PRICING_PATH,
     type Route,
   } from "./router.svelte";
   import { lang, setLang, LANGS, messages, dir, type Lang, type Messages } from "./i18n.svelte";
@@ -44,10 +44,13 @@
   ]);
 
   // Downloads and tools: reachable, named, and deliberately not a transfer
-  // destination. Both labels are already single words.
+  // destination. Pricing rides here too: it used to be reachable only from a
+  // page footer, so the sidebar could not mark it current and a visitor on
+  // /pricing had a different header from every other page.
   const tools: NavLink[] = $derived([
     { id: "cli", href: CLI_PATH, label: () => t.nav.cliTab, short: () => t.nav.cliTab },
     { id: "apps", href: APPS_PATH, label: () => t.nav.appsTab, short: () => t.nav.appsTab },
+    { id: "pricing", href: PRICING_PATH, label: () => t.pricingPage.navLink, short: () => t.pricingPage.navLink },
   ]);
 
   // The account control only appears on the login-gated flows (async storage,
@@ -58,10 +61,15 @@
     || currentRoute() === "me" || currentRoute() === "device-inbox",
   );
 
-  // The four transfer destinations render inside the settings shell (App's
-  // `.appshell.shell`), so on a wide viewport this header IS that shell's 216px
-  // rail. Everywhere else it stays the horizontal header it has always been.
-  const SHELL_ROUTES = new Set<Route>(["lan", "cross", "offline", "device-inbox"]);
+  // Every SPA route except the recipient's download page renders inside the
+  // settings shell (App's `.appshell.shell`), so on a wide viewport this header
+  // IS that shell's 216px rail. /d/<id> keeps its own header: a recipient who
+  // opened a link is not inside the app and should not be handed its
+  // navigation. Below the breakpoint this stays the horizontal header.
+  const SHELL_ROUTES = new Set<Route>([
+    "lan", "cross", "offline", "device-inbox",
+    "pricing", "cli", "apps", "me", "verify-email", "reset-password", "magic-link",
+  ]);
   const inShell = $derived(SHELL_ROUTES.has(currentRoute()));
   const activeTool = $derived(tools.find((tool) => tool.id === currentRoute()));
 
@@ -405,8 +413,9 @@
   }
 
   /* ── Sidebar form ────────────────────────────────────────────────────────
-     The owner reference's left rail. Gated on BOTH `.shell` (one of the four
-     transfer destinations) and the 1180px breakpoint App's shell grid uses.
+     The owner reference's left rail. Gated on BOTH `.shell` (every route but
+     the recipient's download page) and the 1180px breakpoint App's shell grid
+     uses.
 
      Reference numbers as written: 216px fixed rail, 28px rows with a 7px radius
      and 10px inline padding, 11px/600 group titles. The surface is the
@@ -437,11 +446,23 @@
       margin-block-end: var(--space-2);
       min-block-size: 28px;
     }
-    /* Destinations first in the rail, utilities at its foot: `order` rather than
-       a second markup order, because the toolbar row needs the account control
-       before the destination row and the rail needs it after. */
-    .topnav.shell .tabs { order: 1; }
-    .topnav.shell .util-slot { order: 2; }
+    /* Rail order, top to bottom: brand, account, destinations, tools, then the
+       language and theme controls. It is `order` on the SAME markup rather than
+       a second tree: the toolbar row needs the account control beside the
+       disclosure, and the rail needs it under the brand. `.util-slot` is
+       `display: contents` here so the account control and the disclosure are
+       each a flex item of the rail — the slot stays in the DOM (Account and the
+       disclosure remain siblings, never ancestor and descendant) and the
+       narrow form still lays it out as the box it is.
+
+       Measured before this change at 1440×900: four groups ended 250px down
+       and Sign in / CLI / Apps / language / theme sat at the very foot, with
+       ~600px of empty rail between. The list is now top-aligned like a settings
+       sidebar, with the empty space below it instead of through it. */
+    .topnav.shell .util-slot { display: contents; }
+    .topnav.shell .util-slot > :global(.account) { order: 1; margin-block-end: var(--space-2); }
+    .topnav.shell .tabs { order: 2; }
+    .topnav.shell .more { order: 3; }
     .topnav.shell .side-group {
       display: block;
       margin-block: var(--space-3) 4px;
@@ -489,12 +510,6 @@
       border-color: transparent;
     }
 
-    .topnav.shell .util-slot {
-      display: block;
-      inline-size: 100%;
-      margin-block-start: auto;
-      padding-block-start: var(--space-4);
-    }
     .topnav.shell .more { display: block; inline-size: 100%; }
     .topnav.shell .more-panel {
       flex-direction: column;
@@ -532,7 +547,6 @@
     .topnav.shell .util-slot :global(.acct-btn) {
       inline-size: 100%;
       max-inline-size: 100%;
-      margin-block-end: var(--space-2);
     }
   }
   @media (min-width: 1180px) and (prefers-reduced-motion: reduce) {

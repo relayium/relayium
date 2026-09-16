@@ -5,7 +5,9 @@
   const t = $derived<Messages>(messages[lang()]);
 </script>
 
-<section class="compare" aria-label={t.compare.title}>
+<!-- `id="compare"`: this is now the ONE copy of the comparison. The share-link
+     page points here instead of rendering the same three tables again. -->
+<section class="compare" id="compare" aria-label={t.compare.title}>
   <div class="head">
     <h2>{t.compare.title}</h2>
     <p class="sub">{t.compare.sub}</p>
