@@ -101,15 +101,38 @@ function serve(cipher: Uint8Array, turns: { deliver?: number; cut?: boolean }[] 
   return { ranges, fetchMock };
 }
 
-/** 假时钟推到 promise 落定为止（退避是真的 setTimeout）。 */
+/** 模块加载时拿到的真 setTimeout —— 每个用例都在这之后才装假时钟。 */
+const realSetTimeout = globalThis.setTimeout;
+
+/** 把一轮真实事件循环让出去：真 WebCrypto 的解密结果、流的读取都在这里落地。 */
+function realTurn(): Promise<void> {
+  return new Promise((resolve) => realSetTimeout(resolve, 0));
+}
+
+/**
+ * 一直推到 promise 落定为止。
+ *
+ * 退避是**假**时钟上的 setTimeout，解密却是**真**的 WebCrypto（结果作为真实任务回来）。
+ * 旧版固定把假时钟推 40 次就停手：在 CI 这种解密更慢的机器上，40 次推完时下载还没走到
+ * 断线处，之后才装上的退避定时器再也没人推，用例就挂到 5 秒超时（line 121 的 CI 失败；
+ * 可用 author/ci-resume 的慢解密探针稳定复现）。
+ *
+ * 现在按真实进度推：每轮先让出一轮真实事件循环，再只在确有待触发的假定时器时把时钟推到
+ * 下一个定时器。没有固定轮数，也不靠把假时钟一口气推远；上限仍是用例自己的 5 秒超时 ——
+ * 真卡死照样失败，只是不会再因为机器慢而失败。
+ */
 async function settle<T>(p: Promise<T>): Promise<T | Error> {
-  const done = p.then((v) => v as T | Error).catch((e: Error) => e);
-  for (let i = 0; i < 40; i++) {
-    await vi.advanceTimersByTimeAsync(1000);
-    const raced = await Promise.race([done, Promise.resolve("pending" as const)]);
-    if (raced !== "pending") return raced;
+  let settled = false;
+  let result: T | Error = undefined as T;
+  p.then(
+    (v) => { result = v; settled = true; },
+    (e: Error) => { result = e; settled = true; },
+  );
+  while (!settled) {
+    await realTurn();
+    if (!settled && vi.getTimerCount() > 0) await vi.advanceTimersToNextTimerAsync();
   }
-  return done;
+  return result;
 }
 
 afterEach(() => {
@@ -179,9 +202,16 @@ describe("writeStoredObject 与断线续传", () => {
     vi.useFakeTimers();
     const r = recorder();
     const ac = new AbortController();
-    const run = writeStoredObject({ id: "obj", key, manifest, target: r.target, signal: ac.signal });
+    const phases: string[] = [];
+    const run = writeStoredObject({
+      id: "obj", key, manifest, target: r.target, signal: ac.signal,
+      onRecovery: (x) => phases.push(x.phase),
+    });
     const settled = run.then(() => null).catch((e: Error) => e);
-    await vi.advanceTimersByTimeAsync(100); // 停在退避里
+    // 等它真的进了退避再取消。旧版只推 100ms 假时钟就 abort：解密慢的时候下载还没走到断线处，
+    // 取消落在了流式读取中间，用例测的就不再是"退避中取消"。
+    while (!phases.includes("waiting")) await realTurn();
+    expect(phases, "取消时应当正停在退避里").toEqual(["waiting"]);
     ac.abort();
     const err = await settled;
     expect((err as DOMException).name).toBe("AbortError");
