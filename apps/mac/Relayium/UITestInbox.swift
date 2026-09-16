@@ -341,6 +341,10 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
     private var heldStream: BoundedDataStream?
     /// How many pending reads the check fixture has answered.
     private var pendingReads = 0
+    /// The ask fixture's answers, by task id: `true` accepted, `false` declined.
+    /// An answered task is no longer held for the user, so it leaves `pending`,
+    /// and it cannot be answered a second time.
+    private var askAnswers: [String: Bool] = [:]
 
     init(mode: UITestInbox.Mode) { self.mode = mode }
 
@@ -414,16 +418,25 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
 
     func goOffline() async throws {}
 
+    /// The two deliveries the ask fixture holds for an answer. Different sizes,
+    /// so the rows can be told apart without a name.
+    // nonlocalized: acceptance fixture identifiers, never displayed
+    private static let askTasks = [
+        InboxTask(id: "task_ask_one", sourceDeviceID: UITestInbox.senderDeviceID,
+                  state: .attentionRequired,
+                  ciphertextBytes: 1_024, expiresAt: 4_102_444_800),
+        InboxTask(id: "task_ask_two", sourceDeviceID: UITestInbox.senderDeviceID,
+                  state: .attentionRequired,
+                  ciphertextBytes: 8_192, expiresAt: 4_102_444_800)
+    ]
+
     func pending(limit: Int) async throws -> [InboxTask] {
         if mode == .ask {
-            return [
-                InboxTask(id: "task_ask_one", sourceDeviceID: UITestInbox.senderDeviceID,
-                          state: .attentionRequired,
-                          ciphertextBytes: 1_024, expiresAt: 4_102_444_800),
-                InboxTask(id: "task_ask_two", sourceDeviceID: UITestInbox.senderDeviceID,
-                          state: .attentionRequired,
-                          ciphertextBytes: 8_192, expiresAt: 4_102_444_800)
-            ]
+            // Only the tasks still waiting for an answer. An accepted task would
+            // be queued for a claim on central; this fixture holds no payload for
+            // it, so it is not offered again rather than pretending to deliver.
+            let answered = sync { askAnswers }
+            return Self.askTasks.filter { answered[$0.id] == nil }
         }
         if mode == .check {
             let read = sync { () -> Int in pendingReads += 1; return pendingReads }
@@ -502,7 +515,22 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
 
     @discardableResult
     func accept(taskID: String, accept: Bool) async throws -> InboxTask {
-        InboxTask(id: taskID, state: accept ? .queued : .failedTerminal)
+        guard mode == .ask else {
+            return InboxTask(id: taskID, state: accept ? .queued : .failedTerminal)
+        }
+        // Central's own rule: only a task still held for an answer can be
+        // answered, once. Anything else is the same refusal it sends.
+        let recorded = sync { () -> Bool in
+            guard Self.askTasks.contains(where: { $0.id == taskID }),
+                  askAnswers[taskID] == nil else { return false }
+            askAnswers[taskID] = accept
+            return true
+        }
+        // nonlocalized: central's wire error token
+        guard recorded else { throw InboxError.api(status: 409, code: "invalid_transition") }
+        return accept
+            ? InboxTask(id: taskID, state: .queued)
+            : InboxTask(id: taskID, state: .failedTerminal, errorCode: .device(.userDeclined))
     }
 
     func clearInbox() async throws {}

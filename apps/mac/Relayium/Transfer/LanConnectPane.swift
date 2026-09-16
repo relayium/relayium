@@ -279,21 +279,15 @@ struct LanConnectPane: View {
         case .off:
             action = L10n.t(.nearbyStartReceiving)
         }
-        // No label content, for the reason `VerificationSetting` gives: the
-        // hero's title says what this switch controls on screen, and the
-        // explicit accessibility label below is its one spoken name.
-        return Toggle(isOn: Binding(
+        return Toggle(L10n.t(.nearbyA11yReceiving), isOn: Binding(
             get: { on },
-            set: { setReceiving($0) })) {
-                EmptyView()
-            }
+            set: { setReceiving($0) }))
             .toggleStyle(.switch)
             .labelsHidden()
             // Pausing would drop a session this module owns; resuming or
             // starting never can.
             .disabled(on && sessionLocked)
             .help(action)
-            .accessibilityLabel(L10n.t(.nearbyA11yReceiving))
             .accessibilityHint(action)
             .accessibilityIdentifier("lan-receiving-switch")
     }

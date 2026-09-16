@@ -169,90 +169,22 @@ final class DeviceInboxUITests: XCTestCase {
     /// open so a click that landed nowhere fails HERE, naming the navigation,
     /// rather than as a missing section further down.
     ///
-    /// **DIAGNOSTIC, and red whatever it finds.** Hosted macOS 15 (UI CI runs
-    /// 35105452536, 35111315290 and 35115666135) recorded the click squarely on the
-    /// visible Open and the list staying put, while a real mouse on macOS 27 opens
-    /// the page. A repeat click, a hover, a long press and a destination rebuild
-    /// were each tried twice on the hosted runner and none opened it, so that
-    /// cascade is gone. What is left is ONE controlled comparison: when the first
-    /// click does not navigate, this records the app's own trace and a screenshot,
-    /// relaunches the SAME fixture with only
-    /// `--relayium-ui-testing-native-conversation-button` added — which draws this
-    /// one Open with the platform's `.bordered` style instead of the reference
-    /// style, same label, action and identifier — clicks that Open once, and
-    /// records whether the page opened and the trace again. Then it FAILS for the
-    /// original first click whatever the native click did: the comparison only
-    /// says whether the custom style is where the press is lost.
+    /// **One click, and no second chance.** The first on-screen click either
+    /// opens the page or the test fails; nothing here clicks again, relaunches or
+    /// tries another route. A failure keeps the screenshot and the hierarchy.
     private func requireDevicePageOpened(after control: XCUIElement, in window: XCUIElement,
                                          file: StaticString = #filePath, line: UInt = #line) {
         if revealed("inbox-send-back", in: window, timeout: 20).exists { return }
-
-        let custom = "custom reference style, first click: not opened after 20s; control "
-            + "\(controlState(control)); window \(window.frame); app state \(app.state.rawValue); "
-            + appTrace(in: window)
-        attachDiagnostics(named: "open-custom-first-click")
-        // Kept before the relaunch, so a relaunch that fails its own assertions
-        // still leaves the original failure's record in the result bundle.
-        let customRecord = XCTAttachment(string: custom)
-        customRecord.name = "open-custom-first-click-trail"
-        customRecord.lifetime = .keepAlways
-        add(customRecord)
-
-        // The same fixture, relaunched: only the native-button flag is added.
-        let fixture = app.launchArguments.filter { !offlineLaunchArguments.contains($0) }
-        app.terminate()
-        launch(fixture + ["--relayium-ui-testing-native-conversation-button"])
-        let nativeWindow = openDeviceInboxDestination()
-        let nativeOpen = revealed("inbox-conversation-open", in: nativeWindow, timeout: 60)
-        let outcome: String
-        var native = "native .bordered Open never rendered"
-        if nativeOpen.exists {
-            // Brought on screen without asserting, so a reachability miss cannot
-            // end the test before the comparison is reported.
-            _ = scrollToReveal(nativeOpen, in: nativeWindow)
-            let before = "control \(controlState(nativeOpen))"
-            nativeOpen.click()
-            let opened = revealed("inbox-send-back", in: nativeWindow, timeout: 20).exists
-            outcome = opened
-                ? "native .bordered Open OPENED the page on its first click"
-                : "native .bordered Open did NOT open the page either"
-            native = "native .bordered style, first click: \(opened ? "opened" : "not opened after 20s"); "
-                + "\(before); window \(nativeWindow.frame); app state \(app.state.rawValue); "
-                + appTrace(in: nativeWindow)
-        } else {
-            outcome = "native .bordered Open never rendered"
-        }
-        attachDiagnostics(named: "open-native-first-click")
+        attachDiagnostics(named: "open-first-click")
         XCTFail("opening the conversation did not open its device page on the first on-screen "
-                + "click — DIAGNOSTIC comparison: \(outcome) | \(custom) | \(native)",
+                + "click; control exists=\(control.exists) "
+                + "hittable=\(control.exists && control.isHittable) frame=\(control.frame)",
                 file: file, line: line)
     }
 
-    private func controlState(_ element: XCUIElement) -> String {
-        "exists=\(element.exists) hittable=\(element.exists && element.isHittable) "
-            + "enabled=\(element.exists && element.isEnabled) frame=\(element.frame)"
-    }
-
-    /// The app's own record (`InboxOpenTrace`, DEBUG and inbox fixtures only): the
-    /// mouse events it received and the view AppKit hit-tested for each, whether
-    /// Open's action ran, every value the focused peer took, and whether the
-    /// device page was built or torn down.
-    ///
-    /// The trace arrives in the probe's label (its AXValue reads empty at
-    /// runtime); a non-empty value is still taken first if a platform exposes
-    /// one, so either transport is reported rather than lost.
-    private func appTrace(in window: XCUIElement) -> String {
-        let probe = element("uitest-inbox-open-trace", in: window)
-        guard probe.exists else { return "app trace absent" }
-        if let value = probe.value as? String, !value.isEmpty {
-            return "app trace value [\(value)]"
-        }
-        return probe.label.isEmpty ? "app trace empty" : "app trace label [\(probe.label)]"
-    }
-
-    /// DIAGNOSTIC: keep a screenshot and the full accessibility hierarchy in the
-    /// result bundle under a name that says what was being looked at. Evidence
-    /// only — it asserts nothing and changes no outcome.
+    /// Keep a screenshot and the full accessibility hierarchy in the result
+    /// bundle under a name that says what was being looked at. Evidence only —
+    /// it asserts nothing and changes no outcome.
     private func attachDiagnostics(named name: String) {
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         shot.name = "\(name)-screenshot"
@@ -542,6 +474,73 @@ final class DeviceInboxUITests: XCTestCase {
                       "the route out of a refused account goes nowhere")
     }
 
+    /// **The folder button opens the system folder panel, and Cancel leaves the
+    /// grant exactly as it was.**
+    ///
+    /// The surface's other assertions prove this button EXISTS. It is a
+    /// reference-styled button in the folder card's own row — a card, not a
+    /// `CardRows` list like the conversation Open that took no press on hosted
+    /// macOS 15 — and a control that exists but cannot be pressed is exactly
+    /// what an existence check cannot see. So it is pressed once, on screen,
+    /// and the real `NSOpenPanel` must appear; the panel is then
+    /// cancelled with nothing chosen, and the folder, the grant's removal
+    /// control, the receiving choices and the ready status must all read as
+    /// they did before.
+    func testChoosingAFolderOpensTheSystemPanelAndCancellingChangesNothing() {
+        launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-ready"])
+        let window = openDeviceInboxDestination()
+
+        let status = element("inbox-status", in: window)
+        XCTAssertTrue(status.waitForExistence(timeout: 15),
+                      "the destination renders no Device Inbox status at all")
+        let ready = NSPredicate(format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@",
+                                "Ready to receive", "Ready to receive")
+        expectation(for: ready, evaluatedWith: status, handler: nil)
+        waitForExpectations(timeout: 20)
+
+        let folder = revealed("inbox-folder", in: window)
+        let choose = revealed("inbox-choose-folder", in: window)
+        XCTAssertTrue(folder.exists, "the destination does not say where it receives")
+        XCTAssertTrue(element("inbox-remove-folder", in: window).exists,
+                      "the ready fixture has no folder grant to leave untouched")
+        let policies = ["off", "ask", "auto"]
+        func snapshot() -> [String] {
+            [text(of: element("inbox-folder", in: window)),
+             text(of: element("inbox-choose-folder", in: window)),
+             "remove=\(element("inbox-remove-folder", in: window).exists)"]
+                + policies.map { "\($0)=\(text(of: element("inbox-policy-\($0)", in: window)))" }
+        }
+        let before = snapshot()
+
+        pressOnScreen(choose, "the folder button", in: window)
+        let candidates = [app.dialogs["open-panel"], app.windows["open-panel"],
+                          app.sheets["open-panel"]]
+        let deadline = Date().addingTimeInterval(15)
+        var panel: XCUIElement?
+        repeat {
+            panel = candidates.first { $0.exists }
+            if panel == nil { RunLoop.current.run(until: Date().addingTimeInterval(0.1)) }
+        } while panel == nil && Date() < deadline
+        guard let panel else {
+            attachDiagnostics(named: "choose-folder-first-click")
+            return XCTFail("the folder button opened no system folder panel on its first "
+                           + "on-screen click")
+        }
+
+        let cancel = panel.buttons["CancelButton"].exists
+            ? panel.buttons["CancelButton"] : panel.buttons["Cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5), "the folder panel offers no Cancel")
+        cancel.click()
+        let gone = NSPredicate(format: "exists == false")
+        expectation(for: gone, evaluatedWith: panel, handler: nil)
+        waitForExpectations(timeout: 10)
+
+        XCTAssertEqual(snapshot(), before,
+                       "cancelling the folder panel changed the folder grant or the receiving choice")
+        XCTAssertTrue(ready.evaluate(with: status),
+                      "cancelling the folder panel took the inbox out of its ready state")
+    }
+
     /// **The destination carries the WHOLE surface, not a summary of it.**
     ///
     /// The requirement is that Settings stops being the only full entry, and the
@@ -764,6 +763,100 @@ final class DeviceInboxUITests: XCTestCase {
         XCTAssertTrue(copy.contains("8.0 KB"), "the second held delivery has no safe identity")
         XCTAssertFalse(copy.contains("task_ask_one") || copy.contains("task_ask_two"),
                        "the Ask surface exposed central task identifiers")
+    }
+
+    /// **Each held delivery takes its own answer, on the first press, and the
+    /// answer stays given.**
+    ///
+    /// Accept and Decline sit in a `CardRowList` row, the row boundary where a
+    /// reference-styled Open took no press on hosted macOS 15, and the test
+    /// above only proves they exist. So they are pressed, once each:
+    ///
+    ///  - Decline on the 1.0 KB delivery must remove that delivery and only that
+    ///    one — the 8.0 KB delivery stays, identifiable by its size and with its
+    ///    own two answers — and the status must count one waiting.
+    ///  - The controller removes an answered row before central replies and then
+    ///    re-reads `pending`, so a row vanishing proves the press but not the
+    ///    answer. The count and the missing row are therefore held for a further
+    ///    window: a declined delivery that came back would fail here.
+    ///  - Accept on the remaining delivery must empty the list the same way.
+    ///
+    /// The fixture's central refuses a task that is unknown or already answered,
+    /// as central does, and lists only unanswered tasks. It holds no payload for
+    /// an accepted task, so nothing here claims that an accepted delivery is
+    /// received — only that the answer was taken and kept.
+    func testDecliningOneHeldDeliveryLeavesTheOtherAnswerableAndAcceptingItClearsTheList() {
+        launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-ask"])
+        let window = openDeviceInboxDestination()
+        let status = element("inbox-status", in: window)
+        func waiting(_ words: String) -> NSPredicate {
+            NSPredicate(format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@", words, words)
+        }
+        func size(_ words: String) -> XCUIElement {
+            window.descendants(matching: .any).matching(waiting(words)).firstMatch
+        }
+        /// The size line sits in the same row as the answer control: their
+        /// vertical centres are within one row of each other.
+        func sameRow(_ control: XCUIElement, _ words: String) -> Bool {
+            let text = size(words)
+            return control.exists && text.exists
+                && abs(control.frame.midY - text.frame.midY) < 30
+        }
+        func settles(_ predicate: NSPredicate, on object: Any, within seconds: TimeInterval) -> Bool {
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: object)],
+                           timeout: seconds) == .completed
+        }
+
+        expectation(for: waiting("2 deliveries waiting for your answer"),
+                    evaluatedWith: status, handler: nil)
+        waitForExpectations(timeout: 20)
+        let declineFirst = revealed("inbox-ask-decline-0", in: window, timeout: 20)
+        XCTAssertTrue(declineFirst.exists, "the first held delivery has no Decline")
+        XCTAssertTrue(sameRow(declineFirst, "1.0 KB"),
+                      "the first Decline is not on the 1.0 KB delivery's row")
+        XCTAssertTrue(sameRow(element("inbox-ask-decline-1", in: window), "8.0 KB"),
+                      "the second Decline is not on the 8.0 KB delivery's row")
+
+        pressOnScreen(declineFirst, "the 1.0 KB delivery's Decline", in: window)
+        guard settles(waiting("1 delivery waiting for your answer"), on: status, within: 10) else {
+            attachDiagnostics(named: "ask-decline-first-click")
+            return XCTFail("Decline did not answer the 1.0 KB delivery on its first on-screen click")
+        }
+        XCTAssertFalse(size("1.0 KB").exists, "the declined delivery is still listed")
+        XCTAssertFalse(element("inbox-ask-decline-1", in: window).exists,
+                       "a second answer row is still listed after one was declined")
+        let acceptRemaining = element("inbox-ask-accept-0", in: window)
+        XCTAssertTrue(sameRow(acceptRemaining, "8.0 KB"),
+                      "the 8.0 KB delivery lost its Accept")
+        XCTAssertTrue(sameRow(element("inbox-ask-decline-0", in: window), "8.0 KB"),
+                      "the 8.0 KB delivery lost its Decline")
+        XCTAssertFalse(element("inbox-error", in: window).exists,
+                       "declining one delivery reported an error")
+
+        // Held: central is re-read after an answer, and a declined delivery it
+        // still listed would return here.
+        for _ in 0..<8 {
+            RunLoop.current.run(until: Date().addingTimeInterval(1))
+            XCTAssertFalse(size("1.0 KB").exists, "the declined delivery came back")
+            XCTAssertTrue(waiting("1 delivery waiting for your answer").evaluate(with: status),
+                          "the waiting count changed after the decline was given")
+        }
+
+        pressOnScreen(acceptRemaining, "the 8.0 KB delivery's Accept", in: window)
+        let askList = element("inbox-ask", in: window)
+        guard settles(NSPredicate(format: "exists == false"), on: askList, within: 10) else {
+            attachDiagnostics(named: "ask-accept-first-click")
+            return XCTFail("Accept did not answer the 8.0 KB delivery on its first on-screen click")
+        }
+        for _ in 0..<8 {
+            RunLoop.current.run(until: Date().addingTimeInterval(1))
+            XCTAssertFalse(askList.exists, "an answered delivery was listed again")
+            XCTAssertFalse(size("8.0 KB").exists, "the accepted delivery is still listed")
+        }
+        XCTAssertFalse(waiting("waiting for your answer").evaluate(with: status),
+                       "the status still counts a delivery waiting after both were answered")
+        XCTAssertFalse(element("inbox-error", in: window).exists,
+                       "answering the held deliveries reported an error")
     }
 
     // MARK: - working

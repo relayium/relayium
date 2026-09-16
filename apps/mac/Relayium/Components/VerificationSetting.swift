@@ -40,21 +40,13 @@ struct VerificationSetting: View {
                         // The setter re-checks `locked` rather than trusting
                         // `.disabled`: a click delivered from the previous render
                         // can land after a claim.
-                        //
-                        // No label content: the visible line beside it names the
-                        // switch, and the explicit accessibility label below is
-                        // the one name assistive technology reads. A title
-                        // string here would only exist as a hidden text child.
-                        Toggle(isOn: Binding(
+                        Toggle(L10n.t(.verifyToggle), isOn: Binding(
                             get: { preference.requiresSASConfirmation },
                             set: { if !locked { preference.requiresSASConfirmation = $0 } }
-                        )) {
-                            EmptyView()
-                        }
+                        ))
                             .toggleStyle(.switch)
                             .labelsHidden()
                             .disabled(locked)
-                            .accessibilityLabel(L10n.t(.verifyToggle))
                             .accessibilityIdentifier("transfer-verification-toggle")
                     }
                 }
