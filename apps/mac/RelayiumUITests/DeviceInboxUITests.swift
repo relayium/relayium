@@ -169,108 +169,85 @@ final class DeviceInboxUITests: XCTestCase {
     /// open so a click that landed nowhere fails HERE, naming the navigation,
     /// rather than as a missing section further down.
     ///
-    /// **DIAGNOSTIC, and red whatever it finds.** Hosted macOS 15 (UI CI run
-    /// 35105452536) recorded the click squarely on the visible Open button and
-    /// the list staying put; a real mouse on macOS 27 opens the page. When the
-    /// first click does not navigate, this runs ONE ordered set of counterfactual
-    /// presses on the same control, recording after each whether the page opened
-    /// and attaching a screenshot and the full hierarchy, and then FAILS with that
-    /// trail. None of it can turn the test green: the outcome is `XCTFail` on every
-    /// path that reaches it. What the trail discriminates:
-    ///
-    ///  1. the same click again — first-event/activation effects;
-    ///  2. hover, a settle, then click — the reference button style re-renders on
-    ///     hover, so a press cancelled by that re-render opens here, and the
-    ///     screenshot shows whether the hover fill reached the button at all;
-    ///  3. a 0.4 s press — a press recognizer that a quick synthetic click races;
-    ///  4. away to LAN Transfer and back — and the page checked BEFORE any second
-    ///     Open lookup or click. A page present then means the earlier press DID
-    ///     focus the peer and the surface only failed to refresh; only if it is
-    ///     absent is the rebuilt Open clicked.
-    ///
-    /// If none of them opens the page, the press reaches the button and the page
-    /// still does not render: the next step is product-side (focus state or the
-    /// page's presentation), not the test.
-    ///
-    /// Every entry also carries the app's OWN record (`InboxOpenTrace`, DEBUG and
-    /// inbox fixtures only): the mouse events it received and the view AppKit
-    /// hit-tested for each, whether Open's action ran, every value the focused
-    /// peer took, and whether the device page was built or torn down. That is
-    /// what separates "the click never reached the button" from "the action ran
-    /// and something cleared or failed to render it".
+    /// **DIAGNOSTIC, and red whatever it finds.** Hosted macOS 15 (UI CI runs
+    /// 35105452536, 35111315290 and 35115666135) recorded the click squarely on the
+    /// visible Open and the list staying put, while a real mouse on macOS 27 opens
+    /// the page. A repeat click, a hover, a long press and a destination rebuild
+    /// were each tried twice on the hosted runner and none opened it, so that
+    /// cascade is gone. What is left is ONE controlled comparison: when the first
+    /// click does not navigate, this records the app's own trace and a screenshot,
+    /// relaunches the SAME fixture with only
+    /// `--relayium-ui-testing-native-conversation-button` added — which draws this
+    /// one Open with the platform's `.bordered` style instead of the reference
+    /// style, same label, action and identifier — clicks that Open once, and
+    /// records whether the page opened and the trace again. Then it FAILS for the
+    /// original first click whatever the native click did: the comparison only
+    /// says whether the custom style is where the press is lost.
     private func requireDevicePageOpened(after control: XCUIElement, in window: XCUIElement,
                                          file: StaticString = #filePath, line: UInt = #line) {
         if revealed("inbox-send-back", in: window, timeout: 20).exists { return }
 
-        var trail: [String] = []
-        func opened(_ timeout: TimeInterval) -> Bool {
-            element("inbox-send-back", in: window).waitForExistence(timeout: timeout)
-        }
-        func state(_ element: XCUIElement) -> String {
-            "exists=\(element.exists) hittable=\(element.exists && element.isHittable) "
-                + "enabled=\(element.exists && element.isEnabled) frame=\(element.frame)"
-        }
-        func settle(_ seconds: TimeInterval) {
-            _ = XCTWaiter.wait(for: [XCTestExpectation(description: "settle")], timeout: seconds)
-        }
-        // The probe's trace arrives in its label (its AXValue reads empty at
-        // runtime); a non-empty value is still taken first if a platform
-        // exposes one, so either transport is reported rather than lost.
-        func appTrace() -> String {
-            let probe = element("uitest-inbox-open-trace", in: window)
-            guard probe.exists else { return "app trace absent" }
-            if let value = probe.value as? String, !value.isEmpty {
-                return "app trace value [\(value)]"
-            }
-            return probe.label.isEmpty ? "app trace empty" : "app trace label [\(probe.label)]"
-        }
-        trail.append("first click: not opened after 20s; control \(state(control)); "
-                     + "window \(window.frame); app state \(app.state.rawValue); \(appTrace())")
-        attachDiagnostics(named: "open-0-first-click")
+        let custom = "custom reference style, first click: not opened after 20s; control "
+            + "\(controlState(control)); window \(window.frame); app state \(app.state.rawValue); "
+            + appTrace(in: window)
+        attachDiagnostics(named: "open-custom-first-click")
+        // Kept before the relaunch, so a relaunch that fails its own assertions
+        // still leaves the original failure's record in the result bundle.
+        let customRecord = XCTAttachment(string: custom)
+        customRecord.name = "open-custom-first-click-trail"
+        customRecord.lifetime = .keepAlways
+        add(customRecord)
 
-        var outcome = "none opened"
-        repeat {
-            if control.exists { control.click() }
-            if opened(5) { outcome = "step 1 (repeat click) opened"; break }
-            trail.append("step 1 repeat click: not opened; control \(state(control)); \(appTrace())")
-            attachDiagnostics(named: "open-1-repeat-click")
-
-            if control.exists { control.hover() }
-            settle(1.5)
-            attachDiagnostics(named: "open-2-hovered")
-            if control.exists { control.click() }
-            if opened(5) { outcome = "step 2 (hover, settle, click) opened"; break }
-            trail.append("step 2 hover+settle+click: not opened; control \(state(control)); "
-                         + appTrace())
-
-            if control.exists { control.press(forDuration: 0.4) }
-            if opened(5) { outcome = "step 3 (0.4s press) opened"; break }
-            trail.append("step 3 press 0.4s: not opened; control \(state(control)); \(appTrace())")
-            attachDiagnostics(named: "open-3-press")
-
-            sidebarRow("lanTransfer", named: "LAN Transfer", in: window).click()
-            _ = element("destination-lanTransfer", in: window).waitForExistence(timeout: 20)
-            sidebarDeviceInbox(in: window).click()
-            _ = element("destination-deviceInbox", in: window).waitForExistence(timeout: 20)
-            attachDiagnostics(named: "open-4-rebuilt-before-click")
-            // Checked before anything else is looked up or pressed: a page here was
-            // opened by an EARLIER press whose focus persisted while the surface did
-            // not redraw, which a click on the rebuilt Open would hide.
-            if opened(5) {
-                outcome = "navigation rebuild revealed already focused peer WITHOUT another Open click"
-                break
-            }
-            trail.append("step 4 rebuild alone: not opened; \(appTrace())")
-            let rebuilt = revealed("inbox-conversation-open", in: window, timeout: 30)
-            trail.append("step 4 rebuilt destination: control \(state(rebuilt))")
-            if rebuilt.exists { rebuilt.click() }
-            if opened(5) { outcome = "step 4 (rebuilt destination, click) opened"; break }
-            trail.append("step 4 click: not opened; \(appTrace())")
-        } while false
-        attachDiagnostics(named: "open-final")
+        // The same fixture, relaunched: only the native-button flag is added.
+        let fixture = app.launchArguments.filter { !offlineLaunchArguments.contains($0) }
+        app.terminate()
+        launch(fixture + ["--relayium-ui-testing-native-conversation-button"])
+        let nativeWindow = openDeviceInboxDestination()
+        let nativeOpen = revealed("inbox-conversation-open", in: nativeWindow, timeout: 60)
+        let outcome: String
+        var native = "native .bordered Open never rendered"
+        if nativeOpen.exists {
+            // Brought on screen without asserting, so a reachability miss cannot
+            // end the test before the comparison is reported.
+            _ = scrollToReveal(nativeOpen, in: nativeWindow)
+            let before = "control \(controlState(nativeOpen))"
+            nativeOpen.click()
+            let opened = revealed("inbox-send-back", in: nativeWindow, timeout: 20).exists
+            outcome = opened
+                ? "native .bordered Open OPENED the page on its first click"
+                : "native .bordered Open did NOT open the page either"
+            native = "native .bordered style, first click: \(opened ? "opened" : "not opened after 20s"); "
+                + "\(before); window \(nativeWindow.frame); app state \(app.state.rawValue); "
+                + appTrace(in: nativeWindow)
+        } else {
+            outcome = "native .bordered Open never rendered"
+        }
+        attachDiagnostics(named: "open-native-first-click")
         XCTFail("opening the conversation did not open its device page on the first on-screen "
-                + "click — DIAGNOSTIC outcome: \(outcome); trail: "
-                + trail.joined(separator: " | "), file: file, line: line)
+                + "click — DIAGNOSTIC comparison: \(outcome) | \(custom) | \(native)",
+                file: file, line: line)
+    }
+
+    private func controlState(_ element: XCUIElement) -> String {
+        "exists=\(element.exists) hittable=\(element.exists && element.isHittable) "
+            + "enabled=\(element.exists && element.isEnabled) frame=\(element.frame)"
+    }
+
+    /// The app's own record (`InboxOpenTrace`, DEBUG and inbox fixtures only): the
+    /// mouse events it received and the view AppKit hit-tested for each, whether
+    /// Open's action ran, every value the focused peer took, and whether the
+    /// device page was built or torn down.
+    ///
+    /// The trace arrives in the probe's label (its AXValue reads empty at
+    /// runtime); a non-empty value is still taken first if a platform exposes
+    /// one, so either transport is reported rather than lost.
+    private func appTrace(in window: XCUIElement) -> String {
+        let probe = element("uitest-inbox-open-trace", in: window)
+        guard probe.exists else { return "app trace absent" }
+        if let value = probe.value as? String, !value.isEmpty {
+            return "app trace value [\(value)]"
+        }
+        return probe.label.isEmpty ? "app trace empty" : "app trace label [\(probe.label)]"
     }
 
     /// DIAGNOSTIC: keep a screenshot and the full accessibility hierarchy in the

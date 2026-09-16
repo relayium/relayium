@@ -311,7 +311,12 @@ struct DeviceInboxSurface: View {
             Button(L10n.t(.inboxOpenDeviceInbox)) {
                 open(conversation.peerDeviceID)
             }
+            #if DEBUG
+            // Release keeps the exact line below; see `ConversationOpenProbeStyle`.
+            .modifier(ConversationOpenProbeStyle())
+            #else
             .buttonStyle(.referenceSecondary)
+            #endif
             .accessibilityLabel(L10n.detail([
                 L10n.t(.inboxOpenDeviceInbox), conversationName(conversation)]))
             .accessibilityIdentifier("inbox-conversation-open")
@@ -1117,6 +1122,38 @@ private struct InboxOpenTraceProbe: View {
             // nonlocalized: UI-test diagnostic, never shown and absent from Release
             .accessibilityLabel("UI test open trace: \(trace.text)")
             .accessibilityIdentifier("uitest-inbox-open-trace")
+    }
+}
+#endif
+
+#if DEBUG
+/// **DIAGNOSTIC COUNTERFACTUAL, not a fix — temporary until hosted macOS 15's
+/// conversation Open failure is closed.**
+///
+/// With `--relayium-ui-testing-native-conversation-button`, and only in a UI-test
+/// launch of an inbox fixture, the conversation row's Open is drawn with the
+/// platform's `.bordered` style instead of `.referenceSecondary`. Its label,
+/// action, accessibility label, identifier and row are the same. Every other
+/// launch — including every default UI test — takes the reference style, and a
+/// Release build never compiles this: the row there applies
+/// `.buttonStyle(.referenceSecondary)` directly.
+///
+/// One hosted run can then say whether the custom style is what macOS 15 does
+/// not deliver the press to, or whether the navigation fails with either style.
+enum InboxNativeButtonProbe {
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let argument = "--relayium-ui-testing-native-conversation-button"
+    static let isActive = UITestMode.isActive && UITestInbox.isActive
+        && ProcessInfo.processInfo.arguments.contains(argument)
+}
+
+private struct ConversationOpenProbeStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        if InboxNativeButtonProbe.isActive {
+            content.buttonStyle(.bordered)
+        } else {
+            content.buttonStyle(.referenceSecondary)
+        }
     }
 }
 #endif
