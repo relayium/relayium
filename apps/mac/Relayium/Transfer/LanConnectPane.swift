@@ -104,7 +104,34 @@ struct LanConnectPane: View {
     /// press for is a caveat most readers never see. What the list IS — which
     /// devices arrive from this public address and why — is the explanation, and
     /// that folds.
+    ///
+    /// **Drawn only when it holds something**, which is `hasRosterContent`. The
+    /// card's three arms are a roster while this Mac is scanning, a Start
+    /// control while it is not scanning and not paused, and the chosen device's
+    /// actions — and a user who presses Pause in the status head above satisfies
+    /// none of them. `CardRows` with no rows is zero points tall, so the card
+    /// still drew its own background, border and 11pt corners around nothing: a
+    /// sliver of chrome between the caption and the names footnote, in a state
+    /// the user had just asked for. There is nothing to explain in its place
+    /// either — the head directly above says this Mac is not listening and
+    /// carries the Resume that changes it, and a second copy of that sentence
+    /// down here would be the duplicated status this pane has already had to
+    /// remove once.
+    @ViewBuilder
     private var sameNetwork: some View {
+        if hasRosterContent {
+            rosterCard
+        }
+    }
+
+    /// Whether the card below has an arm to draw. The same three conditions its
+    /// rows are written in, in the same order, so a fourth row cannot be added
+    /// without this answering for it.
+    private var hasRosterContent: Bool {
+        discovery.isScanning || !discovery.isPaused || discovery.selectedDevice != nil
+    }
+
+    private var rosterCard: some View {
         SectionCard(title: L10n.t(.workspaceSameNetworkHeading),
                     footnote: L10n.t(.nearbyNamesDisclaimer),
                     explanation: L10n.t(.nearbyExplain),
@@ -152,10 +179,12 @@ struct LanConnectPane: View {
                     footnote: L10n.t(.nearbyAddressesPrivacyNote),
                     rows: true) {
             CardRows {
-                CardBlockRow(explanation: identityCaption) {
+                CardBlockRow(explanation: identityCaption,
+                             subject: L10n.t(.nearbyThisMacHeading)) {
                     identity
                 }
-                CardBlockRow(explanation: L10n.t(.nearbyAddressesNotGroupingNote)) {
+                CardBlockRow(explanation: L10n.t(.nearbyAddressesNotGroupingNote),
+                             subject: L10n.t(.nearbyLocalAddressesHeading)) {
                     addresses
                 }
             }

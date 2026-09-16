@@ -913,10 +913,22 @@ struct LinkTransferListView: View {
                     .foregroundStyle(.secondary)
                 Text(summary(batch)).font(.callout)
                 Spacer()
-                Text(stateText(batch.state)).font(.subheadline).foregroundStyle(.secondary)
+                Text(stateLine(batch)).font(.subheadline).foregroundStyle(.secondary)
             }
             if let fraction = batch.fractionCompleted, !batch.isTerminal {
-                ProgressView(value: fraction).controlSize(.small)
+                // **Named, and spoken as a percentage** — the pair `UploadPane`
+                // and `DownloadPane` have always given theirs. A bare
+                // `ProgressView(value:)` announces a fraction with nothing
+                // saying what is moving, and this is the one surface where two
+                // batches can be running at once in both directions: "62%" with
+                // no subject is the least useful of the three. The manifest
+                // summary is the label because it is what tells two live rows
+                // apart; `commonStarting` is the value until the peer's manifest
+                // gives a total to divide by.
+                ProgressView(value: fraction)
+                    .controlSize(.small)
+                    .accessibilityLabel(summary(batch))
+                    .accessibilityValue(percent(batch) ?? L10n.t(.commonStarting))
             }
             if batch.state == .offered {
                 HStack {
@@ -959,6 +971,35 @@ struct LinkTransferListView: View {
         let count = L10n.plural(.selectionFiles, batch.files.count)
         guard batch.totalBytes > 0 else { return count }
         return L10n.detail([count, L10n.bytes(Int64(batch.totalBytes))])
+    }
+
+    /// The state word, and the figure behind it while bytes are actually
+    /// moving.
+    ///
+    /// On the trailing end of the row the bar sits under, rather than on a line
+    /// of its own: a batch list that can hold a dozen finished transfers must not
+    /// gain a row per running one. Only `.transferring` takes a percentage —
+    /// "Queued · 0%" would be a number about a batch the lane has not started.
+    private func stateLine(_ batch: LinkFileBatch) -> String {
+        let state = stateText(batch.state)
+        guard case .transferring = batch.state, let percent = percent(batch) else { return state }
+        return L10n.detail([state, percent])
+    }
+
+    /// The figure the bar is drawn from, in this language's number format. Nil
+    /// while the manifest has no total, which is the same condition
+    /// `fractionCompleted` draws no bar for.
+    ///
+    /// Taken from `fractionCompleted` rather than dividing the bytes again here.
+    /// `LinkFilePresentationModel` keeps `transferredBytes` exactly as the driver
+    /// reported it — a peer whose manifest disagrees with the bytes that actually
+    /// moved is a fact it deliberately preserves — and clamps only the fraction,
+    /// because a bar past its own end renders as garbage. A percentage computed
+    /// from the raw pair would reintroduce exactly that: "104%" printed beside a
+    /// full bar, with the label and the value of one control disagreeing.
+    private func percent(_ batch: LinkFileBatch) -> String? {
+        guard let fraction = batch.fractionCompleted else { return nil }
+        return L10n.percent(Int(fraction * 100))
     }
 
     private func stateText(_ state: LinkFileBatchState) -> String {

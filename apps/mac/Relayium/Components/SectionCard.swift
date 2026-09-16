@@ -79,7 +79,7 @@ struct SectionCard<Content: View>: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
             if explanation != nil {
-                RowExplainButton(explaining: $explaining)
+                RowExplainButton(explaining: $explaining, subject: title)
             }
             if let note {
                 Spacer(minLength: Metrics.tight)

@@ -256,7 +256,7 @@ line:
 | section | destination | purpose (tooltip and hint) | account |
 |---|---|---|---|
 | Live transfers | LAN Transfer | messages and files with a device on this network — both sides online | not needed |
-| Live transfers | Pairing Transfer | messages and files with a device anywhere, using a six-digit code — same network not required; both sides online | needed to *create* a code, not to join one |
+| Live transfers | Cross-network Transfer | messages and files with a device anywhere, using a six-digit code — same network not required; both sides online | needed to *create* a code, not to join one |
 | Links | Share a link | large files, picked up later — plan limits apply | needed |
 | This Mac | Device Inbox | files from your own account land in a folder you choose — works with the window closed | needed |
 | — | Account | plan, devices and stored files | is the sign-in *and* the sign-up |
@@ -278,7 +278,7 @@ sets out for. `AppDeepLink` still selects `.storedReceive` for a supported
 `MacSurface.browseable` is the one list that says which surfaces the sidebar
 offers. A Finder **Open With** or a Dock drop never lands there.
 
-**LAN Transfer and Pairing Transfer are two destinations for two
+**LAN Transfer and Cross-network Transfer are two destinations for two
 preconditions.** They were briefly one row called Workspace. Underneath they
 still share every model and one `TransferPresence` — `AppDestination` keeps
 `.nearby` and `.pairingCode`, iOS renders them as two tabs, and deep links,
@@ -310,7 +310,7 @@ The shell itself never reads the account session — `MacSurfaceGuardTests`
 asserts that by name, and asserts that the stored-receive and LAN Transfer
 destination files mention neither `AccountSession` nor `bearerToken`. That is
 what keeps the anonymous capabilities reachable without a sign-in form in front
-of them. Pairing Transfer does hold an `AccountSession`, for exactly one
+of them. Cross-network Transfer does hold an `AccountSession`, for exactly one
 half of itself, and the guard checks that positionally rather than by presence:
 the gate must sit *before* the join controls, so joining somebody else's code
 cannot drift behind it. The account-backed halves render an

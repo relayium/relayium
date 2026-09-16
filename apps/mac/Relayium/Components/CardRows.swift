@@ -80,6 +80,13 @@ enum CardRowBuilder {
 /// types that own one take their content separately from their explanation.
 struct RowExplainButton: View {
     @Binding var explaining: Bool
+    /// What the explanation is about — the card's title or the row's label.
+    ///
+    /// Required, because the glyph is identical everywhere: a screen with two
+    /// ⓘ side by side (This Mac's name and its addresses) read to VoiceOver as
+    /// two buttons called "Explain", told apart only by position. The visible
+    /// control, its hit area and its identifier do not change.
+    let subject: String
 
     var body: some View {
         Button {
@@ -98,7 +105,7 @@ struct RowExplainButton: View {
                 .padding(-Metrics.compactControlOverhang)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(L10n.t(.rowExplainLabel))
+        .accessibilityLabel(L10n.detail([L10n.t(.rowExplainLabel), subject]))
         .accessibilityValue(L10n.t(explaining ? .helpExpandedValue : .helpCollapsedValue))
         .accessibilityHint(L10n.t(.rowExplainHint))
         .accessibilityIdentifier("row-explain")
@@ -173,7 +180,7 @@ struct SettingsRow<Trailing: View>: View {
                     .textSelection(.enabled)
             }
             if explanation != nil {
-                RowExplainButton(explaining: $explaining)
+                RowExplainButton(explaining: $explaining, subject: label)
             }
             trailing()
         }
@@ -188,13 +195,29 @@ struct SettingsRow<Trailing: View>: View {
 /// layout. Same insets and same floor, so it sits in the same grid as
 /// `SettingsRow`.
 struct CardBlockRow<Content: View>: View {
-    let explanation: String?
+    /// An optional explanation and what it is about, as ONE value: this row has
+    /// no label of its own to name the ⓘ after, so the two are supplied together
+    /// or not at all.
+    private struct Explanation {
+        let text: String
+        let subject: String
+    }
+
+    private let explanation: Explanation?
     @ViewBuilder let content: () -> Content
 
     @State private var explaining = false
 
-    init(explanation: String? = nil, @ViewBuilder content: @escaping () -> Content) {
-        self.explanation = explanation
+    init(@ViewBuilder content: @escaping () -> Content) {
+        self.explanation = nil
+        self.content = content
+    }
+
+    /// A row whose ⓘ folds `explanation`, announced as explaining `subject`.
+    init(explanation: String,
+         subject: String,
+         @ViewBuilder content: @escaping () -> Content) {
+        self.explanation = Explanation(text: explanation, subject: subject)
         self.content = content
     }
 
@@ -203,12 +226,12 @@ struct CardBlockRow<Content: View>: View {
             HStack(alignment: .top, spacing: Metrics.tight) {
                 content()
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if explanation != nil {
-                    RowExplainButton(explaining: $explaining)
+                if let explanation {
+                    RowExplainButton(explaining: $explaining, subject: explanation.subject)
                 }
             }
             if explaining, let explanation {
-                RowExplanation(text: explanation)
+                RowExplanation(text: explanation.text)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

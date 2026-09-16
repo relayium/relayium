@@ -493,7 +493,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the runtime check does not confirm the LAN pane kept the fact")
         XCTAssertTrue(runtime.contains("NSPredicate(format: \"title == %@\", destination)"),
                       "the absence is asserted before the destination is on screen")
-        XCTAssertTrue(runtime.contains("\"Pairing Transfer\""),
+        XCTAssertTrue(runtime.contains("\"Cross-network Transfer\""),
                       "the sibling destination is not among the checked absences")
     }
 
@@ -4815,7 +4815,15 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// Two routes into the send flow are two places the rules can disagree.
     func testStagedDraftsEnterThroughTheOpenedFilesRouter() throws {
         let app = try source(named: "RelayiumApp.swift")
-        XCTAssertTrue(app.contains("SharedDraftInbox(store: AppEnvironment.makeSharedDraftStore())"))
+        // Whitespace-normalised: the initializer is wrapped, and its store is
+        // withheld under UI acceptance so a test launch never adopts or retires
+        // the installed app's drafts. `MacUITestIsolationTests` owns that
+        // wiring's exact behaviour; this asserts the inbox is still built from
+        // the one App Group store otherwise.
+        let flatApp = app.components(separatedBy: .whitespacesAndNewlines).joined()
+        XCTAssertTrue(flatApp.contains(
+            "SharedDraftInbox(store:UITestMode.isActive?nil:AppEnvironment.makeSharedDraftStore())"),
+            "the app no longer builds its draft inbox from the shared store")
         XCTAssertEqual(occurrences(of: "fileOpens.open(sharedDrafts.collect())", in: app), 2,
                        "collected on first appearance AND on every return to active")
         XCTAssertTrue(app.contains(".onChange(of: scenePhase) { phase in"),
@@ -6295,8 +6303,8 @@ final class MacSurfaceGuardTests: XCTestCase {
         let apps = flattened(try claimSurfaceText("apps/README.md"))
         XCTAssertTrue(apps.contains("LAN Transfer"),
                       "apps/README.md does not name the same-network destination")
-        XCTAssertTrue(apps.contains("Pairing Transfer"),
-                      "apps/README.md does not name the pairing-code destination")
+        XCTAssertTrue(apps.contains("Cross-network Transfer"),
+                      "apps/README.md does not name the cross-network destination")
         XCTAssertFalse(apps.contains("Open a link, Device Inbox"),
                        "apps/README.md still lists Open a link as a sidebar row")
         XCTAssertTrue(apps.contains("five destinations"),

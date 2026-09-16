@@ -57,6 +57,17 @@ final class SharedDraftInboxTests: XCTestCase {
         XCTAssertTrue(none.collect().isEmpty)
     }
 
+    func testIsolatedInboxPreservesPreviouslyAdoptedDraftsAndRecord() throws {
+        let plan = try publish("owner-draft.bin")
+        defaults.set([plan.id], forKey: SharedDraftInbox.defaultsKey)
+        let isolated = SharedDraftInbox(store: nil, defaults: defaults)
+
+        XCTAssertTrue(isolated.collect().isEmpty)
+        XCTAssertTrue(isolated.collect().isEmpty)
+        XCTAssertEqual(adoptedIds, [plan.id])
+        XCTAssertFalse(try store.stagedFiles(for: plan).isEmpty)
+    }
+
     func testAStagedDraftIsHandedOverAndRecorded() throws {
         let plan = try publish("a.bin")
         let files = inbox().collect()

@@ -60,8 +60,10 @@ final class AppUpdates {
     let controller = SPUStandardUpdaterController(
         // The engineering candidate has no update channel. In particular it
         // must never read the production appcast embedded in the ordinary
-        // direct-download Info.plist.
-        startingUpdater: !AppEnvironment.isEngineeringCandidate,
+        // direct-download Info.plist. UI acceptance also skips automatic
+        // startup: Sparkle consent can otherwise change the installed app's
+        // automatic-update preference. UITestMode is always false in Release.
+        startingUpdater: !AppEnvironment.isEngineeringCandidate && !UITestMode.isActive,
         updaterDelegate: nil,
         userDriverDelegate: nil
     )
@@ -83,9 +85,11 @@ final class AppUpdates {
         #if DEBUG
         // **Observation, and it is compiled out of every Release build.**
         //
-        // It records that this function ran, AFTER the line above has started
-        // Sparkle's check — so acceptance can assert that the blocked screen's
-        // Update button reaches the shipped update path without waiting on an
+        // It records that this function reached Sparkle's check entry point.
+        // During UI acceptance the updater is not started, so Sparkle returns
+        // without checking; the witness proves routing, not a live update.
+        // Acceptance can assert that the blocked screen's Update button reaches
+        // the shipped update path without waiting on an
         // appcast fetch, a signature verification or a download, none of which a
         // UI test may depend on. It publishes nothing unless the process is an
         // acceptance launch.

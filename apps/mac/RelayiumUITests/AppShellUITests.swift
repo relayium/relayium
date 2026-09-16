@@ -171,7 +171,7 @@ final class AppShellUITests: XCTestCase {
     /// own connection method.
     private static let destinationIDs = [
         "LAN Transfer": "lanTransfer",
-        "Pairing Transfer": "crossNetworkTransfer",
+        "Cross-network Transfer": "crossNetworkTransfer",
         "Share a link": "storedSend",
         "Device Inbox": "deviceInbox",
         "Account": "account",
@@ -480,7 +480,7 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(window.waitForExistence(timeout: 20))
         // English is the CI locale; the language matrix above covers the other
         // shipped language and the archived-preference fallback.
-        for destination in ["LAN Transfer", "Pairing Transfer", "Share a link",
+        for destination in ["LAN Transfer", "Cross-network Transfer", "Share a link",
                             "Device Inbox", "Account"] {
             let row = sidebarDestination(destination, in: window)
             XCTAssertTrue(row.waitForExistence(timeout: 10),
@@ -540,7 +540,7 @@ final class AppShellUITests: XCTestCase {
     func testNeitherTransferScreenStagesAnythingBeforeConnecting() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        for destination in ["LAN Transfer", "Pairing Transfer"] {
+        for destination in ["LAN Transfer", "Cross-network Transfer"] {
             let row = sidebarDestination(destination, in: window)
             XCTAssertTrue(row.waitForExistence(timeout: 10))
             row.click()
@@ -572,7 +572,7 @@ final class AppShellUITests: XCTestCase {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
         let destinations = ["Share a link", "Device Inbox", "Account",
-                            "LAN Transfer", "Pairing Transfer"]
+                            "LAN Transfer", "Cross-network Transfer"]
         for destination in destinations {
             let row = sidebarDestination(destination, in: window)
             guard row.waitForExistence(timeout: 10) else {
@@ -731,7 +731,7 @@ final class AppShellUITests: XCTestCase {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
 
-        let pairing = sidebarDestination("Pairing Transfer", in: window)
+        let pairing = sidebarDestination("Cross-network Transfer", in: window)
         XCTAssertTrue(pairing.waitForExistence(timeout: 10))
         pairing.click()
 
@@ -785,7 +785,7 @@ final class AppShellUITests: XCTestCase {
         XCTAssertEqual(cancels.count, 1,
                        "the generated-code surface does not offer exactly one Cancel")
         let cancelWatch = cancels.element
-        XCTAssertEqual(window.title, "Pairing Transfer",
+        XCTAssertEqual(window.title, "Cross-network Transfer",
                        "creating a pairing-code message session navigated elsewhere")
         XCTAssertFalse(window.descendants(matching: .any)["transfer-lane-note"]
             .firstMatch.exists,
@@ -817,13 +817,13 @@ final class AppShellUITests: XCTestCase {
     func testCrossNetworkJoinKeepsACompleteCodeActionable() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let cross = sidebarDestination("Pairing Transfer", in: window)
+        let cross = sidebarDestination("Cross-network Transfer", in: window)
         XCTAssertTrue(cross.waitForExistence(timeout: 10))
         cross.click()
 
         let field = window.textFields["pairing.joinCode"]
         XCTAssertTrue(field.waitForExistence(timeout: 10),
-                      "Pairing Transfer has no pairing-code field")
+                      "Cross-network Transfer has no pairing-code field")
         XCTAssertFalse(window.buttons["Connect"].isEnabled,
                        "an empty code left the connect action actionable")
         // And neither retired kind-specific verb survives beside it.
@@ -857,7 +857,7 @@ final class AppShellUITests: XCTestCase {
     /// This is the owner's correction, at runtime: the two connection methods
     /// were merged onto one screen, and neither could then be described without
     /// describing the other. LAN Transfer shows the roster and no pairing
-    /// controls at all; Pairing Transfer shows the code and no roster.
+    /// controls at all; Cross-network Transfer shows the code and no roster.
     /// Both keep the files and folders they will carry inside their own flow.
     func testLanTransferOffersOnlySameNetworkConnecting() {
         let window = mainWindow
@@ -891,18 +891,18 @@ final class AppShellUITests: XCTestCase {
     func testCrossNetworkTransferOffersOnlyPairingCodeConnectingAndLeadsWithMessages() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let cross = sidebarDestination("Pairing Transfer", in: window)
+        let cross = sidebarDestination("Cross-network Transfer", in: window)
         XCTAssertTrue(cross.waitForExistence(timeout: 10))
         cross.click()
 
         // Pairing-code create AND connect, one of each.
         XCTAssertTrue(window.buttons["Create a pairing code"].waitForExistence(timeout: 10),
-                      "Pairing Transfer lost pairing-code creation")
+                      "Cross-network Transfer lost pairing-code creation")
         XCTAssertTrue(window.buttons["Connect"].exists,
-                      "Pairing Transfer lost pairing-code joining")
+                      "Cross-network Transfer lost pairing-code joining")
         XCTAssertTrue(window.textFields["pairing.joinCode"].exists,
-                      "Pairing Transfer lost pairing-code joining")
-        XCTAssertEqual(window.title, "Pairing Transfer",
+                      "Cross-network Transfer lost pairing-code joining")
+        XCTAssertEqual(window.title, "Cross-network Transfer",
                        "the window no longer names the destination it is on")
 
         // The one thing this destination exists to say, said on the destination
@@ -914,9 +914,9 @@ final class AppShellUITests: XCTestCase {
 
         // No same-network discovery here at all.
         XCTAssertFalse(window.buttons["Start receiving"].exists,
-                       "Pairing Transfer still offers same-network discovery")
+                       "Cross-network Transfer still offers same-network discovery")
         XCTAssertFalse(window.buttons["Pause receiving"].exists,
-                       "Pairing Transfer still carries the residency control")
+                       "Cross-network Transfer still carries the residency control")
 
         // **No staging, at all.** Pairing is ONE workspace, and a workspace with
         // no connection in it has nothing to offer yet. A "Files and folders"
@@ -950,7 +950,7 @@ final class AppShellUITests: XCTestCase {
     /// `testCrossNetworkTransferOffersOnlyPairingCodeConnecting…` above already
     /// forbids the residency *control* on the pairing screen. It passed while
     /// the sidebar's own footer reported "Receiving · ready" under every row,
-    /// including Pairing Transfer — a destination whose whole premise is
+    /// including Cross-network Transfer — a destination whose whole premise is
     /// that the two devices share no network — because that footer is one
     /// column to the left of everything that test looks at.
     ///
@@ -979,7 +979,7 @@ final class AppShellUITests: XCTestCase {
         XCTAssertFalse(footer.exists,
                        "the sidebar repeats the LAN pane's own residency line")
 
-        for destination in ["Pairing Transfer", "Share a link",
+        for destination in ["Cross-network Transfer", "Share a link",
                             "Device Inbox", "Account"] {
             let row = sidebarDestination(destination, in: window)
             XCTAssertTrue(row.waitForExistence(timeout: 10),
@@ -1002,7 +1002,7 @@ final class AppShellUITests: XCTestCase {
     func testALiveSessionIsVisibleOnlyOnTheDestinationThatOwnsIt() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let cross = sidebarDestination("Pairing Transfer", in: window)
+        let cross = sidebarDestination("Cross-network Transfer", in: window)
         XCTAssertTrue(cross.waitForExistence(timeout: 10))
         cross.click()
         let create = window.buttons["Create a pairing code"]
@@ -1068,7 +1068,7 @@ final class AppShellUITests: XCTestCase {
 
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let cross = sidebarDestination("Pairing Transfer", in: window)
+        let cross = sidebarDestination("Cross-network Transfer", in: window)
         let code = window.descendants(matching: .any)["pairing-code-value"].firstMatch
         // `staticTexts`, not `descendants(matching: .any)`: the latter can match
         // a wrapper that carries the identifier and no label, which reads as "the
@@ -1177,7 +1177,7 @@ final class AppShellUITests: XCTestCase {
 
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let cross = sidebarDestination("Pairing Transfer", in: window)
+        let cross = sidebarDestination("Cross-network Transfer", in: window)
         XCTAssertTrue(cross.waitForExistence(timeout: 10))
         cross.click()
         let create = window.buttons["Create a pairing code"]
@@ -1715,7 +1715,7 @@ final class AppShellUITests: XCTestCase {
     func testThePairingScreenOffersOnlyCreateAndEnterCode() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let cross = sidebarDestination("Pairing Transfer", in: window)
+        let cross = sidebarDestination("Cross-network Transfer", in: window)
         XCTAssertTrue(cross.waitForExistence(timeout: 10))
         cross.click()
 
@@ -1783,7 +1783,7 @@ final class AppShellUITests: XCTestCase {
     }
 
     /// Creating a pairing code with a batch already staged stays on
-    /// Pairing Transfer and shows every handoff.
+    /// Cross-network Transfer and shows every handoff.
     ///
     /// It used to be the FILE half of a two-button create, proving that the
     /// link's `?mode=file` survived. There is one create action now and no mode
@@ -1806,7 +1806,7 @@ final class AppShellUITests: XCTestCase {
 
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let pairing = sidebarDestination("Pairing Transfer", in: window)
+        let pairing = sidebarDestination("Cross-network Transfer", in: window)
         XCTAssertTrue(pairing.waitForExistence(timeout: 10))
         pairing.click()
 
@@ -2095,7 +2095,7 @@ final class AppShellUITests: XCTestCase {
         // rather than a stack of cards, so it is the one whose height the
         // scaffold's non-scrolling mode has to carry, and the minimum window is
         // where that would clip first.
-        for destination in ["LAN Transfer", "Pairing Transfer", "Share a link",
+        for destination in ["LAN Transfer", "Cross-network Transfer", "Share a link",
                             "Device Inbox", "Account"] {
             let row = sidebarDestination(destination, in: window)
             XCTAssertTrue(row.waitForExistence(timeout: 10),
@@ -2202,7 +2202,7 @@ final class AppShellUITests: XCTestCase {
 
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let pairing = sidebarDestination("Pairing Transfer", in: window)
+        let pairing = sidebarDestination("Cross-network Transfer", in: window)
         XCTAssertTrue(pairing.waitForExistence(timeout: 10))
         pairing.click()
         let create = window.buttons["Create a pairing code"]

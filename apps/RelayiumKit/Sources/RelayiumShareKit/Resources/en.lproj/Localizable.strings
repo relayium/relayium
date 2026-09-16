@@ -115,7 +115,7 @@
 "nav.pairingCodeSubtitle" = "Text and small files across networks — both sides online";
 "nav.lanTransfer" = "LAN Transfer";
 "nav.lanTransferSubtitle" = "Messages and files with a device on this network — no account; both sides online";
-"nav.crossNetwork" = "Pairing Transfer";
+"nav.crossNetwork" = "Cross-network Transfer";
 "nav.crossNetworkSubtitle" = "Messages and files with a device anywhere, using a six-digit code — same network not required; both sides online";
 "nav.storedSend" = "Share a link";
 "nav.storedSendSubtitle" = "Large files, picked up later — sign in; plan limits apply";
@@ -258,7 +258,7 @@
 "share.itemCount.one" = "%@ item";
 "share.itemCount.other" = "%@ items";
 "share.savedTitle" = "Saved to Relayium on this device";
-"share.savedBody" = "Nothing has been uploaded. Open Relayium and press Send on the Send tab when you're ready.";
+"share.savedBody" = "Nothing has been uploaded. Open Relayium and send the files when you're ready.";
 "share.waitingTitle" = "Shared from another app";
 "share.waitingBody" = "%@ waiting to be sent.";
 "share.staysHere" = "They stay on this device until you send or discard them. Relayium never sends them on its own.";
@@ -873,7 +873,7 @@
 "help.lan.boundary" = "Files are encrypted end to end: encrypted on this Mac before they leave and decrypted only on the other device, so Relayium never has the key. What Relayium's service does is introduce the two devices to each other. Depending on the network the connection may run between the two devices, or a Relayium relay may carry it, and this Mac cannot tell which — it makes no difference to what Relayium can read.";
 "help.lan.where" = "Files you receive are saved to your Downloads folder. A conversation lives only on the two devices and is discarded when the connection ends; nothing is kept on a server.";
 "help.lan.failure" = "The other device is not in the list. Devices are grouped by the network path Relayium's service observes, so a guest network, a VPN, or a router that keeps clients apart can put two devices on the same cable into different groups.";
-"help.lan.recovery" = "Check that both devices are receiving, turn off any VPN, and join the same network. If they still can't see each other, use a pairing code on the Cross-network screen instead — that one needs no shared network.";
+"help.lan.recovery" = "Check that both devices are receiving, turn off any VPN, and join the same network. If they still can't see each other, use a pairing code on the Cross-network Transfer screen instead — that one needs no shared network.";
 
 "help.cross.purpose" = "Reach a device anywhere by passing on a six-digit code. The two devices do not have to be on the same network.";
 "help.cross.step1" = "Create a pairing code, then pass on the code or the link beside it.";
