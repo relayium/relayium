@@ -79,6 +79,55 @@ An operator does not need to interact with `macos.yml` for a release. If a
 release needs something that only `macos.yml` can do, the change belongs in the
 call's inputs — not in a manual trigger restored to the CI half.
 
+## Processor architecture: Apple silicon only
+
+Standing owner decision, 2026-09-16. Starting with **1.4.0**, every newly
+produced Relayium macOS version is built for Apple silicon (`arm64`) only. This
+is a rule for all future versions, not a one-release exception, and it covers
+every channel: the Developer ID/GitHub download, Sparkle updates, TestFlight,
+Mac App Store submissions and private owner-preview candidates. Do not produce
+an Intel (`x86_64`) or universal package unless the owner explicitly reverses
+the decision.
+
+How it is enforced, and where:
+
+* **Source.** `ARCHS = arm64` on the four product targets (direct app, direct
+  Share extension, App Store app, App Store Share extension) in Debug and
+  Release. `BundleVersionTests.testTheMacProductsAreAppleSiliconOnly` fails if a
+  target reverts to the standard architectures. The UI test bundle keeps the
+  default and builds for its host.
+* **Built bytes.** `apps/mac/scripts/verify-apple-silicon.sh <Relayium.app>`
+  requires the app's executable and every embedded extension's executable to be
+  exactly `arm64`, and rejects a universal or Intel slice. It runs on the signed
+  direct build and the App Store product in `macos.yml`, and on the mounted DMG
+  in `macos-release.yml` before notarization. `test-verify-apple-silicon.sh`
+  runs in the release-script tests. Vendor frameworks delivered prebuilt (Sparkle,
+  WebRTC) stay universal; they are not stripped, and the arm64-only main
+  executable is what makes the app unlaunchable on Intel.
+* **Sparkle feed.** Sparkle 2.9.4 honours `<sparkle:hardwareRequirements>arm64`
+  and never offers such an item to a native Intel process, and its
+  `generate_appcast` writes the element for an arm64-only executable.
+  `web/scripts/stage-macos-release.mjs` refuses a generated item without exactly
+  that requirement, and refuses a generated feed with more than the one release
+  item. The feed holds that single item; no earlier Intel-capable item is
+  carried forward. The release workflow re-asserts the element and the item
+  count on the staged and on the delivered feed.
+* **Public metadata.** The stager writes `"architectures": ["arm64"]` into
+  `web/native-releases.json`. The `/apps` card, the Device Inbox download link
+  and the maintained `/apps` page twins state the Apple silicon requirement
+  when, and only when, the manifest records it — never from a user-agent guess.
+* **UI tests.** Hosted `macos-15` runners are Apple silicon; the UI smoke job
+  fails, rather than skips, on any other host architecture.
+
+Historical Intel-capable universal public releases (every public release before 1.4.0)
+stay immutable and their records stay as written. There is no Intel update lane
+and no legacy Intel migration or compatibility work: the owner confirmed there
+are no existing users to migrate. Version policy is not architecture-aware — do
+not add a cap that holds `minimumSupportedVersion` or `recommendedVersion` at a
+last Intel-capable release. Raising the minimum supported version to 1.4.0 after
+launch is the owner's separate decision; release preparation leaves the served
+minimum unchanged.
+
 ## Build numbers
 
 `CFBundleVersion` is an independent, strictly increasing integer. Increase it

@@ -5,7 +5,7 @@ import { messages, setLang } from "./i18n.svelte";
 import { currentRoute, syncRouteFromLocation } from "./router.svelte";
 import type { Platform } from "./platform";
 
-type MacRelease = { available: boolean; downloadUrl: string | null };
+type MacRelease = { available: boolean; downloadUrl: string | null; architectures?: string[] };
 type AndroidRelease = {
   available: boolean;
   versionName?: string;
@@ -228,5 +228,23 @@ describe("AppsPage executable hierarchy", () => {
     cli.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     flushSync();
     expect(currentRoute()).toBe("cli");
+  });
+});
+
+describe("AppsPage macOS hardware requirement", () => {
+  const URL = "https://github.com/relayium/relayium/releases/download/macos-v1.4.0/Relayium.dmg";
+
+  // From 1.4.0 every macOS release is Apple Silicon only, and the release
+  // manifest records it. The requirement comes from that field, never from the
+  // user agent: a Mac browser says "Intel Mac OS X" on Apple silicon as well.
+  it("states the Apple silicon requirement beside the download when the manifest records it", async () => {
+    await mountPage({ macRelease: { available: true, downloadUrl: URL, architectures: ["arm64"] } });
+    expect(target.querySelector('#app-mac [data-apps="mac-requirements"]')?.textContent)
+      .toBe(messages.en.appsPage.cards.mac.requirements);
+  });
+
+  it("says nothing about hardware for a manifest without architectures", async () => {
+    await mountPage({ macRelease: { available: true, downloadUrl: URL } });
+    expect(target.querySelector('[data-apps="mac-requirements"]')).toBeNull();
   });
 });

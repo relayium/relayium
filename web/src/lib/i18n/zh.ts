@@ -563,7 +563,7 @@ const zh: Messages = {
     cards: {
       web: { name: "网页版", desc: "无需安装。在任意系统的现代浏览器中打开，即可传文件，也能发临时文本。", cta: "打开网页版" },
       cli: { name: "命令行", desc: "可脚本化的文件传输、文件夹同步、服务器间备份与临时文本，支持 macOS、Linux 与 Windows。", cta: "命令行文档与安装" },
-      mac: { name: "macOS 应用", desc: "真正的原生菜单栏应用（com.relayium.mac）：与附近设备或用配对码互传文件和文本、收发加密链接、管理账号与设备。", cta: "下载 macOS 版" },
+      mac: { name: "macOS 应用", desc: "真正的原生菜单栏应用（com.relayium.mac）：与附近设备或用配对码互传文件和文本、收发加密链接、管理账号与设备。", cta: "下载 macOS 版", requirements: "需要搭载 Apple 芯片（M1 或更新）的 Mac · macOS 13 及以上" },
       android: {
         name: "Android 应用",
         desc: "公开预览版，以 APK 直接分发。五个页面——传输、附近、收件箱、云端与账户：可以自己发起配对传输，也可以加入别人的；可以在同一网络内免配对码直接连上另一台设备；可以接收自己其他设备发来的内容，也能发送和打开加密链接。",
@@ -767,6 +767,7 @@ const zh: Messages = {
     macNoDownload:
       "这里暂时没有下载按钮：一旦站点发布的版本元数据里有 Mac 版，这个页面就会给出下载。",
     macDownloadCta: "下载 Mac 版",
+    macRequirement: "需要搭载 Apple 芯片（M1 或更新）的 Mac。",
     safetyH2: "不会动摇的边界",
     safetyPoints: [
       "Relayium 从不持有能解开你文件的密钥：浏览器完成加密并把内容密钥封装给目标设备，服务端保存的只有密文、大小、时间和路由状态。",

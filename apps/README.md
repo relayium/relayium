@@ -128,8 +128,12 @@ recorded decision in `apps/mac/release-readiness.json` remains approved
 (`"approved": true`), and the GitHub release workflow published the notarized
 build as GitHub Release
 [`macos-v1.3.10`](https://github.com/relayium/relayium/releases/tag/macos-v1.3.10):
-a universal, Developer ID-signed, Apple-notarized and stapled `Relayium.dmg`
-with its SHA-256 alongside. Distribution is that direct download and Sparkle
+a Developer ID-signed, Apple-notarized and stapled `Relayium.dmg` with its
+SHA-256 alongside. Public releases before the 1.4 series are universal; from the 1.4
+series on, every macOS build — Developer ID, Sparkle update, TestFlight, Mac App
+Store and private candidates — is Apple silicon (`arm64`) only, and its Sparkle
+feed item carries `<sparkle:hardwareRequirements>arm64` so an Intel Mac is never
+offered it. Distribution is that direct download and Sparkle
 updates from it. The separately versioned Mac App Store channel is also public,
 currently at [1.3.10](https://apps.apple.com/app/id6801142976) under App Apple ID
 `6801142976`. [`web/mac-app-store-release.json`](../web/mac-app-store-release.json)
@@ -620,7 +624,10 @@ four lines from `Relayium.entitlements` makes the same tree build and sign
 cleanly with no profile at all. See "Provisioning profile" below.
 
 The signed-build CI job builds the Release app for the generic macOS destination
-and verifies that the executable contains both `arm64` and `x86_64`. It then
+and verifies, with `apps/mac/scripts/verify-apple-silicon.sh`, that the app's
+executable and its Share extension's executable are each exactly `arm64`; a
+universal or Intel slice fails the job. (Public release builds before the 1.4
+series were universal and were checked with `lipo -verify_arch arm64 x86_64`.) It then
 re-signs Sparkle's nested installer helpers leaf-to-root with Relayium's
 Developer ID identity, packages the app into a compressed, Developer ID-signed
 `Relayium.dmg`, mounts it, verifies the copied app's signature, and retains the

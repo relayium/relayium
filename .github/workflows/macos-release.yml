@@ -197,6 +197,9 @@ jobs:
           hdiutil attach "$RUNNER_TEMP/Relayium.dmg" -mountpoint "$mount" -nobrowse -readonly
           codesign --verify --deep --strict --verbose=2 "$mount/Relayium.app"
           [ "$(defaults read "$mount/Relayium.app/Contents/Info" CFBundleVersion)" = "$(jq -r .build "$RUNNER_TEMP/provenance.json")" ]
+          # The bytes about to be notarized are Apple Silicon only, app and
+          # Share extension alike; a universal or Intel slice stops here.
+          bash apps/mac/scripts/verify-apple-silicon.sh "$mount/Relayium.app"
           hdiutil detach "$mount"
           chmod 0755 "$RUNNER_TEMP/release-tools/generate_appcast"
           test -x "$RUNNER_TEMP/release-tools/generate_appcast" || {
@@ -340,6 +343,13 @@ jobs:
           grep -Fq "url=\"https://github.com/${GITHUB_REPOSITORY}/releases/download/macos-v${RELEASE_VERSION}/Relayium.dmg\"" \
             "$staged/public/apps/macos/appcast.xml"
           grep -q 'sparkle:edSignature="[^"]' "$staged/public/apps/macos/appcast.xml"
+          # Apple Silicon only: the one feed item carries the arm64 requirement
+          # Sparkle filters Intel Macs on, and the manifest says the same.
+          [ "$(grep -c '<item>' "$staged/public/apps/macos/appcast.xml")" = 1 ]
+          grep -Fq '<sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>' \
+            "$staged/public/apps/macos/appcast.xml" || {
+            echo "::error::the staged appcast does not restrict the release to Apple Silicon"; exit 1; }
+          [ "$(jq -c '.macos.architectures' "$staged/native-releases.json")" = '["arm64"]' ]
           # The critical-update threshold survived generation, and it is the one
           # the policy names. `generate_appcast` writes a fresh feed and knows
           # nothing about the policy, so this is the assertion that the
@@ -455,6 +465,10 @@ jobs:
           [ "$(jq -r '.macos.downloadUrl' release-web/native-releases.json)" = "$expected" ]
           grep -Fq "url=\"$expected\"" release-web/public/apps/macos/appcast.xml
           grep -q 'sparkle:edSignature="[^"]' release-web/public/apps/macos/appcast.xml
+          [ "$(grep -c '<item>' release-web/public/apps/macos/appcast.xml)" = 1 ]
+          grep -Fq '<sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>' \
+            release-web/public/apps/macos/appcast.xml
+          [ "$(jq -c '.macos.architectures' release-web/native-releases.json)" = '["arm64"]' ]
           # The client policy travelled with the artifact, names this release,
           # and its threshold is the one written into the feed.
           [ "$(jq -r '.macos.latestVersion' release-web/native-client-policy.json)" \
@@ -765,7 +779,7 @@ jobs:
               --target "$GITHUB_SHA" \
               --latest=false \
               --title "Relayium for macOS ${RELEASE_VERSION}" \
-              --notes "Signed, notarized universal macOS release. The disk image passed Apple notarization, stapling, and Gatekeeper assessment in workflow run ${GITHUB_RUN_ID}."
+              --notes "Signed, notarized macOS release for Apple Silicon Macs. The disk image passed Apple notarization, stapling, and Gatekeeper assessment in workflow run ${GITHUB_RUN_ID}."
           fi
 
           # The flag is a request; this is the answer. It runs on BOTH branches

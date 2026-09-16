@@ -347,6 +347,18 @@ describe("the six platform sections", () => {
     const cta = full.querySelector<HTMLAnchorElement>('[data-di="mac-download"]')!;
     expect(cta.getAttribute("href")).toBe("https://relayium.com/Relayium.dmg");
   });
+
+  it("states the Apple silicon requirement only when the manifest records it", () => {
+    // Pre-1.4.0 manifests carry no architectures and were universal builds.
+    const universal = render({ macRelease: { available: true, downloadUrl: "https://relayium.com/Relayium.dmg" } });
+    expect(universal.querySelector('[data-di="mac-requirement"]')).toBeNull();
+
+    const arm64 = render({ macRelease: {
+      available: true, downloadUrl: "https://relayium.com/Relayium.dmg", architectures: ["arm64"],
+    } });
+    expect(arm64.querySelector('[data-di="mac-requirement"]')?.textContent)
+      .toBe(messages.en.deviceInboxPage.macRequirement);
+  });
 });
 
 describe("the boundaries this page must not blur", () => {

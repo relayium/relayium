@@ -924,7 +924,11 @@ export interface Messages {
     cards: {
       web: { name: string; desc: string; cta: string };
       cli: { name: string; desc: string; cta: string };
-      mac: { name: string; desc: string; cta: string };
+      // `requirements` is shown only while the release manifest says the
+      // published build is Apple Silicon only (`architectures: ["arm64"]`,
+      // every macOS release from 1.4.0). Optional because the archived tables
+      // are frozen; the maintained pair both carry it.
+      mac: { name: string; desc: string; cta: string; requirements?: string };
       // Added 2026-09-08 with the first public Android APK. Unlike every other
       // card this one carries its LIMITS next to its download button: a direct
       // APK has no store listing, so there is no review page where a reader
@@ -1084,6 +1088,10 @@ export interface Messages {
     /** Label of the macOS download link, used only if the release manifest
      *  actually carries a build. */
     macDownloadCta: string;
+    /** Hardware requirement beside that link, shown only when the manifest
+     *  says the published build is Apple Silicon only. Optional: the archived
+     *  tables are frozen. */
+    macRequirement?: string;
     // ── Boundaries + further reading ──────────────────────────────────────
     safetyH2: string;
     safetyPoints: string[]; // iterated

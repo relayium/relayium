@@ -75,6 +75,36 @@ function childText(element, tag) {
   return match?.[1]?.trim() || null;
 }
 
+/// **Apple Silicon only, and the feed has to say so in the one way Sparkle reads.**
+///
+/// From 1.4.0 (37) the macOS app ships arm64 only. An installed Intel copy of
+/// an earlier release must never be offered it, and the only thing that reaches
+/// that copy is this feed. Sparkle 2.9.0+ (every published Relayium pins 2.9.4)
+/// reads `<sparkle:hardwareRequirements>` — comma/space separated, lowercased —
+/// and, in a native x86_64 process, drops any item whose set contains `arm64`
+/// (`SPUAppcastItemStateResolver isArm64HardwareRequirementOK`,
+/// `SUAppcastDriver filterSupportedAppcast`). `generate_appcast` writes the
+/// element itself when the app's executable has no pre-ARM slice.
+///
+/// So the element is REQUIRED here rather than trusted: a release item without
+/// it is refused. Every macOS version from 1.4.0 on is arm64 only (standing
+/// owner rule), so this is unconditional, and the feed stays one item — the
+/// release being staged. There is no Intel update lane: historical GitHub
+/// Releases stay immutable, but no earlier Intel-capable item is carried into
+/// the feed.
+export const ARM64_REQUIREMENT = "arm64";
+
+export function hardwareRequirements(item) {
+  const text = childText(item, "sparkle:hardwareRequirements");
+  if (text === null) return new Set();
+  return new Set(text.split(/[\s,]+/).filter(Boolean).map((entry) => entry.toLowerCase()));
+}
+
+/// Every `<item>…</item>` in document order.
+function allItems(appcast) {
+  return appcast.match(/<item>[\s\S]*?<\/item>/g) ?? [];
+}
+
 /// **The one canonical statement of which builds Relayium still answers for.**
 ///
 /// `web/native-client-policy.json` is edited by hand when the product decides to
@@ -283,6 +313,11 @@ export async function stageMacOSRelease({
   }
   const releasePolicy = nextRelease ?? policy.macos;
   const generatedAppcast = await readFile(source, "utf8");
+  // One generated item: the release being staged. Anything else in the
+  // generator's output is not something this script verified.
+  if (allItems(generatedAppcast).length !== 1) {
+    throw new Error("generated appcast must contain exactly one release item");
+  }
   const appcast = applyCriticalUpdate(
     canonicalizeChannel(generatedAppcast),
     releasePolicy.minimumSupportedBuild,
@@ -311,6 +346,12 @@ export async function stageMacOSRelease({
   const length = attribute(asset, "length");
   if (!length || !/^[1-9][0-9]*$/.test(length)) {
     throw new Error("appcast enclosure length must be a positive integer");
+  }
+  const requirements = hardwareRequirements(item);
+  if (requirements.size !== 1 || !requirements.has(ARM64_REQUIREMENT)) {
+    throw new Error(
+      "appcast item must carry <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>: "
+      + "this release is Apple Silicon only and an Intel Mac must never be offered it");
   }
   // A release that is critical against ITSELF. Sparkle marks an update critical
   // when the running build is BELOW the threshold, so a threshold ABOVE this
@@ -360,6 +401,7 @@ export async function stageMacOSRelease({
       version,
       build: Number(build),
       downloadUrl: expectedUrl,
+      architectures: [ARM64_REQUIREMENT],
     },
   };
   let serverCatalog = null;

@@ -29,6 +29,18 @@ const RELEASES = JSON.parse(
 );
 const MAC_AVAILABLE = RELEASES.macos.available === true;
 const MAC_DOWNLOAD_URL = MAC_AVAILABLE ? RELEASES.macos.downloadUrl : null;
+// Every macOS release from 1.4.0 is Apple Silicon only, recorded by the stager
+// as `architectures: ["arm64"]`. Only the maintained en/zh twins state it; the
+// archived locales keep the copy they were published with. Appended outside
+// the available/pre-release ternaries so each locale keeps its branch pair.
+const MAC_APPLE_SILICON_ONLY = MAC_AVAILABLE
+  && JSON.stringify(RELEASES.macos.architectures) === JSON.stringify(["arm64"]);
+const MAC_REQUIREMENT = {
+  en: MAC_APPLE_SILICON_ONLY
+    ? " The download requires a Mac with Apple silicon (M1 or later) and macOS 13 or later."
+    : "",
+  zh: MAC_APPLE_SILICON_ONLY ? "下载版需要搭载 Apple 芯片（M1 或更新）的 Mac，以及 macOS 13 及以上。" : "",
+};
 
 // The Android half reads its own canonical manifest — the same document
 // `gen-pages` publishes as the update feed and `AppsPage.svelte` imports — so
@@ -76,9 +88,10 @@ const en = {
       },
       {
         title: "macOS app",
-        desc: MAC_AVAILABLE
+        desc: (MAC_AVAILABLE
           ? "A true native menu-bar app (com.relayium.mac): files and text with nearby devices or by pairing code, encrypted links to send and open, and account management — available as a signed and notarized download, and separately on the Mac App Store."
-          : "A true native menu-bar app (com.relayium.mac): files and text with nearby devices or by pairing code, encrypted links to send and open, and account management. It is an engineering build and is not publicly available yet.",
+          : "A true native menu-bar app (com.relayium.mac): files and text with nearby devices or by pairing code, encrypted links to send and open, and account management. It is an engineering build and is not publicly available yet.")
+          + MAC_REQUIREMENT.en,
       },
       {
         title: "Android app",
@@ -166,9 +179,10 @@ const zh = {
       },
       {
         title: "macOS 应用",
-        desc: MAC_AVAILABLE
+        desc: (MAC_AVAILABLE
           ? "真正的原生菜单栏应用（com.relayium.mac）：与附近设备或用配对码互传文件和文本、收发加密链接、管理账号与设备。现已提供经过签名和公证的下载版本，也可从 Mac App Store 获取。"
-          : "真正的原生菜单栏应用（com.relayium.mac）：与附近设备或用配对码互传文件和文本、收发加密链接、管理账号与设备。目前是工程版本，尚未开放公开下载。",
+          : "真正的原生菜单栏应用（com.relayium.mac）：与附近设备或用配对码互传文件和文本、收发加密链接、管理账号与设备。目前是工程版本，尚未开放公开下载。")
+          + MAC_REQUIREMENT.zh,
       },
       {
         title: "Android 应用",

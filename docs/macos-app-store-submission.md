@@ -44,7 +44,7 @@ macOS `1.3.10` version, attached to build `28`, in `READY_FOR_SALE`, above
 `currentVersionReleaseDate` `2026-09-14T15:57:27Z`. Until that read-back,
 `web/mac-app-store-release.json` still named `1.3.8` (public since
 2026-08-26), two days after Apple had moved on; the record was corrected with
-the `1.4.0 (36)` preparation below, not backdated.
+the `1.4.0` preparation below, not backdated.
 
 Build numbers consumed so far, none of which may be rebuilt or re-uploaded:
 `5`, `6`, `7`, `11`, `12`, `24` (`1.3.6`), `25` (`1.3.7`), `26` (`1.3.8`),
@@ -52,25 +52,41 @@ Build numbers consumed so far, none of which may be rebuilt or re-uploaded:
 (`builds-before.json`) returns `29` as the highest macOS build on the record.
 Builds `30` to `35` were signed only as private Developer ID owner-preview
 packages and were never uploaded, but they are spent all the same: each one
-names a distinct artifact. **The next archive of any version needs a build
-number strictly above `35`, and `36` is allocated to the `1.4.0` preparation
-below.** The published minimum is macOS 13.0, and the published build does not
-remove compatibility with older Relayium clients.
+names a distinct artifact. Build `36` is spent too: it was archived universal
+for the Mac App Store on 2026-09-16 and then abandoned, never exported or
+uploaded, when the owner dropped Intel support. **The next archive of any
+version needs a build number strictly above `36`, and `37` is allocated to the
+`1.4.0` preparation below.** The published minimum is macOS 13.0, and the
+published build does not remove compatibility with older Relayium clients.
 
 The Developer ID/GitHub download channel is versioned, released and verified
 separately from this record. Its state is never evidence about what the Mac App
 Store is serving, in either direction, even when the two version numbers happen
 to agree — as they do today, both at `1.3.10`.
 
-#### `1.4.0` (build `36`) — PREPARING for GitHub and internal TestFlight
+#### `1.4.0` (build `37`) — PREPARING for GitHub and internal TestFlight, Apple silicon only
 
 **Status: preparing. Nothing below has been built, signed, notarized,
 uploaded, submitted or published.** The owner accepted the private
 arm64 Developer ID preview `1.4.0 (35)` on 2026-09-16 and asked for a public
 GitHub release and an internal TestFlight build. Build `35` is spent by that
-private package, so both newly signed distribution artifacts — the universal
-Developer ID build for GitHub and the Mac App Store build for TestFlight — use
-build `36` under the same marketing version.
+private package. Build `36` was then archived universal for the Mac App Store
+and abandoned unexported when the owner dropped Intel support the same day. Both
+newly signed distribution artifacts — the Developer ID build for GitHub and the
+Mac App Store build for TestFlight — use build `37` under the same marketing
+version, and both are **Apple silicon (`arm64`) only**.
+
+**Processor support.** From `1.4.0` every macOS version on every channel is
+built for Macs with Apple silicon only; this is a standing owner rule for all
+later versions (see `docs/MACOS-RELEASE-POLICY.md`, "Processor architecture").
+The app's and the Share extension's executables are each exactly `arm64`, and
+release checks reject a universal or Intel slice. Every public release before
+`1.4.0`, including the `1.3.10` Apple is serving, was universal and stays as
+published. The GitHub release's Sparkle feed item carries
+`<sparkle:hardwareRequirements>arm64`, so Sparkle never offers `1.4.0` to an
+Intel Mac. A public Mac App Store submission of `1.4.0` still needs its own
+explicit authorization, which this document does not give. The served
+minimum-supported-version policy is unchanged by this preparation.
 
 Scope of the request, and nothing wider: internal TestFlight in the existing
 **Relayium Internal** group only. No external beta group, beta review, App Store
@@ -124,7 +140,8 @@ The Mac App Store target still links no Sparkle and ships no updater.
 What to Test for `1.4.0` (drafted, English):
 
 > This build redesigns the app's layout. Transfers, encryption, accounts and
-> subscriptions work as before.
+> subscriptions work as before. It runs only on Macs with Apple silicon (M1 or
+> later); please test on one.
 >
 > 1. New layout. Open every sidebar destination and Settings, in
 >    English and again with the Mac set to Simplified Chinese, in Light and Dark
@@ -151,7 +168,8 @@ What to Test for `1.4.0` (drafted, English):
 
 What to Test for `1.4.0` (drafted, Simplified Chinese):
 
-> 本次更新重新设计了 App 的界面布局，传输、加密、账户与订阅的行为保持不变。
+> 本次更新重新设计了 App 的界面布局，传输、加密、账户与订阅的行为保持不变。本版本仅支持搭载
+> Apple 芯片（M1 或更新）的 Mac，请在这类 Mac 上测试。
 >
 > 1. 新布局。分别在英文和简体中文、浅色和深色模式下，打开侧边栏中的每个页面以及
 >    设置窗口。每页都应使用新的卡片与按钮，在窗口内滚动，标题只出现一次，
@@ -170,7 +188,7 @@ What to Test for `1.4.0` (drafted, Simplified Chinese):
 >
 > 也请在放大的系统字号下试用，并反馈任何无法点到或看不清的地方。
 
-The copy above is drafted for build `36` and has **not** been entered on any
+The copy above is drafted for build `37` and has **not** been entered on any
 build. Record the upload, processing, export-compliance answer, group
 assignment and entered test information here only after they are read back.
 

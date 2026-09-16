@@ -60,6 +60,13 @@ final class BundleVersionTests: XCTestCase {
         // release of the same app through two channels, and a user who installs
         // one after the other must not see the version go backwards.
         //
+        // `1.4.0 (37)`: the same release, Apple Silicon only. The owner dropped
+        // Intel for both GitHub and TestFlight on 2026-09-16, after build `36`
+        // had already been archived universal for the Mac App Store. That archive
+        // was never exported or uploaded, but it is a signed artifact answering to
+        // `1.4.0 (36)`, so it is abandoned and **build `36` is spent**; the arm64
+        // artifacts take `37`.
+        //
         // `1.4.0 (36)`: the public release of that preview — universal Developer
         // ID/GitHub and internal TestFlight. **Build `35` is spent** as the
         // private arm64 owner-preview package the owner accepted, and newly
@@ -96,7 +103,24 @@ final class BundleVersionTests: XCTestCase {
         // carries the newer cross-platform navigation work cannot reuse that
         // number without making the version string stop identifying a build.
         try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.0", occurrences: 10)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "36", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "37", occurrences: 10)
+    }
+
+    /// macOS: both shipped products and both Share extensions are Apple Silicon
+    /// only, from `1.4.0 (37)`.
+    ///
+    /// Eight settings: four product targets (direct app, direct Share, App Store
+    /// app, App Store Share) in Debug and Release, each exactly `arm64`. The UI
+    /// test bundle keeps the default, so it still builds for whatever host runs
+    /// it — an arm64 hosted runner, which the workflows assert before launching.
+    /// A release whose executable is fat or Intel-only is rejected again, from
+    /// the built bytes, by `macos.yml` and `macos-release.yml`; this is the
+    /// source half, so a target that silently reverts to the standard
+    /// architectures fails here before anything is signed.
+    func testTheMacProductsAreAppleSiliconOnly() throws {
+        let values = try settings("mac", "ARCHS")
+        XCTAssertEqual(values.count, 8, "expected ARCHS on the four product targets × 2 configurations: \(values)")
+        XCTAssertEqual(Set(values), ["arm64"], "a macOS product target builds a non-arm64 slice: \(values)")
     }
 
     /// iOS: the app and its Share extension, both Debug and Release.

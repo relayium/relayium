@@ -63,6 +63,10 @@ async function fixture(overrides = {}, policy = {}) {
     "sparkle:shortVersionString": "1.0",
     length: "42",
     "sparkle:edSignature": "signed-value",
+    // Every release from 1.4.0 on is Apple Silicon only, so the generator's
+    // arm64 requirement is part of the ordinary shape; cases that test its
+    // absence override it with "".
+    "sparkle:hardwareRequirements": "arm64",
     ...overrides,
   };
   const enclosureAttrs = ["url", "length", "sparkle:edSignature"]
@@ -73,6 +77,9 @@ async function fixture(overrides = {}, policy = {}) {
     .filter((tag) => fields[tag] !== undefined && fields[tag] !== "")
     .map((tag) => `<${tag}>${fields[tag]}</${tag}>`)
     .join("");
+  const requirement = fields["sparkle:hardwareRequirements"]
+    ? `            <sparkle:hardwareRequirements>${fields["sparkle:hardwareRequirements"]}</sparkle:hardwareRequirements>\n`
+    : "";
   const appcastPath = join(root, "generated.xml");
   await writeFile(
     appcastPath,
@@ -83,6 +90,7 @@ async function fixture(overrides = {}, policy = {}) {
       + `            <pubDate>Thu, 06 Aug 2026 19:39:25 +0400</pubDate>\n`
       + `            ${itemChildren}\n`
       + `            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>\n`
+      + requirement
       + `            <enclosure ${enclosureAttrs} type="application/octet-stream"/>\n`
       + `        </item>\n    </channel>\n</rss>\n`,
   );
@@ -105,6 +113,7 @@ describe("stageMacOSRelease", () => {
       version: "1.0",
       build: 1,
       downloadUrl: "https://github.com/relayium/relayium/releases/download/macos-v1.0/Relayium.dmg",
+      architectures: ["arm64"],
     });
     expect(await readFile(join(webRoot, "public/apps/macos/appcast.xml"), "utf8"))
       .toContain('sparkle:edSignature="signed-value"');
@@ -116,6 +125,12 @@ describe("stageMacOSRelease", () => {
     ["a mismatched version", { "sparkle:shortVersionString": "1.1" }],
     ["a non-numeric build", { "sparkle:version": "beta" }],
     ["a zero-length enclosure", { length: "0" }],
+    // The Intel-safety half. Sparkle offers an item with no arm64 requirement
+    // to every Intel Mac, so each of these would publish an arm64-only app to
+    // hardware that cannot run it.
+    ["a missing arm64 hardware requirement", { "sparkle:hardwareRequirements": "" }],
+    ["an Intel hardware requirement", { "sparkle:hardwareRequirements": "x86_64" }],
+    ["an arm64 requirement mixed with another", { "sparkle:hardwareRequirements": "arm64, x86_64" }],
   ])("rejects %s without changing release state", async (_label, overrides) => {
     const { webRoot, appcastPath } = await fixture(overrides);
 
@@ -189,6 +204,7 @@ describe("the critical-update threshold the release derives", () => {
         + `            <sparkle:version>1</sparkle:version>\n`
         + `            <sparkle:shortVersionString>1.0</sparkle:shortVersionString>\n`
         + `            <sparkle:criticalUpdate sparkle:version="99"/>\n`
+        + `            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>\n`
         + `            <enclosure url="https://github.com/relayium/relayium/releases/download/macos-v1.0/Relayium.dmg"`
         + ` length="42" type="application/octet-stream" sparkle:edSignature="signed-value"/>\n`
         + `        </item>\n    </channel>\n</rss>\n`,
@@ -459,13 +475,52 @@ describe("the appcast shape this parser assumes", () => {
 </rss>
 `;
 
+  /// The same real output for an Apple Silicon-only app. Sparkle 2.9.4's
+  /// `generate_appcast` adds `<sparkle:hardwareRequirements>arm64` when the
+  /// app's executable has no pre-ARM slice, appended right after
+  /// `<sparkle:minimumSystemVersion>` (`FeedXML.swift`, pinned revision
+  /// b6496a74). The capture above predates 1.4.0 and was a universal build, so
+  /// it has no such element; it is kept verbatim and is now refused below.
+  const REAL_SPARKLE_ARM64_OUTPUT = REAL_SPARKLE_OUTPUT.replace(
+    "<sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>\n",
+    "<sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>\n"
+      + "            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>\n",
+  );
+
+  it("refuses the universal generator output, which Sparkle would offer to Intel Macs", async () => {
+    const root = await mkdtemp(join(tmpdir(), "relayium-stage-universal-"));
+    work.push(root);
+    const webRoot = join(root, "web");
+    await writeWebRoot(webRoot);
+    const appcastPath = join(root, "generated.xml");
+    await writeFile(appcastPath, REAL_SPARKLE_OUTPUT);
+
+    await expect(stageMacOSRelease({ version: "1.0", appcastPath, webRoot }))
+      .rejects.toThrow(/hardwareRequirements>arm64/);
+    expect(JSON.parse(await readFile(join(webRoot, "native-releases.json"), "utf8")).macos.available)
+      .toBe(false);
+  });
+
+  it("refuses a generated feed with more than the one release item", async () => {
+    const root = await mkdtemp(join(tmpdir(), "relayium-stage-two-"));
+    work.push(root);
+    const webRoot = join(root, "web");
+    await writeWebRoot(webRoot);
+    const appcastPath = join(root, "generated.xml");
+    const item = REAL_SPARKLE_ARM64_OUTPUT.match(/<item>[\s\S]*?<\/item>/)[0];
+    await writeFile(appcastPath, REAL_SPARKLE_ARM64_OUTPUT.replace(item, `${item}\n        ${item}`));
+
+    await expect(stageMacOSRelease({ version: "1.0", appcastPath, webRoot }))
+      .rejects.toThrow(/exactly one release item/);
+  });
+
   it("accepts what generate_appcast actually writes", async () => {
     const root = await mkdtemp(join(tmpdir(), "relayium-stage-real-"));
     work.push(root);
     const webRoot = join(root, "web");
     await writeWebRoot(webRoot);
     const appcastPath = join(root, "generated.xml");
-    await writeFile(appcastPath, REAL_SPARKLE_OUTPUT);
+    await writeFile(appcastPath, REAL_SPARKLE_ARM64_OUTPUT);
 
     const result = await stageMacOSRelease({ version: "1.0", appcastPath, webRoot });
     expect(result).toMatchObject({ version: "1.0", build: "1" });
@@ -475,6 +530,9 @@ describe("the appcast shape this parser assumes", () => {
     const staged = await readFile(join(webRoot, "public/apps/macos/appcast.xml"), "utf8");
     expect(staged).toContain("<sparkle:version>1</sparkle:version>");
     expect(staged).toContain("<sparkle:shortVersionString>1.0</sparkle:shortVersionString>");
+    // The requirement survives staging: it is what Sparkle filters Intel on.
+    expect(staged).toContain("<sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>");
+    expect(staged.match(/<item>/g)).toHaveLength(1);
   });
 
   /// The versions are child elements. If this ever passes with them written as

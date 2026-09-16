@@ -111,6 +111,13 @@ describe("macOS Sparkle appcast", () => {
 
     expect(childText(item, "sparkle:shortVersionString")).toBe(manifest.macos.version);
     expect(childText(item, "sparkle:version")).toBe(String(manifest.macos.build));
+    // An Apple Silicon-only release (every one from 1.4.0) must carry the
+    // requirement Sparkle filters Intel Macs on; a published arm64 manifest
+    // whose feed item lacks it would offer the app to hardware it cannot run on.
+    if (manifest.macos.architectures !== undefined) {
+      expect(manifest.macos.architectures).toEqual(["arm64"]);
+      expect(childText(item, "sparkle:hardwareRequirements")).toBe("arm64");
+    }
 
     expect(asset, "the release item has no enclosure").not.toBeNull();
     expect(attribute(asset, "url")).toBe(manifest.macos.downloadUrl);

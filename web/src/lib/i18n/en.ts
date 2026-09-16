@@ -593,6 +593,7 @@ const en: Messages = {
         name: "macOS app",
         desc: "A true native menu-bar app (com.relayium.mac): files and text with nearby devices or by pairing code, encrypted links to send and open, and account and device management.",
         cta: "Download for macOS",
+        requirements: "Requires a Mac with Apple silicon (M1 or later) · macOS 13 or later",
       },
       android: {
         name: "Android app",
@@ -802,6 +803,7 @@ const en: Messages = {
     macNoDownload:
       "No download button here yet: this page offers the Mac app as soon as the site's published release metadata says there is one.",
     macDownloadCta: "Download the Mac app",
+    macRequirement: "Requires a Mac with Apple silicon (M1 or later).",
     safetyH2: "Boundaries that do not move",
     safetyPoints: [
       "Relayium never holds a key that can open your files: the browser encrypts them and seals the content key to the target device, and the server keeps ciphertext, sizes, timestamps and routing state.",

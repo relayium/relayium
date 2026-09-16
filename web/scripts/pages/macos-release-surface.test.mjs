@@ -100,11 +100,19 @@ describe("macOS release surface", () => {
       // state in which an extra or renamed key goes unnoticed — and this file
       // is the only thing standing between `jq` in the release workflow and
       // `releases.macos` in AppsPage agreeing on what the shape is.
+      // `architectures` is written by the stager from 1.4.0 on, when every
+      // macOS release became Apple Silicon only. The published releases before
+      // it were universal and predate the field, so their manifest keeps its
+      // original four keys; from 1.4.0 the field is required and is exactly
+      // `["arm64"]` — there is no Intel or universal state to describe.
+      const [major, minor] = manifest.macos.version.split(".").map(Number);
+      const appleSiliconEra = major > 1 || (major === 1 && minor >= 4);
       expect(manifest.macos).toEqual({
         available: true,
         version: manifest.macos.version,
         build: manifest.macos.build,
         downloadUrl: canonicalUrl(manifest.macos.version),
+        ...(appleSiliconEra ? { architectures: ["arm64"] } : {}),
       });
     } else {
       expect(manifest.macos).toEqual({

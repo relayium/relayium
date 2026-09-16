@@ -62,7 +62,7 @@
   import DeviceSendList from "./DeviceSendList.svelte";
   import releases from "../../native-releases.json";
 
-  type MacRelease = { available: boolean; downloadUrl: string | null };
+  type MacRelease = { available: boolean; downloadUrl: string | null; architectures?: string[] };
 
   // The manifest and the fetcher are props so the two branches that matter —
   // "a Mac build exists" and "/api/devices did not answer" — are reachable from
@@ -322,6 +322,10 @@
   // download only appears when the flag AND the URL are both present. While it
   // is absent, the section says why instead of showing a dead control.
   const macDownloadable = $derived(macRelease?.available === true && !!macRelease?.downloadUrl);
+  // Apple Silicon only from 1.4.0, as recorded by the manifest (not the UA).
+  const macAppleSiliconOnly = $derived(
+    macDownloadable && JSON.stringify(macRelease?.architectures) === JSON.stringify(["arm64"]),
+  );
 
   function statusText(s: PlatformStatus): string {
     return s === "available"
@@ -554,6 +558,9 @@
               {#if macDownloadable}
                 <p class="alt">
                   <a href={macRelease.downloadUrl!} data-di="mac-download">{t.deviceInboxPage.macDownloadCta}</a>
+                  {#if macAppleSiliconOnly && t.deviceInboxPage.macRequirement}
+                    <span data-di="mac-requirement">{t.deviceInboxPage.macRequirement}</span>
+                  {/if}
                 </p>
               {:else}
                 <p class="alt" data-di="mac-no-download">{t.deviceInboxPage.macNoDownload}</p>

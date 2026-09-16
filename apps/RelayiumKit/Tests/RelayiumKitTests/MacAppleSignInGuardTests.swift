@@ -299,8 +299,9 @@ final class MacAppleSignInGuardTests: XCTestCase {
     /// (builds 31 and 32), `1.3.13` (build 33), `1.3.14` (build 34) and
     /// `1.4.0` (build 35) were private owner-preview candidates only, and
     /// were neither submitted nor published on either channel. `1.4.0`
-    /// (build 36) is being prepared for GitHub and internal TestFlight; it is
-    /// not an App Store release.
+    /// (build 37, Apple silicon only; build 36 was a universal App Store
+    /// archive abandoned unexported) is being prepared for GitHub and internal
+    /// TestFlight; it is not an App Store release.
     func testTheReleaseIsVersionOnePointFourPointZero() throws {
         let project = projectText
         XCTAssertTrue(project.contains("MARKETING_VERSION = 1.4.0;"))

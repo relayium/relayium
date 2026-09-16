@@ -282,6 +282,7 @@ jobs:
       # missing.
       - name: Release script tests
         run: |
+          apps/mac/scripts/test-verify-apple-silicon.sh
           apps/mac/scripts/test-package-dmg.sh
           apps/mac/scripts/test-resign-sparkle.sh
           apps/mac/scripts/test-notarize-dmg.sh
@@ -344,6 +345,12 @@ jobs:
           TEST_CLASSES: ${{ matrix.tests }}
         run: |
           set -euo pipefail
+          # The app is Apple Silicon only, so it can only launch on an arm64
+          # host. Fail loudly on any other runner rather than skip the flows.
+          host_arch="$(uname -m)"
+          echo "UI smoke host architecture: $host_arch"
+          [ "$host_arch" = arm64 ] || {
+            echo "::error::macOS UI smoke needs an Apple Silicon runner (got $host_arch)"; exit 1; }
           only=()
           IFS=',' read -ra classes <<< "$TEST_CLASSES"
           for class in "${classes[@]}"; do only+=("-only-testing:$class"); done
@@ -517,6 +524,8 @@ jobs:
           fi
           [ -d "$app/Contents/PlugIns/RelayiumShare.appex" ] || {
             echo "::error::the App Store build does not embed its Share extension"; exit 1; }
+          # The TestFlight/App Store product is Apple Silicon only too.
+          bash apps/mac/scripts/verify-apple-silicon.sh "$app"
       # The two files Apple requires of a submission, read off the built product.
       #
       # Their CONTENT is decided by `MacPrivacyManifestTests`, which re-derives
@@ -551,8 +560,9 @@ jobs:
           set -euo pipefail
           app="$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app"
           codesign --verify --strict --verbose=2 "$app"
-          lipo "$app/Contents/MacOS/Relayium" -verify_arch arm64 x86_64 || {
-            echo "::error::Release executable is not universal (arm64 + x86_64)"; exit 1; }
+          # Apple Silicon only from 1.4.0 (37): the app and its Share extension
+          # must each be exactly arm64. A universal or Intel slice is rejected.
+          bash apps/mac/scripts/verify-apple-silicon.sh "$app"
           signature_details="$(codesign -d --verbose=4 "$app" 2>&1)"
           printf '%s\n' "$signature_details"
           printf '%s\n' "$signature_details" | grep -q 'flags=.*runtime' || {

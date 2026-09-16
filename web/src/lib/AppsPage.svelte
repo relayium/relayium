@@ -5,7 +5,7 @@
   import releases from "../../native-releases.json";
   import androidRelease from "../../android-release.json";
 
-  type MacRelease = { available: boolean; downloadUrl: string | null };
+  type MacRelease = { available: boolean; downloadUrl: string | null; architectures?: string[] };
   // The SAME canonical document `gen-pages` publishes as
   // /apps/android/update.json, which is what an installed Android build reads
   // when the user presses Check for updates. One source, so the page and the
@@ -117,6 +117,12 @@
   // when both the release flag and its exact download URL are present. The JSON
   // import is replaced atomically by stage-macos-release and bundled at build.
   const macAvailable = $derived(macRelease.available === true && !!macRelease.downloadUrl);
+  // Every macOS release from 1.4.0 is Apple Silicon only, and the manifest
+  // records it. Read from the manifest, never guessed from the user agent: a
+  // Mac browser reports "Intel Mac OS X" on Apple silicon too.
+  const macAppleSiliconOnly = $derived(
+    macAvailable && JSON.stringify(macRelease.architectures) === JSON.stringify(["arm64"]),
+  );
   const cards = $derived<AppCard[]>([
     {
       id: "web", name: t.appsPage.cards.web.name, desc: t.appsPage.cards.web.desc,
@@ -199,6 +205,9 @@
                    burying the download behind a four-item list is what put its
                    button 1928px down the page. -->
               <p class="req">{t.appsPage.cards.android.requirements}</p>
+            {/if}
+            {#if card.id === "mac" && macAppleSiliconOnly && t.appsPage.cards.mac.requirements}
+              <p class="req" data-apps="mac-requirements">{t.appsPage.cards.mac.requirements}</p>
             {/if}
             {#if card.id === "cli"}
               <p class="cli-install" id="cli-install-label">{t.appsPage.cliInstallLabel}</p>
