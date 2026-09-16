@@ -1106,3 +1106,8 @@
 "settings.thisVersionHeading" = "This version";
 "inbox.notificationsHeading" = "Notifications";
 "inbox.conversationsEmpty" = "Nothing has been sent or received on this Mac yet.";
+"inbox.checkNow" = "Check now";
+"inbox.checking" = "Checking…";
+"inbox.checkNothingNew" = "Nothing new. A delivery appears here only after the sender's upload has finished.";
+"inbox.checkDone" = "Check complete.";
+"inbox.checkFailed" = "The check didn't finish. The status above says why.";

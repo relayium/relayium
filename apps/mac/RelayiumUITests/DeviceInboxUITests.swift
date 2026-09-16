@@ -669,6 +669,62 @@ final class DeviceInboxUITests: XCTestCase {
                        "the in-progress surface named the file being received")
     }
 
+    // MARK: - check now
+
+    /// **Check now is observable end to end: Checking…, an empty answer that
+    /// claims nothing, then a found delivery whose saved claim is the status
+    /// line's.**
+    ///
+    /// The fixture stretches the automatic schedule to an hour, so nothing
+    /// below can be explained by the loop's own timer: each pass after launch is
+    /// one this test pressed for, and each is held for a moment so Checking… is
+    /// on screen long enough to read. No network is involved.
+    func testCheckNowShowsCheckingThenNothingNewThenDefersToTheReceipt() {
+        launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-check"])
+        let window = openDeviceInboxDestination()
+
+        let status = element("inbox-status", in: window)
+        XCTAssertTrue(status.waitForExistence(timeout: 15))
+        let ready = NSPredicate(format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@",
+                                "Ready to receive", "Ready to receive")
+        expectation(for: ready, evaluatedWith: status, handler: nil)
+        waitForExpectations(timeout: 20)
+
+        let check = revealed("inbox-check-now", in: window, timeout: 10)
+        assertOnScreen(check, "Check now", in: window)
+        XCTAssertTrue(check.isEnabled)
+        XCTAssertFalse(element("inbox-check-result", in: window).exists,
+                       "an answer was shown before anything was checked")
+
+        check.click()
+        let busy = NSPredicate(format: "isEnabled == false")
+        expectation(for: busy, evaluatedWith: check, handler: nil)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(text(of: check).contains("Checking"),
+                      "a running check does not say so")
+
+        let answer = element("inbox-check-result", in: window)
+        XCTAssertTrue(answer.waitForExistence(timeout: 15), "the check was never answered")
+        XCTAssertTrue(text(of: answer).contains("Nothing new"))
+        XCTAssertTrue(text(of: status).contains("Ready to receive"),
+                      "an empty check changed what the inbox says it is")
+        XCTAssertFalse(visibleText(in: window).contains("files saved"),
+                       "an empty check was presented as a delivery")
+
+        let enabled = NSPredicate(format: "isEnabled == true")
+        expectation(for: enabled, evaluatedWith: check, handler: nil)
+        waitForExpectations(timeout: 5)
+        check.click()
+        let saved = NSPredicate(format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@",
+                                "3 files saved", "3 files saved")
+        expectation(for: saved, evaluatedWith: status, handler: nil)
+        waitForExpectations(timeout: 30)
+        let done = NSPredicate(format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@",
+                               "Check complete", "Check complete")
+        expectation(for: done, evaluatedWith: answer, handler: nil)
+        waitForExpectations(timeout: 10)
+    }
+
     // MARK: - a completed result
 
     /// A real delivery, decrypted and committed during this launch, appears in

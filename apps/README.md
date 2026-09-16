@@ -334,6 +334,30 @@ legacy session renders the lane it actually has and says in one sentence that th
 other kind needs a session of its own. A peer that announces exact `link/1` gets
 one connection for both, and the sentence with it.
 
+**Device Inbox can be checked on demand.** The resident receiver polls central
+on its own schedule — every 30 s while idle, sooner right after a delivery,
+longer while blocked or backing off from a failure — and that schedule is
+unchanged. While the inbox is ready, asking, or has just saved something, its
+status head also offers **Check now** (`inbox-check-now`,
+`InboxController.checkNow()`). It wakes the loop that is already running for one
+extra pass; it is not Try again, which restarts the receiver and would cancel a
+delivery mid-download. The button reads Checking… and is disabled until a pass
+that started after the press returns. Presses during a running pass merge into
+the one pass that follows it. The answer beside it (`inbox-check-result`) is one
+of three: nothing new, check complete (the status line says what was found), or
+the check did not finish (the status line says why). It never says a delivery
+arrived — only a durable receipt does that. Its limits:
+
+- it sees only deliveries whose upload the sender has finished, because an
+  unfinished upload is not a task yet;
+- it does not make bytes move faster;
+- under Ask it answers nothing: held deliveries still need Receive or Decline;
+- it is not offered while the inbox is Off, paused, missing its folder,
+  signed out, offline or failed.
+
+This first ships in the private 1.3.14 (34) preview. iOS does not render the
+control, and its schedule is unchanged.
+
 There is no sidebar footer. Whether this Mac can be reached right now is stated
 once, in LAN Transfer's status head, beside the switch that pauses and resumes
 receiving. The menu bar keeps its own status line.

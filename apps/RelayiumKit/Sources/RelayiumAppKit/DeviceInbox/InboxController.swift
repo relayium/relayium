@@ -22,6 +22,32 @@ public struct InboxAccountIdentity: Equatable, Sendable {
     }
 }
 
+/// The user's own "check now", and what came of it.
+///
+/// Separate from `InboxRuntimeState` for the reason `InboxSettingsError` is: it
+/// is feedback on one button press, not a description of what the inbox IS. The
+/// status line still says saved, waiting, offline or ready; this only says
+/// whether the check the user asked for has run.
+///
+/// **No case means "received".** A check that found nothing and a check that
+/// found something are told apart only so the empty one can say so; what
+/// actually landed is still reported by the status line, from a durable
+/// receipt, and nowhere else.
+public enum InboxManualCheck: Equatable, Sendable {
+    /// Nothing asked, or the last answer no longer describes the current state.
+    case none
+    /// Requested, and not yet answered by a pass that started after the request.
+    case checking
+    /// A pass that started after the request completed and central held
+    /// nothing for this device: no delivery, no question, no blocker.
+    case nothingNew
+    /// A pass that started after the request completed and found something to
+    /// report. What it found is the status line's to say.
+    case checked
+    /// The check did not complete. The status line names why.
+    case failed
+}
+
 /// A held delivery rendered without decrypting or exposing its manifest.
 ///
 /// The task id remains the response handle, while size and expiry give multiple
@@ -302,7 +328,19 @@ public final class InboxController: ObservableObject {
 
     /// The single closed state every surface renders. Never `ready` by default
     /// and never `ready` by fall-through.
-    @Published public private(set) var state: InboxRuntimeState = .signedOut
+    @Published public private(set) var state: InboxRuntimeState = .signedOut {
+        didSet {
+            // A settled answer describes the state the check left. Once the
+            // loop has moved on — a delivery arrived, the network dropped, the
+            // user paused — the answer is about a moment that has passed, and
+            // "nothing new" beside "1 file saved" would contradict itself.
+            if manualCheck != .none, manualCheck != .checking, state != manualCheckState {
+                manualCheck = .none
+            }
+        }
+    }
+    /// The user's last "check now", published for the status card.
+    @Published public private(set) var manualCheck: InboxManualCheck = .none
     /// The user's own answer, mirrored for the settings control.
     @Published public private(set) var policy: InboxAutoAccept = .off
     @Published public private(set) var folder: InboxFolderSummary = .none
@@ -391,6 +429,20 @@ public final class InboxController: ObservableObject {
     private var deviceNames: [String: String] = [:]
     private var currentDeviceIDs: Set<String> = []
     private var deviceDirectoryLoaded = false
+    /// Whether a "check now" is waiting for a pass that started after it.
+    ///
+    /// While this is set the loop does not sleep: it goes straight to the next
+    /// pass. Every loop iteration either answers it, drops it at a gate, or
+    /// fails it, so it can never keep the loop spinning.
+    private var manualCheckPending = false
+    /// Distinguishes one request from a later one, so a pass that started before
+    /// a drop-and-re-request cannot answer the newer request.
+    private var manualCheckSerial = 0
+    /// The state the last answered check left, for `state`'s observer.
+    private var manualCheckState: InboxRuntimeState?
+    /// A generation whose loop has returned for good — a terminal failure — so
+    /// a check requested under it would wait for a pass that is never coming.
+    private var endedGeneration: InboxGeneration?
     public init(runtime: InboxRuntime) {
         self.runtime = runtime
     }
@@ -511,6 +563,7 @@ public final class InboxController: ObservableObject {
         deviceDirectoryLoaded = false
         asking = []
         settingsError = nil
+        dropManualCheck()
         isPaused = false
         folder = .none
         policy = .off
@@ -527,6 +580,10 @@ public final class InboxController: ObservableObject {
     private func stopLoop() {
         loop?.cancel()
         loop = nil
+        // A check asked of the loop being stopped is not carried into the next
+        // one: whatever stopped it — a policy change, a folder change, a sign-out,
+        // leaving the foreground — may also be why the check must not run.
+        dropManualCheck()
         runtime.sleeper.wake()
         passToken += 1
     }
@@ -540,9 +597,18 @@ public final class InboxController: ObservableObject {
     private func run(_ generation: InboxGeneration, bearer: String) async {
         var failures = 0
         var prepared = false
+        defer {
+            // Returned while still current: a terminal failure. Nothing will run
+            // under this generation until the user acts or the account changes.
+            if isCurrent(generation) {
+                endedGeneration = generation
+                dropManualCheck()
+            }
+        }
 
         while isCurrent(generation), !Task.isCancelled {
             if isPaused {
+                dropManualCheck()
                 publish(.paused, for: generation)
                 await nap(runtime.backoff.idle, generation)
                 continue
@@ -563,12 +629,14 @@ public final class InboxController: ObservableObject {
             // has been set up, and nothing will be until the app comes back.
             // `foreground(true)` restarts and re-publishes at that point.
             if !isForeground {
+                dropManualCheck()
                 await nap(runtime.backoff.idle, generation)
                 continue
             }
             let policy = runtime.folder.receivePolicy(account: generation.account)
             self.policy = policy
             guard policy != .off else {
+                dropManualCheck()
                 // Off is announced, once, rather than simply going quiet. Central
                 // keeps the last policy it was told, so a Mac that stopped
                 // polling without saying so would still be offered to senders as
@@ -601,6 +669,7 @@ public final class InboxController: ObservableObject {
                 // Receiving is on with no grant to receive INTO. Never `ready`,
                 // and never silently `off` either: the policy the user set is
                 // still their answer, and this names what is missing.
+                dropManualCheck()
                 refreshFolder()
                 publish(.folderMissing, for: generation)
                 await nap(runtime.backoff.blocked, generation)
@@ -618,9 +687,17 @@ public final class InboxController: ObservableObject {
                     guard isCurrent(generation) else { return }
                     prepared = true
                 }
-                let delay = try await pass(engine, generation: generation, policy: policy)
+                // Only a request made BEFORE this pass started is answered by it.
+                // A click while the pass is already past its pending read is
+                // answered by the next pass, which `nap` then starts at once.
+                let answering = manualCheckPending ? manualCheckSerial : nil
+                let (delay, foundNothing) = try await pass(engine, generation: generation,
+                                                           policy: policy)
                 guard isCurrent(generation) else { return }
                 failures = 0
+                if let answering {
+                    answerManualCheck(answering, foundNothing ? .nothingNew : .checked)
+                }
                 await nap(delay, generation)
             } catch {
                 guard isCurrent(generation) else { return }
@@ -630,7 +707,13 @@ public final class InboxController: ObservableObject {
                 // central still holds what the last successful pass established.
                 prepared = false
                 let delay = runtime.backoff.delay(afterFailures: failures)
-                if applyFailure(error, retryIn: delay) { return }
+                let terminal = applyFailure(error, retryIn: delay)
+                // Whenever the request was made, this attempt was the one serving
+                // it and it did not complete. Answering here — rather than only
+                // for a request that predates the pass — is also what stops a
+                // failing enrolment from being retried without backoff.
+                if manualCheckPending { answerManualCheck(manualCheckSerial, .failed) }
+                if terminal { return }
                 await nap(delay, generation)
             }
         }
@@ -649,7 +732,8 @@ public final class InboxController: ObservableObject {
     /// One pass, with this generation's observers attached for exactly its
     /// duration. Returns how long to wait before the next one.
     private func pass(_ engine: InboxReceiveEngine, generation: InboxGeneration,
-                      policy: InboxAutoAccept) async throws -> TimeInterval {
+                      policy: InboxAutoAccept) async throws
+        -> (delay: TimeInterval, foundNothing: Bool) {
         passToken += 1
         let token = passToken
         let record = InboxPassRecord()
@@ -690,8 +774,21 @@ public final class InboxController: ObservableObject {
         // Invalidate BEFORE reading the record, so nothing else can publish over
         // the decision about to be made.
         passToken += 1
-        guard isCurrent(generation) else { return runtime.backoff.idle }
-        return apply(result, record: record, generation: generation, policy: policy)
+        guard isCurrent(generation) else { return (runtime.backoff.idle, false) }
+        let delay = apply(result, record: record, generation: generation, policy: policy)
+        // Nothing new means exactly this: this pass READ the pending list and
+        // central listed nothing for this device, and nothing is waiting on an
+        // answer or a blocker. `.idle` alone is not enough — the engine also
+        // returns it when pending was non-empty and the claim leased nothing — and
+        // a pass that worked a delivery is not "nothing" either. Anything short of
+        // an observed empty list is for the status line to describe.
+        let foundNothing: Bool
+        if case .idle = result, case .ready = state, record.sawPending, record.pending.isEmpty {
+            foundNothing = true
+        } else {
+            foundNothing = false
+        }
+        return (delay, foundNothing)
     }
 
     private func apply(_ result: InboxReceiveEngine.PassResult, record: InboxPassRecord,
@@ -1146,7 +1243,33 @@ public final class InboxController: ObservableObject {
 
     private func nap(_ seconds: TimeInterval, _ generation: InboxGeneration) async {
         guard isCurrent(generation) else { return }
-        await runtime.sleeper.sleep(seconds)
+        // A check is outstanding, so the next pass is now rather than after the
+        // interval. Read on the main actor, where `checkNow` sets it.
+        if manualCheckPending { return }
+        // A pause that landed while the pass ran woke nothing — nothing was
+        // sleeping — and the finished pass then published its own state over
+        // `paused`. Go straight back to the gate, which re-publishes `paused` and
+        // sleeps there, instead of showing Ready for a whole interval.
+        if isPaused, state != .paused { return }
+        // The mark is read here, on the main actor and after the check above, so a
+        // `checkNow` (or any other wake) that lands in the hop into the sleeper is
+        // not lost; a wake from before this point is not replayed.
+        let mark = runtime.sleeper.wakeMark()
+        await runtime.sleeper.sleep(seconds, unlessWokenSince: mark)
+    }
+
+    private func answerManualCheck(_ serial: Int, _ outcome: InboxManualCheck) {
+        guard manualCheckPending, manualCheckSerial == serial else { return }
+        manualCheckPending = false
+        manualCheckState = state
+        manualCheck = outcome
+    }
+
+    /// Withdraw an outstanding or answered check without claiming any result.
+    private func dropManualCheck() {
+        manualCheckPending = false
+        manualCheckState = nil
+        manualCheck = .none
     }
 
     // MARK: - the user's own controls
@@ -1213,6 +1336,7 @@ public final class InboxController: ObservableObject {
     /// clears it.
     public func pause() {
         guard generation != nil, !isPaused else { return }
+        dropManualCheck()
         isPaused = true
         state = .paused
         runtime.sleeper.wake()
@@ -1276,6 +1400,49 @@ public final class InboxController: ObservableObject {
         settingsError = nil
         refreshFolder()
         restart()
+    }
+
+    /// Whether "check now" can do anything at all right now.
+    ///
+    /// Every gate the loop itself applies, read from the same facts: an account,
+    /// the foreground, no pause, a policy that is not Off, a chosen folder, and a
+    /// loop that has not stopped for good. A surface renders the control only
+    /// where this holds, so the button is never one that does nothing.
+    public var canCheckNow: Bool {
+        guard let generation, identity != nil, isForeground, !isPaused,
+              endedGeneration != generation else { return false }
+        if case .failed = state { return false }
+        return runtime.folder.receivePolicy(account: generation.account) != .off
+            && runtime.folder.hasFolder(account: generation.account)
+    }
+
+    /// Check with central now instead of waiting for the next scheduled pass.
+    ///
+    /// **Not `retryNow()`.** That restarts the generation, which cancels a
+    /// delivery in flight. This only wakes the loop that is already running, so a
+    /// transfer mid-download is never interrupted by a person asking whether
+    /// anything else has arrived.
+    ///
+    /// What it can and cannot do, and the copy says the same: it asks central
+    /// for deliveries that have FINISHED uploading. A sender's upload still in
+    /// progress is not a task yet and no check can fetch it, and nothing here
+    /// makes bytes move faster. It answers nothing on the user's behalf — under
+    /// Ask, held deliveries still need their own Receive or Decline.
+    ///
+    /// Coalescing: while a check is outstanding, further calls change nothing. At
+    /// most one extra pass per request, run serially by the one loop, so repeated
+    /// clicks cannot start passes in parallel or add polling beyond what the user
+    /// asked for.
+    @discardableResult
+    public func checkNow() -> Bool {
+        guard canCheckNow else { return false }
+        if manualCheckPending { return true }
+        manualCheckSerial += 1
+        manualCheckPending = true
+        manualCheckState = nil
+        manualCheck = .checking
+        runtime.sleeper.wake()
+        return true
     }
 
     /// Answer a task central is holding under `ask`.

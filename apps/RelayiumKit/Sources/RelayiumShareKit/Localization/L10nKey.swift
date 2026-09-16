@@ -2384,6 +2384,13 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case settingsThisVersionHeading = "settings.thisVersionHeading"
     case inboxNotificationsHeading = "inbox.notificationsHeading"
     case inboxConversationsEmpty = "inbox.conversationsEmpty"
+
+    // MARK: macOS Device Inbox check now (2026-09-16)
+    case inboxCheckNow = "inbox.checkNow"
+    case inboxChecking = "inbox.checking"
+    case inboxCheckNothingNew = "inbox.checkNothingNew"
+    case inboxCheckDone = "inbox.checkDone"
+    case inboxCheckFailed = "inbox.checkFailed"
 }
 
 /// Keys whose value depends on a count.

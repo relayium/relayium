@@ -482,6 +482,29 @@ struct DeviceInboxSurface: View {
                 InlineMessage(.failure, InboxSettingsErrorCopy.message(error))
                     .accessibilityIdentifier("inbox-error")
             }
+            // Check now wakes the loop that is already running. It is never
+            // `retryNow()`: that restarts the generation and would cancel a
+            // delivery mid-download. Offered only in healthy waiting states, and
+            // kept on screen — disabled, saying Checking… — until the pass that
+            // answers it returns, so a second press cannot queue a second pass.
+            if offersControls, inbox.canCheckNow,
+               inbox.manualCheck == .checking
+                || InboxManualCheckPresentation.offersCheck(in: inbox.state) {
+                Button(InboxManualCheckPresentation
+                    .label(isChecking: inbox.manualCheck == .checking)) {
+                    inbox.checkNow()
+                }
+                .buttonStyle(.referenceSecondary)
+                .disabled(inbox.manualCheck == .checking)
+                .accessibilityIdentifier("inbox-check-now")
+            }
+            // The answer, beside the button that asked. It never says anything
+            // arrived; the status line above does that from a durable receipt.
+            if offersControls,
+               let answer = InboxManualCheckPresentation.feedback(for: inbox.manualCheck) {
+                InlineMessage(inbox.manualCheck == .failed ? .warning : .info, answer)
+                    .accessibilityIdentifier("inbox-check-result")
+            }
             // Pause is offered only where it means something. A paused inbox
             // already renders Resume as its recovery action above, and pausing
             // an inbox that is Off or has no folder would be a control with no

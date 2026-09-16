@@ -1085,3 +1085,8 @@
 "settings.thisVersionHeading" = "当前版本";
 "inbox.notificationsHeading" = "通知";
 "inbox.conversationsEmpty" = "这台 Mac 上还没有收发记录。";
+"inbox.checkNow" = "立即检查";
+"inbox.checking" = "正在检查…";
+"inbox.checkNothingNew" = "暂无新内容。发送方上传完成后，投递才会出现在这里。";
+"inbox.checkDone" = "检查完成。";
+"inbox.checkFailed" = "检查未完成，原因见上方状态。";

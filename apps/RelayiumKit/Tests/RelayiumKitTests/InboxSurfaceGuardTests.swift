@@ -472,7 +472,8 @@ final class InboxSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(surface.contains("statusSection(offersControls: false)"),
                       "the branch with no generation renders the full control set")
         for guarded in ["if offersControls,\n               let recovery",
-                        "if offersControls, canPause"] {
+                        "if offersControls, canPause",
+                        "if offersControls, inbox.canCheckNow,"] {
             XCTAssertTrue(surface.contains(guarded),
                           "a control that needs a generation is rendered unguarded")
         }
@@ -1487,7 +1488,10 @@ final class InboxSurfaceGuardTests: XCTestCase {
                      // beside it. It is the one state where the session and the
                      // receiver disagree permanently, and both obvious renderings
                      // of it are defects.
-                     "testAnAccountTheReceiverCannotUseSaysSoAndOffersARouteOut"] {
+                     "testAnAccountTheReceiverCannotUseSaysSoAndOffersARouteOut",
+                     // Check now, pressed and observed: Checking…, an empty
+                     // answer, then a found delivery.
+                     "testCheckNowShowsCheckingThenNothingNewThenDefersToTheReceipt"] {
             XCTAssertTrue(ui.contains(name), "the runtime suite lost \(name)")
         }
         for argument in ["--relayium-ui-testing-inbox-ready",
@@ -1495,6 +1499,7 @@ final class InboxSurfaceGuardTests: XCTestCase {
                          "--relayium-ui-testing-inbox-ask",
                          "--relayium-ui-testing-inbox-working",
                          "--relayium-ui-testing-inbox-result",
+                         "--relayium-ui-testing-inbox-check",
                          "--relayium-ui-testing-inbox-notifications-denied",
                          "--relayium-ui-testing-inbox-notifications-recover",
                          "--relayium-ui-testing-unusable-account"] {
@@ -1505,6 +1510,24 @@ final class InboxSurfaceGuardTests: XCTestCase {
         let mode = try macSource("UITestMode.swift")
         XCTAssertTrue(mode.contains("hasUnusableAccount ? \"acct/uitest\" : \"acct_uitest\""),
                       "the refused-account fixture no longer supplies an id this build rejects")
+    }
+
+    /// Check now wakes the running loop and is never an alias of Try again.
+    ///
+    /// `retryNow()` restarts the generation, which cancels a delivery mid-
+    /// download; a button for "is there anything else?" must not be able to do
+    /// that. The controller behaviour is proven in `InboxControllerTests`; this
+    /// pins the wiring the runtime suite clicks.
+    func testCheckNowIsWiredToTheWakeAndNotToTheRestart() throws {
+        let surface = try macSource("DeviceInbox/DeviceInboxSurface.swift")
+        let start = try XCTUnwrap(surface.range(of: ".accessibilityIdentifier(\"inbox-check-now\")"))
+        let window = surface[surface.index(start.lowerBound, offsetBy: -600)..<start.lowerBound]
+        XCTAssertTrue(window.contains("inbox.checkNow()"), "check now is not wired to checkNow")
+        XCTAssertFalse(window.contains("inbox.retryNow()"),
+                       "check now restarts the receiver and can cancel a transfer")
+        XCTAssertTrue(window.contains(".disabled(inbox.manualCheck == .checking)"),
+                      "a running check can be pressed again")
+        XCTAssertTrue(surface.contains(".accessibilityIdentifier(\"inbox-check-result\")"))
     }
 
     /// The acceptance fixture exists only in DEBUG. What it substitutes is the
