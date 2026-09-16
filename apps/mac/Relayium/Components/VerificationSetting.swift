@@ -37,18 +37,17 @@ struct VerificationSetting: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer(minLength: Metrics.tight)
-                        #if DEBUG
-                        // Diagnostic variants only; see `UITestSwitchAudit`.
-                        UITestSwitchAudit.Slot(title: L10n.t(.verifyToggle),
-                                               identifier: "transfer-verification-toggle",
-                                               help: nil,
-                                               isOn: requiresConfirmation) {
-                            verificationToggle
-                        }
-                        .disabled(locked)
-                        #else
-                        verificationToggle
-                        #endif
+                        // The setter re-checks `locked` rather than trusting
+                        // `.disabled`: a click delivered from the previous render
+                        // can land after a claim.
+                        NativeSwitch(label: L10n.t(.verifyToggle),
+                                     identifier: "transfer-verification-toggle",
+                                     isOn: Binding(
+                            get: { preference.requiresSASConfirmation },
+                            set: { if !locked { preference.requiresSASConfirmation = $0 } }
+                        ))
+                            .fixedSize()
+                            .disabled(locked)
                     }
                 }
                 SettingsRow(label: L10n.t(.verifyEncryptionLabel),
@@ -58,27 +57,6 @@ struct VerificationSetting: View {
                                 .joined(separator: "\n\n")) // nonlocalized: paragraph break
             }
         }
-        #if DEBUG
-        .environment(\.uiTestHoldsAuditedSwitch, true)
-        .onAppear { UITestSwitchAudit.NativeWalk.startIfRequested() }
-        #endif
         .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
-    }
-
-    /// The setter re-checks `locked` rather than trusting `.disabled`: a click
-    /// delivered from the previous render can land after a claim.
-    private var requiresConfirmation: Binding<Bool> {
-        Binding(
-            get: { preference.requiresSASConfirmation },
-            set: { if !locked { preference.requiresSASConfirmation = $0 } }
-        )
-    }
-
-    private var verificationToggle: some View {
-        Toggle(L10n.t(.verifyToggle), isOn: requiresConfirmation)
-            .toggleStyle(.switch)
-            .labelsHidden()
-            .disabled(locked)
-            .accessibilityIdentifier("transfer-verification-toggle")
     }
 }

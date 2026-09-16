@@ -228,20 +228,7 @@ struct LanConnectPane: View {
                        title: NearbyStatusPresentation.text(for: receive.state),
                        detail: heroDetail,
                        isActive: isListening) {
-                #if DEBUG
-                // Diagnostic variants only; see `UITestSwitchAudit`.
-                UITestSwitchAudit.Slot(
-                    title: L10n.t(.nearbyA11yReceiving),
-                    identifier: "lan-receiving-switch",
-                    help: receivingAction,
-                    isOn: Binding(get: { receive.state != .paused && receive.state != .off },
-                                  set: { setReceiving($0) })) {
-                    receivingSwitch
-                }
-                .disabled(receive.state != .paused && receive.state != .off && sessionLocked)
-                #else
                 receivingSwitch
-                #endif
             }
             // The consent stays on the page rather than folding: a listening
             // Mac accepts a stranger's transfer without asking first, and a
@@ -263,26 +250,10 @@ struct LanConnectPane: View {
                     .padding(.horizontal, Metrics.caption)
             }
         }
-        #if DEBUG
-        .modifier(UITestSwitchAudit.GroupSemantics(label: L10n.t(.nearbyA11yReceiving)))
-        .environment(\.uiTestHoldsAuditedSwitch, true)
-        #else
         .accessibilityElement(children: .contain)
         .accessibilityLabel(L10n.t(.nearbyA11yReceiving))
-        #endif
         .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
     }
-
-    #if DEBUG
-    /// The receiving switch's hint, for the diagnostic variants only.
-    private var receivingAction: String {
-        switch receive.state {
-        case .paused: return L10n.t(.nearbyResumeReceiving)
-        case .connecting, .ready, .reconnecting, .active: return L10n.t(.nearbyPauseReceiving)
-        case .off: return L10n.t(.nearbyStartReceiving)
-        }
-    }
-    #endif
 
     /// The reference's one supporting line while listening; what pausing
     /// leaves working while not.
@@ -308,17 +279,20 @@ struct LanConnectPane: View {
         case .off:
             action = L10n.t(.nearbyStartReceiving)
         }
-        return Toggle(L10n.t(.nearbyA11yReceiving), isOn: Binding(
-            get: { on },
+        // The name, the action it names and the identifier live on the native
+        // switch itself; see `NativeSwitch` for why no SwiftUI accessibility
+        // modifier is added here. The getter reads the state live, so a press
+        // the setter refuses snaps back to what is true.
+        return NativeSwitch(label: L10n.t(.nearbyA11yReceiving),
+                            identifier: "lan-receiving-switch",
+                            help: action,
+                            isOn: Binding(
+            get: { receive.state != .paused && receive.state != .off },
             set: { setReceiving($0) }))
-            .toggleStyle(.switch)
-            .labelsHidden()
+            .fixedSize()
             // Pausing would drop a session this module owns; resuming or
             // starting never can.
             .disabled(on && sessionLocked)
-            .help(action)
-            .accessibilityHint(action)
-            .accessibilityIdentifier("lan-receiving-switch")
     }
 
     private func setReceiving(_ on: Bool) {
