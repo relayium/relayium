@@ -391,19 +391,23 @@ struct TransferLinkPane: View {
                 .accessibilityIdentifier("link-drop-hint")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        // VERTICAL only. Padding the sides too would inset the two buttons from
-        // the composer above them, so gaining a drop target would have moved
-        // controls that have nothing to do with dragging.
-        .padding(.vertical, Metrics.tight)
-        .contentShape(Rectangle())
-        // Drawn only while a drag is actually over it, so the resting pane keeps
-        // two buttons and a sentence rather than gaining a box.
-        .overlay(
-            RoundedRectangle(cornerRadius: Metrics.corner)
-                .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6]))
-                .foregroundStyle(isDropTargeted && link.acceptsWork
-                                 ? Color.accentColor : Color.clear)
+        // The reference's drop zone: a spacious dashed area that is visible at
+        // rest, so a connected workspace says where a drag can land before one
+        // starts, and turns violet while a drag that can land is over it. It
+        // exists only here, inside a real connection — never before one.
+        .padding(.vertical, 18)
+        .padding(.horizontal, Metrics.rowHorizontal)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(isDropTargeted && link.acceptsWork ? Palette.actionSurface : Color.clear)
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                .foregroundStyle(isDropTargeted && link.acceptsWork
+                                 ? Palette.action : Palette.buttonBorder)
+        )
+        .contentShape(Rectangle())
         // **The attempt, not just the state.** `acceptsWork` alone would let a
         // drag that began on a link which ended mid-load stage onto whatever
         // link is open in its place: this pane is rendered for `.ended` too, so

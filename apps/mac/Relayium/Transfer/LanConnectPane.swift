@@ -28,6 +28,9 @@ struct LanConnectPane: View {
     /// longer-lived: an address inventory is a fingerprint of somebody's home
     /// network, and it is never stored, logged or sent.
     @State private var localAddresses: [LocalNetworkAddress] = []
+    /// Which address row just acknowledged a Copy. View state; the address
+    /// itself is not kept here.
+    @State private var copiedAddressID: LocalNetworkAddress.ID?
 
     private let route = AppDestination.nearby
 
@@ -45,14 +48,12 @@ struct LanConnectPane: View {
                 InlineMessage(.warning, message)
                     .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
             }
-            // A route, not progress: before a device is chosen the client can
-            // truthfully name both endpoints and the encryption, and nothing
-            // else — no stop is complete and no path is promised to be direct.
-            PathRail(stops: PathRailPresentation.lan())
+            // No route rail on this screen any more: the reference's status
+            // head already says what the route is — this network, end-to-end
+            // encrypted, no account — and says nothing about a direct path
+            // this client cannot observe.
             thisMac
             sameNetwork
-            InlineMessage(.info, L10n.t(.nearbyNoAccountNeeded))
-                .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
             if let actionError {
                 InlineMessage(.failure, actionError)
                     .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
@@ -99,17 +100,15 @@ struct LanConnectPane: View {
 
     /// The roster, and the one way onto a device in it.
     ///
-    /// The names disclaimer is the card's footnote rather than an ⓘ: it is what
-    /// a name on this list does NOT prove, and a security caveat a reader has to
-    /// press for is a caveat most readers never see. What the list IS — which
-    /// devices arrive from this public address and why — is the explanation, and
-    /// that folds.
+    /// The names caveat sits on the caption line, visible without pressing
+    /// anything. What the list IS — which devices arrive from this public
+    /// address and why — is the explanation, and that folds.
     ///
     /// **Drawn only when it holds something**, which is `hasRosterContent`. The
-    /// card's three arms are a roster while this Mac is scanning, a Start
-    /// control while it is not scanning and not paused, and the chosen device's
-    /// actions — and a user who presses Pause in the status head above satisfies
-    /// none of them. `CardRows` with no rows is zero points tall, so the card
+    /// card's three arms are a roster while this Mac is scanning, the reconnect
+    /// status while a dropped socket retries, and the chosen device's actions —
+    /// and a listener that is off or paused satisfies none of them; its one
+    /// control is the switch in the status head above. `CardRows` with no rows is zero points tall, so the card
     /// still drew its own background, border and 11pt corners around nothing: a
     /// sliver of chrome between the caption and the names footnote, in a state
     /// the user had just asked for. There is nothing to explain in its place
@@ -128,36 +127,36 @@ struct LanConnectPane: View {
     /// rows are written in, in the same order, so a fourth row cannot be added
     /// without this answering for it.
     private var hasRosterContent: Bool {
-        discovery.isScanning || !discovery.isPaused || discovery.selectedDevice != nil
+        discovery.isScanning || isRetrying || discovery.selectedDevice != nil
+    }
+
+    /// A dropped resident socket that is retrying on its own — real background
+    /// work, and the one non-roster fact this card still carries.
+    private var isRetrying: Bool {
+        if case .reconnecting = discovery.state { return true }
+        return false
     }
 
     private var rosterCard: some View {
+        // The names caveat sits on the caption line, where the reference puts
+        // it: visible without pressing anything, beside the list it is about.
         SectionCard(title: L10n.t(.workspaceSameNetworkHeading),
-                    footnote: L10n.t(.nearbyNamesDisclaimer),
+                    note: L10n.t(.nearbyNamesDisclaimerShort),
                     explanation: L10n.t(.nearbyExplain),
                     rows: true) {
             CardRows {
                 if discovery.isScanning {
                     roster
-                } else if !discovery.isPaused {
+                } else if isRetrying {
+                    // **No Start button here.** The status head's switch is the
+                    // one start, pause and resume control; a second Start in
+                    // this card ran the same `discovery.start()` beside it. An
+                    // `off` listener therefore draws no card at all, and only a
+                    // dropped resident socket — which really is retrying in the
+                    // background — says so here.
                     CardBlockRow {
-                        HStack(spacing: Metrics.tight) {
-                            // **Start receiving, because that is what it does.**
-                            // `discovery.start()` opens the room socket rather
-                            // than rescanning a roster, and the status above
-                            // reads *off* until it is pressed — so a label
-                            // naming a search would say the app is looking while
-                            // nothing is listening.
-                            Button(L10n.t(.nearbyStartReceiving)) { discovery.start() }
-                                .disabled(sessionLocked)
-                            // `off` is waiting for the user and must not animate
-                            // as if work were running. Only a dropped resident
-                            // socket really does retry in the background.
-                            if case .reconnecting = discovery.state {
-                                ProgressView { Text(L10n.t(.nearbyReconnecting)) }
-                                    .controlSize(.small)
-                            }
-                        }
+                        ProgressView { Text(L10n.t(.nearbyReconnecting)) }
+                            .controlSize(.small)
                     }
                 }
                 if let device = discovery.selectedDevice {
@@ -170,20 +169,32 @@ struct LanConnectPane: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel(L10n.t(.nearbyA11yDevices))
         }
+        .accessibilityHint(L10n.t(.nearbyNamesDisclaimer))
     }
 
     /// What this Mac is called and where it is: the first-viewport answer to
     /// "can the other side find me", above the card that holds the roster.
     private var thisMac: some View {
         SectionCard(title: L10n.t(.nearbyThisMacHeading),
-                    footnote: L10n.t(.nearbyAddressesPrivacyNote),
+                    footnote: thisMacFootnote,
                     rows: true) {
             CardRows {
                 CardBlockRow(explanation: identityCaption,
                              subject: L10n.t(.nearbyThisMacHeading)) {
-                    identity
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(L10n.t(.nearbyVisibleNameLabel))
+                            .font(.body)
+                            .foregroundStyle(Palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: Metrics.tight)
+                        identity
+                    }
                 }
-                CardBlockRow(explanation: L10n.t(.nearbyAddressesNotGroupingNote),
+                // The full privacy statement lives behind this ⓘ; where files
+                // land is said only under the card, and only while listening.
+                CardBlockRow(explanation: [L10n.t(.nearbyAddressesPrivacyNote),
+                                           L10n.t(.nearbyAddressesNotGroupingNote)]
+                                .joined(separator: "\n\n"), // nonlocalized: paragraph break
                              subject: L10n.t(.nearbyLocalAddressesHeading)) {
                     addresses
                 }
@@ -192,6 +203,17 @@ struct LanConnectPane: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel(L10n.t(.nearbyA11yThisMac))
         }
+    }
+
+    /// What the addresses are not, and — while this Mac is listening — where an
+    /// incoming file lands: the reference's single short line under the card.
+    /// The full privacy statement is the address row's ⓘ.
+    private var thisMacFootnote: String {
+        if !(receive.state == .paused || receive.state == .off) {
+            return L10n.detail([L10n.t(.nearbyAddressesPrivacyShort),
+                                L10n.t(.nearbySavedToDownloadsShort)])
+        }
+        return L10n.t(.nearbyAddressesPrivacyShort)
     }
 
     /// Whether this Mac can be reached right now, and the one control that
@@ -204,25 +226,24 @@ struct LanConnectPane: View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
             StatusHero(symbol: "dot.radiowaves.left.and.right",
                        title: NearbyStatusPresentation.text(for: receive.state),
-                       detail: L10n.t(receive.state == .paused || receive.state == .off
-                                      ? .nearbyPausedBody : .nearbyListeningBody),
+                       detail: heroDetail,
                        isActive: isListening) {
-                switch receive.state {
-                case .paused:
-                    Button(L10n.t(.nearbyResumeReceiving)) { discovery.resume() }
-                case .connecting, .ready, .reconnecting, .active:
-                    Button(L10n.t(.nearbyPauseReceiving)) { discovery.pause() }
-                        .disabled(sessionLocked)
-                case .off:
-                    EmptyView()
-                }
+                receivingSwitch
             }
+            // The consent stays on the page rather than folding: a listening
+            // Mac accepts a stranger's transfer without asking first, and a
+            // reader must not have to press anything to learn that.
             if !(receive.state == .paused || receive.state == .off) {
-                Text(L10n.t(.nearbySavedToDownloads))
+                // Short and on the page; the full sentence is its tooltip and
+                // its VoiceOver hint, and Help below explains it at length.
+                Text(L10n.t(.nearbyListeningConsentShort))
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, Metrics.caption)
+                    .help(L10n.t(.nearbyListeningBody))
+                    .accessibilityHint(L10n.t(.nearbyListeningBody))
+                    .accessibilityIdentifier("lan-listening-consent")
             }
             if let failure = receive.lastFailure {
                 InlineMessage(.warning, failure)
@@ -234,26 +255,82 @@ struct LanConnectPane: View {
         .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
     }
 
+    /// The reference's one supporting line while listening; what pausing
+    /// leaves working while not.
+    private var heroDetail: String {
+        guard isListening else { return L10n.t(.nearbyPausedBody) }
+        return L10n.detail([L10n.plural(.nearbyDevicesNearby, discovery.devices.count),
+                            L10n.t(.nearbyEncryptedNoAccount)])
+    }
+
+    /// **The status head's switch is the residency control.** On means this
+    /// Mac is listening or on its way into the room; flipping it runs exactly
+    /// the call the old buttons ran for the state on screen — Start for a
+    /// listener that is off, Resume for a paused one, Pause for a live one —
+    /// and it names that action for VoiceOver and the pointer.
+    private var receivingSwitch: some View {
+        let on = receive.state != .paused && receive.state != .off
+        let action: String
+        switch receive.state {
+        case .paused:
+            action = L10n.t(.nearbyResumeReceiving)
+        case .connecting, .ready, .reconnecting, .active:
+            action = L10n.t(.nearbyPauseReceiving)
+        case .off:
+            action = L10n.t(.nearbyStartReceiving)
+        }
+        return Toggle(L10n.t(.nearbyA11yReceiving), isOn: Binding(
+            get: { on },
+            set: { setReceiving($0) }))
+            .toggleStyle(.switch)
+            .labelsHidden()
+            // Pausing would drop a session this module owns; resuming or
+            // starting never can.
+            .disabled(on && sessionLocked)
+            .help(action)
+            .accessibilityLabel(L10n.t(.nearbyA11yReceiving))
+            .accessibilityHint(action)
+            .accessibilityIdentifier("lan-receiving-switch")
+    }
+
+    private func setReceiving(_ on: Bool) {
+        switch receive.state {
+        case .paused:
+            if on { discovery.resume() }
+        case .connecting, .ready, .reconnecting, .active:
+            // Re-checked here rather than trusted to `.disabled`: a click from
+            // the previous render can land after a claim.
+            if !on && !sessionLocked { discovery.pause() }
+        case .off:
+            if on { discovery.start() }
+        }
+    }
+
     /// The socket's answer while there is one, and the configured name
     /// otherwise — never the configured name presented as what peers see.
     @ViewBuilder
     private var identity: some View {
         if let announced = discovery.announcedName, isListening {
             Text(L10n.token(announced))
-                .font(.title3.weight(.semibold))
+                .font(.body.weight(.medium))
+                .foregroundStyle(Palette.text)
+                .multilineTextAlignment(.trailing)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
                 .accessibilityIdentifier("lan-announced-name")
         } else {
-            VStack(alignment: .leading, spacing: Metrics.hairline) {
+            VStack(alignment: .trailing, spacing: 1) {
                 Text(L10n.token(AppEnvironment.deviceName()))
-                    .font(.title3.weight(.semibold))
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(Palette.text)
+                    .multilineTextAlignment(.trailing)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                     .accessibilityIdentifier("lan-configured-name")
                 Text(L10n.t(isStarting ? .nearbyIdentityAnnouncing : .nearbyIdentityNotListening))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(Palette.textTertiary)
+                    .multilineTextAlignment(.trailing)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("lan-identity-unavailable")
             }
@@ -271,25 +348,72 @@ struct LanConnectPane: View {
     @ViewBuilder
     private var addresses: some View {
         if localAddresses.isEmpty {
-            Text(L10n.t(.nearbyNoLocalAddresses))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("lan-local-addresses-empty")
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(L10n.t(.nearbyAddressLabel))
+                    .font(.body)
+                    .foregroundStyle(Palette.textSecondary)
+                Spacer(minLength: Metrics.tight)
+                Text(L10n.t(.nearbyNoLocalAddresses))
+                    .font(.callout)
+                    .foregroundStyle(Palette.textTertiary)
+                    .multilineTextAlignment(.trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("lan-local-addresses-empty")
+            }
         } else {
             VStack(alignment: .leading, spacing: Metrics.hairline) {
-                Text(L10n.t(.nearbyLocalAddressesHeading))
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                ForEach(localAddresses) { address in
-                    Text(L10n.t(.nearbyLocalAddressRow,
-                                [L10n.token(address.text), L10n.token(address.interfaceName)]))
-                        .font(.callout.monospaced())
-                        .textSelection(.enabled)
-                        .accessibilityIdentifier("lan-local-address")
+                ForEach(Array(localAddresses.enumerated()), id: \.element.id) { index, address in
+                    HStack(alignment: .center, spacing: 10) {
+                        // One label for the group, on its first line only.
+                        Text(L10n.t(.nearbyAddressLabel))
+                            .font(.body)
+                            .foregroundStyle(Palette.textSecondary)
+                            .opacity(index == 0 ? 1 : 0)
+                            .accessibilityHidden(index != 0)
+                        Spacer(minLength: Metrics.tight)
+                        Text(L10n.token(address.text))
+                            .font(.callout.monospaced())
+                            .foregroundStyle(Palette.text)
+                            .textSelection(.enabled)
+                            .accessibilityLabel(L10n.t(.nearbyLocalAddressRow,
+                                                       [L10n.token(address.text),
+                                                        L10n.token(address.interfaceName)]))
+                            .accessibilityIdentifier("lan-local-address")
+                        Text(L10n.token(address.interfaceName))
+                            .font(.subheadline)
+                            .foregroundStyle(Palette.textTertiary)
+                            .accessibilityHidden(true)
+                        Button(L10n.t(copiedAddressID == address.id ? .commonCopied : .commonCopy)) {
+                            copyAddress(address)
+                        }
+                        .buttonStyle(.referenceSecondary)
+                        .accessibilityLabel(L10n.detail([
+                            L10n.t(copiedAddressID == address.id ? .commonCopied : .commonCopy),
+                            L10n.token(address.text)]))
+                        .accessibilityIdentifier("lan-local-address-copy")
+                    }
                 }
             }
+        }
+    }
+
+    /// One explicit clipboard write of one address the user is looking at.
+    ///
+    /// Marked transient and concealed, so clipboard-history tools that honour
+    /// those types do not keep a copy: the inventory itself is still never
+    /// stored or logged by Relayium, and this is not a way for it to be.
+    private func copyAddress(_ address: LocalNetworkAddress) {
+        let board = NSPasteboard.general
+        board.clearContents()
+        board.setString(address.text, forType: .string)
+        // nonlocalized: nspasteboard.org marker types
+        board.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
+        board.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+        copiedAddressID = address.id
+        let copied = address.id
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            if copiedAddressID == copied { copiedAddressID = nil }
         }
     }
 
@@ -338,18 +462,39 @@ struct LanConnectPane: View {
         return Button {
             if chosen { discovery.clearSelection() } else { discovery.select(device.id) }
         } label: {
-            HStack(spacing: Metrics.tight) {
+            HStack(spacing: 11) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 9)
+                        .fill(Palette.actionSurface)
+                    Image(systemName: "laptopcomputer.and.iphone")
+                        .font(.callout)
+                        .foregroundStyle(Palette.actionLabel)
+                }
+                .frame(width: Metrics.deviceChip, height: Metrics.deviceChip)
+                .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(device.label)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(Palette.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                    // Only what the roster knows: the device is announcing on
+                    // this network now, and whether it can take a connection.
+                    Text(L10n.t(device.supportsLink ? .nearbyDeviceOnline : .nearbyDeviceNeedsUpdate))
+                        .font(.subheadline)
+                        .foregroundStyle(Palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: Metrics.tight)
                 Image(systemName: chosen ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(chosen ? Palette.actionLabel : Color.secondary)
-                Text(device.label)
-                Spacer()
+                    .foregroundStyle(chosen ? Palette.actionLabel : Palette.textTertiary)
+                    .accessibilityHidden(true)
             }
-            .padding(.vertical, Metrics.rowVertical)
+            .padding(.vertical, 11)
             .padding(.horizontal, Metrics.rowHorizontal)
             // A whole-row control, so it takes the platform hit floor rather
-            // than the compact row height — which is also the taller row the
-            // reference draws for a device.
+            // than the compact row height.
             .frame(minHeight: Metrics.hitTarget)
+            .background(chosen ? Palette.rowHover : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -367,22 +512,31 @@ struct LanConnectPane: View {
     @ViewBuilder
     private func actions(for device: NearbyDevice) -> some View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
-            Text(L10n.t(.nearbySendTo, [L10n.token(device.label)]))
-                .font(.callout.weight(.semibold))
             if device.supportsLink {
-                Button(L10n.t(.workspaceConnectToDevice)) { connect(to: device) }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(sessionLocked)
-                    .accessibilityIdentifier("lan-connect-device")
-                Text(L10n.t(.workspaceConnectToDeviceHint))
-                    .font(.subheadline).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .center, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(L10n.t(.nearbySendTo, [L10n.token(device.label)]))
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(Palette.text)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(L10n.t(.workspaceConnectToDeviceHint))
+                            .font(.subheadline).foregroundStyle(Palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: Metrics.tight)
+                    Button(L10n.t(.workspaceConnectToDevice)) { connect(to: device) }
+                        .buttonStyle(.referencePrimary)
+                        .disabled(sessionLocked)
+                        .accessibilityIdentifier("lan-connect-device")
+                }
                 Text(L10n.t(.nearbyAcceptanceNote))
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
                 InlineMessage(.info, L10n.t(.linkOneConnectionNote))
                     .accessibilityIdentifier("lan-device-connection-note")
             } else {
+                Text(L10n.t(.nearbySendTo, [L10n.token(device.label)]))
+                    .font(.callout.weight(.semibold))
                 InlineMessage(.warning, L10n.t(.errorRealtimeLegacyPeer))
                     .accessibilityIdentifier("lan-device-unsupported")
             }

@@ -2328,6 +2328,54 @@ public enum L10nKey: String, CaseIterable, Sendable {
 
     case sendOutstandingHeading = "send.outstandingHeading"
     case sendOutstandingExplain = "send.outstandingExplain"
+
+    // MARK: macOS reference shell (2026-09-16)
+    case navHideSidebar = "nav.hideSidebar"
+    case navShowSidebar = "nav.showSidebar"
+    case navSearchPlaceholder = "nav.searchPlaceholder"
+    case navSearchLabel = "nav.searchLabel"
+    case navSearchClear = "nav.searchClear"
+    case navSearchNoResults = "nav.searchNoResults"
+    case navCrossNetworkShort = "nav.crossNetworkShort"
+    case navLanTransferTagline = "nav.lanTransferTagline"
+    case navCrossNetworkTagline = "nav.crossNetworkTagline"
+    case navStoredSendTagline = "nav.storedSendTagline"
+    case navStoredReceiveTagline = "nav.storedReceiveTagline"
+    case navDeviceInboxTagline = "nav.deviceInboxTagline"
+    case toolbarStatusReceiving = "toolbar.statusReceiving"
+    case toolbarStatusJoining = "toolbar.statusJoining"
+    case toolbarStatusReconnecting = "toolbar.statusReconnecting"
+    case toolbarStatusPaused = "toolbar.statusPaused"
+    case toolbarStatusOff = "toolbar.statusOff"
+    case toolbarStatusConnecting = "toolbar.statusConnecting"
+    case toolbarStatusConnected = "toolbar.statusConnected"
+    case toolbarStatusEnded = "toolbar.statusEnded"
+    case toolbarStatusReady = "toolbar.statusReady"
+    case toolbarStatusCreatingCode = "toolbar.statusCreatingCode"
+    case toolbarStatusWaiting = "toolbar.statusWaiting"
+    case toolbarStatusCodeExpired = "toolbar.statusCodeExpired"
+    case toolbarStatusFailed = "toolbar.statusFailed"
+    case nearbyEncryptedNoAccount = "nearby.encryptedNoAccount"
+    case nearbyNamesDisclaimerShort = "nearby.namesDisclaimerShort"
+    case nearbyVisibleNameLabel = "nearby.visibleNameLabel"
+    case nearbyAddressLabel = "nearby.addressLabel"
+    case nearbyDeviceOnline = "nearby.deviceOnline"
+    case nearbyDeviceNeedsUpdate = "nearby.deviceNeedsUpdate"
+    case verifySecurityHeading = "verify.securityHeading"
+    case verifyToggleShort = "verify.toggleShort"
+    case verifyToggleDetail = "verify.toggleDetail"
+    case verifyEncryptionLabel = "verify.encryptionLabel"
+    case verifyEncryptionValue = "verify.encryptionValue"
+    case pairingCopyCode = "pairing.copyCode"
+    case pairingNewCodeShort = "pairing.newCodeShort"
+    case pairingPassItOn = "pairing.passItOn"
+    case pairingCodePlaceholder = "pairing.codePlaceholder"
+    case workspaceJoinHeading = "workspace.joinHeading"
+    case directJoinNoAccountShort = "direct.joinNoAccountShort"
+    case nearbyListeningConsentShort = "nearby.listeningConsentShort"
+    case nearbyAddressesPrivacyShort = "nearby.addressesPrivacyShort"
+    case nearbySavedToDownloadsShort = "nearby.savedToDownloadsShort"
+    case pairingShareLinkToggle = "pairing.shareLinkToggle"
 }
 
 /// Keys whose value depends on a count.
@@ -2337,6 +2385,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
 /// and the integrity test has to check a different thing for them: exactly the
 /// categories `PluralRule` says the language can produce, no more and no fewer.
 public enum PluralKey: String, CaseIterable, Sendable {
+    /// %@ — how many devices the same-network roster shows right now.
+    case nearbyDevicesNearby = "nearby.devicesNearby"
     /// %@ — the count.
     case selectionFiles = "selection.files"
     /// %@ — the count.

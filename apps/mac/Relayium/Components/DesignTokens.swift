@@ -3,28 +3,27 @@ import SwiftUI
 
 /// **The whole visual vocabulary of this app, in one file.**
 ///
-/// The numbers come from the owner's macOS interface reference: a 216pt
-/// sidebar, a 660pt reading measure, 16pt between groups, 11pt corners, and a
-/// settings row that is at least 40pt tall with 8/14pt insets. They live here
-/// rather than at forty call sites so a screen inherits the rhythm instead of
-/// guessing at it.
+/// The numbers and colours come from the owner's macOS interface reference
+/// (`RelayiumApp.dc.html`, variant b, rendered at 940×620): a 216pt sidebar
+/// with a 40pt window-control row, a 44pt detail toolbar, a 660pt reading
+/// measure, 16pt between groups, 11pt card corners, 14pt hero corners, and a
+/// settings row that is at least 40pt tall with 8/14pt insets.
 ///
-/// ## What it does NOT contain
+/// ## Typography
 ///
-/// No fonts. Every string in the app uses a semantic text style, so it scales
-/// with the user's settings; the one deliberate exception is
-/// `SecurityCodeText`, which states its own reason and is scaled too. The
-/// reference's five type sizes map onto macOS's own steps exactly — 17pt is
-/// `.title2`, 13pt semibold is `.headline`, 13pt is `.body`, 12pt is
-/// `.callout`, 11pt is `.subheadline` — so following the reference and
-/// following the platform are the same thing here.
+/// The reference's five sizes map onto macOS's own text styles exactly — 17pt
+/// is `.title2`, 13pt is `.body`, 12pt is `.callout`, 11pt is `.subheadline` —
+/// so the text styles are kept and only the WEIGHTS follow the reference
+/// (600 → `.semibold`, 500 → `.medium`). A style scales with the user's
+/// settings; a point size would not. The transcribed digits are the one fixed
+/// base, and `SecurityCodeText` scales that too.
 ///
-/// Almost no colour. macOS already has semantic backgrounds and text styles
-/// that answer light mode, dark mode, Increase Contrast and Reduce Transparency
-/// correctly, and a hex value written here would answer none of them. The one
-/// brand colour is the `AccentColor` asset, reached through `Color.accentColor`
-/// — which is also what makes the system draw selection, focus rings and
-/// prominent buttons in it for free. `Palette` says where it may be spent.
+/// ## Colour
+///
+/// Every colour is a named set in `Assets.xcassets` carrying the reference's
+/// dark value, its existing light counterpart, and a High Contrast variant for
+/// each. The catalog answers light, dark and Increase Contrast by itself, so no
+/// hex value is written in Swift and no view branches on the appearance.
 enum Metrics {
     /// The gutter around a destination's content.
     static let page: CGFloat = 22
@@ -41,36 +40,51 @@ enum Metrics {
     static let hairline: CGFloat = 4
     /// Between a group's caption and its card.
     static let caption: CGFloat = 6
-    /// The reading measure. A wider window does not set the text wider — that
-    /// is the first source of the reference's native feel, and the reason the
+    /// The reading measure. A wider window does not set the text wider, so the
     /// column is centred rather than stretched.
     static let readingMeasure: CGFloat = 660
-    /// A card's corner, and the window's.
+    /// A card's corner.
     static let corner: CGFloat = 11
-    /// A status head's corner: one step softer than a card, so the one
-    /// summary per screen reads as a different kind of thing.
+    /// A status head's corner: one step softer than a card, so the one summary
+    /// per screen reads as a different kind of thing.
     static let heroCorner: CGFloat = 14
+    /// The status head's own insets.
+    static let heroPadding: CGFloat = 20
     /// A settings row: the floor, and the insets inside it.
     static let rowMinHeight: CGFloat = 40
     static let rowVertical: CGFloat = 8
     static let rowHorizontal: CGFloat = 14
-    /// The sidebar's width in the reference. A minimum rather than a lock:
-    /// dragging the split divider is a Mac behaviour, and removing it would
-    /// cost more native feel than the fixed width buys.
+    /// The sidebar, at the reference's width.
     static let sidebar: CGFloat = 216
-    static let sidebarMax: CGFloat = 260
-    /// A sidebar row.
+    /// The sidebar's top row, which the window's own controls sit in.
+    static let sidebarControlRow: CGFloat = 40
+    /// A sidebar row, its corner and its insets.
     static let sidebarRowHeight: CGFloat = 28
+    static let sidebarRowCorner: CGFloat = 7
+    static let sidebarInset: CGFloat = 10
+    /// The search field above the rows.
+    static let searchHeight: CGFloat = 24
+    /// The detail column's unified toolbar.
+    static let toolbarHeight: CGFloat = 44
+    /// The space the window's traffic lights take when the sidebar is hidden
+    /// and the toolbar starts at the window's leading edge.
+    static let trafficLightsWidth: CGFloat = 78
     /// The smallest thing a pointer or a Full Keyboard Access ring is allowed
-    /// to have to find. 44pt is the platform's own answer, and a control that
-    /// happens to measure 40 because its label is short is a control somebody
-    /// misses.
+    /// to have to find.
     static let hitTarget: CGFloat = 44
     /// A control inside a compact grouped row: it LAYS OUT at this size so the
     /// 40pt row keeps its height, and takes `hitTarget` as its actual hit
     /// rectangle by overhanging the row's insets.
     static let compactControl: CGFloat = 24
     static var compactControlOverhang: CGFloat { (hitTarget - compactControl) / 2 }
+    /// The reference's button: 24pt tall, 11pt insets, 6pt corners.
+    static let buttonHeight: CGFloat = 24
+    static let buttonCorner: CGFloat = 6
+    /// The brand radar in the status head.
+    static let radar: CGFloat = 52
+    static let radarCore: CGFloat = 30
+    /// The chip behind a device glyph in a roster row.
+    static let deviceChip: CGFloat = 30
     /// A composer that is a place to write rather than a line to fill, and a
     /// cap so a long draft scrolls inside it instead of pushing everything
     /// below it out of a 560pt window.
@@ -84,9 +98,6 @@ enum Metrics {
 
 /// The two container weights a destination is allowed to use, and nothing
 /// between them.
-///
-/// `Level.primary` is the card. `Level.open` is a titled group with no chrome
-/// at all, used INSIDE a card, which is what a bare `Divider` was reaching for.
 enum SurfaceLevel {
     /// A card: the app's only container chrome.
     case primary
@@ -94,72 +105,190 @@ enum SurfaceLevel {
     case open
 }
 
-/// Where the brand violet is allowed to go.
+/// The reference palette, by role.
 ///
-/// It is an action colour, and the app has exactly three uses for it: the thing
-/// you press, the row you are on, and the code you are checking. It is never
-/// body text, never a background for a paragraph, and never decoration — a
-/// screen that tints its prose has spent the one signal it had for "this is the
-/// thing to do next".
-///
-/// Everything here resolves through `Color.accentColor`, so the asset is the
-/// single source and dark mode is already answered.
+/// Violet is still an action colour: the thing you press, the row you are on,
+/// the state that is live. It is never body text and never a paragraph's
+/// background.
 enum Palette {
-    /// The primary action, the current selection, the verified state — as a
-    /// FILL, with white on it. The `AccentColor` asset is shared with iOS and
-    /// Android and is not forked here; at this weight it carries white at about
-    /// 5.3:1 in Light and 5.7:1 in Dark.
-    static var action: Color { .accentColor }
-    /// The same role as a LABEL: an accent-tinted symbol or word drawn ON a
-    /// surface rather than behind white.
-    ///
-    /// The fill value cannot do both jobs. `#7C3AED` on a dark card measures
-    /// about 2.99:1, which is the defect iOS answered with a separate
-    /// `ActionLabel` asset. Rather than fork the brand, this lifts the SAME
-    /// asset toward the foreground in Dark — which lands on the lighter violet
-    /// the reference asks for (about 5.7:1 on the dark card) and leaves Light,
-    /// where the fill value is already a legible label, untouched.
-    static var actionLabel: Color {
-        Color(nsColor: NSColor(name: "relayiumActionLabel") { appearance in
-            var accent = NSColor.controlAccentColor
-            appearance.performAsCurrentDrawingAppearance {
-                accent = NSColor.controlAccentColor.usingColorSpace(.sRGB) ?? accent
-            }
-            guard appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua else {
-                return accent
-            }
-            return accent.blended(withFraction: 0.35, of: .white) ?? accent
-        })
-    }
-    /// The same colour at the weight a background can carry behind ordinary
-    /// text — a reached step on the path rail, the chip behind an accent
-    /// symbol. Never a block of copy.
-    static var actionSurface: Color { Color.accentColor.opacity(0.14) }
-    /// The detail column behind the cards. The sidebar's own material and this
-    /// are what separate the three surfaces; the card adds the third.
-    static var pageBackground: Color { Color(nsColor: .windowBackgroundColor) }
+    private static func named(_ name: String) -> Color { Color(name) }
+
+    // MARK: surfaces
+
+    /// The sidebar column.
+    static var sidebar: Color { named("RelayiumSidebar") }
+    /// The detail column behind the cards.
+    static var pageBackground: Color { named("RelayiumContent") }
+    /// The detail toolbar's wash over the page.
+    static var toolbar: Color { named("RelayiumToolbar") }
     /// A card, and the only chrome in the app.
-    static var cardBackground: Color { Color(nsColor: .controlBackgroundColor) }
-    /// What lifts a card off the window in Dark, where the two system fills
-    /// coincide. White at this weight is invisible on the white Light card and
-    /// is the reference's own `rgba(255,255,255,.045)` at night, so one value
-    /// answers both appearances.
-    static var cardLift: Color { Color.white.opacity(0.045) }
-    /// A status head: one step brighter than a card, and the only surface that
-    /// is.
-    static var heroBackground: Color { Color.white.opacity(0.03) }
-    /// Behind a small glyph or a value that needs to read as a token rather
-    /// than as text.
-    static var chip: Color { Color.primary.opacity(0.07) }
-    /// A hairline that separates without drawing a line the eye stops at.
-    static var hairline: Color { Color(nsColor: .separatorColor) }
+    static var cardBackground: Color { named("RelayiumCard") }
     /// The edge of a card.
-    ///
-    /// **A card needs one because its fill alone does not carry it in Light
-    /// appearance.** It is the same role as `hairline` deliberately:
-    /// `separatorColor` is the system's answer to "a line that bounds without
-    /// being looked at", and it tracks Increase Contrast and both appearances
-    /// on its own. Named separately only so the intent at the call site is a
-    /// boundary rather than a division.
-    static var cardBorder: Color { Color(nsColor: .separatorColor) }
+    static var cardBorder: Color { named("RelayiumCardBorder") }
+    /// A rule between rows, and under the toolbar.
+    static var hairline: Color { named("RelayiumSeparator") }
+    /// The status head's gradient: violet at the leading top, fading to the
+    /// card's own weight.
+    static var heroBackground: LinearGradient {
+        LinearGradient(colors: [named("RelayiumHeroTint"), named("RelayiumHeroBase")],
+                       startPoint: .topLeading,
+                       endPoint: UnitPoint(x: 0.75, y: 1))
+    }
+    /// Behind a small glyph, a status chip, or a value that reads as a token.
+    static var chip: Color { named("RelayiumChip") }
+    /// A text field's fill.
+    static var field: Color { named("RelayiumField") }
+    /// A pairing-code digit tile.
+    static var codeTile: Color { named("RelayiumCodeTile") }
+    /// A secondary button's fill and edge.
+    static var button: Color { named("RelayiumButton") }
+    static var buttonBorder: Color { named("RelayiumButtonBorder") }
+    /// Pointer hover over a row.
+    static var rowHover: Color { named("RelayiumRowHover") }
+
+    // MARK: text
+
+    static var text: Color { named("RelayiumText") }
+    static var textSecondary: Color { named("RelayiumTextSecondary") }
+    static var textTertiary: Color { named("RelayiumTextTertiary") }
+
+    // MARK: state
+
+    /// The primary action, the current selection, the live state — as a FILL,
+    /// with white on it. Dark appearance uses `#7A57F5`, one step deeper than
+    /// the reference's `#8B6BFF` (3.7:1), so small white text on a selected
+    /// row or a primary button clears 4.5:1 without Increase Contrast; the
+    /// lighter reference violet remains `actionLabel`.
+    static var action: Color { named("RelayiumAccent") }
+    /// The same role as a LABEL drawn on a surface rather than behind white.
+    static var actionLabel: Color { named("RelayiumAccentLabel") }
+    /// The same colour at the weight a background can carry behind ordinary
+    /// text.
+    static var actionSurface: Color { named("RelayiumAccentSoft") }
+    /// Something is running and healthy. Always paired with words.
+    static var good: Color { named("RelayiumGood") }
+}
+
+/// The reference's two buttons: a violet primary and a quiet secondary.
+///
+/// 24pt tall with 12pt medium text, but the hit rectangle is at least
+/// `Metrics.hitTarget` tall, and the label is never truncated. Disabled is
+/// carried by the fill AND by the text weight, never by opacity alone.
+struct ReferenceButtonStyle: ButtonStyle {
+    enum Kind { case primary, secondary }
+
+    let kind: Kind
+
+    func makeBody(configuration: Configuration) -> some View {
+        ReferenceButton(kind: kind, configuration: configuration)
+    }
+
+    private struct ReferenceButton: View {
+        let kind: Kind
+        let configuration: ButtonStyleConfiguration
+
+        @Environment(\.isEnabled) private var isEnabled
+        @Environment(\.colorSchemeContrast) private var contrast
+        @State private var hovering = false
+
+        var body: some View {
+            configuration.label
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .foregroundStyle(foreground)
+                .padding(.horizontal, 11)
+                .frame(minHeight: Metrics.buttonHeight)
+                .background(
+                    RoundedRectangle(cornerRadius: Metrics.buttonCorner)
+                        .fill(fill)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: Metrics.buttonCorner)
+                        .strokeBorder(border, lineWidth: 1)
+                )
+                .brightness(kind == .primary && isEnabled && hovering ? 0.06 : 0)
+                .opacity(configuration.isPressed ? 0.85 : 1)
+                .padding(.vertical, (Metrics.hitTarget - Metrics.buttonHeight) / 2)
+                .contentShape(Rectangle())
+                .padding(.vertical, -(Metrics.hitTarget - Metrics.buttonHeight) / 2)
+                .onHover { hovering = $0 }
+        }
+
+        private var foreground: Color {
+            guard isEnabled else { return Palette.textTertiary }
+            switch kind {
+            case .primary: return .white
+            case .secondary: return hovering ? Palette.actionLabel : Palette.text
+            }
+        }
+
+        private var fill: Color {
+            guard isEnabled else { return Palette.chip }
+            switch kind {
+            case .primary: return Palette.action
+            case .secondary: return hovering ? Palette.actionSurface : Palette.button
+            }
+        }
+
+        private var border: Color {
+            switch kind {
+            case .primary:
+                return contrast == .increased ? Palette.buttonBorder : .clear
+            case .secondary:
+                return isEnabled ? Palette.buttonBorder : .clear
+            }
+        }
+    }
+}
+
+extension ButtonStyle where Self == ReferenceButtonStyle {
+    static var referencePrimary: ReferenceButtonStyle { ReferenceButtonStyle(kind: .primary) }
+    static var referenceSecondary: ReferenceButtonStyle { ReferenceButtonStyle(kind: .secondary) }
+}
+
+/// A small token of live state: a dot and a word, on a chip.
+///
+/// The word carries the state; the dot's colour is the second carrier, never
+/// the only one.
+struct StatusChip: View {
+    enum Tone { case good, busy, idle, failure }
+
+    let label: String
+    let tone: Tone
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(dot)
+                .frame(width: 6, height: 6)
+                .accessibilityHidden(true)
+            Text(label)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Palette.textSecondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .padding(.horizontal, 9)
+        .frame(minHeight: 22)
+        .background(Capsule().fill(Palette.chip))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("toolbar-status")
+    }
+
+    private var dot: Color {
+        switch tone {
+        case .good: return Palette.good
+        case .busy: return InlineMessage.Kind.warning.tint
+        case .idle: return Palette.textTertiary
+        case .failure: return InlineMessage.Kind.failure.tint
+        }
+    }
+}
+
+/// What the toolbar says about the open destination's live state, if it has
+/// one worth saying.
+struct ToolbarStatus: Equatable {
+    let label: String
+    let tone: StatusChip.Tone
 }

@@ -22,15 +22,20 @@ public enum AppEnvironment {
         isEngineeringCandidate ? nil : "7PVYUG4YQS.com.relayium.shared"
     }
 
-    /// Persistent preferences for this product identity. The engineering app's
-    /// explicit suite is intentionally unrelated to the production bundle's
-    /// standard defaults domain.
+    /// Persistent preferences for this product identity: the running bundle's
+    /// own standard defaults domain, for the engineering candidate as well as
+    /// production.
+    ///
+    /// `.standard` is already scoped to `Bundle.main.bundleIdentifier`, so an
+    /// engineering binary (`com.relayium.mac.engineering`) reads and writes its
+    /// own domain and can never reach production's `com.relayium.mac`. An
+    /// explicit defaults suite named after the engineering identity was
+    /// the SAME domain as the running bundle, which Foundation refuses ("using
+    /// your own bundle identifier as an NSUserDefaults suite name does not make
+    /// sense") — and the precondition beneath it then stopped the engineering
+    /// app before its window opened. No domain is ever selected here by string.
     public static var persistentDefaults: UserDefaults {
-        guard isEngineeringCandidate else { return .standard }
-        guard let defaults = UserDefaults(suiteName: "com.relayium.mac.engineering") else {
-            preconditionFailure("engineering defaults domain is unavailable") // nonlocalized: engineering-only invariant
-        }
-        return defaults
+        .standard
     }
 
     /// The engineering candidate gets an explicit second boundary underneath

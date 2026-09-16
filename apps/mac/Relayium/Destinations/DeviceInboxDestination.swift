@@ -34,7 +34,7 @@ struct DeviceInboxDestination: View {
         // nest two scroll views around one list of sections.
         DestinationScaffold(title: L10n.t(.inboxTitle),
                             surface: .deviceInbox,
-                            purpose: L10n.t(.navDeviceInboxSubtitle),
+                            subtitle: L10n.t(.navDeviceInboxTagline),
                             fillsWidth: true,
                             scrolls: false) {
             DeviceInboxSurface { intent in

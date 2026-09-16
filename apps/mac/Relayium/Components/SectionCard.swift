@@ -61,7 +61,7 @@ struct SectionCard<Content: View>: View {
             if let footnote {
                 Text(footnote)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, Metrics.caption)
             }
@@ -73,9 +73,13 @@ struct SectionCard<Content: View>: View {
 
     private var caption: some View {
         HStack(alignment: .firstTextBaseline, spacing: Metrics.tight) {
+            // The reference sets group names in capitals. `textCase` rather
+            // than uppercased copy, so the key stays the sentence it is and a
+            // script without case is untouched.
             Text(title)
                 .font(.callout.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .foregroundStyle(Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
             if explanation != nil {
@@ -85,7 +89,7 @@ struct SectionCard<Content: View>: View {
                 Spacer(minLength: Metrics.tight)
                 Text(note)
                     .font(.subheadline)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.trailing)
             }
@@ -100,10 +104,6 @@ struct SectionCard<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, rows ? 0 : Metrics.inner)
         .padding(.horizontal, rows ? 0 : Metrics.rowHorizontal)
-        // The lift sits between the system fill and the content, so Dark gets
-        // the reference's raised card and Light — where the fill is already
-        // white — is unchanged.
-        .background(Palette.cardLift)
         .background(Palette.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: Metrics.corner))
         .overlay(

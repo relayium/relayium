@@ -19,7 +19,7 @@ struct CardRows: View {
         VStack(spacing: 0) {
             ForEach(rows.indices, id: \.self) { index in
                 if index > 0 {
-                    Divider()
+                    CardRowRule()
                 }
                 rows[index]
             }
@@ -50,11 +50,21 @@ where Data.Element: Identifiable {
             // rule goes — the same composition `PathRail` uses.
             ForEach(Array(data.enumerated()), id: \.element.id) { index, element in
                 if index > 0 {
-                    Divider()
+                    CardRowRule()
                 }
                 content(element)
             }
         }
+    }
+}
+
+/// The hairline between two rows of a card, edge to edge.
+struct CardRowRule: View {
+    var body: some View {
+        Rectangle()
+            .fill(Palette.hairline)
+            .frame(height: 1)
+            .accessibilityHidden(true)
     }
 }
 
@@ -88,23 +98,30 @@ struct RowExplainButton: View {
     /// control, its hit area and its identifier do not change.
     let subject: String
 
+    @State private var hovering = false
+
     var body: some View {
         Button {
             explaining.toggle()
         } label: {
-            Image(systemName: "info.circle")
-                .font(.callout)
-                .foregroundStyle(explaining ? Palette.actionLabel : Color.secondary)
-                // The glyph lays out at the compact size a 40pt row has room
-                // for, and the pad/shape/unpad pair gives it the platform's
-                // 44pt hit rectangle overhanging the row rather than a second
-                // set of insets inside it.
-                .frame(width: Metrics.compactControl, height: Metrics.compactControl)
-                .padding(Metrics.compactControlOverhang)
-                .contentShape(Rectangle())
-                .padding(-Metrics.compactControlOverhang)
+            // The reference's small italic "i" on a round chip. It lays out at
+            // 17pt and keeps the platform's 44pt hit rectangle by overhanging
+            // the row rather than adding insets inside it.
+            ZStack {
+                Circle()
+                    .fill(explaining || hovering ? Palette.action : Palette.chip)
+                Image(systemName: "info")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(explaining || hovering ? Color.white : Palette.textSecondary)
+            }
+            .frame(width: 17, height: 17)
+            .frame(width: Metrics.compactControl, height: Metrics.compactControl)
+            .padding(Metrics.compactControlOverhang)
+            .contentShape(Rectangle())
+            .padding(-Metrics.compactControlOverhang)
         }
         .buttonStyle(.plain)
+        .onHover { hovering = $0 }
         .accessibilityLabel(L10n.detail([L10n.t(.rowExplainLabel), subject]))
         .accessibilityValue(L10n.t(explaining ? .helpExpandedValue : .helpCollapsedValue))
         .accessibilityHint(L10n.t(.rowExplainHint))
@@ -120,7 +137,7 @@ struct RowExplanation: View {
     var body: some View {
         Text(text)
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Palette.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityIdentifier("row-explanation")
@@ -166,15 +183,16 @@ struct SettingsRow<Trailing: View>: View {
     }
 
     private var line: some View {
-        HStack(spacing: Metrics.tight) {
+        HStack(spacing: 10) {
             Text(label)
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: Metrics.tight)
             if let value {
                 Text(value)
-                    .font(valueIsCode ? .callout.monospaced() : .body)
+                    .font(valueIsCode ? .callout.monospaced() : .body.weight(.medium))
+                    .foregroundStyle(Palette.text)
                     .multilineTextAlignment(.trailing)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)

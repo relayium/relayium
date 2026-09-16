@@ -38,9 +38,15 @@ final class MacSurfaceGuardTests: XCTestCase {
         // two had drifted: `nearby.lookAgain` named a search and performed a
         // subscription. That key still exists and is still correct — on iOS,
         // where the control it labels really does refresh a live roster.
-        XCTAssertTrue(nearby.contains(
-            "Button(L10n.t(.nearbyStartReceiving)) { discovery.start() }"),
-            "the off-state recovery does not name the receiving it starts")
+        // Since the reference revision the recovery is the status head's switch,
+        // and it is the ONLY one: the off state runs `discovery.start()` and
+        // names that action, and no second Start button repeats it below.
+        XCTAssertTrue(nearby.contains("case .off:\n            if on { discovery.start() }"),
+                      "the off-state switch does not start receiving")
+        XCTAssertTrue(nearby.contains("action = L10n.t(.nearbyStartReceiving)"),
+                      "the off-state recovery does not name the receiving it starts")
+        XCTAssertEqual(occurrences(of: "discovery.start()", in: nearby), 1,
+                       "the LAN pane offers the same start action twice")
         XCTAssertFalse(nearby.contains("nearbyLookAgain"),
                        "the LAN pane calls its start action a search again")
         // The sentence naming where an incoming file lands is the same claim as
@@ -50,7 +56,9 @@ final class MacSurfaceGuardTests: XCTestCase {
         // for. Scope this to the sentence's own condition: the roster's
         // separate `else if !discovery.isPaused` is a different question, and a
         // whole-file search for that text would fail on it.
-        let delivery = try XCTUnwrap(nearby.range(of: "nearbySavedToDownloads"))
+        XCTAssertFalse(nearby.contains("L10n.t(.nearbySavedToDownloads)"),
+                       "the delivery sentence is stated outside its gated footnote")
+        let delivery = try XCTUnwrap(nearby.range(of: "nearbySavedToDownloadsShort"))
         let condition = String(nearby[..<delivery.lowerBound].suffix(220))
         XCTAssertTrue(condition.contains("if !(receive.state == .paused || receive.state == .off) {"),
                       "the delivery sentence is not gated on the rendered state")
@@ -87,8 +95,10 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(ui.contains("testStoppedNearbyDiscoveryAsksForActionWithoutPretendingToWork"))
         XCTAssertTrue(ui.contains("window.buttons[\"Pause receiving\"].exists"))
         XCTAssertTrue(ui.contains("window.buttons[\"Resume receiving\"].exists"))
-        XCTAssertTrue(ui.contains("window.buttons[\"Start receiving\"].waitForExistence"),
-                      "no runtime check presses the renamed off-state recovery")
+        XCTAssertTrue(ui.contains("\"lan-receiving-switch\""),
+                      "no runtime check observes the off-state recovery switch")
+        XCTAssertTrue(ui.contains("XCTAssertFalse(window.buttons[\"Start receiving\"].exists"),
+                      "no runtime check proves the duplicate Start button is gone")
         XCTAssertFalse(ui.contains("window.buttons[\"Look again\"].waitForExistence"),
                        "a runtime check still expects the old search-shaped label")
     }
@@ -1468,7 +1478,8 @@ final class MacSurfaceGuardTests: XCTestCase {
         let cancel = try XCTUnwrap(handoff.components(
             separatedBy: "Button(L10n.t(.commonCancel), action: cancel)").dropFirst().first?
             .components(separatedBy: "}").first)
-        XCTAssertTrue(cancel.contains(".buttonStyle(.bordered)"))
+        // The reference's secondary button: bordered chrome, never a bare link.
+        XCTAssertTrue(cancel.contains(".buttonStyle(.referenceSecondary)"))
     }
 
     /// One handoff builder for both lanes now, so the expiry scope cannot be
@@ -1998,9 +2009,9 @@ final class MacSurfaceGuardTests: XCTestCase {
         // its presentation is a route with nil progress, not a fabricated task.
         let railUsers = try sources(under: try macRoot, atLeast: 30)
             .filter { $0.text.contains("PathRail(stops:") }.map(\.name).sorted()
+        // The two connect panes dropped theirs for the reference's status head,
+        // which states the same route facts in words and claims no direct path.
         XCTAssertEqual(railUsers, ["DeviceInbox/DeviceInboxSurface.swift",
-                                   "Transfer/CrossNetworkConnectPane.swift",
-                                   "Transfer/LanConnectPane.swift",
                                    "UploadPane.swift"])
         for (name, text) in try sources(under: try macRoot, atLeast: 30)
             where name != "Components/PathRail.swift" {
@@ -2071,17 +2082,16 @@ final class MacSurfaceGuardTests: XCTestCase {
         // the one fact somebody reads this screen out loud for was the smallest
         // type on it. It is now a `.title3` in its own card, with the sentence
         // demoted to the caption underneath.
-        XCTAssertTrue(pane.contains("Text(L10n.token(announced))\n"
-                                    + "                .font(.title3.weight(.semibold))"),
-                      "the announced name is no longer the identity card's primary line")
+        XCTAssertTrue(pane.contains("Text(L10n.token(announced))"),
+                      "the announced name is no longer the identity row's value")
         XCTAssertTrue(pane.contains("L10n.t(.nearbyAnnouncedNameCaption)"),
                       "the announced name is shown with nothing saying what it is")
         XCTAssertTrue(pane.contains("SectionCard(title: L10n.t(.nearbyThisMacHeading),"),
                       "identity is filed back inside the receive status")
         // It is the FIRST thing under the route rail, above the card that holds
         // the roster: a first-viewport answer or it is not an answer.
-        guard let rail = pane.range(of: "PathRail(stops: PathRailPresentation.lan())"),
-              let identity = pane.range(of: "thisMac", range: rail.upperBound..<pane.endIndex),
+        guard let head = pane.range(of: "receiving\n"),
+              let identity = pane.range(of: "thisMac", range: head.upperBound..<pane.endIndex),
               let roster = pane.range(of: "sameNetwork", range: identity.upperBound..<pane.endIndex)
         else {
             return XCTFail("the LAN pane no longer has the shape this guards")
@@ -2429,14 +2439,25 @@ final class MacSurfaceGuardTests: XCTestCase {
         let code = try source(named: "Components/SecurityCodeText.swift")
         XCTAssertTrue(code.contains("design: .monospaced"))
         XCTAssertTrue(code.contains(".textSelection(.enabled)"))
-        XCTAssertEqual(code.components(separatedBy: ".accessibilityElement(children: .ignore)").count - 1, 2,
+        // Three: the pairing string, the verification phrase, and the pairing
+        // tiles — each collapsed into one labelled automation element.
+        XCTAssertEqual(code.components(separatedBy: ".accessibilityElement(children: .ignore)").count - 1, 3,
                        "selectable AppKit text must collapse into one labelled automation element")
         XCTAssertTrue(code.contains(".accessibilityLabel(spokenCode)"))
         XCTAssertTrue(code.contains("joined(separator: \" \")"),
                       "VoiceOver must read pairing-code digits one at a time")
         XCTAssertTrue(code.contains("L10n.token(code)"),
                       "the displayed code must stay isolated in RTL copy")
-        XCTAssertEqual(code.components(separatedBy: "pairing-code-value").count - 1, 1)
+        // The string and the tiles are alternative renderings of one code;
+        // only one is ever on screen.
+        XCTAssertEqual(code.components(separatedBy: "pairing-code-value").count - 1, 2)
+        // Separate tiles cannot be selected as one string, so the pane that
+        // draws them must offer the code as a real copy action instead.
+        let cross = try source(named: crossConnect)
+        XCTAssertTrue(cross.contains("style: .tiles"))
+        XCTAssertTrue(cross.contains("NSPasteboard.general.setString(live, forType: .string)")
+                      && cross.contains(".accessibilityIdentifier(\"pairing-code-copy\")"),
+                      "the tiled code has no way to be copied")
         XCTAssertEqual(code.components(separatedBy: "verification-code-value").count - 1, 1)
         XCTAssertFalse(try source(named: "Transfer/TransferLinkPane.swift")
             .contains("link-sas"),
@@ -2573,14 +2594,15 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertTrue(shell.contains("case .\(surface.rawValue):"),
                           "the shell renders nothing for \(surface.rawValue)")
             let hasRow = sidebar.contains("row(.\(surface.rawValue),")
+                || sidebar.contains("Entry(surface: .\(surface.rawValue),")
             XCTAssertEqual(hasRow, surface.isBrowseable,
                            "\(surface.rawValue) has a sidebar row it should not, or lacks one")
         }
-        XCTAssertEqual(occurrences(of: "row(.", in: sidebar), MacSurface.browseable.count,
+        XCTAssertEqual(occurrences(of: "Entry(surface: .", in: sidebar), MacSurface.browseable.count,
                        "the sidebar renders a row for something it should not offer")
         XCTAssertEqual(MacSurface.browseable.count, 5)
         XCTAssertEqual(MacSurface.allCases.count, 6)
-        XCTAssertFalse(sidebar.contains("row(.storedReceive,"),
+        XCTAssertFalse(sidebar.contains("Entry(surface: .storedReceive,"),
                        "Open a link is an ordinary sidebar row again")
         // Every destination reaches a surface, and no two share one. Derived
         // from the enum rather than restated, so a seventh destination cannot be
@@ -3014,7 +3036,8 @@ final class MacSurfaceGuardTests: XCTestCase {
                           "joining somebody else's code must not sit behind the account gate")
         // The gate wraps the create half only — `if case .allowed` selects
         // between the create controls and the gate, and nothing else.
-        XCTAssertTrue(connect.contains("if case .allowed = gate {\n                    createControls\n                } else {"),
+        XCTAssertTrue(connect.components(separatedBy: .whitespacesAndNewlines).joined()
+                        .contains("ifcase.allowed=gate{createControls}else{"),
                       "the account gate no longer selects exactly the create controls")
         // The join field may not consult the account at all.
         guard let start = connect.range(of: "private var joinControls: some View") else {
@@ -3129,8 +3152,11 @@ final class MacSurfaceGuardTests: XCTestCase {
         // The row and the screen it opens draw the same glyph, from the one
         // place that names it — a row and a header marked differently is a
         // screen that does not look like the thing that was clicked.
-        XCTAssertTrue(sidebar.contains("Label(title, systemImage: surface.symbol)"),
-                      "the sidebar names its own symbols again, so a row can drift from its screen")
+        // The reference's glyphs come from one presentation table, keyed by
+        // surface, so every row is still exhaustively answered and no row can
+        // name a symbol of its own inline.
+        XCTAssertTrue(sidebar.contains("Image(systemName: SidebarGlyph.symbol(for: surface))"),
+                      "the sidebar names its own symbols inline again")
         for (name, text) in try sources(under: try macRoot, atLeast: 30) {
             XCTAssertFalse(text.contains("systemImage: \"dot.radiowaves.left.and.right\""),
                            "\(name) hard-codes a destination symbol MacSurface already names")
@@ -3138,9 +3164,11 @@ final class MacSurfaceGuardTests: XCTestCase {
         // Three now: the two transfer groups and the one this Mac is itself the
         // destination for. A group without the named header is a heading macOS
         // promotes to `AXHeading` and then leaves empty.
-        XCTAssertEqual(occurrences(of: "sectionHeader(.navSection", in: sidebar), 3,
+        XCTAssertEqual(occurrences(of: "SidebarSection(header: .navSection", in: sidebar), 3,
                        "every sidebar group needs the named accessibility header")
-        XCTAssertTrue(sidebar.contains("sectionHeader(.navSectionDevice)"),
+        XCTAssertTrue(sidebar.contains("sectionHeader(group.header)"),
+                      "a sidebar group is rendered without its named header")
+        XCTAssertTrue(sidebar.contains("SidebarSection(header: .navSectionDevice"),
                       "the Device Inbox row sits in an unnamed group")
         // The row's title is the feature's one name. A `nav.deviceInbox` key of
         // its own is how the sidebar, the menu bar, the settings tab and the
@@ -3155,16 +3183,26 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(occurrences(of: "subtitle: L10n.t(", in: sidebar),
                        MacSurface.browseable.count,
                        "a sidebar row lost the sentence its hint and tooltip are made of")
-        // And the same five sentences reach the screens they belong to. This is
-        // the other end of the move: a header that dropped its `purpose:` would
-        // delete the explanation from the product rather than relocate it.
-        for (file, key) in [(lanDestination, ".navLanTransferSubtitle"),
-                            (crossDestination, ".navCrossNetworkSubtitle"),
-                            ("Destinations/StoredSendDestination.swift", ".navStoredSendSubtitle"),
-                            ("Destinations/DeviceInboxDestination.swift", ".navDeviceInboxSubtitle"),
+        // **Search is real, and it finds rows by the words they are known by.**
+        // It filters on the localized title and the row's own sentence, drops
+        // a section with nothing left, says so when nothing matches, and Return
+        // goes to the first match through the one selection path.
+        for real in ["$0.title.localizedStandardContains(needle)",
+                     "$0.subtitle.localizedStandardContains(needle)",
+                     "L10n.t(.navSearchNoResults)",
+                     "navigation.select(first.surface.route)",
+                     ".accessibilityIdentifier(\"sidebar-search\")"] {
+            XCTAssertTrue(sidebar.contains(real), "the sidebar search is decorative: \(real)")
+        }
+        // Each destination's toolbar carries a short subtitle; the long sentence
+        // stays on the row's tooltip and hint above rather than being repeated.
+        for (file, key) in [(lanDestination, ".navLanTransferTagline"),
+                            (crossDestination, ".navCrossNetworkTagline"),
+                            ("Destinations/StoredSendDestination.swift", ".navStoredSendTagline"),
+                            ("Destinations/DeviceInboxDestination.swift", ".navDeviceInboxTagline"),
                             ("Destinations/AccountDestination.swift", ".navAccountSubtitle")] {
-            XCTAssertTrue(try source(named: file).contains("purpose: L10n.t(\(key))"),
-                          "\(file) no longer explains itself; the sentence exists nowhere visible")
+            XCTAssertTrue(try source(named: file).contains("subtitle: L10n.t(\(key))"),
+                          "\(file) has no toolbar subtitle")
         }
         for kept in [".accessibilityLabel(title)",
                      ".accessibilityAddTraits(.isHeader)",
@@ -3207,7 +3245,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // whether the devices share a network.
         XCTAssertTrue(sidebar.contains("title: L10n.t(.navLanTransfer)"))
         XCTAssertTrue(sidebar.contains("subtitle: L10n.t(.navLanTransferSubtitle)"))
-        XCTAssertTrue(sidebar.contains("title: L10n.t(.navCrossNetwork)"))
+        XCTAssertTrue(sidebar.contains("title: L10n.t(.navCrossNetworkShort)"))
         XCTAssertTrue(sidebar.contains("subtitle: L10n.t(.navCrossNetworkSubtitle)"))
         for retired in ["navWorkspace", "navWorkspaceSubtitle", "navStoredReceiveSubtitle"] {
             XCTAssertFalse(sidebar.contains(retired),
@@ -3253,35 +3291,29 @@ final class MacSurfaceGuardTests: XCTestCase {
     ///  - `SectionCard` and `OpenSection` titles are untouched. They say what a
     ///    PART of a screen is, which neither the sidebar nor this header claims.
     func testTheDestinationNameIsSaidByTheChromeAndNotRepeatedInTheContent() throws {
+        // **Said once, in the unified toolbar.** The reference draws the name,
+        // a short subtitle and the live status in the detail toolbar, and the
+        // window does not draw its title a second time. `navigationTitle` stays
+        // so Mission Control, the Window menu, VoiceOver and the UI suite's
+        // title predicates still read the destination's name.
         let scaffold = try source(named: "Components/DestinationScaffold.swift")
         XCTAssertTrue(scaffold.contains(".navigationTitle(title)"),
                       "the window lost its title")
-        XCTAssertTrue(scaffold.contains("DetailHeader(symbol: surface.symbol,"),
-                      "the scaffold no longer renders the one destination header")
-        // The decisive line: whether the header names the destination is read
-        // from the sidebar's own list, never passed per screen.
-        XCTAssertTrue(scaffold.contains("namesDestination: !surface.isBrowseable"),
-                      "the header no longer derives its title rule from MacSurface.browseable")
-        XCTAssertFalse(scaffold.contains("Text(title)"),
-                       "the scaffold draws the name itself instead of through DetailHeader")
-
-        let header = try source(named: "Components/DetailHeader.swift")
-        XCTAssertTrue(header.contains("if namesDestination {"),
-                      "the header prints its title unconditionally again")
-        XCTAssertTrue(header.contains(".font(.title3.weight(.semibold))"),
-                      "the destination header is no longer a label-sized heading")
-        XCTAssertTrue(header.contains(".accessibilityAddTraits(.isHeader)"),
-                      "the header is not a heading in the accessibility outline")
-        XCTAssertTrue(header.contains(".accessibilityIdentifier(\"destination-header\")")
-                      && header.contains(".accessibilityIdentifier(\"destination-purpose\")"),
-                      "the header has no stable runtime identity to assert against")
-
-        // Exactly one surface is not offered by the sidebar, so exactly one
-        // screen may still print its own name. Derived from `browseable` rather
-        // than spelled out, so adding a row cannot silently leave a second
-        // screen titling itself.
-        XCTAssertEqual(MacSurface.allCases.filter { !$0.isBrowseable }, [.storedReceive],
-                       "the set of screens allowed to name themselves changed")
+        XCTAssertEqual(occurrences(of: "Text(title)", in: scaffold), 1,
+                       "the toolbar must say the destination's name exactly once")
+        XCTAssertTrue(scaffold.contains(".accessibilityIdentifier(\"destination-title\")")
+                      && scaffold.contains(".accessibilityIdentifier(\"destination-subtitle\")"),
+                      "the toolbar has no stable runtime identity to assert against")
+        XCTAssertTrue(scaffold.contains(".accessibilityAddTraits(.isHeader)"),
+                      "the toolbar title is not a heading in the accessibility outline")
+        let chrome = try source(named: "Shell/WindowChrome.swift")
+        XCTAssertTrue(chrome.contains("window.titleVisibility = .hidden"),
+                      "the window draws its title a second time above the toolbar")
+        XCTAssertFalse(chrome.contains("window.title ="),
+                       "the chrome rewrites the title the rest of the system reads")
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: try macRoot.appendingPathComponent("Components/DetailHeader.swift").path),
+                       "the detached purpose header is back")
 
         for surface in MacSurface.allCases {
             let name = surface.rawValue.prefix(1).uppercased() + surface.rawValue.dropFirst()
@@ -3291,30 +3323,18 @@ final class MacSurfaceGuardTests: XCTestCase {
                           "\(file) no longer names the window")
             XCTAssertTrue(text.contains("surface: .\(surface.rawValue)"),
                           "\(file) does not identify the surface it draws")
-            XCTAssertFalse(text.contains("symbol:"),
-                           "\(file) names its own symbol instead of taking MacSurface's")
-            XCTAssertFalse(text.contains("subtitle:"),
-                           "\(file) passes an introductory subtitle again")
+            XCTAssertTrue(text.contains("subtitle: L10n.t("),
+                          "\(file) has no toolbar subtitle")
+            XCTAssertFalse(text.contains("purpose:"),
+                           "\(file) passes a detached purpose line again")
         }
 
-        // Compacting the chrome must not have deleted the explanation: every
-        // destination the sidebar offers still hands its sentence to the header,
-        // and the one it does not offer still has no sentence to hand.
-        for (file, key) in [(lanDestination, ".navLanTransferSubtitle"),
-                            (crossDestination, ".navCrossNetworkSubtitle"),
-                            ("Destinations/StoredSendDestination.swift", ".navStoredSendSubtitle"),
-                            ("Destinations/DeviceInboxDestination.swift", ".navDeviceInboxSubtitle"),
-                            ("Destinations/AccountDestination.swift", ".navAccountSubtitle")] {
-            XCTAssertTrue(try source(named: file).contains("purpose: L10n.t(\(key))"),
-                          "\(file) stopped explaining itself when it stopped titling itself")
-        }
-        XCTAssertFalse(try source(named: "Destinations/StoredReceiveDestination.swift")
-            .contains("purpose:"),
-            "the deep-link-only screen invented a sidebar sentence it has no row for")
+        // The toolbar's status is read from the models the page renders, never
+        // decided in the destination.
+        XCTAssertTrue(try source(named: lanDestination).contains("TransferToolbarStatus.lan("))
+        XCTAssertTrue(try source(named: crossDestination).contains("TransferToolbarStatus.crossNetwork("))
 
         // And nothing anywhere in the app sets a display-sized font of its own.
-        // Comments are stripped by the loader, so the sentences explaining this
-        // rule do not satisfy it.
         for (name, text) in try sources(under: try macRoot, atLeast: 30) {
             XCTAssertFalse(text.contains("font(.largeTitle"),
                            "\(name) draws a page heading of its own")
@@ -4563,7 +4583,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the field writes a raw value and corrects it afterwards")
         XCTAssertTrue(source.contains("text: normalizedJoinCode"))
         XCTAssertTrue(source.contains(".accessibilityIdentifier(\"pairing.joinCode\")"))
-        XCTAssertEqual(occurrences(of: "TextField(L10n.t(.commonCode)", in: source), 1,
+        XCTAssertEqual(occurrences(of: "TextField(", in: source), 1,
                        "one code, one field: two would be two answers to one question")
         XCTAssertFalse(source.contains(".onChange(of: code.joinCode)"),
                        "the join field can overwrite fast input with an older partial value")
@@ -5192,7 +5212,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         let connectAction = try XCTUnwrap(connect.range(
             of: "Button(L10n.t(.workspaceConnectToDevice)) { connect(to: device) }"))
         let styling = String(connect[connectAction.upperBound...].prefix(200))
-        XCTAssertTrue(styling.contains(".buttonStyle(.borderedProminent)"),
+        XCTAssertTrue(styling.contains(".buttonStyle(.referencePrimary)"),
                       "the one verb on a chosen device is not the prominent one")
         XCTAssertTrue(styling.contains(".disabled(sessionLocked)"),
                       "the connect verb ignores the one lock that may stop it")
@@ -5701,9 +5721,15 @@ final class MacSurfaceGuardTests: XCTestCase {
         // would be a colour that answers neither appearance nor Increase
         // Contrast — the exact reason `DesignTokens` holds no colours of its own.
         let tokens = try source(named: "Components/DesignTokens.swift")
+        // Adaptive through the asset catalog: every reference colour set carries
+        // light, dark and both High Contrast variants.
         XCTAssertTrue(tokens.contains(
-            "static var cardBorder: Color { Color(nsColor: .separatorColor) }"),
-            "the card boundary is no longer an adaptive system colour")
+            "static var cardBorder: Color { named(\"RelayiumCardBorder\") }"),
+            "the card boundary is no longer an adaptive catalog colour")
+        let border = try String(contentsOf: macRoot.appendingPathComponent(
+            "Assets.xcassets/RelayiumCardBorder.colorset/Contents.json"), encoding: .utf8)
+        XCTAssertTrue(border.contains("\"luminosity\"") && border.contains("\"contrast\""),
+                      "the card boundary does not answer dark appearance and Increase Contrast")
         XCTAssertFalse(tokens.contains("Color(red:") || tokens.contains("#colorLiteral"),
                        "DesignTokens named a colour of its own")
 

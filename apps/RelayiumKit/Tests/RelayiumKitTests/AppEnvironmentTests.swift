@@ -597,4 +597,29 @@ final class AppEnvironmentTests: XCTestCase {
         XCTAssertNotEqual(a, b, "two accounts share one durable journal namespace")
     }
 
+
+    /// **Preferences live in the running bundle's own domain, and nothing names
+    /// one by string.** The engineering app once opened
+    /// `UserDefaults(suiteName: "com.relayium.mac.engineering")` — its own
+    /// bundle identifier, which Foundation refuses — and a precondition turned
+    /// that refusal into a crash before the window appeared. `.standard` is
+    /// already per-bundle, so it is the isolation, not a weakening of it.
+    func testPersistentDefaultsAreTheRunningBundlesOwnDomain() throws {
+        XCTAssertTrue(AppEnvironment.persistentDefaults === UserDefaults.standard)
+        let source = try String(contentsOf: URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Sources/RelayiumAppKit/AppEnvironment.swift"), encoding: .utf8)
+        let factory = try XCTUnwrap(source.components(
+            separatedBy: "public static var persistentDefaults: UserDefaults {").dropFirst().first?
+            .components(separatedBy: "\n    }").first)
+        XCTAssertEqual(factory.trimmingCharacters(in: .whitespacesAndNewlines), ".standard",
+                       "persistent preferences select a defaults domain other than the bundle's own")
+        XCTAssertFalse(source.contains("UserDefaults(suiteName:"),
+                       "AppEnvironment names a defaults domain by string again")
+        // The other isolation boundaries are untouched by this seam.
+        XCTAssertTrue(source.contains("isEngineeringCandidate ? \"com.relayium.mac.engineering\" : \"com.relayium.mac\""),
+                      "the engineering keychain service lost its separate identity")
+        XCTAssertTrue(source.contains("\"Relayium Engineering\""),
+                      "the engineering application-support boundary is gone")
+    }
 }

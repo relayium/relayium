@@ -507,7 +507,12 @@ final class AppShellUITests: XCTestCase {
         // this Mac reachable — so beside a status line reading "off", "Look
         // again" described a search that was not happening and hid the one
         // thing the user actually had to do.
-        XCTAssertTrue(window.buttons["Start receiving"].waitForExistence(timeout: 10))
+        // The recovery is the status head's switch (below), and it is the only
+        // one: no second Start button repeats it.
+        XCTAssertTrue(window.descendants(matching: .any)["lan-receiving-switch"].firstMatch
+            .waitForExistence(timeout: 10))
+        XCTAssertFalse(window.buttons["Start receiving"].exists,
+                       "the off state offers a second Start beside the switch")
         XCTAssertFalse(window.buttons["Look again"].exists,
                        "the off state still names its recovery after a search")
         XCTAssertEqual(window.progressIndicators.count, 0,
@@ -516,6 +521,12 @@ final class AppShellUITests: XCTestCase {
                        "an off listener offers the contradictory action to pause")
         XCTAssertFalse(window.buttons["Resume receiving"].exists,
                        "Start receiving is the one recovery for a listener that never started")
+        // The status head's switch is the residency control, and it reads OFF
+        // for a listener that never started.
+        let receivingSwitch = window.descendants(matching: .any)["lan-receiving-switch"].firstMatch
+        XCTAssertTrue(receivingSwitch.exists, "the LAN status head has no receiving switch")
+        XCTAssertEqual((receivingSwitch.value as? NSNumber)?.intValue, 0,
+                       "an off listener's switch claims this Mac is receiving")
         XCTAssertTrue(window.staticTexts[
             "This device is not listening for nearby devices. It can still send, and pairing codes still work."
         ].exists, "the off state claims this Mac is still listening")
@@ -752,8 +763,20 @@ final class AppShellUITests: XCTestCase {
                       "the generated pairing code was not visible")
         XCTAssertEqual(generatedCode.label, "4 8 3 9 2 0",
                        "VoiceOver no longer reads the pairing code digit by digit")
-        XCTAssertTrue(window.staticTexts["Join link"].exists,
-                      "the generated code has no visible browser handoff")
+        // The QR and join link are folded behind one labelled disclosure so
+        // the code's hero stays compact. Folded first; opened, every handoff
+        // is still there.
+        let shareToggle = window.descendants(matching: .any)["pairing-share-toggle"].firstMatch
+        XCTAssertTrue(shareToggle.exists, "the generated code has no way to share its link")
+        XCTAssertFalse(window.staticTexts["Join link"].exists,
+                       "the QR and join link are not folded by default")
+        shareToggle.click()
+        XCTAssertTrue(window.staticTexts["Join link"].waitForExistence(timeout: 5),
+                      "opening the disclosure does not show the browser handoff")
+        XCTAssertTrue(window.images["QR code for the pairing link"].exists
+                      || window.descendants(matching: .any)["pairing-share-details"].firstMatch
+                        .images.count > 0,
+                      "opening the disclosure does not show the QR code")
         // The code and nothing else. A `?mode=` hint would name a lane the
         // sender was never asked to choose, which is the removed question
         // smuggled back into a URL.
@@ -867,7 +890,8 @@ final class AppShellUITests: XCTestCase {
         lan.click()
 
         // Same-network discovery, and no page heading repeating the row.
-        XCTAssertTrue(window.buttons["Start receiving"].waitForExistence(timeout: 10),
+        XCTAssertTrue(window.descendants(matching: .any)["lan-receiving-switch"].firstMatch
+            .waitForExistence(timeout: 10),
                       "LAN Transfer lost same-network discovery")
         XCTAssertEqual(window.title, "LAN Transfer",
                        "the window no longer names the destination it is on")
@@ -917,6 +941,8 @@ final class AppShellUITests: XCTestCase {
                        "Cross-network Transfer still offers same-network discovery")
         XCTAssertFalse(window.buttons["Pause receiving"].exists,
                        "Cross-network Transfer still carries the residency control")
+        XCTAssertFalse(window.descendants(matching: .any)["lan-receiving-switch"].firstMatch.exists,
+                       "Cross-network Transfer still carries the receiving switch")
 
         // **No staging, at all.** Pairing is ONE workspace, and a workspace with
         // no connection in it has nothing to offer yet. A "Files and folders"
@@ -1018,7 +1044,8 @@ final class AppShellUITests: XCTestCase {
         let lan = sidebarDestination("LAN Transfer", in: window)
         XCTAssertTrue(lan.waitForExistence(timeout: 10))
         lan.click()
-        XCTAssertTrue(window.buttons["Start receiving"].waitForExistence(timeout: 10),
+        let lanSwitch = window.descendants(matching: .any)["lan-receiving-switch"].firstMatch
+        XCTAssertTrue(lanSwitch.waitForExistence(timeout: 10),
                       "the other destination did not return to its own connect phase")
         XCTAssertFalse(window.descendants(matching: .any)["pairing-code-value"]
             .firstMatch.exists,
@@ -1028,7 +1055,7 @@ final class AppShellUITests: XCTestCase {
         // print `transfer-busy-elsewhere` under them, so a user holding a code
         // could not start receiving on their own network. The two modules are
         // independent now, and this is where that is proved from the outside.
-        XCTAssertTrue(window.buttons["Start receiving"].isEnabled,
+        XCTAssertTrue(lanSwitch.isEnabled,
                       "a pairing session still locks the same-network screen")
         XCTAssertFalse(window.descendants(matching: .any)["transfer-busy-elsewhere"]
             .firstMatch.exists,
@@ -1107,6 +1134,8 @@ final class AppShellUITests: XCTestCase {
                        "an expired code still shows a countdown beside the expiry notice")
         XCTAssertFalse(window.staticTexts["Join link"].exists,
                        "an expired code still offers its join link and QR")
+        XCTAssertFalse(window.descendants(matching: .any)["pairing-share-toggle"].firstMatch.exists,
+                       "an expired code still offers a way to share its link")
         XCTAssertTrue(code.exists,
                       "the expired digits were hidden, so the reader cannot check "
                       + "which code they just read out")
@@ -1820,8 +1849,20 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(window.descendants(matching: .any)["pairing-code-value"]
             .firstMatch.waitForExistence(timeout: 20),
                       "the generated pairing code is not visible")
-        XCTAssertTrue(window.staticTexts["Join link"].exists,
-                      "the generated code has no visible browser handoff")
+        // The QR and join link are folded behind one labelled disclosure so
+        // the code's hero stays compact. Folded first; opened, every handoff
+        // is still there.
+        let shareToggle = window.descendants(matching: .any)["pairing-share-toggle"].firstMatch
+        XCTAssertTrue(shareToggle.exists, "the generated code has no way to share its link")
+        XCTAssertFalse(window.staticTexts["Join link"].exists,
+                       "the QR and join link are not folded by default")
+        shareToggle.click()
+        XCTAssertTrue(window.staticTexts["Join link"].waitForExistence(timeout: 5),
+                      "opening the disclosure does not show the browser handoff")
+        XCTAssertTrue(window.images["QR code for the pairing link"].exists
+                      || window.descendants(matching: .any)["pairing-share-details"].firstMatch
+                        .images.count > 0,
+                      "opening the disclosure does not show the QR code")
         XCTAssertTrue(window.staticTexts[
             "https://relayium.com/cross-network#c=483920"
         ].exists, "the handoff link is not the bare code the sender created")

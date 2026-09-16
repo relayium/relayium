@@ -1,7 +1,7 @@
 import SwiftUI
 import RelayiumAppKit
 
-/// Five rows, all visible at once, in three sections plus a standalone Account row.
+/// Five rows, all visible at once, in three sections, under a destination search.
 ///
 /// **The sidebar names the destinations; the screen it opens explains the one
 /// you are on.** For one round it did both: every row printed its full
@@ -19,12 +19,10 @@ import RelayiumAppKit
 /// pointer user can still read it before choosing. A keyboard user sees the
 /// complete purpose immediately after selecting a row in the detail column.
 ///
-/// **The selected state is the system's.** `List` selection already draws the
-/// row in the app's own `AccentColor` — the brand violet — with the correct
-/// contrast, focus behaviour and Increase Contrast handling. There is no second
-/// indicator painted over it: the saturated violet paragraph block this replaces
-/// was the single loudest thing in the window, and a bar drawn inside a
-/// highlight the system already drew is decoration.
+/// **The selected state is the reference's**: a 28pt violet row with white
+/// semibold text, drawn by this view because the owner rejected the system
+/// sidebar's styling. It is still a real selection — the row carries the
+/// selected trait — and its High Contrast colour keeps white text legible.
 ///
 /// **LAN Transfer and Cross-network Transfer are two rows.** They were briefly
 /// one, called Workspace, on the argument that they are two ways to reach one
@@ -74,161 +72,234 @@ struct SidebarView: View {
     /// says nothing at all under a colour filter or in Increase Contrast.
     private let liveSessionSymbol = "arrow.left.arrow.right.circle.fill"
 
-    /// Clicks go through `select(_:)` rather than writing `selection` directly,
-    /// so every selection change — user, deep link or incoming session — takes
-    /// the same one-assignment path the routing contract is stated in terms of.
-    /// `List` single-selection is an optional binding; a deselection (which the
-    /// sidebar has no gesture for) is simply ignored rather than blanking the
-    /// detail column.
-    /// **Normalised to the surface, not to the destination.** Writing back goes
-    /// through the surface's own `route`, so a click still produces exactly one
-    /// ordinary `select(_:)`.
-    ///
-    /// A destination with no row of its own — Open a link, arrived at by deep
-    /// link — maps to a `MacSurface` that no row is tagged with, so `List`
-    /// highlights nothing. That is the correct answer rather than a gap: the
-    /// user is somewhere the sidebar does not offer, and pretending a row is
-    /// selected would name the wrong one.
-    private var selection: Binding<MacSurface?> {
-        Binding(get: { navigation.selection.macSurface },
-                set: { if let surface = $0 { navigation.select(surface.route) } })
+    /// The destination filter. View state only: what somebody typed to find a
+    /// row is not remembered, stored or sent anywhere.
+    @State private var query = ""
+    @State private var hovered: MacSurface?
+    @Environment(\.shellChrome) private var chrome
+
+    /// One row of the sidebar: which surface, and the words it is found by.
+    private struct Entry: Identifiable {
+        let surface: MacSurface
+        let title: String
+        let subtitle: String
+        var id: MacSurface { surface }
+    }
+
+    private struct SidebarSection: Identifiable {
+        let header: L10nKey
+        let entries: [Entry]
+        var id: String { header.rawValue }
+    }
+
+    /// The sections in the reference's order. Account sits under This Mac with
+    /// the Device Inbox, as it does in the reference.
+    private var groups: [SidebarSection] {
+        [
+            SidebarSection(header: .navSectionDirect, entries: [
+                Entry(surface: .lanTransfer,
+                      title: L10n.t(.navLanTransfer),
+                      subtitle: L10n.t(.navLanTransferSubtitle)),
+                Entry(surface: .crossNetworkTransfer,
+                      title: L10n.t(.navCrossNetworkShort),
+                      subtitle: L10n.t(.navCrossNetworkSubtitle)),
+            ]),
+            SidebarSection(header: .navSectionLinks, entries: [
+                Entry(surface: .storedSend,
+                      title: L10n.t(.navStoredSend),
+                      subtitle: L10n.t(.navStoredSendSubtitle)),
+            ]),
+            // The title is `inbox.title`, the same key the menu bar, the
+            // settings tab and the destination toolbar render.
+            SidebarSection(header: .navSectionDevice, entries: [
+                Entry(surface: .deviceInbox,
+                      title: L10n.t(.inboxTitle),
+                      subtitle: L10n.t(.navDeviceInboxSubtitle)),
+                Entry(surface: .account,
+                      title: L10n.t(.navAccount),
+                      subtitle: L10n.t(.navAccountSubtitle)),
+            ]),
+        ]
+    }
+
+    /// **Search is real.** It matches the localized row title and the row's own
+    /// purpose sentence, ignoring case and diacritics, and a section with no
+    /// match disappears with its heading. An empty query shows everything.
+    private var visibleGroups: [SidebarSection] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return groups }
+        return groups.compactMap { group in
+            let matches = group.entries.filter {
+                $0.title.localizedStandardContains(needle)
+                    || $0.subtitle.localizedStandardContains(needle)
+            }
+            return matches.isEmpty ? nil : SidebarSection(header: group.header, entries: matches)
+        }
     }
 
     var body: some View {
-        List(selection: selection) {
-            Section {
-                row(.lanTransfer,
-                    title: L10n.t(.navLanTransfer),
-                    subtitle: L10n.t(.navLanTransferSubtitle))
-                row(.crossNetworkTransfer,
-                    title: L10n.t(.navCrossNetwork),
-                    subtitle: L10n.t(.navCrossNetworkSubtitle))
-            } header: {
-                sectionHeader(.navSectionDirect)
+        VStack(alignment: .leading, spacing: 0) {
+            controlRow
+            searchField
+                .padding(.horizontal, 12)
+                .padding(.bottom, Metrics.tight)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    let shown = visibleGroups
+                    if shown.isEmpty {
+                        Text(L10n.t(.navSearchNoResults))
+                            .font(.callout)
+                            .foregroundStyle(Palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 20)
+                            .padding(.top, Metrics.tight)
+                            .accessibilityIdentifier("sidebar-search-empty")
+                    }
+                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, group in
+                        sectionHeader(group.header)
+                            .padding(.top, index == 0 ? 6 : 12)
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(group.entries) { entry in
+                                row(entry)
+                            }
+                        }
+                        .padding(.horizontal, Metrics.sidebarInset)
+                    }
+                }
+                .padding(.bottom, Metrics.sidebarInset)
             }
-            Section {
-                row(.storedSend,
-                    title: L10n.t(.navStoredSend),
-                    subtitle: L10n.t(.navStoredSendSubtitle))
-            } header: {
-                sectionHeader(.navSectionLinks)
-            }
-            // A section of its own rather than a third row under Links, because
-            // the Device Inbox is neither a link nor a conversation with somebody
-            // present: it is this Mac as a destination, running with the window
-            // closed. One row today; a section is what the next resident
-            // capability joins without renaming the group around it.
-            Section {
-                // The title is `inbox.title`, the same key the menu bar, the
-                // settings tab and the destination heading render — so the
-                // feature has one name in the product rather than four.
-                row(.deviceInbox,
-                    title: L10n.t(.inboxTitle),
-                    subtitle: L10n.t(.navDeviceInboxSubtitle))
-            } header: {
-                sectionHeader(.navSectionDevice)
-            }
-            // Standalone rather than in a section of its own: the account is not
-            // a transport, and grouping it under a heading would imply it is one
-            // more way to move a file.
-            row(.account,
-                title: L10n.t(.navAccount),
-                subtitle: L10n.t(.navAccountSubtitle))
         }
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(L10n.t(.navA11ySections))
     }
 
-    /// A `Section` promotes its visual header to `AXHeading`, but on macOS it
-    /// can leave that element empty even though the glyphs are on screen. Give
-    /// the header's own text an explicit label, heading trait and stable
-    /// identity, so the transfer groups have names in the accessibility outline
-    /// and a runtime check can tell the product's own element apart from
-    /// whatever `List` wraps around it.
-    ///
-    /// **Annotate the element the text already is; do not synthesize one here.**
-    /// `.accessibilityElement(children: .ignore)` sat on this header for two
-    /// rounds — first on an `HStack(spacing: 0)` holding a single `Text`, then on
-    /// the `Text` itself — and the owner's 2026-08-16 run of
-    /// `testEveryDestinationPassesTheSystemAccessibilityAudit` measured what it
-    /// cost: NO element carrying `sidebar-sectionDirect`, `…Links` or `…Device`
-    /// existed anywhere in the running tree. That modifier discards the view's
-    /// own accessibility element and puts a roleless synthesized one in its
-    /// place, and everything written after it — the label, the heading trait, the
-    /// identifier — lands on that replacement rather than on the text. Inside a
-    /// `List` section header the replacement does not survive into the tree: the
-    /// 2026-08-15 probe (`WORK-QUEUE.md` Q9), taken while the same modifier stack
-    /// sat on the `HStack`, found only the raw `Text` — `(778,362,34,14)
-    /// label=Direct`, no identity — which is the same result read twice.
-    ///
-    /// `PathRail` is the control case for the other half of that mechanism: its
-    /// stops genuinely need one element built from several views, and the same
-    /// audit reported them as `Unknown role` until a trait supplied the role the
-    /// synthesized element does not have. A heading needs neither step. A `Text`
-    /// is already one leaf element with a role, so the label, the trait and the
-    /// identity below modify it in place.
-    ///
-    /// What the audit still rejects on these rows — an unlabelled 208×19 `Group`
-    /// at `(778,360)`, `(778,456)` and `(778,520)`, byte-identical before and
-    /// after everything this function has been rewritten to do — is therefore
-    /// `List`'s own wrapper, which no product code can reach.
-    /// `AppShellUITests` excludes it by name, and only for as long as it encloses
-    /// one of these identified, labelled headings.
+    /// The row the window's traffic lights sit in, with the sidebar toggle at
+    /// its trailing end, centred on the lights AppKit actually placed.
+    private var controlRow: some View {
+        let height = max(Metrics.sidebarControlRow, chrome.controls.controlsMidY * 2)
+        return HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            SidebarToggleButton(sidebarVisible: true, action: chrome.toggleSidebar)
+                .padding(.trailing, 10)
+        }
+        .frame(height: height)
+        .background(WindowDragArea())
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.subheadline)
+                .foregroundStyle(Palette.textTertiary)
+                .accessibilityHidden(true)
+            TextField(L10n.t(.navSearchPlaceholder), text: $query)
+                .textFieldStyle(.plain)
+                .font(.callout)
+                // Return opens the first match, so search is a way to get
+                // somewhere rather than only a way to hide rows.
+                .onSubmit {
+                    if let first = visibleGroups.first?.entries.first {
+                        navigation.select(first.surface.route)
+                    }
+                }
+                .accessibilityLabel(L10n.t(.navSearchLabel))
+                .accessibilityIdentifier("sidebar-search")
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(Palette.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L10n.t(.navSearchClear))
+                .accessibilityIdentifier("sidebar-search-clear")
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(minHeight: Metrics.searchHeight)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Palette.field))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Palette.cardBorder, lineWidth: 1))
+    }
+
+    /// Each section heading is a real heading element with a stable identity,
+    /// so the groups have names in the accessibility outline and a runtime check
+    /// can find them. The label, trait and identity modify the `Text` in place.
     private func sectionHeader(_ key: L10nKey) -> some View {
         let title = L10n.t(key)
         // The trailing component of `nav.sectionDirect`, so the runtime identity
         // cannot drift from the key that supplies the words.
         let id = key.rawValue.split(separator: ".").last.map(String.init) ?? key.rawValue
         return Text(title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Palette.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 3)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityLabel(title)
             .accessibilityAddTraits(.isHeader)
             .accessibilityIdentifier("sidebar-\(id)")
     }
 
-    private func row(_ surface: MacSurface,
-                     title: String,
-                     subtitle: String) -> some View {
+    /// A 28pt row: glyph and title, violet with white text when selected.
+    ///
+    /// Clicks go through `navigation.select(_:)`, so every selection change —
+    /// user, deep link or incoming session — takes the same one-assignment path
+    /// the routing contract is stated in terms of. A destination with no row of
+    /// its own (Open a link) highlights nothing, which is the truthful answer.
+    private func row(_ entry: Entry) -> some View {
+        let surface = entry.surface
+        let title = entry.title
+        let subtitle = entry.subtitle
+        let selected = navigation.selection.macSurface == surface
         let live = hasLiveSession(surface)
-        return HStack(spacing: Metrics.tight) {
-            Label(title, systemImage: surface.symbol)
-                .lineLimit(2)
-                // The reference's sidebar glyph is a step larger than its
-                // label. `imageScale` rather than a point size, so it stays a
-                // step larger at every text size the user can choose.
-                .imageScale(.medium)
-            if live {
-                Image(systemName: liveSessionSymbol)
-                    .foregroundStyle(.tint)
-                    // The words are already on the row's own accessibility
-                    // label, and a badge that announced itself separately
-                    // would read the state twice.
-                    .accessibilityHidden(true)
+        return Button {
+            navigation.select(surface.route)
+        } label: {
+            HStack(spacing: 9) {
+                Image(systemName: SidebarGlyph.symbol(for: surface))
+                    .font(.body)
+                    .frame(width: 16)
+                    .foregroundStyle(selected ? Color.white : Palette.text)
+                Text(title)
+                    .font(.body.weight(selected ? .semibold : .regular))
+                    .foregroundStyle(selected ? Color.white : Palette.text)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                if live {
+                    // The words are on the row's own accessibility label; the
+                    // symbol is the visible carrier and the tint the third.
+                    Image(systemName: liveSessionSymbol)
+                        .foregroundStyle(selected ? Color.white : Palette.actionLabel)
+                        .accessibilityHidden(true)
+                }
             }
+            .padding(.horizontal, Metrics.sidebarInset)
+            // A FLOOR rather than a fixed height: a longer locale or a larger
+            // text size wraps to two lines instead of clipping.
+            .frame(minHeight: Metrics.sidebarRowHeight)
+            .background(
+                RoundedRectangle(cornerRadius: Metrics.sidebarRowCorner)
+                    .fill(selected ? Palette.action
+                          : hovered == surface ? Palette.rowHover : Color.clear)
+            )
+            .contentShape(Rectangle())
         }
-        // A 28pt row, which is the reference's and System Settings' own. The
-        // constant is the ROW; a `List` adds its own insets above and below the
-        // content, so what the content asks for is the row minus them. A FLOOR
-        // rather than a fixed height: a longer locale or a larger text size
-        // wraps to two lines and takes the room it needs instead of clipping.
-        .frame(minHeight: Metrics.sidebarRowHeight - 2 * Metrics.hairline,
-               alignment: .leading)
-        // The sentence that used to be printed under the title, kept where a
-        // pointer can still reach it. This is the SAME string the row's
-        // accessibility hint carries, so the tooltip and VoiceOver cannot drift
-        // apart, and it is the reason dropping the visible caption costs a
-        // browsing reader nothing rather than hiding the explanation.
+        .buttonStyle(.plain)
+        .onHover { inside in
+            if inside { hovered = surface } else if hovered == surface { hovered = nil }
+        }
+        // The purpose sentence, kept where a pointer and VoiceOver can reach it.
         .help(subtitle)
-        .accessibilityElement(children: .combine)
-        // The AX container for a SwiftUI List changed between macOS 15 and 26
-        // (table vs outline). The task identity must not depend on that private
-        // hierarchy, and it also gives UI automation the same stable row on
-        // every supported system.
         .accessibilityIdentifier("sidebar-\(surface.rawValue)")
         .accessibilityLabel(live
                             ? L10n.detail([title, L10n.t(.navA11yLiveSession)])
                             : title)
         .accessibilityHint(subtitle)
-        .tag(surface)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 
     /// Whichever destination is presenting a session that is actually running —
@@ -263,5 +334,23 @@ struct SidebarView: View {
         guard let module = modules.module(for: surface.route) else { return false }
         return module.presence.announcesRunningTransfer(surface.route,
                                                         sessionIsBusy: module.isBusy)
+    }
+}
+
+/// The reference's sidebar glyphs, as SF Symbols.
+///
+/// Presentation only: `MacSurface.symbol` stays the shared answer for every
+/// other place a surface is drawn.
+enum SidebarGlyph {
+    // nonlocalized: SF Symbol names
+    static func symbol(for surface: MacSurface) -> String {
+        switch surface {
+        case .lanTransfer:          return "smallcircle.filled.circle"
+        case .crossNetworkTransfer: return "number"
+        case .storedSend:           return "link"
+        case .storedReceive:        return "arrow.down.circle"
+        case .deviceInbox:          return "tray.and.arrow.down"
+        case .account:              return "person.crop.circle"
+        }
     }
 }

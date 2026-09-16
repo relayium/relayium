@@ -12,37 +12,50 @@ import RelayiumAppKit
 /// handshake already under way stops for confirmation.
 ///
 /// `locked` is the caller's `TransferSurfacePresentation.acceptsNewSession`
-/// answer inverted, so a session owned by the OTHER transfer destination locks
-/// this one too. The setting is global; a screen that let it change while any
-/// session was live would be changing it for that session.
+/// answer inverted.
 ///
-/// What the switch DOES folds behind the row's ⓘ. What it does not do — change
-/// the encryption — is the card's footnote and stays on the page, because that
-/// is the misreading a reader has to be stopped from making without pressing
-/// anything.
+/// Drawn as the reference's Security group: the switch with what it does in
+/// one visible line, and an Encryption row that states what the switch never
+/// changes. The longer explanation folds behind that row's ⓘ.
 struct VerificationSetting: View {
     let locked: Bool
     @ObservedObject var preference: VerificationPreference
 
     var body: some View {
-        SectionCard(title: L10n.t(.verifyHeading),
-                    footnote: L10n.t(.verifyExplainEncryption),
-                    rows: true) {
+        SectionCard(title: L10n.t(.verifySecurityHeading), rows: true) {
             CardRows {
-                SettingsRow(label: L10n.t(.verifyToggle),
-                            explanation: L10n.t(.verifyExplainWhat)) {
-                    // The setter re-checks `locked` rather than trusting
-                    // `.disabled`: a click delivered from the previous render
-                    // can land after a claim.
-                    Toggle(L10n.t(.verifyToggle), isOn: Binding(
-                        get: { preference.requiresSASConfirmation },
-                        set: { if !locked { preference.requiresSASConfirmation = $0 } }
-                    ))
-                        .labelsHidden()
-                        .disabled(locked)
-                        .accessibilityLabel(L10n.t(.verifyToggle))
-                        .accessibilityIdentifier("transfer-verification-toggle")
+                CardBlockRow {
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(L10n.t(.verifyToggleShort))
+                                .font(.body)
+                                .foregroundStyle(Palette.text)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(L10n.t(.verifyToggleDetail))
+                                .font(.subheadline)
+                                .foregroundStyle(Palette.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: Metrics.tight)
+                        // The setter re-checks `locked` rather than trusting
+                        // `.disabled`: a click delivered from the previous render
+                        // can land after a claim.
+                        Toggle(L10n.t(.verifyToggle), isOn: Binding(
+                            get: { preference.requiresSASConfirmation },
+                            set: { if !locked { preference.requiresSASConfirmation = $0 } }
+                        ))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .disabled(locked)
+                            .accessibilityLabel(L10n.t(.verifyToggle))
+                            .accessibilityIdentifier("transfer-verification-toggle")
+                    }
                 }
+                SettingsRow(label: L10n.t(.verifyEncryptionLabel),
+                            value: L10n.t(.verifyEncryptionValue),
+                            explanation: [L10n.t(.verifyExplainEncryption),
+                                          L10n.t(.verifyExplainWhat)]
+                                .joined(separator: "\n\n")) // nonlocalized: paragraph break
             }
         }
         .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
