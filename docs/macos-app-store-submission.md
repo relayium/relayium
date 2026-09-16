@@ -44,7 +44,7 @@ macOS `1.3.10` version, attached to build `28`, in `READY_FOR_SALE`, above
 `currentVersionReleaseDate` `2026-09-14T15:57:27Z`. Until that read-back,
 `web/mac-app-store-release.json` still named `1.3.8` (public since
 2026-08-26), two days after Apple had moved on; the record was corrected with
-the `1.4.0` preparation below, not backdated.
+the `1.4.0` release work below, not backdated.
 
 Build numbers consumed so far, none of which may be rebuilt or re-uploaded:
 `5`, `6`, `7`, `11`, `12`, `24` (`1.3.6`), `25` (`1.3.7`), `26` (`1.3.8`),
@@ -57,21 +57,86 @@ for the Mac App Store on 2026-09-16 and then abandoned, never exported or
 uploaded, when the owner dropped Intel support. Build `37` is spent as well:
 its Apple silicon Mac App Store package was archived, exported and passed
 Apple's validation on 2026-09-16, but was never uploaded, and was abandoned
-when a macOS 15 window-chrome defect required a product change. **The next
-archive of any version needs a build number strictly above `37`, and `38` is
-allocated to the `1.4.0` preparation below.** The published minimum is macOS
-13.0, and the published build does not remove compatibility with older Relayium
-clients.
+when a macOS 15 window-chrome defect required a product change. Build `38` is
+consumed by `1.4.0`: it was uploaded to TestFlight on 2026-09-16 and is in
+internal testing (see below), and the separately signed Developer ID `1.4.0`
+package on GitHub answers to the same build number. **The next archive of any
+version needs a build number strictly above `38`.** The published minimum is
+macOS 13.0, and the published build does not remove compatibility with older
+Relayium clients.
 
 The Developer ID/GitHub download channel is versioned, released and verified
 separately from this record. Its state is never evidence about what the Mac App
 Store is serving, in either direction, even when the two version numbers happen
-to agree — as they do today, both at `1.3.10`.
+to agree. Today they do not: the Mac App Store serves `1.3.10`, while the public
+Developer ID/GitHub release is `macos-v1.4.0`.
 
-#### `1.4.0` (build `38`) — PREPARING for GitHub and internal TestFlight, Apple silicon only
+#### `1.4.0` (build `38`) — RELEASED on GitHub and in internal TestFlight, Apple silicon only
 
-**Status: preparing. Nothing below has been built, signed, notarized,
-uploaded, submitted or published.** The owner accepted the private
+**Status, read back on 2026-09-16: `macos-v1.4.0` is a public, stable GitHub
+Release, and build `38` is in internal TestFlight testing. It is not on the Mac
+App Store and not in any external TestFlight group.** Evidence is retained in the
+workspace release artifact `artifacts/macos-1.4.0-release-20260916/`
+(`provider/` for App Store Connect, `root-validation/` for GitHub).
+
+- **GitHub (Developer ID).** Release `macos-v1.4.0`, "Relayium for macOS 1.4.0",
+  published 2026-09-16T18:55:34Z, not a draft or pre-release, and not the
+  repository's `latest` release (that alias still names the CLI's `v0.25.0`).
+  The tag points at the product source
+  `f2a8e48a4d89e6093f23721aeaf9b68bcd45f193`. Its assets are `Relayium.dmg`
+  (20,917,211 bytes, SHA-256
+  `443d567c3611a9758892f16edc8cab5a506615a4022c8e1c469883ee1bcc78e5`),
+  `Relayium.dmg.sha256` and `appcast.xml`, each read back byte-identical to the
+  notarized workflow artifact (`root-validation/public-release-readback.json`).
+  The DMG was notarized by Apple (submission
+  `9cc0cf2d-915d-41d8-9d2e-08130eb19619`, Accepted with no issues), stapled, and
+  passed Gatekeeper assessment in workflow run `35132057673`.
+- **How the GitHub release was delivered.** The run's first publish attempt
+  froze the metadata commit `ad6bc05bbc4c141bfdefb78dba0069cdfdd64afd` (parent
+  `f2a8…`) and then stopped, because repository policy does not let GitHub
+  Actions open pull requests. The operator opened that exact frozen candidate as
+  PR #121; both merge-gate runs on it passed (the pull-request run and the
+  workflow's bound dispatch run on head `ad6`), `main` was fast-forwarded to
+  `ad6`, and only the failed publish job was rerun. Attempt 2 re-derived the
+  metadata from `main` with no change and published the release. Nothing was
+  rebuilt, re-signed or re-notarized, and no repository permission or setting was
+  changed.
+- **Internal TestFlight.** Build `b6d57581-df38-453e-9cfc-85f665da4181`, macOS
+  `1.4.0 (38)`, processing state `VALID`, internal build state
+  `IN_BETA_TESTING`, `usesNonExemptEncryption` `false`. Automatic tester
+  notification was set to off before the build was added to the existing
+  **Relayium Internal** group (`35cb330d-04d0-4072-a6ad-a96c67b97201`), the only
+  group it belongs to. The external group does not contain build `38`, and
+  App Store Connect still shows macOS `1.3.10` `READY_FOR_SALE`
+  (`provider/build-38-final.json`, `beta-detail-38-final.json`,
+  `internal-group-builds-38.json`, `external-group-builds-after-38.json`,
+  `store-after-38.json`).
+- **Verification before release.** Product source `f2a8` passed the full Swift
+  package suite on hosted CI (4,921 tests, 1 skipped, 0 failures) and the full
+  hosted macOS 15 UI run `35129707754`: 40 app-shell tests, including the
+  unchanged system accessibility audit of every destination; 28 Device Inbox
+  and 5 subscription tests; and the 3 existing local-session tests that skip
+  without their acceptance harness.
+- **Production.** The relayium.com download pages, appcast and static
+  client-version policy are deployed from the production pin. The ops pin was
+  promoted to the release metadata commit
+  `ad6bc05bbc4c141bfdefb78dba0069cdfdd64afd` in `relayium-ops`
+  `6a9bb33ecad0d263c572907864f2355165902506`, and the host deployed it at
+  2026-09-16 19:10:32 UTC with the service active
+  (`root-validation/production-after-1.4.txt`). In a browser, the English
+  `/apps` and Simplified Chinese `/zh/apps/` pages at 1440 and 390 px widths link
+  the macOS download to `macos-v1.4.0/Relayium.dmg`, name Apple silicon and have
+  no horizontal overflow (`root-validation/browser-*-final.txt` and screenshots).
+  The production appcast and static client policy are byte-identical to the
+  published release asset and to `main`, and the dynamic policy read back
+  identical before and after.
+- **Not done by this release.** The dynamic client-version policy changes only
+  through its authenticated admin path and was not changed. The served
+  minimum-supported-version floors are unchanged (static `1.3.7`, dynamic
+  `1.3.9`); the owner plans to raise the minimum to `1.4.0` after launch as a
+  separate step.
+
+The owner accepted the private
 arm64 Developer ID preview `1.4.0 (35)` on 2026-09-16 and asked for a public
 GitHub release and an internal TestFlight build. Build `35` is spent by that
 private package. Build `36` was then archived universal for the Mac App Store
@@ -81,10 +146,10 @@ validated by Apple but never uploaded; it was abandoned because hosted macOS 15
 UI runs showed the opaque title bar covering the detail toolbar's title, status
 and sidebar toggle, and the window-chrome fix changes the product. That fix
 makes the main window declare the hidden-title-bar window style and re-apply its
-transparent title bar whenever the window changes it; it has not yet been
-checked on a macOS 15 window. Both newly signed distribution artifacts — the
-Developer ID build for GitHub and the Mac App Store build for TestFlight — use
-build `38` under the same marketing version, and both are **Apple silicon
+transparent title bar whenever the window changes it; the hosted macOS 15 UI
+run above covers the built product. Both newly signed distribution artifacts —
+the Developer ID build for GitHub and the Mac App Store build for TestFlight —
+use build `38` under the same marketing version, and both are **Apple silicon
 (`arm64`) only**.
 
 **Processor support.** From `1.4.0` every macOS version on every channel is
@@ -97,14 +162,14 @@ published. The GitHub release's Sparkle feed item carries
 `<sparkle:hardwareRequirements>arm64`, so Sparkle never offers `1.4.0` to an
 Intel Mac. A public Mac App Store submission of `1.4.0` still needs its own
 explicit authorization, which this document does not give. The served
-minimum-supported-version policy is unchanged by this preparation.
+minimum-supported-version policy is unchanged by this release.
 
 Scope of the request, and nothing wider: internal TestFlight in the existing
 **Relayium Internal** group only. No external beta group, beta review, App Store
 version, App Review submission, App Store metadata or screenshot edit, and no
 public App Store release is part of it; `1.3.10` stays what Apple is serving.
-Until the release workflow actually publishes `macos-v1.4.0`, the public
-Developer ID/GitHub release also stays `1.3.10`.
+The public Developer ID/GitHub release is `macos-v1.4.0`, published by the
+release workflow as recorded above.
 
 **What it changes on macOS**, relative to the public `1.3.10`, from the accepted
 private previews `1.3.11 (30)`, `1.3.12 (31, 32)`, `1.3.13 (33)`,
@@ -148,7 +213,7 @@ button styles: no subscription product, price, entitlement, purchase or restore
 transition, or provider configuration changes. The minimum remains macOS 13.0.
 The Mac App Store target still links no Sparkle and ships no updater.
 
-What to Test for `1.4.0` (drafted, English):
+What to Test for `1.4.0` (entered on build `38`, English):
 
 > This build redesigns the app's layout. Transfers, encryption, accounts and
 > subscriptions work as before. It runs only on Macs with Apple silicon (M1 or
@@ -177,7 +242,7 @@ What to Test for `1.4.0` (drafted, English):
 > Also try an enlarged system text size, and report anything you cannot reach
 > or read.
 
-What to Test for `1.4.0` (drafted, Simplified Chinese):
+What to Test for `1.4.0` (entered on build `38`, Simplified Chinese):
 
 > 本次更新重新设计了 App 的界面布局，传输、加密、账户与订阅的行为保持不变。本版本仅支持搭载
 > Apple 芯片（M1 或更新）的 Mac，请在这类 Mac 上测试。
@@ -199,9 +264,10 @@ What to Test for `1.4.0` (drafted, Simplified Chinese):
 >
 > 也请在放大的系统字号下试用，并反馈任何无法点到或看不清的地方。
 
-The copy above is drafted for build `38` and has **not** been entered on any
-build. Record the upload, processing, export-compliance answer, group
-assignment and entered test information here only after they are read back.
+The copy above is the What to Test text entered on build `38` for `en-US` and
+`zh-Hans`. The read-back (`provider/beta-localizations-38.json`) matches it
+character for character. The upload, processing, export-compliance answer and
+group assignment are recorded in the status above.
 
 #### `1.3.9` (build `27`) — uploaded to TestFlight, never released
 
