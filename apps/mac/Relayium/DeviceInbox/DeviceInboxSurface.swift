@@ -122,6 +122,10 @@ struct DeviceInboxSurface: View {
                                            deliveries: deliveries,
                                            onAccount: { onAccount(.signIn) },
                                            onBack: { closePeer() })
+                        #if DEBUG
+                        .onAppear { InboxOpenTrace.shared.note("page+ \(peer.id)") }
+                        .onDisappear { InboxOpenTrace.shared.note("page- \(peer.id)") }
+                        #endif
                         // **The page's identity IS the device it is about.**
                         //
                         // Without this the branch is one view that swaps its
@@ -213,6 +217,15 @@ struct DeviceInboxSurface: View {
             HelpCard(surface: .deviceInbox)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        #if DEBUG
+        .background(alignment: .topLeading) {
+            if InboxOpenTrace.isEnabled { InboxOpenTraceProbe() }
+        }
+        .onReceive(deliveries.$focusedPeerID) { focused in
+            InboxOpenTrace.shared.note("focus=\(focused ?? "nil")")
+        }
+        .onAppear { InboxOpenTrace.shared.installMouseMonitor() }
+        #endif
         // Re-measured when the surface appears rather than on every redraw: the
         // probe creates and removes a real file in the user's folder, and the
         // grant can be revoked while the app runs with nothing notifying it.
@@ -350,7 +363,16 @@ struct DeviceInboxSurface: View {
     /// the model's own answer to whether this page may send, and it is nil for
     /// exactly those peers without anything being cleared.
     private func open(_ peerID: String) {
+        #if DEBUG
+        InboxOpenTrace.shared.note("action \(peerID)")
+        #endif
         deliveries.focusPeer(peerID)
+        #if DEBUG
+        InboxOpenTrace.shared.note("after focus=\(deliveries.focusedPeerID ?? "nil") "
+            + "conversation=\(inbox.conversations.contains { $0.peerDeviceID == peerID }) "
+            + "candidate=\(deliveries.candidates.contains { $0.id == peerID }) "
+            + "resolved=\(openPeer != nil) surface=\(entry == .surface)")
+        #endif
     }
 
     /// Back to the list. There is one answer to clear.
@@ -1008,3 +1030,88 @@ func copyReceivedMessage(_ text: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(text, forType: .string)
 }
+
+#if DEBUG
+/// **DIAGNOSTIC, UI-test launches of an inbox fixture only; never in Release.**
+///
+/// Hosted macOS 15 records a click on the visible, hittable, enabled Open of a
+/// conversation and the list staying put — through a repeat, a hover, a long
+/// press and a destination rebuild — while a device row's Send content opens
+/// the same page in the same run. This records, in order, what the app itself
+/// saw, so one hosted run can say which link broke:
+///
+///  - `down`/`up`: a left mouse event reached this process, where (top-left
+///    screen points, the UI test's own coordinates) and which AppKit view the
+///    window hit-tests there. No event means the click never arrived; an event
+///    on another view means something above the button took it.
+///  - `action`: the Open button's action ran, and `after …` what the model and
+///    this surface answered immediately afterwards.
+///  - `focus=`: every value the one stored answer took, so a later write that
+///    clears it is visible.
+///  - `page+`/`page-`: the device page was built, and torn down.
+///
+/// It observes and never consumes: the monitor returns every event unchanged,
+/// and the published text is read by a one-point probe outside the surface's
+/// own layout. The ids it names are the fixture's, never an account's.
+@MainActor
+final class InboxOpenTrace: ObservableObject {
+    static let shared = InboxOpenTrace()
+
+    static var isEnabled: Bool { UITestMode.isActive && UITestInbox.isActive }
+
+    @Published private(set) var text = "none"
+    private var lines: [String] = []
+    private var monitor: Any?
+
+    /// Appended now, published on the next turn, so a note taken inside a view
+    /// update or a press never republishes during it.
+    func note(_ line: String) {
+        guard Self.isEnabled else { return }
+        lines.append(line)
+        if lines.count > 40 { lines.removeFirst(lines.count - 40) }
+        let joined = lines.joined(separator: " ; ")
+        DispatchQueue.main.async { [weak self] in self?.text = joined }
+    }
+
+    func installMouseMonitor() {
+        guard Self.isEnabled, monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .leftMouseUp]) { event in
+                // AppKit delivers local monitors on the main thread, before the
+                // event is dispatched, which is exactly the moment to hit-test.
+                MainActor.assumeIsolated {
+                    let kind = event.type == .leftMouseDown ? "down" : "up"
+                    InboxOpenTrace.shared.note("\(kind) \(Self.describe(event))")
+                }
+                return event
+            }
+    }
+
+    private static func describe(_ event: NSEvent) -> String {
+        guard let window = event.window else { return "window=nil" }
+        let point = event.locationInWindow
+        let screen = window.convertPoint(toScreen: point)
+        let top = (NSScreen.screens.first?.frame.maxY ?? 0) - screen.y
+        // The theme frame has no superview, so window coordinates are its own.
+        let hit = window.contentView?.superview?.hitTest(point)
+        let hitName = hit.map { String(describing: type(of: $0)) } ?? "nil"
+        return "at=(\(Int(screen.x)),\(Int(top))) clicks=\(event.clickCount) "
+            + "hit=\(hitName) key=\(window.isKeyWindow) active=\(NSApp.isActive)"
+    }
+}
+
+/// The one-point element the UI test reads the trace from.
+private struct InboxOpenTraceProbe: View {
+    @ObservedObject private var trace = InboxOpenTrace.shared
+
+    var body: some View {
+        Color.clear
+            .frame(width: 1, height: 1)
+            .accessibilityElement()
+            // nonlocalized: UI-test diagnostic, never shown and absent from Release
+            .accessibilityLabel("UI test open trace")
+            .accessibilityValue(trace.text)
+            .accessibilityIdentifier("uitest-inbox-open-trace")
+    }
+}
+#endif

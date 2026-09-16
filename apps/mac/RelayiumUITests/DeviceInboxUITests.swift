@@ -191,6 +191,13 @@ final class DeviceInboxUITests: XCTestCase {
     /// If none of them opens the page, the press reaches the button and the page
     /// still does not render: the next step is product-side (focus state or the
     /// page's presentation), not the test.
+    ///
+    /// Every entry also carries the app's OWN record (`InboxOpenTrace`, DEBUG and
+    /// inbox fixtures only): the mouse events it received and the view AppKit
+    /// hit-tested for each, whether Open's action ran, every value the focused
+    /// peer took, and whether the device page was built or torn down. That is
+    /// what separates "the click never reached the button" from "the action ran
+    /// and something cleared or failed to render it".
     private func requireDevicePageOpened(after control: XCUIElement, in window: XCUIElement,
                                          file: StaticString = #filePath, line: UInt = #line) {
         if revealed("inbox-send-back", in: window, timeout: 20).exists { return }
@@ -206,15 +213,20 @@ final class DeviceInboxUITests: XCTestCase {
         func settle(_ seconds: TimeInterval) {
             _ = XCTWaiter.wait(for: [XCTestExpectation(description: "settle")], timeout: seconds)
         }
+        func appTrace() -> String {
+            let probe = element("uitest-inbox-open-trace", in: window)
+            guard probe.exists else { return "app trace absent" }
+            return "app trace [\((probe.value as? String) ?? "nil")]"
+        }
         trail.append("first click: not opened after 20s; control \(state(control)); "
-                     + "window \(window.frame); app state \(app.state.rawValue)")
+                     + "window \(window.frame); app state \(app.state.rawValue); \(appTrace())")
         attachDiagnostics(named: "open-0-first-click")
 
         var outcome = "none opened"
         repeat {
             if control.exists { control.click() }
             if opened(5) { outcome = "step 1 (repeat click) opened"; break }
-            trail.append("step 1 repeat click: not opened; control \(state(control))")
+            trail.append("step 1 repeat click: not opened; control \(state(control)); \(appTrace())")
             attachDiagnostics(named: "open-1-repeat-click")
 
             if control.exists { control.hover() }
@@ -222,11 +234,12 @@ final class DeviceInboxUITests: XCTestCase {
             attachDiagnostics(named: "open-2-hovered")
             if control.exists { control.click() }
             if opened(5) { outcome = "step 2 (hover, settle, click) opened"; break }
-            trail.append("step 2 hover+settle+click: not opened; control \(state(control))")
+            trail.append("step 2 hover+settle+click: not opened; control \(state(control)); "
+                         + appTrace())
 
             if control.exists { control.press(forDuration: 0.4) }
             if opened(5) { outcome = "step 3 (0.4s press) opened"; break }
-            trail.append("step 3 press 0.4s: not opened; control \(state(control))")
+            trail.append("step 3 press 0.4s: not opened; control \(state(control)); \(appTrace())")
             attachDiagnostics(named: "open-3-press")
 
             sidebarRow("lanTransfer", named: "LAN Transfer", in: window).click()
@@ -241,12 +254,12 @@ final class DeviceInboxUITests: XCTestCase {
                 outcome = "navigation rebuild revealed already focused peer WITHOUT another Open click"
                 break
             }
-            trail.append("step 4 rebuild alone: not opened")
+            trail.append("step 4 rebuild alone: not opened; \(appTrace())")
             let rebuilt = revealed("inbox-conversation-open", in: window, timeout: 30)
             trail.append("step 4 rebuilt destination: control \(state(rebuilt))")
             if rebuilt.exists { rebuilt.click() }
             if opened(5) { outcome = "step 4 (rebuilt destination, click) opened"; break }
-            trail.append("step 4 click: not opened")
+            trail.append("step 4 click: not opened; \(appTrace())")
         } while false
         attachDiagnostics(named: "open-final")
         XCTFail("opening the conversation did not open its device page on the first on-screen "

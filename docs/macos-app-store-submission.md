@@ -54,27 +54,38 @@ Builds `30` to `35` were signed only as private Developer ID owner-preview
 packages and were never uploaded, but they are spent all the same: each one
 names a distinct artifact. Build `36` is spent too: it was archived universal
 for the Mac App Store on 2026-09-16 and then abandoned, never exported or
-uploaded, when the owner dropped Intel support. **The next archive of any
-version needs a build number strictly above `36`, and `37` is allocated to the
-`1.4.0` preparation below.** The published minimum is macOS 13.0, and the
-published build does not remove compatibility with older Relayium clients.
+uploaded, when the owner dropped Intel support. Build `37` is spent as well:
+its Apple silicon Mac App Store package was archived, exported and passed
+Apple's validation on 2026-09-16, but was never uploaded, and was abandoned
+when a macOS 15 window-chrome defect required a product change. **The next
+archive of any version needs a build number strictly above `37`, and `38` is
+allocated to the `1.4.0` preparation below.** The published minimum is macOS
+13.0, and the published build does not remove compatibility with older Relayium
+clients.
 
 The Developer ID/GitHub download channel is versioned, released and verified
 separately from this record. Its state is never evidence about what the Mac App
 Store is serving, in either direction, even when the two version numbers happen
 to agree — as they do today, both at `1.3.10`.
 
-#### `1.4.0` (build `37`) — PREPARING for GitHub and internal TestFlight, Apple silicon only
+#### `1.4.0` (build `38`) — PREPARING for GitHub and internal TestFlight, Apple silicon only
 
 **Status: preparing. Nothing below has been built, signed, notarized,
 uploaded, submitted or published.** The owner accepted the private
 arm64 Developer ID preview `1.4.0 (35)` on 2026-09-16 and asked for a public
 GitHub release and an internal TestFlight build. Build `35` is spent by that
 private package. Build `36` was then archived universal for the Mac App Store
-and abandoned unexported when the owner dropped Intel support the same day. Both
-newly signed distribution artifacts — the Developer ID build for GitHub and the
-Mac App Store build for TestFlight — use build `37` under the same marketing
-version, and both are **Apple silicon (`arm64`) only**.
+and abandoned unexported when the owner dropped Intel support the same day.
+Build `37`'s Apple silicon Mac App Store package was then archived, exported and
+validated by Apple but never uploaded; it was abandoned because hosted macOS 15
+UI runs showed the opaque title bar covering the detail toolbar's title, status
+and sidebar toggle, and the window-chrome fix changes the product. That fix
+makes the main window declare the hidden-title-bar window style and re-apply its
+transparent title bar whenever the window changes it; it has not yet been
+checked on a macOS 15 window. Both newly signed distribution artifacts — the
+Developer ID build for GitHub and the Mac App Store build for TestFlight — use
+build `38` under the same marketing version, and both are **Apple silicon
+(`arm64`) only**.
 
 **Processor support.** From `1.4.0` every macOS version on every channel is
 built for Macs with Apple silicon only; this is a standing owner rule for all
@@ -188,7 +199,7 @@ What to Test for `1.4.0` (drafted, Simplified Chinese):
 >
 > 也请在放大的系统字号下试用，并反馈任何无法点到或看不清的地方。
 
-The copy above is drafted for build `37` and has **not** been entered on any
+The copy above is drafted for build `38` and has **not** been entered on any
 build. Record the upload, processing, export-compliance answer, group
 assignment and entered test information here only after they are read back.
 

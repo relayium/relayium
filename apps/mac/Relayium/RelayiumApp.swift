@@ -956,6 +956,13 @@ struct RelayiumApp: App {
                     await versionSupport.refresh()
                 }
         }
+        // The scene's OWN style is a transparent title bar with no drawn title,
+        // the chrome `WindowChrome` draws against, so SwiftUI's window styling
+        // agrees with it instead of being left at the default. On macOS 15 an
+        // opaque title bar covered the detail toolbar's title, status and
+        // sidebar toggle although `WindowChrome` had made it transparent.
+        // The traffic lights stay; `navigationTitle` still names the window.
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1040, height: 700)
         .commands {
             CommandGroup(after: .appInfo) {

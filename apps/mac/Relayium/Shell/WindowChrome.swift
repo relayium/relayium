@@ -49,6 +49,11 @@ struct WindowChrome: NSViewRepresentable {
         /// `navigationTitle` changes, and that write makes AppKit draw the title
         /// again above the toolbar. Hiding it only when this representable
         /// updates missed every later write, so the window itself is watched.
+        ///
+        /// The title bar's transparency and the full-size content view are
+        /// watched for the same reason: an opaque title bar written after this
+        /// view last updated covers the toolbar drawn underneath it, which is
+        /// what macOS 15 showed.
         private var titleObservations: [NSKeyValueObservation] = []
 
         override func viewDidMoveToWindow() {
@@ -67,6 +72,12 @@ struct WindowChrome: NSViewRepresentable {
                 },
                 window.observe(\.titleVisibility, options: [.new]) { [weak self] _, _ in
                     DispatchQueue.main.async { self?.hideDrawnTitle() }
+                },
+                window.observe(\.titlebarAppearsTransparent, options: [.new]) { [weak self] _, _ in
+                    DispatchQueue.main.async { self?.apply() }
+                },
+                window.observe(\.styleMask, options: [.new]) { [weak self] _, _ in
+                    DispatchQueue.main.async { self?.apply() }
                 },
             ]
             for name in [NSWindow.didResizeNotification,

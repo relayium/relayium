@@ -277,7 +277,15 @@ struct StatusChip: View {
         .padding(.horizontal, 9)
         .frame(minHeight: 22)
         .background(Capsule().fill(Palette.chip))
-        .accessibilityElement(children: .combine)
+        // One leaf that says the word, rather than a merge of a hidden dot and
+        // a text: the dot is decoration and the word is the whole of what is
+        // spoken either way. `.combine` over a hidden child left hosted
+        // macOS 15's accessibility audit reporting an element that is not an
+        // accessibility child of its parent on exactly the two destinations
+        // that draw this chip; whether this is that element is what the next
+        // hosted audit decides.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
         .accessibilityIdentifier("toolbar-status")
     }
 

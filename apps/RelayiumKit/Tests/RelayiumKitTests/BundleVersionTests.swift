@@ -60,6 +60,12 @@ final class BundleVersionTests: XCTestCase {
         // release of the same app through two channels, and a user who installs
         // one after the other must not see the version go backwards.
         //
+        // `1.4.0 (38)`: the same release, with the window chrome fix for the
+        // opaque title bar that covered the toolbar on macOS 15. **Build `37`
+        // is spent**: its Mac App Store package was archived, exported and
+        // validated by Apple but never uploaded, and a changed product cannot
+        // answer to a signed artifact's number.
+        //
         // `1.4.0 (37)`: the same release, Apple Silicon only. The owner dropped
         // Intel for both GitHub and TestFlight on 2026-09-16, after build `36`
         // had already been archived universal for the Mac App Store. That archive
@@ -103,7 +109,7 @@ final class BundleVersionTests: XCTestCase {
         // carries the newer cross-platform navigation work cannot reuse that
         // number without making the version string stop identifying a build.
         try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.0", occurrences: 10)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "37", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "38", occurrences: 10)
     }
 
     /// macOS: both shipped products and both Share extensions are Apple Silicon
