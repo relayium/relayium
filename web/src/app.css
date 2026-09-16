@@ -672,7 +672,6 @@ label:has(> .file-pick-input:focus-visible) {
 
 :root {
   --shell-side-w: 216px;
-  --shell-bar-h: 44px;
   --shell-col-w: 660px;
   /* The decision-width track for /pricing, /cli, /apps and /me. */
   --shell-col-wide: 1040px;
@@ -693,11 +692,10 @@ label:has(> .file-pick-input:focus-visible) {
    there. So:
 
      narrow  body → content     (the whole page IS the content pane)
-             .topnav → window   (the toolbar sits on the window surface)
+             .topnav → window   (the compact header sits on the window surface)
      wide    body → window      (the frame around the app)
              .topnav.shell → sidebar   (in Nav.svelte)
              .appshell-main → content
-             .appshell-bar  → window
 
    All of it is behind `:root.shell-route`, the class App toggles on <html> for
    the four destinations only — which is also what replaces `body`'s two

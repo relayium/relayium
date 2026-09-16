@@ -75,8 +75,9 @@
     .auth-card { padding-inline: var(--space-4); }
     h1 { font-size: 26px; }
   }
-  /* Inside the application shell the card's title is the page title, at the
-     shell's page-title size like every other shell page; the shell's 17px h2
-     token would otherwise make it smaller than the toolbar label above it. */
+  /* Inside the application shell the card's title is the page title, and it
+     takes the shell's page-title size like every other shell page. Without this
+     it inherits the shell's 17px h2 token and the one heading on the route
+     comes out smaller than the section headings on every neighbouring page. */
   :global(.appshell.shell) h1 { font-size: var(--fs-page-title); }
 </style>

@@ -72,10 +72,12 @@
 <section class="crosspage page-enter">
 
   <!-- ONE title. This page used to print its name three times on one screen:
-       the toolbar echoes the destination, `crossTitle` was the <h1>, and
-       `methods.realtime.name` was the card heading directly under it — the same
-       words in both languages. The <h1> stays (it is the page), the card heading
-       is gone, and the group label below names the OPERATION instead.
+       `crossTitle` was the <h1>, `methods.realtime.name` was the card heading
+       directly under it, and the shell's toolbar echoed the destination above
+       both — the same words in both languages. The <h1> stays (it is the page),
+       the card heading is gone, the group label below names the OPERATION
+       instead, and the toolbar itself has been removed from the shell. What is
+       left on screen once is the selected sidebar row and this <h1>.
 
        `crossPitch` used to be two paragraphs between the title and the control.
        They are still here, verbatim, inside the disclosure — the reference's §5

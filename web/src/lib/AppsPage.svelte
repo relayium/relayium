@@ -303,6 +303,26 @@
   .head { margin-block: var(--space-3) var(--space-2); }
   .head .tagline { max-inline-size: 58ch; }
 
+  /* ── Settings-shell form ──────────────────────────────────────────────────
+     Inside the shell the column already owns this page's measure and both of
+     its insets, and these two rules were competing with it. Measured at 1440px
+     before they existed: /cli and /me started their content at x=318 (the
+     column's own 22px gutter) and /apps started at x=348, so the left edge of
+     the page moved by 30px whenever the reader crossed between two entries of
+     the same "Downloads and tools" sidebar group — 960px centred inside a
+     1040px track. `.head`'s 12px did the same thing on the block axis, putting
+     this page's <h1> 12px lower than the <h1> of every neighbour that uses the
+     shared `.ui-page-head` primitive.
+
+     Overridden rather than deleted, for the same reason `.dinbox` overrides its
+     own 1120px measure instead of dropping it: the two rules above are what
+     this component lays out to when it is mounted on its own, which is how
+     AppsPage.test.ts and AppsPage.claims.test.ts render it, and a component
+     that only has a layout inside one particular wrapper is harder to test than
+     one that carries its own. */
+  :global(.appshell.shell) .apps { max-width: none; margin-inline: 0; }
+  :global(.appshell.shell) .head { margin-block: 0; }
+
   .groups { display: flex; flex-direction: column; gap: var(--space-6); }
   .group-title {
     margin: 0 0 var(--space-3); font-size: var(--fs-sm); color: var(--text-h);

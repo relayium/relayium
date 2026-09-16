@@ -11,8 +11,9 @@
      `:global(:last-child)` rule that drops the last row's separator.
 
      `title` names a CONCEPT — never the page. The page already has an <h1> and
-     the toolbar already echoes the destination; a group label repeating either
-     is the duplicate-title defect this component exists to make hard to write.
+     the sidebar's selected row already names the destination; a group label
+     repeating either is the duplicate-title defect this component exists to
+     make hard to write.
      It is deliberately not a heading element: these label one card each inside a
      page that already has its single title, and promoting them to <h2> would
      invent an outline level per card. -->

@@ -816,9 +816,9 @@ export interface Messages {
    *     that name — otherwise speech input cannot address the control by what it
    *     says. Check both languages when editing either side.
    *  2. **Group labels name a concept, never the page.** They exist because the
-   *     page title, the toolbar and the card heading used to print the same
-   *     words three times; a group label that repeats the <h1> puts that defect
-   *     straight back. */
+   *     page title, the shell's since-removed toolbar and the card heading used
+   *     to print the same words three times; a group label that repeats the
+   *     <h1> puts that defect straight back. */
   shell: {
     /** Sidebar group titles — the real Direct / Links / your-own-devices
      *  hierarchy of the reference, not one generic heading over all four

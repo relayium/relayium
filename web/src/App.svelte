@@ -870,22 +870,17 @@
   // transfer destinations and the auth landings use.
   const WIDE_ROUTES = ["pricing", "cli", "apps", "me"] as const;
   const shellWide = $derived((WIDE_ROUTES as readonly string[]).includes(currentRoute()));
-  // The toolbar's label: the sidebar's own name for the page, so the two never
-  // disagree. Never a new string — every one of these is already a nav label
-  // or the page's own title.
-  const shellTitle = $derived(
-    currentRoute() === "cross" ? t.nav.crossTab
-    : currentRoute() === "offline" ? t.nav.offlineTab
-    : currentRoute() === "device-inbox" ? t.nav.deviceInboxTab
-    : currentRoute() === "pricing" ? t.pricingPage.navLink
-    : currentRoute() === "cli" ? t.nav.cliTab
-    : currentRoute() === "apps" ? t.nav.appsTab
-    : currentRoute() === "me" ? t.me.title
-    : currentRoute() === "verify-email" ? t.verifyEmail.title
-    : currentRoute() === "reset-password" ? t.resetPassword.title
-    : currentRoute() === "magic-link" ? t.magicLink.title
-    : t.nav.lanTab,
-  );
+  // There was a toolbar here, and it echoed the destination's name above the
+  // page. It is gone, and no replacement belongs in its place: on seven of the
+  // eleven shell routes its label and the page's own <h1> were the SAME string
+  // — "Cross-network transfer" was on screen three times at once (selected
+  // sidebar row, toolbar, heading), and "Share a link", "Device Inbox",
+  // "Personal center" and the three auth titles were on screen twice. On the
+  // remaining four it was the short nav word over a longer title that already
+  // says it ("CLI" over "Relayium CLI", "Apps" over "Get Relayium"). Either way
+  // it named what the selected sidebar row already names, so what it added to
+  // every page was a 44px band and one more thing to read. The route's identity
+  // is the sidebar's selected row plus the page's one <h1>.
 
   // The neutral window surface, switched on <html> for the four shell routes.
   // `body`'s two accent-tinted radial washes are the "满屏紫" the reference's §3
@@ -2564,17 +2559,19 @@
     {/await}
   {:else}
   <!-- The settings-style shell: a 216px sidebar (Nav, which becomes the rail on
-       its own), a 44px toolbar and a 660px content track (1040px on the
-       decision-width pages — `shellWide`). It wraps every route but the
-       recipient's download page — `shellRoute` — and is `display: contents`
-       there and at every width below the breakpoint, so /d/<id> and every
-       narrow viewport lay out exactly as they did.
+       its own) and a 660px content track (1040px on the decision-width pages —
+       `shellWide`). It wraps every route but the recipient's download page —
+       `shellRoute` — and is `display: contents` there and at every width below
+       the breakpoint, so /d/<id> and every narrow viewport lay out exactly as
+       they did.
 
-       The toolbar names the destination and nothing else. It carries no status
-       pill: on this route the connection state is already the identity rail's
-       first line, and on the other three the account state is already the
-       control in the sidebar — a second copy of either would be the same fact
-       said twice. -->
+       There is no toolbar row between them. It carried the destination's name
+       and nothing else, which is what the selected sidebar row and the page's
+       own <h1> each already carry — the note above `shellRoute`/`shellWide` in
+       the script block records what it printed on each of the eleven routes.
+       A status pill was never in it either: the connection state is
+       the identity rail's first line and the account state is a control in the
+       sidebar, so either one here would be the same fact said twice. -->
   <div class="appshell" class:shell={shellRoute} class:wide={shellWide}>
   <Nav />
   <!-- `inert` while the account dialog is open: the page behind a modal must not
@@ -2583,14 +2580,6 @@
        route change all clear it by the same path. Nav marks its own background
        halves; the account slot itself stays live so focus can return to it. -->
   <div class="appshell-main" inert={loginOpen() ? true : undefined}>
-  {#if shellRoute}
-    <!-- Not a heading: every one of these four routes already renders its own
-         single <h1> in the column below, and this is the sidebar's selected row
-         echoed at the top of the pane (exactly as the reference does it). An
-         <h2> here would insert a second, higher-level title into each page's
-         outline for a word the page already says. -->
-    <div class="appshell-bar"><span class="appshell-bar-title">{shellTitle}</span></div>
-  {/if}
   <div class="appshell-col">
 
   {#if currentRoute() === "cross"}
@@ -2765,10 +2754,6 @@
      download route, the DOM renders with exactly the boxes it had before this
      batch — the wrappers generate none. */
   .appshell, .appshell-main, .appshell-col { display: contents; }
-  /* The toolbar belongs to the wide form. On a phone the destination is already
-     named by the active tab in the row above it, and a second copy of that word
-     would be the one duplication the reference's own rules forbid. */
-  .appshell-bar { display: none; }
 
   /* Between a phone and the sidebar breakpoint there is no rail, but there is
      still more width than a line of text should use: at 1000px these four pages
@@ -2809,51 +2794,29 @@
       min-block-size: 100svh;
       background: var(--shell-content);
     }
-    /* 44px, 1px bottom rule, 13px/600 title. */
-    /* The toolbar is part of the window chrome, not of the content it sits
-       over — the reference's own separation, and the reason the 1px rule under
-       it reads as an edge rather than as a hairline inside one surface. */
-    .appshell.shell .appshell-bar {
-      display: flex;
-      align-items: center;
-      gap: var(--space-3);
-      box-sizing: border-box;
-      block-size: var(--shell-bar-h);
-      padding-inline: 22px;
-      border-block-end: 1px solid var(--shell-sep);
-      background: var(--shell-win);
-    }
-    /* The title sits on the SAME track as the column below it — the bar's rule
-       runs the full width of the pane, but its label starts where the rows
-       start. A toolbar title indented to its own arbitrary gutter is the tell
-       that a settings window was assembled rather than laid out. */
-    .appshell.shell .appshell-bar { padding-inline: 0; }
-    .appshell-bar-title {
-      box-sizing: border-box;
-      inline-size: 100%;
-      max-inline-size: calc(var(--shell-col-w) + 44px);
-      margin-inline: auto;
-      padding-inline: 22px;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-h);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
     /* The reading and operating track. The window may be any width; this is not
        — which is the single biggest difference between the reference and a page
-       that merely stretches. */
+       that merely stretches.
+
+       The block-start padding is what the removed toolbar left behind. It was
+       18px UNDER a 44px bar, so the <h1> started 62px below the top of the pane;
+       left at 18px with no bar above it, the heading sits closer to the window's
+       top edge than to the column's own side gutter, and that corner reads as a
+       page that was cropped rather than one that starts. --space-5 (24px) is a
+       hair over the 22px inline gutter, so the column is inset by about the same
+       amount on both axes and the corner reads as ONE inset — which is the thing
+       the bar's height used to supply, minus the band and minus the second copy
+       of the page's name. Anything larger starts rebuilding the band as
+       whitespace. */
     .appshell.shell .appshell-col {
       display: block;
       box-sizing: border-box;
       inline-size: 100%;
       max-inline-size: calc(var(--shell-col-w) + 44px);
       margin-inline: auto;
-      padding: 18px 22px var(--space-8);
+      padding: var(--space-5) 22px var(--space-8);
     }
-    .appshell.shell.wide .appshell-col,
-    .appshell.shell.wide .appshell-bar-title { max-inline-size: calc(var(--shell-col-wide) + 44px); }
+    .appshell.shell.wide .appshell-col { max-inline-size: calc(var(--shell-col-wide) + 44px); }
   }
 
   /* The desktop LAN route is an application workspace once there is enough room
