@@ -162,8 +162,20 @@ class FakeInboxTransport(
         return keys.toList()
     }
 
+    /** Parks the NEXT heartbeat — the first step of a receive pass — then clears
+     *  itself, so a test can hold one pass in flight. */
+    var heartbeatGate: CompletableDeferred<Unit>? = null
+
+    /** Thrown by every heartbeat while set. */
+    var heartbeatFailure: Throwable? = null
+
     override suspend fun heartbeat(receiveDirReady: Boolean): InboxHeartbeatResult {
         calls.add("heartbeat")
+        heartbeatGate?.let { gate ->
+            heartbeatGate = null
+            gate.await()
+        }
+        heartbeatFailure?.let { throw it }
         return InboxHeartbeatResult(
             com.relayium.protocol.inbox.InboxPresence.ONLINE,
             1_700_000_090L, InboxProtocol.DEFAULT_HEARTBEAT_SECONDS,

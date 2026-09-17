@@ -25,7 +25,6 @@
     <string name="inbox_error_unsupported_build">The server selected an Inbox protocol this version of Relayium cannot use. Update the app.</string>
     <string name="inbox_error_protocol">The server sent a response Relayium could not accept.</string>
 
-    <string name="inbox_status_title">Status</string>
     <string name="inbox_receive_title">Receiving</string>
     <string name="inbox_this_device">This device: %1$s</string>
     <string name="inbox_policy_off">Off</string>
@@ -137,4 +136,9 @@
         <item quantity="one">%1$d unread</item>
         <item quantity="other">%1$d unread</item>
     </plurals>
+    <string name="inbox_check_now">Check now</string>
+    <string name="inbox_checking">Checking…</string>
+    <string name="inbox_check_nothing_new">Nothing new. A delivery appears here only after the sender\'s upload has finished.</string>
+    <string name="inbox_check_done">Check complete.</string>
+    <string name="inbox_check_failed">The check didn\'t finish. The status above says why.</string>
 </resources>

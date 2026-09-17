@@ -1700,6 +1700,7 @@ private fun InboxDestination(
         InboxActions(
             signIn = onOpenAccount,
             retry = { viewModel.inboxRefresh() },
+            checkNow = { viewModel.inboxCheckNow() },
             setPolicy = { viewModel.inboxSetPolicy(it) },
             respond = { taskId, accept -> viewModel.inboxRespond(taskId, accept) },
             repairKey = { viewModel.inboxRepairKey() },

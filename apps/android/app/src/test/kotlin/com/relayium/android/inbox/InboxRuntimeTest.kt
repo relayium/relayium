@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -621,6 +622,182 @@ class InboxRuntimeTest {
         assertNull(w.model.state.value.authority)
         assertTrue(w.model.state.value.conversations.isEmpty())
         assertEquals(InboxReceiving.OFF, w.model.state.value.receiving)
+    }
+
+    // ── check now ───────────────────────────────────────────────────────────
+
+    /** A receiving world parked in its first nap after one pass.
+     *
+     *  The steps below settle with `runCurrent`, not `advanceUntilIdle`: the loop
+     *  lives in the model's background scope, which `advanceUntilIdle` does not
+     *  wait for once no foreground work remains. */
+    private suspend fun TestScope.listening(): World {
+        val w = world()
+        w.services.holdKey()
+        w.adopt()
+        w.runtime.start()?.join()
+        w.runtime.setPolicy(InboxAutoAccept.AUTO)?.join()
+        runCurrent()
+        assertEquals(InboxReceiving.LISTENING, w.model.state.value.receiving)
+        assertEquals(1, w.services.server.device.count("heartbeat"))
+        assertEquals(1, w.pause.entered.get())
+        return w
+    }
+
+    /** A press wakes the parked loop for one pass — the heartbeat timer is never
+     *  released — and the empty answer claims nothing. */
+    @Test
+    fun `check now wakes the napping loop for exactly one pass`() = runTest {
+        val w = listening()
+
+        assertTrue(w.runtime.checkNow())
+        runCurrent()
+
+        assertEquals(2, w.services.server.device.count("heartbeat"))
+        assertEquals(2, w.services.server.device.count("pending"))
+        assertEquals(InboxManualCheck.NOTHING_NEW, w.model.state.value.manualCheck)
+        assertEquals("the loop went back to napping", 2, w.pause.entered.get())
+        assertTrue(w.model.state.value.conversations.isEmpty())
+    }
+
+    /** Repeated presses before the pass runs are one request, not three passes. */
+    @Test
+    fun `repeated presses coalesce into one pass`() = runTest {
+        val w = listening()
+
+        repeat(3) { assertTrue(w.runtime.checkNow()) }
+        runCurrent()
+
+        assertEquals(2, w.services.server.device.count("heartbeat"))
+        assertEquals(InboxManualCheck.NOTHING_NEW, w.model.state.value.manualCheck)
+    }
+
+    /**
+     * A press while a pass is already running neither cancels it nor is answered
+     * by it: the running pass finishes its own work, and a NEW pass answers.
+     */
+    @Test
+    fun `a press during a pass waits for the next pass and cancels nothing`() = runTest {
+        val w = listening()
+        val held = CompletableDeferred<Unit>()
+        w.services.server.device.heartbeatGate = held
+        w.pause.release()
+        runCurrent()
+        assertEquals("the second pass is parked in flight", 2, w.services.server.device.count("heartbeat"))
+        assertEquals(1, w.services.server.device.count("pending"))
+
+        assertTrue(w.runtime.checkNow())
+        runCurrent()
+        assertEquals(InboxManualCheck.CHECKING, w.model.state.value.manualCheck)
+
+        held.complete(Unit)
+        runCurrent()
+
+        assertEquals("the in-flight pass ran to completion", 3, w.services.server.device.count("pending"))
+        assertEquals("a fresh pass answered the request", 3, w.services.server.device.count("heartbeat"))
+        assertEquals(InboxManualCheck.NOTHING_NEW, w.model.state.value.manualCheck)
+    }
+
+    /** A pass that fails answers the request truthfully, and the loop keeps
+     *  running on its own cadence. */
+    @Test
+    fun `a failed pass answers the check as failed`() = runTest {
+        val w = listening()
+        w.services.server.device.heartbeatFailure =
+            InboxTransportException(InboxTransportException.Kind.NETWORK)
+
+        assertTrue(w.runtime.checkNow())
+        runCurrent()
+
+        assertEquals(InboxManualCheck.FAILED, w.model.state.value.manualCheck)
+        assertEquals(InboxModel.State.Failure.NETWORK, w.model.state.value.failure)
+        assertEquals(2, w.pause.entered.get())
+    }
+
+    /** Where the loop would do nothing, the press is refused and asks central
+     *  nothing: receiving off, and the surface no longer live. */
+    @Test
+    fun `check now is refused when off or not in the foreground`() = runTest {
+        val off = world()
+        off.services.holdKey()
+        off.adopt()
+        off.runtime.start()?.join()
+        runCurrent()
+        assertFalse(off.runtime.checkNow())
+        runCurrent()
+        assertEquals(0, off.services.server.device.count("heartbeat"))
+        assertEquals(InboxManualCheck.NONE, off.model.state.value.manualCheck)
+
+        val w = listening()
+        w.runtime.stop()?.join()
+        runCurrent()
+        assertFalse(w.runtime.checkNow())
+        runCurrent()
+        assertEquals(1, w.services.server.device.count("heartbeat"))
+    }
+
+    /** Leaving the foreground with a request outstanding withdraws it rather than
+     *  leaving Checking on screen or reporting a result nobody ran. */
+    @Test
+    fun `stopping withdraws an outstanding check`() = runTest {
+        val w = listening()
+        val held = CompletableDeferred<Unit>()
+        w.services.server.device.heartbeatGate = held
+        w.pause.release()
+        runCurrent()
+        assertTrue(w.runtime.checkNow())
+        runCurrent()
+        assertEquals(InboxManualCheck.CHECKING, w.model.state.value.manualCheck)
+
+        w.runtime.stop()?.join()
+        runCurrent()
+
+        assertEquals(InboxManualCheck.NONE, w.model.state.value.manualCheck)
+        assertEquals(InboxReceiving.STOPPED, w.model.state.value.receiving)
+    }
+
+    /** A request made under one account never answers onto the next. */
+    @Test
+    fun `an account switch drops a pending check`() = runTest {
+        val w = listening()
+        val held = CompletableDeferred<Unit>()
+        w.services.server.device.heartbeatGate = held
+        w.pause.release()
+        runCurrent()
+        assertTrue(w.runtime.checkNow())
+        runCurrent()
+
+        w.runtime.adopt(other, "bearer-b")
+        held.complete(Unit)
+        runCurrent()
+
+        assertEquals(InboxManualCheck.NONE, w.model.state.value.manualCheck)
+        assertFalse("no answer from the old account's loop", w.model.state.value.manualCheck ==
+            InboxManualCheck.NOTHING_NEW)
+    }
+
+    /** Under Ask a check looks again and answers nothing for the user: the held
+     *  question stays, and no accept is sent. */
+    @Test
+    fun `check now under ask accepts nothing`() = runTest {
+        val w = world()
+        w.services.holdKey()
+        w.services.server.device.pending = listOf(
+            InboxTaskRow.read(InboxFixtures.task("State" to Json.of("attention_required"))),
+        )
+        w.adopt()
+        w.runtime.start()?.join()
+        w.runtime.setPolicy(InboxAutoAccept.ASK)?.join()
+        runCurrent()
+        val held = w.model.state.value.awaitingAnswer.map { it.id }
+        assertEquals(listOf(InboxFixtures.TASK_ID), held)
+
+        assertTrue(w.runtime.checkNow())
+        runCurrent()
+
+        assertEquals(0, w.services.server.device.count("accept"))
+        assertEquals(held, w.model.state.value.awaitingAnswer.map { it.id })
+        assertTrue(w.model.state.value.manualCheck != InboxManualCheck.CHECKING)
     }
 
     // ── fixtures ────────────────────────────────────────────────────────────

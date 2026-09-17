@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.assertIsDisplayed
@@ -229,7 +231,18 @@ class ReferenceLayoutAcceptanceTest {
                         .verticalScroll(rememberScrollState())
                         .padding(Metrics.gutter),
                 ) {
-                    InboxScreen(state, InboxActions())
+                    // The Scaffold's other half: it also provides the content
+                    // colour for its background. Without it every Text that does
+                    // not name a colour — the screen heading — drew in the
+                    // default black, which a dark capture showed as black on
+                    // near-black although the product has no such defect.
+                    CompositionLocalProvider(
+                        LocalContentColor provides MaterialTheme.colorScheme.onBackground,
+                    ) {
+                        // With a working Check now, so the status head captures
+                        // the control a listening inbox actually offers.
+                        InboxScreen(state, InboxActions(checkNow = {}))
+                    }
                 }
             }
         }

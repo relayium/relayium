@@ -34,6 +34,7 @@ import com.relayium.android.inbox.InboxDeviceRow
 import com.relayium.android.inbox.InboxDirectoryState
 import com.relayium.android.inbox.InboxKeyHealth
 import com.relayium.android.inbox.InboxKeyRow
+import com.relayium.android.inbox.InboxManualCheck
 import com.relayium.android.inbox.InboxModel
 import com.relayium.android.inbox.InboxReceiving
 import com.relayium.android.inbox.InboxSendCoordinator
@@ -445,6 +446,103 @@ class InboxScreenAcceptanceTest {
             InboxActions(),
         )
         control(R.string.inbox_pending_accept).performScrollTo().assertIsNotEnabled()
+    }
+
+    // ── check now ───────────────────────────────────────────────────────────
+
+    private fun listening() = ready().copy(
+        policy = InboxAutoAccept.AUTO,
+        receiving = InboxReceiving.LISTENING,
+    )
+
+    /** A listening inbox offers Check now, and pressing it asks the runtime —
+     *  not Retry, which re-reads the device list. */
+    @Test
+    fun aListeningInboxOffersCheckNow() {
+        val recorder = Recorder()
+        host(
+            listening(),
+            InboxActions(
+                checkNow = { recorder.record("checkNow") },
+                retry = { recorder.record("retry") },
+            ),
+        )
+        clickText(R.string.inbox_check_now)
+        assertTrue(recorder.saw("checkNow"))
+        assertTrue("Check now fell through to Retry", !recorder.saw("retry"))
+        compose.onNode(hasText(s(R.string.inbox_check_nothing_new))).assertDoesNotExist()
+    }
+
+    /** While a check is outstanding the control stays, disabled, saying so. */
+    @Test
+    fun aRunningCheckIsDisabledAndSaysSo() {
+        host(listening().copy(manualCheck = InboxManualCheck.CHECKING), InboxActions(checkNow = {}))
+        control(R.string.inbox_checking).performScrollTo().assertIsNotEnabled()
+    }
+
+    /** Each answer is its own sentence, and none of them claims an arrival. */
+    @Test
+    fun everyCheckAnswerIsShownBesideTheControl() {
+        var state by mutableStateOf(listening().copy(manualCheck = InboxManualCheck.NOTHING_NEW))
+        compose.setContent {
+            RelayiumTheme {
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+                    InboxScreen(state, InboxActions(checkNow = {}))
+                }
+            }
+        }
+        for ((check, text) in listOf(
+            InboxManualCheck.NOTHING_NEW to R.string.inbox_check_nothing_new,
+            InboxManualCheck.CHECKED to R.string.inbox_check_done,
+            InboxManualCheck.FAILED to R.string.inbox_check_failed,
+        )) {
+            state = listening().copy(manualCheck = check)
+            compose.waitForIdle()
+            compose.onNodeWithText(s(text)).performScrollTo().assertIsDisplayed()
+        }
+    }
+
+    /** Off, not yet listening, or already failing: no Check now, because the loop
+     *  would do nothing or the failure already carries its own recovery. */
+    @Test
+    fun checkNowIsAbsentWhereTheLoopCannotAnswer() {
+        var state by mutableStateOf(ready())
+        compose.setContent {
+            RelayiumTheme {
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+                    InboxScreen(state, InboxActions(checkNow = {}))
+                }
+            }
+        }
+        for (candidate in listOf(
+            ready(),
+            listening().copy(receiving = InboxReceiving.STOPPED),
+            listening().copy(failure = InboxModel.State.Failure.NETWORK),
+        )) {
+            state = candidate
+            compose.waitForIdle()
+            compose.onNode(hasText(s(R.string.inbox_check_now)) and hasClickAction()).assertDoesNotExist()
+        }
+    }
+
+    /** Under Ask a held delivery keeps its own answers after a check. */
+    @Test
+    fun checkingUnderAskLeavesTheHeldDeliveryToThePerson() {
+        val recorder = Recorder()
+        host(
+            listening().copy(
+                policy = InboxAutoAccept.ASK,
+                awaitingAnswer = listOf(task()),
+                manualCheck = InboxManualCheck.NOTHING_NEW,
+            ),
+            InboxActions(
+                checkNow = { recorder.record("checkNow") },
+                respond = { id, accept -> recorder.record("respond:$id:$accept") },
+            ),
+        )
+        clickText(R.string.inbox_check_now)
+        control(R.string.inbox_pending_accept).performScrollTo().assertIsDisplayed()
+        assertTrue(recorder.calls.none { it.startsWith("respond") })
     }
 
     // ── devices and sending ─────────────────────────────────────────────────

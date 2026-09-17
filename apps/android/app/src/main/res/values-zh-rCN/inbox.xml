@@ -16,7 +16,6 @@
     <string name="inbox_error_unsupported_build">服务器选择的收件箱协议是此版本 Relayium 无法使用的。请更新应用。</string>
     <string name="inbox_error_protocol">服务器返回了 Relayium 无法接受的响应。</string>
 
-    <string name="inbox_status_title">状态</string>
     <string name="inbox_receive_title">接收</string>
     <string name="inbox_this_device">本设备：%1$s</string>
     <string name="inbox_policy_off">关闭</string>
@@ -126,4 +125,9 @@
     <plurals name="inbox_history_unread">
         <item quantity="other">%1$d 条未读</item>
     </plurals>
+    <string name="inbox_check_now">立即检查</string>
+    <string name="inbox_checking">正在检查…</string>
+    <string name="inbox_check_nothing_new">暂无新内容。发送方上传完成后，投递才会出现在这里。</string>
+    <string name="inbox_check_done">检查完成。</string>
+    <string name="inbox_check_failed">检查未完成，原因见上方状态。</string>
 </resources>

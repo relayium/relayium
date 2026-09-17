@@ -12,6 +12,12 @@ import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -381,6 +387,116 @@ internal fun SectionCard(
                 text = footnote,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * **The one summary at the top of a task: what this device is doing now, and
+ * the controls that change it.** The macOS 1.4.0 status head, on a touch screen.
+ *
+ * A destination has at most one, and it is the only surface drawn on the violet
+ * wash, so a page of equal cards does not read as a list of features. [title] is
+ * the STATE, never the screen's name again. Controls go full width BELOW the
+ * summary rather than trailing it, because a trailing button beside a wrapping
+ * sentence at font scale 2 on 320dp is a word per line.
+ *
+ * The wash runs from a tint of the action colour to the card fill, both OPAQUE
+ * (the tint is composited over the card here), so supporting prose is measured
+ * against known colours: `onSurfaceVariant` clears 4.5:1 on both ends in both
+ * schemes (`InboxStatusHeroContrastTest`). Nothing moves: the radar is still, so
+ * the state reads the same with animations off, and it is carried by the words
+ * first and the filled or quiet core second, never by colour alone.
+ */
+@Composable
+internal fun StatusHero(
+    icon: ImageVector,
+    active: Boolean,
+    modifier: Modifier = Modifier,
+    title: String? = null,
+    detail: String? = null,
+    content: @Composable ColumnScope.() -> Unit = {},
+) {
+    val scheme = MaterialTheme.colorScheme
+    val base = scheme.surfaceContainerLow
+    val tint = heroTint(scheme.primary, base)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Brush.linearGradient(listOf(tint, base)), HeroCorner)
+            .border(BorderStroke(1.dp, scheme.outlineVariant), HeroCorner)
+            .padding(Metrics.inner),
+        verticalArrangement = Arrangement.spacedBy(Metrics.cardGap),
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Metrics.cardGap),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BrandRadar(icon = icon, active = active)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(Metrics.hairline),
+            ) {
+                if (title != null) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        // Named rather than inherited: the hero is not a Surface,
+                        // and its own wash is what the colour is measured on.
+                        color = scheme.onSurface,
+                        // The node a screen reader announces when the state
+                        // changes, as the plain status line it replaces was.
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                }
+                if (detail != null) {
+                    Text(
+                        text = detail,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        content()
+    }
+}
+
+/** The status head's corner: one step softer than a card's 11, the Mac's 14. */
+private val HeroCorner = RoundedCornerShape(14.dp)
+
+/** The opaque violet end of the status-head wash. Exposed for the contrast test. */
+internal fun heroTint(action: Color, card: Color): Color =
+    action.copy(alpha = if (card.luminanceApprox() > 0.5f) 0.10f else 0.22f).compositeOver(card)
+
+private fun Color.luminanceApprox(): Float = 0.2126f * red + 0.7152f * green + 0.0722f * blue
+
+/** The brand radar: a core inside two still rings, the Mac's 52/30 footprint.
+ *  Decorative — the title beside it carries the state. */
+@Composable
+private fun BrandRadar(icon: ImageVector, active: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    val ring = if (active) scheme.primary else scheme.outlineVariant
+    Box(
+        modifier = Modifier
+            .size(52.dp)
+            .border(1.5.dp, ring.copy(alpha = if (active) 0.22f else 1f), CircleShape)
+            .padding(6.dp)
+            .border(1.5.dp, ring.copy(alpha = if (active) 0.45f else 1f), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .background(if (active) scheme.primary else scheme.surfaceVariant, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (active) scheme.onPrimary else scheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
             )
         }
     }

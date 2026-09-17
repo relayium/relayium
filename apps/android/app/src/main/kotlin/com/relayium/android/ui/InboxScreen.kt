@@ -17,6 +17,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -51,6 +53,7 @@ import com.relayium.android.inbox.InboxConversationEntry
 import com.relayium.android.inbox.InboxDeviceRow
 import com.relayium.android.inbox.InboxDirectoryState
 import com.relayium.android.inbox.InboxKeyHealth
+import com.relayium.android.inbox.InboxManualCheck
 import com.relayium.android.inbox.InboxModel
 import com.relayium.android.inbox.InboxReceiving
 import com.relayium.android.inbox.InboxSendCoordinator
@@ -120,7 +123,7 @@ fun InboxScreen(
                     InitialCard(state, actions)
                 } else {
                     state.failure?.let { FailureCard(it, actions) }
-                    StatusCard(state)
+                    StatusCard(state, actions)
                     PolicyCard(state, actions)
                     state.keyHealth?.let { KeyHealthCard(it, state.repairing, actions) }
                     if (state.awaitingAnswer.isNotEmpty()) PendingCard(state, actions)
@@ -159,6 +162,9 @@ class InboxActions(
     /** A message entry's own text, in either direction, read on demand so it
      *  never lives in saved state. Null means the body is genuinely not here. */
     val loadMessage: suspend (InboxConversationEntry) -> String? = { null },
+    /** Wake the running receive loop for one pass now. Null hides Check now, so
+     *  a host that has not wired it shows no control that does nothing. */
+    val checkNow: (() -> Unit)? = null,
     val open: ((InboxConversationEntry) -> Unit)? = null,
     val export: ((InboxConversationEntry) -> Unit)? = null,
     val share: ((InboxConversationEntry) -> Unit)? = null,
@@ -263,27 +269,61 @@ private fun failureText(failure: InboxModel.State.Failure): String = stringResou
  * claim.
  */
 @Composable
-private fun StatusCard(state: InboxModel.State) {
-    SectionCard(title = stringResource(R.string.inbox_status_title)) {
-        Column {
-            state.deviceName?.let {
-                GroupRow(label = stringResource(R.string.inbox_this_device, it))
-                GroupDivider()
-            }
-            // Left as a Text carrying the live region exactly as before: this is
-            // the node a screen reader announces, and it says which discrete
-            // state receiving is in rather than counting bytes.
-            Text(
-                receivingText(state.receiving),
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier
-                    .padding(vertical = Metrics.tight)
-                    .semantics { liveRegion = LiveRegionMode.Polite },
-            )
-        }
+private fun StatusCard(state: InboxModel.State, actions: InboxActions) {
+    // The status head: the discrete receiving state is its title (and its live
+    // region), this device's name the line under it.
+    StatusHero(
+        icon = Icons.Filled.MailOutline,
+        active = state.receiving == InboxReceiving.LISTENING || state.receiving == InboxReceiving.RECEIVING,
+        title = receivingText(state.receiving),
+        detail = state.deviceName?.let { stringResource(R.string.inbox_this_device, it) },
+        modifier = Modifier.testTag("inbox-status"),
+    ) {
         (state.directory as? InboxDirectoryState.Unavailable)?.let {
             InlineMessage(text = directoryText(it.problem), tone = MessageTone.ERROR)
         }
+        CheckNow(state, actions)
+    }
+}
+
+/**
+ * **Check now: the running receiver asks central again, and says what it found.**
+ *
+ * It wakes the loop that is already running (`InboxRuntime.checkNow`) — never a
+ * restart, so a delivery mid-download is untouched — and it is NOT Retry, which
+ * re-reads the device list. Offered only while the loop is listening with no
+ * failure of its own to recover from, or while a check is outstanding; disabled
+ * and saying Checking… until the pass that answers it returns. The answer never
+ * claims an arrival: that is the conversation's, from a durable receipt. Under
+ * Ask it accepts nothing — held deliveries keep their own Receive and Decline.
+ */
+@Composable
+private fun CheckNow(state: InboxModel.State, actions: InboxActions) {
+    val check = actions.checkNow ?: return
+    val checking = state.manualCheck == InboxManualCheck.CHECKING
+    val offered = state.policy != InboxAutoAccept.OFF &&
+        state.receiving == InboxReceiving.LISTENING && state.failure == null
+    if (offered || checking) {
+        SecondaryAction(
+            label = stringResource(if (checking) R.string.inbox_checking else R.string.inbox_check_now),
+            onClick = check,
+            enabled = !checking,
+            modifier = Modifier.testTag("inbox-check-now"),
+        )
+    }
+    val answer = when (state.manualCheck) {
+        InboxManualCheck.NONE, InboxManualCheck.CHECKING -> null
+        InboxManualCheck.NOTHING_NEW -> R.string.inbox_check_nothing_new
+        InboxManualCheck.CHECKED -> R.string.inbox_check_done
+        InboxManualCheck.FAILED -> R.string.inbox_check_failed
+    }
+    if (answer != null) {
+        InlineMessage(
+            text = stringResource(answer),
+            tone = if (state.manualCheck == InboxManualCheck.FAILED) MessageTone.WARNING else MessageTone.NEUTRAL,
+            modifier = Modifier.testTag("inbox-check-result"),
+            announce = true,
+        )
     }
 }
 

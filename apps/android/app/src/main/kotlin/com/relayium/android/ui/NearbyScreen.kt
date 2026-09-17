@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -102,25 +104,26 @@ internal fun NearbyScreen(
         }
     }
 
-    Text(
-        text = stringResource(
+    // The status head, as on macOS 1.4.0 LAN Transfer: the discovery mode this
+    // device is running is its title, radar lit while it is discoverable, and the
+    // hub caution stays inside it beside the sentence it qualifies.
+    StatusHero(
+        icon = Icons.Filled.Search,
+        active = nearby.room != TransferController.NearbyRoom.RECONNECTING,
+        title = stringResource(
             if (nearby.direct) R.string.nearby_mode_direct else R.string.nearby_mode_hub,
         ),
-        style = MaterialTheme.typography.titleMedium,
-    )
-    Text(
-        text = stringResource(
+        detail = stringResource(
             if (nearby.direct) {
                 R.string.nearby_mode_direct_detail
             } else {
                 R.string.nearby_mode_hub_detail
             },
         ),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    if (!nearby.direct) {
-        StatusCard(text = stringResource(R.string.nearby_mode_hub_warning), isError = false)
+    ) {
+        if (!nearby.direct) {
+            StatusCard(text = stringResource(R.string.nearby_mode_hub_warning), isError = false)
+        }
     }
 
     when {
