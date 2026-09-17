@@ -153,14 +153,25 @@ final class BundleVersionTests: XCTestCase {
         // macOS above there is no published artifact for the number to collide
         // with — the iOS App Store version record still reads `0.3.1` in
         // `PREPARE_FOR_SUBMISSION`.
-        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.3.1", occurrences: 4)
+        //
+        // That reuse ended with 0.3.1 (7). The 2026-09-17 App Store Connect
+        // read-back showed the 0.3.1 App Store version WAITING_FOR_REVIEW with
+        // build 7 selected, so the "never submitted" sentence above describes an
+        // earlier reading, and 0.3.1 now names a submission in review that no
+        // later candidate may be confused with. The next distributed candidate
+        // therefore takes a new visible version, `0.3.2`, per the owner's
+        // 2026-09-17 preference for a distinct marketing version on every newly
+        // distributed test or public candidate. 0.3.2 is a new TestFlight
+        // train for internal testing only; it is not an App Store version on
+        // the record and does not touch the 0.3.1 submission or its build.
+        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.3.2", occurrences: 4)
         //
         // 8 is the internal TestFlight build carrying the macOS 1.4.0 aligned
         // UI and Device Inbox Check now. Read back from App Store Connect on
         // 2026-09-17 before it was taken: builds 4–7 consumed, all VALID. The
-        // same read showed the 0.3.1 App Store version WAITING_FOR_REVIEW, so
-        // the "never submitted" sentence above describes an earlier reading;
-        // a TestFlight build does not change that submission's selected build.
+        // build number stays monotonic across the version change — it does not
+        // restart for 0.3.2 — and a TestFlight build does not change the 0.3.1
+        // submission's selected build.
         try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "8", occurrences: 4)
     }
 }

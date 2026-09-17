@@ -135,7 +135,142 @@ function accepts(label, text, extraArgs = []) {
 // ── the baseline ─────────────────────────────────────────────────────────────
 
 accepts("the shipped packet passes", shippedRaw);
-accepts("the shipped packet passes against its own declared version", shippedRaw, ["--expect-version", "0.3.1"]);
+accepts("the shipped packet passes against its own declared version", shippedRaw, ["--expect-version", "0.3.2"]);
+
+// ── the candidate version and the observed version are different facts ─────
+//
+// The packet is drafted for 0.3.2 while App Store Connect was last read back
+// holding 0.3.1, which is in review. The validator lets those two differ, and
+// that permission is exactly what these cases exist to keep narrow: it must not
+// turn into "any mismatch is fine", and it must not let the observation be
+// rewritten to agree with the candidate.
+
+{
+  const shipped = clone();
+  const observed = shipped.appStoreConnectObservation.records.find((entry) => entry.targetForIosRelease);
+  cases += 1;
+  if (shipped.record.marketingVersion !== "0.3.2" || observed?.observedVersion !== "0.3.1") {
+    bad(
+      "the shipped packet drafts 0.3.2 against an observed 0.3.1",
+      `record.marketingVersion is ${shipped.record.marketingVersion}, observedVersion is ${observed?.observedVersion}`,
+    );
+  } else {
+    ok("the shipped packet drafts 0.3.2 against an observed 0.3.1");
+  }
+}
+
+const iosTarget = (p) => p.appStoreConnectObservation.records.find((entry) => entry.targetForIosRelease);
+
+rejects(
+  "an observation rewritten to the candidate version, as though 0.3.2 had been read back",
+  (p) => {
+    iosTarget(p).observedVersion = "0.3.2";
+  },
+  "never to match the candidate",
+);
+
+rejects(
+  "an observation moved to some other version",
+  (p) => {
+    iosTarget(p).observedVersion = "0.3.0";
+  },
+  "but it was read back as '0.3.1'",
+);
+
+rejects(
+  "a candidate OLDER than the observed version is not a new train",
+  (p) => {
+    p.record.marketingVersion = "0.3.0";
+  },
+  "must be a strictly newer version",
+);
+
+// Numeric rather than textual order is not observable through this case: the
+// candidate is also pinned to one version, so every value that could expose
+// the difference is refused by the pin first. What this case does prove is
+// that an older MINOR line, with a larger patch number, is still older.
+rejects(
+  "a candidate from an older minor line is not a new train, whatever its patch number",
+  (p) => {
+    p.record.marketingVersion = "0.2.10";
+  },
+  "must be a strictly newer version",
+);
+
+rejects(
+  "the in-review version itself is not this packet's candidate",
+  (p) => {
+    p.record.marketingVersion = "0.3.1";
+  },
+  "not the '0.3.2' this packet was written for",
+);
+
+rejects(
+  "an observation note claiming the candidate version was observed",
+  (p) => {
+    const field = p.appStoreConnectObservation.observedFields.find((entry) => entry.id === "version");
+    field.observed = `${field.observed} On a later reading the record showed 0.3.2 selected for review.`;
+  },
+  "no read-back of '0.3.2' exists",
+);
+
+rejects(
+  "an observed record note naming the candidate version",
+  (p) => {
+    iosTarget(p).note = `${iosTarget(p).note} It now reads 0.3.2.`;
+  },
+  "no read-back of '0.3.2' exists",
+);
+
+// The guard names WHOLE versions. A different version that merely contains the
+// candidate's digits is not a claim about the candidate, and refusing it would
+// make the guard noise that somebody eventually deletes. (`0.3.20` would be the
+// sharper probe, but the packet's decimal-price rule refuses it on its own.)
+cases += 1;
+{
+  const mutated = clone();
+  const field = mutated.appStoreConnectObservation.observedFields.find((entry) => entry.id === "version");
+  field.observed = `${field.observed} (Not to be confused with 10.3.2 or 0.3.2.1.)`;
+  const { status, out } = runOn(serialize(mutated));
+  if (status !== 0) {
+    bad("a longer version containing the candidate's digits is not read as the candidate", out.trim().split("\n").slice(0, 4).join(" | "));
+  } else {
+    ok("a longer version containing the candidate's digits is not read as the candidate");
+  }
+}
+
+rejects(
+  "TestFlight text left describing the previous version",
+  (p) => {
+    p.testFlight.betaAppDescription["en-US"] = p.testFlight.betaAppDescription["en-US"].replace("the 0.3.2 line", "the 0.3.1 line");
+  },
+  "names version '0.3.1', but this packet is drafted for '0.3.2'",
+);
+
+rejects(
+  "Chinese What to Test naming another version",
+  (p) => {
+    p.testFlight.whatToTest["zh-Hans"] = `${p.testFlight.whatToTest["zh-Hans"]}\n9. 与 0.3.1 对照。`;
+  },
+  "names version '0.3.1', but this packet is drafted for '0.3.2'",
+);
+
+rejects(
+  "What's New naming another version",
+  (p) => {
+    p.storefront["en-US"].whatsNew = `New in 0.3.3. ${p.storefront["en-US"].whatsNew}`;
+  },
+  "names version '0.3.3'",
+);
+
+rejects(
+  "a run told the candidate is the in-review 0.3.1",
+  (p) => {
+    p.testFlight.whatToTest["en-US"] = `${p.testFlight.whatToTest["en-US"]} `.trimEnd() + ".";
+  },
+  "this run was told the candidate is '0.3.1'",
+  ["--expect-version", "0.3.1"],
+);
 
 // A validator that exits 0 on anything would satisfy every `accepts` above and
 // nothing below, which is what the rest of this file is for.
@@ -509,7 +644,7 @@ rejects(
   (p) => {
     p.record.marketingVersion = "0.4.0";
   },
-  "not the '0.3.1' this packet was written for",
+  "not the '0.3.2' this packet was written for",
 );
 
 cases += 1;
@@ -1196,7 +1331,7 @@ rejects(
   (p) => {
     p.appStoreConnectObservation.records[0].observedVersion = "0.4.0";
   },
-  "read the target's version back as",
+  "reports the target's version as '0.4.0', but it was read back as '0.3.1'",
 );
 
 rejects(

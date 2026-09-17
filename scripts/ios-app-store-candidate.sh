@@ -74,7 +74,7 @@
 #
 #   * a read-back attestation that is missing, malformed, stale, in the
 #     future, or whose two build numbers do not agree;
-#   * a selected Xcode that is not exactly major REQUIRED_XCODE_MAJOR, or an
+#   * a selected Xcode whose major is not one of SUPPORTED_XCODE_MAJORS, or an
 #     iphoneos SDK below MIN_IPHONEOS_SDK_MAJOR — Apple rejects uploads built
 #     against anything older, and a candidate that cannot be uploaded is not a
 #     candidate;
@@ -337,12 +337,22 @@ readonly EXPORT_METHOD='app-store-connect'
 readonly EXPORT_SIGNING_STYLE='manual'
 
 # Apple has refused App Store Connect uploads built with anything older than
-# Xcode 26 and the iOS 26 SDK since 2026-04-28. The Xcode major is REQUIRED
-# rather than a floor, for the same reason `.github/workflows/ios.yml` treats it
-# that way: a newer major may be a public preview this project holds no
-# submission evidence for. The SDK stays a floor, because what Apple validates
-# is the SDK the binary was linked against.
-readonly REQUIRED_XCODE_MAJOR=26
+# Xcode 26 and the iOS 26 SDK since 2026-04-28. That is Apple's MINIMUM, and it
+# is deliberately not what this script accepts: "26 or later" would admit a
+# major that is still a public preview, which Apple does not accept for
+# submission and this project holds no evidence for. So the Xcode major is an
+# explicit ALLOWLIST of majors known to be accepted, not a floor. A major joins
+# it only by a reviewed change citing Apple's acceptance of that major:
+#
+#   26  the upload toolchain since 2026-04-28, with accepted uploads behind it;
+#   27  accepted by App Store Connect for TestFlight and App Store submission
+#       since 2026-09-14 (App Store Connect release notes).
+#
+# Anything older, any newer major (28 and up), and anything unparseable is
+# refused. `.github/workflows/ios.yml` pins its own hosted toolchain separately;
+# this list does not change what CI compiles with. The SDK stays a floor,
+# because what Apple validates is the SDK the binary was linked against.
+readonly SUPPORTED_XCODE_MAJORS='26 27'
 readonly MIN_IPHONEOS_SDK_MAJOR=26
 
 # Twelve hours. Long enough to read the record, get an approval and build;
@@ -1015,9 +1025,12 @@ xcode_build="$(printf '%s\n' "$xcodebuild_version_report" | awk '/^Build version
 
 xcode_major="${xcode_version%%.*}"
 [[ "$xcode_major" =~ ^[0-9]+$ ]] || refuse "cannot read a major version out of Xcode '$xcode_version'"
-if [ "$xcode_major" -ne "$REQUIRED_XCODE_MAJOR" ]; then
-  refuse "selected Xcode is $xcode_version, not the required major $REQUIRED_XCODE_MAJOR; Apple does not accept an App Store upload built with another major"
-fi
+# Exact word membership, not arithmetic: `027` is not `27`, and a major absent
+# from the list is refused whether it is older or newer.
+case " $SUPPORTED_XCODE_MAJORS " in
+  *" $xcode_major "*) ;;
+  *) refuse "selected Xcode is $xcode_version, not a supported major ($SUPPORTED_XCODE_MAJORS); only majors known to be accepted for App Store Connect upload may build a candidate" ;;
+esac
 
 iphoneos_sdk_version=''
 iphoneos_sdk_version="$(xcrun --sdk iphoneos --show-sdk-version 2>/dev/null)" ||

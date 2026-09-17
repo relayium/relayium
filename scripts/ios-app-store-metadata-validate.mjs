@@ -130,14 +130,31 @@ const BUNDLE_ID = "com.relayium.mac";
 const SHARE_BUNDLE_ID = "com.relayium.mac.ShareIOS";
 const TEAM_ID = "7PVYUG4YQS";
 const RECORD_NAME = "relayium";
-// The candidate this packet is written for. It currently agrees with the version
-// App Store Connect holds: the record was renamed and read back at 0.3.1 on
-// 2026-09-05 15:27 Asia/Dubai, which is why `OBSERVED_FIELDS` below says 0.3.1.
-// The agreement is a result, not a rule — the two are independent, and the order
-// that produced it is the rule. Moving this constant is a candidate decision;
-// moving those strings ahead of a rename and a fresh read-back would be inventing
-// a read-back.
-const MARKETING_VERSION = "0.3.1";
+// The candidate this packet is written for, and the version App Store Connect was
+// last observed holding. They are two different facts and they are pinned
+// separately.
+//
+// Until 2026-09-17 they agreed: the record was renamed and read back at 0.3.1 on
+// 2026-09-05 15:27 Asia/Dubai, which is why `OBSERVED_FIELDS` below says 0.3.1,
+// and candidates 0.3.1 (5), (6) and (7) all targeted it. That agreement was a
+// result, not a rule. On 2026-09-17 the 0.3.1 version was read back
+// WAITING_FOR_REVIEW with build 7 selected, and the next distributed candidate
+// took a NEW visible version, 0.3.2, as an internal TestFlight train, per the
+// owner's preference for a distinct marketing version on every newly distributed
+// candidate. No 0.3.2 App Store version exists on the record, and nothing here
+// may say one does.
+//
+// So:
+//   * `MARKETING_VERSION` is a candidate decision and moves with the project;
+//   * `OBSERVED_IOS_VERSION` moves only with a fresh read-back of the record —
+//     editing it to match the candidate would be inventing one;
+//   * the candidate may differ from the observation only by being strictly
+//     NEWER, and then no text in the observation section may name the candidate
+//     version, because nothing observed it. A mismatch is not a waiver: an older
+//     or unrelated candidate, or an observation rewritten to the candidate, is
+//     refused.
+const MARKETING_VERSION = "0.3.2";
+const OBSERVED_IOS_VERSION = "0.3.1";
 // The name the record actually holds. This is NOT a place to propose a rename:
 // the App Store name is owner-controlled, changing it is an App Store Connect
 // edit with its own review implications, and a packet that quietly enters a
@@ -1040,6 +1057,28 @@ function describe(value) {
   return typeof value;
 }
 
+// Numeric x.y.z order: -1, 0 or 1, or null for anything that is not x.y.z.
+// Compared as numbers, never as text, because "0.3.10" sorts before "0.3.9" as
+// text.
+function compareMarketingVersions(left, right) {
+  const parse = (value) =>
+    typeof value === "string" && /^\d+\.\d+\.\d+$/.test(value) ? value.split(".").map(Number) : null;
+  const a = parse(left);
+  const b = parse(right);
+  if (!a || !b) return null;
+  for (let index = 0; index < 3; index += 1) {
+    if (a[index] !== b[index]) return a[index] < b[index] ? -1 : 1;
+  }
+  return 0;
+}
+
+// Whether `text` names `version` as a whole version, so that 0.3.2 does not
+// match inside 0.3.20 or 10.3.2.
+function mentionsVersion(text, version) {
+  const escaped = version.replace(/\./g, "\\.");
+  return new RegExp(`(?<![\\d.])${escaped}(?![\\d]|\\.\\d)`).test(text);
+}
+
 walk(packet, SCHEMA, "");
 
 // A structural failure makes every cross-check below unsound: a missing
@@ -1350,6 +1389,24 @@ if (packet.record.marketingVersion !== MARKETING_VERSION) {
   );
 }
 
+// The drafts that describe THIS candidate may name no other 0.x.y version. The
+// TestFlight description once said "the 0.3.1 line", and a version bump that
+// leaves that sentence behind tells every tester they are on a build they are
+// not on.
+for (const path of [
+  ...LOCALES.map((locale) => `storefront.${locale}.whatsNew`),
+  ...LOCALES.map((locale) => `testFlight.betaAppDescription.${locale}`),
+  ...LOCALES.map((locale) => `testFlight.whatToTest.${locale}`),
+]) {
+  const value = path.split(".").reduce((node, key) => node?.[key], packet);
+  if (typeof value !== "string") continue;
+  for (const named of value.match(/(?<![\d.])0\.\d+\.\d+(?![\d]|\.\d)/g) ?? []) {
+    if (named !== packet.record.marketingVersion) {
+      fail(path, `names version '${named}', but this packet is drafted for '${packet.record.marketingVersion}'`);
+    }
+  }
+}
+
 // `subscriptions.group.localizations` used to be in this list. It is gone with
 // the drafts it covered: the group is Approved and its localized display names
 // live on the record, so this packet no longer carries any subscription copy for
@@ -1583,12 +1640,36 @@ if (iosRecord) {
       `names ${iosRecord.appleId} / '${iosRecord.bundleId}' as the iOS target; it is ${APPLE_ID} / '${BUNDLE_ID}'`,
     );
   }
-  if (iosRecord.observedVersion !== packet.record.marketingVersion) {
+  if (iosRecord.observedVersion !== OBSERVED_IOS_VERSION) {
     fail(
       "appStoreConnectObservation.records",
-      `read the target's version back as '${iosRecord.observedVersion}', but this packet is drafted for ` +
-        `'${packet.record.marketingVersion}'; one of the two is describing a different version than the other`,
+      `reports the target's version as '${iosRecord.observedVersion}', but it was read back as ` +
+        `'${OBSERVED_IOS_VERSION}'; an observation changes only with a fresh read-back of the record, never to ` +
+        "match the candidate",
     );
+  } else if (iosRecord.observedVersion !== packet.record.marketingVersion) {
+    const order = compareMarketingVersions(packet.record.marketingVersion, iosRecord.observedVersion);
+    if (order === null || order <= 0) {
+      fail(
+        "appStoreConnectObservation.records",
+        `read the target's version back as '${iosRecord.observedVersion}', but this packet is drafted for ` +
+          `'${packet.record.marketingVersion}'; a candidate that differs from the observed version must be a strictly ` +
+          "newer version, not an older or unrelated one",
+      );
+    } else {
+      // A newer candidate has, by construction, never been read back. Anything in
+      // the observation section that names it is a read-back nobody performed.
+      for (const { path, value } of allStrings) {
+        if (!path.startsWith("appStoreConnectObservation.")) continue;
+        if (mentionsVersion(value, packet.record.marketingVersion)) {
+          fail(
+            path,
+            `names '${packet.record.marketingVersion}', the candidate version, but the record was observed at ` +
+              `'${iosRecord.observedVersion}' and no read-back of '${packet.record.marketingVersion}' exists`,
+          );
+        }
+      }
+    }
   }
   if (iosRecord.observedVersionState !== OBSERVED_VERSION_STATE) {
     fail(
