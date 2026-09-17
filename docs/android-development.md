@@ -401,9 +401,13 @@ decided by what the peer announced rather than by a preference:
   computed identically by both peers.
 * **the shipped older wire** — one `data` channel carrying **either** files
   **or** messages and never both, a control set of exactly `0xfe`/`0xff`/`0xfd`,
-  no barrier, no resume and no leave. This is what the Apple clients speak in a
-  pairing-code room: `PeerCapabilityRegistry.LINK_PAIRING_ROOM_SUPPORT` is false
-  on iOS, so an iPhone announces only `text/1` there and answers nothing else.
+  no barrier, no resume and no leave. In a pairing-code room this is now only
+  what an iOS build at or below `0.3.2` speaks: those builds compiled
+  `PeerCapabilityRegistry.LINK_PAIRING_ROOM_SUPPORT` false and announced only
+  `text/1` there. iOS `0.4.0` announces `link/1` in a pairing room and refuses a
+  legacy peer, exactly as macOS and the Web do, so among current clients this
+  lane is reached on a same-network roster alone. It is kept because Android
+  adopts rather than refuses, and an older iPhone is still a peer it can serve.
   Its role is the user's **intent** — whoever created the code offers, whoever
   joined answers — which is why `TransferController.join` takes a
   `MINTER`/`JOINER` and never derives one.

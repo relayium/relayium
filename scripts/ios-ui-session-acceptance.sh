@@ -15,14 +15,20 @@
 #     staged batch and a typed message reach the counterpart with matching
 #     SHA-256 digests, and that Done leaves no half-session behind.
 #   * PROVES the app joins a pairing code MINTED BY ANOTHER PROCESS on the local
-#     server and drives it to a completed transfer.
+#     server AS A `link/1` CLIENT: the counterpart is `pair-link`, the macOS
+#     Cross-network composition with the SwiftUI removed, and the run fails if
+#     that host reports a legacy fallback. The app then accepts a batch offered
+#     after connecting and exchanges a message each way in the one workspace.
+#     (Until iOS 0.4.0 this half drove the LEGACY pairing wire against
+#     `pair-sender`; macOS and the Web refuse that wire, which is the defect the
+#     owner reported on 2026-09-17.)
 #
 # Which Q0 iOS cells this is the runtime path for:
 #
 #   Nearby → 创建/加入            testNearbyRosterNamesThePeerAndConnects
 #   Nearby → 完成后下一步          testNearbyLinkTransfersThenDoneReturnsToACleanRoster
-#   Direct (pairing) → 创建/加入   testDirectJoinsAMintedCodeAndCompletes
-#   Direct (pairing) → 完成后下一步 testDirectJoinsAMintedCodeAndCompletes
+#   Cross-network → 创建/加入      testCrossNetworkJoinsAMintedCodeAndOpensTheUnifiedWorkspace
+#   Cross-network → 完成后下一步    testCrossNetworkJoinsAMintedCodeAndOpensTheUnifiedWorkspace
 #
 # No macOS cell moves here: this boots an iOS Simulator and nothing else. The
 # macOS built-App paths are T2c.
@@ -117,7 +123,10 @@ assert_control_api_is_guarded "$nearby_port"
 # through the environment and never through argv, and `start_peer` clears the
 # slot immediately afterwards so no later peer inherits it.
 peer_env=("RELAYIUM_ACCEPTANCE_ACCOUNT_TOKEN=$account_token")
-start_peer pair-sender pair-sender --receive-root "$run_root/pair-send"
+# `pair-link` rather than `pair-sender`, for the reason the macOS launcher gives:
+# the app joins a `link/1` pairing room, which is the wire every current client
+# speaks, and the legacy role is one this build now refuses exactly as macOS does.
+start_peer pair-link pair-link --receive-root "$run_root/pair-send"
 pair_port="$peer_port"
 
 # Residency is started here rather than by the test: it is the state the app
@@ -270,5 +279,5 @@ assert_run_was_local
 completed=1
 say ""
 say "PASS: the built iOS app's own UI completed a Nearby link/1 transfer over a"
-say "      real local $peer_name peer and a pairing-code transfer against $origin,"
+say "      real local $peer_name peer and a pairing-code link/1 workspace against $origin,"
 say "      with matching SHA-256 digests."

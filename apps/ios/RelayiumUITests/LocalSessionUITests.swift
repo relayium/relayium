@@ -194,12 +194,17 @@ final class LocalSessionUITests: XCTestCase {
     /// probe would bury the thing being asserted.
     @discardableResult
     private func control(_ port: Int, _ method: String, _ path: String,
+                         body: [String: Any]? = nil,
                          file: StaticString = #filePath,
                          line: UInt = #line) -> [String: Any]? {
         guard let harness = try? requireHarness(),
               let url = URL(string: "http://127.0.0.1:\(port)\(path)") else { return nil }
         var request = URLRequest(url: url, timeoutInterval: 15)
         request.httpMethod = method
+        if let body {
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
         request.setValue("Bearer \(harness.controlToken)", forHTTPHeaderField: "Authorization")
         var result: [String: Any]?
         let done = DispatchSemaphore(value: 0)
@@ -639,6 +644,14 @@ final class LocalSessionUITests: XCTestCase {
                       "a live link offers no way out")
         scrollUntilHittable(leave)
         leave.tap()
+        // A message was exchanged above, so leaving would destroy the only copy
+        // of that conversation and the workspace asks first. The dialog's
+        // destructive button carries the same title as the control that raised
+        // it; the dialog is topmost, so it is the last match.
+        XCTAssertTrue(app.staticTexts["Discard local text?"].waitForExistence(timeout: 10),
+                      "leaving a link that holds a conversation asked nothing")
+        let confirms = app.buttons.matching(NSPredicate(format: "label == %@", "End connection"))
+        confirms.element(boundBy: confirms.count - 1).tap()
 
         let done = app.buttons["Done"]
         XCTAssertTrue(done.waitForExistence(timeout: 30), """
@@ -668,29 +681,30 @@ final class LocalSessionUITests: XCTestCase {
 
     // MARK: - Direct (pairing), 创建/加入 and 完成后下一步
 
-    /// The app joins a code another process minted on the local server, and
-    /// drives it to a completed transfer.
+    /// **Cross-network against the composition a Mac ships: join a code minted
+    /// by a `link/1` pairing host, and use the ONE workspace it opens.**
     ///
-    /// A REAL join, which is the distinction the cell turns on: every earlier
-    /// run could assert only that Join became enabled. The code is minted here
-    /// rather than by the launcher because a pairing code is short-lived and
-    /// single-use, and one minted before a simulator boot would be spent on
-    /// waiting.
+    /// This is the owner's 2026-09-17 report as a runtime path. iOS `0.3.2`
+    /// announced only `text/1` in a pairing room; macOS `1.4.0` refuses such a
+    /// peer and said the iPhone was "running an older version". The counterpart
+    /// here is `pair-link` — `AppPairLinkHost`, the macOS Cross-network pane with
+    /// the SwiftUI removed — so its verdict on this app is the Mac's verdict. It
+    /// used to be `pair-sender`, the LEGACY pairing wire, which this build now
+    /// refuses exactly as macOS does.
     ///
-    /// **What the sender reaching `done` proves.** `PairSenderRun` finishes on
-    /// its own model reaching `.completed`, and a SENDING model reaches that
-    /// only on the receiver's `CTRL_COMPLETE` — which the receiving side emits
-    /// after its writer finished and the batch verified. So the peer's `done`,
-    /// carrying per-file SHA-256 digests of the bytes it read, is the far side's
-    /// confirmation that this app wrote and verified exactly those files.
-    func testDirectJoinsAMintedCodeAndCompletes() throws {
+    /// What the counterpart reports is read off its production models:
+    /// `hasSession` with no `legacyFallback` is that host saying this app spoke
+    /// `link/1` in the code's room. Everything after that is the workspace the
+    /// Nearby cell also drives — a batch offered, accepted and committed, and a
+    /// message each way — over a connection that was opened with nothing chosen
+    /// beforehand.
+    func testCrossNetworkJoinsAMintedCodeAndOpensTheUnifiedWorkspace() throws {
         let harness = try requireHarness()
-        // The shipped default. iOS announces no `link/1` in a pairing room, so
-        // this half is the legacy wire either way; pinning it keeps the run
-        // independent of whichever test happened to go first.
+        // The shipped default, so the link opens without a comparison step and
+        // the run does not depend on whichever test happened to go first.
         launch(harness, verifying: false)
 
-        control(harness.pairPort, "POST", "/start")
+        control(harness.pairPort, "POST", "/start", body: ["action": "create"])
         var code = ""
         let deadline = Date().addingTimeInterval(60)
         while Date() < deadline, code.isEmpty {
@@ -704,87 +718,128 @@ final class LocalSessionUITests: XCTestCase {
         XCTAssertFalse(code.isEmpty, "the counterpart never minted a pairing code")
 
         open(Shell.crossNetworkTransfer, in: app)
+        XCTAssertFalse(app.segmentedControls.firstMatch.exists,
+                       "Cross-network asks for Files or Text before a connection exists")
 
         let field = app.textFields["Code"]
         XCTAssertTrue(field.waitForExistence(timeout: 15),
-                      "Direct offers no code field to join with")
+                      "Cross-network offers no code field to connect with")
         scrollUntilHittable(field)
         field.tap()
         field.typeText(code)
 
-        let join = app.buttons["Join"]
+        let join = app.buttons["Connect"]
         XCTAssertTrue(join.waitForExistence(timeout: 10))
         scrollUntilHittable(join)
-        XCTAssertTrue(join.isEnabled, "a complete pairing code did not enable Join")
+        XCTAssertTrue(join.isEnabled, "a complete pairing code did not enable Connect")
         join.tap()
 
-        // The far side's own confirmation that this app wrote and verified the
-        // batch. Polled on `/status` rather than `/observed`: this half is the
-        // LEGACY wire — iOS announces no `link/1` in a pairing room, because
-        // `LINK_PAIRING_ROOM_SUPPORT` is false there — so the peer's live link
-        // view is empty by design and `done` is the honest terminal signal.
-        var sent: [String: Any]?
-        let transferDeadline = Date().addingTimeInterval(180)
-        while Date() < transferDeadline {
-            let status = control(harness.pairPort, "GET", "/status")
-            let phase = status?["phase"] as? String
-            if phase == "failed" {
-                return XCTFail("the sending peer failed: \(String(describing: status))")
+        // The Mac-shaped counterpart's own answer about THIS app. A legacy
+        // fallback here is the 0.3.2 defect, named by the host that saw it.
+        let linked = awaitCounterpart(
+            harness.pairPort, timeout: 120,
+            describing: "opened a link/1 session with this app") { facts in
+                if facts["legacyFallback"] != nil { return true }
+                return (facts["hasSession"] as? Bool) == true
+                    && ((facts["linkPhase"] as? String) ?? "").hasPrefix("open")
             }
-            if phase == "done" {
-                sent = control(harness.pairPort, "GET", "/result")
-                break
+        XCTAssertNil(linked?["legacyFallback"], """
+            the pairing host fell back to the legacy wire, so this app did not announce \
+            link/1 in the code's room: \(String(describing: linked?["legacyFallback"]))
+            """)
+        XCTAssertFalse(app.staticTexts[
+            "The other device is running an older version that can't complete this transfer. It needs updating."
+        ].exists, "this app refused an up-to-date link/1 peer as an older version")
+
+        // One workspace, both lanes. The composer is the text lane's proof that
+        // the screen is the link's and not a one-lane file session.
+        let composer = app.textFields["Message"]
+        XCTAssertTrue(composer.waitForExistence(timeout: 60), """
+            a connected Cross-network peer did not open the unified workspace.
+            \(app.debugDescription)
+            """)
+
+        // Inbound files: offered by the peer AFTER connecting, accepted here.
+        let fileName = "cross-network-\(harness.peerName).txt"
+        let contents = "relayium cross-network acceptance \(harness.peerName)"
+        let driven = control(harness.pairPort, "POST", "/drive",
+                             body: ["command": "files", "name": fileName, "contents": contents])
+        XCTAssertEqual(driven?["ok"] as? Bool, true,
+                       "the counterpart could not offer a batch: \(String(describing: driven))")
+        let accept = app.buttons["Accept files"]
+        XCTAssertTrue(accept.waitForExistence(timeout: 60), """
+            the peer's batch never reached this app as an offer.
+            \(app.debugDescription)
+            """)
+        scrollUntilHittable(accept)
+        accept.tap()
+        let saved = app.descendants(matching: .any)
+            .containing(NSPredicate(format: "label CONTAINS %@", "Saved")).firstMatch
+        XCTAssertTrue(saved.waitForExistence(timeout: 120), """
+            the accepted batch never committed.
+            \(app.debugDescription)
+            """)
+        let named = app.descendants(matching: .any)
+            .containing(NSPredicate(format: "label CONTAINS %@", fileName)).firstMatch
+        XCTAssertTrue(named.exists, "the committed batch does not name \"\(fileName)\"")
+
+        // Outbound message, over the same connection.
+        scrollUntilHittable(composer)
+        composer.tap()
+        let body = "T2b-cross-\(harness.peerName)"
+        composer.typeText(body)
+        // The workspace's own Send, not the Send TAB — see the Nearby cell.
+        let send = app.scrollViews.buttons["Send"].firstMatch
+        XCTAssertTrue(send.waitForExistence(timeout: 15),
+                      "the live link's composer offers no way to send")
+        scrollUntilHittable(send)
+        send.tap()
+        _ = awaitCounterpart(
+            harness.pairPort, timeout: 120,
+            describing: "received this app's message") { facts in
+                (facts["messages"] as? [String] ?? []).contains(body)
             }
-            Thread.sleep(forTimeInterval: 0.5)
-        }
-        let receipts = try XCTUnwrap(
-            sent?["files"] as? [[String: Any]],
-            "the pairing transfer never completed: \(String(describing: sent))")
-        XCTAssertFalse(receipts.isEmpty, "the peer reported a completed send of nothing")
 
-        // The app agrees, on screen, about every file the peer says it handed
-        // over. A terminal state alone would pass for a session that completed
-        // having written nothing the user can see.
-        for receipt in receipts {
-            let name = try XCTUnwrap(receipt["name"] as? String)
-            let shown = app.descendants(matching: .any)
-                .containing(NSPredicate(format: "label CONTAINS %@", name)).firstMatch
-            XCTAssertTrue(shown.waitForExistence(timeout: 60), """
-                the completed Direct session does not name "\(name)", which the \
-                peer reported sending.
-                \(app.debugDescription)
-                """)
-        }
+        // And one back, which is what makes it a conversation rather than a
+        // delivery.
+        let reply = "T2b-reply-\(harness.peerName)"
+        control(harness.pairPort, "POST", "/drive", body: ["command": "message", "body": reply])
+        let replied = app.descendants(matching: .any)
+            .containing(NSPredicate(format: "label CONTAINS %@", reply)).firstMatch
+        XCTAssertTrue(replied.waitForExistence(timeout: 60), """
+            the peer's message never reached this app's conversation.
+            \(app.debugDescription)
+            """)
 
-        // 完成后下一步: the terminal state offers its exit, and taking it
-        // returns to the controls a new session starts from.
+        // 完成后下一步: leaving asks first, because the conversation is stored
+        // nowhere else; then Done returns to the connect controls with the spent
+        // code retired.
+        let leave = app.buttons["End connection"]
+        XCTAssertTrue(leave.waitForExistence(timeout: 15), "a live link offers no way out")
+        scrollUntilHittable(leave)
+        leave.tap()
+        XCTAssertTrue(app.staticTexts["Discard local text?"].waitForExistence(timeout: 10),
+                      "leaving a link that holds a conversation asked nothing")
+        let confirms = app.buttons.matching(NSPredicate(format: "label == %@", "End connection"))
+        confirms.element(boundBy: confirms.count - 1).tap()
+
         let done = app.buttons["Done"]
         XCTAssertTrue(done.waitForExistence(timeout: 30), """
-            the completed Direct session offers no next step.
+            ending the connection did not produce its terminal Done.
             \(app.debugDescription)
             """)
         scrollUntilHittable(done)
         done.tap()
 
         XCTAssertTrue(app.textFields["Code"].waitForExistence(timeout: 30), """
-            Done did not return to the Direct start controls.
+            Done did not return to the Cross-network connect controls.
             \(app.debugDescription)
             """)
-        XCTAssertTrue(app.buttons["Join"].exists,
-                      "the start controls returned without their own action")
+        XCTAssertTrue(app.buttons["Connect"].exists,
+                      "the connect controls returned without their own action")
+        XCTAssertFalse(app.otherElements["Conversation"].exists,
+                       "Done left the finished conversation on the connect screen")
         XCTAssertFalse(done.exists,
                        "Done left the finished session's own control on screen")
-
-        // **Not asserted: that the Code field is empty.** It is not — this run
-        // observed the spent code still in it — and that is worth recording
-        // rather than either fixing here or passing over. It is CONSISTENT:
-        // neither `RealtimeSessionModel.cancel()` (the file path's Done) nor
-        // `RealtimeTextSessionModel.reset()` (the text path's) clears
-        // `joinCode`, so both surfaces behave the same way. A pairing code is
-        // single-use and short-lived, so re-tapping Join with it would fail —
-        // but whether the field should clear is a product decision about the
-        // start controls, not something this cell turns on, and changing shared
-        // model behaviour to satisfy an assertion nobody asked for would be the
-        // wrong way to find that out. Recorded for disposition instead.
     }
 }

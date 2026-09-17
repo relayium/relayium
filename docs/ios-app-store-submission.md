@@ -100,8 +100,45 @@ purchase is accepted, not a conclusion this document may assert on its own.
 
 | Field | Value |
 | --- | --- |
-| Marketing version in the project source | `0.3.2` |
-| Build in the project source | `8` |
+| Marketing version in the project source | `0.4.0` |
+| Build in the project source | `9` |
+
+#### In development — `0.4.0 (9)`, not archived, not uploaded (2026-09-17)
+
+`0.4.0` exists only as source. Nothing has been archived, exported, uploaded or
+entered under it, no `0.4.0` TestFlight train or App Store version exists on the
+record, and build `9` is a project value that must be checked against a fresh
+read-back of the highest consumed build before it is archived.
+
+- **Why it exists.** The owner's first cross-network test of `0.3.2 (8)` against
+  macOS `1.4.0`, on the day it was delivered, was refused with "The other device
+  is running an older version that can't complete this transfer." `0.3.2`
+  announced only `text/1` in a pairing-code room; macOS and the Web refuse a
+  pairing peer without `link/1`. The iOS Cross-network screen was still the
+  Files/Text legacy product under the 1.4.0-aligned visuals.
+- **What it changes.** Cross-network is connect-first and opens the unified
+  `link/1` workspace (see `apps/README.md`, "Direct transfer"), with its own
+  `TransferModule`; the waiting code counts down, expires visibly and can be
+  replaced; the join link is mode-less; the unified workspace confirms before
+  discarding a conversation. No wire, server, protocol-document, payment,
+  entitlement, bundle-identifier or macOS/Android/Web change.
+- **Why a new visible version.** Owner direction, 2026-09-17: these changes take
+  a new version rather than reusing `0.3.2`. It is also what the standing
+  preference for a distinct marketing version per distributed candidate would
+  have produced.
+- **Metadata packet.** `docs/app-store-metadata-ios.json` is drafted for `0.4.0`;
+  its TestFlight *What to Test* item 6 now describes the connect-first workspace
+  and asks for a test against macOS 1.4.0 and relayium.com in both directions.
+  The App Store Connect observation is unchanged and still records `0.3.1`.
+- **Evidence so far.** `swift test` for `RelayiumKit` (4,935 tests, 0 failures),
+  including `PairingLinkHandoffTests`; the metadata validator and its 261 cases;
+  the candidate-script suite (72 mutations, 57 cases); `xcodebuild
+  build-for-testing` for the iOS Simulator. **Not run:** any simulator or device
+  UI test — CoreSimulator was unavailable on the development machine — so the
+  hosted `ios.yml` run and an owner device test are the first runtime evidence.
+- **Distribution.** Not authorized by this change. A TestFlight upload needs an
+  explicit owner instruction for that channel, a fresh highest-build read-back,
+  and the candidate script's own gates.
 
 #### Delivery checkpoint — `0.3.2 (8)` on internal TestFlight, 2026-09-17
 

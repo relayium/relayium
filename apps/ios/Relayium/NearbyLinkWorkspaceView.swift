@@ -67,6 +67,10 @@ struct NearbyLinkWorkspaceView: View {
     @State private var draft = ""
     @State private var isChoosingFiles = false
     @State private var actionError: String?
+    /// The one question this view asks before tearing anything down. Leave and
+    /// Done both destroy text that exists nowhere else — the transcript is never
+    /// stored — so neither may do it on a single tap.
+    @State private var confirmingLocalTextDiscard = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.section) {
@@ -306,11 +310,45 @@ struct NearbyLinkWorkspaceView: View {
 
     private var exit: some View {
         VStack(alignment: .leading, spacing: Metrics.hairline) {
-            Button(exitTitle, role: isEnded ? nil : .destructive) { leave() }
+            Button(exitTitle, role: isEnded ? nil : .destructive) {
+                leaveOrConfirmLocalTextDiscard()
+            }
                 .borderedAction(isEnded ? .ordinary : .destructive)
                 .controlSize(.large)
+                .accessibilityIdentifier("link-leave-session")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // **The confirmation the legacy text session always had, and this
+        // workspace did not.** Leaving used to destroy the conversation on one
+        // tap, while both legacy iOS exits and the macOS link pane asked first.
+        // Cross-network now draws this view too, in place of a text session that
+        // confirmed, so without this the move to one workspace would have
+        // removed a protection rather than carried it over. The wording follows
+        // macOS: a transcript is named as history, a lone draft as a draft.
+        .confirmationDialog(L10n.t(hasTranscript ? .textDiscardLocalContentConfirmTitle
+                                                 : .textDiscardDraftConfirmTitle),
+                            isPresented: $confirmingLocalTextDiscard,
+                            titleVisibility: .visible) {
+            Button(exitTitle, role: .destructive) { leaveDiscardingLocalText() }
+                .accessibilityIdentifier("link-discard-local-text-confirm")
+            Button(L10n.t(.commonCancel), role: .cancel) {
+                confirmingLocalTextDiscard = false
+            }
+        } message: {
+            Text(L10n.t(hasTranscript ? .textDiscardLocalContentConfirmBody
+                                      : .textDiscardDraftConfirmBody))
+        }
+    }
+
+    private var hasTranscript: Bool {
+        !(link.textModel?.textMessages.isEmpty ?? true)
+    }
+
+    /// Everything a teardown would destroy: what the MODEL holds — a transcript,
+    /// a message waiting for the conversation to open, one the lane handed back —
+    /// and the draft, which on this platform still lives in the view.
+    private var holdsLocalText: Bool {
+        link.holdsLocalText || !trimmedDraft.isEmpty
     }
 
     private var isEnded: Bool {
@@ -371,6 +409,22 @@ struct NearbyLinkWorkspaceView: View {
         actionError = nil
         link.send(files: staged.metas, sources: staged.sources)
         selection.clear()
+    }
+
+    private func leaveOrConfirmLocalTextDiscard() {
+        guard holdsLocalText else {
+            leave()
+            return
+        }
+        confirmingLocalTextDiscard = true
+    }
+
+    /// The confirmed exit. The model clears every holder it owns in one
+    /// operation — leaving an open link, dismissing an ended one — and the
+    /// view-local draft goes with them, or it would ride into the next session.
+    private func leaveDiscardingLocalText() {
+        draft = ""
+        link.leaveDiscardingLocalText()
     }
 
     private func leave() {

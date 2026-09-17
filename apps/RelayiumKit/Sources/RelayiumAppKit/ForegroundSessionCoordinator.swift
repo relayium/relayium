@@ -95,13 +95,23 @@ public final class ForegroundSessionCoordinator: ObservableObject {
     /// open. Writing `link: nil` is a decision; omitting the argument is an
     /// oversight, and the two must not look the same at the call site.
     private let link: LinkWorkspaceModel?
+    /// The Cross-network module: a pairing code and the `link/1` watching its
+    /// room. The FOURTH thing that cannot survive backgrounding, and the one
+    /// with two halves — a code still waiting for its peer holds an open room
+    /// socket exactly as a connected link holds a transport.
+    ///
+    /// Optional and defaulted so every existing caller, and the macOS-hosted
+    /// tests that build this object without one, keep what they had.
+    private let crossNetwork: TransferModule?
 
     public init(file: RealtimeSessionModel,
                 text: RealtimeTextSessionModel,
-                link: LinkWorkspaceModel?) {
+                link: LinkWorkspaceModel?,
+                crossNetwork: TransferModule? = nil) {
         self.file = file
         self.text = text
         self.link = link
+        self.crossNetwork = crossNetwork
     }
 
     public func phaseChanged(to phase: AppLifecyclePhase) {
@@ -122,8 +132,12 @@ public final class ForegroundSessionCoordinator: ObservableObject {
             text.end()
             ended = true
         }
-        let endedALink = endLinkIfLive()
-        if endedALink { ended = true }
+        // Both links are asked, never short-circuited: each is its own
+        // transport and leaving one says nothing about the other.
+        let endedNearbyLink = endLinkIfLive()
+        let crossNetworkEnding = endCrossNetworkIfLive()
+        let endedALink = endedNearbyLink || crossNetworkEnding == .link
+        if endedALink || crossNetworkEnding == .code { ended = true }
         // The link's own sentence only when THIS transition took a link away.
         // Read from what was ended rather than from the link's current state: a
         // link that had already finished before the app was backgrounded leaves
@@ -158,6 +172,25 @@ public final class ForegroundSessionCoordinator: ObservableObject {
     /// app keeps no copy of that anywhere — no server-side history by design — so
     /// "the direct session ended" would be accurate about the mechanism and
     /// misleading about what is gone.
+    private enum CrossNetworkEnding { case none, code, link }
+
+    /// A code that is only WAITING is cancelled outright — digits, room and
+    /// surface — because there is no conversation to keep readable and a code
+    /// left on screen would name a room this app has already left. A link that
+    /// reached a peer is LEFT, not dismissed, exactly as the same-network one
+    /// is: its transcript and its ending stay on screen for the user to read.
+    private func endCrossNetworkIfLive() -> CrossNetworkEnding {
+        guard let crossNetwork else { return .none }
+        if crossNetwork.link.connection.hasPeer {
+            guard crossNetwork.link.connection.isActive else { return .none }
+            crossNetwork.link.leave()
+            return .link
+        }
+        guard crossNetwork.retainsWork else { return .none }
+        crossNetwork.cancelPairingCode()
+        return .code
+    }
+
     private func endLinkIfLive() -> Bool {
         guard let link, link.connection.isActive else { return false }
         link.leave()

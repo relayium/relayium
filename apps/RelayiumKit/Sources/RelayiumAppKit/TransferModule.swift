@@ -457,10 +457,13 @@ public final class TransferModule: ObservableObject {
 /// nothing enforces. This way the shell reads `modules.nearby` and
 /// `modules.direct` by name and hands each destination exactly one.
 ///
-/// **macOS only.** iOS composes one shared set of models across its Nearby and
-/// Direct tabs and one `TransferPresence` to arbitrate them; that is a
-/// deliberately different product with a different surface budget, and giving it
-/// a second full model graph is not this change's business.
+/// **The PAIR is macOS's; the module is not.** iOS composes one
+/// `TransferModule` — `TransferModule.crossNetwork`, for its Cross-network
+/// destination — beside a same-network surface that still keeps the legacy file
+/// and text models for a roster peer that does not speak `link/1`. Until iOS
+/// 0.4.0 that platform shared ONE set of models and one `TransferPresence`
+/// across both tabs, which is how an open Nearby link came to make Cross-network
+/// unusable, and how its pairing room came to announce no `link/1` at all.
 @MainActor
 public final class TransferModules: ObservableObject {
     public let nearby: TransferModule

@@ -220,13 +220,13 @@ final class IOSPairingScannerTests: XCTestCase {
         // The result goes through the SAME normalization a keystroke does, into
         // the same bindings — not into a raw assignment that would skip the
         // six-digit filter every other entry path uses.
-        XCTAssertTrue(view.contains("case .files: file.updateJoinCode(result.code)"))
-        XCTAssertTrue(view.contains("case .text:  text.updateJoinCode(result.code)"))
-        // And the mode hint passes through the refusal the picker uses, so a
-        // scan cannot switch modes under a live session.
-        XCTAssertTrue(view.contains("modes.select(mode,"),
-                      "the mode hint bypasses DirectModeSelection's own refusal")
-        XCTAssertTrue(view.contains("sessionClaimed: presence.owner != nil)"))
+        XCTAssertTrue(view.contains("code.updateJoinCode(result.code)"))
+        // A link scanned off an older build may still carry a `mode` hint. It is
+        // ignored, deliberately: Cross-network is connect-first, the room a code
+        // names carries both lanes, and there is no mode on this screen for a
+        // scan to move — under a live session or otherwise.
+        XCTAssertFalse(view.contains("result.mode"),
+                       "a scanned link selects a Files/Text lane again")
 
         // The join action is not reachable from the scan seam. `applyScan` is
         // read as its own body so an unrelated `join` elsewhere in the file

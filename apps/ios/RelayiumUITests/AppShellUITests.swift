@@ -134,25 +134,30 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Account"].waitForExistence(timeout: 10))
     }
 
-    func testDirectModeChoiceStaysInDirect() {
+    /// **Cross-network asks no Files-or-Text question, and joining needs no
+    /// account.**
+    ///
+    /// This used to drive the Files/Text segmented control. iOS 0.4.0 removed it:
+    /// a code carries no type and the connection carries both lanes, so the
+    /// screen is two tasks — create a code, or connect with one — and what the
+    /// connection carries is chosen after it exists. The first assertion is the
+    /// absence, because a picker coming back is how that regression would look.
+    func testCrossNetworkIsConnectFirstAndJoiningNeedsNoAccount() {
         open(Shell.crossNetworkTransfer, in: app)
-        let textMode = app.segmentedControls.firstMatch.buttons["Text"]
-        XCTAssertTrue(textMode.waitForExistence(timeout: 10),
-                      "Direct offers no text mode")
-        textMode.tap()
-
-        XCTAssertTrue(app.navigationBars["Cross-network"].exists)
-        XCTAssertTrue(app.staticTexts["Start a text session"].waitForExistence(timeout: 10),
-                      "Direct selected Text but did not render the text task")
+        XCTAssertTrue(app.navigationBars["Cross-network"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.segmentedControls.firstMatch.exists,
+                       "Cross-network asks the user to choose Files or Text before connecting")
+        XCTAssertTrue(app.staticTexts["Join a code"].waitForExistence(timeout: 10),
+                      "Cross-network offers no way to connect with somebody else's code")
 
         let code = app.textFields["Code"]
         XCTAssertTrue(code.waitForExistence(timeout: 10),
-                      "the anonymous text receiver has no code field")
+                      "the anonymous joiner has no code field")
         code.tap()
         code.typeText("123456")
         XCTAssertEqual(code.value as? String, "123456")
-        XCTAssertTrue(app.buttons["Join"].isEnabled,
-                      "a complete text code cannot be joined")
+        XCTAssertTrue(app.buttons["Connect"].isEnabled,
+                      "a complete code cannot be connected with while signed out")
     }
 
     func testDirectLargeFileRouteReachesSend() {
@@ -680,27 +685,24 @@ final class AppShellUITests: XCTestCase {
                       "a signed-out Send task no longer offers its account remedy")
     }
 
-    /// Creating a text pairing code stays on Direct and shows every handoff.
+    /// Creating a pairing code stays on Cross-network and shows every handoff.
     ///
     /// This is the flow the owner's 2026-08-07 review found broken: creating a
-    /// text code jumped to Nearby, and the generated code offered digits and a
-    /// QR but no visible, copyable, shareable join link. macOS has had a runtime
-    /// path for it since; iOS had none, so the platform that produced the
-    /// complaint was the one with no evidence.
-    func testCreatingATextCodeStaysOnDirectAndShowsEveryHandoff() {
+    /// code jumped to Nearby, and the generated code offered digits and a QR but
+    /// no visible, copyable, shareable join link. It is ONE flow now rather than
+    /// a Files one and a Text one, and the link it offers names a room and no
+    /// lane — a `?mode=` there would tell a connect-first peer to make a choice
+    /// it no longer has.
+    func testCreatingACodeStaysOnCrossNetworkAndShowsEveryHandoff() {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-text-code"]
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-code"]
         app.launch()
 
         open(Shell.crossNetworkTransfer, in: app)
-        let textMode = app.segmentedControls.firstMatch.buttons["Text"]
-        XCTAssertTrue(textMode.waitForExistence(timeout: 10), "Direct offers no text mode")
-        textMode.tap()
-
-        let create = app.buttons["Create a text code"]
+        let create = app.buttons["Create a code"]
         XCTAssertTrue(create.waitForExistence(timeout: 10),
-                      "a signed-in Direct text task cannot create a code")
+                      "a signed-in Cross-network task cannot create a code")
         scrollUntilHittable(create)
         create.tap()
 
@@ -709,74 +711,83 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 15),
                       "the generated pairing code is not visible")
         XCTAssertTrue(app.navigationBars["Cross-network"].exists)
+        XCTAssertTrue(app.staticTexts["Give this code to the other device"].exists)
 
         XCTAssertTrue(app.staticTexts["Join link"].exists,
                       "the generated code has no visible browser handoff")
         XCTAssertTrue(app.staticTexts[
-            "https://relayium.com/cross-network?mode=text#c=483920"
-        ].exists, "the visible handoff did not preserve the created Text mode")
+            "https://relayium.com/cross-network#c=483920"
+        ].exists, "the visible handoff is not the mode-less link macOS emits")
         XCTAssertTrue(app.buttons["Copy"].exists, "the join link cannot be copied")
         XCTAssertTrue(app.buttons["Share"].exists,
                       "the join link cannot use the system share sheet")
+        // The deadline is live. The fixture code dies in 2100, so what is pinned
+        // is that a countdown is drawn at all rather than its value.
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(
+            format: "label BEGINSWITH %@", "Expires in")).firstMatch.exists,
+                      "the waiting code shows no countdown to its own expiry")
     }
 
     /// Cancelling a generated code is the whole exit, not the first half of
-    /// Cancel → Session ended → Done. No transcript exists yet, so manufacturing
+    /// Cancel → Session ended → Done. Nothing was connected, so manufacturing
     /// an empty terminal task would make the user dismiss something that never
     /// happened.
-    func testCancellingAGeneratedTextCodeReturnsDirectlyToTheStartControls() {
+    func testCancellingAGeneratedCodeReturnsDirectlyToTheStartControls() {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-text-code"]
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-code"]
         app.launch()
 
         open(Shell.crossNetworkTransfer, in: app)
-        app.segmentedControls.firstMatch.buttons["Text"].tap()
-        let create = app.buttons["Create a text code"]
+        let create = app.buttons["Create a code"]
         XCTAssertTrue(create.waitForExistence(timeout: 10))
         scrollUntilHittable(create)
         create.tap()
         XCTAssertTrue(app.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 15))
+        XCTAssertFalse(create.exists,
+                       "a second code can be created over one that is still waiting")
 
         let cancel = app.buttons["Cancel"]
         XCTAssertTrue(cancel.waitForExistence(timeout: 10),
                       "the generated-code surface hides its escape action")
+        scrollUntilHittable(cancel)
         cancel.tap()
 
         XCTAssertTrue(create.waitForExistence(timeout: 10),
-                      "Cancel did not return directly to text-code creation")
+                      "Cancel did not return directly to code creation")
         XCTAssertFalse(app.buttons["Done"].exists,
                        "Cancel manufactured an empty terminal task requiring Done")
         XCTAssertFalse(app.staticTexts["4 8 3 9 2 0"].exists,
                        "the cancelled pairing code remained on screen")
     }
 
-    /// A terminal task is not an invitation to start another one on top of it.
-    /// Done is the explicit boundary that releases the old session; only after
-    /// it is pressed may Create return.
-    func testATerminalTextSessionMustBeDismissedBeforeStartingAgain() {
+    /// A failed mint keeps its reason on screen and holds the surface until the
+    /// user has read it. Dismiss is the explicit boundary that gives Create
+    /// back; a second start over an unread failure would replace the one
+    /// sentence explaining why nothing happened.
+    func testAFailedCodeMustBeDismissedBeforeStartingAgain() {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-terminal-text"]
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-mint-failure"]
         app.launch()
 
         open(Shell.crossNetworkTransfer, in: app)
-        app.segmentedControls.firstMatch.buttons["Text"].tap()
-        let create = app.buttons["Create a text code"]
+        let create = app.buttons["Create a code"]
         XCTAssertTrue(create.waitForExistence(timeout: 10))
         scrollUntilHittable(create)
         create.tap()
 
-        let done = app.buttons["Done"]
-        XCTAssertTrue(done.waitForExistence(timeout: 15),
-                      "the failed session has no cleanup boundary")
-        XCTAssertFalse(create.exists,
-                       "a new create path replaced a terminal session before Done")
+        let dismiss = app.buttons["Dismiss"]
+        XCTAssertTrue(dismiss.waitForExistence(timeout: 15),
+                      "the failed code has no cleanup boundary")
+        XCTAssertFalse(app.staticTexts["4 8 3 9 2 0"].exists,
+                       "a failed mint drew a code")
 
-        scrollUntilHittable(done)
-        done.tap()
+        scrollUntilHittable(dismiss)
+        dismiss.tap()
         XCTAssertTrue(create.waitForExistence(timeout: 10),
                       "the start controls did not return after cleanup")
+        XCTAssertFalse(dismiss.exists, "the dismissed failure stayed on screen")
     }
 
     /// A terminal Nearby task keeps both its peer context and a real cleanup
@@ -1160,50 +1171,6 @@ final class AppShellUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts.matching(NSPredicate(
             format: "label CONTAINS %@", "#k=")).count, 0,
             "a failed upload produced a capability link anyway")
-    }
-
-    /// Creating a FILE pairing code stays on Direct and shows every handoff,
-    /// with the mode the user actually chose preserved in the link.
-    ///
-    /// macOS proved this one batch earlier and the assertion it produced was not
-    /// the one I would have written from memory: the link carries `mode=file`,
-    /// not `mode=files`. iOS gets the same path rather than inheriting the claim.
-    func testCreatingAFilePairingCodeStaysOnDirectAndShowsEveryHandoff() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pending-fixture",
-               "--relayium-ui-testing-file-code"]
-        app.launch()
-
-        open(Shell.crossNetworkTransfer, in: app)
-        let chooser = app.buttons["Choose Files or Folders…"]
-        XCTAssertTrue(chooser.waitForExistence(timeout: 15),
-                      "Direct's file mode stages nothing")
-        scrollUntilHittable(chooser)
-        chooser.tap()
-
-        openBrowseInSystemPicker()
-        selectStagedFixture(named: "Relayium product brief")
-        let open = app.buttons["Open"]
-        XCTAssertTrue(open.waitForExistence(timeout: 10))
-        open.tap()
-
-        let create = app.buttons["Create a code"]
-        XCTAssertTrue(create.waitForExistence(timeout: 15),
-                      "a staged file offers no way to create a code")
-        scrollUntilHittable(create, maxSwipes: 10)
-        create.tap()
-
-        XCTAssertTrue(app.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 20),
-                      "the generated pairing code is not visible")
-        XCTAssertTrue(app.staticTexts["Join link"].exists,
-                      "the generated code has no visible browser handoff")
-        XCTAssertTrue(app.staticTexts[
-            "https://relayium.com/cross-network?mode=file#c=483920"
-        ].exists, "the visible handoff did not preserve the created Files mode")
-        XCTAssertTrue(app.buttons["Copy"].exists, "the join link cannot be copied")
-        XCTAssertTrue(app.buttons["Share"].exists,
-                      "the join link cannot use the system share sheet")
     }
 
     /// A stored link that resolves to the real pre-download manifest surface.
@@ -1591,12 +1558,11 @@ final class AppShellUITests: XCTestCase {
     func testShareOpensTheSystemShareSheet() {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
-            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-text-code"]
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pairing-code"]
         app.launch()
 
         open(Shell.crossNetworkTransfer, in: app)
-        app.segmentedControls.firstMatch.buttons["Text"].tap()
-        let create = app.buttons["Create a text code"]
+        let create = app.buttons["Create a code"]
         XCTAssertTrue(create.waitForExistence(timeout: 15))
         scrollUntilHittable(create)
         create.tap()

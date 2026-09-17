@@ -27,10 +27,10 @@ import Foundation
 /// exact failure the original split existed to prevent, so the directive stays
 /// and only its condition widened.
 ///
-/// What did NOT become cross-platform is the ROOM rule below: iOS answers
-/// `link/1` in the code-less room only, because it composes no pairing-code link
-/// surface at all. That distinction lives in `linkRoomActive`, in one function,
-/// rather than being spread back into this constant.
+/// The ROOM rule below is a separate question with its own constant. It was
+/// narrower than this one on iOS until that app composed a pairing-code link;
+/// the distinction still lives in `linkRoomActive`, in one function, rather
+/// than being spread back into this constant.
 #if os(macOS) || os(iOS)
 public let LINK_BUILD_SUPPORT = true
 #else
@@ -40,21 +40,31 @@ public let LINK_BUILD_SUPPORT = false
 /// Whether this build composes a `link/1` in a PAIRING-CODE room.
 ///
 /// macOS does: `LinkWorkspaceModel.watchPairingCode` opens one socket per code,
-/// shared by the link attempt and by the legacy fallback built on it, and
-/// `RelayDeadline` bounds the relayed credential it is issued.
+/// and `RelayDeadline` bounds the relayed credential it is issued.
 ///
-/// iOS does not, and this is the constant that says so rather than a comment.
-/// The iOS app is handed a `LinkWorkspaceModel` with **no** `connectPairingSocket`
-/// (`AppEnvironment.makeLinkWorkspaceModel`'s iOS overload takes no room handle
-/// and passes none), so there is nothing on that platform that could join a code
-/// room as a link. Announcing `link/1` there would be the same broken promise
-/// the platform split above existed to prevent — one room narrower.
+/// **iOS does too, and it has to.** It used to be `false` there, because the
+/// iOS factory passed no `connectPairingSocket` and the Cross-network screen
+/// composed only the legacy file and text lanes. That was self-consistent while
+/// macOS and the Web still adopted a legacy peer. It stopped being a working
+/// product the day they did not: both now refuse a pairing-room peer that does
+/// not announce exact `link/1` (`LinkPairingFallbackPolicy.terminateUnsupported`
+/// on macOS), so an iPhone that announced only `text/1` on a code was told, by
+/// every current Mac and browser, that it was "running an older version" — about
+/// the newest build there was. iOS now watches the code's room through
+/// `CrossNetworkPairingStart` on the socket its factory opens, so the promise
+/// this constant makes is one that build keeps. Like macOS it refuses a peer
+/// that genuinely lacks `link/1` rather than adopting it: the only such peer
+/// left is an internal iOS build at or below `0.3.2`.
+///
+/// Still compiled per platform, for the reason `LINK_BUILD_SUPPORT` is: this
+/// module is not limited to the two app binaries, and a build that composes no
+/// pairing-code link surface must not announce one.
 ///
 /// Its own constant, and not an inline `#if` inside `linkRoomActive`, for the
 /// reason `LINK_BUILD_SUPPORT` is one: it is a property of the source, it is
 /// asserted directly by `PeerCapabilityRegistryTests`, and turning it on means
-/// editing it alongside the surface that would make it true.
-#if os(macOS)
+/// editing it alongside the surface that makes it true.
+#if os(macOS) || os(iOS)
 public let LINK_PAIRING_ROOM_SUPPORT = true
 #else
 public let LINK_PAIRING_ROOM_SUPPORT = false
@@ -88,12 +98,13 @@ public let LINK_PAIRING_ROOM_SUPPORT = false
 /// in ONE function is what stops the announcement and the routing rule from
 /// consulting different halves.
 ///
-/// **And on iOS the parameter is now load-bearing.** That build composes a link
-/// for the code-less room and nothing for a pairing code — see
-/// `LINK_PAIRING_ROOM_SUPPORT` — so a pairing room there answers false. Because
-/// this one function feeds the roster hello, the SDP confirmation and the
-/// routing predicate alike, an iOS pairing room cannot announce a capability its
-/// routing would then refuse, and cannot route one it never announced.
+/// **The parameter is load-bearing wherever `LINK_PAIRING_ROOM_SUPPORT` is
+/// false.** Such a build composes a link for the code-less room and nothing for
+/// a pairing code, so a pairing room there answers false. Because this one
+/// function feeds the roster hello, the SDP confirmation and the routing
+/// predicate alike, that room cannot announce a capability its routing would
+/// then refuse, and cannot route one it never announced. Both Apple apps now
+/// answer true for both room kinds.
 ///
 /// See DECISION-LOG "Promote the unified Web workspace to pairing rooms with a
 /// bounded relay lifecycle" (2026-08-10) for the Web's equivalent step.

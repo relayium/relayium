@@ -182,11 +182,28 @@ struct RelayiumApp: App {
     /// the socket's delivery queue. A view-scoped owner would be absent exactly
     /// when a peer dials this device while the user is on Account.
     ///
-    /// The pairing-code half is deliberately absent. `AppEnvironment`'s iOS
-    /// overload takes no room handle, so this model has no `connectPairingSocket`
-    /// and nothing here can watch a code — the structural half of the boundary
-    /// `LINK_PAIRING_ROOM_SUPPORT` states at the wire.
+    /// The pairing-code half is deliberately absent from THIS object.
+    /// `AppEnvironment`'s same-network overload passes no `connectPairingSocket`,
+    /// so nothing here can watch a code; `crossNetwork` below owns the link that
+    /// does, exactly as macOS keeps two.
     @StateObject private var link: LinkWorkspaceModel
+    /// **Cross-network transfer: a pairing code, and the `link/1` that watches
+    /// its room.**
+    ///
+    /// Its own module, link, registry and presence — the macOS shape. A link that
+    /// also observed the same-network roster would have a pairing request
+    /// cancelled by a device appearing on the LAN, and one shared presence would
+    /// refuse a code because a Nearby transfer was running.
+    ///
+    /// It replaced the legacy file and text lanes this screen used to compose.
+    /// macOS and the Web refuse a pairing peer that does not announce `link/1`,
+    /// so those lanes could no longer reach either of them: `0.3.2` was told by
+    /// an up-to-date Mac that it was "running an older version".
+    @StateObject private var crossNetwork: TransferModule
+    /// The Cross-network workspace's own post-connect picker, separate from the
+    /// same-network one for the reason `linkSelection` records: a send made
+    /// inside a workspace is already addressed to the peer on screen.
+    @StateObject private var crossNetworkSelection: DirectSendSelection
     /// The link's own post-connect file picker, and a SECOND selection owner on
     /// purpose.
     ///
@@ -511,10 +528,8 @@ struct RelayiumApp: App {
         // mid-setup — reach a room where that id belongs to somebody else.
         let room = InboundRoom()
         let files = UITestMode.makeTerminalNearbyFileModel(verification: verifying)
-            ?? UITestMode.makeWaitingFileModel(verification: verifying)
             ?? AppEnvironment.makeRealtimeModel(verification: verifying, nearby: nearby, inboundRoom: room)
-        let texts = UITestMode.makeRealtimeTextModel(verification: verifying)
-            ?? AppEnvironment.makeRealtimeTextModel(verification: verifying, nearby: nearby, inboundRoom: room)
+        let texts = AppEnvironment.makeRealtimeTextModel(verification: verifying, nearby: nearby, inboundRoom: room)
         _direct = StateObject(wrappedValue: files)
         _directText = StateObject(wrappedValue: texts)
         _discovery = StateObject(wrappedValue: nearby)
@@ -551,6 +566,19 @@ struct RelayiumApp: App {
             verification: verifying, nearby: nearby,
             receiveDirectory: { files.saveDirectory })
         _link = StateObject(wrappedValue: unified)
+
+        // **The Cross-network module.** `TransferModule.crossNetwork` installs
+        // the two callbacks that keep the digits truthful; it lives in the
+        // package so `PairingLinkHandoffTests` can build this graph the way this
+        // initializer does. The receive folder is the residency-owned one, read
+        // at call time for the reason recorded above.
+        let crossing = TransferModule.crossNetwork(
+            link: UITestMode.makeCrossNetworkLinkWorkspaceModel(verification: verifying)
+                ?? AppEnvironment.makeCrossNetworkLinkWorkspaceModel(
+                    verification: verifying, receiveDirectory: { files.saveDirectory }),
+            code: UITestMode.makePairingCodeModel() ?? AppEnvironment.makePairingCodeModel())
+        _crossNetwork = StateObject(wrappedValue: crossing)
+        _crossNetworkSelection = StateObject(wrappedValue: DirectSendSelection())
 
         let presenting = TransferPresence()
         // The link is the THIRD liveness source, and it is not optional: a link
@@ -640,7 +668,10 @@ struct RelayiumApp: App {
         // which by design does NOT end an open link, only marks it
         // `signalingLost` — and then hands `.background` here. No view ends it on
         // disappearance, because a `TabView` teardown is not the user leaving.
-        let ending = ForegroundSessionCoordinator(file: files, text: texts, link: unified)
+        // The Cross-network module is the fourth: a code still waiting holds an
+        // open room socket, and its link holds a transport.
+        let ending = ForegroundSessionCoordinator(file: files, text: texts, link: unified,
+                                                  crossNetwork: crossing)
         _foreground = StateObject(wrappedValue: ending)
         // The lifecycle now goes through residency, which owns the ORDER: on
         // `.background` the room is left BEFORE R3-E's session cleanup runs, or
@@ -652,12 +683,15 @@ struct RelayiumApp: App {
         // them. It navigates exactly once per link, and it is the ONE place that
         // decides whether a link may write into a model that is mid-transfer —
         // which is why no view on this platform repeats that decision.
+        //
+        // **The Cross-network module's code and presence, and only those.** A
+        // pairing link is routed to `.pairingCode`, so the field it may write is
+        // that module's and the ownership rule it applies is that module's too.
+        // Handed the same-network presence, it would refuse a pairing link
+        // because a Nearby transfer was running.
         _deepLinkRouting = StateObject(wrappedValue: AppDeepLinkCoordinator(
             navigation: routing, download: downloads,
-            realtime: files, realtimeText: texts, presence: presenting,
-            selectRealtimeMode: { mode in
-                modes.select(mode, file: files.state, text: texts.state)
-            }))
+            pairingCode: crossing.code, presence: crossing.presence))
     }
 
     /// SwiftUI's three phases, narrowed to the one decision this app makes.
@@ -686,6 +720,8 @@ struct RelayiumApp: App {
                      discovery: discovery, nearbyReceive: nearbyReceive,
                      residency: residency,
                      link: link, linkSelection: linkSelection,
+                     crossNetwork: crossNetwork,
+                     crossNetworkSelection: crossNetworkSelection,
                      navigation: navigation, shell: shell, presence: presence,
                      deepLinks: deepLinks, deepLinkRouting: deepLinkRouting)
                 .environmentObject(session)

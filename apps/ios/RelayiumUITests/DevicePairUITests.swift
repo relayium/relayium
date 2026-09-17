@@ -225,6 +225,7 @@ final class DevicePairUITests: XCTestCase {
                     // atomic read-and-press, and a window one statement wide is
                     // not the seconds-long window scrolling used to open.
                     leave.tap()
+                    confirmLocalTextDiscardIfAsked(DevicePair.endConnectionLabel)
                     pressedLeave = true
                 } else if gesturesSpent < Self.exitReachGestures {
                     // One gesture, then back to the top of the loop to re-read
@@ -273,6 +274,29 @@ final class DevicePairUITests: XCTestCase {
             """, file: file, line: line)
         scrollUntilHittable(done, in: app, file: file, line: line)
         done.tap()
+        // Only a PEER-ended link still holds its transcript here: this device's
+        // own confirmed exit above already cleared it.
+        confirmLocalTextDiscardIfAsked(DevicePair.doneLabel)
+    }
+
+    /// **Take the confirmation a workspace exit raises when it would destroy
+    /// text.**
+    ///
+    /// Since iOS 0.4.0 the unified workspace asks before Leave or Done discards a
+    /// transcript or a draft — the conversation is stored nowhere else. The
+    /// dialog's destructive button carries the SAME title as the control that
+    /// raised it, so the label alone is ambiguous once it is up; the dialog is
+    /// the topmost match, which is the last one. A run that exchanged no text
+    /// raises nothing, and this returns without pressing anything.
+    private func confirmLocalTextDiscardIfAsked(_ label: String) {
+        let asked = app.staticTexts.matching(NSPredicate(
+            format: "label == %@ OR label == %@",
+            "Discard local text?", "Discard the unsent message?")).firstMatch
+        guard asked.waitForExistence(timeout: 5) else { return }
+        let matches = app.buttons.matching(NSPredicate(format: "label == %@", label))
+        XCTAssertGreaterThan(matches.count, 0,
+                             "the discard confirmation offers no \"\(label)\"")
+        matches.element(boundBy: matches.count - 1).tap()
     }
 
     /// The size of the scrolling repertoire below, which is `scrollUntilHittable`'s.
@@ -486,14 +510,22 @@ final class DevicePairUITests: XCTestCase {
                        "Done left the finished transfer list on the roster screen")
     }
 
-    // MARK: - the pairing-code (legacy lane) steps both code flows share
+    // MARK: - the Cross-network steps both code roles share
+    //
+    // Cross-network is connect-first as of iOS 0.4.0: a code is created or
+    // entered with nothing chosen beforehand, the room is watched as a `link/1`
+    // client, and the connected peer is drawn by the SAME unified workspace the
+    // Nearby roles above drive. So everything after the code is the workspace
+    // vocabulary — `compareAndConfirm` with the link's own gate, `sendMessage`,
+    // `awaitPeerMessage`, `endLinkAndDismiss` — and the legacy lane's words
+    // ("Check this matches", "Private text session", "End session") no longer
+    // appear on this screen at all.
+    //
+    // **Re-authored against source, not yet run.** These roles need two physical
+    // devices. They were rewritten with the surface on 2026-09-17 and have not
+    // been driven since; the first physical run is their acceptance.
 
     /// **The one manual step this harness cannot take, written once.**
-    ///
-    /// Two checks reach this same conclusion — the staged-batch precondition
-    /// below and `mintCode` itself — and they must say the whole action rather
-    /// than half of it, because which of the two speaks first is an accident of
-    /// the flow and the operator reading a skipped run gets only one of them.
     private static let createCodeNeedsAnAccount = """
         This device cannot create a pairing code: it holds no ready account. \
         Creating a code needs one; joining a code does not. Sign in ONCE by \
@@ -503,70 +535,26 @@ final class DevicePairUITests: XCTestCase {
         credential and reads none.
         """
 
-    /// Open the Direct tab in one of its two modes.
-    ///
-    /// The mode picker is above both cards, governs Create AND Join, and a code
-    /// carries no type — which is exactly what the shipped hint says. So both
-    /// ends must select the same mode, and neither may infer it.
-    private func openPairingTab(mode: String) -> Bool {
-        guard openDevicePairDestination(DevicePair.directSurface, in: app)
-        else { return false }
-        let segment = app.buttons[mode]
-        guard segment.waitForExistence(timeout: DevicePair.settleBudget) else {
-            XCTFail("""
-                the Direct tab offers no "\(mode)" mode.
-                \(app.debugDescription)
-                """)
-            return false
-        }
-        scrollUntilHittable(segment, in: app)
-        segment.tap()
-        return true
-    }
+    /// **Why the two FILE roles skip.** A connect-first surface chooses its
+    /// batch inside the workspace, through the system document browser, and
+    /// this harness has no way to drive that browser on a physical device. The
+    /// legacy lane staged its batch BEFORE the code existed, which is what the
+    /// `--relayium-ui-testing-preselect-direct-fixture` seam stood in for; there
+    /// is no pre-connect selection left for it to fill. The unified workspace's
+    /// file lane is still proved on hardware by the two Nearby roles, which drive
+    /// the same view over the same `link/1`; what is NOT yet proved on hardware
+    /// is a file crossing a RELAYED pairing room from an iPhone. That needs an
+    /// in-workspace staging seam and is recorded as its own requirement.
+    private static let filePhaseNeedsAWorkspaceStagingSeam = """
+        The Cross-network file phase is not driveable yet: since iOS 0.4.0 the \
+        batch is chosen inside the connected workspace through the system \
+        document browser, which this harness cannot operate. Run the \
+        pair-text phase for the pairing room and the Nearby phase for the \
+        workspace's file lane. This is a recorded gap, not a pass.
+        """
 
-    /// The staged batch a legacy code carries — **or the account gate that
-    /// replaces the entire card it would have appeared in.**
-    ///
-    /// `DirectView.createFiles` renders `PendingFileList` INSIDE its
-    /// `case .allowed = gate` branch, so a device with no ready account draws
-    /// neither the pending row nor Create; it draws
-    /// `DevicePair.createCodeGateTitle`. Asserting the row on its own therefore
-    /// turned the one condition `mintCode` already knows how to skip for into a
-    /// timeout naming a fixture that was never the problem — a signed-out phone
-    /// reported as a staging failure, which is what the retained run shows.
-    ///
-    /// The two states are waited for TOGETHER, for the reason `mintCode` waits
-    /// for both of its: `AccountSession.restore()` is a keychain read followed
-    /// by a network refresh, so for the first seconds of a cold launch NEITHER
-    /// exists, and a fixed pre-check that expired inside that window would
-    /// answer with whichever half it happened to be looking at.
-    ///
-    /// **The staged row wins ties.** On a settled screen the two are mutually
-    /// exclusive, but a restore resolving mid-check can leave a gate readable
-    /// for one snapshot after the account became ready — and skipping a run two
-    /// people's devices are already held for is by far the more expensive of
-    /// the two mistakes. Nothing is lost by preferring to continue: `mintCode`
-    /// re-reads the gate on the very next line and skips there, in these same
-    /// words, if it is genuinely still up.
-    private func requireStagedFixtureUnlessAccountGated(
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) throws {
-        let pending = app.descendants(matching: .any)["pendingFile.0"]
-        let gate = app.staticTexts[DevicePair.createCodeGateTitle]
-        let deadline = Date().addingTimeInterval(DevicePair.establishBudget)
-        while Date() < deadline, !pending.exists, !gate.exists {
-            Thread.sleep(forTimeInterval: 1)
-        }
-        if pending.exists { return }
-        if gate.exists { throw XCTSkip(Self.createCodeNeedsAnAccount) }
-        XCTFail("""
-            the preselected fixture never became a pending direct send, and this \
-            device is not account-gated either: after \
-            \(Int(DevicePair.establishBudget))s the Direct tab offered neither a \
-            staged row nor "\(DevicePair.createCodeGateTitle)".
-            \(app.debugDescription)
-            """, file: file, line: line)
+    private func openPairingTab() -> Bool {
+        openDevicePairDestination(DevicePair.directSurface, in: app)
     }
 
     /// Mint a code through the shipped Create control, and publish the digits
@@ -576,31 +564,27 @@ final class DevicePairUITests: XCTestCase {
     /// code costs an account and joining one does not, so a signed-out device
     /// renders the gate instead of Create — and timing out on a button nobody
     /// drew would report that as a transport failure.
-    private func mintCode(_ run: DevicePairRun,
-                          create: String,
-                          heading: String) throws -> String? {
+    private func mintCode(_ run: DevicePairRun) throws -> String? {
         // Wait for whichever of the two arrives, rather than pre-checking the
         // gate for a fixed few seconds. `AccountSession.restore()` is a keychain
         // read followed by a network refresh, so for the first seconds of a cold
-        // launch this card shows a spinner and NEITHER control exists — and a
-        // fixed pre-check that expired during it would go on to fail on a
-        // missing Create button instead of skipping with the manual step.
+        // launch this card shows a spinner and NEITHER control exists.
         let gate = app.staticTexts[DevicePair.createCodeGateTitle]
-        let button = app.buttons[create]
+        let button = app.buttons[DevicePair.createCodeLabel]
         let deadline = Date().addingTimeInterval(DevicePair.establishBudget)
         while Date() < deadline, !gate.exists, !button.exists {
             Thread.sleep(forTimeInterval: 1)
         }
         if gate.exists { throw XCTSkip(Self.createCodeNeedsAnAccount) }
         XCTAssertTrue(button.exists, """
-            the Direct tab offers neither "\(create)" nor the account gate that replaces \
-            it, after \(Int(DevicePair.establishBudget))s.
+            Cross-network offers neither "\(DevicePair.createCodeLabel)" nor the account \
+            gate that replaces it, after \(Int(DevicePair.establishBudget))s.
             \(app.debugDescription)
             """)
         scrollUntilHittable(button, in: app)
         button.tap()
 
-        guard awaitLabel(containing: heading, in: app,
+        guard awaitLabel(containing: DevicePair.giveCodeHeading, in: app,
                          within: DevicePair.establishBudget,
                          describing: "the pairing-code handoff") else { return nil }
         guard let digits = awaitSpokenDigits(
@@ -615,192 +599,103 @@ final class DevicePairUITests: XCTestCase {
         return digits
     }
 
-    /// Type the digits the other device minted into the shipped field and join.
+    /// Type the digits the other device minted into the shipped field and
+    /// connect.
     private func joinCode(_ run: DevicePairRun) throws {
         guard let code = run.pairingCode else {
             throw XCTSkip("this joining role was started with no pairing code")
         }
         let field = app.textFields[DevicePair.codeFieldLabel]
         XCTAssertTrue(field.waitForExistence(timeout: DevicePair.settleBudget), """
-            the Direct tab offers no code field.
+            Cross-network offers no code field.
             \(app.debugDescription)
             """)
         scrollUntilHittable(field, in: app)
         field.tap()
         field.typeText(code)
-        // Read back before Join. `PairingCodeInput` normalises what it is given,
-        // and a field that dropped or reordered a digit under the keyboard would
-        // otherwise present as "the other device never answered".
+        // Read back before connecting. `PairingCodeInput` normalises what it is
+        // given, and a field that dropped or reordered a digit under the
+        // keyboard would otherwise present as "the other device never answered".
         XCTAssertEqual(field.value as? String, code,
                        "the code field did not take the digits the peer minted")
-        let join = app.buttons[DevicePair.joinLabel]
+        let join = app.buttons[DevicePair.joinCodeLabel]
         XCTAssertTrue(join.waitForExistence(timeout: DevicePair.settleBudget),
-                      "the Direct tab offers no Join")
+                      "Cross-network offers no way to connect with a typed code")
         scrollUntilHittable(join, in: app)
         join.tap()
     }
 
-    // MARK: - Cross-network files, the minting half
+    // MARK: - Cross-network files: recorded as not driveable
 
     func testPairingCodeFilesAreSentToThePhysicalPeer() throws {
-        let run = try requireDevicePairRun(role: "pair-file-generator")
-        app = XCUIApplication()
-        launchForDevicePair(app, verifying: true, stagingFixture: true)
-
-        guard openPairingTab(mode: DevicePair.filesModeLabel) else { return }
-        requireVerificationIsOn()
-
-        // Staged before the code exists, because on this platform a legacy code
-        // carries the batch that was chosen before it was minted. Create is
-        // disabled with nothing staged, so this is a precondition of the tap
-        // below and not decoration — but only on a device that can mint at all,
-        // which is why the account gate is read HERE rather than one step later.
-        try requireStagedFixtureUnlessAccountGated()
-
-        guard try mintCode(run, create: DevicePair.createCodeLabel,
-                           heading: DevicePair.giveCodeHeading) != nil else { return }
-
-        // The legacy lane's own gate, whose words are NOT the workspace's.
-        compareAndConfirm(run, title: DevicePair.legacyVerifyTitle,
-                          confirm: DevicePair.legacyMatchesLabel)
-
-        awaitLabel(containing: DevicePair.filesSentTitle, in: app,
-                   within: DevicePair.transferBudget,
-                   describing: "this device's own record of what it sent")
-
-        let done = app.buttons[DevicePair.doneLabel]
-        XCTAssertTrue(done.waitForExistence(timeout: DevicePair.settleBudget),
-                      "the completed transfer offers no way out")
-        scrollUntilHittable(done, in: app)
-        done.tap()
+        _ = try requireDevicePairRun(role: "pair-file-generator")
+        throw XCTSkip(Self.filePhaseNeedsAWorkspaceStagingSeam)
     }
-
-    // MARK: - Cross-network files, the joining half
 
     func testPairingCodeFilesFromThePhysicalPeerAreReceived() throws {
-        let run = try requireDevicePairRun(role: "pair-file-joiner")
-        app = XCUIApplication()
-        // The receiving half, for the same reason the Nearby resident is: a
-        // fixed destination that refuses a taken name makes the second run of
-        // this phase fail on the first run's own file.
-        launchForDevicePair(app, verifying: true,
-                            freshReceivedFolder: !run.keepsReceivedFolder)
-
-        guard openPairingTab(mode: DevicePair.filesModeLabel) else { return }
-        requireVerificationIsOn()
-        emitDevicePair(.ready, value: run.tag, for: run)
-
-        try joinCode(run)
-
-        compareAndConfirm(run, title: DevicePair.legacyVerifyTitle,
-                          confirm: DevicePair.legacyMatchesLabel)
-
-        awaitLabel(containing: DevicePair.filesReceivedTitle, in: app,
-                   within: DevicePair.transferBudget,
-                   describing: "this device's own record of what it received")
-        // **The receiver naming the file, not merely reporting a success.**
-        // `DirectFileSessionView.fileList` renders
-        // `FileIdentityPresentation.name(for:)` for every entry of the manifest
-        // this device actually took, so this is the received NAME and not the
-        // sender's description of it. The BYTES are proved separately, by the
-        // launcher, out of this device's container.
-        awaitLabel(containing: DevicePair.fixtureName, in: app,
-                   within: DevicePair.settleBudget,
-                   describing: "the name of the file this device received")
-        emitDevicePair(.received, value: run.tag, for: run)
-        // Held HERE, before Done, because Done is a product action with its own
-        // consequences for what is on this device's disk. Reading the container
-        // only after it would let one outcome — the file is gone — stand for
-        // both "it was never written" and "dismissing the receipt removed it".
-        holdForContainerRead(run, in: app, showing: DevicePair.filesReceivedTitle)
-
-        let done = app.buttons[DevicePair.doneLabel]
-        XCTAssertTrue(done.waitForExistence(timeout: DevicePair.settleBudget),
-                      "the completed receive offers no way out")
-        scrollUntilHittable(done, in: app)
-        done.tap()
+        _ = try requireDevicePairRun(role: "pair-file-joiner")
+        throw XCTSkip(Self.filePhaseNeedsAWorkspaceStagingSeam)
     }
 
-    // MARK: - Cross-network text, the minting half
+    // MARK: - Cross-network conversation, the minting half
 
     func testPairingCodeTextIsExchangedWithThePhysicalPeer() throws {
         let run = try requireDevicePairRun(role: "pair-text-generator")
         app = XCUIApplication()
         launchForDevicePair(app, verifying: true)
 
-        guard openPairingTab(mode: DevicePair.textModeLabel) else { return }
+        guard openPairingTab() else { return }
         requireVerificationIsOn()
 
-        guard try mintCode(run, create: DevicePair.textCreateCodeLabel,
-                           heading: DevicePair.textGiveCodeHeading) != nil else { return }
+        guard try mintCode(run) != nil else { return }
 
-        // The INITIATING side of the text lane renders its digits in the code
-        // grid, exactly as the files lane does.
-        compareAndConfirm(run, title: DevicePair.textVerifyTitle,
-                          confirm: DevicePair.legacyMatchesLabel)
+        // The WORKSPACE's gate — one verification per link — because a code now
+        // opens the same unified link the Nearby roles drive. Reaching it at all
+        // is the assertion that this device announced `link/1` in the pairing
+        // room and the peer believed it, which is exactly what iOS 0.3.2 did not
+        // do.
+        compareAndConfirm(run, title: DevicePair.verifyTitle,
+                          confirm: DevicePair.verifyMatchesLabel)
 
-        awaitLabel(containing: DevicePair.textSessionHeading, in: app,
-                   within: DevicePair.establishBudget,
-                   describing: "the open text session")
         // The minting side speaks first and the joining side answers, for the
-        // same reason the Nearby conversation is ordered: a lane that is still
-        // opening holds one message, and two simultaneous first messages is a
+        // reason the Nearby conversation is ordered: the link holds one message
+        // while the conversation opens, and two simultaneous first messages is a
         // race with nothing to prove.
-        sendMessage(run.message, composer: DevicePair.textComposerLabel)
+        sendMessage(run.message, composer: DevicePair.composerLabel)
         awaitPeerMessage(run)
 
-        let end = app.buttons[DevicePair.endSessionLabel]
-        XCTAssertTrue(end.waitForExistence(timeout: DevicePair.settleBudget),
-                      "the open text session offers no way out")
-        scrollUntilHittable(end, in: app)
-        end.tap()
+        endLinkAndDismiss()
+        // Back to the connect phase, with the spent code retired rather than
+        // redrawn under the controls.
+        XCTAssertTrue(app.buttons[DevicePair.createCodeLabel]
+            .waitForExistence(timeout: DevicePair.settleBudget),
+                      "Done did not return Cross-network to its connect controls")
+        XCTAssertFalse(app.staticTexts[DevicePair.giveCodeHeading].exists,
+                       "the spent pairing code reappeared after the link ended")
     }
 
-    // MARK: - Cross-network text, the joining half
+    // MARK: - Cross-network conversation, the joining half
 
     func testPairingCodeTextFromThePhysicalPeerIsExchanged() throws {
         let run = try requireDevicePairRun(role: "pair-text-joiner")
         app = XCUIApplication()
         launchForDevicePair(app, verifying: true)
 
-        guard openPairingTab(mode: DevicePair.textModeLabel) else { return }
+        guard openPairingTab() else { return }
         requireVerificationIsOn()
         emitDevicePair(.ready, value: run.tag, for: run)
 
         try joinCode(run)
 
-        // **The responder's gate is a different screen, and this is the one
-        // place the two halves of the text lane genuinely diverge.** With
-        // advanced verification on, `RealtimeTextSessionModel` puts the
-        // RESPONDER in `.incomingRequest`, which renders the digits inside
-        // `text.verifiedPhrase` — ordinary prose, not the code grid — and offers
-        // Accept rather than "They match". Driving the initiator's vocabulary
-        // here would time out on controls this state never draws.
-        guard awaitLabel(containing: DevicePair.textIncomingHeading, in: app,
-                         within: DevicePair.establishBudget,
-                         describing: "the incoming text request") else { return }
-        guard let digits = awaitDigitsInPhrase(
-            prefixed: DevicePair.verifiedPhrasePrefix, in: app,
-            within: DevicePair.verificationBudget,
-            describing: "the code this device derived") else { return }
-        emitDevicePair(.sas, value: digits, for: run)
+        // Both halves meet the same gate with the same words now. The legacy
+        // text lane gave its responder a different screen — digits in prose and
+        // an Accept — and none of that is drawn on this surface any more.
+        compareAndConfirm(run, title: DevicePair.verifyTitle,
+                          confirm: DevicePair.verifyMatchesLabel)
 
-        let accept = app.buttons[DevicePair.acceptLabel]
-        XCTAssertTrue(accept.waitForExistence(timeout: DevicePair.settleBudget),
-                      "the incoming request offers no Accept")
-        scrollUntilHittable(accept, in: app)
-        accept.tap()
-
-        awaitLabel(containing: DevicePair.textSessionHeading, in: app,
-                   within: DevicePair.establishBudget,
-                   describing: "the open text session")
         awaitPeerMessage(run)
-        sendMessage(run.message, composer: DevicePair.textComposerLabel)
+        sendMessage(run.message, composer: DevicePair.composerLabel)
 
-        let end = app.buttons[DevicePair.endSessionLabel]
-        XCTAssertTrue(end.waitForExistence(timeout: DevicePair.settleBudget),
-                      "the open text session offers no way out")
-        scrollUntilHittable(end, in: app)
-        end.tap()
+        endLinkAndDismiss()
     }
 }

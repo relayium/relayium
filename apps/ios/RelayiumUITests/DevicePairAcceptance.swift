@@ -772,52 +772,26 @@ enum DevicePair {
     static let endConnectionLabel = "End connection"
     static let doneLabel = "Done"
 
-    // MARK: - the pairing-code (legacy lane) surface
+    // MARK: - the Cross-network connect phase
 
-    /// `direct.createCode`, `direct.giveCode`, `common.join`, `common.code`.
+    /// `direct.createCode`, `direct.giveCode`, `workspace.connectWithCode`,
+    /// `common.code`.
     ///
-    /// iOS composes NO pairing-code link — `LINK_PAIRING_ROOM_SUPPORT` is false
-    /// off macOS — so a code here establishes the legacy lane and its own
-    /// session view, not the workspace above. That is the whole reason this
-    /// vocabulary is separate from the link one.
+    /// Only the CONNECT phase has words of its own. As of iOS 0.4.0 a pairing
+    /// code opens the same unified `link/1` workspace a Nearby peer does, so
+    /// everything after the code — the verification gate, the composer, the
+    /// transfer list, the exit — is the link vocabulary above. The legacy lane's
+    /// separate vocabulary ("Check this matches", "Private text session", "End
+    /// session", the Files/Text mode labels) was retired with that surface.
     static let createCodeLabel = "Create a code"
     static let giveCodeHeading = "Give this code to the other device"
-    static let joinLabel = "Join"
+    static let joinCodeLabel = "Connect"
     static let codeFieldLabel = "Code"
-    static let filesModeLabel = "Files"
-    static let textModeLabel = "Text"
     /// `gate.createCodeTitle`. Minting a code costs an account and joining one
     /// does not, so a device that cannot mint renders this instead of Create.
     /// The generating role SKIPS with the manual step quoted rather than timing
     /// out on a button nobody drew.
     static let createCodeGateTitle = "Creating a code needs an account"
-    /// `session.checkMatches`, `session.theyMatch` — the legacy lane's own
-    /// verification gate, which is NOT the workspace's.
-    static let legacyVerifyTitle = "Check this matches"
-    static let legacyMatchesLabel = "They match"
-    /// `text.startHeading`, `text.createCode`, `text.giveCode`.
-    static let textStartHeading = "Start a text session"
-    static let textCreateCodeLabel = "Create a text code"
-    static let textGiveCodeHeading = "Give this text code to the other device"
-    /// `text.checkMatches` — the text lane's gate heading, on the INITIATING
-    /// side. The responder reaches `text.incomingHeading` instead and renders
-    /// its digits as prose; see `verifiedPhrasePrefix`.
-    static let textVerifyTitle = "Check this matches the other device"
-    static let textIncomingHeading = "The other device wants to exchange text"
-    /// `text.verifiedPhrase`, up to its placeholder. The responder's SAS is
-    /// inside this sentence rather than in a code grid.
-    static let verifiedPhrasePrefix = "Verified phrase:"
-    /// `common.accept` — the responder's own gate, reached only with advanced
-    /// verification on.
-    static let acceptLabel = "Accept"
-    /// `text.sessionHeading`, `text.composerLabel`, `common.endSession`.
-    static let textSessionHeading = "Private text session"
-    static let textComposerLabel = "Message"
-    static let endSessionLabel = "End session"
-    /// `file.transfer` completion titles, from
-    /// `FileTransferCompletionPresentation`.
-    static let filesSentTitle = "Files sent"
-    static let filesReceivedTitle = "Files received"
 
     // MARK: - shapes and budgets
 

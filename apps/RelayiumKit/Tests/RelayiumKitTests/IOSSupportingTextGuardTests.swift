@@ -445,7 +445,7 @@ final class IOSSupportingTextGuardTests: XCTestCase {
             supporting += code.components(separatedBy: "Palette.supportingLabel").count - 1
             warning += code.components(separatedBy: "Palette.warningLabel").count - 1
         }
-        // 118 in the app and 2 in the Share extension. The declarations
+        // 116 in the app and 2 in the Share extension. The declarations
         // themselves are not counted: `DesignTokens` spells the property name
         // without the `Palette.` prefix, which is what makes this a count of
         // USES rather than of mentions.
@@ -472,7 +472,13 @@ final class IOSSupportingTextGuardTests: XCTestCase {
         // the status head's detail line and its quiet radar glyph add three;
         // the conversation header's sentence and the Cross-network route
         // sentence, now that status head's `detail:`, remove two.
-        XCTAssertEqual(supporting, 120,
+        //
+        // Cross-network becoming connect-first (0.4.0) removes two: the
+        // Files/Text picker's match hint and the text-start paragraph went with
+        // the lanes they described, the wall-clock expiry line became the live
+        // countdown, and the create card gained the one sentence that says what
+        // happens after connecting.
+        XCTAssertEqual(supporting, 118,
                        "the supporting role should reach every one of the sentences the "
                        + "audit counted across both targets, plus the two disclosure tints")
         // The over-limit byte counter, the not-sent label, and the three

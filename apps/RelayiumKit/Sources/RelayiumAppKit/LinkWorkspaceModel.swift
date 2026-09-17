@@ -15,13 +15,17 @@ import WebRTC
 // and its own acceptance evidence — so the directive is gone and the constant
 // `LINK_BUILD_SUPPORT` is true on both platforms.
 //
-// **What did not become cross-platform is the pairing-code room.** This object
-// can watch a code, and iOS must never do it: the iOS factory takes no room
-// handle and passes no `connectPairingSocket`, so `watchPairingCode` there has
-// nothing to open, and `LINK_PAIRING_ROOM_SUPPORT` makes an iOS pairing room
-// announce no `link/1` in the first place. Two independent halves, for the same
-// reason the platform split had two: neither a forged announcement nor a stray
-// call can produce a promise that build cannot keep.
+// **The pairing-code room became cross-platform last, in iOS 0.4.0.** Until then
+// the iOS factory passed no `connectPairingSocket` and `LINK_PAIRING_ROOM_SUPPORT`
+// was false there, so an iPhone on a code announced `text/1` only — and once
+// macOS and the Web stopped adopting legacy pairing peers, every current Mac and
+// browser refused it as "an older version". iOS now builds a SECOND instance of
+// this object for its Cross-network destination
+// (`AppEnvironment.makeCrossNetworkLinkWorkspaceModel`), with the macOS answers:
+// its own registry, the strict fallback policy and the link-only hello. The
+// same-network instance still passes no socket factory, so the two halves stay
+// independent: neither a forged announcement nor a stray call can make the
+// roster's link watch a code.
 
 /// Where the Workspace's ONE `link/1` attempt is, as a screen states it.
 ///
@@ -159,13 +163,14 @@ public enum LinkPendingMessagePolicy: String, Equatable, Sendable {
 
 /// **What a pairing room does with a peer that is not exact `link/1`.**
 ///
-/// A configuration rather than a behaviour change, and the default is the
-/// behaviour that ships. Two products read this file: the paused iOS
-/// implementation and the headless acceptance hosts still compose the legacy
-/// file and text lanes and still need a room handed to them, while macOS 1.3.7
-/// is the published minimum and every client at or above it speaks `link/1` —
-/// so macOS has no lane to fall back TO, and handing it a room would hand it to
-/// nothing.
+/// A configuration rather than a behaviour change. The headless acceptance
+/// hosts still compose the legacy file and text lanes and still need a room
+/// handed to them, so the shared default adopts. Both APPS refuse: macOS 1.3.7
+/// is the published minimum and every client at or above it speaks `link/1`, so
+/// macOS has no lane to fall back TO; and the iOS Cross-network destination has
+/// been connect-first since 0.4.0 and composes no legacy lane either — the only
+/// pairing peer without `link/1` left is an internal iOS build at or below
+/// 0.3.2. Handing either a room would hand it to nothing.
 ///
 /// It is a two-case enum rather than a `Bool` because the call sites read as a
 /// claim about the product, not as a flag: `legacyFallback: .terminateUnsupported`

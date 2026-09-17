@@ -83,11 +83,15 @@ struct RootView: View {
     @ObservedObject var discovery: LanDiscoveryModel
     @ObservedObject var nearbyReceive: NearbyReceiveModel
     @ObservedObject var residency: NearbyResidencyCoordinator
-    /// The unified `link/1` and its own post-connect file selection. Both go to
-    /// LAN Transfer alone: `link/1` is code-less-room only on this platform, so
-    /// Cross-network Transfer has nothing to do with either.
+    /// The same-network `link/1` and its own post-connect file selection. Both
+    /// go to LAN Transfer alone: this link observes the code-less room and
+    /// cannot watch a code, so Cross-network Transfer has its own below.
     @ObservedObject var link: LinkWorkspaceModel
     @ObservedObject var linkSelection: DirectSendSelection
+    /// The Cross-network module and its workspace's own picker. They go to
+    /// Cross-network alone, for the mirror of the reason above.
+    @ObservedObject var crossNetwork: TransferModule
+    @ObservedObject var crossNetworkSelection: DirectSendSelection
     @ObservedObject var navigation: AppNavigationModel
     /// Which surface is drawn and which is presented over it, derived from the
     /// one selection above. App-scoped so "where the user was before the link"
@@ -344,17 +348,15 @@ struct RootView: View {
                        link: link, linkSelection: linkSelection,
                        onShowSession: { navigation.select($0) })
         case .crossNetworkTransfer:
-            DirectView(file: direct, text: directText,
-                       selection: directSelection, modes: directModes,
-                       foreground: foreground, presence: presence,
+            DirectView(module: crossNetwork, selection: crossNetworkSelection,
+                       receiving: direct, foreground: foreground,
                        // Two destination selections, and neither is a session
                        // read. The first is the honest route for a large file —
                        // a live transfer needs both devices open, a stored link
                        // does not — and the second is where a user who needs an
                        // account goes.
                        onOpenSend: { navigation.select(.storedSend) },
-                       onOpenAccount: { navigation.select(.account) },
-                       onShowSession: { navigation.select($0) })
+                       onOpenAccount: { navigation.select(.account) })
         case .storedSend:
             SendView(upload: upload, selection: send,
                      onOpenAccount: { navigation.select(.account) })

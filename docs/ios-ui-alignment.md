@@ -5,6 +5,16 @@ Status: delivered to internal TestFlight only as `0.3.2 (8)` from `9880648a`
 iOS app changed to read as the same product as macOS 1.4.0, what it
 deliberately did not copy, and how the change is verified.
 
+**Correction, 2026-09-17 — the alignment was visual, and Cross-network's RULES
+were not aligned.** `0.3.2` gave Cross-network the macOS 1.4.0 status head and
+cards while the screen underneath was still the Files/Text legacy product, which
+macOS and the Web refuse in a pairing room. The owner's first cross-network test
+of `0.3.2` against macOS `1.4.0` failed with "the other device is running an
+older version". `0.4.0` (in development, not distributed) replaces that screen
+with the connect-first unified workspace macOS has; the account is in
+`apps/README.md` under "Direct transfer". Statements below that describe the
+Cross-network mode picker or its two create cards describe `0.3.2`.
+
 ## What changed
 
 - **Surfaces.** Page, card, card edge and status-head colours are named asset

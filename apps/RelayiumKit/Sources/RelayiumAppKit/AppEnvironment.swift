@@ -657,11 +657,12 @@ public enum AppEnvironment {
     public static let localNearbyNoAnswerCopy: L10nKey = .errorNearbyIOSNoAnswer
 
     #if os(iOS)
-    /// iOS uses nearby discovery but does not compose the macOS `link/1`
-    /// workspace. Keep the fallback handle inside the shared factory so the iOS
-    /// target neither names nor accidentally starts owning that surface; the
-    /// session model's room-connection closure retains the handle for exactly
-    /// as long as the model graph lives.
+    /// The two LEGACY models, which on iOS belong to LAN Transfer alone: they
+    /// serve a roster peer that does not speak `link/1`. They take no part in a
+    /// pairing code — Cross-network is `makeCrossNetworkLinkWorkspaceModel`'s —
+    /// so the room handle they are given is private and nothing ever opens a
+    /// socket into it. It is kept inside this factory so the iOS target neither
+    /// names nor accidentally starts owning that surface.
     ///
     /// These two overloads are also the iOS Local Nearby composition boundary,
     /// and that is why the answer-timeout copy is substituted HERE rather than
@@ -695,11 +696,14 @@ public enum AppEnvironment {
 
     // MARK: - the unified link
     //
-    // Both platforms compose one now. What differs is the ROOM: macOS's owner can
-    // watch a pairing code, and iOS's cannot — see the iOS overload at the end of
-    // this section, which takes no room handle and can therefore pass no
-    // `connectPairingSocket`. That is the structural half of the boundary
-    // `LINK_PAIRING_ROOM_SUPPORT` states at the wire.
+    // Both platforms compose one now, for BOTH rooms. Each keeps the split
+    // macOS established: the same-network owner is a room observer of the
+    // discovery model and is handed no `connectPairingSocket`, and the
+    // Cross-network owner watches a pairing code on a socket of its own and
+    // observes no roster. iOS reaches the second through
+    // `makeCrossNetworkLinkWorkspaceModel` below — until it did, an iPhone
+    // announced only `text/1` on a code and every current Mac and browser
+    // refused it as "an older version".
     #if os(macOS)
 
     /// The transfer surfaces' `link/1` owner, wired to the SAME room socket and the
@@ -932,25 +936,6 @@ public enum AppEnvironment {
         return model
     }
 
-    /// **The six digits a Cross-network transfer starts from, and nothing
-    /// else.**
-    ///
-    /// Its own factory because it is its own object now. Minting used to be a
-    /// `RealtimeSessionModel` state, so asking for a code meant building a whole
-    /// transport — which is what coupled retiring a code to ending a session,
-    /// and what made a build with no legacy transport unable to mint at all.
-    ///
-    /// The Nearby module gets one too. It is never minted into: that screen has
-    /// no control that mints and same-network transfer has no code. Handing both
-    /// modules the same shape keeps `TransferModule` unconditional, and the
-    /// thing that would actually go wrong is prevented by the surface rather
-    /// than by an optional nobody can see the reason for.
-    @MainActor
-    public static func makePairingCodeModel(baseURL: URL = transferBaseURL,
-                                            client: PairCodeClient? = nil) -> PairingCodeModel {
-        PairingCodeModel(client: client ?? HTTPPairClient(baseURL: baseURL))
-    }
-
     /// The Direct module's `link/1` owner: whichever room a pairing code names.
     ///
     /// **It is not a room observer of the discovery model, and that is the fix
@@ -1059,7 +1044,82 @@ public enum AppEnvironment {
         return model
     }
 
+    /// **The iOS Cross-network `link/1` owner: whichever room a pairing code
+    /// names, and no other.**
+    ///
+    /// The same object macOS builds in `makeDirectLinkWorkspaceModel`, for the
+    /// same three reasons, and it exists because iOS shipped without it:
+    ///
+    ///  - **It opens the code's socket.** The iOS same-network overload above
+    ///    passes no `connectPairingSocket`, so nothing on this platform could
+    ///    watch a code, and `LINK_PAIRING_ROOM_SUPPORT` was false to match. macOS
+    ///    and the Web then stopped adopting legacy pairing peers, and an iPhone
+    ///    on a code — announcing `text/1` only — was refused by every one of them.
+    ///  - **It is NOT a room observer of the discovery model.** One model
+    ///    registered for both rooms receives the LAN roster's ordinary churn
+    ///    while routing a code room, and that churn cancels a pairing request in
+    ///    flight. Its registry is its own, built with the pairing room's rule.
+    ///  - **It refuses instead of adopting.** Every client that can reach a code
+    ///    room today — macOS, the Web, Android and this build — announces exact
+    ///    `link/1`, and the Cross-network screen composes no legacy lane to hand
+    ///    a room to. The only peer the hand-over could serve is an internal iOS
+    ///    build at or below `0.3.2`, which "needs updating" describes truthfully.
+    ///    The room handle is private for the same reason: nothing else builds on
+    ///    this socket, so the iOS app never has to name `LinkRoomHandle`.
+    ///
+    /// `receiveDirectory` is REQUIRED for the reason the overload above records:
+    /// the receive destination on iOS is the residency-owned one, read and never
+    /// re-resolved.
+    ///
+    /// `pendingMessages` keeps the shared default. This link is drawn by the same
+    /// `NearbyLinkWorkspaceView` composer the same-network link uses, and that
+    /// composer does not read `canSendMessage`; one composer, one policy.
+    @MainActor
+    public static func makeCrossNetworkLinkWorkspaceModel(baseURL: URL = transferBaseURL,
+                                                          verification: VerificationPreference,
+                                                          receiveDirectory: @escaping () -> URL)
+        -> LinkWorkspaceModel {
+        LinkWorkspaceModel(
+            capabilities: PeerCapabilityRegistry(
+                linkRoomActive: { linkRoomActive(isCodelessRoom: false) }),
+            receiveDirectory: receiveDirectory,
+            requiresVerification: { verification.requiresSASConfirmation },
+            iceClient: HTTPICEClient(baseURL: baseURL),
+            connectPairingSocket: { code in
+                SignalingClient.connect(wsBase: RealtimeConnectionFactory.signalingBase(baseURL),
+                                        code: code,
+                                        name: deviceName())
+            },
+            pairingRoomHandle: LinkRoomHandle(),
+            legacyFallback: .terminateUnsupported,
+            // Rejecting every legacy session while still announcing `text/1`
+            // would invite a conversation this room then meets with silence.
+            localHello: linkOnlyCapsHello(linkRoomActive:))
+    }
+
     #endif
+
+    /// **The six digits a Cross-network transfer starts from, and nothing
+    /// else.**
+    ///
+    /// Its own factory because it is its own object now. Minting used to be a
+    /// `RealtimeSessionModel` state, so asking for a code meant building a whole
+    /// transport — which is what coupled retiring a code to ending a session,
+    /// and what made a build with no legacy transport unable to mint at all.
+    ///
+    /// The macOS Nearby module gets one too. It is never minted into: that
+    /// screen has no control that mints and same-network transfer has no code.
+    /// Handing both modules the same shape keeps `TransferModule` unconditional,
+    /// and the thing that would actually go wrong is prevented by the surface
+    /// rather than by an optional nobody can see the reason for.
+    ///
+    /// Outside the platform split because both Apple apps mint through it: the
+    /// iOS Cross-network module is the same `TransferModule` shape.
+    @MainActor
+    public static func makePairingCodeModel(baseURL: URL = transferBaseURL,
+                                            client: PairCodeClient? = nil) -> PairingCodeModel {
+        PairingCodeModel(client: client ?? HTTPPairClient(baseURL: baseURL))
+    }
 
     /// **The discovery room's observer for a composition with no legacy
     /// transport.**

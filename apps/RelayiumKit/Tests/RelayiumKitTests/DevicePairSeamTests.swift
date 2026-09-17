@@ -404,8 +404,14 @@ final class DevicePairSeamTests: XCTestCase {
 
     // MARK: - the bytes, read while the receiver is alive AND after it exits
 
-    /// **A receiving role holds its completed state before it presses Done, and
-    /// the two roles that receive are the two roles that hold.**
+    /// **A receiving role holds its completed state before it presses Done.**
+    ///
+    /// ONE role receives a file today: the Nearby resident. The pairing joiner
+    /// used to be the second, on the legacy file lane; since iOS 0.4.0 the
+    /// Cross-network batch is chosen inside the connected workspace through the
+    /// system document browser, which this harness cannot drive, so both pairing
+    /// FILE roles skip with that reason and receive nothing. The count below
+    /// goes back to two on the day an in-workspace staging seam exists.
     ///
     /// The ordering is the whole mechanism. `Done` on a completion screen is a
     /// PRODUCT action with its own consequences for what is on that device's
@@ -419,17 +425,22 @@ final class DevicePairSeamTests: XCTestCase {
     /// exactly what the un-held version proved.
     func testAReceivingRoleHoldsItsCompletedStateBeforeItPressesDone() throws {
         let suite = try Self.codeOnly(Self.uiTestSource("DevicePairUITests.swift"))
-        XCTAssertEqual(suite.components(separatedBy: "holdForContainerRead(").count - 1, 2, """
-            exactly two roles receive a file — the Nearby resident and the pairing joiner — \
-            and each must hold its completed state while the launcher reads the bytes off \
-            that device.
+        XCTAssertEqual(suite.components(separatedBy: "holdForContainerRead(").count - 1, 1, """
+            exactly one role receives a file — the Nearby resident — and it must hold its \
+            completed state while the launcher reads the bytes off that device.
             """)
-        // Each receiving role, with the control that ENDS its session named
-        // explicitly: the Nearby resident leaves the link, the pairing joiner
-        // presses the legacy lane's Done.
+        for skipped in ["testPairingCodeFilesAreSentToThePhysicalPeer",
+                        "testPairingCodeFilesFromThePhysicalPeerAreReceived"] {
+            XCTAssertTrue(try Self.body(of: skipped, in: suite)
+                .contains("throw XCTSkip(Self.filePhaseNeedsAWorkspaceStagingSeam)"), """
+                \(skipped) must say why it cannot run rather than pass, fail or vanish: a \
+                pairing file phase reported green would be a claim nothing drove.
+                """)
+        }
+        // The receiving role, with the control that ENDS its session named
+        // explicitly: the Nearby resident leaves the link.
         for (test, exit) in [
             ("testNearbyAcceptsThePhysicalPeerAndTransfersBothWays", "endLinkAndDismiss()"),
-            ("testPairingCodeFilesFromThePhysicalPeerAreReceived", "DevicePair.doneLabel"),
         ] {
             let body = try Self.body(of: test, in: suite)
             guard let published = body.range(of: "emitDevicePair(.received"),
@@ -736,54 +747,66 @@ final class DevicePairSeamTests: XCTestCase {
 
     // MARK: - the two flows, as THIS platform composes them
 
-    /// **A pairing code on iOS is the legacy lane, not the unified workspace.**
+    /// **A pairing code on iOS opens the unified workspace, exactly as Nearby
+    /// does.**
     ///
-    /// `LINK_PAIRING_ROOM_SUPPORT` is false off macOS, so
-    /// `linkRoomActive(isCodelessRoom: false)` answers false here and the app
-    /// composes no pairing-code link at all. The two flows therefore have
-    /// DIFFERENT vocabularies, and a harness that drove the workspace's controls
-    /// against a code would time out on a screen this platform never draws.
-    ///
-    /// Pinned because it is a product fact the harness's whole pairing half
-    /// depends on, and because it is exactly the kind of fact that changes under
-    /// a feature that looks unrelated to a two-device run.
-    func testAPairingCodeOnThisPlatformIsTheLegacyLane() {
+    /// This used to pin the opposite, and the pin was right about the build it
+    /// described: `LINK_PAIRING_ROOM_SUPPORT` was false off macOS, the app
+    /// composed no pairing-code link, and the harness's pairing roles drove the
+    /// legacy lane's own screens. It also said what to do when that changed —
+    /// "every one of their selectors is wrong" — and as of iOS 0.4.0 it has: the
+    /// Cross-network screen is connect-first and a code opens the same `link/1`
+    /// workspace, because macOS and the Web refuse a pairing peer that announces
+    /// anything less. So the roles were re-authored with the surface, and what
+    /// is pinned now is that the two stay in step.
+    func testAPairingCodeOnThisPlatformOpensTheUnifiedWorkspace() throws {
         XCTAssertTrue(linkRoomActive(isCodelessRoom: true), """
             this build no longer answers link/1 in the code-less room, so the Nearby half \
             of the harness is driving a workspace that will not exist.
             """)
-        #if os(macOS)
         XCTAssertTrue(LINK_PAIRING_ROOM_SUPPORT)
-        #else
-        XCTAssertFalse(LINK_PAIRING_ROOM_SUPPORT)
-        #endif
         // The iOS answer, asserted directly rather than through the host
         // platform: `swift test` runs on macOS, so the constant above is the
         // Mac's. This is the sentence the harness depends on.
-        let registry = try? RepoRoot.text(
+        let registry = try RepoRoot.text(
             "apps/RelayiumKit/Sources/RelayiumKit/Realtime/PeerCapabilityRegistry.swift")
-        XCTAssertNotNil(registry)
-        XCTAssertTrue(registry?.contains("""
-            #if os(macOS)
+        XCTAssertTrue(registry.contains("""
+            #if os(macOS) || os(iOS)
             public let LINK_PAIRING_ROOM_SUPPORT = true
-            #else
-            public let LINK_PAIRING_ROOM_SUPPORT = false
-            #endif
-            """) == true, """
-            LINK_PAIRING_ROOM_SUPPORT is no longer macOS-only. If iOS now composes a \
-            pairing-code link, the harness's pairing roles are driving the legacy lane's \
-            controls against a workspace, and every one of their selectors is wrong.
+            """), """
+            iOS no longer announces link/1 in a pairing-code room. The harness's pairing \
+            roles drive the unified workspace, which such a build would never reach.
             """)
+
+        // And the roles really do drive the workspace: the link's own gate and
+        // composer, never the retired legacy lane's.
+        let suite = try Self.uiTestSource("DevicePairUITests.swift")
+        let pairing = try XCTUnwrap(suite.components(
+            separatedBy: "// MARK: - the Cross-network steps both code roles share")
+            .dropFirst().first)
+        for workspace in ["compareAndConfirm(run, title: DevicePair.verifyTitle,",
+                          "confirm: DevicePair.verifyMatchesLabel)",
+                          "sendMessage(run.message, composer: DevicePair.composerLabel)",
+                          "endLinkAndDismiss()"] {
+            XCTAssertTrue(pairing.contains(workspace),
+                          "a pairing role no longer drives the workspace: \(workspace)")
+        }
+        for retired in ["legacyVerifyTitle", "legacyMatchesLabel", "textSessionHeading",
+                        "endSessionLabel", "filesModeLabel", "textModeLabel",
+                        "openPairingTab(mode:"] {
+            XCTAssertFalse(suite.contains(retired),
+                           "a pairing role reaches for the retired legacy lane: \(retired)")
+        }
     }
 
-    /// The pairing roles name the legacy lane's controls and the Nearby roles
-    /// name the workspace's, with no crossing.
+    /// Every word the harness waits for is the shipped English copy for the key
+    /// it stands for.
     ///
-    /// The two verification gates in particular are different screens with
-    /// different words — "Compare this code" against "Check this matches" — and
-    /// a role that reached for the other one's would wait out its budget on a
-    /// live, healthy connection.
-    func testTheTwoFlowsDoNotShareEachOthersVocabulary() throws {
+    /// The Cross-network CONNECT phase has words of its own; everything after a
+    /// code is the link vocabulary, shared with the Nearby roles. A constant
+    /// that drifted from the catalog would wait out its budget on a live,
+    /// healthy connection.
+    func testTheHarnessVocabularyIsTheShippedCopy() throws {
         let vocabulary = try Self.uiTestSource("DevicePairAcceptance.swift")
         for (key, constant) in [
             (L10nKey.linkVerifyTitle, "verifyTitle"),
@@ -791,18 +814,10 @@ final class DevicePairSeamTests: XCTestCase {
             (.linkConnectToDevice, "connectLabel"),
             (.linkAcceptFiles, "acceptFilesLabel"),
             (.linkComposerLabel, "composerLabel"),
-            (.sessionCheckMatches, "legacyVerifyTitle"),
-            (.sessionTheyMatch, "legacyMatchesLabel"),
             (.directCreateCode, "createCodeLabel"),
             (.directGiveCode, "giveCodeHeading"),
-            (.textCreateCode, "textCreateCodeLabel"),
-            (.textGiveCode, "textGiveCodeHeading"),
-            (.textCheckMatches, "textVerifyTitle"),
-            (.textIncomingHeading, "textIncomingHeading"),
-            (.textSessionHeading, "textSessionHeading"),
-            (.commonJoin, "joinLabel"),
-            (.commonAccept, "acceptLabel"),
-            (.commonEndSession, "endSessionLabel"),
+            (.workspaceConnectWithCode, "joinCodeLabel"),
+            (.commonCode, "codeFieldLabel"),
             (.nearbyA11yDevices, "rosterContainerLabel"),
             (.linkA11yTransfers, "transfersLabel"),
             (.gateCreateCodeTitle, "createCodeGateTitle"),
@@ -886,9 +901,9 @@ final class DevicePairSeamTests: XCTestCase {
             """)
         XCTAssertEqual(
             suite.components(separatedBy: "freshReceivedFolder: !run.keepsReceivedFolder").count - 1,
-            2, """
-            exactly two roles receive a file — the Nearby resident and the pairing joiner — \
-            and both must resolve this the same way.
+            1, """
+            exactly one role receives a file — the Nearby resident — and it must honour \
+            the operator's choice.
             """)
     }
 

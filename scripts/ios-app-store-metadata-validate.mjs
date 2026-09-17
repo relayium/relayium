@@ -144,6 +144,14 @@ const RECORD_NAME = "relayium";
 // candidate. No 0.3.2 App Store version exists on the record, and nothing here
 // may say one does.
 //
+// 0.3.2 (8) reached internal TestFlight on 2026-09-17, and its Cross-network
+// screen could not reach a current Mac or browser: it announced `text/1` only in
+// a pairing-code room, and both refuse a pairing peer without `link/1`. The
+// correction replaces that screen with the connect-first unified workspace and,
+// by owner direction, takes another new visible version: 0.4.0. The same two
+// statements hold for it — it is a candidate decision, and no 0.4.0 App Store
+// version exists on the record.
+//
 // So:
 //   * `MARKETING_VERSION` is a candidate decision and moves with the project;
 //   * `OBSERVED_IOS_VERSION` moves only with a fresh read-back of the record —
@@ -153,7 +161,7 @@ const RECORD_NAME = "relayium";
 //     version, because nothing observed it. A mismatch is not a waiver: an older
 //     or unrelated candidate, or an observation rewritten to the candidate, is
 //     refused.
-const MARKETING_VERSION = "0.3.2";
+const MARKETING_VERSION = "0.4.0";
 const OBSERVED_IOS_VERSION = "0.3.1";
 // The name the record actually holds. This is NOT a place to propose a rename:
 // the App Store name is owner-controlled, changing it is an App Store Connect

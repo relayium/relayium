@@ -89,7 +89,7 @@ final class IOSActionColorGuardTests: XCTestCase {
                       "\(Self.styleFile) no longer applies the style it owns")
     }
 
-    /// Every one of the 64 sites, and the split between them.
+    /// Every one of the 61 sites, and the split between them.
     ///
     /// The numbers are asserted rather than merely counted so that a control
     /// deleted, added or reclassified has to be looked at. `>=` would let the
@@ -109,16 +109,22 @@ final class IOSActionColorGuardTests: XCTestCase {
                 else { conditional += 1 }
             }
         }
-        XCTAssertEqual(ordinary, 43, "ordinary bordered actions")
+        // 43 when the boundary was drawn. Cross-network becoming connect-first
+        // in 0.4.0 removed three: the chooser's outlined state and the two
+        // legacy terminal Done controls went with the Files/Text lanes, the
+        // Files and Text minting Cancels became one, and the expired-code Cancel
+        // is new.
+        XCTAssertEqual(ordinary, 40, "ordinary bordered actions")
         XCTAssertEqual(destructive, 20, "destructive bordered actions")
         XCTAssertEqual(conditional, 1,
                        "exactly one control has a conditional role: "
                        + "NearbyLinkWorkspaceView's exit, destructive while the "
                        + "session is live and ordinary once it has ended")
-        XCTAssertEqual(ordinary + destructive + conditional, 64,
-                       "the app had 64 bordered controls when this boundary was drawn; "
-                       + "a new one is fine, but it has to be counted here and its role "
-                       + "has to be a decision rather than a default")
+        XCTAssertEqual(ordinary + destructive + conditional, 61,
+                       "the app had 64 bordered controls when this boundary was drawn and "
+                       + "61 since Cross-network became connect-first; a new one is fine, "
+                       + "but it has to be counted here and its role has to be a decision "
+                       + "rather than a default")
     }
 
     /// **The role on the style must match the role on the button.**
@@ -164,7 +170,7 @@ final class IOSActionColorGuardTests: XCTestCase {
                                + "2.02:1 accent.")
             }
         }
-        XCTAssertEqual(checked, 64, "every bordered control must have been paired")
+        XCTAssertEqual(checked, 61, "every bordered control must have been paired")
     }
 
     /// A line that is prose rather than code.

@@ -334,59 +334,69 @@ enum UITestMode {
         )
     }
 
-    /// Holds the text pairing model on a deterministic terminal failure, so the
-    /// suite can verify that cleanup — not a second start path — owns the page.
+    /// Fails the Cross-network mint deterministically, so the suite can verify
+    /// that a failed code keeps its message on screen and that Dismiss — not a
+    /// second start path — is what gives the surface back.
     // nonlocalized: a test-only launch argument, absent from Release
-    static let terminalTextArgument = "--relayium-ui-testing-terminal-text"
-    static let showsTerminalText = ProcessInfo.processInfo.arguments.contains(
-        terminalTextArgument)
+    static let pairingMintFailureArgument = "--relayium-ui-testing-pairing-mint-failure"
+    static let showsPairingMintFailure = ProcessInfo.processInfo.arguments.contains(
+        pairingMintFailureArgument)
 
-
-    /// Holds the FILE pairing surface on its generated code.
+    /// Holds the Cross-network surface on its generated code.
     ///
-    /// The text half of this flow gained a runtime path in batch 107; the file
-    /// half — the mode most people reach for — had none, so the join link's mode
-    /// parameter was only ever proven for Text.
+    /// One fixture where there used to be a Files one and a Text one: the
+    /// surface is connect-first, a code carries no type, and the screen a
+    /// creator waits on is the same whatever the connection later carries.
+    /// Minting succeeds locally, the room's socket is silent and its ICE read
+    /// waits for the rest of the process, so the screen stays on the handoff
+    /// state a person needs time to read and share. No network call is made.
     // nonlocalized: a test-only launch argument, absent from Release
-    static let fileCodeArgument = "--relayium-ui-testing-file-code"
-    static let showsGeneratedFileCode = ProcessInfo.processInfo.arguments.contains(
-        fileCodeArgument)
+    static let pairingCodeArgument = "--relayium-ui-testing-pairing-code"
+    static let showsGeneratedPairingCode = ProcessInfo.processInfo.arguments.contains(
+        pairingCodeArgument)
 
+    /// The pairing-code model an offline acceptance launch drives, or nil for
+    /// every other launch. Guarded per fixture, like every other substitution
+    /// here: a launch that did not ask for one gets the production mint.
     @MainActor
-    static func makeWaitingFileModel(verification: VerificationPreference) -> RealtimeSessionModel? {
-        guard showsGeneratedFileCode else { return nil }
-        return RealtimeSessionModel(
-            pairClient: UITestPairClient(),
-            iceClient: UITestWaitingICEClient(),
-            requiresVerification: { verification.requiresSASConfirmation },
-            makeConnection: { _, _, _ in throw AccountError.network }
-        )
+    static func makePairingCodeModel() -> PairingCodeModel? {
+        guard showsGeneratedPairingCode || showsPairingMintFailure else { return nil }
+        return PairingCodeModel(client: UITestPairClient())
     }
 
-    /// Holds the text pairing surface on its generated code.
+    /// Keeps the Cross-network room watcher deterministic and offline.
     ///
-    /// The pairing-code handoff is the flow the owner's 2026-08-07 review found
-    /// broken — creating a text code jumped to Nearby and produced no visible
-    /// join link — and iOS had no runtime evidence for it at all while macOS
-    /// did. Minting succeeds locally and the ICE lookup then waits for the rest
-    /// of the process, so the screen stays on the handoff state a person needs
-    /// time to read and share. No network call is made.
-    // nonlocalized: a test-only launch argument, absent from Release
-    static let generatedTextCodeArgument = "--relayium-ui-testing-text-code"
-    static let showsGeneratedTextCode = ProcessInfo.processInfo.arguments.contains(
-        generatedTextCodeArgument)
-
+    /// Mirrors `AppEnvironment.makeCrossNetworkLinkWorkspaceModel` answer for
+    /// answer — its own registry, the strict fallback policy, the link-only
+    /// hello — because a substitution that answered a different rule would make
+    /// every built-App run evidence about the fixture instead. What the offline
+    /// launch needs from the socket is exactly nothing: hold `.watching` without
+    /// a frame leaving the process.
     @MainActor
-    static func makeRealtimeTextModel(
+    static func makeCrossNetworkLinkWorkspaceModel(
         verification: VerificationPreference
-    ) -> RealtimeTextSessionModel? {
-        guard showsGeneratedTextCode || showsTerminalText else { return nil }
-        return RealtimeTextSessionModel(
-            pairClient: UITestPairClient(),
-            iceClient: UITestWaitingICEClient(),
+    ) -> LinkWorkspaceModel? {
+        guard showsGeneratedPairingCode || showsPairingMintFailure else { return nil }
+        return LinkWorkspaceModel(
+            capabilities: PeerCapabilityRegistry(
+                linkRoomActive: { linkRoomActive(isCodelessRoom: false) }),
+            // Application Support, never a purgeable directory — see
+            // `pendingUploadRoot`. Nothing is ever received on a silent socket.
+            receiveDirectory: {
+                (try? FileManager.default.url(for: .applicationSupportDirectory,
+                                              in: .userDomainMask,
+                                              appropriateFor: nil, create: true))
+                    ?? URL(fileURLWithPath: NSHomeDirectory())
+            },
             requiresVerification: { verification.requiresSASConfirmation },
-            makeConnection: { _, _, _ in throw AccountError.network }
-        )
+            iceClient: UITestWaitingICEClient(),
+            connectPairingSocket: { _ in
+                // nonlocalized: an acceptance fixture name — the silent channel
+                // never opens, so no join frame ever announces it
+                SignalingClient(channel: UITestSilentWebSocketChannel(), name: "uitest")
+            },
+            legacyFallback: .terminateUnsupported,
+            localHello: linkOnlyCapsHello(linkRoomActive:))
     }
 
 
@@ -738,10 +748,9 @@ enum UITestMode {
     static let stallsUpload = false
     static let failsUpload = false
     /// false, so a shipped launch always mints a real code over the network.
-    static let showsGeneratedTextCode = false
-    static let showsTerminalText = false
+    static let showsGeneratedPairingCode = false
+    static let showsPairingMintFailure = false
     static let showsTerminalNearby = false
-    static let showsGeneratedFileCode = false
     static func makeAccountTransport() -> URLSession? { nil }
 
     /// nil, so shipped launches always construct the production realtime
@@ -751,15 +760,15 @@ enum UITestMode {
         verification: VerificationPreference
     ) -> RealtimeSessionModel? { nil }
 
+    /// nil, so a shipped launch always mints against the product's own server
+    /// and watches the room on a real socket.
     @MainActor
-    static func makeWaitingFileModel(
-        verification: VerificationPreference
-    ) -> RealtimeSessionModel? { nil }
+    static func makePairingCodeModel() -> PairingCodeModel? { nil }
 
     @MainActor
-    static func makeRealtimeTextModel(
+    static func makeCrossNetworkLinkWorkspaceModel(
         verification: VerificationPreference
-    ) -> RealtimeTextSessionModel? { nil }
+    ) -> LinkWorkspaceModel? { nil }
 
     /// Folded to a no-op; no launch argument can prefill a shipped receive.
     @MainActor
@@ -1044,7 +1053,7 @@ final class UITestAccountTransport: URLProtocol {
 /// Mints deterministically and never opens a connection.
 private struct UITestPairClient: PairCodeClient {
     func mint(token: String) async throws -> MintedCode {
-        if UITestMode.showsTerminalText { throw AccountError.network }
+        if UITestMode.showsPairingMintFailure { throw AccountError.network }
         return MintedCode(code: "483920", expiresAt: 4_102_444_800)
     }
 }
@@ -1060,5 +1069,21 @@ private struct UITestWaitingICEClient: ICEConfigClient {
         try await Task.sleep(nanoseconds: 300_000_000_000)
         throw AccountError.network
     }
+}
+
+/// A room socket that never opens and never speaks.
+///
+/// `SignalingClient` installs its callbacks on construction, so they are stored
+/// here — and then nothing ever fires them: no `onOpen` means the join frame is
+/// never sent, no `onText` means no roster or signal ever arrives, and no
+/// `onClose` means the watcher is never told the room ended. The offline launch
+/// therefore joins a code, publishes `.watching`, and holds there.
+private final class UITestSilentWebSocketChannel: WebSocketChannel {
+    var onOpen: (() -> Void)?
+    var onText: ((String) -> Void)?
+    var onClose: (() -> Void)?
+    let isOpen = false
+    func send(_ text: String) {}
+    func close() {}
 }
 #endif

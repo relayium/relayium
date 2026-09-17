@@ -21,7 +21,7 @@
   inside the released 1.4.0 app. The system Share menu is verified to list it; a
   real Finder share has not yet been driven by hand.
 - `ios/` — iOS SwiftUI app (`com.relayium.mac`), same local package. **In
-  development at 0.3.2 and not public.** The bundle id is macOS's on purpose:
+  development at 0.4.0 and not public.** The bundle id is macOS's on purpose:
   iOS and macOS are two platforms of ONE universal-purchase App Store record
   (Apple ID `6801142976`), and Apple requires every platform in such a record to
   carry the same Bundle ID. That is also what puts an iOS build in front of the
@@ -71,7 +71,7 @@
   outstanding gap are tracked in `windows/DURABLE-PARITY.md`.
 - `ios/RelayiumShare/` — the iOS Share Extension (`com.relayium.mac.ShareIOS`),
   embedded in the app at `PlugIns/RelayiumShare.appex`. Links `RelayiumShareKit`
-  only. **In development at 0.3.2 and not public.** Its identifier is *not*
+  only. **In development at 0.4.0 and not public.** Its identifier is *not*
   `com.relayium.mac.Share` — that is the macOS extension. The target record's
   iOS TestFlight build metadata reports extension application identifier
   `7PVYUG4YQS.com.relayium.mac.ShareIOS`, so that is what this project must
@@ -1143,7 +1143,7 @@ Developer ID identity.
 
 `apps/ios/Relayium.xcodeproj` (bundle id `com.relayium.mac`,
 `IPHONEOS_DEPLOYMENT_TARGET = 16.0`, iPhone + iPad) is a SwiftUI app over the
-same local `RelayiumKit` package. **In development at 0.3.2 and not public** —
+same local `RelayiumKit` package. **In development at 0.4.0 and not public** —
 internal TestFlight builds were used for development acceptance before the
 earlier pause, but there is no public App Store listing and the website offers
 no iOS download.
@@ -1200,8 +1200,10 @@ holding views only. Design and plan:
 
 Five tabs now. **Receive** is R3-A unchanged and still needs no account.
 **Send** is R3-C: files, folders, photos and videos chosen in the app, encrypted
-here and uploaded. **Direct** is R3-E: a six-digit pairing code carrying text or
-small files straight to another device across networks, described below.
+here and uploaded. **Direct** — named **Cross-network** in the app — began as
+R3-E: a six-digit pairing code carrying text or small files straight to another
+device across networks. Since `0.4.0` it is connect-first and opens one unified
+`link/1` workspace for both; see "Direct transfer" below.
 **Nearby** is R3-F: the same transfer with no code, to a device picked off a
 live roster, plus the passive half — one unsolicited file or text session at a
 time. **Account** is R3-B's sign-in and usage summary plus R3-D's device and
@@ -1405,11 +1407,74 @@ multi-file receive shares its **container** as one item and *Save to Files*
 copies the tree in one piece. The affordance exists only in `.done`, which the
 model reaches only after `ManifestWriter.finish()` returned.
 
-### Direct transfer (R3-E)
+### Direct transfer (R3-E, connect-first since 0.4.0)
 
 A six-digit pairing code, the same one the web client and the macOS app mint and
 join, carrying **text or files straight to the other device** — the relay moves
 ciphertext and stores nothing.
+
+**What 0.4.0 changed, and why it had to.** R3-E shipped this screen with a
+Files/Text picker, a batch staged before the code existed, and one of two
+single-lane legacy sessions behind it. In a pairing room iOS announced `text/1`
+only (`LINK_PAIRING_ROOM_SUPPORT` was false off macOS). That was self-consistent
+until macOS and the Web stopped adopting legacy pairing peers
+(`LinkPairingFallbackPolicy.terminateUnsupported`): from then on every current
+Mac and browser refused an iPhone on a code, with copy saying the *iPhone* was
+"running an older version". The owner met exactly that testing iOS `0.3.2`
+against macOS `1.4.0` on 2026-09-17. The decision to make iOS a `link/1` pairing
+client had been recorded on 2026-08-21 and lived only on an unmerged branch.
+
+So the screen now follows the rule macOS, the Web and Android already follow:
+
+- **Connect first.** *Create a code* or *Join a code*, with nothing chosen
+  beforehand. There is no Files/Text question — a code carries no type — and no
+  pre-connect picker. `CrossNetworkPairingStart` mints or adopts the digits and
+  watches their room as a `link/1` client.
+- **One workspace.** A connected peer is drawn by `NearbyLinkWorkspaceView`, the
+  same view the same-network link uses: files, folders and messages in both
+  directions over one verified connection, any number of batches, per-batch
+  accept/decline, the relay-expiry warning and the signalling-lost notice.
+  `DirectFileSessionView` and `DirectTextSessionView` are LAN Transfer's alone.
+- **Its own module.** `TransferModule.crossNetwork` gives the destination its own
+  code, link, capability registry and `TransferPresence`, as macOS has. The two
+  transfer tabs used to share one presence and one pair of legacy models, so an
+  open Nearby link made this screen refuse to create or join a code at all.
+  The link is built by `AppEnvironment.makeCrossNetworkLinkWorkspaceModel` with
+  the macOS answers: it observes no LAN roster, announces link-only, and
+  **refuses** a peer without `link/1` — after 0.4.0 that can only be an internal
+  iOS build at or below 0.3.2, which "needs updating" describes truthfully.
+- **A live deadline.** The waiting code counts down from the shared
+  `PairingCodeExpiry`; past it the card says the code has expired and offers a
+  replacement. The old card printed a wall-clock time and went on looking live.
+  The join link is mode-less (`/cross-network#c=…`), as macOS emits it.
+- **Leaving asks first.** The workspace's Leave and Done confirm before
+  discarding a transcript or a draft — the legacy text session always did, and
+  moving this screen onto a view that did not would have removed the protection.
+- **The assembly is tested as the app builds it.** The module, the start and the
+  foreground coordinator's Cross-network half live in `RelayiumAppKit`
+  (`PairingLinkHandoff.swift`) so `PairingLinkHandoffTests` can build the same
+  graph under `swift test`: a strict Mac accepting this composition's hello and
+  refusing the old one, the spent code retired, a waiting code admitting its own
+  peer although the surface is owned, and backgrounding. The runtime path is
+  `LocalSessionUITests.testCrossNetworkJoinsAMintedCodeAndOpensTheUnifiedWorkspace`,
+  against `pair-link` — the macOS Cross-network composition with the SwiftUI
+  removed.
+
+**Not yet verified for 0.4.0:** no simulator or physical run has been made — the
+development machine's CoreSimulator service was unavailable when this was
+written, so the first evidence is the hosted `ios.yml` run and the owner's own
+device test. The two-device harness's pairing FILE roles skip with a recorded
+reason (the batch is now chosen through the system document browser, which that
+harness cannot drive); its pairing conversation roles were re-authored and have
+not been run.
+
+The paragraphs below are R3-E's own account. Still true: the create/join account
+asymmetry, the one numeric join field, the large-file route, the verification
+preference, app-scoped ownership, resolving the receive folder before a room is
+opened (now on BOTH halves, because a creator can be sent files too) and
+foreground-only behaviour. **Retired on this tab:** "Files or text is one
+choice", `DirectSendSelection` staging before a code, and the "Text" paragraph —
+each now describes LAN Transfer's legacy peers only.
 
 **Positioned, not just shipped.** A direct transfer runs only while both devices
 have Relayium open, which makes it very good for text and small files and less
