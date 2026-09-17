@@ -404,22 +404,26 @@ struct RelayiumApp: App {
         // `UITestMode.makeInboxController()` is nil outside the DEBUG Check now
         // launches — and in Release it is nil by definition — so the product
         // path below is the only one a shipped build can take.
-        let receiving = UITestMode.makeInboxController() ?? AppEnvironment.makeIOSInboxController(
+        //
+        // **The one site in this app that claims a text surface, and the claim
+        // is about a SCREEN.** `inbox.text.v1` says this receiver presents a
+        // text delivery AS text; `DeviceConversationView`'s timeline is what
+        // makes that true, and it is why the token is passed here rather than
+        // defaulted inside the factory. It lived in `InboxProtocol.capabilities`
+        // for one commit and every build that linked the library inherited it —
+        // including this app, which then had no message surface at all, and a
+        // headless acceptance host that presents nothing.
+        // `InboxSurfaceGuardTests` keeps it to one site, so the DEBUG Check now
+        // fixture is HANDED this value rather than making the claim itself.
+        let capabilities = InboxProtocol.announcedCapabilities(presentingText: true)
+        let receiving = UITestMode.makeInboxController(capabilities: capabilities)
+            ?? AppEnvironment.makeIOSInboxController(
             keychain: UITestMode.inboxKeychainConfiguration()
                 ?? AppEnvironment.keychainConfiguration,
             defaults: UITestMode.inboxDefaults() ?? .standard,
             receiveDirectory: UITestMode.inboxReceiveDirectory()
                 ?? { try InboxContainerFolder.directory() },
-            // **The one site in this app that claims a text surface, and the
-            // claim is about a SCREEN.** `inbox.text.v1` says this receiver
-            // presents a text delivery AS text; `DeviceConversationView`'s
-            // timeline is what makes that true, and it is why the token is
-            // passed here rather than defaulted inside the factory. It lived in
-            // `InboxProtocol.capabilities` for one commit and every build that
-            // linked the library inherited it — including this app, which then
-            // had no message surface at all, and a headless acceptance host that
-            // presents nothing. `InboxSurfaceGuardTests` keeps it to one site.
-            capabilities: InboxProtocol.announcedCapabilities(presentingText: true),
+            capabilities: capabilities,
             appVersion: AppEnvironment.appVersion(),
             session: UITestMode.makeAccountTransport() ?? .shared)
         _inbox = StateObject(wrappedValue: receiving)

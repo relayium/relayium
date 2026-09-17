@@ -61,7 +61,7 @@ enum UITestInbox {
 
     /// The mode's own controller, or nil when this launch is not an inbox one.
     @MainActor
-    static func makeController() -> InboxController? {
+    static func makeController(capabilities: [String]) -> InboxController? {
         guard UITestMode.isActive, UITestMode.isSignedIn, showsCheck || showsAsk,
               let account = try? InboxAccountID(accountID),
               let journalRoot = supportDirectory("uitest-inbox-journal"),
@@ -111,7 +111,9 @@ enum UITestInbox {
             // own timer rather than by the press being tested.
             sleeper: InboxTaskSleeper(),
             platform: AppEnvironment.iosInboxPlatform,
-            capabilities: InboxProtocol.announcedCapabilities(presentingText: true),
+            // The app scene's own claim, passed in: this fixture presents the
+            // same timeline, and the claim is made in one place.
+            capabilities: capabilities,
             appVersion: "uitest",  // nonlocalized: a build label, never displayed
             backoff: InboxBackoff(idle: 3600, afterWork: 3600, first: 1, cap: 2,
                                   blocked: 3600)))

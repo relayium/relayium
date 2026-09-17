@@ -503,7 +503,9 @@ enum UITestMode {
     /// from one type — and so the Release answer below can be nil. See
     /// `UITestInbox` for why it replaces the transport and nothing above it.
     @MainActor
-    static func makeInboxController() -> InboxController? { UITestInbox.makeController() }
+    static func makeInboxController(capabilities: [String]) -> InboxController? {
+        UITestInbox.makeController(capabilities: capabilities)
+    }
 
     /// Opens the launch on the stored-link screen, which is no longer a tab.
     ///
@@ -714,7 +716,7 @@ enum UITestMode {
     /// Release: nil, so a shipped launch always assembles the real Device Inbox
     /// against the real keychain, defaults, container folder and transport.
     @MainActor
-    static func makeInboxController() -> InboxController? { nil }
+    static func makeInboxController(capabilities: [String]) -> InboxController? { nil }
 
     /// nil, so a shipped launch always opens on the destination the product
     /// chose, and no argument can start the app on a screen the user did not
