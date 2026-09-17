@@ -230,7 +230,7 @@ cases += 1;
 {
   const mutated = clone();
   const field = mutated.appStoreConnectObservation.observedFields.find((entry) => entry.id === "version");
-  field.observed = `${field.observed} (Not to be confused with 10.3.2 or 0.3.2.1.)`;
+  field.observed = `${field.observed} (Not to be confused with 10.3.2 or ${mutated.record.marketingVersion}.1.)`;
   const { status, out } = runOn(serialize(mutated));
   if (status !== 0) {
     bad("a longer version containing the candidate's digits is not read as the candidate", out.trim().split("\n").slice(0, 4).join(" | "));
