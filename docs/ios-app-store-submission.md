@@ -103,37 +103,65 @@ purchase is accepted, not a conclusion this document may assert on its own.
 | Marketing version in the project source | `0.3.2` |
 | Build in the project source | `8` |
 
-#### In progress — `0.3.2 (8)` for internal TestFlight, not yet delivered
+#### Delivery checkpoint — `0.3.2 (8)` on internal TestFlight, 2026-09-17
 
-As of 2026-09-17 the project source declares `0.3.2 (8)`, carrying the macOS
-1.4.0 aligned surfaces and Device Inbox *Check now*. It is **not** archived,
-uploaded or on TestFlight yet; this section records the plan and the facts it
-rests on, and must be replaced by a delivery checkpoint only once they are
-observed.
+`0.3.2 (8)` carries the macOS 1.4.0 aligned surfaces and Device Inbox *Check
+now*. It was archived, uploaded and accepted into internal TestFlight; the
+read-back below completed at 09:01 UTC. It is an internal TestFlight build
+only: not an App Store submission and not a release. iOS remains non-public.
 
-- **App Store Connect read-back, 2026-09-17T05:31:29Z:** iOS builds `4`, `5`,
-  `6` and `7`, all `VALID`, so `8` is the next free number. The App Store
-  version `0.3.1` is **`WAITING_FOR_REVIEW`** (not *Prepare for Submission*, as
-  the 2026-09-07 checkpoint below last recorded) and selects `0.3.1 (7)`
-  (build `5254bd55-c3cd-49a2-bc30-e461bea28bc0`).
-- **Scope:** internal TestFlight only, the existing group **Relayium
-  Internal**. That submission in review is not touched: no change to its
-  selected build, metadata, screenshots or review state, and no external group
-  or beta review. `0.3.2` is a separate version train, so its TestFlight
-  upload does not depend on the review state of `0.3.1`; whatever that state
-  is when the upload runs, the App Store version's selected build `0.3.1 (7)`
-  must be read before and after and must not change.
-- **Toolchain:** the build machine has only Xcode 27.0 (`27A266a`) with the
-  iOS 27.0 SDK. The candidate script was changed to accept it — see the
-  toolchain bullet under the candidate script's refusals.
-- **Why a new visible version:** `0.3.1` now names the submission in review,
-  so this candidate does not reuse it. Following the owner's 2026-09-17
-  preference for a distinct marketing version on every newly distributed test
-  or public candidate, it is `0.3.2`: a new TestFlight version train, internal
-  only. The build number stays monotonic across the change — `8`, not a restart
-  — because App Store Connect's consumed numbers are what the candidate script
-  attests against. No `0.3.2` App Store version exists on the record, and
-  creating one belongs to a later, separately authorized submission.
+- **Signed source:** `9880648a279aee2f69b61beb8009ff7df586a65e`. That commit is
+  what was signed; later documentation commits, including this one, do not
+  change the bytes and do not move the source SHA.
+- **Toolchain:** archived with Xcode 27.0 (`27A266a`) and the iOS 27.0 SDK —
+  see the toolchain bullet under the candidate script's refusals. The hosted
+  iOS lanes that gated this source select Xcode major 26 (the UI job's log
+  shows Xcode 26.3), so the uploaded binary was not built by the hosted
+  toolchain; that difference is recorded, not hidden.
+- **Artifact:** private workspace directory `test-builds/ios/0.3.2-8-9880648a`,
+  IPA `export/Relayium.ipa`, SHA-256
+  `f1028b8257467682e9fa59454bdd252722e38f7ee6a2ae4fdb3e393ddbbfde84`.
+- **Hosted gate on the exact source:** iOS workflow run `35199174983` on
+  `9880648a`, all four jobs (`ios-build`, `ios-ui-smoke`, `ios-ipad-shell`,
+  `ios-transfer-acceptance`) `success`. The UI counts are recorded in
+  `docs/ios-ui-alignment.md`.
+- **Pre-upload read-back, 2026-09-17T08:21:23Z:** iOS builds `4` through `7`,
+  all `VALID`, so `8` was the next free number; the App Store version `0.3.1`
+  selected `0.3.1 (7)` (build `5254bd55-c3cd-49a2-bc30-e461bea28bc0`). A fresh
+  read of that App Store version before the upload returned
+  `WAITING_FOR_REVIEW` with release type `MANUAL`.
+- **Upload:** `altool` reported `UPLOAD SUCCEEDED`, delivery
+  `95c15b10-d2fa-4ee3-a789-7691af9461fe`, uploaded 2026-09-17T08:56:42Z. Apple
+  processing `VALID`, pre-release version `0.3.2` on platform `IOS`.
+- **Export compliance:** non-exempt encryption **false** on the build.
+- **TestFlight:** internal state `IN_BETA_TESTING`, attached to the existing
+  internal group **Relayium Internal** only. The build is in no external group;
+  its external state is `READY_FOR_BETA_SUBMISSION` and no beta review was
+  requested. Automatic tester notification is **disabled**
+  (`autoNotifyEnabled` false).
+- **Test information:** the `0.3.2` *What to Test* from
+  `docs/app-store-metadata-ios.json` is entered on this build, and `en-US` and
+  `zh-Hans` both read back matching the packet.
+- **Build `8` is now consumed** and is the highest consumed iOS build number.
+  It may not be rebuilt or re-uploaded under any version. The next archive
+  needs a number strictly above `8`, taken from a fresh read-back on the day of
+  that archive rather than from this checkpoint.
+- **What this delivery changed:** it added build `8` to the `0.3.2` TestFlight
+  version train and to the internal group, with the notes and settings above.
+- **What it did not change:** no App Store version was created or submitted;
+  the iOS App Store version remains `0.3.1`. The `0.3.1` version's selected build
+  was read before and after the internal configuration and is unchanged,
+  `0.3.1 (7)` (`5254bd55-c3cd-49a2-bc30-e461bea28bc0`). No App Store metadata,
+  screenshot or review state was edited. `WAITING_FOR_REVIEW` is the review
+  state Apple reported before the upload, not an effect of this delivery.
+- **Why a new visible version:** `0.3.1` names the submission in review, so
+  this candidate did not reuse it. Following the owner's 2026-09-17 preference
+  for a distinct marketing version on every newly distributed test or public
+  candidate, it is `0.3.2`: a new TestFlight version train, internal only. The
+  build number stayed monotonic across the change — `8`, not a restart —
+  because App Store Connect's consumed numbers are what the candidate script
+  attests against. Creating a `0.3.2` App Store version belongs to a later,
+  separately authorized submission.
 - **Metadata packet:** `docs/app-store-metadata-ios.json` is drafted for
   `0.3.2`, with What's New and the TestFlight notes describing the aligned
   cards and status panels and *Check now* in English and Simplified Chinese.
@@ -556,7 +584,9 @@ scripts/ios-app-store-candidate.sh \
 The values above match the candidate this document records — project `0.3.1 (7)`,
 with build `6` the highest this record was known to have accepted at that
 moment. **Build 7 has since been uploaded and consumed**, so these exact values
-would now be refused as a re-upload; the next archive needs a number above `7`.
+would now be refused as a re-upload. Build 8 was consumed on 2026-09-17 as
+`0.3.2 (8)`, so the next archive needs a number above `8` — or above whatever a
+fresh read-back then shows.
 **They are an example of the shape, not a licence to skip the read-back**: the timestamp is refused once it is more than 12 hours
 old, so supply what the record actually shows on the day.
 
@@ -2272,8 +2302,8 @@ own exact-source archive and checksum, which is what
 **not** by itself authorize uploading. The record's iOS version already reads
 `0.3.1`; on 2026-09-07 it selected `0.3.1 (6)` and that internal TestFlight
 delivery left the selection untouched. The 2026-09-17 read-back shows it
-`WAITING_FOR_REVIEW` with `0.3.1 (7)` selected, and the pending `0.3.2 (8)`
-internal delivery above must leave that untouched too. Selecting a different build on the version belongs to whichever App
+`WAITING_FOR_REVIEW` with `0.3.1 (7)` selected, and the `0.3.2 (8)` internal
+delivery above left that selection untouched, read back before and after. Selecting a different build on the version belongs to whichever App
 Store submission is authorized later, with screenshots and copy that match it. Upload
 only the exact candidate whose hosted Go, Swift, iOS Release build and UI gates
 are green. Every hosted iOS job
@@ -2285,7 +2315,7 @@ depends on. The hosted lanes' Xcode 26 pin is separate from the local
 candidate script, which accepts the supported majors `26` and `27`; a candidate
 archived with Xcode 27 is therefore not built by the same toolchain as the
 hosted iOS lane, and that difference is recorded rather than hidden. It covers the toolchain only: it signs, archives and uploads
-nothing, so the outstanding App Store Connect read-back above, an exact-source
+nothing, so a fresh App Store Connect read-back, an exact-source
 archive and TestFlight build availability remain separate gates a green iOS lane
 does not satisfy.
 

@@ -1,6 +1,7 @@
 # iOS alignment with macOS 1.4.0
 
-Status: private engineering candidate, not a release. This records what the
+Status: delivered to internal TestFlight only as `0.3.2 (8)` from `9880648a`
+(see `docs/ios-app-store-submission.md`); not a public release. This records what the
 iOS app changed to read as the same product as macOS 1.4.0, what it
 deliberately did not copy, and how the change is verified.
 
@@ -141,8 +142,23 @@ The root's independent checks then passed on the same owned simulators:
 `root-inline-phone.xcresult` passed 4 of 4 (Light audit, Dark audit, English
 normal capture, AX-XXXL capture), and `root-inline-pad.xcresult` passed the
 AX-XXXL capture, 1 of 1. The logs sit beside those bundles, and the before and
-after phone screenshots at normal and AX-XXXL sizes were inspected. A hosted
-rerun on iOS 18.5 is still pending and required; that runtime is not installed
-here. Local iOS 26.5 results are not
-iOS 18.5 evidence: the earlier conditional passed these same local audits.
-Nothing here claims TestFlight delivery.
+after phone screenshots at normal and AX-XXXL sizes were inspected. Local
+iOS 26.5 results are not iOS 18.5 evidence: the earlier conditional passed
+these same local audits.
+
+The required hosted rerun then passed on the final source. Workflow run
+`35199174983`, commit `9880648a`, completed with all four iOS jobs `success`:
+`ios-build`, `ios-ui-smoke`, `ios-ipad-shell` and `ios-transfer-acceptance`.
+`ios-ui-smoke` ran `RelayiumUITests` on an iPhone 16 Pro, iOS 18.5 simulator,
+with Xcode 26.3, and reported `Executed 71 tests, with 17 tests skipped and 0
+failures (0 unexpected)`, then `TEST SUCCEEDED`: 54 passed, 17 skipped. The 17
+skips are the existing platform- and device-specific cases, not waivers added
+by this work: 6 `AdaptiveShellUITests` that need a regular-width shell (the
+iPad job's lane), 6 `DevicePairUITests` and 2 `DeviceInboxAcceptanceUITests`
+that need a second physical device, and 3 `LocalSessionUITests` that need the
+local acceptance harness. The Light and Dark system accessibility audits, the
+largest-text-size reach test and every `ReferenceLayoutCaptureTests` case,
+including `testTheLargestTextSizeCapturesEverySurface`, passed there. The
+dedicated iPad shell and transfer-acceptance jobs passed; their per-test counts
+are not in the retained UI log, so none are claimed here. Root evidence:
+`root-resume/9880648a-hosted-ui.log` and `root-resume/9880648a-hosted-ios-final.json`.
