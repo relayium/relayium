@@ -3,10 +3,30 @@
 **Status: public preview.** `apps/android/` is the native Android client,
 applicationId `com.relayium.android`, distributed as a direct APK only — no
 Google Play listing, no Play Billing, and no Play Services or GMS dependency of
-any kind. The published build is 0.2.2 (versionCode 5), and it is the source:
+any kind. The published build is 0.2.3 (versionCode 6), and it is the source:
 the update feed, the download surface and this tree describe one build.
 
-### Provenance of the 0.2.2 release — read this before auditing the tag
+### Provenance of the 0.2.3 release — read this before auditing the tag
+
+The same rule as 0.2.2 below, with different commits:
+
+* the artifact `Relayium-0.2.3-6.apk`, SHA-256
+  `9e2695f4f171dec08e4f767ffcb04de8e4db1ac866ce0f87d506217e805ee1a1`,
+  45,844,867 bytes, APK Signature Scheme v2 and v3, signing certificate SHA-256
+  `ac867828a511f15e9214498f234d8898bbd56033342edd7e70d8037c20380aad` — unchanged,
+  so an installed 0.2.2 updates in place (verified on the AOSP 36 emulator from
+  the published 0.2.2 bytes) — was built and signed from
+  **`0b573e4c`** on `release/native-ui-20260917`;
+* the `android-v0.2.3` tag names the later metadata-and-copy commit. Between the
+  two, the only other change is an iOS test-fixture fix with no `apps/android/`
+  change.
+
+Against the published 0.2.2 bytes, 0.2.3 ships the three changes described under
+"Changes released in 0.2.3" below: stored-download recovery with the receiving
+flow fixes, grouped layouts with a tablet reading width, and the macOS 1.4.0
+aligned status head with Device Inbox Check now (`docs/android-ui-alignment.md`).
+
+### Provenance of the 0.2.2 release
 
 The APK and the metadata that describes it were produced at DIFFERENT commits,
 on purpose, and the release tag names the second one:
@@ -67,20 +87,14 @@ the manifest says `available: false`, and every surface — the card, the
 static twins and the app itself — reports "no download is published" rather than
 inventing one.
 
-## Unreleased development changes since 0.2.2
+## Changes released in 0.2.3
 
-**These are in the source tree and in NO published build.** The APK offered at
-`/apps`, the `android-v0.2.2` tag and the update feed all still describe the
-artifact whose provenance is recorded above, byte for byte. Nothing below has
-been built into a signed release, and `versionName`/`versionCode` are unchanged
-at `0.2.2`/`5` — so a tree containing this work and the published 0.2.2 report
-the SAME version while differing in behaviour. Read the version as naming the
-release, never as naming the checkout.
-
-The status of this batch is an **engineering candidate awaiting owner testing**.
-It has passed focused JVM, compile and emulator gates (below); it has not been
-through release packaging, signing or any distribution gate, and none of it is
-claimed as launched.
+**Released in 0.2.3 (versionCode 6).** These were engineering candidates after
+0.2.2 and are now in the published APK. Before signing, the release tree passed
+the full JVM suites (`:protocol:test` and `:app:testDebugUnitTest`), both lints,
+all builds and the update-check acceptance. The signed bytes passed an in-place
+upgrade from the published 0.2.2 APK on the emulator. The macOS 1.4.0 alignment
+and Check now are described in `docs/android-ui-alignment.md`.
 
 ### An incoming stored-file link is no longer refused by the field that takes links
 
@@ -704,11 +718,11 @@ Metadata is derived from the artifact, never written by hand:
 #    root to the working directory, so without it this writes
 #    <repo>/android-release.json instead of web/android-release.json.
 node web/scripts/stage-android-release.mjs --web-root web \
-     --apk Relayium-0.2.2-5.apk \
-     --version 0.2.2 --code 5 --notes-en "…" --notes-zh "…"
+     --apk Relayium-0.2.3-6.apk \
+     --version 0.2.3 --code 6 --notes-en "…" --notes-zh "…"
 # 3. commit the metadata-only diff
 # 4. publish the SAME file, pinned to the commit that carries that metadata
-scripts/publish-android-release.sh --apk Relayium-0.2.2-5.apk --target <metadata-commit>
+scripts/publish-android-release.sh --apk Relayium-0.2.3-6.apk --target <metadata-commit>
 ```
 
 The staging tool reads the package, versionCode, versionName and signing

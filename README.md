@@ -325,7 +325,7 @@ the iOS sections of [`apps/README.md`](apps/README.md) describe a build in
 development, not something a reader can install.
 
 **On Android:** `apps/android/` is a native Kotlin/Compose client, at version
-`0.2.2` (versionCode 5), offered as a **public preview** distributed as a direct
+`0.2.3` (versionCode 6), offered as a **public preview** distributed as a direct
 APK — no Google Play listing and no Google Play Services dependency of any kind.
 It has five destinations — Transfer, Nearby, Inbox, Cloud and Account — and none
 of them opens onto a placeholder:
@@ -338,7 +338,9 @@ of them opens onto a placeholder:
   explicit selection or an accepted prompt.
 * **Inbox** is a real Device Inbox receiver: it enrols a key, holds the
   receiving policy (off / ask / automatic), decrypts deliveries and keeps a
-  durable history with grant-based open, share and export.
+  durable history with grant-based open, share and export. **Check now** asks
+  central for finished deliveries immediately, without interrupting a transfer
+  in progress or answering anything on the user's behalf.
 * **Cloud** sends and opens zero-knowledge `#k=` stored links, with resumable
   uploads for large selections.
 * **Account** covers email/password sign-in, registration with verification,
