@@ -263,7 +263,7 @@ describe("the manifest", () => {
     const { ka, kb } = await session();
     const frames = await new Sender().batchFrames([{ name: "a.bin", size: 1 }], ka, CHROME_MAX_MESSAGE_BYTES);
     expect(frames).toHaveLength(1);
-    expect(new Receiver().feed(frames[0], kb)).resolves.toBeTruthy();
+    await expect(new Receiver().feed(frames[0], kb)).resolves.toBeTruthy();
   });
 
   it("still refuses one that exceeds the protocol maximum, whatever the connection allows", async () => {
