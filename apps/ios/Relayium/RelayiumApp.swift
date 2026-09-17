@@ -400,7 +400,11 @@ struct RelayiumApp: App {
         // an acceptance launch resolving the shipped keychain identity would
         // overwrite the device keys the installed product needs to decrypt
         // deliveries already sealed to it.
-        let receiving = AppEnvironment.makeIOSInboxController(
+        //
+        // `UITestMode.makeInboxController()` is nil outside the DEBUG Check now
+        // launches — and in Release it is nil by definition — so the product
+        // path below is the only one a shipped build can take.
+        let receiving = UITestMode.makeInboxController() ?? AppEnvironment.makeIOSInboxController(
             keychain: UITestMode.inboxKeychainConfiguration()
                 ?? AppEnvironment.keychainConfiguration,
             defaults: UITestMode.inboxDefaults() ?? .standard,

@@ -70,15 +70,11 @@ struct DeviceConversationView: View {
     @State private var deletingConversation: Set<String>?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Metrics.section) {
-                headerSection
-                activeSection
-                composeSection
-                timelineSection
-            }
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
+        DestinationPage {
+            headerSection
+            activeSection
+            composeSection
+            timelineSection
         }
         .navigationTitle(peerName)
         .navigationBarTitleDisplayMode(.inline)
@@ -130,12 +126,14 @@ struct DeviceConversationView: View {
 
     // MARK: - header
 
+    /// Drawn as the page's status head without a title — the navigation bar is
+    /// the device's name — and with the radar quiet once the device has left
+    /// the account, so a removed peer's page does not look like a live route.
+    /// The refusals stay inside it, beside the sentence they qualify.
     private var headerSection: some View {
-        SectionCard {
-            Text(L10n.t(.sendDeviceExplain))
-                .font(.footnote)
-                .foregroundStyle(Palette.supportingLabel)
-                .fixedSize(horizontal: false, vertical: true)
+        StatusHero(symbol: "laptopcomputer", // nonlocalized: SF Symbol name
+                   detail: L10n.t(.sendDeviceExplain),
+                   isActive: !inbox.isRemoved(peerID)) {
             if let refusal = deliveries.refusal {
                 InlineMessage(.warning, InboxSendPresentation.text(for: refusal))
                     .accessibilityIdentifier("inbox-send-refusal")

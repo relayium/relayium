@@ -165,30 +165,24 @@ struct NearbyView: View {
             // roster of unknown length, a staging section and a session. At the
             // largest accessibility content sizes anything not in a `ScrollView`
             // puts its own action off the bottom with no way to reach it.
-            ScrollView {
-                VStack(alignment: .leading, spacing: Metrics.section) {
-                    if let owner = presence.owner, owner != .nearby {
-                        busyElsewhere(owner)
-                    } else {
-                        switch pane {
-                        case .link:
-                            // The interruption notice belongs above every pane:
-                            // the app can be backgrounded out of a link exactly
-                            // as it can out of a legacy session, and the notice
-                            // is readable only after it is back on screen.
-                            if let notice = foreground.interruption { interruption(notice) }
-                            NearbyLinkWorkspaceView(link: link, selection: linkSelection)
-                        case .legacySession:
-                            session
-                        case .connect:
-                            discoverySection
-                        }
+            DestinationPage {
+                if let owner = presence.owner, owner != .nearby {
+                    busyElsewhere(owner)
+                } else {
+                    switch pane {
+                    case .link:
+                        // The interruption notice belongs above every pane:
+                        // the app can be backgrounded out of a link exactly
+                        // as it can out of a legacy session, and the notice
+                        // is readable only after it is back on screen.
+                        if let notice = foreground.interruption { interruption(notice) }
+                        NearbyLinkWorkspaceView(link: link, selection: linkSelection)
+                    case .legacySession:
+                        session
+                    case .connect:
+                        discoverySection
                     }
                 }
-                .padding()
-                // Leading, not centred: at the largest Dynamic Type sizes a
-                // centred ragged column is unreadable.
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .navigationTitle(L10n.t(.navNearby))
         }
@@ -396,9 +390,16 @@ struct NearbyView: View {
     /// one question this card answers — is this device listening right now — is
     /// now the thing the eye lands on and the thing VoiceOver reads on entering
     /// the group, rather than a semibold line among five other lines.
+    ///
+    /// Drawn as the status head — the macOS 1.4.0 LAN Transfer hero, radar lit
+    /// while listening — but kept BELOW the send task. On the Mac the receiver
+    /// leads because the window is a place you leave open; on a phone this tab is
+    /// opened to send, and the task-first order is the accepted decision.
     @ViewBuilder
     private var receiving: some View {
-        SectionCard(NearbyStatusPresentation.text(for: receive.state)) {
+        StatusHero(symbol: "dot.radiowaves.left.and.right", // nonlocalized: SF Symbol name
+                   title: NearbyStatusPresentation.text(for: receive.state),
+                   isActive: isListening) {
             receivingBody
         }
     }

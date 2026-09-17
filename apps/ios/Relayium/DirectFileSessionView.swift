@@ -27,7 +27,7 @@ struct DirectFileSessionView: View {
             fileList
 
         case .joining, .connecting:
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Metrics.snug) {
                 // Labelled, never a bare spinner: on this screen the spinner is
                 // the only thing on it, and a bare one reads as nothing at all
                 // to VoiceOver.
@@ -53,7 +53,7 @@ struct DirectFileSessionView: View {
     /// the model goes straight from `connecting` to `transferring`, so this is
     /// never built: the gate is a model state, not a hidden control here.
     private func verifying(_ sas: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.snug) {
             Text(L10n.t(.sessionCheckMatches)).font(.headline)
             PairingCodeText(code: sas, style: .verification)
             Text(L10n.t(.sessionCheckMatchesBody))
@@ -77,7 +77,7 @@ struct DirectFileSessionView: View {
     }
 
     private func transferring(done: Int, total: Int) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.snug) {
             // Named as well as measured: two labelled progress views can be on
             // screen in this app at once, and "72%" on its own says nothing
             // about which transfer it belongs to.
@@ -101,7 +101,7 @@ struct DirectFileSessionView: View {
     }
 
     private var completed: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
             Label {
                 Text(FileTransferCompletionPresentation.title(received: model.received != nil))
             } icon: {
@@ -145,9 +145,9 @@ struct DirectFileSessionView: View {
     @ViewBuilder
     private var fileList: some View {
         if !model.sessionFiles.isEmpty {
-            LazyVStack(alignment: .leading, spacing: 10) {
+            LazyVStack(alignment: .leading, spacing: Metrics.tight) {
                 ForEach(Array(model.sessionFiles.enumerated()), id: \.offset) { _, file in
-                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    HStack(alignment: .firstTextBaseline, spacing: Metrics.snug) {
                         Text(FileIdentityPresentation.name(for: file))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .fixedSize(horizontal: false, vertical: true)
@@ -159,8 +159,10 @@ struct DirectFileSessionView: View {
                     .accessibilityElement(children: .combine)
                 }
             }
-            .padding(12)
-            .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 10))
+            .padding(Metrics.snug)
+            .background(Palette.chip,
+                        in: RoundedRectangle(cornerRadius: Metrics.corner,
+                                             style: .continuous))
             .accessibilityElement(children: .contain)
         }
     }

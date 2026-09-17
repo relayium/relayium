@@ -56,21 +56,14 @@ struct ReceiveView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Metrics.section) {
-                    if !model.isComplete {
-                        linkField
-                    }
-                    if let destinationError {
-                        failure(destinationError)
-                    }
-                    stateSection
+            DestinationPage {
+                if !model.isComplete {
+                    linkField
                 }
-                .padding()
-                // Leading, not centred: with the largest Dynamic Type sizes the
-                // column becomes a single ragged edge, and a centred one is
-                // unreadable.
-                .frame(maxWidth: .infinity, alignment: .leading)
+                if let destinationError {
+                    failure(destinationError)
+                }
+                stateSection
             }
             // The same rule as SendView: the sheet is titled with the name the
             // shell uses for this surface (`RootView.title(for:)` answers

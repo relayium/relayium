@@ -127,8 +127,10 @@ struct RootView: View {
             .overlay {
                 if signOut.isSigningOut {
                     ProgressView { Text(L10n.t(.accountSigningOut)) }
-                        .padding(24)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        .padding(Metrics.section)
+                        .background(.regularMaterial,
+                                    in: RoundedRectangle(cornerRadius: Metrics.corner,
+                                                         style: .continuous))
                 }
             }
             // The one non-browseable surface, over whichever browseable one the
@@ -429,7 +431,7 @@ struct RootView: View {
     private func title(for surface: IOSSurface) -> String {
         switch surface {
         case .lanTransfer:          return L10n.t(.navNearby)
-        case .crossNetworkTransfer: return L10n.t(.tabDirect)
+        case .crossNetworkTransfer: return L10n.t(.navCrossNetworkShort)
         case .storedSend:           return L10n.t(.tabSend)
         case .deviceInbox:          return L10n.t(.tabDeviceInbox)
         case .account:              return L10n.t(.tabAccount)

@@ -421,7 +421,7 @@ private struct LinkConversationTranscript: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(Metrics.tight)
-                    .background(.quaternary.opacity(0.35),
+                    .background(Palette.chip,
                                 in: RoundedRectangle(cornerRadius: Metrics.corner,
                                                      style: .continuous))
                     // One element per message, so VoiceOver reads "Sent, <body>"

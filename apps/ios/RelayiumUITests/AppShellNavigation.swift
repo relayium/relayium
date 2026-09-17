@@ -54,7 +54,7 @@ enum Shell {
     }
 
     static let lanTransfer = Surface(id: "lanTransfer", title: "Nearby")
-    static let crossNetworkTransfer = Surface(id: "crossNetworkTransfer", title: "Pairing")
+    static let crossNetworkTransfer = Surface(id: "crossNetworkTransfer", title: "Cross-network")
     static let storedSend = Surface(id: "storedSend", title: "Share a link")
     static let deviceInbox = Surface(id: "deviceInbox", title: "Device Inbox")
     static let account = Surface(id: "account", title: "Account")

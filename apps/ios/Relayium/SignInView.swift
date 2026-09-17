@@ -75,22 +75,14 @@ struct SignInView: View {
         // through the system fill rather than through two chosen opacities.
         SectionCard {
             HStack(alignment: .top, spacing: Metrics.inner) {
-                Image(systemName: mode == .signIn
-                      ? "person.crop.circle"
-                      : "person.crop.circle.badge.plus")
-                    .font(.title2)
-                    // `actionLabel`, not `action`: this is the accent as a
-                    // FOREGROUND on `actionSurface`, the same pair the nearby
-                    // roster's selected glyph measured 2.70:1 at.
-                    .foregroundStyle(Palette.actionLabel)
-                    .frame(width: Metrics.hitTarget, height: Metrics.hitTarget)
-                    .background(Palette.actionSurface, in: Circle())
-                    // Capped, for the same reason the inline message's symbol
-                    // is: it is a landmark, and left to scale it takes a third
-                    // of the width from the sentence beside it at the
-                    // accessibility sizes.
-                    .dynamicTypeSize(...DynamicTypeSize.xLarge)
-                    .accessibilityHidden(true)
+                // The macOS 1.4.0 welcome mark: the brand radar, lit, rather
+                // than a tinted glyph of this form's own — so the first screen
+                // a person meets carries the same mark as every status head.
+                // White on the accent fill, the measured 5.6:1 fill role; the
+                // glyph is capped inside `BrandRadar` so it never crowds the
+                // sentence beside it at the accessibility sizes.
+                BrandRadar(symbol: mode == .signIn ? "person.fill" : "person.badge.plus",
+                           isActive: true)
                 VStack(alignment: .leading, spacing: Metrics.hairline) {
                     Text(L10n.t(mode.titleKey))
                         .font(.title2.weight(.semibold))

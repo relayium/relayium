@@ -55,28 +55,22 @@ struct SendView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Metrics.section) {
-                    // ABOVE the account gate, and outside it.
-                    //
-                    // The share extension can be used from any app at any time,
-                    // including on a device nobody has signed in on, and it
-                    // tells the user their files are waiting in Relayium. A
-                    // draft rendered inside the `.ready` arm would make that
-                    // sentence false for exactly the person most likely to be
-                    // confused by it: they would open Relayium, see a sign-in
-                    // form, and have no way to know their files arrived at all.
-                    //
-                    // What signing in changes is whether the draft can be USED,
-                    // not whether it exists — and `SharedDraftGate` says which,
-                    // in words, right next to it.
-                    sharedDrafts
-                    availability
-                }
-                .padding()
-                // Leading, not centred: at the largest Dynamic Type sizes a
-                // centred ragged column is unreadable.
-                .frame(maxWidth: .infinity, alignment: .leading)
+            DestinationPage {
+                // ABOVE the account gate, and outside it.
+                //
+                // The share extension can be used from any app at any time,
+                // including on a device nobody has signed in on, and it
+                // tells the user their files are waiting in Relayium. A
+                // draft rendered inside the `.ready` arm would make that
+                // sentence false for exactly the person most likely to be
+                // confused by it: they would open Relayium, see a sign-in
+                // form, and have no way to know their files arrived at all.
+                //
+                // What signing in changes is whether the draft can be USED,
+                // not whether it exists — and `SharedDraftGate` says which,
+                // in words, right next to it.
+                sharedDrafts
+                availability
             }
             // The DESTINATION's name, not the action inside it. `upload.heading`
             // ("Send files") titles the card below and the progress line, and
@@ -105,10 +99,10 @@ struct SendView: View {
     @ViewBuilder
     private var sharedDrafts: some View {
         if !selection.sharedDrafts.isEmpty {
-            // The shared card role rather than the hand-rolled
-            // `.quaternary.opacity(0.35)` this and the delivery list each had
-            // their own copy of — two fills that were meant to be the same one
-            // and were only equal by coincidence.
+            // The shared card role rather than the hand-rolled quaternary fill
+            // this and the delivery list each had their own copy of — two fills
+            // that were meant to be the same one and were only equal by
+            // coincidence.
             SectionCard(L10n.t(.shareWaitingTitle)) {
                 ForEach(selection.sharedDrafts) { draft in
                     sharedDraftCard(draft)
@@ -180,6 +174,7 @@ struct SendView: View {
             ProgressView { Text(L10n.t(.accountRestoring)) }
 
         case .needsAccount:
+            route
             accountPanel(title: L10n.t(.sendAccountTitle),
                          message: L10n.t(.sendAccountBody))
 
@@ -218,16 +213,31 @@ struct SendView: View {
     /// here, and its absence is not a transfer left unwatched: it renders in the
     /// Device Inbox, which is both where those sends now start and where the
     /// conversation they belong to is. A device delivery has one place, not two.
+    ///
+    /// **The route sits above the card, on the page** — the macOS 1.4.0 Share a
+    /// link layout — so the card holds only the task, and a signed-out reader
+    /// sees the same route above the account card rather than a different page.
     @ViewBuilder
     private var ready: some View {
+        route
         SectionCard {
+            flow
+        }
+    }
+
+    /// Where the bytes go and what this destination is for, stated once above
+    /// whichever card the account state draws. No wash and no card: it is not a
+    /// status of this device, so it does not take the status head's surface.
+    private var route: some View {
+        VStack(alignment: .leading, spacing: Metrics.snug) {
             PathRail(stops: PathRailPresentation.iosStoredSend(upload.state))
             Text(L10n.t(.navStoredSendSubtitle))
                 .font(.footnote)
                 .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
-            flow
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Metrics.hairline)
     }
 
     /// In a card, and its heading is the card's: this is the whole screen for a

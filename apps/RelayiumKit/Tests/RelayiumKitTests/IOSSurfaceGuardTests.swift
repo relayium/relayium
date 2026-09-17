@@ -3568,7 +3568,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// take the anonymous receive tab with it.
     func testTheShellGainedTheDirectTabAndStillReadsNoSessionState() throws {
         let root = try XCTUnwrap(try sources().first { $0.name == "RootView.swift" })
-        XCTAssertTrue(root.text.contains("L10n.t(.tabDirect)"))
+        // Named after what it does — reach a device on another network — rather
+        // than after the pairing mechanism. `tab.direct` ("Pairing") hid the
+        // task on the phone's tab bar; the shell now uses the macOS sidebar's
+        // own short name, "Cross-network" / "跨网络", an existing key in both
+        // maintained languages.
+        XCTAssertTrue(root.text.contains("L10n.t(.navCrossNetworkShort)"))
+        XCTAssertFalse(root.text.contains("L10n.t(.tabDirect)"),
+                       "the cross-network tab is named after its mechanism again")
         // The tag is `surface.route` now, not a written-out destination: the two
         // shells enumerate one `IOSSurface.browseable` list, so the mapping from
         // a row to a destination is stated once on the enum rather than five
@@ -4810,16 +4817,23 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(textClaim.lowerBound < textTask.lowerBound)
     }
 
-    /// The Nearby tab scrolls, like every other screen in this app.
+    /// The Nearby tab scrolls, like every other screen in this app — and now for
+    /// the same reason rather than by its own copy of the same four lines.
     ///
     /// It is the longest one: an explanation, a status card, a roster of
     /// unknown length, a staging section and a session. At the largest
     /// accessibility content sizes anything not in a `ScrollView` puts its own
-    /// action off the bottom of the screen with no way to reach it.
+    /// action off the bottom of the screen with no way to reach it. The scroller
+    /// is `Components/DestinationPage.swift`, so this asserts both halves: the
+    /// screen reaches for the scaffold, and the scaffold is still a scroller.
     func testTheNearbyTabScrollsAndStatesEveryResidencyState() throws {
         let view = try nearby()
-        XCTAssertTrue(view.text.contains("ScrollView"),
-                      "the longest screen in the app cannot be scrolled")
+        XCTAssertTrue(view.text.contains("DestinationPage {"),
+                      "the longest screen in the app is not on the shared page scaffold")
+        let page = try XCTUnwrap(
+            try sources().first { $0.name == "Components/DestinationPage.swift" }?.text)
+        XCTAssertTrue(page.contains("ScrollView"),
+                      "the page scaffold stopped scrolling, so no screen in the app does")
         XCTAssertTrue(view.text.contains("NearbyStatusPresentation.text(for: receive.state)"),
                       "the residency state must come from the shared, translated mapping")
         XCTAssertFalse(view.text.contains("ProgressView()\n"),
@@ -4905,7 +4919,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let all = try sources()
         for component in ["Components/DesignTokens.swift", "Components/SectionCard.swift",
                           "Components/InlineMessage.swift", "Components/EmptyStateView.swift",
-                          "Components/PathRail.swift"] {
+                          "Components/PathRail.swift", "Components/CardRows.swift",
+                          "Components/DestinationPage.swift"] {
             XCTAssertTrue(all.contains { $0.name == component },
                           "the shared layer lost \(component)")
         }
@@ -5120,9 +5135,12 @@ final class IOSSurfaceGuardTests: XCTestCase {
 
         // The receiving card's TITLE is the status, which is the hierarchy
         // change: one question, answered where the eye and VoiceOver both land
-        // first. It must still come from the shared mapping.
+        // first. It must still come from the shared mapping. Since the macOS
+        // 1.4.0 alignment the receiver is drawn as the status head, so the
+        // status is the hero's title rather than a card's.
         XCTAssertTrue(view.text.contains(
-            "SectionCard(NearbyStatusPresentation.text(for: receive.state))"),
+            "title: NearbyStatusPresentation.text(for: receive.state)")
+            && view.text.contains("StatusHero(symbol: \"dot.radiowaves.left.and.right\""),
             "the receiving card no longer leads with the state it is reporting")
         XCTAssertFalse(view.text.contains("Divider()"),
                        "the tab went back to separating groups with rules")
@@ -5769,10 +5787,13 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // Identity, devices, stored files and deletion are titled with the fact
         // each card is about; the two untitled ones would only repeat a heading
         // that is already inside them or the navigation bar.
-        XCTAssertTrue(summary.contains("SectionCard(profileTitle)"),
+        XCTAssertTrue(summary.contains("SectionCard(profileTitle,"),
                       "the identity card is not titled with whose account this is")
-        for titled in ["SectionCard(L10n.t(.accountDevicesHeading))",
-                       "SectionCard(L10n.t(.accountFilesHeading))",
+        // The first two are row groups now, so their titles are captions above
+        // the card and each carries the sentence about the list as the group's
+        // footnote — hence the open parenthesis rather than a closed call.
+        for titled in ["SectionCard(L10n.t(.accountDevicesHeading),",
+                       "SectionCard(L10n.t(.accountFilesHeading),",
                        "SectionCard(L10n.t(.accountDeleteAccountHeading))"] {
             XCTAssertTrue(summary.contains(titled), "the account surface lost \(titled)")
         }
