@@ -18,17 +18,18 @@ android {
         applicationId = "com.relayium.android"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        // 0.2.2 (5), the relay-pool compatibility fix over the 0.2.1 UI and
-        // motion polish release: a room whose TURN credential is issued only in
-        // the `relays` pool is no longer read as STUN-only, so this client sees
-        // the same relay its Apple and Web peers already fold in (`IceConfig`).
-        // No UI or capability change. `versionCode` is the only ordering the
+        // 0.2.3 (6): the macOS 1.4.0 aligned layout with a Device Inbox status
+        // head and Check now, grouped layouts with a tablet reading width,
+        // stored downloads that resume a dropped connection, the screen kept
+        // awake only while a transfer is actually running, and stored-file
+        // links accepted by the link field. 0.2.2 (5) was the relay-pool
+        // compatibility fix. `versionCode` is the only ordering the
         // update check ever uses — `versionName` is a display string and
         // "0.1.10" sorts before "0.1.9" as text — so it must increase
         // monotonically for every published APK, forever.
         // `scripts/test/android-policy-test.mjs` asserts the two move together.
-        versionCode = 5
-        versionName = "0.2.2"
+        versionCode = 6
+        versionName = "0.2.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

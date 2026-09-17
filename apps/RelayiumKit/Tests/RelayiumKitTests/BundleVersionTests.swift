@@ -154,6 +154,13 @@ final class BundleVersionTests: XCTestCase {
         // with — the iOS App Store version record still reads `0.3.1` in
         // `PREPARE_FOR_SUBMISSION`.
         try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.3.1", occurrences: 4)
-        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "7", occurrences: 4)
+        //
+        // 8 is the internal TestFlight build carrying the macOS 1.4.0 aligned
+        // UI and Device Inbox Check now. Read back from App Store Connect on
+        // 2026-09-17 before it was taken: builds 4–7 consumed, all VALID. The
+        // same read showed the 0.3.1 App Store version WAITING_FOR_REVIEW, so
+        // the "never submitted" sentence above describes an earlier reading;
+        // a TestFlight build does not change that submission's selected build.
+        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "8", occurrences: 4)
     }
 }
