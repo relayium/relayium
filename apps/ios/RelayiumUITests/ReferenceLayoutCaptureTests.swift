@@ -458,8 +458,8 @@ final class ReferenceLayoutCaptureTests: XCTestCase {
             switch (surface.id, self) {
             case ("lanTransfer", .english):                  return "Nearby"
             case ("lanTransfer", .simplifiedChinese):        return "附近设备"
-            case ("crossNetworkTransfer", .english):         return "Pairing"
-            case ("crossNetworkTransfer", .simplifiedChinese): return "配对"
+            case ("crossNetworkTransfer", .english):         return "Cross-network"
+            case ("crossNetworkTransfer", .simplifiedChinese): return "跨网络"
             case ("storedSend", .english):                   return "Share a link"
             case ("storedSend", .simplifiedChinese):         return "分享链接"
             case ("deviceInbox", .english):                  return "Device Inbox"

@@ -497,6 +497,14 @@ enum UITestMode {
         }
     }
 
+    /// The Device Inbox Check now launches: a whole controller built on the
+    /// launch-isolated stores and a stand-in transport, or nil for every other
+    /// launch. Kept as a call here so every acceptance substitution is reachable
+    /// from one type — and so the Release answer below can be nil. See
+    /// `UITestInbox` for why it replaces the transport and nothing above it.
+    @MainActor
+    static func makeInboxController() -> InboxController? { UITestInbox.makeController() }
+
     /// Opens the launch on the stored-link screen, which is no longer a tab.
     ///
     /// **Why acceptance needs a seam here at all.** Until 0.3.0 `storedReceive`
@@ -703,6 +711,10 @@ enum UITestMode {
     /// nil, so a shipped launch always receives into the one folder it publishes
     /// to the Files app, and no argument can redirect a delivery.
     static func inboxReceiveDirectory() -> (@Sendable () throws -> URL)? { nil }
+    /// Release: nil, so a shipped launch always assembles the real Device Inbox
+    /// against the real keychain, defaults, container folder and transport.
+    @MainActor
+    static func makeInboxController() -> InboxController? { nil }
 
     /// nil, so a shipped launch always opens on the destination the product
     /// chose, and no argument can start the app on a screen the user did not

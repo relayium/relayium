@@ -182,70 +182,124 @@ struct DeviceInboxView: View {
     // MARK: - status, and the one limitation that defines this platform
 
     private var statusSection: some View {
-        // A row group, because these are separate facts about one question
-        // rather than one paragraph: the route, the state and its recovery, the
-        // limit, and where the bytes land.
+        // **The status head: the macOS 1.4.0 hero, on a phone.** One question —
+        // can this device receive right now — answered in the title, with the
+        // controls that change the answer directly under it, and the facts a
+        // person needs before walking away from the device in the open below.
         //
         // Only the mechanism folds. `inboxIOSExplain` is how this works and is
-        // read once; the foreground-only limit, the folder promise and any store
-        // failure are what a person needs before walking away from the device,
-        // so none of them is behind a tap.
-        SectionCard(rows: true) {
-            CardRows {
-                // The route, stated as a shape rather than as a claim about any
-                // one delivery — and ending at THIS device, not at a Mac.
-                CardBlockRow {
-                    PathRail(stops: PathRailPresentation.iosDeviceInbox())
-                }
+        // read once, behind the hero's ⓘ; the foreground-only limit, the folder
+        // promise and any store failure are what a person needs before walking
+        // away from the device, so none of them is behind a tap.
+        StatusHero(symbol: "tray.and.arrow.down", // nonlocalized: SF Symbol name
+                   title: IOSInboxCopy.status(for: inbox.state),
+                   titleIdentifier: "inbox-status",
+                   explanation: L10n.t(.inboxIOSExplain),
+                   isActive: isReceiving) {
+            // The route, stated as a shape rather than as a claim about any
+            // one delivery — and ending at THIS device, not at a Mac.
+            PathRail(stops: PathRailPresentation.iosDeviceInbox())
 
-                CardBlockRow(explanation: L10n.t(.inboxIOSExplain)) {
-                    VStack(alignment: .leading, spacing: Metrics.tight) {
-                        Text(IOSInboxCopy.status(for: inbox.state))
-                            .font(.callout)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("inbox-status")
-
-                        // Present only where there is something to do.
-                        // `IOSInboxCopy` guarantees this can never be Choose
-                        // Folder — the control this platform cannot draw — which
-                        // is the whole reason it overrides the shared rule
-                        // rather than reusing it.
-                        if let recovery = IOSInboxCopy.recovery(for: inbox.state) {
-                            Button(IOSInboxCopy.label(for: recovery)) { perform(recovery) }
-                                .borderedAction()
-                                .controlSize(.large)
-                                .accessibilityIdentifier("inbox-recovery")
-                        }
-                    }
+            // Present only where there is something to do. `IOSInboxCopy`
+            // guarantees this can never be Choose Folder — the control this
+            // platform cannot draw — which is the whole reason it overrides the
+            // shared rule rather than reusing it.
+            if let recovery = IOSInboxCopy.recovery(for: inbox.state) {
+                Button { perform(recovery) } label: {
+                    Text(IOSInboxCopy.label(for: recovery)).frame(maxWidth: .infinity)
                 }
-
-                // **The sentence that makes this screen honest on a phone**, and
-                // it is rendered in every state rather than only when something
-                // has gone wrong: "Ready to receive" is true and still
-                // incomplete, and the missing half is what a user needs before
-                // they walk away from the device expecting a file to arrive.
-                CardBlockRow {
-                    InlineMessage(.info, L10n.t(.inboxIOSForegroundOnly))
-                        .accessibilityIdentifier("inbox-foreground-only")
-                }
-
-                // Where the bytes go, named as the Files-app route the user can
-                // actually walk — the same route a stored-link receive names,
-                // built from the same two constants.
-                CardBlockRow {
-                    Text(IOSInboxCopy.folderExplanation())
-                        .font(.footnote)
-                        .foregroundStyle(Palette.supportingLabel)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("inbox-folder")
-                }
-
-                if inbox.conversationStoreIssue {
-                    CardBlockRow {
-                        InlineMessage(.warning, L10n.t(.inboxConversationStoreIssue))
-                    }
-                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .accessibilityIdentifier("inbox-recovery")
             }
+
+            checkNow
+
+            // **The sentence that makes this screen honest on a phone**, and it
+            // is rendered in every state rather than only when something has
+            // gone wrong: "Ready to receive" is true and still incomplete, and
+            // the missing half is what a user needs before they walk away from
+            // the device expecting a file to arrive.
+            InlineMessage(.info, L10n.t(.inboxIOSForegroundOnly))
+                .accessibilityIdentifier("inbox-foreground-only")
+
+            // Where the bytes go, named as the Files-app route the user can
+            // actually walk — the same route a stored-link receive names, built
+            // from the same two constants.
+            Text(IOSInboxCopy.folderExplanation())
+                .font(.footnote)
+                .foregroundStyle(Palette.supportingLabel)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("inbox-folder")
+
+            if inbox.conversationStoreIssue {
+                InlineMessage(.warning, L10n.t(.inboxConversationStoreIssue))
+            }
+        }
+    }
+
+    /// **Check now: the running receiver asks central again, and says what it
+    /// found.**
+    ///
+    /// The macOS control, with the same four rules, all of them the shared
+    /// controller's rather than this view's:
+    ///
+    ///  * **It wakes the loop that is already running** — `inbox.checkNow()`,
+    ///    never `inbox.retryNow()`. A restart cancels the generation, and with it
+    ///    a delivery mid-download; a person asking whether anything else has
+    ///    arrived must never interrupt the one that is arriving.
+    ///  * **Offered only where it can do something**: `inbox.canCheckNow` is
+    ///    every gate the loop itself applies — an account, the foreground, no
+    ///    pause, a policy that is not Off, a folder — and
+    ///    `InboxManualCheckPresentation.offersCheck` keeps it out of the states
+    ///    that already carry their own recovery. Under Ask it checks and answers
+    ///    nothing on the user's behalf: the held deliveries keep their own
+    ///    Receive and Decline in `askSection`.
+    ///  * **One pass per request.** Kept on screen, disabled and saying
+    ///    Checking…, until the pass that answers it returns; the controller also
+    ///    coalesces, so neither a double tap nor a tap during a delivery starts a
+    ///    second pass.
+    ///  * **The answer never claims an arrival.** "Nothing new", "Check
+    ///    complete" or "didn't finish" — what arrived is the status line's, from
+    ///    a durable receipt.
+    ///
+    /// No state of its own: the flag and the answer are `inbox.manualCheck`, so a
+    /// sign-out or an account switch withdraws both with the generation.
+    ///
+    /// Secondary, not prominent: the hero's one prominent control is the
+    /// recovery when there is one, and a healthy inbox checks on its own.
+    @ViewBuilder
+    private var checkNow: some View {
+        if inbox.canCheckNow,
+           inbox.manualCheck == .checking
+            || InboxManualCheckPresentation.offersCheck(in: inbox.state) {
+            Button { inbox.checkNow() } label: {
+                Text(InboxManualCheckPresentation
+                    .label(isChecking: inbox.manualCheck == .checking))
+                    .frame(maxWidth: .infinity)
+            }
+            .borderedAction()
+            .controlSize(.large)
+            .disabled(inbox.manualCheck == .checking)
+            .accessibilityIdentifier("inbox-check-now")
+        }
+        // The answer, beside the button that asked.
+        if let answer = InboxManualCheckPresentation.feedback(for: inbox.manualCheck) {
+            InlineMessage(inbox.manualCheck == .failed ? .warning : .info, answer)
+                .accessibilityIdentifier("inbox-check-result")
+        }
+    }
+
+    /// Whether the radar is lit: the receiver is running and can take a
+    /// delivery. Words carry the state first — the title is the status sentence
+    /// — so this only decides the core's fill, never what anybody reads.
+    private var isReceiving: Bool {
+        switch inbox.state {
+        case .ready, .asking, .working, .saved, .savedMessage:
+            return true
+        case .signedOut, .loading, .disabled, .folderMissing, .paused,
+             .attention, .offline, .failed:
+            return false
         }
     }
 

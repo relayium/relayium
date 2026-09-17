@@ -174,6 +174,7 @@ struct SendView: View {
             ProgressView { Text(L10n.t(.accountRestoring)) }
 
         case .needsAccount:
+            route
             accountPanel(title: L10n.t(.sendAccountTitle),
                          message: L10n.t(.sendAccountBody))
 
@@ -212,16 +213,31 @@ struct SendView: View {
     /// here, and its absence is not a transfer left unwatched: it renders in the
     /// Device Inbox, which is both where those sends now start and where the
     /// conversation they belong to is. A device delivery has one place, not two.
+    ///
+    /// **The route sits above the card, on the page** — the macOS 1.4.0 Share a
+    /// link layout — so the card holds only the task, and a signed-out reader
+    /// sees the same route above the account card rather than a different page.
     @ViewBuilder
     private var ready: some View {
+        route
         SectionCard {
+            flow
+        }
+    }
+
+    /// Where the bytes go and what this destination is for, stated once above
+    /// whichever card the account state draws. No wash and no card: it is not a
+    /// status of this device, so it does not take the status head's surface.
+    private var route: some View {
+        VStack(alignment: .leading, spacing: Metrics.snug) {
             PathRail(stops: PathRailPresentation.iosStoredSend(upload.state))
             Text(L10n.t(.navStoredSendSubtitle))
                 .font(.footnote)
                 .foregroundStyle(Palette.supportingLabel)
                 .fixedSize(horizontal: false, vertical: true)
-            flow
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Metrics.hairline)
     }
 
     /// In a card, and its heading is the card's: this is the whole screen for a

@@ -180,6 +180,43 @@ final class IOSSupportingTextGuardTests: XCTestCase {
         }
     }
 
+    /// **The macOS-aligned surfaces are backgrounds this prose sits on too.**
+    ///
+    /// The page, card and status-head sets in `Assets.xcassets` replaced the
+    /// system backgrounds measured above on every destination, so each prose role
+    /// is measured on each of them in the SAME appearance it is drawn in — Light
+    /// on Light, Dark + Increase Contrast on Dark + Increase Contrast — including
+    /// the violet end of the hero wash, which is the tinted surface most likely
+    /// to be lightened past the line, and the quaternary inset over the new card.
+    /// Both hero stops are opaque, so the gradient between them is bounded by
+    /// its ends. A surface set without all four appearances fails in `role(_:)`.
+    func testTheMacAlignedSurfacesKeepEveryProseRoleReadable() throws {
+        let surfaces = try ["RelayiumPage", "RelayiumCard", "RelayiumHeroTint", "RelayiumHeroBase"]
+            .map { try role($0) }
+        let card = try role("RelayiumCard")
+        for prose in try roles() {
+            let pairs: [(String, KeyPath<Role, RGB>, RGB, Double)] = [
+                ("Light", \.light, RGB(hex: 0x3C3C43), 0.18),
+                ("Light + Increase Contrast", \.lightHigh, RGB(hex: 0x3C3C43), 0.18),
+                ("Dark", \.dark, RGB(hex: 0xEBEBF5), 0.16),
+                ("Dark + Increase Contrast", \.darkHigh, RGB(hex: 0xEBEBF5), 0.16),
+            ]
+            for (label, appearance, quaternary, alpha) in pairs {
+                var backgrounds = surfaces.map { ($0.name, $0[keyPath: appearance]) }
+                backgrounds.append((".quaternary.opacity(0.35) over RelayiumCard",
+                                    over(quaternary, alpha: alpha * 0.35, card[keyPath: appearance])))
+                for (surface, background) in backgrounds {
+                    let measured = ratio(prose[keyPath: appearance], background)
+                    XCTAssertGreaterThanOrEqual(
+                        measured, Self.minimum,
+                        "\(prose.name) \(label) \(prose[keyPath: appearance]) measures "
+                        + String(format: "%.3f", measured)
+                        + ":1 on \(surface) \(background)")
+                }
+            }
+        }
+    }
+
     /// **Increase Contrast must actually increase contrast.**
     ///
     /// This is the guard against the failure mode that has no symptom. A named
@@ -430,7 +467,12 @@ final class IOSSupportingTextGuardTests: XCTestCase {
         // is what holds, and it is unchanged.
         // `testTheVerificationSettingIsVisibleAndIsTheSharedPreference` and
         // `testTheIPadSidebarNamesDestinationsAndKeepsTheirPurposeAsAHint`.
-        XCTAssertEqual(supporting, 119,
+        //
+        // The macOS 1.4.0 alignment moves it by one more: the group caption,
+        // the status head's detail line and its quiet radar glyph add three;
+        // the conversation header's sentence and the Cross-network route
+        // sentence, now that status head's `detail:`, remove two.
+        XCTAssertEqual(supporting, 120,
                        "the supporting role should reach every one of the sentences the "
                        + "audit counted across both targets, plus the two disclosure tints")
         // The over-limit byte counter, the not-sent label, and the three

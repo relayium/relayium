@@ -431,7 +431,7 @@ struct RootView: View {
     private func title(for surface: IOSSurface) -> String {
         switch surface {
         case .lanTransfer:          return L10n.t(.navNearby)
-        case .crossNetworkTransfer: return L10n.t(.tabDirect)
+        case .crossNetworkTransfer: return L10n.t(.navCrossNetworkShort)
         case .storedSend:           return L10n.t(.tabSend)
         case .deviceInbox:          return L10n.t(.tabDeviceInbox)
         case .account:              return L10n.t(.tabAccount)

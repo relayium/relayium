@@ -257,7 +257,7 @@ struct DirectView: View {
                     verificationSetting
                 }
             }
-            .navigationTitle(L10n.t(.tabDirect))
+            .navigationTitle(L10n.t(.navCrossNetworkShort))
         }
         // `[.item, .folder]`, so a folder is choosable and its contents are
         // expanded inside the security scope `DirectSendSelection` starts before
@@ -308,15 +308,18 @@ struct DirectView: View {
     /// and the same encrypted middle, because it is the same route. What it must
     /// never be is a Mac rail: `crossNetwork` says "This Mac", and this screen
     /// is only ever drawn on a phone.
+    ///
+    /// Drawn as the status head without a title: the navigation bar already
+    /// says Cross-network, and the macOS 1.4.0 pairing hero's job here is the
+    /// same sentence and route — anywhere, a six-digit code, both sides online —
+    /// on the violet wash, so the two task cards below read as the two ends of
+    /// it. Still no card: the route belongs to neither of them.
     private var positioning: some View {
-        VStack(alignment: .leading, spacing: Metrics.inner) {
-            Text(L10n.t(.navPairingCodeSubtitle))
-                .font(.callout)
-                .foregroundStyle(Palette.supportingLabel)
-                .fixedSize(horizontal: false, vertical: true)
+        StatusHero(symbol: "globe", // nonlocalized: SF Symbol name
+                   detail: L10n.t(.navPairingCodeSubtitle),
+                   isActive: true) {
             PathRail(stops: PathRailPresentation.iosPairingCode())
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - the one choice

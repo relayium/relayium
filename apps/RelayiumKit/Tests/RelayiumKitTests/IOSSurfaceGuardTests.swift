@@ -3568,7 +3568,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// take the anonymous receive tab with it.
     func testTheShellGainedTheDirectTabAndStillReadsNoSessionState() throws {
         let root = try XCTUnwrap(try sources().first { $0.name == "RootView.swift" })
-        XCTAssertTrue(root.text.contains("L10n.t(.tabDirect)"))
+        // Named after what it does — reach a device on another network — rather
+        // than after the pairing mechanism. `tab.direct` ("Pairing") hid the
+        // task on the phone's tab bar; the shell now uses the macOS sidebar's
+        // own short name, "Cross-network" / "跨网络", an existing key in both
+        // maintained languages.
+        XCTAssertTrue(root.text.contains("L10n.t(.navCrossNetworkShort)"))
+        XCTAssertFalse(root.text.contains("L10n.t(.tabDirect)"),
+                       "the cross-network tab is named after its mechanism again")
         // The tag is `surface.route` now, not a written-out destination: the two
         // shells enumerate one `IOSSurface.browseable` list, so the mapping from
         // a row to a destination is stated once on the enum rather than five
@@ -5128,9 +5135,12 @@ final class IOSSurfaceGuardTests: XCTestCase {
 
         // The receiving card's TITLE is the status, which is the hierarchy
         // change: one question, answered where the eye and VoiceOver both land
-        // first. It must still come from the shared mapping.
+        // first. It must still come from the shared mapping. Since the macOS
+        // 1.4.0 alignment the receiver is drawn as the status head, so the
+        // status is the hero's title rather than a card's.
         XCTAssertTrue(view.text.contains(
-            "SectionCard(NearbyStatusPresentation.text(for: receive.state))"),
+            "title: NearbyStatusPresentation.text(for: receive.state)")
+            && view.text.contains("StatusHero(symbol: \"dot.radiowaves.left.and.right\""),
             "the receiving card no longer leads with the state it is reporting")
         XCTAssertFalse(view.text.contains("Divider()"),
                        "the tab went back to separating groups with rules")

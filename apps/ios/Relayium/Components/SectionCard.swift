@@ -72,8 +72,15 @@ struct SectionCard<Content: View>: View {
     private var group: some View {
         VStack(alignment: .leading, spacing: Metrics.caption) {
             if rows, let title, !title.isEmpty {
+                // The macOS 1.4.0 group caption: small, set in capitals, in the
+                // supporting role, so the NAME of a group reads as a label over
+                // the card rather than as a heading competing with the status
+                // head. `textCase` rather than uppercased copy, so the key stays
+                // the sentence it is and a script without case is untouched.
                 Text(title)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.footnote.weight(.semibold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(Palette.supportingLabel)
                     // Wrapping rather than truncating: at accessibility content
                     // sizes a group caption is several lines on a 375pt screen,
                     // and the part that would be cut is the part that says what
@@ -112,6 +119,7 @@ struct SectionCard<Content: View>: View {
                 // background — a selected roster row, a pressed row — from
                 // squaring the corners it sits in.
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.corner, style: .continuous))
+                .overlay(CardEdge(cornerRadius: Metrics.corner))
         } else {
             VStack(alignment: .leading, spacing: Metrics.inner) {
                 if let title {
@@ -126,7 +134,25 @@ struct SectionCard<Content: View>: View {
             .padding(Metrics.inner)
             .background(Palette.cardBackground,
                         in: RoundedRectangle(cornerRadius: Metrics.corner, style: .continuous))
+            .overlay(CardEdge(cornerRadius: Metrics.corner))
         }
+    }
+}
+
+/// The fine edge every surface in the app shares: a card's, and the status
+/// head's at its own softer corner.
+///
+/// An overlay rather than a stroke on the fill, so the edge sits INSIDE the
+/// shape and a card beside the gutter never grows by its width. Hidden from
+/// accessibility: it is the boundary of a group the container already names.
+struct CardEdge: View {
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .strokeBorder(Palette.cardBorder, lineWidth: Metrics.edge)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 

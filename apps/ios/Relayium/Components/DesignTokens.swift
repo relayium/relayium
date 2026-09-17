@@ -10,7 +10,10 @@ import SwiftUI
 ///
 /// ## What it does NOT contain
 ///
-/// No colour of its own beyond the roles below, and no hex value anywhere. UIKit
+/// No hex value anywhere. The page, card, edge and hero surfaces are named
+/// sets in `Assets.xcassets` (Light, Dark and both Increase Contrast variants),
+/// read through a lookup that falls back to the system role in a bundle that
+/// does not ship them. Every text colour stays a role. UIKit
 /// already has semantic backgrounds and label colours that answer light mode,
 /// dark mode, Increase Contrast and Smart Invert correctly, and a literal
 /// written here would answer none of them. Both brand values in the app are
@@ -49,8 +52,26 @@ enum Metrics {
     static let pageTop: CGFloat = 12
     static let pageBottom: CGFloat = 28
     /// One card's corner. Continuous, at the call site — a circular corner at
-    /// this radius reads as a foreign control on iOS.
-    static let corner: CGFloat = 12
+    /// this radius reads as a foreign control on iOS. 11, the macOS 1.4.0
+    /// card, so the two apps' groups are one shape.
+    static let corner: CGFloat = 11
+    /// The status head's corner: one step softer than a card, so the one
+    /// summary a screen has reads as a different kind of thing — the macOS
+    /// 1.4.0 hero's 14.
+    static let heroCorner: CGFloat = 14
+    /// The status head's own insets. The Mac's 20 less a step: a phone's
+    /// gutter is 16, and a hero inset wider than the page it sits in reads as
+    /// a second page.
+    static let heroPadding: CGFloat = 16
+    /// The brand radar in the status head, and the core it rings — the Mac's
+    /// 52 and 30, which are also over the 44pt floor a finger would need if it
+    /// were a control (it is not; it is `accessibilityHidden`).
+    static let radar: CGFloat = 52
+    static let radarCore: CGFloat = 30
+    /// The width of a card's and a hero's edge. Fine rather than a full point:
+    /// at 3x a 1pt rule is three device pixels, which reads as a frame drawn
+    /// around content rather than the edge of a surface.
+    static let edge: CGFloat = 0.75
     /// The badge on a path stop. The connector is centred on it, so the two
     /// numbers are related rather than separately tuned.
     static let pathBadge: CGFloat = 22
@@ -96,18 +117,43 @@ enum Palette {
     static var actionSurface: Color { Color.accentColor.opacity(0.14) }
     /// A card, and the only container chrome in the app.
     ///
-    /// Deliberately a system fill rather than a fill plus a hairline: the Mac
-    /// needed the border because `controlBackgroundColor` on `windowBackground`
-    /// is nearly invisible in Light, and `secondarySystemBackground` on
-    /// `systemBackground` is not — it is the separation iOS itself uses for
-    /// grouped content in both appearances, and it tracks Increase Contrast on
-    /// its own.
-    static var cardBackground: Color { Color(uiColor: .secondarySystemBackground) }
-    /// The page a card sits on: the other half of the pair above, and the
-    /// separation iOS itself uses for grouped content in both appearances.
+    /// **The macOS 1.4.0 layering, on a phone:** a white card with a fine edge
+    /// on a neutral page in Light, and a lifted neutral card on a near-black
+    /// page in Dark — rather than the system's grey card on a white page, which
+    /// inverted the Mac's hierarchy (the content was darker than what it sat
+    /// on). Both halves are opaque, and Increase Contrast darkens the page and
+    /// strengthens the edge rather than relying on the fill alone.
+    static var cardBackground: Color { named("RelayiumCard", or: .secondarySystemBackground) }
+    /// The page a card sits on: the other half of the pair above.
     /// Named so a destination's surface is the token layer's decision rather
     /// than whatever a `ScrollView` inherited.
-    static var pageBackground: Color { Color(uiColor: .systemBackground) }
+    static var pageBackground: Color { named("RelayiumPage", or: .systemBackground) }
+    /// The fine edge of a card and of the status head. Clear where the asset
+    /// is absent, so a bundle without it keeps the fill-only card it had.
+    static var cardBorder: Color { named("RelayiumCardBorder", or: .clear) }
+    /// The status head's wash: the tint at the leading top, fading to the
+    /// card's own weight — the macOS 1.4.0 hero, with opaque stops so every
+    /// text role on it is measured against one known colour rather than a
+    /// composite that depends on what is underneath.
+    static var heroBackground: LinearGradient {
+        LinearGradient(colors: [named("RelayiumHeroTint", or: .secondarySystemBackground),
+                                named("RelayiumHeroBase", or: .secondarySystemBackground)],
+                       startPoint: .topLeading,
+                       endPoint: UnitPoint(x: 0.75, y: 1))
+    }
+
+    /// **A surface role from the asset catalog, or the system role it replaced.**
+    ///
+    /// `DesignTokens`, `SectionCard` and `InlineMessage` also compile into the
+    /// Share extension, and an extension resolves a colour name in its OWN
+    /// bundle. `Color("…")` with a missing name draws nothing useful and says
+    /// so only in a log, so the lookup is `UIColor(named:)`, which answers nil —
+    /// and nil falls back to exactly the system colour this role was before.
+    /// The app ships the named sets with Light, Dark and both Increase Contrast
+    /// variants; `IOSSupportingTextGuardTests` measures every prose role on them.
+    private static func named(_ name: String, or fallback: UIColor) -> Color {
+        Color(uiColor: UIColor(named: name) ?? fallback)
+    }
     /// A line that bounds or separates without being looked at — including the
     /// rules BETWEEN a card's rows, which is where most of them are.
     static var hairline: Color { Color(uiColor: .separator) }
