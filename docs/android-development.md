@@ -17,9 +17,10 @@ The same rule as 0.2.2 below, with different commits:
   so an installed 0.2.2 updates in place (verified on the AOSP 36 emulator from
   the published 0.2.2 bytes) — was built and signed from
   **`0b573e4c`** on `release/native-ui-20260917`;
-* the `android-v0.2.3` tag names the later metadata-and-copy commit. Between the
-  two, the only other change is an iOS test-fixture fix with no `apps/android/`
-  change.
+* the `android-v0.2.3` tag names the later commit
+  `9880648a279aee2f69b61beb8009ff7df586a65e`. The commits in between carry
+  release metadata and copy plus iOS version, toolchain and UI fixes, but
+  `apps/android/` at the tag is identical to the APK source `0b573e4c`.
 
 Against the published 0.2.2 bytes, 0.2.3 ships the three changes described under
 "Changes released in 0.2.3" below: stored-download recovery with the receiving
