@@ -6,13 +6,18 @@ import com.relayium.protocol.inbox.InboxProtocol
 import com.relayium.protocol.inbox.InboxTaskState
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -94,6 +99,30 @@ class InboxRuntime(
 
         @Volatile
         var pending: List<InboxTaskRow> = emptyList()
+
+        /**
+         * Check now, owned by THIS session so a sign-out or account switch drops
+         * it with everything else.
+         *
+         * [requestedCheck] is set before [wake] is sent, and the nap only ends
+         * early for a wake that finds it set — so a wake sent before the loop
+         * started napping is remembered (the channel is conflated), and a stale
+         * one left over from a request a pass already took costs nothing.
+         *
+         * The outstanding request is ONE atomic value, its serial (0 = none), so
+         * a pass takes the request and learns which one it is answering in a
+         * single step; a press landing between two separate reads could
+         * otherwise be answered by a pass that started before it.
+         */
+        val wake = Channel<Unit>(Channel.CONFLATED)
+        val requestedCheck = AtomicLong(0)
+        val lastSerial = AtomicLong(0)
+        /** The serial of the latest request answered. */
+        @Volatile
+        var answeredSerial = 0L
+        /** The running pass took a request and owes it an answer. */
+        @Volatile
+        var answering = false
     }
 
     @Volatile
@@ -241,10 +270,87 @@ class InboxRuntime(
                     model.ensureCurrent(session.authority)
                 }
                 if (!wanted) {
-                    model.publish(session.authority) { it.copy(receiving = resting(session)) }
+                    // A check the stopped loop can no longer answer is withdrawn,
+                    // not left spinning and not reported as a result.
+                    val outstanding = session.requestedCheck.getAndSet(0) != 0L || session.answering
+                    session.answering = false
+                    model.publish(session.authority) {
+                        it.copy(
+                            receiving = resting(session),
+                            manualCheck = if (outstanding) InboxManualCheck.NONE else it.manualCheck,
+                        )
+                    }
                     announceStopped(session)
                 }
             }
+        }
+    }
+
+    // ── check now ───────────────────────────────────────────────────────────
+
+    /**
+     * Ask central again now instead of waiting out the heartbeat.
+     *
+     * **It wakes the loop that is already running; it never starts, restarts or
+     * cancels one.** A delivery mid-download is untouched, and [refresh] — which
+     * re-reads the device directory — keeps its own meaning. Returns whether the
+     * request was taken (or coalesced into one already outstanding).
+     *
+     * Refused where the loop itself would do nothing: no session, the surface not
+     * live (Android receives only in the foreground), policy Off, no running
+     * loop, or a device key that is not usable yet. Under Ask it answers nothing
+     * on the user's behalf — held deliveries keep their own Receive and Decline.
+     *
+     * Coalescing: while a request is outstanding or being answered, further
+     * presses change nothing, so the one loop runs at most one extra pass per
+     * request and never two at once.
+     */
+    fun checkNow(): Boolean {
+        val session = session ?: return false
+        if (!live || session.policy == InboxAutoAccept.OFF ||
+            worker?.isActive != true || !session.prepared
+        ) {
+            return false
+        }
+        if (session.answering) return true
+        val serial = session.lastSerial.incrementAndGet()
+        if (!session.requestedCheck.compareAndSet(0, serial)) return true
+        model.launchOwned(session.authority) {
+            model.publish(session.authority) {
+                // Under the publish lock: an answer that already landed for this
+                // request is not overwritten by its own late Checking.
+                if (session.answeredSerial >= serial) it else it.copy(manualCheck = InboxManualCheck.CHECKING)
+            }
+        }
+        session.wake.trySend(Unit)
+        return true
+    }
+
+    private suspend fun answerCheck(session: Session, serial: Long, answer: InboxManualCheck) {
+        session.answeredSerial = serial
+        session.answering = false
+        model.publish(session.authority) { it.copy(manualCheck = answer) }
+    }
+
+    /**
+     * Wait out the heartbeat, or until a Check now asks for a pass.
+     *
+     * The injected [pause] still does the waiting, so a test that parks the loop
+     * there keeps working; a wake only cancels that wait. Nothing else is
+     * interrupted, because the loop only ever naps between passes.
+     */
+    private suspend fun nap(session: Session, millis: Long) = coroutineScope {
+        val sleeping = launch { pause(millis) }
+        try {
+            while (sleeping.isActive) {
+                val woken = select<Boolean> {
+                    sleeping.onJoin { false }
+                    session.wake.onReceive { true }
+                }
+                if (woken && session.requestedCheck.get() != 0L) break
+            }
+        } finally {
+            sleeping.cancel()
         }
     }
 
@@ -602,6 +708,12 @@ class InboxRuntime(
                 session.prepared = true
             }
 
+            // Only a pass that STARTS after a request answers it. A request made
+            // while this pass is already running stays set for the next one.
+            val serial = session.requestedCheck.getAndSet(0)
+            val answers = serial != 0L
+            if (answers) session.answering = true
+
             val result = try {
                 engine.pass()
             } catch (e: InboxSupersededException) {
@@ -614,19 +726,30 @@ class InboxRuntime(
                 model.publish(session.authority) {
                     it.copy(failure = failure, receiving = resting(session))
                 }
+                if (answers) answerCheck(session, serial, InboxManualCheck.FAILED)
                 if (failure == InboxModel.State.Failure.SIGNED_OUT ||
                     failure == InboxModel.State.Failure.UNSUPPORTED_BUILD
                 ) {
                     return
                 }
-                pause(session.heartbeatSeconds * 1000L)
+                nap(session, session.heartbeatSeconds * 1000L)
                 continue
             }
 
             model.ensureCurrent(session.authority)
             publishPass(session, result)
+            if (answers) {
+                answerCheck(
+                    session, serial,
+                    when (result) {
+                        is InboxReceiveEngine.PassResult.Worked -> InboxManualCheck.CHECKED
+                        is InboxReceiveEngine.PassResult.Idle -> InboxManualCheck.NOTHING_NEW
+                        is InboxReceiveEngine.PassResult.NotReceiving -> InboxManualCheck.FAILED
+                    },
+                )
+            }
             if (result is InboxReceiveEngine.PassResult.Worked) continue
-            pause(session.heartbeatSeconds * 1000L)
+            nap(session, session.heartbeatSeconds * 1000L)
         }
     }
 

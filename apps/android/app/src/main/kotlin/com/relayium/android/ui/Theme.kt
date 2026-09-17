@@ -59,7 +59,7 @@ private val AccentTextLight = Color(0xFF7E22CE)
  * it is what an un-migrated `Card {}` picks up by default, and a stray one
  * should look like the rest of the app rather than announce itself.
  */
-private val LightColors = lightColorScheme(
+internal val LightColors = lightColorScheme(
     primary = ActionLight,
     onPrimary = Color.White,
     primaryContainer = Color(0xFFEDE4FE),
@@ -92,7 +92,7 @@ private val LightColors = lightColorScheme(
     onErrorContainer = Color(0xFF410E0B),
 )
 
-private val DarkColors = darkColorScheme(
+internal val DarkColors = darkColorScheme(
     primary = ActionDark,
     onPrimary = Color.White,
     primaryContainer = Color(0xFF2E1065),

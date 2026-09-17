@@ -125,4 +125,9 @@
     <plurals name="inbox_history_unread">
         <item quantity="other">%1$d 条未读</item>
     </plurals>
+    <string name="inbox_check_now">立即检查</string>
+    <string name="inbox_checking">正在检查…</string>
+    <string name="inbox_check_nothing_new">暂无新内容。发送方上传完成后，投递才会出现在这里。</string>
+    <string name="inbox_check_done">检查完成。</string>
+    <string name="inbox_check_failed">检查未完成，原因见上方状态。</string>
 </resources>

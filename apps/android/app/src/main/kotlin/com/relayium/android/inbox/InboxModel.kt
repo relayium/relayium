@@ -99,6 +99,9 @@ class InboxModel(
         /** Tasks whose accept/decline is in flight, so a control cannot be
          *  double-answered. */
         val answering: Set<String> = emptySet(),
+        /** The user's last Check now and its answer. Reset with the rest of the
+         *  state on every adoption, so no answer outlives its account. */
+        val manualCheck: InboxManualCheck = InboxManualCheck.NONE,
     ) {
         /** Closed, so a surface renders a named condition rather than a string
          *  that came from somewhere it cannot vouch for. */
@@ -355,6 +358,24 @@ class InboxModel(
 /** A body was superseded by an account switch or a sign-out. Cancellation rather
  *  than a failure: nobody is waiting for its answer any more. */
 class InboxSupersededException : CancellationException("relayium inbox: superseded")
+
+/**
+ * A Check now request, and the answer of the pass that served it.
+ *
+ * None of these says a delivery arrived: an arrival is the conversation's, from a
+ * durable receipt. [CHECKED] only says the pass that answered found work.
+ */
+enum class InboxManualCheck {
+    NONE,
+    /** A pass that started after the request has not returned yet. */
+    CHECKING,
+    /** That pass found nothing to deliver. */
+    NOTHING_NEW,
+    /** That pass worked at least one delivery. */
+    CHECKED,
+    /** That pass failed, or the receiver could not run it. */
+    FAILED,
+}
 
 /**
  * What this device is doing about deliveries RIGHT NOW.

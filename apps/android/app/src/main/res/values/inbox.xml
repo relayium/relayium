@@ -136,4 +136,9 @@
         <item quantity="one">%1$d unread</item>
         <item quantity="other">%1$d unread</item>
     </plurals>
+    <string name="inbox_check_now">Check now</string>
+    <string name="inbox_checking">Checking…</string>
+    <string name="inbox_check_nothing_new">Nothing new. A delivery appears here only after the sender\'s upload has finished.</string>
+    <string name="inbox_check_done">Check complete.</string>
+    <string name="inbox_check_failed">The check didn\'t finish. The status above says why.</string>
 </resources>

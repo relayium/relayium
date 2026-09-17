@@ -26,6 +26,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -89,12 +90,10 @@ internal fun AccountScreen(viewModel: TransferViewModel) {
 
     if (note) {
         StatusCard(text = stringResource(R.string.account_signout_note), isError = true)
-        TextButton(
+        TertiaryAction(
+            label = stringResource(R.string.cleanup_dismiss),
             onClick = viewModel.account::dismissSignOutNote,
-            modifier = Modifier.height(48.dp),
-        ) {
-            Text(stringResource(R.string.cleanup_dismiss))
-        }
+        )
     }
 
     when (val s = state) {
@@ -116,18 +115,14 @@ internal fun AccountScreen(viewModel: TransferViewModel) {
                 style = MaterialTheme.typography.bodyMedium,
             )
             StatusCard(text = accountErrorMessage(s.failure), isError = true)
-            Button(
+            PrimaryAction(
+                label = stringResource(R.string.account_retry),
                 onClick = viewModel.account::refresh,
-                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
-            ) {
-                Text(stringResource(R.string.account_retry))
-            }
-            TextButton(
+            )
+            TertiaryAction(
+                label = stringResource(R.string.account_sign_out),
                 onClick = viewModel::signOutAccount,
-                modifier = Modifier.height(48.dp),
-            ) {
-                Text(stringResource(R.string.account_sign_out))
-            }
+            )
         }
 
         // The credential MAY STILL BE LIVE on the server. Every account action
@@ -141,22 +136,18 @@ internal fun AccountScreen(viewModel: TransferViewModel) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(
+            PrimaryAction(
+                label = stringResource(R.string.account_signout_retry),
                 onClick = viewModel.account::retrySignOut,
-                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
-            ) {
-                Text(stringResource(R.string.account_signout_retry))
-            }
+            )
         }
 
         is AccountState.CredentialUnreadable -> SectionCard {
             StatusCard(text = stringResource(R.string.account_unreadable), isError = true)
-            Button(
+            PrimaryAction(
+                label = stringResource(R.string.account_unreadable_discard),
                 onClick = viewModel.account::discardUnreadableCredential,
-                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
-            ) {
-                Text(stringResource(R.string.account_unreadable_discard))
-            }
+            )
         }
     }
 }
@@ -208,14 +199,12 @@ private fun AccessForm(viewModel: TransferViewModel, rejection: AccountFailure?)
     val browserBusy = browser is BrowserLoginModel.State.Starting ||
         browser is BrowserLoginModel.State.Waiting
 
-    SectionCard {
+    SectionCard(
+        title = stringResource(
+            if (creating) R.string.account_create_title else R.string.account_signin_title,
+        ),
+    ) {
         run {
-            Text(
-                text = stringResource(
-                    if (creating) R.string.account_create_title else R.string.account_signin_title,
-                ),
-                style = MaterialTheme.typography.titleMedium,
-            )
             Text(
                 text = stringResource(
                     if (creating) R.string.account_create_intro else R.string.account_signin_intro,
@@ -337,7 +326,11 @@ private fun AccessForm(viewModel: TransferViewModel, rejection: AccountFailure?)
                     onClick = { viewModel.account.requestPasswordReset(email.trim()) },
                     enabled = !browserBusy && email.isNotBlank() &&
                         recovery !is RequestState.Sending,
-                    modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.secondary,
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                        .defaultMinSize(minHeight = Metrics.touch),
                 ) {
                     Text(stringResource(R.string.account_forgot_action))
                 }
@@ -366,17 +359,14 @@ private fun BrowserLoginCard(state: BrowserLoginModel.State, viewModel: Transfer
     val context = LocalContext.current
     var noBrowser by rememberSaveable { mutableStateOf(false) }
 
-    SectionCard {
+    // The intro is this card's footnote rather than a fold: it names WHICH
+    // accounts have to come this way and states the precondition — a browser
+    // already signed in — so it is a routing instruction, not mechanism.
+    SectionCard(
+        title = stringResource(R.string.account_browser_title),
+        footnote = stringResource(R.string.account_browser_intro),
+    ) {
         run {
-            Text(
-                text = stringResource(R.string.account_browser_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = stringResource(R.string.account_browser_intro),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
             when (state) {
                 is BrowserLoginModel.State.Idle,
                 is BrowserLoginModel.State.Failed,
@@ -445,12 +435,10 @@ private fun BrowserLoginCard(state: BrowserLoginModel.State, viewModel: Transfer
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
-                    OutlinedButton(
+                    SecondaryAction(
+                        label = stringResource(R.string.files_cancel),
                         onClick = viewModel.browserLogin::cancel,
-                        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
-                    ) {
-                        Text(stringResource(R.string.files_cancel))
-                    }
+                    )
                 }
             }
         }
@@ -463,12 +451,8 @@ private fun BrowserLoginCard(state: BrowserLoginModel.State, viewModel: Transfer
 private fun CheckEmailCard(email: String, viewModel: TransferViewModel) {
     val resend by viewModel.account.resend.collectAsStateWithLifecycle()
 
-    SectionCard {
+    SectionCard(title = stringResource(R.string.account_verify_title)) {
         run {
-            Text(
-                text = stringResource(R.string.account_verify_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
             Text(
                 text = stringResource(R.string.account_verify_body, email),
                 style = MaterialTheme.typography.bodyMedium,
@@ -483,19 +467,16 @@ private fun CheckEmailCard(email: String, viewModel: TransferViewModel) {
                     StatusCard(text = accountErrorMessage(r.failure), isError = true)
                 is RequestState.Idle -> Unit
             }
-            Button(
+            PrimaryAction(
+                label = stringResource(R.string.account_verify_resend),
                 onClick = viewModel.account::resendVerification,
                 enabled = resend !is RequestState.Sending,
-                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
-            ) {
-                Text(stringResource(R.string.account_verify_resend))
-            }
-            TextButton(
+            )
+            TertiaryAction(
+                label = stringResource(R.string.account_back_to_signin),
                 onClick = viewModel::returnToSignInForm,
-                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
-            ) {
-                Text(stringResource(R.string.account_back_to_signin))
-            }
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
@@ -510,22 +491,17 @@ private fun CheckEmailCard(email: String, viewModel: TransferViewModel) {
  */
 @Composable
 private fun PendingDeletionCard(purgeAfter: Long, viewModel: TransferViewModel) {
-    SectionCard {
+    SectionCard(title = stringResource(R.string.account_frozen_title)) {
         run {
-            Text(
-                text = stringResource(R.string.account_frozen_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
             Text(
                 text = stringResource(R.string.account_frozen_body, formatDate(purgeAfter)),
                 style = MaterialTheme.typography.bodyMedium,
             )
-            TextButton(
+            TertiaryAction(
+                label = stringResource(R.string.account_back_to_signin),
                 onClick = viewModel::returnToSignInForm,
-                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
-            ) {
-                Text(stringResource(R.string.account_back_to_signin))
-            }
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
@@ -540,50 +516,44 @@ private fun ReadyCards(ready: AccountState.Ready, viewModel: TransferViewModel) 
     // the next signed-out screen from opening on the previous session's account.
     LaunchedEffect(ready.user.id) { viewModel.accessDraft.clear() }
 
-    SectionCard {
-        run {
-            Text(
-                text = ready.user.email,
-                style = MaterialTheme.typography.titleMedium,
+    SectionCard(title = stringResource(R.string.account_identity_title)) {
+        Column {
+            GroupRow(
+                label = ready.user.email,
+                secondary = ready.user.displayName.ifBlank { null },
             )
-            if (ready.user.displayName.isNotBlank()) {
-                Text(
-                    text = ready.user.displayName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
             if (ready.user.linkedMethods.isNotEmpty()) {
-                Text(
-                    text = stringResource(
-                        R.string.account_methods,
-                        ready.user.linkedMethods.joinToString(", "),
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                GroupDivider()
+                GroupRow(
+                    label = stringResource(R.string.account_methods_label),
+                    value = ready.user.linkedMethods.joinToString(", "),
                 )
             }
-            // A session that is real now and will NOT survive a restart. Said
-            // here rather than discovered on the next launch.
-            if (!ready.persisted) {
-                StatusCard(text = stringResource(R.string.account_not_persisted), isError = true)
+        }
+        // A session that is real now and will NOT survive a restart. Said
+        // here rather than discovered on the next launch.
+        if (!ready.persisted) {
+            StatusCard(text = stringResource(R.string.account_not_persisted), isError = true)
+        }
+        if (stale) {
+            StatusCard(text = stringResource(R.string.account_stale), isError = false)
+        }
+        // Both outlined: neither refreshing nor signing out is the thing this
+        // screen wants next, and a filled pair would spend the accent twice.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(
+                onClick = viewModel.account::refresh,
+                colors = accentOutlinedColors(),
+                modifier = Modifier.weight(1f).defaultMinSize(minHeight = Metrics.touch),
+            ) {
+                Text(stringResource(R.string.account_refresh))
             }
-            if (stale) {
-                StatusCard(text = stringResource(R.string.account_stale), isError = false)
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(
-                    onClick = viewModel.account::refresh,
-                    modifier = Modifier.weight(1f).defaultMinSize(minHeight = 48.dp),
-                ) {
-                    Text(stringResource(R.string.account_refresh))
-                }
-                OutlinedButton(
-                    onClick = viewModel::signOutAccount,
-                    modifier = Modifier.weight(1f).defaultMinSize(minHeight = 48.dp),
-                ) {
-                    Text(stringResource(R.string.account_sign_out))
-                }
+            OutlinedButton(
+                onClick = viewModel::signOutAccount,
+                colors = accentOutlinedColors(),
+                modifier = Modifier.weight(1f).defaultMinSize(minHeight = Metrics.touch),
+            ) {
+                Text(stringResource(R.string.account_sign_out))
             }
         }
     }
@@ -596,32 +566,27 @@ private fun ReadyCards(ready: AccountState.Ready, viewModel: TransferViewModel) 
  *  offered for sale: this app makes no billing request of any kind. */
 @Composable
 private fun PlanCard(ready: AccountState.Ready) {
-    SectionCard {
-        run {
-            Text(
-                text = stringResource(R.string.account_plan_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = ready.usage.planName.ifBlank { ready.user.planId },
-                style = MaterialTheme.typography.bodyLarge,
-            )
+    SectionCard(
+        title = stringResource(R.string.account_plan_title),
+        // When the allowance comes back is a standing fact about the figures
+        // above it, not a row of its own.
+        footnote = stringResource(R.string.account_quota_resets, formatDate(ready.usage.resetsAt)),
+    ) {
+        Column {
+            GroupRow(label = ready.usage.planName.ifBlank { ready.user.planId })
+            GroupDivider()
             QuotaRow(
                 label = stringResource(R.string.account_quota_traffic),
                 used = ready.usage.traffic.used,
                 cap = ready.usage.traffic.cap,
                 unlimited = ready.usage.traffic.unlimited,
             )
+            GroupDivider()
             QuotaRow(
                 label = stringResource(R.string.account_quota_storage),
                 used = ready.usage.storage.used,
                 cap = ready.usage.storage.cap,
                 unlimited = ready.usage.storage.unlimited,
-            )
-            Text(
-                text = stringResource(R.string.account_quota_resets, formatDate(ready.usage.resetsAt)),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -629,17 +594,17 @@ private fun PlanCard(ready: AccountState.Ready) {
 
 @Composable
 private fun QuotaRow(label: String, used: Long, cap: Long, unlimited: Boolean) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = if (unlimited) {
+    Column(modifier = Modifier.padding(bottom = Metrics.tight)) {
+        GroupRow(
+            label = label,
+            value = if (unlimited) {
                 // `cap <= 0` is the server's documented spelling of "no limit".
                 // A progress bar against no limit would be a bar that can never
                 // move, which reads as a broken one.
-                stringResource(R.string.account_quota_unlimited, label, formatBytes(used))
+                stringResource(R.string.account_quota_unlimited, formatBytes(used))
             } else {
-                stringResource(R.string.account_quota_used, label, formatBytes(used), formatBytes(cap))
+                stringResource(R.string.account_quota_used, formatBytes(used), formatBytes(cap))
             },
-            style = MaterialTheme.typography.bodyMedium,
         )
         if (!unlimited) {
             LinearProgressIndicator(
@@ -657,34 +622,41 @@ private fun DevicesCard(viewModel: TransferViewModel) {
 
     LaunchedEffect(Unit) { viewModel.account.loadDevices() }
 
-    SectionCard {
-        run {
-            Text(
-                text = stringResource(R.string.account_devices_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            when (val d = devices) {
-                is DevicesState.Idle -> Unit
-                is DevicesState.Loading -> Busy(R.string.account_devices_loading)
-                is DevicesState.Failed -> {
-                    StatusCard(text = accountErrorMessage(d.failure), isError = true)
-                    TextButton(
-                        onClick = viewModel.account::loadDevices,
-                        modifier = Modifier.height(48.dp),
-                    ) {
-                        Text(stringResource(R.string.account_retry))
-                    }
+    SectionCard(title = stringResource(R.string.account_devices_title)) {
+        when (val d = devices) {
+            is DevicesState.Idle -> Unit
+            is DevicesState.Loading -> Busy(R.string.account_devices_loading)
+            is DevicesState.Failed -> {
+                StatusCard(text = accountErrorMessage(d.failure), isError = true)
+                TextButton(
+                    onClick = viewModel.account::loadDevices,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.secondary,
+                    ),
+                    // A floor, never `height`: a fixed height is also a ceiling
+                    // and clips this label at font scale 2.
+                    modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
+                ) {
+                    Text(stringResource(R.string.account_retry))
                 }
-                is DevicesState.Loaded -> {
-                    if (d.devices.isEmpty()) {
-                        Text(
-                            text = stringResource(R.string.account_devices_empty),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    d.devices.forEach { device ->
-                        DeviceRow(device) { confirming = device }
+            }
+            is DevicesState.Loaded -> {
+                if (d.devices.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.account_devices_empty),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Column {
+                    d.devices.forEachIndexed { index, device ->
+                        // Keyed on the SERVER's device id, so a revoke that
+                        // shortens the list does not hand one row's remembered
+                        // state to whichever device slid into its position.
+                        key(device.id) {
+                            if (index > 0) GroupDivider()
+                            DeviceRow(device) { confirming = device }
+                        }
                     }
                 }
             }
@@ -726,37 +698,30 @@ private fun DevicesCard(viewModel: TransferViewModel) {
 
 @Composable
 private fun DeviceRow(device: AccountDevice, onRevoke: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = device.name.ifBlank { stringResource(R.string.account_device_unnamed) },
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Text(
-                    text = if (device.current) {
-                        stringResource(R.string.account_device_current)
-                    } else if (device.lastSeenAt > 0L) {
-                        stringResource(R.string.account_device_last_seen, formatDate(device.lastSeenAt))
-                    } else {
-                        // 0 means the credential has never been used since it
-                        // was issued — the state most worth revoking, so it is
-                        // preserved rather than rendered as 1970.
-                        stringResource(R.string.account_device_never_used)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            TextButton(onClick = onRevoke, modifier = Modifier.defaultMinSize(minHeight = 48.dp)) {
+    GroupRow(
+        label = device.name.ifBlank { stringResource(R.string.account_device_unnamed) },
+        secondary = if (device.current) {
+            stringResource(R.string.account_device_current)
+        } else if (device.lastSeenAt > 0L) {
+            stringResource(R.string.account_device_last_seen, formatDate(device.lastSeenAt))
+        } else {
+            // 0 means the credential has never been used since it was issued —
+            // the state most worth revoking, so it is preserved rather than
+            // rendered as 1970.
+            stringResource(R.string.account_device_never_used)
+        },
+        trailing = {
+            TextButton(
+                onClick = onRevoke,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.secondary,
+                ),
+                modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
+            ) {
                 Text(stringResource(R.string.account_device_revoke))
             }
-        }
-        HorizontalDivider()
-    }
+        },
+    )
 }
 
 // ── copy ────────────────────────────────────────────────────────────────────

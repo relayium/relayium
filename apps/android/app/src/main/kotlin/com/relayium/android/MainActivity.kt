@@ -2,12 +2,17 @@ package com.relayium.android
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import com.relayium.android.ui.RelayiumApp
 import com.relayium.android.ui.RelayiumTheme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * The single Activity. All state lives in [TransferViewModel], which survives
@@ -52,10 +57,29 @@ import com.relayium.android.ui.RelayiumTheme
  * links" by hand. Nothing here pretends to be a verified App Link. The share
  * filters have no such caveat — `ACTION_SEND` needs no domain verification —
  * and a share is a real, complete entry point in this build.
+ *
+ * ## The screen is held awake by THIS window, for as long as there is work
+ *
+ * See [com.relayium.android.integration.TransferAwakePolicy] for why a screen
+ * timeout was ending live transfers and why the fix belongs here rather than in
+ * the presence rule. The mechanics are the part this class owns: the flag is
+ * applied only between `ON_START` and `ON_STOP`, from a scope created at start
+ * and cancelled at stop, and it is cleared on the way out of BOTH.
  */
 class MainActivity : ComponentActivity() {
 
     private val viewModel: TransferViewModel by viewModels()
+
+    /**
+     * Collects the keep-awake answer while this Activity is on screen.
+     *
+     * Its own scope, created in `onStart` and cancelled in `onStop`, rather than
+     * a ViewModel-scoped collection: the flag belongs to a WINDOW, and the
+     * ViewModel outlives this one across a recreation. A collection that
+     * outlived the window would be writing into the flags of an Activity that is
+     * no longer there.
+     */
+    private var awakeScope: CoroutineScope? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,10 +117,44 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         viewModel.hostStarted()
+        // `Main.immediate`, so a value already in the flow is applied without a
+        // dispatch: an Activity restarted while a transfer is running must come
+        // back holding the flag, not one frame later.
+        val scope = CoroutineScope(Dispatchers.Main.immediate)
+        awakeScope = scope
+        scope.launch { viewModel.keepScreenAwake.collect(::keepScreenOn) }
     }
 
     override fun onStop() {
         super.onStop()
+        // Released BEFORE the presence report, and unconditionally: whatever the
+        // last collected value was, a window that is not on screen holds no
+        // claim on the display. The system would drop the effect anyway; saying
+        // so here means the flag's lifetime is readable in one place.
+        awakeScope?.cancel()
+        awakeScope = null
+        keepScreenOn(false)
         viewModel.hostStopped(changingConfigurations = isChangingConfigurations)
+    }
+
+    /**
+     * `onStop` always precedes `onDestroy`, so this is belt and braces rather
+     * than a second release path — and it is kept because "the flag is cleared
+     * when this Activity goes away" should be true by inspection, not by
+     * reasoning about lifecycle ordering.
+     */
+    override fun onDestroy() {
+        super.onDestroy()
+        awakeScope?.cancel()
+        awakeScope = null
+        keepScreenOn(false)
+    }
+
+    private fun keepScreenOn(hold: Boolean) {
+        if (hold) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
     }
 }

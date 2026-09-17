@@ -12,14 +12,22 @@ import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
@@ -28,6 +36,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -51,6 +60,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -76,8 +86,22 @@ import androidx.compose.ui.unit.dp
  *    inserted into these containers is consent prompts, failures and actions.
  */
 internal object Metrics {
+    /**
+     * The reading column.
+     *
+     * A phone is narrower than this and simply fills the width; a tablet, a
+     * foldable or a landscape phone stops here and centres, so the app does not
+     * stretch a settings row to the width of the display. Wider than a desktop
+     * measure would be because this app keeps its limits, consents and file
+     * destinations on screen as prose rather than folding them away.
+     */
+    val reading: Dp = 660.dp
+
+    /** Between the reading column and the edge of the screen. */
+    val gutter: Dp = 16.dp
+
     /** Between top-level sections of a screen. */
-    val section: Dp = 20.dp
+    val section: Dp = 16.dp
 
     /** Padding inside a card. */
     val inner: Dp = 16.dp
@@ -292,13 +316,26 @@ internal fun ScreenHeader(title: String, supporting: String? = null) {
     }
 }
 
+/** The corner every group is drawn with. Not `MaterialTheme.shapes`, which is
+ *  the theme's contract with dialogs and menus too. */
+private val GroupCorner = RoundedCornerShape(11.dp)
+
+/** A container drawn INSIDE a group, kept tighter than [GroupCorner] so a
+ *  nested edge is never rounder than the one holding it. */
+private val NestedCorner = RoundedCornerShape(8.dp)
+
 /**
- * The app's one container.
+ * The app's one container: a caption, a group of rows, and at most one footnote.
  *
  * A light fill on a neutral page plus a hairline. The border is what states the
  * edge: the fill difference between a card and the page is a small step
  * whichever values are chosen, and it survives a system contrast setting
  * flattening the fills.
+ *
+ * [title] is drawn ABOVE the card, so the screen's own heading stays the only
+ * one. [footnote] is the quiet line that must stay on screen whatever else
+ * happens — where files land, what this app cannot do while it is closed — and
+ * is never a fold.
  *
  * No size animation, per the file's motion rule — these cards are what consent
  * prompts and failure messages are inserted into.
@@ -307,6 +344,7 @@ internal fun ScreenHeader(title: String, supporting: String? = null) {
 internal fun SectionCard(
     modifier: Modifier = Modifier,
     title: String? = null,
+    footnote: String? = null,
     tone: CardTone = CardTone.PLAIN,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -321,22 +359,208 @@ internal fun SectionCard(
         CardTone.ERROR -> scheme.errorContainer
     }
     val border = if (tone == CardTone.PLAIN) scheme.outlineVariant else Color.Transparent
-    Card(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = container),
-        border = BorderStroke(1.dp, border),
+        verticalArrangement = Arrangement.spacedBy(Metrics.tight),
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(Metrics.inner),
-            verticalArrangement = Arrangement.spacedBy(Metrics.cardGap),
+        if (title != null) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = GroupCorner,
+            colors = CardDefaults.cardColors(containerColor = container),
+            border = BorderStroke(1.dp, border),
         ) {
-            if (title != null) {
-                Text(text = title, style = MaterialTheme.typography.titleMedium)
-            }
-            content()
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(Metrics.inner),
+                verticalArrangement = Arrangement.spacedBy(Metrics.cardGap),
+                content = content,
+            )
+        }
+        if (footnote != null) {
+            Text(
+                text = footnote,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
+}
+
+/**
+ * **The one summary at the top of a task: what this device is doing now, and
+ * the controls that change it.** The macOS 1.4.0 status head, on a touch screen.
+ *
+ * A destination has at most one, and it is the only surface drawn on the violet
+ * wash, so a page of equal cards does not read as a list of features. [title] is
+ * the STATE, never the screen's name again. Controls go full width BELOW the
+ * summary rather than trailing it, because a trailing button beside a wrapping
+ * sentence at font scale 2 on 320dp is a word per line.
+ *
+ * The wash runs from a tint of the action colour to the card fill, both OPAQUE
+ * (the tint is composited over the card here), so supporting prose is measured
+ * against known colours: `onSurfaceVariant` clears 4.5:1 on both ends in both
+ * schemes (`InboxStatusHeroContrastTest`). Nothing moves: the radar is still, so
+ * the state reads the same with animations off, and it is carried by the words
+ * first and the filled or quiet core second, never by colour alone.
+ */
+@Composable
+internal fun StatusHero(
+    icon: ImageVector,
+    active: Boolean,
+    modifier: Modifier = Modifier,
+    title: String? = null,
+    detail: String? = null,
+    content: @Composable ColumnScope.() -> Unit = {},
+) {
+    val scheme = MaterialTheme.colorScheme
+    val base = scheme.surfaceContainerLow
+    val tint = heroTint(scheme.primary, base)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Brush.linearGradient(listOf(tint, base)), HeroCorner)
+            .border(BorderStroke(1.dp, scheme.outlineVariant), HeroCorner)
+            .padding(Metrics.inner),
+        verticalArrangement = Arrangement.spacedBy(Metrics.cardGap),
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Metrics.cardGap),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BrandRadar(icon = icon, active = active)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(Metrics.hairline),
+            ) {
+                if (title != null) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        // Named rather than inherited: the hero is not a Surface,
+                        // and its own wash is what the colour is measured on.
+                        color = scheme.onSurface,
+                        // The node a screen reader announces when the state
+                        // changes, as the plain status line it replaces was.
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                }
+                if (detail != null) {
+                    Text(
+                        text = detail,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        content()
+    }
+}
+
+/** The status head's corner: one step softer than a card's 11, the Mac's 14. */
+private val HeroCorner = RoundedCornerShape(14.dp)
+
+/** The opaque violet end of the status-head wash. Exposed for the contrast test. */
+internal fun heroTint(action: Color, card: Color): Color =
+    action.copy(alpha = if (card.luminanceApprox() > 0.5f) 0.10f else 0.22f).compositeOver(card)
+
+private fun Color.luminanceApprox(): Float = 0.2126f * red + 0.7152f * green + 0.0722f * blue
+
+/** The brand radar: a core inside two still rings, the Mac's 52/30 footprint.
+ *  Decorative — the title beside it carries the state. */
+@Composable
+private fun BrandRadar(icon: ImageVector, active: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    val ring = if (active) scheme.primary else scheme.outlineVariant
+    Box(
+        modifier = Modifier
+            .size(52.dp)
+            .border(1.5.dp, ring.copy(alpha = if (active) 0.22f else 1f), CircleShape)
+            .padding(6.dp)
+            .border(1.5.dp, ring.copy(alpha = if (active) 0.45f else 1f), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .background(if (active) scheme.primary else scheme.surfaceVariant, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (active) scheme.onPrimary else scheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+/**
+ * One fact in a group: a label, optionally a line under it, a value opposite,
+ * and a control at the end.
+ *
+ * The row is one thing — every part of it stays inside it and above the next
+ * separator. [value] takes its own weighted slot rather than sharing a line, so
+ * a long figure wraps instead of squeezing the label away at 320dp. At least
+ * [Metrics.touch] tall, by `defaultMinSize` so large fonts can exceed it.
+ */
+@Composable
+internal fun GroupRow(
+    label: String,
+    modifier: Modifier = Modifier,
+    secondary: String? = null,
+    value: String? = null,
+    trailing: @Composable (RowScope.() -> Unit)? = null,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = Metrics.touch)
+            .padding(vertical = Metrics.tight),
+        horizontalArrangement = Arrangement.spacedBy(Metrics.cardGap),
+        // TOP rather than centre, for the reason `InlineMessage` gives: at font
+        // scale 2 these rows are several lines tall and a centred control drifts
+        // into the middle of the sentence beside it.
+        verticalAlignment = Alignment.Top,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(Metrics.hairline),
+        ) {
+            Text(text = label, style = MaterialTheme.typography.bodyLarge)
+            if (secondary != null) {
+                Text(
+                    text = secondary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (value != null) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.End,
+            )
+        }
+        trailing?.invoke(this)
+    }
+}
+
+/** Between two rows of one group. Inset by the card's own padding, which is what
+ *  keeps it reading as a division inside a thing rather than as an edge. */
+@Composable
+internal fun GroupDivider() {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 /**
@@ -492,7 +716,7 @@ internal fun InlineMessage(
                     Modifier
                 },
             ),
-        shape = MaterialTheme.shapes.medium,
+        shape = NestedCorner,
         colors = CardDefaults.cardColors(containerColor = container),
     ) {
         Row(

@@ -4,6 +4,8 @@ import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -32,6 +34,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -68,13 +72,36 @@ internal fun CloudScreen(
     pickers: CloudPickers,
     onOpenAccount: () -> Unit,
 ) {
+    val download by viewModel.cloudDownload.state.collectAsStateWithLifecycle()
+
+    // ORDER, decided by what is actually happening.
+    //
+    // Sending leads by default: this surface's own entry point is "put files
+    // somewhere the other person can fetch them", and that is what most visits
+    // are for.
+    //
+    // A transfer coming IN reverses it. Arriving here with a link — tapped,
+    // shared, scanned, or pasted into the Code-or-link field on the transfer
+    // screen — means the receive half is the thing the user asked for, and it
+    // otherwise renders below a send card, its retention controls and an
+    // account prompt, which on a phone is entirely below the fold. The
+    // condition is the DOWNLOAD's state and deliberately not the link draft:
+    // keying it on the text would make the card jump while somebody was still
+    // typing, and `Idle` is exactly "nothing is incoming yet".
+    val incoming = download !is CloudDownloadModel.State.Idle
+
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.section)) {
         ScreenHeader(
             title = stringResource(R.string.cloud_title),
             supporting = stringResource(R.string.cloud_intro),
         )
-        SendCard(viewModel, pickers, onOpenAccount)
-        ReceiveCard(viewModel, pickers)
+        if (incoming) {
+            ReceiveCard(viewModel, pickers)
+            SendCard(viewModel, pickers, onOpenAccount)
+        } else {
+            SendCard(viewModel, pickers, onOpenAccount)
+            ReceiveCard(viewModel, pickers)
+        }
         HistoryCard(viewModel)
     }
 }
@@ -101,9 +128,8 @@ private fun SendCard(
     val burn by viewModel.cloudUpload.burnAfterRead.collectAsStateWithLifecycle()
     val signedIn = account is AccountState.Ready
 
-    SectionCard {
+    SectionCard(title = stringResource(R.string.cloud_send_title)) {
         run {
-            Text(stringResource(R.string.cloud_send_title), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.cloud_send_intro), style = MaterialTheme.typography.bodyMedium)
 
             if (!signedIn) {
@@ -556,9 +582,24 @@ private fun ReceiveCard(viewModel: TransferViewModel, pickers: CloudPickers) {
     // [com.relayium.android.cloud.CloudLinkDraft].
     val link by viewModel.cloudLinkDraft.text.collectAsStateWithLifecycle()
 
-    SectionCard {
+    // ONE action, reachable two ways, and it is the same explicit open the
+    // button has always performed — the keyboard's Done does not get a path of
+    // its own, so there is no arrangement in which a single gesture opens twice.
+    // The blank guard mirrors the button's `enabled`: Done on an empty field
+    // does nothing, rather than starting a request for no link.
+    //
+    // The keyboard is hidden FIRST, for the reason the join field states: on a
+    // narrow screen at a large font scale the result of this action — a
+    // resolved transfer, or an error above the field — can sit entirely behind
+    // the IME, and an action that appears to do nothing reads as a dead key.
+    val keyboard = LocalSoftwareKeyboardController.current
+    val open = {
+        keyboard?.hide()
+        if (link.isNotBlank()) viewModel.cloudDownload.open(link)
+    }
+
+    SectionCard(title = stringResource(R.string.cloud_receive_title)) {
         run {
-            Text(stringResource(R.string.cloud_receive_title), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.cloud_receive_intro), style = MaterialTheme.typography.bodyMedium)
 
             when (val current = state) {
@@ -579,9 +620,11 @@ private fun ReceiveCard(viewModel: TransferViewModel, pickers: CloudPickers) {
                         colors = accentFieldColors(),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { open() }),
                     )
                     Button(
-                        onClick = { viewModel.cloudDownload.open(link) },
+                        onClick = open,
                         enabled = link.isNotBlank(),
                         modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
                     ) { Text(stringResource(R.string.cloud_open)) }
@@ -631,14 +674,37 @@ private fun ReceiveCard(viewModel: TransferViewModel, pickers: CloudPickers) {
                 }
 
                 is CloudDownloadModel.State.Saving -> {
+                    // The ONLY announced node while saving, and it changes only
+                    // when the situation does: entering `Saving`, losing the
+                    // connection, getting it back.
+                    //
+                    // The byte counter below used to carry the live region, and
+                    // `CloudDownloadModel` republishes `Saving` on every write —
+                    // once per 192 KiB frame — so a 2 GB receive interrupted
+                    // TalkBack about eleven thousand times and the one
+                    // announcement that mattered was buried in it. Every other
+                    // live region in this app is on a discrete status string;
+                    // this is now the same, and the bar beside it carries the
+                    // continuous value as `ProgressBarRangeInfo`, which a screen
+                    // reader reports on demand rather than by interruption.
+                    Text(
+                        stringResource(
+                            if (current.reconnecting) {
+                                R.string.cloud_reconnecting
+                            } else {
+                                R.string.cloud_saving_status
+                            },
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    )
                     Text(
                         stringResource(
                             R.string.cloud_saving,
                             formatBytes(current.received),
                             formatBytes(current.total),
                         ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        style = MaterialTheme.typography.bodySmall,
                     )
                     LinearProgressIndicator(
                         progress = {
@@ -701,9 +767,8 @@ private fun HistoryCard(viewModel: TransferViewModel) {
         if (signedIn && state is CloudHistoryModel.State.Idle) viewModel.cloudHistory.refresh()
     }
 
-    SectionCard {
+    SectionCard(title = stringResource(R.string.cloud_history_title)) {
         run {
-            Text(stringResource(R.string.cloud_history_title), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.cloud_history_intro), style = MaterialTheme.typography.bodyMedium)
 
             if (!signedIn) {
