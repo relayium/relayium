@@ -69,3 +69,49 @@ XCUITest's query latency. Launch arguments: `--relayium-ui-testing-inbox-check`
   holding its deliveries after a check.
 - `RelayiumUITests/ReferenceLayoutCaptureTests`: EN/zh, Light/Dark and
   accessibility-size captures of every destination, phone and iPad.
+
+## Hosted UI gate corrections (2026-09-17)
+
+The first hosted iOS run of this work (workflow run `35186364950`, iPhone 16
+Pro, iOS 18.5 simulator, Xcode 26.3) failed three UI tests. Both causes were
+diagnosed from that run's result bundle and screen recording before anything
+was changed.
+
+- **Cross-network title clipped at accessibility sizes: a real defect, fixed
+  in `DirectView`.** Both system accessibility audits (Light and Dark)
+  reported `Text clipped` on the `Cross-network` navigation title. Frames from
+  the run's recording show the audit scaling the type and the large title
+  going from full width to `Cross-netw…`. The unchanged source reproduced it
+  locally without the audit: the AX-XXXL capture on the iPhone 17 Pro
+  simulator (iOS 26.5) rendered `Cross-netwo…`. A large title is a single line
+  that grows with Dynamic Type, and `Cross-network` is the widest destination
+  name. The screen now uses an inline title at accessibility sizes, which shows
+  the whole word, and keeps the large title otherwise. The audit's
+  classifications and assertions are unchanged, and the hosted iOS 18.5 audit
+  remains the required proof.
+- **The stored-link sheet at AX-XXXL: a test-driving defect, fixed in
+  `ReferenceLayoutCaptureTests`.** The run's activity trail shows `Done`
+  stopped resolving right after the capture's two swipes back down, before
+  any upward swipe. A downward swipe at the top of a sheet drags the sheet
+  itself, so the capture dismissed the sheet, and the reach loop then failed
+  looking for a control that was gone. The locally passing run found `Done`
+  immediately. The presented sheet is now captured without the swipe back
+  (`Done` is pinned in the page's top inset and stays on screen from the
+  scrolled position). A new assertion fails if the capture's own scrolling
+  dismisses the sheet. The reach check and the dismissal assertion are
+  unchanged.
+
+Validation status, on the owned iOS 26.5 simulators (iPhone 17 Pro phone, iPad
+Pro 11-inch pad), recorded under `root-resume/ui-gate-fix`:
+
+- `root-phone.xcresult`: passed 12 of 12, none skipped. That is the whole
+  `ReferenceLayoutCaptureTests` class (10) plus the Light and Dark system
+  accessibility audits (2).
+- `root-pad.xcresult`: the AX-XXXL capture passed, 1 of 1.
+- `root-swift-ios.log`: 343 tests, 0 failures.
+- `root-web-tests.log`: 82 tests, 0 failures.
+- The AX-XXXL screenshots from both the phone and the pad were reviewed.
+
+Still pending and required: a hosted rerun on iOS 18.5, the runtime where the
+audit failures were found, which is not installed here. Nothing here claims
+TestFlight delivery.

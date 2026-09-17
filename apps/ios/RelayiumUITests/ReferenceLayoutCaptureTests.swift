@@ -542,7 +542,16 @@ final class ReferenceLayoutCaptureTests: XCTestCase {
                       "the stored-link screen did not come up as a sheet")
         XCTAssertTrue(app.navigationBars[language.storedReceiveTitle].waitForExistence(timeout: 10),
                       "the stored-link sheet did not render its \(language.argument) title")
-        captureColumn(name: "\(name)-storedReceive")
+        // Captured WITHOUT the swipe back down. This is a sheet: a downward swipe
+        // that reaches the top of its content drags the sheet itself, and on the
+        // hosted iOS 18.5 runner the second one dismissed it — `Done` stopped
+        // resolving before any upward swipe was made, and the reach loop below
+        // then failed searching for a control that was no longer on screen. Done
+        // sits in the page's top safe-area inset, so it stays on screen from the
+        // scrolled position this leaves.
+        captureColumn(name: "\(name)-storedReceive", returnToTop: false)
+        XCTAssertTrue(done.exists,
+                      "the capture's own scrolling dismissed the stored-link sheet before its Done was tried")
         // Dismissed the way a reader dismisses it, so the capture also records
         // that the sheet's own exit still works over the redesigned page.
         scrollUntilHittable(done)
@@ -625,11 +634,12 @@ final class ReferenceLayoutCaptureTests: XCTestCase {
 
     /// The top of a destination and, for the ones long enough to have one, what
     /// is below the fold — the device and stored-file groups sit there.
-    private func captureColumn(name: String) {
+    private func captureColumn(name: String, returnToTop: Bool = true) {
         attach(name: name)
         app.swipeUp()
         app.swipeUp()
         attach(name: "\(name)-scrolled")
+        guard returnToTop else { return }
         app.swipeDown()
         app.swipeDown()
     }
