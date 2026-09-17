@@ -197,7 +197,6 @@ struct DirectView: View {
 
     @EnvironmentObject private var session: AccountSession
     @EnvironmentObject private var verification: VerificationPreference
-    @Environment(\.dynamicTypeSize) private var typeSize
 
     @State private var isChoosingFiles = false
     /// The pairing scanner sheet. One flag for both modes, because exactly one
@@ -259,15 +258,13 @@ struct DirectView: View {
                 }
             }
             .navigationTitle(L10n.t(.navCrossNetworkShort))
-            // **Inline at accessibility sizes, because the large title truncates
-            // there.** A large navigation title is one line that grows with
-            // Dynamic Type, and "Cross-network" is the widest destination name:
-            // at the largest sizes it rendered "Cross-netwo…" on an iPhone 17
-            // Pro under iOS 26.5, and the iOS 18.5 system audit reported it as
-            // clipped text while scaling the type. The other destination names
-            // measured clear at the same sizes. The inline title keeps the whole
-            // word, and the page below still scales like every other screen.
-            .navigationBarTitleDisplayMode(typeSize.isAccessibilitySize ? .inline : .automatic)
+            // **Always inline.** "Cross-network" is the widest destination name,
+            // and a one-line large title truncates it at accessibility text sizes.
+            // Switching to inline only at those sizes moved the page 52 pt when the
+            // size changed, and the bar did not return to a large title afterwards.
+            // One mode keeps the complete title and a stable layout at every
+            // Dynamic Type size. History: docs/ios-ui-alignment.md.
+            .navigationBarTitleDisplayMode(.inline)
         }
         // `[.item, .folder]`, so a folder is choosable and its contents are
         // expanded inside the security scope `DirectSendSelection` starts before

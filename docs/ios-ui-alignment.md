@@ -77,18 +77,44 @@ Pro, iOS 18.5 simulator, Xcode 26.3) failed three UI tests. Both causes were
 diagnosed from that run's result bundle and screen recording before anything
 was changed.
 
-- **Cross-network title clipped at accessibility sizes: a real defect, fixed
-  in `DirectView`.** Both system accessibility audits (Light and Dark)
-  reported `Text clipped` on the `Cross-network` navigation title. Frames from
-  the run's recording show the audit scaling the type and the large title
-  going from full width to `Cross-netw…`. The unchanged source reproduced it
-  locally without the audit: the AX-XXXL capture on the iPhone 17 Pro
-  simulator (iOS 26.5) rendered `Cross-netwo…`. A large title is a single line
-  that grows with Dynamic Type, and `Cross-network` is the widest destination
-  name. The screen now uses an inline title at accessibility sizes, which shows
-  the whole word, and keeps the large title otherwise. The audit's
-  classifications and assertions are unchanged, and the hosted iOS 18.5 audit
-  remains the required proof.
+- **Cross-network title clipped at accessibility sizes: a real defect. The
+  Cross-network screen now always uses an inline title.** Both system
+  accessibility audits (Light and Dark) reported `Text clipped` on the
+  `Cross-network` navigation title. Frames from the run's recording show the
+  audit scaling the type and the large title going from full width to
+  `Cross-netw…`. The unchanged source reproduced it locally without the audit:
+  the AX-XXXL capture on the iPhone 17 Pro simulator (iOS 26.5) rendered
+  `Cross-netwo…`. A large title is one line that grows with Dynamic Type, and
+  `Cross-network` is the widest destination name.
+
+  The first correction, inline only at accessibility sizes, failed the next
+  hosted run (`35192603745`, commit `ed14a73d`, iOS 18.5). The Cross-network
+  screen then had new Light contrast findings on the three route labels and
+  the mode explanation, an empty "potentially inaccessible" element, and a
+  Dark contrast finding on `Scan a QR code`. The run's recordings and a
+  recorded local run established why:
+  - When the audit scaled the type, the bar switched to inline and the page
+    moved up 52 pt. It did not switch back when the size returned. That was
+    recorded on iOS 26.5 with the other branch as `.automatic` and again as
+    `.large`: hero top 180 pt before the audit, 128 pt after it, at the same
+    ordinary text size. So the conditional also left real users stuck inline
+    after changing their text size.
+  - At the reported frames, the pre-jump pixels measure 1.03–3.67:1 for three
+    of the route and explanation labels and 1.31:1 for the Dark button. The
+    stable post-jump pixels at those same frames measure 19–21:1 for the route
+    labels, about 4.5:1 for the explanation and 4.6:1 for the button. Those
+    are video estimates, not exact colour values.
+  - The frame positions match the post-jump layout, and the low ratios match
+    the pre-jump pixels. The likely explanation is that the audit measured
+    pixels from before the jump at frames from after it, not a colour defect.
+    That is an inference consistent with the recordings. How the system audit
+    samples internally cannot be observed.
+
+  One mode removes the jump. In a recorded local audit with the title always
+  inline, the page stays at 128 pt throughout, and the title reads in full at
+  every size on phone and iPad. No audit classification or assertion was
+  changed. The remaining risk is that this screen now differs from the other
+  destinations, which keep large titles.
 - **The stored-link sheet at AX-XXXL: a test-driving defect, fixed in
   `ReferenceLayoutCaptureTests`.** The run's activity trail shows `Done`
   stopped resolving right after the capture's two swipes back down, before
@@ -101,17 +127,22 @@ was changed.
   dismisses the sheet. The reach check and the dismissal assertion are
   unchanged.
 
-Validation status, on the owned iOS 26.5 simulators (iPhone 17 Pro phone, iPad
-Pro 11-inch pad), recorded under `root-resume/ui-gate-fix`:
+Validation status for the always-inline correction, on the owned iOS 26.5
+simulators (recorded under `root-resume/ui-gate-fix`):
 
-- `root-phone.xcresult`: passed 12 of 12, none skipped. That is the whole
-  `ReferenceLayoutCaptureTests` class (10) plus the Light and Dark system
-  accessibility audits (2).
-- `root-pad.xcresult`: the AX-XXXL capture passed, 1 of 1.
-- `root-swift-ios.log`: 343 tests, 0 failures.
-- `root-web-tests.log`: 82 tests, 0 failures.
-- The AX-XXXL screenshots from both the phone and the pad were reviewed.
+- The Light and Dark system accessibility audits pass on the phone, each
+  screen-recorded. The Cross-network page stays at 128 pt through the whole
+  audit.
+- On the phone, `testEnglishLightCapturesEverySurface` and
+  `testTheLargestTextSizeCapturesEverySurface` pass.
+- On the pad, `testTheLargestTextSizeCapturesEverySurface` passes.
 
-Still pending and required: a hosted rerun on iOS 18.5, the runtime where the
-audit failures were found, which is not installed here. Nothing here claims
-TestFlight delivery.
+The root's independent checks then passed on the same owned simulators:
+`root-inline-phone.xcresult` passed 4 of 4 (Light audit, Dark audit, English
+normal capture, AX-XXXL capture), and `root-inline-pad.xcresult` passed the
+AX-XXXL capture, 1 of 1. The logs sit beside those bundles, and the before and
+after phone screenshots at normal and AX-XXXL sizes were inspected. A hosted
+rerun on iOS 18.5 is still pending and required; that runtime is not installed
+here. Local iOS 26.5 results are not
+iOS 18.5 evidence: the earlier conditional passed these same local audits.
+Nothing here claims TestFlight delivery.
