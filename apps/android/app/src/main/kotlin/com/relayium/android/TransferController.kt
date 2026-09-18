@@ -229,6 +229,9 @@ class TransferController(
         val sas: String? = null,
         /** A stable identifier the UI maps to localised copy. Never raw text. */
         val errorKey: String? = null,
+        /** Incoming conversations this link admitted WITHOUT a prompt (link/1
+         *  only). Zero on the older wire, which still asks. */
+        val textAutoAdmits: Int = 0,
         /** The pairing room's socket dropped while waiting and is being rejoined
          *  with the same code. The code on screen is still the code to use. */
         val reconnecting: Boolean = false,
@@ -1605,7 +1608,10 @@ class TransferController(
             FileLaneSession(sessionKeys, frameBytes, barrier = wire == Wire.LINK)
         }
         val text: TextLane? = when (wire) {
-            Wire.LINK -> TextLaneSession(sessionKeys, frameBytes)
+            Wire.LINK -> TextLaneSession(
+                sessionKeys, frameBytes,
+                initiator = LinkProtocol.linkRole(selfId, peerId) == LinkProtocol.Role.INITIATOR,
+            )
             Wire.LEGACY_TEXT -> LegacyTextLane(sessionKeys, frameBytes, role = legacy!!.role)
             Wire.LEGACY_FILES -> null
         }
@@ -2240,6 +2246,8 @@ class TransferController(
     private fun applyText(mine: Int, actions: List<TextLaneSession.Action>): Boolean {
         val lane = textLane ?: return false
         var enqueueFailed = false
+        var requestedNow = false
+        var openedNow = false
         for (action in actions) {
             when (action) {
                 is TextLaneSession.Action.Send -> {
@@ -2265,9 +2273,9 @@ class TransferController(
                     }
                     if (key != null) _state.value = _state.value.copy(errorKey = key)
                 }
+                is TextLaneSession.Action.Requested -> requestedNow = true
+                is TextLaneSession.Action.Opened -> openedNow = true
                 is TextLaneSession.Action.Drained,
-                is TextLaneSession.Action.Requested,
-                is TextLaneSession.Action.Opened,
                 is TextLaneSession.Action.Ended,
                 -> Unit
             }
@@ -2280,6 +2288,30 @@ class TransferController(
         }
         syncTextTimers(mine, lane)
         _state.value = _state.value.copy(textState = lane.state, textCanRequest = lane.canRequest)
+        if (!isLegacy) {
+            // On `link/1` the conversation is part of the ONE workspace, as it is
+            // on the website, the Mac and the iPhone: they open the lane by
+            // themselves and admit an incoming request without asking. Here it
+            // needed a "Start a conversation" tap on one side and an "Accept" on
+            // the other, in a card below the fold — while the browser at the far
+            // end sat in "waiting for accept" with Send disabled and neither
+            // screen said why. The pair was already admitted and authenticated
+            // when the link came up; this is not a second consent. The older
+            // wire keeps its prompt: there the conversation IS the connection.
+            if (requestedNow && lane.state == TextLaneSession.State.INCOMING_REQUEST) {
+                lastTextActivity = System.currentTimeMillis()
+                // Counted, because the state passes through INCOMING_REQUEST in
+                // one executor turn and an observer polling the published state
+                // may never see it: an acceptance that has to account for who
+                // opened the conversation reads this instead of guessing.
+                _state.value = _state.value.copy(textAutoAdmits = _state.value.textAutoAdmits + 1)
+                applyText(mine, lane.accept())
+            }
+            if (openedNow || lane.state == TextLaneSession.State.OPEN) flushPendingText()
+            if (lane.state == TextLaneSession.State.ENDED || lane.state == TextLaneSession.State.FAILED) {
+                dropPendingText()
+            }
+        }
         // On the older wire the conversation IS the connection: once it is
         // ENDED or FAILED nothing can carry a frame on it in either direction,
         // and leaving the socket open would leave the user in front of a dead
@@ -2404,7 +2436,26 @@ class TransferController(
         }
         val lane = textLane ?: run { onOutcome?.invoke(false); return@post }
         if (lane.state != TextLaneSession.State.OPEN) {
-            onOutcome?.invoke(false)
+            // `link/1`: typing and pressing Send IS how a conversation starts, as
+            // on iOS (`flushOrOpenConversation`). Open the lane, hold this one
+            // message, and send it the moment the peer's ACCEPT lands. One held
+            // message, not a queue: a second Send before the first has gone is
+            // refused, so the draft stays in the field rather than piling up
+            // behind a lane that may never open.
+            val canOpen = !isLegacy && pendingText == null &&
+                (lane.canRequest || lane.state == TextLaneSession.State.INCOMING_REQUEST ||
+                    lane.state == TextLaneSession.State.REQUESTED)
+            if (!canOpen) {
+                onOutcome?.invoke(false)
+                return@post
+            }
+            pendingText = PendingText(body, epoch, onOutcome)
+            lastTextActivity = System.currentTimeMillis()
+            when {
+                lane.state == TextLaneSession.State.INCOMING_REQUEST -> applyText(epoch, lane.accept())
+                lane.canRequest -> applyText(epoch, lane.request())
+                // Already REQUESTED: the ACCEPT that is on its way flushes it.
+            }
             return@post
         }
         // The send-buffer bound, checked BEFORE sealing so no nonce is burned
@@ -2426,6 +2477,45 @@ class TransferController(
             )
         }
         onOutcome?.invoke(sent)
+    }
+
+    private class PendingText(val body: String, val link: Int, val onOutcome: ((Boolean) -> Unit)?)
+
+    /** The one message typed before the lane was open. See [sendText]. */
+    private var pendingText: PendingText? = null
+
+    private fun flushPendingText() {
+        val pending = pendingText ?: return
+        pendingText = null
+        val lane = textLane
+        if (lane == null || pending.link != epoch || lane.state != TextLaneSession.State.OPEN) {
+            pending.onOutcome?.invoke(false)
+            return
+        }
+        if ((transport?.textBufferedAmount() ?: 0) > TextSessionLimits.SEND_BUFFER_MAX) {
+            _state.value = _state.value.copy(errorKey = "error_text_buffer_full")
+            pending.onOutcome?.invoke(false)
+            return
+        }
+        lastTextActivity = System.currentTimeMillis()
+        val actions = lane.send(pending.body)
+        val hadFrame = actions.any { it is TextLaneSession.Action.Send }
+        val sent = hadFrame && applyText(epoch, actions)
+        if (sent) {
+            _state.value = _state.value.copy(
+                messages = (_state.value.messages + Message(pending.body, fromPeer = false))
+                    .takeLast(TextSessionLimits.HISTORY_MAX),
+            )
+        }
+        pending.onOutcome?.invoke(sent)
+    }
+
+    /** The lane ended or failed before it opened: the draft was NOT sent, and the
+     *  caller keeps it in the field. */
+    private fun dropPendingText() {
+        val pending = pendingText ?: return
+        pendingText = null
+        pending.onOutcome?.invoke(false)
     }
 
     // ── ending ──────────────────────────────────────────────────────────────
@@ -2560,6 +2650,7 @@ class TransferController(
         keys = null
         fileLane = null
         textLane = null
+        dropPendingText()
         wireProfile = null
         peerId = ""
         receivedBytes = 0

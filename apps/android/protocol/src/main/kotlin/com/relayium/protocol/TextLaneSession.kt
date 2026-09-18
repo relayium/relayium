@@ -71,6 +71,12 @@ class TextLaneSession(
     private val sender: TextWire.Sender = TextWire.Sender(),
     private val receiver: TextWire.Receiver = TextWire.Receiver(),
     private val now: () -> Long = System::currentTimeMillis,
+    /**
+     * This side's role on the link, for the one decision that needs it: two
+     * REQUESTs that crossed. Defaults to the yielding side, which is what this
+     * class did for everyone before it was told its role.
+     */
+    private val initiator: Boolean = false,
 ) : TextLane {
 
     companion object {
@@ -413,6 +419,22 @@ class TextLaneSession(
             // open conversation with REJECT rather than silence, so the peer
             // fails fast instead of waiting out its own timeout.
             State.OPEN -> listOf(Action.Send(TextWire.REJECT))
+            // Both sides asked at once. The shipped Web's rule, which this file
+            // says it is modelled on and had left out: the INITIATOR keeps its
+            // outbound request and refuses the crossing one; the responder turns
+            // its own intent into the one incoming prompt. With both sides
+            // yielding — what happened here when this side was the initiator —
+            // each sat in "incoming request" waiting for the other to accept.
+            State.REQUESTED -> if (initiator) {
+                listOf(Action.Send(TextWire.REJECT))
+            } else {
+                beginConversation()
+                state = State.INCOMING_REQUEST
+                listOf(Action.Requested)
+            }
+            // A duplicate REQUEST for the prompt already showing: not a new
+            // conversation, and not a second prompt.
+            State.INCOMING_REQUEST -> emptyList()
             else -> {
                 beginConversation()
                 state = State.INCOMING_REQUEST

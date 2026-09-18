@@ -382,10 +382,28 @@ private fun MessagesCard(
     val renderedLink = state.linkId
     val draft = if (draftState.linkId == renderedLink) draftState.text else ""
 
+    // On `link/1` the composer is simply THERE, as it is on the website, the Mac
+    // and the iPhone: pressing Send opens the conversation and the message goes
+    // when the other side's accept lands (see TransferController.sendText). The
+    // "Start a conversation" step survives only on the older wire, where opening
+    // a conversation is a commitment that ends the connection with it.
+    val lane = state.textState
+    val composerWithoutOpen = state.wire == TransferController.Wire.LINK && (
+        lane == TextLaneSession.State.REQUESTED ||
+            ((lane == TextLaneSession.State.IDLE || lane == TextLaneSession.State.ENDED) && state.textCanRequest)
+        )
+
     SectionCard(title = stringResource(R.string.text_title)) {
         run {
-            when (state.textState) {
+            when (if (composerWithoutOpen) TextLaneSession.State.OPEN else lane) {
                 TextLaneSession.State.OPEN -> {
+                    if (lane == TextLaneSession.State.REQUESTED) {
+                        Text(
+                            text = stringResource(R.string.text_requested),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     if (state.messages.isEmpty()) {
                         Text(
                             text = stringResource(R.string.text_empty),
@@ -429,7 +447,8 @@ private fun MessagesCard(
                             }
                         },
                         secondary = { m ->
-                            TextButton(
+                            // Only a conversation that is actually open can be ended.
+                            if (lane == TextLaneSession.State.OPEN) TextButton(
                                 onClick = viewModel::endText,
                                 modifier = m.heightIn(min = 48.dp),
                             ) {

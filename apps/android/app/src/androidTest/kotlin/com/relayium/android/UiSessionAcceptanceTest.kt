@@ -205,11 +205,11 @@ class UiSessionAcceptanceTest {
             observations["sas"] = state(vm).sas
             observations["linkId"] = link
 
-            // ── text lane through the REAL Accept button ────────────────────
-            awaitTrue("the peer asked for the text lane") {
-                state(vm).textState == TextLaneSession.State.INCOMING_REQUEST
-            }
-            clickText(R.string.text_accept)
+            // ── text lane, with NO Accept button ────────────────────────────
+            // On link/1 the app admits the peer's request by itself, as the
+            // website, the Mac and the iPhone do. The former round waited for an
+            // INCOMING_REQUEST prompt and tapped Accept; that prompt no longer
+            // exists on this wire, so its absence is part of what is asserted.
             awaitTrue("the text lane opened") {
                 state(vm).textState == TextLaneSession.State.OPEN
             }

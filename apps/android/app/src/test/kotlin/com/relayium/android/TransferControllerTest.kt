@@ -263,13 +263,72 @@ class TransferControllerTest {
 
     // ── R4.2/R13: the end-barrier lease at the adapter ──────────────────────
 
+    /** The peer asks; on `link/1` this side admits by itself, as the website,
+     *  the Mac and the iPhone do. There is no prompt to answer any more. */
     private fun openText(rig: Rig, remote: Crypto.SessionKeys) {
         rig.transport.events.onTextFrame(TextWire.REQUEST)
-        awaitTrue("incoming request") {
-            rig.controller.state.value.textState == TextLaneSession.State.INCOMING_REQUEST
-        }
-        rig.controller.acceptText()
         awaitTrue("open") { rig.controller.state.value.textState == TextLaneSession.State.OPEN }
+    }
+
+    // Owner report, 0.2.3: messages needed "Start a conversation" on one side
+    // and "Accept" on the other, while the browser at the far end sat in
+    // "waiting for accept" with Send disabled. On link/1 the pair is already
+    // admitted and authenticated; the lane opens without a second consent.
+    @Test
+    fun `an incoming conversation on link-1 is admitted without a prompt`() {
+        val rig = rig()
+        connect(rig)
+        rig.transport.events.onTextFrame(TextWire.REQUEST)
+        awaitTrue("open, with no Accept tap") {
+            rig.controller.state.value.textState == TextLaneSession.State.OPEN
+        }
+        assertTrue(
+            "the ACCEPT went to the peer",
+            rig.transport.textFrames.any { it.contentEquals(TextWire.ACCEPT) },
+        )
+    }
+
+    @Test
+    fun `pressing Send on an idle lane opens it and the held message goes when the peer accepts`() {
+        val rig = rig()
+        connect(rig)
+        val outcomes = ArrayList<Boolean>()
+        rig.controller.sendText("typed before anything was open") { outcomes.add(it) }
+        awaitTrue("the lane was requested") {
+            rig.controller.state.value.textState == TextLaneSession.State.REQUESTED
+        }
+        assertTrue("nothing is claimed as sent yet", outcomes.isEmpty())
+        assertTrue(rig.controller.state.value.messages.isEmpty())
+
+        // A second Send while one is held is refused, so that draft stays in
+        // the field instead of queueing behind a lane that may never open.
+        val second = ArrayList<Boolean>()
+        rig.controller.sendText("a second one") { second.add(it) }
+        awaitTrue("refused at once") { second.size == 1 }
+        assertFalse(second[0])
+
+        rig.transport.events.onTextFrame(TextWire.ACCEPT)
+        awaitTrue("the held message is sent on open") { outcomes.size == 1 }
+        assertTrue(outcomes[0])
+        assertEquals(
+            listOf("typed before anything was open"),
+            rig.controller.state.value.messages.map { it.body },
+        )
+    }
+
+    @Test
+    fun `a held message whose lane is refused reports not sent so the draft survives`() {
+        val rig = rig()
+        connect(rig)
+        val outcomes = ArrayList<Boolean>()
+        rig.controller.sendText("never delivered") { outcomes.add(it) }
+        awaitTrue("requested") {
+            rig.controller.state.value.textState == TextLaneSession.State.REQUESTED
+        }
+        rig.transport.events.onTextFrame(TextWire.REJECT)
+        awaitTrue("the outcome is reported") { outcomes.size == 1 }
+        assertFalse("a refused lane sent nothing", outcomes[0])
+        assertTrue(rig.controller.state.value.messages.isEmpty())
     }
 
     @Test
@@ -329,12 +388,9 @@ class TransferControllerTest {
     fun `sendText reports its enqueue outcome truthfully at every refusal`() {
         val rig = rig()
         val remote = connect(rig)
-        // A lane that is not OPEN refuses, and SAYS it refused — the caller's
-        // draft must survive this.
-        val early = ArrayList<Boolean>()
-        rig.controller.sendText("before the lane opened") { early.add(it) }
-        awaitTrue("closed-lane outcome") { early.size == 1 }
-        assertFalse("a closed lane must not report success", early[0])
+        // (A Send on a lane that is not open yet is no longer a refusal on
+        // link/1 — it opens the lane and holds the message; that path has its
+        // own tests above. What follows is every refusal that remains.)
         openText(rig, remote)
         // A full send buffer refuses BEFORE burning a nonce, surfaces the
         // busy error, and reports failure. No false sent row.
@@ -1498,11 +1554,8 @@ class TransferControllerTest {
         // The new peer's text lane is OPEN, so nothing but the fence can refuse.
         // Driven through the NEW transport — `rig.transport` is the first one.
         val newTransport = rig.transports.last()
+        // Admitted without a prompt on link/1; see `openText`.
         newTransport.events.onTextFrame(TextWire.REQUEST)
-        awaitTrue("the new peer's text request") {
-            rig.controller.state.value.textState == TextLaneSession.State.INCOMING_REQUEST
-        }
-        rig.controller.acceptText()
         awaitTrue("the new peer's text lane is open") {
             rig.controller.state.value.textState == TextLaneSession.State.OPEN
         }

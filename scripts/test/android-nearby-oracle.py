@@ -460,6 +460,12 @@ def judge_web(android_path, browser_path, expect_path):
     native_clicks = strict_count(negotiation.get("acceptClicks"), "the phone's acceptClicks")
     native_open = strict_bool(negotiation.get("openedAfterAccept"),
                               "the phone's openedAfterAccept")
+    # Since Android 0.2.4 a link/1 conversation the PEER opens is admitted with
+    # no prompt, as the website, the Mac and the iPhone already did. The
+    # controller counts those admissions itself, because the state that would
+    # show one lasts a single executor turn and a poll can miss it. Absent on an
+    # older receipt, which is read as none.
+    native_auto = strict_count(negotiation.get("autoAdmits", 0), "the phone's autoAdmits")
     browser_accepted = strict_bool(browser["target"].get("acceptedTextRequest"),
                                    "the browser's acceptedTextRequest")
     browser_clicks = strict_count(browser["target"].get("textConsentClicks"),
@@ -479,9 +485,16 @@ def judge_web(android_path, browser_path, expect_path):
 
     native_answered = native_accepted > 0 and native_open
     browser_answered = browser_accepted and browser_clicks > 0
-    if not (native_answered or browser_answered):
-        fail("NEITHER endpoint answered a text consent prompt, so this round never went "
-             "through the stop a person is meant to answer")
+    # An admission without a prompt is a THIRD way the lane opens, and it has to
+    # be accounted for as strictly as the other two: the phone must not also
+    # claim it asked (then the browser's answer is what opened it), and an open
+    # lane with no answer, no admission and no request is still nothing at all.
+    native_admitted = native_auto > 0 and not native_answered
+    if native_auto > 0 and native_prompts > native_accepted + native_auto:
+        fail("the phone reports more incoming prompts than its answers and admissions account for")
+    if not (native_answered or browser_answered or native_admitted):
+        fail("NEITHER endpoint answered a text consent prompt and the phone admitted none, so "
+             "nothing accounts for the conversation being open")
     # Whoever did not answer must account for the prompt the other one answered.
     #
     # A prompt the PHONE answered came from the peer by construction — the lane
@@ -498,8 +511,11 @@ def judge_web(android_path, browser_path, expect_path):
         initiation = "collision"
     elif native_answered:
         initiation = "web-opened"
-    else:
+    elif browser_answered:
         initiation = "android-opened"
+    else:
+        # The browser opened it and the phone admitted it without asking anyone.
+        initiation = "web-opened-auto-admitted"
 
     accepted_files = strict_count(browser["target"].get("acceptedFileRequests"),
                                   "the browser's acceptedFileRequests")
@@ -795,6 +811,37 @@ def selftest():
     if run(android_asked, browser_answered_fixture, expect) != 0:
         print("SELFTEST FAIL: the phone-opened / browser-answered round does not pass",
               file=sys.stderr)
+        return 1
+    # Android 0.2.4: the browser opened the lane and the phone admitted it with
+    # no prompt. Nobody clicked anything, and the phone's own counter is what
+    # accounts for the open conversation.
+    auto_admitted = put(android, {"requestedLocally": False, "sawIncomingRequest": False,
+                                  "incomingPrompts": 0, "acceptedPrompts": 0, "acceptClicks": 0,
+                                  "openedAfterAccept": False, "autoAdmits": 1,
+                                  "finalTextState": "OPEN"},
+                        "textNegotiation")
+    if run(auto_admitted, browser, expect) != 0:
+        print("SELFTEST FAIL: a browser-opened, auto-admitted round does not pass",
+              file=sys.stderr)
+        return 1
+    # ...and the same receipt WITHOUT the counter is still nothing at all: an
+    # open lane that no answer, no admission and no request accounts for.
+    unaccounted = put(android, {"requestedLocally": False, "sawIncomingRequest": False,
+                                "incomingPrompts": 0, "acceptedPrompts": 0, "acceptClicks": 0,
+                                "openedAfterAccept": False, "autoAdmits": 0,
+                                "finalTextState": "OPEN"},
+                      "textNegotiation")
+    if run(unaccounted, browser, expect) == 0:
+        print("SELFTEST FAIL: an open lane nothing accounts for was accepted", file=sys.stderr)
+        return 1
+    # A boolean is an int in Python; the counter goes through the strict reader.
+    counterfeit = put(android, {"requestedLocally": False, "sawIncomingRequest": False,
+                                "incomingPrompts": 0, "acceptedPrompts": 0, "acceptClicks": 0,
+                                "openedAfterAccept": False, "autoAdmits": True,
+                                "finalTextState": "OPEN"},
+                      "textNegotiation")
+    if run(counterfeit, browser, expect) == 0:
+        print("SELFTEST FAIL: a boolean autoAdmits was read as a count", file=sys.stderr)
         return 1
     # And a genuine simultaneous open, which the lane's own rules resolve.
     both = put(android, {"requestedLocally": True, "sawIncomingRequest": True,

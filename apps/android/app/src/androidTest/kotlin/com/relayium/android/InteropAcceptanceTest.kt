@@ -148,12 +148,9 @@ class InteropAcceptanceTest {
             if (textRole == "request") {
                 awaitTrue("the text lane can be requested") { state(vm).textCanRequest }
                 vm.requestText()
-            } else {
-                awaitTrue("the peer asked for the text lane") {
-                    state(vm).textState == TextLaneSession.State.INCOMING_REQUEST
-                }
-                vm.acceptText()
             }
+            // The "accept" role has nothing to do any more: on link/1 an incoming
+            // request is admitted without a prompt, so the lane simply opens.
             awaitTrue("the text lane opened") { InteropDriver.textOpen(vm) }
 
             // The peer's message must arrive before this side answers, so a

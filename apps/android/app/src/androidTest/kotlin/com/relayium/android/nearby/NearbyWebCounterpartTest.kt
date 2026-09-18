@@ -669,6 +669,10 @@ class NearbyWebCounterpartTest {
                 "acceptedPrompts" to acceptedPrompts,
                 "acceptClicks" to acceptClicks,
                 "openedAfterAccept" to (reachedOpen && acceptedPrompts > 0),
+                // link/1 admits an incoming conversation without a prompt. The
+                // controller counts those, because a 100 ms poll can miss a
+                // state that lasts one executor turn.
+                "autoAdmits" to state(vm).textAutoAdmits,
                 "finalTextState" to lastSeen,
             )
         }

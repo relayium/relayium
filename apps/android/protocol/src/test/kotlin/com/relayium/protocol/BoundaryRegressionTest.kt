@@ -283,6 +283,65 @@ class BoundaryRegressionTest {
         assertEquals(RealtimeFrame.FLOW_WINDOW_BYTES, session.sendCredit)
     }
 
+    // ── two REQUESTs that crossed ───────────────────────────────────────────
+    //
+    // The shipped Web's rule (mixed-text-session `receiveRequest`): the
+    // initiator keeps its outbound request and refuses the crossing one; the
+    // responder turns its own intent into the one incoming prompt. This lane
+    // yielded on BOTH sides, so an Android initiator and a Web responder each
+    // sat in "incoming request" waiting for the other to accept.
+
+    @Test
+    fun `when requests cross the initiator keeps its own and refuses the other`() {
+        val (tx, _) = linkKeys()
+        val lane = TextLaneSession(tx, RealtimeFrame.CONSERVATIVE_MAX_FRAME_BYTES, initiator = true)
+        lane.attachReceiver()
+        lane.request()
+        assertEquals(TextLaneSession.State.REQUESTED, lane.state)
+
+        val actions = lane.onFrame(TextWire.REQUEST)
+
+        assertEquals("its own request stands", TextLaneSession.State.REQUESTED, lane.state)
+        assertTrue(
+            "and the crossing one is refused in band",
+            actions.any { it is TextLaneSession.Action.Send && it.frame.contentEquals(TextWire.REJECT) },
+        )
+        // The responder's ACCEPT for the request that stood opens the conversation.
+        lane.onFrame(TextWire.ACCEPT)
+        assertEquals(TextLaneSession.State.OPEN, lane.state)
+    }
+
+    @Test
+    fun `when requests cross the responder yields to the one incoming prompt and survives the refusal of its own`() {
+        val (tx, _) = linkKeys()
+        val lane = TextLaneSession(tx, RealtimeFrame.CONSERVATIVE_MAX_FRAME_BYTES, initiator = false)
+        lane.attachReceiver()
+        lane.request()
+
+        val actions = lane.onFrame(TextWire.REQUEST)
+        assertEquals(TextLaneSession.State.INCOMING_REQUEST, lane.state)
+        assertTrue(actions.any { it is TextLaneSession.Action.Requested })
+
+        // The initiator's REJECT of this side's OWN crossing request arrives
+        // next. It must not fail the conversation this side is about to accept.
+        val late = lane.onFrame(TextWire.REJECT)
+        assertTrue("no failure is raised", late.none { it is TextLaneSession.Action.Fail })
+        assertEquals(TextLaneSession.State.INCOMING_REQUEST, lane.state)
+        lane.accept()
+        assertEquals(TextLaneSession.State.OPEN, lane.state)
+    }
+
+    @Test
+    fun `a duplicate REQUEST for the prompt already showing is not a second prompt`() {
+        val (tx, _) = linkKeys()
+        val lane = TextLaneSession(tx, RealtimeFrame.CONSERVATIVE_MAX_FRAME_BYTES)
+        lane.attachReceiver()
+        lane.onFrame(TextWire.REQUEST)
+        val again = lane.onFrame(TextWire.REQUEST)
+        assertTrue(again.none { it is TextLaneSession.Action.Requested })
+        assertEquals(TextLaneSession.State.INCOMING_REQUEST, lane.state)
+    }
+
     // ── R4: END had no drain and no reopen ──────────────────────────────────
 
     @Test
