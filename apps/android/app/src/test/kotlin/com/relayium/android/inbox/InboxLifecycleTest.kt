@@ -468,6 +468,187 @@ class InboxLifecycleTest {
         assertEquals(1, w.services.sendStore.all().size)
     }
 
+    // ── the user's own discard ──────────────────────────────────────────────
+    //
+    // Owner report, Android 0.2.3 (6): a picked file that the user no longer
+    // wanted to send stayed in Outgoing, could not be removed, and offered only
+    // "Send". Picking stages durably and delivers at once, and no layer had a
+    // discard. These pin the new entry point AND that it is not [cancelSend].
+
+    @Test
+    fun `discarding a send that never reached central removes the job its spool and its history row`() = runTest {
+        val w = world()
+        w.runtime.adopt(a, "bearer-a")
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+        val target = w.model.state.value.devices.single()
+
+        // The upload fails definitively-not-created but NOT terminally, which is
+        // exactly the row the owner was stuck with: kept, and offering "Send".
+        w.services.uploader.failure = InboxUploadException(ambiguous = false)
+        w.runtime.sendText(target, "changed my mind")?.join()
+        advanceUntilIdle()
+        val send = w.model.state.value.sends.single()
+        assertEquals(InboxSendStatus.Phase.STOPPED, send.phase)
+        assertTrue(w.services.sendStore.spool(send.jobId).exists())
+
+        w.runtime.discardSend(send.jobId)?.join()
+        advanceUntilIdle()
+
+        assertTrue("the durable job is gone", w.services.sendStore.all().isEmpty())
+        assertFalse("and so is its ciphertext", w.services.sendStore.spool(send.jobId).exists())
+        assertTrue("the row left Outgoing", w.model.state.value.sends.isEmpty())
+        assertTrue(
+            "nothing was ever created, so history has nothing to remember",
+            w.services.conversations.entries().none { it.id == send.jobId },
+        )
+        assertNull("the sender's own copy of the message went too", w.services.outgoing.read(send.jobId))
+        assertEquals("there was no delivery to cancel", 0, w.services.server.count("cancelTask"))
+
+        // And it stays gone: the row used to be rebuilt from the store on refresh.
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+        assertTrue(w.model.state.value.sends.isEmpty())
+    }
+
+    @Test
+    fun `discarding inside an upload joins the attempt so nothing is written after the release`() = runTest {
+        val w = world()
+        w.runtime.adopt(a, "bearer-a")
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+        val target = w.model.state.value.devices.single()
+
+        w.services.uploader.gate = CompletableDeferred()
+        val first = w.runtime.sendText(target, "held open")
+        runCurrent()
+        val jobId = w.model.state.value.sends.single().jobId
+        assertEquals(InboxSendStatus.Phase.SENDING, w.model.state.value.sends.single().phase)
+
+        w.runtime.discardSend(jobId)?.join()
+        first?.join()
+        advanceUntilIdle()
+
+        assertTrue("no record may reappear once the attempt has unwound", w.services.sendStore.all().isEmpty())
+        assertFalse(w.services.sendStore.spool(jobId).exists())
+        assertTrue(w.model.state.value.sends.isEmpty())
+        assertEquals("nothing may be created for a discarded attempt", 0, w.services.server.count("createTask"))
+    }
+
+    @Test
+    fun `discarding a delivered send cancels it at central first and keeps the history row as stopped`() = runTest {
+        val w = world()
+        w.runtime.adopt(a, "bearer-a")
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+        val target = w.model.state.value.devices.single()
+
+        w.runtime.sendText(target, "queued for the other device")?.join()
+        advanceUntilIdle()
+        val send = w.model.state.value.sends.single()
+        assertEquals(InboxSendStatus.Phase.DELIVERED, send.phase)
+
+        w.runtime.discardSend(send.jobId)?.join()
+        advanceUntilIdle()
+
+        assertEquals(1, w.services.server.count("cancelTask"))
+        assertTrue(w.services.sendStore.all().isEmpty())
+        assertTrue(w.model.state.value.sends.isEmpty())
+        assertEquals(
+            "a delivery existed: history keeps the only trace of it, as stopped",
+            InboxConversationEntry.SentState.STOPPED,
+            w.services.conversations.entries().single { it.id == send.jobId }.sentState,
+        )
+    }
+
+    @Test
+    fun `a cancel central refuses deletes nothing and the row says so`() = runTest {
+        val w = world()
+        w.runtime.adopt(a, "bearer-a")
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+        val target = w.model.state.value.devices.single()
+
+        w.runtime.sendText(target, "still going to arrive")?.join()
+        advanceUntilIdle()
+        val jobId = w.model.state.value.sends.single().jobId
+
+        // Offline. Deleting the record now would leave a file arriving that
+        // nothing on this device could name, track or stop.
+        w.services.server.cancelFailure = InboxTransportException(InboxTransportException.Kind.NETWORK)
+        w.runtime.discardSend(jobId)?.join()
+        advanceUntilIdle()
+
+        assertNotNull("the record of a live delivery survives", w.services.sendStore.load(jobId))
+        assertTrue(w.services.sendStore.spool(jobId).exists())
+        val row = w.model.state.value.sends.single()
+        assertEquals(InboxSendStatus.Phase.DELIVERED, row.phase)
+        assertTrue("and the surface admits the discard did not happen", row.discardRefused)
+
+        // Back online: the same action now works.
+        w.services.server.cancelFailure = null
+        w.runtime.discardSend(jobId)?.join()
+        advanceUntilIdle()
+        assertTrue(w.services.sendStore.all().isEmpty())
+    }
+
+    @Test
+    fun `a delivery central reports as over releases its job instead of sitting in Outgoing for ever`() = runTest {
+        val w = world()
+        w.runtime.adopt(a, "bearer-a")
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+        val target = w.model.state.value.devices.single()
+
+        w.runtime.sendText(target, "saved by the other device")?.join()
+        advanceUntilIdle()
+        val send = w.model.state.value.sends.single()
+        val taskId = assertNotNull(send.taskId).let { send.taskId!! }
+
+        // Still queued: the job is what tracks it, so a refresh keeps it.
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+        assertEquals(1, w.services.sendStore.all().size)
+
+        w.services.server.settle(taskId, com.relayium.protocol.inbox.InboxTaskState.SAVED)
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+
+        assertTrue("a finished send holds no job and no spool", w.services.sendStore.all().isEmpty())
+        assertFalse(w.services.sendStore.spool(send.jobId).exists())
+        assertTrue(w.model.state.value.sends.isEmpty())
+        assertEquals(
+            InboxConversationEntry.SentState.SAVED,
+            w.services.conversations.entries().single { it.id == send.jobId }.sentState,
+        )
+        assertEquals("settling is not a cancel", 0, w.services.server.count("cancelTask"))
+    }
+
+    @Test
+    fun `deleting history does not pretend to remove an outgoing send`() = runTest {
+        val w = world()
+        w.runtime.adopt(a, "bearer-a")
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+        val target = w.model.state.value.devices.single()
+
+        w.services.uploader.failure = InboxUploadException(ambiguous = false)
+        w.runtime.sendText(target, "not sent yet")?.join()
+        advanceUntilIdle()
+        val jobId = w.model.state.value.sends.single().jobId
+
+        w.runtime.deleteHistory(setOf(jobId))?.join()
+        advanceUntilIdle()
+
+        // It used to vanish here and come back on the next refresh, which read
+        // as "it cannot be deleted". History delete is local and cancels nothing.
+        assertEquals(jobId, w.model.state.value.sends.single().jobId)
+        w.runtime.refresh()?.join()
+        advanceUntilIdle()
+        assertEquals(jobId, w.model.state.value.sends.single().jobId)
+        assertNotNull(w.services.sendStore.load(jobId))
+    }
+
     /**
      * Cancelling an attempt takes SENDING off the screen.
      *

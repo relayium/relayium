@@ -157,6 +157,9 @@ class InboxActions(
     val sendText: (InboxSendTarget, String) -> Unit = { _, _ -> },
     val send: (String) -> Unit = {},
     val cancelSend: (String) -> Unit = {},
+    /** Discard a durable send for good — the user's own decision, confirmed on
+     *  the surface first. Not [cancelSend], which only pauses an attempt. */
+    val discardSend: (String) -> Unit = {},
     val markRead: (Set<String>) -> Unit = {},
     val delete: (Set<String>) -> Unit = {},
     /** A message entry's own text, in either direction, read on demand so it
@@ -650,6 +653,9 @@ private fun SendCard(state: InboxModel.State, target: InboxSendTarget, actions: 
  */
 @Composable
 private fun SendsCard(state: InboxModel.State, actions: InboxActions) {
+    // The job id, not the row: the list is republished while the dialog is up,
+    // and the confirmation must describe the job as it is NOW.
+    var discardingId by rememberSaveable { mutableStateOf<String?>(null) }
     SectionCard(title = stringResource(R.string.inbox_sending_title)) {
         state.sends.forEachIndexed { index, send ->
             // The job id: a cancel or a delivery removing one row must not hand
@@ -706,9 +712,86 @@ private fun SendsCard(state: InboxModel.State, actions: InboxActions) {
                             modifier = Modifier.defaultMinSize(minHeight = Metrics.touch),
                         ) { Text(stringResource(R.string.inbox_sending_retry)) }
                     }
+                    // EVERY state gets a way out. Picking files stages them
+                    // durably and starts sending at once, so without this a send
+                    // the user regretted could only ever be sent; an unknown
+                    // upload and a queued delivery had no control at all.
+                    TextButton(
+                        onClick = { discardingId = send.jobId },
+                        modifier = Modifier
+                            .defaultMinSize(minHeight = Metrics.touch)
+                            .testTag("inbox-send-discard-${send.jobId}"),
+                    ) {
+                        Text(
+                            stringResource(
+                                if (send.phase == InboxSendStatus.Phase.DELIVERED) {
+                                    R.string.inbox_sending_cancel_delivery
+                                } else {
+                                    R.string.inbox_sending_discard
+                                },
+                            ),
+                        )
+                    }
+                }
+                if (send.discardRefused) {
+                    Text(
+                        stringResource(R.string.inbox_sending_discard_refused),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    )
                 }
             }
         }
+    }
+
+    // Gone from the list (sent, settled, already discarded): nothing to confirm.
+    state.sends.firstOrNull { it.jobId == discardingId }?.let { send ->
+        val delivered = send.phase == InboxSendStatus.Phase.DELIVERED
+        AlertDialog(
+            onDismissRequest = { discardingId = null },
+            title = {
+                Text(
+                    stringResource(
+                        if (delivered) R.string.inbox_sending_cancel_delivery_title
+                        else R.string.inbox_sending_discard_title,
+                    ),
+                )
+            },
+            // Three different truths, so three bodies. A delivery that exists is
+            // cancelled at relayium.com first; one that MAY exist cannot be
+            // named, so it may still arrive; otherwise nothing was created and
+            // only whatever was already uploaded is left for the server to drop.
+            text = {
+                Text(
+                    stringResource(
+                        when {
+                            delivered -> R.string.inbox_sending_cancel_delivery_body
+                            send.ambiguous -> R.string.inbox_sending_discard_unknown_body
+                            else -> R.string.inbox_sending_discard_body
+                        },
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { discardingId = null; actions.discardSend(send.jobId) },
+                    modifier = Modifier.testTag("inbox-send-discard-confirm"),
+                ) {
+                    Text(
+                        stringResource(
+                            if (delivered) R.string.inbox_sending_cancel_delivery
+                            else R.string.inbox_sending_discard,
+                        ),
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { discardingId = null }) {
+                    Text(stringResource(R.string.inbox_sending_discard_keep))
+                }
+            },
+        )
     }
 }
 

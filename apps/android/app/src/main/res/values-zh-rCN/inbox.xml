@@ -82,6 +82,15 @@
     <string name="inbox_sending_upload_unknown">上传中断且没有得到回应，Relayium 无法确定这些加密数据是否已经到达服务器。再发一次会是另一次独立上传，仍然无法回答这个问题，所以这一条不能安全重试。</string>
     <string name="inbox_sending_cancel">停止</string>
     <string name="inbox_sending_retry">发送</string>
+    <string name="inbox_sending_discard">移除</string>
+    <string name="inbox_sending_discard_title">从“发送中”移除？</string>
+    <string name="inbox_sending_discard_body">它不会被发送，本机上的加密副本会立即删除。如果已经上传了一部分，relayium.com 会在大约一小时内自行丢弃。</string>
+    <string name="inbox_sending_discard_unknown_body">Relayium 无法确认它是否已到达 relayium.com，因此它仍可能出现在另一台设备上。移除会删除本机上的加密副本；之后无法再从这里重新发送或取消。</string>
+    <string name="inbox_sending_discard_keep">保留</string>
+    <string name="inbox_sending_cancel_delivery">取消投递</string>
+    <string name="inbox_sending_cancel_delivery_title">取消这次投递？</string>
+    <string name="inbox_sending_cancel_delivery_body">另一台设备尚未保存它。取消后它会从 relayium.com 移除，不会再送达，本机上的加密副本也会删除。</string>
+    <string name="inbox_sending_discard_refused">暂时无法移除，未删除任何内容。请检查网络后重试。</string>
     <string name="inbox_stop_ineligible">该设备当前无法接收此内容。</string>
     <string name="inbox_stop_stale_key">发送过程中该设备更换了密钥。</string>
     <string name="inbox_stop_conflict">服务器上已有另一次投递占用了相同的标识。</string>

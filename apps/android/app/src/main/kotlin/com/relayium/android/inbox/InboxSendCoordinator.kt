@@ -388,6 +388,119 @@ class InboxSendCoordinator(
         }
     }
 
+    /** What the user's own discard came to. */
+    enum class Discard {
+        /** Nothing had been created. The staged copy is gone and nothing will arrive. */
+        REMOVED,
+
+        /** Central held a delivery and has cancelled it, or no longer has it.
+         *  The staged copy is gone and nothing will arrive. */
+        CANCELLED,
+
+        /** Whether a delivery exists was never settled and cannot be asked by
+         *  id. The staged copy is gone; the delivery MAY still arrive. */
+        REMOVED_UNSETTLED,
+
+        /** Central refused the cancel or could not be reached. NOTHING was
+         *  deleted: the delivery is live and this record is what names it. */
+        CANCEL_FAILED,
+
+        /** The durable record could not be read or removed. Nothing is claimed. */
+        STORAGE,
+
+        /** There was no such job — already released. */
+        ABSENT,
+    }
+
+    /**
+     * Discard a job because the USER said so.
+     *
+     * [release] is a machine decision about an outcome and refuses everything
+     * that is not provably over. This is the other half: the person who staged
+     * these bytes no longer wants them sent. It is never reached from an outcome.
+     *
+     * The caller must have stopped and JOINED the running attempt first. This
+     * takes the same per-job lock as [deliver], so even a caller that did not
+     * waits for the attempt's last durable write rather than racing it.
+     *
+     * A delivery that exists is cancelled at central BEFORE anything local is
+     * touched, and a failed cancel keeps everything: deleting the record of a
+     * live delivery would leave a file arriving that nothing here can name,
+     * track or stop. 404 counts as cancelled — central no longer holds the
+     * task, which is the fact the user asked for.
+     *
+     * Central is NOT asked to delete an uploaded-but-unbound object: it refuses
+     * that for every task-purpose object and reclaims them itself within its
+     * bind grace. Cancelling a task takes its owned ciphertext with it.
+     */
+    suspend fun discard(jobId: String): Discard = InboxSendOperations.withJob(store, jobId) {
+        val job = try {
+            store.load(jobId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: InboxSendStoreException) {
+            return@withJob Discard.STORAGE
+        } ?: return@withJob Discard.ABSENT
+
+        val taskId = job.taskId
+        if (taskId != null) {
+            try {
+                sender.cancelTask(job.targetDeviceId, taskId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: InboxApiException) {
+                if (e.status != 404) return@withJob Discard.CANCEL_FAILED
+            } catch (e: Exception) {
+                return@withJob Discard.CANCEL_FAILED
+            }
+        }
+        val unsettled = taskId == null &&
+            (job.unresolvedCreate || (job.emptyPublishAttempted && job.storedFileId == null))
+        try {
+            store.release(jobId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: InboxSendStoreException) {
+            return@withJob Discard.STORAGE
+        }
+        when {
+            taskId != null -> Discard.CANCELLED
+            unsettled -> Discard.REMOVED_UNSETTLED
+            else -> Discard.REMOVED
+        }
+    }
+
+    /**
+     * Release a job whose delivery central reports as OVER — saved, expired,
+     * revoked or failed.
+     *
+     * Until then the durable job is what tracks the delivery and what can cancel
+     * it, so it stays. Afterwards it tracks nothing, and keeping it left a
+     * finished send as a permanent row with no control, holding its ciphertext
+     * spool on disk. The caller passes what central said; the record is reloaded
+     * and must still name that same task.
+     */
+    suspend fun releaseSettled(jobId: String, task: InboxTaskRow) {
+        if (!task.isTerminal) return
+        InboxSendOperations.withJob(store, jobId) {
+            val job = try {
+                store.load(jobId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: InboxSendStoreException) {
+                return@withJob
+            } ?: return@withJob
+            if (job.taskId == null || job.taskId != task.id) return@withJob
+            try {
+                store.release(jobId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: InboxSendStoreException) {
+                // Costs storage and a row; the next refresh tries again.
+            }
+        }
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     /**

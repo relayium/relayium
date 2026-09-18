@@ -169,6 +169,10 @@ class InboxRuntime(
      *  history, because a reason can stop being true. */
     private val stops = ConcurrentHashMap<String, InboxSendCoordinator.Result.Stopped>()
 
+    /** Jobs whose discard central refused or could not be asked. In memory, like
+     *  [stops]: it describes the last thing the user tried, not the delivery. */
+    private val discardRefused: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
     // ── account lifetime ────────────────────────────────────────────────────
 
     /**
@@ -477,10 +481,17 @@ class InboxRuntime(
                 else -> InboxConversationEntry.SentState.CREATED
             }
             services.conversations.updateSent(job.jobId, state, nowSeconds())
+            // Over at central: the job tracks nothing any more. Left in place it
+            // was a permanent Outgoing row with no control, holding its spool.
+            if (task.isTerminal) {
+                services.coordinator.releaseSettled(job.jobId, task)
+                forget(job.jobId)
+            }
             changed = true
         }
         if (!changed) return
         model.ensureCurrent(session.authority)
+        publishSends(session, services)
         val conversations = services.conversations.conversations()
         model.ensureCurrent(session.authority)
         model.publish(session.authority) { it.copy(conversations = conversations) }
@@ -870,6 +881,8 @@ class InboxRuntime(
         return model.launchOwned(session.authority) {
             val services = services(session)
             model.ensureCurrent(session.authority)
+            // Trying again is the user's answer to a discard that was refused.
+            discardRefused.remove(jobId)
             deliver(session, services, jobId)
         }
     }
@@ -890,6 +903,67 @@ class InboxRuntime(
         // offers start a second upload alongside the dying first one. [deliver]
         // frees it, once there is really nothing running.
         attempts[jobId]?.cancel()
+    }
+
+    /**
+     * Discard a durable job because the user no longer wants it sent.
+     *
+     * NOT [cancelSend], which pauses an attempt and keeps the job on purpose.
+     * Picking files stages them durably and starts delivering at once, so until
+     * this existed a send the user regretted had exactly one control — "Send" —
+     * and survived navigation, refresh and relaunch. The surface confirms first.
+     *
+     * The running attempt is stopped and JOINED before the record is touched: a
+     * merely cancelled upload is still unwinding and can write its session
+     * marker after the release. What may and may not be deleted, and in which
+     * order, is [InboxSendCoordinator.discard]'s.
+     */
+    fun discardSend(jobId: String): Job? {
+        val session = session ?: return null
+        return model.launchOwned(session.authority) {
+            val services = services(session)
+            model.ensureCurrent(session.authority)
+            attempts[jobId]?.cancelAndJoin()
+            model.ensureCurrent(session.authority)
+            val outcome = services.coordinator.discard(jobId)
+            model.ensureCurrent(session.authority)
+            when (outcome) {
+                InboxSendCoordinator.Discard.REMOVED -> {
+                    // Nothing was ever created, so there is nothing for history
+                    // to remember: the row and a message's sender copy go too.
+                    forget(jobId)
+                    services.outgoing.delete(jobId)
+                    services.conversations.delete(setOf(jobId), nowSeconds())
+                }
+
+                InboxSendCoordinator.Discard.CANCELLED,
+                InboxSendCoordinator.Discard.REMOVED_UNSETTLED,
+                -> {
+                    // A delivery existed, or may: history keeps the row, as
+                    // stopped, because it is the only trace left of it.
+                    forget(jobId)
+                    services.conversations.updateSent(
+                        jobId, InboxConversationEntry.SentState.STOPPED, nowSeconds(),
+                    )
+                }
+
+                InboxSendCoordinator.Discard.ABSENT -> forget(jobId)
+
+                InboxSendCoordinator.Discard.CANCEL_FAILED,
+                InboxSendCoordinator.Discard.STORAGE,
+                -> discardRefused.add(jobId)
+            }
+            model.ensureCurrent(session.authority)
+            publishSends(session, services)
+            val conversations = services.conversations.conversations()
+            model.ensureCurrent(session.authority)
+            model.publish(session.authority) { it.copy(conversations = conversations) }
+        }
+    }
+
+    private fun forget(jobId: String) {
+        stops.remove(jobId)
+        discardRefused.remove(jobId)
     }
 
     private suspend fun deliver(session: Session, services: InboxServices, jobId: String) {
@@ -934,6 +1008,13 @@ class InboxRuntime(
                 }
             }
             model.ensureCurrent(session.authority)
+            // The attempt is over, so the slot goes BEFORE the surface is
+            // rebuilt. [status] reads [attempts] to decide SENDING, and a stopped
+            // attempt republished with its slot still held stayed "Sending…",
+            // progress bar and all, offering only Stop, until some later refresh
+            // happened to correct it. The cancellation branch below already
+            // releases first for the same reason.
+            attempt?.let { attempts.remove(jobId, it) }
             publishSends(session, services)
             val conversations = services.conversations.conversations()
             model.ensureCurrent(session.authority)
@@ -1049,12 +1130,11 @@ class InboxRuntime(
             model.ensureCurrent(session.authority)
             val conversations = services.conversations.conversations()
             model.ensureCurrent(session.authority)
-            model.publish(session.authority) {
-                it.copy(
-                    conversations = conversations,
-                    sends = it.sends.filterNot { s -> s.jobId in ids },
-                )
-            }
+            // History only. The Outgoing row is the durable job, which this does
+            // not touch: filtering it out of the published state here made the
+            // row vanish and then return on the next refresh, which read as "it
+            // cannot be deleted". Removing a send is [discardSend].
+            model.publish(session.authority) { it.copy(conversations = conversations) }
         }
     }
 
@@ -1218,6 +1298,7 @@ class InboxRuntime(
             ambiguous = job.unresolvedCreate || stopped?.ambiguous == true || publishUnknown,
             uploadUnknown = publishUnknown,
             taskId = job.taskId,
+            discardRefused = job.jobId in discardRefused,
         )
     }
 }

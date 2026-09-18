@@ -1708,6 +1708,7 @@ private fun InboxDestination(
             sendText = { target, text -> viewModel.inboxSendText(target, text) },
             send = { viewModel.inboxSend(it) },
             cancelSend = { viewModel.inboxCancelSend(it) },
+            discardSend = { viewModel.inboxDiscardSend(it) },
             markRead = { viewModel.inboxMarkRead(it) },
             delete = { viewModel.inboxDelete(it) },
             loadMessage = { entry -> viewModel.inboxMessage(entry) },

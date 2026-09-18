@@ -445,6 +445,10 @@ data class InboxSendStatus(
      */
     val uploadUnknown: Boolean = false,
     val taskId: String? = null,
+    /** The user asked to discard this and it could NOT be done — central refused
+     *  or was unreachable, or the record could not be removed. Nothing was
+     *  deleted; the row says so rather than looking as if nothing happened. */
+    val discardRefused: Boolean = false,
 ) {
     /** No names, no bytes: this reaches failure text. */
     override fun toString(): String =

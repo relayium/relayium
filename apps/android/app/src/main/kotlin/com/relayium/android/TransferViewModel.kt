@@ -1832,6 +1832,9 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
     fun inboxRepairKey() = inboxRuntime.repairKey()
     fun inboxSend(jobId: String) = inboxRuntime.send(jobId)
     fun inboxCancelSend(jobId: String) = inboxRuntime.cancelSend(jobId)
+
+    /** The user's own discard of a durable send; the screen has confirmed it. */
+    fun inboxDiscardSend(jobId: String) = inboxRuntime.discardSend(jobId)
     fun inboxMarkRead(ids: Set<String>) = inboxRuntime.markRead(ids)
     fun inboxDelete(ids: Set<String>) = inboxRuntime.deleteHistory(ids)
     fun inboxSendText(target: com.relayium.android.inbox.InboxSendTarget, text: String) =

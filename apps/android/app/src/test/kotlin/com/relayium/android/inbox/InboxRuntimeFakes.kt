@@ -128,8 +128,14 @@ class ScriptedInboxServer(
         return tasks.values.filter { it.targetDeviceId == targetDeviceId }
     }
 
+    /** What central answers to a cancel. Null cancels, as central does: the task
+     *  is gone afterwards, and asking again is a 404. */
+    var cancelFailure: Exception? = null
+
     override suspend fun cancelTask(targetDeviceId: String, taskId: String) {
         calls.add("cancelTask")
+        cancelFailure?.let { throw it }
+        tasks.remove(taskId) ?: throw InboxApiException(404, null)
     }
 
     /** Move a task into a state, as central would once the target reported. */
