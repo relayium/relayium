@@ -55,6 +55,7 @@ import com.relayium.protocol.inbox.InboxProtocol
 import java.io.File
 import java.util.Collections
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -657,6 +658,99 @@ class InboxScreenAcceptanceTest {
         )
         clickText(R.string.inbox_sending_cancel)
         assertTrue(recorder.saw("cancel:job00000000000000000000000001"))
+    }
+
+    // ── removing an outgoing send ───────────────────────────────────────────
+    //
+    // Owner report, 0.2.3: a picked file the user no longer wanted to send sat
+    // in Outgoing with "Send" as its only control and could not be removed; an
+    // unknown upload and a queued delivery had no control at all.
+
+    private fun outgoing(
+        phase: InboxSendStatus.Phase,
+        ambiguous: Boolean = false,
+        uploadUnknown: Boolean = false,
+        discardRefused: Boolean = false,
+    ) = InboxSendStatus(
+        jobId = "job00000000000000000000000001",
+        targetDeviceId = peerId,
+        kind = InboxManifestKind.TEXT,
+        names = emptyList(),
+        totalBytes = 12,
+        phase = phase,
+        ambiguous = ambiguous,
+        uploadUnknown = uploadUnknown,
+        taskId = if (phase == InboxSendStatus.Phase.DELIVERED) "task0000000000000000000000001" else null,
+        discardRefused = discardRefused,
+    )
+
+    @Test
+    fun aStoppedSendCanBeRemovedAndKeepingItRemovesNothing() {
+        val recorder = Recorder()
+        host(
+            ready().copy(sends = listOf(outgoing(InboxSendStatus.Phase.STOPPED))),
+            InboxActions(discardSend = { recorder.record("discard:$it") }),
+        )
+        // Send is still there; Remove is the way out that was missing.
+        control(R.string.inbox_sending_retry).performScrollTo().assertIsDisplayed()
+        clickText(R.string.inbox_sending_discard)
+        compose.onNodeWithText(s(R.string.inbox_sending_discard_title)).assertIsDisplayed()
+        compose.onNodeWithText(s(R.string.inbox_sending_discard_body)).assertIsDisplayed()
+
+        dialogControl(R.string.inbox_sending_discard_keep).performClick()
+        compose.onNodeWithText(s(R.string.inbox_sending_discard_title)).assertDoesNotExist()
+        assertFalse("keeping it must not remove anything", recorder.saw("discard:job00000000000000000000000001"))
+
+        clickText(R.string.inbox_sending_discard)
+        dialogControl(R.string.inbox_sending_discard).performClick()
+        assertTrue(recorder.saw("discard:job00000000000000000000000001"))
+    }
+
+    @Test
+    fun anUnknownUploadHasAWayOutAndIsToldItMayStillArrive() {
+        val recorder = Recorder()
+        host(
+            ready().copy(
+                sends = listOf(
+                    outgoing(InboxSendStatus.Phase.STOPPED, ambiguous = true, uploadUnknown = true),
+                ),
+            ),
+            InboxActions(discardSend = { recorder.record("discard:$it") }),
+        )
+        // This row used to offer NOTHING: no Send (a repeat answers nothing) and
+        // no removal, so it was permanent.
+        clickText(R.string.inbox_sending_discard)
+        compose.onNodeWithText(s(R.string.inbox_sending_discard_unknown_body)).assertIsDisplayed()
+        compose.onNodeWithText(s(R.string.inbox_sending_discard_body)).assertDoesNotExist()
+        dialogControl(R.string.inbox_sending_discard).performClick()
+        assertTrue(recorder.saw("discard:job00000000000000000000000001"))
+    }
+
+    @Test
+    fun aQueuedDeliveryIsCancelledNotMerelyRemoved() {
+        val recorder = Recorder()
+        host(
+            ready().copy(sends = listOf(outgoing(InboxSendStatus.Phase.DELIVERED))),
+            InboxActions(discardSend = { recorder.record("discard:$it") }),
+        )
+        // Named for what it does to the OTHER device, and explained as such.
+        clickText(R.string.inbox_sending_cancel_delivery)
+        compose.onNodeWithText(s(R.string.inbox_sending_cancel_delivery_title)).assertIsDisplayed()
+        compose.onNodeWithText(s(R.string.inbox_sending_cancel_delivery_body)).assertIsDisplayed()
+        dialogControl(R.string.inbox_sending_cancel_delivery).performClick()
+        assertTrue(recorder.saw("discard:job00000000000000000000000001"))
+    }
+
+    @Test
+    fun aRemovalThatCouldNotHappenSaysSo() {
+        host(
+            ready().copy(
+                sends = listOf(outgoing(InboxSendStatus.Phase.DELIVERED, discardRefused = true)),
+            ),
+            InboxActions(),
+        )
+        compose.onNodeWithText(s(R.string.inbox_sending_discard_refused)).performScrollTo()
+            .assertIsDisplayed()
     }
 
     // ── history ─────────────────────────────────────────────────────────────

@@ -78,7 +78,13 @@ out_dir="${RELAYIUM_INBOX_OUT:-$repo/apps/android/build/inbox-acceptance}"
 # instrumentation is missing and when it printed nothing at all, so the rule has
 # to be positive — this many tests observed to finish OK — and it has to be the
 # same rule everywhere. Bump when a test is added.
-expected_tests=22
+#
+# It was NOT bumped for five tests added after this script was written: `main`
+# carried 27 @Test methods against an expected 22, so this run reported FAILED
+# over 27 tests that had all passed — a judge that cries wolf on every run stops
+# being read. 31 = those 27 plus the four outgoing-send removal cases added with
+# Android 0.2.4. `grep -c '@Test'` on the class is the number to match.
+expected_tests=31
 result_check="$here/lib/instrumentation-result.sh"
 
 require_emulator() {
