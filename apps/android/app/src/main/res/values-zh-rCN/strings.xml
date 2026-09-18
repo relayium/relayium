@@ -21,6 +21,7 @@
     <string name="status_verification_code">验证码 %1$s</string>
     <string name="status_verification_hint">可选。只有对方开启了验证，它才会显示这六位数字；显示时两边应当一致。</string>
     <string name="status_verification_show">显示校验码</string>
+    <string name="status_link_interrupted">连接暂时中断，正在尝试恢复——请保持此页面打开。</string>
     <string name="status_reconnecting_room">连接中断，正在用同一个配对码重新连接…</string>
     <string name="status_disconnect">断开连接</string>
     <string name="status_legacy_files">文件会话</string>

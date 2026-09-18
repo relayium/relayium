@@ -94,6 +94,16 @@ private fun VerificationCard(
                 // is one of the three places the brand belongs.
                 color = MaterialTheme.colorScheme.secondary,
             )
+            if (state.linkInterrupted) {
+                // Said while it is happening, so a stalled progress bar has an
+                // explanation and the user does not end a session that is about
+                // to come back by itself.
+                InlineMessage(
+                    text = stringResource(R.string.status_link_interrupted),
+                    tone = MessageTone.ERROR,
+                    announce = true,
+                )
+            }
             when (state.wire) {
                 TransferController.Wire.LEGACY_FILES -> R.string.status_legacy_files
                 TransferController.Wire.LEGACY_TEXT -> R.string.status_legacy_text

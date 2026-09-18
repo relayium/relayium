@@ -28,6 +28,7 @@
     <string name="status_verification_code">Verification code %1$s</string>
     <string name="status_verification_hint">Optional. The other device shows these six digits only if verification is turned on there; when it does, they should match.</string>
     <string name="status_verification_show">Show verification code</string>
+    <string name="status_link_interrupted">The connection was interrupted. Trying to get it back — keep this screen open.</string>
     <string name="status_reconnecting_room">Connection dropped. Reconnecting with the same code…</string>
     <string name="status_disconnect">Disconnect</string>
     <string name="status_legacy_files">File session</string>

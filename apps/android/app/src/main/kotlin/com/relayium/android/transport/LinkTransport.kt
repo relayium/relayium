@@ -66,6 +66,11 @@ class LinkTransport(
         fun onTextFrame(frame: ByteArray)
         /** Terminal. `reason` is a stable identifier, never user-facing copy. */
         fun onClosed(reason: String)
+
+        /** A READY link stopped answering (`true`) or came back (`false`). Not
+         *  terminal: see [DisconnectGrace]. Defaulted so a test double that has
+         *  no connection state to report need not mention it. */
+        fun onInterrupted(interrupted: Boolean) = Unit
     }
 
     val role: LinkProtocol.Role = profile.role
@@ -101,6 +106,11 @@ class LinkTransport(
     private val pendingFrames = java.util.concurrent.atomic.AtomicInteger(0)
     private val overflowSignalled = AtomicBoolean(false)
 
+    private val disconnectGrace = DisconnectGrace(
+        executor, DisconnectGrace.DEFAULT_GRACE_MS,
+        onInterrupted = { if (!closed) events.onInterrupted(it) },
+        onExpired = { if (!closed) fail("connection-lost") },
+    )
     private var noProgressTimer: ScheduledFuture<*>? = null
     private var hardCapTimer: ScheduledFuture<*>? = null
     private val progressSeen = HashSet<String>()
@@ -503,6 +513,7 @@ class LinkTransport(
     override fun close(reason: String) {
         if (closed) return
         closed = true
+        disconnectGrace.cancel()
         cancelTimers()
         heldCandidates.clear()
         captured.clear()
@@ -577,9 +588,13 @@ class LinkTransport(
                 noteProgress("state:$state")
                 when (state) {
                     PeerConnection.PeerConnectionState.FAILED -> fail("ice-failed")
-                    // Transport resume is deferred: a dropped connection ends
-                    // the link truthfully — relayium-link-v1.md section 8.4.
-                    PeerConnection.PeerConnectionState.DISCONNECTED -> if (ready) fail("connection-lost")
+                    // Transport resume is still deferred (relayium-link-v1.md
+                    // section 8.4) — but DISCONNECTED is not a dropped
+                    // connection yet. It gets a bounded chance to come back on
+                    // its own, or through the peer's ICE restart, before it is
+                    // called lost. See [DisconnectGrace].
+                    PeerConnection.PeerConnectionState.DISCONNECTED -> if (ready) disconnectGrace.disconnected()
+                    PeerConnection.PeerConnectionState.CONNECTED -> disconnectGrace.recovered()
                     PeerConnection.PeerConnectionState.CLOSED -> fail("closed")
                     else -> Unit
                 }

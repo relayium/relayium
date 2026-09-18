@@ -229,6 +229,9 @@ class TransferController(
         val sas: String? = null,
         /** A stable identifier the UI maps to localised copy. Never raw text. */
         val errorKey: String? = null,
+        /** The connected link stopped answering and is being given a bounded
+         *  chance to come back. Not an ending: nothing has been lost yet. */
+        val linkInterrupted: Boolean = false,
         /** Incoming conversations this link admitted WITHOUT a prompt (link/1
          *  only). Zero on the older wire, which still asks. */
         val textAutoAdmits: Int = 0,
@@ -1573,6 +1576,9 @@ class TransferController(
                 }
                 override fun onClosed(reason: String) {
                     if (epoch == mine) onTransportClosed(reason)
+                }
+                override fun onInterrupted(interrupted: Boolean) {
+                    if (epoch == mine) _state.value = _state.value.copy(linkInterrupted = interrupted)
                 }
             },
         )
