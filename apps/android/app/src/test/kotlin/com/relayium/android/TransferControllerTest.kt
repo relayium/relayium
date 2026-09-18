@@ -1304,6 +1304,96 @@ class TransferControllerTest {
      * ANOTHER, both in the same CONNECTED phase, released only after the new
      * peer exists.
      */
+    // ── a pairing room that drops while waiting ─────────────────────────────
+    //
+    // Owner report, 0.2.3: cross-network was "very bad". The likeliest single
+    // reproduction: mint a code, the screen sleeps or Wi-Fi hands over, the
+    // socket drops — and the session ended at once with "That code is not
+    // active", about a code that was still alive. Nothing drove these paths.
+
+    private fun quickRetry() = quietTimeouts().copy(roomRetryMs = 5)
+
+    @Test
+    fun `a pairing room that drops after its welcome rejoins the same code and does not blame it`() {
+        val rig = rig(timeouts = quickRetry(), intent = TransferController.Intent.MINTER)
+        val first = rig.signaling.events
+
+        first.onClosed(1006, "")
+
+        awaitTrue("it says it is reconnecting, and has not ended") {
+            rig.controller.state.value.reconnecting &&
+                rig.controller.state.value.phase != TransferController.Phase.ENDED
+        }
+        assertNull("no error is claimed about the code", rig.controller.state.value.errorKey)
+        awaitTrue("the same room is opened again") { rig.signaling.events !== first }
+
+        rig.signaling.events.onSelfId("aaaaaaaa", "")
+        awaitTrue("a welcome ends the reconnecting note") { !rig.controller.state.value.reconnecting }
+        assertNull(rig.controller.state.value.errorKey)
+    }
+
+    @Test
+    fun `a rejoin that cannot reach the network keeps trying instead of ending on the first miss`() {
+        val rig = rig(timeouts = quickRetry(), intent = TransferController.Intent.MINTER)
+        var events = rig.signaling.events
+        events.onFailure(java.io.IOException("network down"))
+        repeat(3) {
+            val before = events
+            awaitTrue("another attempt is made") { rig.signaling.events !== before }
+            events = rig.signaling.events
+            assertTrue(rig.controller.state.value.phase != TransferController.Phase.ENDED)
+            events.onFailure(java.io.IOException("still down"))
+        }
+        val before = events
+        awaitTrue("and another") { rig.signaling.events !== before }
+        rig.signaling.events.onSelfId("aaaaaaaa", "")
+        awaitTrue("until the network is back") { !rig.controller.state.value.reconnecting }
+    }
+
+    @Test
+    fun `the rejoin budget is bounded so a dead network ends as a network error not a bad code`() {
+        val rig = rig(timeouts = quickRetry(), intent = TransferController.Intent.MINTER)
+        var events = rig.signaling.events
+        events.onFailure(java.io.IOException("down"))
+        repeat(quickRetry().pairingReconnectLimit) {
+            val before = events
+            awaitTrue("attempt ${it + 1}") { rig.signaling.events !== before }
+            events = rig.signaling.events
+            events.onFailure(java.io.IOException("down"))
+        }
+        awaitTrue("it gives up") { rig.controller.state.value.phase == TransferController.Phase.ENDED }
+        assertEquals("error_network", rig.controller.state.value.errorKey)
+    }
+
+    @Test
+    fun `a room that closes before any welcome is a refused code and is not retried`() {
+        val rig = rig(timeouts = quickRetry())
+        val old = rig.signaling.events
+        rig.controller.join(PairCode("222222"), TransferController.Intent.JOINER)
+        awaitTrue("the new join wired fresh signalling") { rig.signaling.events !== old }
+        val fresh = rig.signaling.events
+
+        fresh.onClosed(1008, "")
+
+        awaitTrue("it ends") { rig.controller.state.value.phase == TransferController.Phase.ENDED }
+        assertEquals("error_code_not_found", rig.controller.state.value.errorKey)
+        assertTrue("and no rejoin was attempted", rig.signaling.events === fresh)
+    }
+
+    @Test
+    fun `a rejoin the server closes before its welcome means the code has gone`() {
+        val rig = rig(timeouts = quickRetry(), intent = TransferController.Intent.MINTER)
+        val first = rig.signaling.events
+        first.onClosed(1006, "")
+        awaitTrue("rejoin") { rig.signaling.events !== first }
+
+        // Expired while this device was away: the server refuses the code.
+        rig.signaling.events.onClosed(1008, "")
+
+        awaitTrue("it ends") { rig.controller.state.value.phase == TransferController.Phase.ENDED }
+        assertEquals("error_code_not_found", rig.controller.state.value.errorKey)
+    }
+
     @Test
     fun `a picker result from an old link cannot send to a new same-phase peer`() {
         val rig = rig()

@@ -60,7 +60,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -911,14 +914,30 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
      * the models are here; the Activity owns the WINDOW, which is why it, and
      * not this, decides when to stop listening.
      */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val keepScreenAwake: StateFlow<Boolean> by lazy {
+        // True from the moment a minted code is on screen until it expires, and
+        // not a moment longer: the expiry is what bounds the claim, so it is a
+        // timer here rather than a field someone has to remember to clear.
+        val mintedCodeAlive = createLink.state.flatMapLatest { minted ->
+            flow {
+                val showing = minted as? CreateLinkModel.State.Showing
+                val remainingMs = (showing?.expiresAt ?: 0L) * 1000L - System.currentTimeMillis()
+                if (remainingMs > 0) {
+                    emit(true)
+                    delay(remainingMs)
+                }
+                emit(false)
+            }
+        }
         combine(
             controller.state,
             cloudDownload.state,
             cloudUpload.state,
             inbox,
-        ) { session, download, upload, inboxState ->
-            TransferAwakePolicy.keepAwake(session, download, upload, inboxState)
+            mintedCodeAlive,
+        ) { session, download, upload, inboxState, codeAlive ->
+            TransferAwakePolicy.keepAwake(session, download, upload, inboxState, codeAlive)
         }
             .distinctUntilChanged()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)

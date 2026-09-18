@@ -102,6 +102,10 @@ class TransferController(
         val pendingAdmissionMs: Long = LinkProtocol.LINK_REQUEST_TIMEOUT_MS,
         /** The first room-reconnect delay; later attempts scale it. */
         val roomRetryMs: Long = 2_000L,
+        /** Consecutive rejoin attempts for one pairing code before giving up:
+         *  2+4+10+20+30+30 s at the default retry unit, about a minute and a
+         *  half — well inside a code's life. */
+        val pairingReconnectLimit: Int = 6,
     )
 
     // ── observable state ────────────────────────────────────────────────────
@@ -225,6 +229,9 @@ class TransferController(
         val sas: String? = null,
         /** A stable identifier the UI maps to localised copy. Never raw text. */
         val errorKey: String? = null,
+        /** The pairing room's socket dropped while waiting and is being rejoined
+         *  with the same code. The code on screen is still the code to use. */
+        val reconnecting: Boolean = false,
         val incoming: List<FileMeta> = emptyList(),
         /** Identity of the current incoming prompt. A folder-picker result for
          *  an older prompt — a replaced offer — must not accept this one. */
@@ -487,6 +494,12 @@ class TransferController(
     private var selfId: String = ""
     private var peerId: String = ""
     private var ice: IceConfig.Result = IceConfig.Result(emptyList(), "")
+
+    /** This pairing room welcomed us since it was (re)opened. See [onRoomClosed]. */
+    private var pairingWelcomed = false
+
+    /** Consecutive pairing-room drops without a welcome in between. */
+    private var pairingDrops = 0
     private var pumpJob: Job? = null
     /** The CURRENT pump's stream lease. Session thread only; the lease object
      *  itself is what crosses threads, under its own lock. */
@@ -532,6 +545,8 @@ class TransferController(
      */
     fun join(source: ConnectionSource) = post {
         closeOnSession()
+        pairingWelcomed = false
+        pairingDrops = 0
         epoch++
         roomGen++
         this.source = source
@@ -623,6 +638,15 @@ class TransferController(
         }
         // The registry and every signed leave payload bind to the REAL room id.
         selfId = id
+        if (admission != PeerAdmission.EXPLICIT) {
+            // Joined — for the first time or again. Only a drop AFTER this is a
+            // drop; the retry budget is for consecutive failures, not a lifetime.
+            pairingWelcomed = true
+            pairingDrops = 0
+            // The roster that follows the welcome moves the phase on, as it does
+            // for a first join; only the "reconnecting" note is this line's.
+            if (_state.value.reconnecting) _state.value = _state.value.copy(reconnecting = false)
+        }
         linkSession = LinkSession(id)
         // A join is what proves a retry worked; anything short of it and the
         // next drop must not start from zero again.
@@ -1393,7 +1417,17 @@ class TransferController(
             failRoom(if (code < 0) "error_nearby_unavailable" else null)
             return
         }
-        if (transport == null) endSession("error_code_not_found")
+        if (transport != null) return
+        // Two different events used to share one sentence. A room that closes
+        // BEFORE it ever welcomed this device is the server refusing the code —
+        // wrong, expired, full. A room that closes AFTER the welcome is a
+        // dropped socket: the screen slept, Wi-Fi handed over to cellular, the
+        // server restarted. Telling that user "That code is not active" was
+        // untrue — the code was usually still alive — and it threw away the
+        // digits they had just read out. The website makes the same split and
+        // reconnects (web/src/App.svelte, `joinedRoom`).
+        if (pairingWelcomed && schedulePairingReconnect()) return
+        endSession(if (pairingWelcomed) "error_network" else "error_code_not_found")
     }
 
     private fun onRoomFailed() {
@@ -1401,7 +1435,44 @@ class TransferController(
             failRoom("error_nearby_unavailable")
             return
         }
-        if (transport == null) endSession("error_network")
+        if (transport != null) return
+        // A FAILURE is the network, not the server's answer, so it also covers a
+        // rejoin that could not get out at all: the network that dropped the
+        // socket is usually still down for the first retry or two. Only the
+        // budget ends that, never the first miss.
+        if ((pairingWelcomed || pairingDrops > 0) && schedulePairingReconnect()) return
+        endSession("error_network")
+    }
+
+    /**
+     * Rejoin the SAME pairing room after its socket dropped while waiting.
+     *
+     * Bounded, unlike Nearby's: a code expires, and a client that retried for
+     * ever would sit on a dead code looking alive. When the code really has gone
+     * the rejoin closes before its welcome — and [pairingWelcomed] is cleared
+     * here, so that close reads as what it is, a refused code.
+     *
+     * Its own counter, because [closeRoom] zeroes [reconnectAttempt].
+     */
+    private fun schedulePairingReconnect(): Boolean {
+        val src = source as? ConnectionSource.Pairing ?: return false
+        if (pairingDrops >= deps.timeouts.pairingReconnectLimit) return false
+        val step = ROOM_BACKOFF_STEPS[minOf(pairingDrops, ROOM_BACKOFF_STEPS.size - 1)]
+        pairingDrops++
+        pairingWelcomed = false
+        releaseRoomObjects()
+        roomGen++
+        val room = roomGen
+        _state.value = _state.value.copy(phase = Phase.CONNECTING, reconnecting = true)
+        reconnectTimer = session.schedule(
+            {
+                reconnectTimer = null
+                if (roomGen != room) return@schedule
+                openRoom(room, src)
+            },
+            deps.timeouts.roomRetryMs * step, TimeUnit.MILLISECONDS,
+        )
+        return true
     }
 
     /**

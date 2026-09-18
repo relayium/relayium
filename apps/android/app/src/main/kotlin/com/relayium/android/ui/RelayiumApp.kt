@@ -785,13 +785,21 @@ private fun JoinScreen(
         // A MINIMUM height, never a fixed one. The former `height(52.dp)` was a
         // ceiling as well as a floor, so at font scale 2 the label had less
         // room than it needed on the one control this screen exists for.
+        // After an ending this button says "Start a new session". For the device
+        // that MINTED the code the field above was never filled, so it used to
+        // submit an empty field and answer "Enter the six-digit code from your
+        // other device" — a dead end on the screen's primary action, with the
+        // digits already gone. A creator with nothing typed gets a fresh code
+        // instead; anyone who has typed or pasted something still joins it.
+        val minted by viewModel.createLink.state.collectAsStateWithLifecycle()
+        val remint = endedBanner && input.isBlank() && minted is CreateLinkModel.State.Showing
         PrimaryAction(
             label = if (endedBanner) {
                 stringResource(R.string.status_reconnect)
             } else {
                 stringResource(R.string.join_action)
             },
-            onClick = { submit() },
+            onClick = { if (remint) viewModel.createCrossNetworkLink() else submit() },
         )
 
         // The camera is the SHORTCUT, and the field above is the full path.
@@ -809,6 +817,19 @@ private fun JoinScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+
+    // A successful scan closes the scanner. The decode only prefills the field
+    // above, which sits BEHIND the sheet, so leaving the viewfinder up looked
+    // exactly like a scan that had not worked.
+    val decodes by viewModel.scanner.decodes.collectAsStateWithLifecycle()
+    var decodesAtOpen by rememberSaveable { mutableIntStateOf(decodes) }
+    LaunchedEffect(decodes) {
+        if (scanning && decodes != decodesAtOpen) {
+            viewModel.scanner.dismiss()
+            scanning = false
+        }
+        decodesAtOpen = decodes
     }
 
     if (scanning) {
@@ -1244,6 +1265,23 @@ private fun ConnectingScreen(
     // session started from a pasted code never shows one.
     (create as? CreateLinkModel.State.Showing)?.let { showing ->
         MintedCodeCard(showing, viewModel)
+        // The app tells the JOINING device to scan a QR, and this card was
+        // written, styled and tested for exactly this place — and then never
+        // called, so only a browser or a Mac could produce the code to scan and
+        // two phones could not use the scanner at all. The card owns its own
+        // expiry: it draws nothing scannable for a code the server now refuses.
+        val now by produceState(initialValue = System.currentTimeMillis() / 1000L, showing) {
+            while (true) {
+                value = System.currentTimeMillis() / 1000L
+                delay(1_000L)
+            }
+        }
+        com.relayium.android.scan.PairingQrCard(
+            origin = showing.link.substringBefore(JoinInput.CROSS_PATH),
+            code = runCatching { com.relayium.protocol.PairCode(showing.code) }.getOrNull(),
+            expiresAtEpochSeconds = showing.expiresAt,
+            nowEpochSeconds = now,
+        )
     }
 
     Spacer(Modifier.height(24.dp))
@@ -1254,8 +1292,11 @@ private fun ConnectingScreen(
     ) {
         CircularProgressIndicator()
         Text(
-            text = when (state.phase) {
-                TransferController.Phase.WAITING_PEER ->
+            text = when {
+                // Said plainly, with the code still on screen above: the drop is
+                // this device's connection, not the code, which is still good.
+                state.reconnecting -> stringResource(R.string.status_reconnecting_room)
+                state.phase == TransferController.Phase.WAITING_PEER ->
                     stringResource(R.string.status_waiting_peer)
                 else -> stringResource(R.string.status_connecting)
             },

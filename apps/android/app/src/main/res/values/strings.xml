@@ -26,7 +26,9 @@
     <string name="status_waiting_peer">Waiting for the other device…</string>
     <string name="status_connected">Connected</string>
     <string name="status_verification_code">Verification code %1$s</string>
-    <string name="status_verification_hint">Both devices should show the same six digits. They are not the pairing code.</string>
+    <string name="status_verification_hint">Optional. The other device shows these six digits only if verification is turned on there; when it does, they should match.</string>
+    <string name="status_verification_show">Show verification code</string>
+    <string name="status_reconnecting_room">Connection dropped. Reconnecting with the same code…</string>
     <string name="status_disconnect">Disconnect</string>
     <string name="status_legacy_files">File session</string>
     <string name="status_legacy_text">Message session</string>

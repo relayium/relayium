@@ -122,13 +122,34 @@ object TransferAwakePolicy {
         state.receiving == InboxReceiving.RECEIVING ||
             state.sends.any { it.phase == InboxSendStatus.Phase.SENDING }
 
+    /**
+     * Whether this device is showing a code it minted and waiting for the other
+     * device to enter it.
+     *
+     * The one exception to "never merely being connected", and a bounded one.
+     * This is the longest stretch of the creator's flow — read six digits out,
+     * wait for someone to type them — and with nothing held the screen timed out
+     * in 15–30 s, the socket dropped with it, and the session ended. It is
+     * bounded by the CODE, not by the connection: [mintedCodeAlive] goes false
+     * when the code expires, a few minutes at most, so a phone left on a desk is
+     * released then. A joiner's wait is not included; it is already capped by
+     * the controller's setup deadlines. Nearby is not included either — it has
+     * no expiry, so it would be the unbounded claim this file refuses.
+     */
+    fun waitingOnMintedCode(session: TransferController.State, mintedCodeAlive: Boolean): Boolean =
+        mintedCodeAlive && !session.nearby.active &&
+            (session.phase == TransferController.Phase.CONNECTING ||
+                session.phase == TransferController.Phase.WAITING_PEER)
+
     /** The one answer the window flag is driven from. */
     fun keepAwake(
         session: TransferController.State,
         download: CloudDownloadModel.State,
         upload: CloudUploadModel.State,
         inbox: InboxModel.State,
+        mintedCodeAlive: Boolean = false,
     ): Boolean = sessionWorking(session) ||
+        waitingOnMintedCode(session, mintedCodeAlive) ||
         downloadWorking(download) ||
         uploadWorking(upload) ||
         inboxWorking(inbox)

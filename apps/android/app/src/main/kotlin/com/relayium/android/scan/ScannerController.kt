@@ -70,6 +70,13 @@ class ScannerController(
 
     private val session = ScanSession()
     private val _state = MutableStateFlow(ScannerState.IDLE)
+
+    private val _decodes = MutableStateFlow(0)
+
+    /** How many codes this controller has delivered. A counter rather than the
+     *  code: the host needs the EVENT — close the sheet — and the same code
+     *  scanned twice is still two events. */
+    val decodes: StateFlow<Int> = _decodes.asStateFlow()
     val state: StateFlow<ScannerState> = _state.asStateFlow()
 
     private var provider: ProcessCameraProvider? = null
@@ -453,6 +460,11 @@ class ScannerController(
         // Ended here, before the callback: the run has produced the one result
         // it is going to, and the surface is about to close over it.
         session.close()
+        // Counted BEFORE the callback, so the surface hears that this run is
+        // over. The comment above always said "the surface is about to close
+        // over it" and nothing did: the viewfinder kept running over a field
+        // that had been filled in behind it, with no sign the scan had worked.
+        _decodes.value = _decodes.value + 1
         onCode(request)
     }
 

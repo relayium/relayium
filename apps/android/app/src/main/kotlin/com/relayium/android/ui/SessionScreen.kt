@@ -19,6 +19,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -102,22 +105,37 @@ private fun VerificationCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            // Collapsed by default. The website, the Mac app and the iPhone app
+            // show this code only when the user has turned verification on
+            // there, so an always-visible "both devices should show the same six
+            // digits" sent people looking for digits the other screen was not
+            // showing, and read as a broken connection. It is still one tap away
+            // for anyone who wants to compare, and the hint now says when the
+            // other side shows it.
             state.sas?.let { sas ->
-                Text(
-                    text = stringResource(R.string.status_verification_code, ""),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    text = sas,
-                    style = MonospaceDigits,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                )
+                var showSas by rememberSaveable(state.linkId) { mutableStateOf(false) }
+                if (showSas) {
+                    // One line, label and digits together: the former layout
+                    // formatted the label with an empty argument and printed the
+                    // digits on the next line, leaving "Verification code " with
+                    // a trailing space for a screen reader to announce.
+                    Text(
+                        text = stringResource(R.string.status_verification_code, sas),
+                        style = MonospaceDigits,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    )
+                    Text(
+                        text = stringResource(R.string.status_verification_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    TertiaryAction(
+                        label = stringResource(R.string.status_verification_show),
+                        onClick = { showSas = true },
+                    )
+                }
             }
-            Text(
-                text = stringResource(R.string.status_verification_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TertiaryAction(
                     label = stringResource(R.string.status_disconnect),

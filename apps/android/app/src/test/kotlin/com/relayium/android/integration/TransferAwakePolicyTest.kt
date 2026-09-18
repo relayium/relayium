@@ -216,4 +216,26 @@ class TransferAwakePolicyTest {
         assertTrue(awake(inbox = InboxModel.State(receiving = InboxReceiving.RECEIVING)))
         assertFalse(awake())
     }
+
+    // The creator's wait — read six digits out, wait for someone to type them —
+    // used to let the screen time out, which dropped the socket and ended the
+    // session. Held now, but only while the CODE is alive, so it is bounded.
+    @Test
+    fun `a minted code that is still alive holds the screen while waiting for the peer`() {
+        val waiting = TransferController.State(phase = TransferController.Phase.WAITING_PEER)
+        assertTrue(TransferAwakePolicy.waitingOnMintedCode(waiting, mintedCodeAlive = true))
+        assertFalse("an expired code releases it", TransferAwakePolicy.waitingOnMintedCode(waiting, mintedCodeAlive = false))
+        assertFalse(
+            "connected and idle is still not work",
+            TransferAwakePolicy.waitingOnMintedCode(
+                TransferController.State(phase = TransferController.Phase.CONNECTED), mintedCodeAlive = true,
+            ),
+        )
+        assertFalse(
+            "Nearby has no expiry to bound the claim, so it never qualifies",
+            TransferAwakePolicy.waitingOnMintedCode(
+                waiting.copy(nearby = TransferController.Nearby(active = true)), mintedCodeAlive = true,
+            ),
+        )
+    }
 }
