@@ -1421,8 +1421,9 @@ until macOS and the Web stopped adopting legacy pairing peers
 (`LinkPairingFallbackPolicy.terminateUnsupported`): from then on every current
 Mac and browser refused an iPhone on a code, with copy saying the *iPhone* was
 "running an older version". The owner met exactly that testing iOS `0.3.2`
-against macOS `1.4.0` on 2026-09-17. The decision to make iOS a `link/1` pairing
-client had been recorded on 2026-08-21 and lived only on an unmerged branch.
+against the Relayium macOS app `1.4.0` on 2026-09-17. The decision to make iOS
+a `link/1` pairing client had been recorded on 2026-08-21 and lived only on an
+unmerged branch.
 
 So the screen now follows the rule macOS, the Web and Android already follow:
 
@@ -1486,37 +1487,64 @@ test across two real networks, through a relay, or against the shipped macOS
 app. It proves this client speaks a real `link/1` link with no fallback, and
 nothing about whether a Mac binary or relayium.com accepts it in the field.
 
-**The gates 0.4.0 has not passed.** These are open requirements, not predictions.
+**The hosted gate passed on the final branch source.** Run
+[`35299351635`](https://github.com/relayium/relayium/actions/runs/35299351635) on
+commit `9097326b` completed with all four iOS jobs `success`: `ios-build`,
+`ios-ui-smoke`, `ios-ipad-shell` and `ios-transfer-acceptance`. The transfer job
+is the one that matters here. It moved five files both over Nearby and over a
+pairing code, each matched by name, path, size and SHA-256; it proved the
+acceptance launcher reaps every child it starts, under a failing launch and
+under `TERM` and `INT` while both peers run; and it then drove the **built
+app's own UI** through a Nearby `link/1` transfer and a pairing-code `link/1`
+workspace,
+with the counterpart reporting the file receipt and the message it served, and
+the digests matching. Its network is loopback on the runner, exactly as the
+local harness is, so it is the same class of evidence at a wider scope — not a
+production-network result.
 
-- **The hosted rerun on the repaired source.** The first hosted `ios.yml` run
-  (`35295958893`, commit `34767bba`) built, passed the iPad shell and the UI
-  smoke, and **failed** the transfer job: the offered batch drew its summary
-  without the file's identity, so the assertion that the receiving side names the
-  file found nothing. That was a real product gap rather than a test to relax,
-  and the receipt UI now renders the identity — but the hosted run that would
-  demonstrate it has not been made.
-- **Nearby on hosted hardware.** Discovery could not see a peer on this
-  development machine, so its two local cases are unproven here. That run is
-  required specifically to tell a source defect apart from this machine's own
-  Bonjour behaviour. If it comes back green, the local environment is a
-  follow-up to look at the next time a local Nearby harness is needed, not a
-  blocker on this source.
-- **Physical acceptance, in both directions, before any channel handoff.** An
-  iPhone against a physical Mac running macOS `1.4.0`, and an iPhone against
+This paragraph records **branch** evidence, pinned to commit `9097326b` and run
+`35299351635`. `main` integration is verified against its own selected checks,
+which are recorded with that integration rather than here.
+
+**The earlier hosted failure is history, not an open gate.** The first run
+(`35295958893`, commit `34767bba`) failed the transfer job because the offered
+batch drew its summary without the file's identity, so the assertion that the
+receiving side names the file found nothing. That was a real product gap; the
+receipt UI renders the identity now, and `35299351635` is the run that shows it.
+
+**What is still open.** These are requirements, not predictions.
+
+- **Nearby's local no-peer observation.** The final source passes the hosted
+  Nearby gate. What that gate does not do is explain the local run, where
+  discovery could not see a peer on this development machine under Xcode 27 and
+  iOS 26.5: the cloud exercises one configuration, so a configuration-specific
+  cause in the code cannot be ruled out from a green hosted job. **The cause
+  remains unestablished** and is to be revisited at the next local Nearby
+  validation. Read that as neither a release claim nor a general "no defect
+  here" diagnosis.
+- **A private candidate, in the right order.** The owner cannot retest what is
+  not installed, so physical acceptance cannot precede delivery. The order is:
+  explicit owner authorization for a channel, a fresh read-back of the highest
+  consumed build number, and that channel's release-specific checks — then a
+  private candidate the owner can install. **This task authorizes no upload**,
+  and no install candidate exists yet; the only artifacts are simulator-only
+  task evidence.
+- **Owner physical retest, which follows installation.** With a candidate
+  installed: an iPhone against a Mac running **Relayium for macOS `1.4.0`** (the
+  app's version, not the operating system's), and an iPhone against
   relayium.com, each sending and receiving. This is the exact interaction whose
   failure started this work, and no simulator or loopback result substitutes for
-  it. It is run from written, numbered test notes, so the result is legible
-  rather than an impression.
-- **Distribution gates, none of them authorized now.** No signed archive, no
-  export, no upload. Re-reading the highest consumed build number belongs to the
-  authorized distribution gate and is not this source's to settle.
+  it. Its numbered test notes are kept privately with the task evidence. That
+  retest is what gates acceptance of physical bugs and any judgement about
+  public-release readiness.
 
 **A standing limitation of the harness, recorded rather than fixed.** The
 two-device harness's pairing FILE roles skip with a recorded reason — the batch
 is now chosen through the system document browser, which that harness cannot
 drive — and its pairing conversation roles were re-authored but have never been
 executed against two physical devices. Re-authored, unexecuted test code is not
-evidence, and is not counted as any above.
+evidence and closes none of the above. Nothing in this section claims full iOS
+parity with the other clients, and none of it is a launch claim.
 
 The paragraphs below are R3-E's own account. Still true: the create/join account
 asymmetry, the one numeric join field, the large-file route, the verification

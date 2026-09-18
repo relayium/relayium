@@ -9,16 +9,19 @@ deliberately did not copy, and how the change is verified.
 were not aligned.** `0.3.2` gave Cross-network the macOS 1.4.0 status head and
 cards while the screen underneath was still the Files/Text legacy product, which
 macOS and the Web refuse in a pairing room. The owner's first cross-network test
-of `0.3.2` against macOS `1.4.0` failed with "the other device is running an
-older version". `0.4.0` (in development, not distributed) replaces that screen
-with the connect-first unified workspace macOS has; the account is in
-`apps/README.md` under "Direct transfer". Statements below that describe the
+of `0.3.2` against the Relayium macOS app `1.4.0` failed with "the other device
+is running an older version". `0.4.0` (in development, not distributed) replaces
+that screen with the connect-first unified workspace macOS has; the account is
+in `apps/README.md` under "Direct transfer". Statements below that describe the
 Cross-network mode picker or its two create cards describe `0.3.2`. The layout
 evidence for the replacement screen is its own: the English Light and Chinese
 Dark reference captures, 2 of 2 on an owned iPhone 17 Pro, iOS 26.5 simulator
-under Xcode 27. The hosted rerun recorded at the end of this document gated
-`0.3.2`'s source and is not evidence for `0.4.0`, whose hosted rerun has not
-been made.
+under Xcode 27, plus `0.4.0`'s own hosted run
+[`35299351635`](https://github.com/relayium/relayium/actions/runs/35299351635) on
+commit `9097326b`, where `ios-build`, `ios-ui-smoke`, `ios-ipad-shell` and
+`ios-transfer-acceptance` all passed. The hosted run recorded at the end of this
+document is a different one and gated `0.3.2`'s source; read it as `0.3.2`
+evidence only.
 
 ## What changed
 

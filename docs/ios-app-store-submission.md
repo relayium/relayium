@@ -111,8 +111,9 @@ record, and build `9` is a project value that must be checked against a fresh
 read-back of the highest consumed build before it is archived.
 
 - **Why it exists.** The owner's first cross-network test of `0.3.2 (8)` against
-  macOS `1.4.0`, on the day it was delivered, was refused with "The other device
-  is running an older version that can't complete this transfer." `0.3.2`
+  the Relayium macOS app `1.4.0`, on the day it was delivered, was refused with
+  "The other device is running an older version that can't complete this
+  transfer." `0.3.2`
   announced only `text/1` in a pairing-code room; macOS and the Web refuse a
   pairing peer without `link/1`. The iOS Cross-network screen was still the
   Files/Text legacy product under the 1.4.0-aligned visuals.
@@ -151,20 +152,43 @@ read-back of the highest consumed build before it is archived.
   shares the link machinery without being the shipped Mac's composition. It is
   evidence about this client's rendezvous, link and transfer behaviour — not
   about two real networks, a relay, the shipped macOS app or relayium.com.
-- **Gates not passed for `0.4.0`.** Open requirements, stated as such: the hosted
-  `ios.yml` rerun on the repaired source (the first run, `35295958893` on
-  `34767bba`, passed build, iPad shell and UI smoke and **failed** the transfer
-  job on a missing file identity in the offered batch, which has since been
-  repaired in the product); the hosted Nearby cases, which this development
-  machine could not exercise because discovery saw no peer, and which are needed
-  to separate a source defect from this machine's own Bonjour behaviour; and
-  physical acceptance in both directions — an iPhone against a physical Mac on
-  macOS `1.4.0`, and an iPhone against relayium.com, each sending and receiving,
-  run from written numbered test notes. The two-device harness's pairing
+- **Evidence so far — the hosted branch gate, passed.** Run
+  [`35299351635`](https://github.com/relayium/relayium/actions/runs/35299351635)
+  on commit `9097326b` completed with all four iOS jobs `success`: `ios-build`,
+  `ios-ui-smoke`, `ios-ipad-shell` and `ios-transfer-acceptance`. The transfer
+  job moved five files over Nearby and five over a pairing code, each matched by
+  name, path, size and SHA-256; proved the acceptance launcher reaps every child
+  it starts under a failed launch and under `TERM`/`INT`; and drove the built
+  app's own UI through a Nearby `link/1` transfer and a pairing-code `link/1`
+  workspace with matching digests. That job also networks over loopback on the
+  runner, so it widens the scope of the evidence without becoming a
+  production-network or real-Mac result. The first run on the pre-repair source
+  (`35295958893`, `34767bba`) failed the transfer job on a missing file identity
+  in the offered batch; that cause was repaired in the product and is retained
+  here as history, not as an open gate. This bullet records **branch** evidence,
+  pinned to commit `9097326b` and run `35299351635`; `main` integration is
+  verified against its own selected checks, recorded with that integration
+  rather than here.
+- **Gates not passed for `0.4.0`.** Open requirements, stated as such. The final
+  source passes the hosted Nearby gate, but that does not explain the local run
+  where discovery saw no peer on the development machine under Xcode 27 and
+  iOS 26.5; the cloud exercises one configuration, so a configuration-specific
+  cause in the code cannot be ruled out from a green hosted job. That cause
+  **remains unestablished** and is to be revisited at the next local Nearby
+  validation — which is neither a release claim nor a general "no defect"
+  diagnosis. No signed archive, no export and no upload exists. **Ordering
+  matters and the earlier wording had it backwards:** the owner cannot retest an
+  uninstalled build, so explicit channel authorization, a fresh read-back of the
+  highest consumed build number and that channel's release-specific checks come
+  first, then a private candidate the owner can install; the owner's physical
+  retest — an iPhone against a Mac running **Relayium for macOS `1.4.0`** (the
+  app's version, not the OS release) and an iPhone against relayium.com, each
+  sending and receiving, from numbered notes kept privately with the task
+  evidence — follows installation and is what gates physical-bug acceptance and
+  public-release readiness. No install candidate exists yet; the current
+  artifacts are simulator-only task evidence. The two-device harness's pairing
   conversation roles were re-authored and have never been executed, which is a
-  recorded scope limitation rather than evidence. No signed archive, no export
-  and no upload exists, and re-reading the highest consumed build number belongs
-  to the authorized distribution gate below.
+  recorded scope limitation rather than evidence.
 - **Distribution.** Not authorized by this change. A TestFlight upload needs an
   explicit owner instruction for that channel, a fresh highest-build read-back,
   and the candidate script's own gates.
