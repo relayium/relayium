@@ -246,6 +246,29 @@ class NearbyControllerTest {
         awaitTrue("the address reaches the published state") { rig.nearby.publicIp == "203.0.113.7" }
     }
 
+    // `closeRoom` zeroes the attempt counter, and the scheduler read it AFTER
+    // releasing the room, so every retry was the first one and the documented
+    // backoff (1, 2, 5, 10, 15 x the retry unit) never grew.
+    @Test
+    fun `the room retry backoff actually grows across consecutive failures`() {
+        val unit = 40L
+        val rig = rig(source = ConnectionSource.Hub, timeouts = quiet().copy(roomRetryMs = unit))
+        var events = rig.signaling.events
+        val gaps = ArrayList<Long>()
+        repeat(3) {
+            val failedAt = System.nanoTime()
+            events.onFailure(java.io.IOException("down"))
+            val before = events
+            awaitTrue("retry ${it + 1}") { runCatching { rig.signaling.events !== before }.getOrDefault(false) }
+            gaps.add((System.nanoTime() - failedAt) / 1_000_000)
+            events = rig.signaling.events
+        }
+        // Steps 1, 2, 5: the third wait is five units. With the counter zeroed it
+        // was one unit every time.
+        assertTrue("the third retry waited ${gaps[2]} ms, not about $unit", gaps[2] >= unit * 4)
+        assertTrue("and the first was still prompt (${gaps[0]} ms)", gaps[0] < unit * 4)
+    }
+
     // ── no implicit peer, ever ──────────────────────────────────────────────
 
     @Test

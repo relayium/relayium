@@ -1537,11 +1537,17 @@ class TransferController(
     private fun scheduleRoomReconnect(immediate: Boolean) {
         val src = source ?: return
         if (!_state.value.nearby.active) return
+        // Read BEFORE the release: [releaseRoomObjects] goes through [closeRoom],
+        // which zeroes [reconnectAttempt]. Reading it afterwards made every retry
+        // the FIRST retry, so the backoff documented above never grew — a device
+        // on a dead network re-dialled every two seconds for as long as the
+        // screen stayed on, instead of settling at thirty.
+        val attempt = reconnectAttempt
         // Safe now: nothing is bound to the old room's identity.
         releaseRoomObjects()
-        val step = ROOM_BACKOFF_STEPS[minOf(reconnectAttempt, ROOM_BACKOFF_STEPS.size - 1)]
+        val step = ROOM_BACKOFF_STEPS[minOf(attempt, ROOM_BACKOFF_STEPS.size - 1)]
         val delay = if (immediate) 0L else deps.timeouts.roomRetryMs * step
-        reconnectAttempt++
+        reconnectAttempt = attempt + 1
         roomGen++
         val room = roomGen
         reconnectTimer?.cancel(false)
