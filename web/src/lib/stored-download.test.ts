@@ -5,6 +5,7 @@
 // 上面这一层根本看不见它 —— 看不见是对的，但"看不见"必须意味着"没受影响"，而不是
 // "重复写了一段没人发现"。用真密文 + 真 ReadableStream，sink 是记录式替身。
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { realTurn, settleWithFakeTimers } from "./settle-fake-timers";
 import { writeStoredObject, storedSaveSpecs, storedTotalBytes } from "./stored-download";
 import { generateStoreKey, encryptFiles } from "./store-crypto";
 import type { FileMetaLite, FileSink, SaveTarget } from "./filesink";
@@ -101,39 +102,10 @@ function serve(cipher: Uint8Array, turns: { deliver?: number; cut?: boolean }[] 
   return { ranges, fetchMock };
 }
 
-/** 模块加载时拿到的真 setTimeout —— 每个用例都在这之后才装假时钟。 */
-const realSetTimeout = globalThis.setTimeout;
-
-/** 把一轮真实事件循环让出去：真 WebCrypto 的解密结果、流的读取都在这里落地。 */
-function realTurn(): Promise<void> {
-  return new Promise((resolve) => realSetTimeout(resolve, 0));
-}
-
-/**
- * 一直推到 promise 落定为止。
- *
- * 退避是**假**时钟上的 setTimeout，解密却是**真**的 WebCrypto（结果作为真实任务回来）。
- * 旧版固定把假时钟推 40 次就停手：在 CI 这种解密更慢的机器上，40 次推完时下载还没走到
- * 断线处，之后才装上的退避定时器再也没人推，用例就挂到 5 秒超时（line 121 的 CI 失败；
- * 可用 author/ci-resume 的慢解密探针稳定复现）。
- *
- * 现在按真实进度推：每轮先让出一轮真实事件循环，再只在确有待触发的假定时器时把时钟推到
- * 下一个定时器。没有固定轮数，也不靠把假时钟一口气推远；上限仍是用例自己的 5 秒超时 ——
- * 真卡死照样失败，只是不会再因为机器慢而失败。
- */
-async function settle<T>(p: Promise<T>): Promise<T | Error> {
-  let settled = false;
-  let result: T | Error = undefined as T;
-  p.then(
-    (v) => { result = v; settled = true; },
-    (e: Error) => { result = e; settled = true; },
-  );
-  while (!settled) {
-    await realTurn();
-    if (!settled && vi.getTimerCount() > 0) await vi.advanceTimersToNextTimerAsync();
-  }
-  return result;
-}
+/** 一直推到 promise 落定为止 —— 按真实进度推假时钟，没有固定轮数。
+ *  原因（59c4d152 的 CI 超时、慢解密探针）与实现见 settle-fake-timers.ts；
+ *  stored-file.test.ts 用的是同一个 helper，两边不会再各修各的。 */
+const settle = settleWithFakeTimers;
 
 afterEach(() => {
   vi.useRealTimers();

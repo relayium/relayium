@@ -506,7 +506,12 @@ describe.skipIf(!canRun)("the pasted script, actually executed", () => {
     } finally {
       rmSync(f.root, { recursive: true, force: true });
     }
-  });
+    // Explicit, because the default 5 s contradicted the 20 s start deadline
+    // above: a real `sh` + openssl + fixture CLI that started late on a busy
+    // hosted runner was killed by the runner as "Test timed out in 5000ms"
+    // (web run on 85cb2d52) before the "never started" assertion — the one
+    // message that says what actually happened — could be reached.
+  }, 30_000);
 
   it("writes nothing outside its temp directory and the destination", () => {
     const f = makeFixture();

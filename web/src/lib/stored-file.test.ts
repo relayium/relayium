@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { settleWithFakeTimers } from "./settle-fake-timers";
 import v8 from "node:v8";
 import vm from "node:vm";
 import {
@@ -1829,16 +1830,10 @@ describe("downloadBlob 断线续传", () => {
     return { parts, onChunk: async (pt: Uint8Array) => { parts.push(pt); } };
   }
 
-  /** 让所有退避一次走完。假时钟 + 反复推进，直到那个 promise 落定。 */
-  async function settle<T>(p: Promise<T>): Promise<T | Error> {
-    const done = p.then((v) => v as T | Error).catch((e: Error) => e);
-    for (let i = 0; i < 40; i++) {
-      await vi.advanceTimersByTimeAsync(1000);
-      const raced = await Promise.race([done, Promise.resolve("pending" as const)]);
-      if (raced !== "pending") return raced;
-    }
-    return done;
-  }
+  /** 让所有退避一次走完：按真实进度推假时钟，直到那个 promise 落定。
+   *  旧版固定推 40 次就停手，真解密慢一点（托管 CI）退避定时器就再没人推，用例挂到
+   *  5 秒超时（9fff9258 的 web 失败）—— 原因与修正见 settle-fake-timers.ts。 */
+  const settle = settleWithFakeTimers;
 
   afterEach(() => {
     vi.useRealTimers();
