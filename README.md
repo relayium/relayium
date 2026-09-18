@@ -325,7 +325,7 @@ the iOS sections of [`apps/README.md`](apps/README.md) describe a build in
 development, not something a reader can install.
 
 **On Android:** `apps/android/` is a native Kotlin/Compose client, at version
-`0.2.3` (versionCode 6), offered as a **public preview** distributed as a direct
+`0.2.4` (versionCode 7), offered as a **public preview** distributed as a direct
 APK — no Google Play listing and no Google Play Services dependency of any kind.
 It has five destinations — Transfer, Nearby, Inbox, Cloud and Account — and none
 of them opens onto a placeholder:
@@ -334,13 +334,17 @@ of them opens onto a placeholder:
   link, anonymously) and now **mints** one too, under a signed-in account.
 * **Nearby** finds other Relayium devices with no code at all, either on the
   local link alone — contacting no Relayium server — or through the code-less
-  rendezvous room the Web and macOS clients join. Nothing connects without an
+  rendezvous room the Web and macOS clients join. That room is offered first,
+  because it is the only one a browser or the Mac app is ever in, and it shows
+  the public IP the server keyed the room by. Nothing connects without an
   explicit selection or an accepted prompt.
 * **Inbox** is a real Device Inbox receiver: it enrols a key, holds the
   receiving policy (off / ask / automatic), decrypts deliveries and keeps a
   durable history with grant-based open, share and export. **Check now** asks
   central for finished deliveries immediately, without interrupting a transfer
-  in progress or answering anything on the user's behalf.
+  in progress or answering anything on the user's behalf. An outgoing send can
+  be removed, and a delivery the other device has not saved yet can be
+  cancelled; a cancel central refuses deletes nothing.
 * **Cloud** sends and opens zero-knowledge `#k=` stored links, with resumable
   uploads for large selections.
 * **Account** covers email/password sign-in, registration with verification,

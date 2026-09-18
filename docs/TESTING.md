@@ -2286,7 +2286,7 @@ sink is the one thing the unit tests stand in for:
 
 ## Android client `[AUTOMATED + MANUAL]`
 
-The native Android client (`apps/android/`, public preview at 0.2.3) has its
+The native Android client (`apps/android/`, public preview at 0.2.4) has its
 own gates and they are not duplicated here:
 
 ```bash

@@ -3,14 +3,14 @@
   "android": {
     "available": true,
     "applicationId": "com.relayium.android",
-    "versionCode": 6,
-    "versionName": "0.2.3",
-    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.2.3/Relayium-0.2.3-6.apk",
-    "sha256": "9e2695f4f171dec08e4f767ffcb04de8e4db1ac866ce0f87d506217e805ee1a1",
-    "size": 45844867,
+    "versionCode": 7,
+    "versionName": "0.2.4",
+    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.2.4/Relayium-0.2.4-7.apk",
+    "sha256": "2917fcb727b5f57582ec763a71616143cdbc7d6469240ac7b07fa052343270a5",
+    "size": 45910602,
     "notes": {
-      "en": "Public preview 0.2.3. A refreshed layout that matches Relayium for Mac: grouped cards, a reading width on tablets, and status panels in Device Inbox and Nearby. Device Inbox adds Check now, which asks for finished deliveries immediately instead of waiting for the next check; it never interrupts a transfer in progress and does not change your receiving setting: with Ask, a delivery still waits for your decision. Stored downloads now resume after a dropped connection where the server allows it, the screen stays on only while a transfer is actually running, and pasting a stored-file link into Code or link opens it. Everything still runs while the app is open, with no background transfer. Direct APK only, not on Google Play, and it contains no Play Services and no Play Billing.",
-      "zh": "公开预览版 0.2.3。界面与 Mac 版 Relayium 保持一致：分组卡片、平板上的阅读宽度，设备收件箱与附近设备中新增状态区。设备收件箱新增「立即检查」，会立即查询已上传完成的投递，而不必等下一次自动检查；它不会打断正在进行的传输，也不会改变你的接收设置：选择「询问」时，投递仍会等待你的决定。存储链接下载在服务器允许时可在断线后续传；只有在真正传输时才保持屏幕常亮；在「代码或链接」中粘贴存储文件链接即可打开。所有功能仍然只在应用打开时运行，没有后台传输。仅以 APK 直接分发，不在 Google Play 上架，不含 Play 服务与 Play 结算。"
+      "en": "Public preview 0.2.4. Fixes from real-device feedback. Device Inbox: an outgoing send can now be removed, and a delivery the other device has not saved yet can be cancelled; finished sends leave the Outgoing list on their own. Nearby: the mode that finds the Relayium website and the Mac app now comes first, and it shows your public IP, because devices find each other there only when it matches. Cross-network: a connection that drops while you wait no longer ends the session as \"code not active\"; the app rejoins the same code, keeps the screen on while your code is waiting, shows a QR for a code you create, and closes the scanner after a successful scan. A brief network interruption on a connected session gets a few seconds to recover instead of ending it. Messages open when you press Send and incoming conversations are accepted automatically, as on the website, and the app says up front when no relay is available. Everything still runs while the app is open, with no background transfer. Direct APK only, not on Google Play, and it contains no Play Services and no Play Billing.",
+      "zh": "公开预览版 0.2.4。根据真机反馈修复。设备收件箱：发送项现在可以移除，对方尚未保存的投递可以取消；已完成的发送会自动离开“发送中”列表。附近设备：能找到 Relayium 网页版和 Mac 应用的模式现在排在第一位，并显示你的公网 IP——只有两边的公网 IP 相同，设备才能在那里互相发现。跨网络：等待对方时连接断开，不再以“配对码无效”结束会话，应用会用同一个配对码重新连接；等待期间保持屏幕常亮；创建的配对码会显示二维码；扫码成功后扫码界面自动关闭。已连接的会话遇到短暂网络中断时，会给几秒钟恢复而不是直接结束。按“发送”即可开始消息对话，收到的对话请求会像网页版一样自动接受；没有可用中继时会提前说明。所有功能仍然只在应用打开时运行，没有后台传输。仅以 APK 直接分发，不在 Google Play 上架，不含 Play 服务与 Play 结算。"
     }
   }
 }

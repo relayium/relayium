@@ -3,10 +3,30 @@
 **Status: public preview.** `apps/android/` is the native Android client,
 applicationId `com.relayium.android`, distributed as a direct APK only — no
 Google Play listing, no Play Billing, and no Play Services or GMS dependency of
-any kind. The published build is 0.2.3 (versionCode 6), and it is the source:
+any kind. The published build is 0.2.4 (versionCode 7), and it is the source:
 the update feed, the download surface and this tree describe one build.
 
-### Provenance of the 0.2.3 release — read this before auditing the tag
+### Provenance of the 0.2.4 release — read this before auditing the tag
+
+* the artifact `Relayium-0.2.4-7.apk`, SHA-256
+  `2917fcb727b5f57582ec763a71616143cdbc7d6469240ac7b07fa052343270a5`,
+  45,910,602 bytes, APK Signature Scheme v2 and v3, signing certificate SHA-256
+  `ac867828a511f15e9214498f234d8898bbd56033342edd7e70d8037c20380aad` — unchanged,
+  so an installed 0.2.3 updates in place (verified on the AOSP 36 emulator from
+  the published 0.2.3 bytes: data byte-identical, clean relaunch, downgrade
+  refused) — was built and signed from **`21c95782`** on `main`. Every
+  non-signature entry of the signed file has the same CRC as the unsigned APK
+  that was checked (SHA-256
+  `3d863e0886d69dcc7f3a33c44c79f40ab9427ada682594dd26be39bf35e23c78`);
+* the `android-v0.2.4` tag names the later metadata commit. It changes release
+  metadata, generated pages and documents only: `apps/android/` at the tag is
+  identical to the APK source `21c95782`.
+
+Against the published 0.2.3 bytes, 0.2.4 ships the fixes described under
+"Changes released in 0.2.4" below. The permission set is identical to 0.2.3 and
+no persisted format, store, manifest entry or backup rule changed.
+
+### Provenance of the 0.2.3 release
 
 The same rule as 0.2.2 below, with different commits:
 
@@ -87,6 +107,53 @@ build reads when the user presses **Check for updates**. Until the APK is publis
 the manifest says `available: false`, and every surface — the card, the
 static twins and the app itself — reports "no download is published" rather than
 inventing one.
+
+## Changes released in 0.2.4
+
+**Released in 0.2.4 (versionCode 7).** Fixes for three defects the owner
+reported from a physical phone on 0.2.3, and the follow-ups that report led to.
+
+* **Device Inbox — an outgoing send can be removed.** Picking files stages a
+  durable encrypted job and delivers at once, and no layer offered a discard: a
+  send the user regretted showed only Send, and an unknown upload or a queued
+  delivery had no control at all. `InboxSendCoordinator.discard` is the user's
+  own intent, separate from the outcome-driven `release`: a delivery that exists
+  is cancelled at central FIRST (404 counts) and a refused or unreachable cancel
+  deletes nothing; `InboxRuntime.discardSend` joins the running attempt before
+  the record is touched; `cancelSend` remains a pause. A delivery central reports
+  as over releases its job, history delete no longer hides the Outgoing row until
+  the next refresh, and a stopped attempt frees its slot before the list is
+  republished.
+* **Nearby — the room the website is in comes first, with its public IP.** The
+  app always had the code-less relayium.com room, but offered the local-link
+  mode first as the filled action, where a browser or the Mac app can never
+  appear. The welcome's observed address, previously dropped, is shown: it is
+  the room key. The room retry backoff now grows; its counter was zeroed before
+  it was read.
+* **Cross-network — a dropped socket is not a bad code.** A pairing room that
+  closes after its welcome rejoins the same code with bounded backoff; a close
+  before the welcome is a refused code. The screen is held while a minted code
+  is alive, bounded by the code's expiry. The minted code shows the QR card, the
+  scanner closes on a decode, a creator's primary action re-mints after an
+  ending, and the verification code is collapsed with an honest hint.
+* **Link — `DISCONNECTED` gets a bounded 12 s chance to recover**
+  (`DisconnectGrace`) before the link ends; `FAILED` and `CLOSED` are unchanged.
+  Not a resume layer, and not an Android-initiated ICE restart.
+* **Messages on `link/1`** open on Send, admit an incoming conversation without a
+  prompt, and resolve crossed requests by role, as the shipped Web does. The older
+  wire keeps its prompt.
+* **Relay availability** (`quota`, `unverified`, none) is said while connecting
+  instead of being parsed and dropped.
+
+Before signing, the release tree passed `:protocol:test`, `:app:testDebugUnitTest`,
+both lints and all builds; on the AOSP 36 emulator the Android↔browser interop
+acceptance (both role assignments, both cancels), the Device Inbox acceptance
+(six groups) and the code-less room acceptance against three browser devices;
+and every hosted check on `21c95782`. The signed bytes passed an in-place
+upgrade from the published 0.2.3 APK. **None of this is physical-device
+evidence.** Still foreground only. Not in this release: a remembered receive
+folder, open/share after a receive, notifications, an Android-initiated ICE
+restart, and keeping Nearby alive in the background.
 
 ## Changes released in 0.2.3
 
@@ -723,11 +790,11 @@ Metadata is derived from the artifact, never written by hand:
 #    root to the working directory, so without it this writes
 #    <repo>/android-release.json instead of web/android-release.json.
 node web/scripts/stage-android-release.mjs --web-root web \
-     --apk Relayium-0.2.3-6.apk \
-     --version 0.2.3 --code 6 --notes-en "…" --notes-zh "…"
+     --apk Relayium-0.2.4-7.apk \
+     --version 0.2.4 --code 7 --notes-en "…" --notes-zh "…"
 # 3. commit the metadata-only diff
 # 4. publish the SAME file, pinned to the commit that carries that metadata
-scripts/publish-android-release.sh --apk Relayium-0.2.3-6.apk --target <metadata-commit>
+scripts/publish-android-release.sh --apk Relayium-0.2.4-7.apk --target <metadata-commit>
 ```
 
 The staging tool reads the package, versionCode, versionName and signing
