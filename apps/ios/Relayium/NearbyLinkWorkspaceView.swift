@@ -35,7 +35,11 @@ import RelayiumKit
 ///    44pt is a floor a finger has.
 ///  - **One `ScrollView`, the tab's own.** Everything here is `LazyVStack`
 ///    inside it; a nested scroller on a phone is a region the user cannot
-///    reliably scroll past.
+///    reliably scroll past. The single exception is `PendingFileList` inside a
+///    transfer row, and it is an exception because the thing it bounds is worse:
+///    a folder batch's manifest listed in full pushes the Accept it exists to
+///    inform off the bottom of the page. `NearbyView` already draws that same
+///    component in the same scroll view.
 ///
 /// What the two DO share is the model: `LinkWorkspaceModel` makes every
 /// decision. The words come from `LinkEndingCopy`/`LinkBatchCopy` in that same
@@ -561,6 +565,45 @@ private struct LinkTransfersSection: View {
             if let fraction = batch.fractionCompleted, !batch.isTerminal {
                 ProgressView(value: fraction)
             }
+            // **The manifest itself, in every state, above every verb.**
+            //
+            // `LinkBatchCopy.summary` describes a batch — "3 files, 2 MB" — and
+            // that is the right line to LEAD with, but it is not a thing anyone
+            // can decide against. Accept below releases a write to this user's
+            // disk, and consent to "3 files" is not consent to THESE three
+            // files: a peer that announced a name the user would have refused
+            // got the same row as one that announced a name they wanted. The
+            // same list is what turns a committed batch into a receipt
+            // afterwards, naming what landed rather than only that something
+            // did — which is the whole of what a user can check against the
+            // Files app.
+            //
+            // Drawn for outbound and in-flight batches too, and deliberately:
+            // "what am I sending" and "what is still moving" are the same
+            // question asked at a different moment, and a list that appeared
+            // only at the two ends would be missing where it is looked at.
+            //
+            // `PendingFileList` rather than rows written here. It is the file
+            // identity list every other iOS send and receive surface already
+            // draws, so this is the same row a user has read before; it takes
+            // `[FileMeta]`, which is exactly what `LinkFileBatch.files` is —
+            // the manifest verbatim, in manifest order, nothing re-ordered or
+            // trimmed on the way; it renders a nested entry by its PATH through
+            // `FileIdentityPresentation`, so a folder batch shows the shape
+            // that will land rather than a flat list of leaf names; and its
+            // bounded scroll is what keeps a folder batch of thousands of
+            // entries inspectable WITHOUT pushing Accept off the screen.
+            //
+            // That bounded scroller is the one nested scroll region this view
+            // permits, against its own rule at the top of the file. The rule is
+            // there because a nested scroller is a region a finger cannot
+            // reliably drag past; the exception holds because the alternative —
+            // an unbounded list — does not merely make the page long, it puts
+            // the consent control beyond reach for exactly the batches where
+            // consent matters most. It is also not a new region on this page:
+            // `NearbyView`'s staging section draws the same component inside the
+            // same `DestinationPage` scroll view.
+            PendingFileList(sessionFiles: batch.files)
             if batch.state == .offered {
                 // Accepting a manifest releases a write to this user's disk, so
                 // it stays behind the verification boundary — `acceptsWork` —

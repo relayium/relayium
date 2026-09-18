@@ -783,6 +783,30 @@ final class AppShellUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["4 8 3 9 2 0"].exists,
                        "a failed mint drew a code")
 
+        // **Both starts are refused, and both SAY so.** This is the one state
+        // that draws the connect controls over a module that still holds work,
+        // and until 0.4.0 they were fully pressable dead buttons: the actions
+        // re-ask `acceptsNewSession`, which is false for an unread failure, so a
+        // tap did nothing and explained nothing. macOS refuses the same state
+        // visibly. Asserted BEFORE Dismiss, because Dismiss is what ends it.
+        XCTAssertTrue(create.exists,
+                      "the failure removed Create instead of refusing it visibly")
+        XCTAssertFalse(create.isEnabled,
+                       "Create was pressable over an unread mint failure and did nothing")
+
+        // Join needs a complete code before its control is announced at all, so
+        // the lock is asserted on the one that would otherwise be usable.
+        let code = app.textFields["Code"]
+        XCTAssertTrue(code.waitForExistence(timeout: 10))
+        scrollUntilHittable(code)
+        code.tap()
+        code.typeText("123456")
+        let connect = app.buttons["Connect"]
+        XCTAssertTrue(connect.waitForExistence(timeout: 10),
+                      "a complete code did not reveal its Connect control")
+        XCTAssertFalse(connect.isEnabled,
+                       "Connect was pressable over an unread mint failure and did nothing")
+
         scrollUntilHittable(dismiss)
         dismiss.tap()
         XCTAssertTrue(create.waitForExistence(timeout: 10),

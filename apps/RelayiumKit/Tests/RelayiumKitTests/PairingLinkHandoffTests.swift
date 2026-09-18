@@ -32,11 +32,46 @@ final class PairingLinkHandoffTests: XCTestCase {
         }
     }
 
-    private final class StubPair: PairCodeClient {
+    /// A mint that hands out DISTINCT codes and can be held open.
+    ///
+    /// Both halves are load-bearing. A replacement that reuses the first code
+    /// cannot show that a second room was opened for it; and a mint that answers
+    /// instantly closes the window a real round trip leaves — the window a
+    /// Cancel, or a second press of the same button, actually lands in.
+    private final class StubPair: PairCodeClient, @unchecked Sendable {
         var fails = false
+        var codes = ["483920", "774051"]
+
+        private let lock = NSLock()
+        private var issued = 0
+        private var holding = false
+        private var waiter: CheckedContinuation<Void, Never>?
+
+        /// The next mint does not answer until `answerHeldMint()`. Under the
+        /// lock, because `mint` is not actor-isolated and the test writes this
+        /// from the main actor.
+        func holdNextMint() { lock.withLock { holding = true } }
+
         func mint(token: String) async throws -> MintedCode {
+            if lock.withLock({ defer { holding = false }; return holding }) {
+                await withCheckedContinuation { waiting in
+                    lock.withLock { waiter = waiting }
+                }
+            }
             if fails { throw AccountError.network }
-            return MintedCode(code: "483920", expiresAt: 4_102_444_800)
+            let code = lock.withLock { () -> String in
+                defer { issued += 1 }
+                return codes[min(issued, codes.count - 1)]
+            }
+            return MintedCode(code: code, expiresAt: 4_102_444_800)
+        }
+
+        func answerHeldMint() {
+            let waiting = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+                defer { waiter = nil }
+                return waiter
+            }
+            waiting?.resume()
         }
     }
 
@@ -70,7 +105,13 @@ final class PairingLinkHandoffTests: XCTestCase {
         }
         func start() {}
         func receive(from: String, signal: JSONValue) {}
-        func send(_ bytes: [UInt8], on lane: LinkLane) throws {}
+        /// Recorded rather than dropped: "nothing crossed the verification
+        /// boundary" is only assertable against what reached the wire.
+        private var _sent: [LinkLane: [[UInt8]]] = [:]
+        var sent: [LinkLane: [[UInt8]]] { lock.withLock { _sent } }
+        func send(_ bytes: [UInt8], on lane: LinkLane) throws {
+            lock.withLock { _sent[lane, default: []].append(bytes) }
+        }
         func bufferedAmount(on lane: LinkLane) -> UInt64 { 0 }
         private var _closed = false
         var isClosed: Bool { lock.withLock { _closed } }
@@ -104,15 +145,20 @@ final class PairingLinkHandoffTests: XCTestCase {
         var code: PairingCodeModel { module.code }
         var start: CrossNetworkPairingStart { CrossNetworkPairingStart(module: module) }
 
+        /// The room this module is watching NOW. Replacing an expired code
+        /// opens a SECOND channel, and driving the retired one would drive a
+        /// socket nothing is listening on.
+        var room: FakeWebSocketChannel { channels[channels.count - 1] }
+
         func welcome(_ selfId: String) {
-            channels[0].fire(Envelope(type: SignalType.welcome, name: selfId))
+            room.fire(Envelope(type: SignalType.welcome, name: selfId))
         }
         func roster(_ ids: [String]) {
-            channels[0].fire(Envelope(type: SignalType.peers,
-                                      peers: ids.map { Peer(id: $0, name: "peer") }))
+            room.fire(Envelope(type: SignalType.peers,
+                               peers: ids.map { Peer(id: $0, name: "peer") }))
         }
         func announce(_ peerId: String, hello: JSONValue) {
-            channels[0].fire(Envelope(type: SignalType.signal, from: peerId, data: hello))
+            room.fire(Envelope(type: SignalType.signal, from: peerId, data: hello))
         }
         func announce(_ peerId: String, _ caps: [String]) {
             announce(peerId, hello: .object(["caps": .array(caps.map(JSONValue.string))]))
@@ -120,7 +166,7 @@ final class PairingLinkHandoffTests: XCTestCase {
 
         /// Every capability hello this side actually put on the wire for `peer`.
         func hellosSent(to peer: String) -> [JSONValue] {
-            channels[0].sent.compactMap { text in
+            room.sent.compactMap { text in
                 guard let envelope = try? JSONDecoder().decode(Envelope.self, from: Data(text.utf8)),
                       envelope.type == SignalType.signal, envelope.to == peer,
                       let data = envelope.data,
@@ -142,6 +188,7 @@ final class PairingLinkHandoffTests: XCTestCase {
     /// composition an `App` initializer that forgot the callbacks would produce.
     private func rig(policy: LinkPairingFallbackPolicy = .terminateUnsupported,
                      hello: @escaping (Bool) -> JSONValue = linkOnlyCapsHello(linkRoomActive:),
+                     verifying: Bool = false,
                      assembled: Bool = true) throws -> Rig {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("pairing-handoff-\(UUID().uuidString)")
@@ -153,7 +200,7 @@ final class PairingLinkHandoffTests: XCTestCase {
             capabilities: PeerCapabilityRegistry(
                 linkRoomActive: { linkRoomActive(isCodelessRoom: false) }),
             receiveDirectory: { directory },
-            requiresVerification: { false },
+            requiresVerification: { verifying },
             iceClient: StubICE(),
             connectPairingSocket: { code in
                 let channel = FakeWebSocketChannel()
@@ -443,5 +490,201 @@ final class PairingLinkHandoffTests: XCTestCase {
         foreground.phaseChanged(to: .background)
         XCTAssertNil(foreground.interruption)
         XCTAssertTrue(rig.module.acceptsNewSession)
+    }
+
+    // MARK: - 5. replacing an expired code
+
+    /// **The expired-code replacement, driven all the way to a peer.**
+    ///
+    /// The shipped `regenerate` left and dismissed the dead room and then
+    /// minted. `TransferModule.crossNetwork` answers a retired room by
+    /// cancelling the digits that named it, so `dismiss()` left this module
+    /// holding NOTHING for one turn — and the app-scoped liveness observer
+    /// released the surface, which nothing afterwards claimed again. Both
+    /// visible halves stayed correct: the replacement code was minted and its
+    /// room was watched. `pane` answered `.connect` for the rest of the
+    /// process, so the peer that linked on those digits was invisible — no SAS,
+    /// no transcript, no End connection, and the connect controls it fell back
+    /// to were refused by `acceptsNewSession`.
+    ///
+    /// The owner is asked to test exactly this path in the 0.4.0 TestFlight
+    /// notes ("let a code run out and confirm it offers a new one"), so it is
+    /// driven here end to end rather than asserted one state at a time.
+    func testARegeneratedCodeWatchesItsOwnRoomAndItsPeerOpensTheWorkspace() async throws {
+        let rig = try rig()
+        await create(rig)
+        XCTAssertEqual(rig.joinedCodes, ["483920"])
+
+        await rig.start.regenerate(token: "token")
+        await settle()
+
+        XCTAssertEqual(rig.code.state.code, "774051", "the replacement code was never minted")
+        XCTAssertEqual(rig.joinedCodes, ["483920", "774051"],
+                       "the replacement code's room was not watched")
+        XCTAssertEqual(rig.link.connection, .watching(code: "774051"))
+        XCTAssertTrue(rig.channels[0].closed,
+                      "the dead room's socket outlived the code that named it")
+        XCTAssertFalse(rig.channels[1].closed)
+        XCTAssertEqual(rig.module.presence.owner, .pairingCode,
+                       "replacing a code gave away the surface it was replacing the code on")
+
+        await linkPeerArrives(rig)
+        XCTAssertTrue(rig.link.hasSession)
+        XCTAssertEqual(rig.module.pane, .link,
+                       "a peer linked on the replacement code and the workspace never opened")
+        XCTAssertEqual(rig.code.state, .idle, "the spent replacement stayed on screen")
+        XCTAssertEqual(rig.module.presence.owner, .pairingCode)
+    }
+
+    /// The surface is held for the WHOLE replacement, including the window the
+    /// mint is in flight. A module that reports idle there is one the liveness
+    /// observer may release, and a user who can see neither a code nor the
+    /// controls that make one.
+    func testTheSurfaceIsHeldWhileAReplacementCodeIsStillBeingMinted() async throws {
+        let rig = try rig()
+        await create(rig)
+
+        rig.pair.holdNextMint()
+        let replacing = Task { await rig.start.regenerate(token: "token") }
+        await settle()
+
+        XCTAssertEqual(rig.code.state, .minting)
+        XCTAssertEqual(rig.module.presence.owner, .pairingCode,
+                       "the surface was released under a replacement the user asked for")
+        XCTAssertFalse(rig.module.acceptsNewSession,
+                       "a second start was allowed while a replacement was minting")
+
+        rig.pair.answerHeldMint()
+        await replacing.value
+        await settle()
+        XCTAssertEqual(rig.module.pane, .connect)
+        XCTAssertEqual(rig.link.connection, .watching(code: "774051"))
+    }
+
+    /// **Cancel, pressed while the replacement is still being minted.**
+    ///
+    /// The answer arrives into a module the user has already left. It must not
+    /// write digits back onto an idle surface and it must not open a room:
+    /// `PairingCodeModel`'s generation is what makes the late mint unwritable,
+    /// and `createAndWatch` watches nothing it could not mint.
+    func testCancellingWhileAReplacementIsMintingReopensNothing() async throws {
+        let rig = try rig()
+        await create(rig)
+
+        rig.pair.holdNextMint()
+        let replacing = Task { await rig.start.regenerate(token: "token") }
+        await settle()
+        XCTAssertEqual(rig.code.state, .minting)
+
+        rig.module.cancelPairingCode()
+        rig.pair.answerHeldMint()
+        await replacing.value
+        await settle()
+
+        XCTAssertEqual(rig.code.state, .idle,
+                       "a cancelled replacement wrote its code onto a surface the user had left")
+        XCTAssertEqual(rig.joinedCodes, ["483920"], "a cancelled replacement opened a room")
+        XCTAssertEqual(rig.link.connection, .idle)
+        XCTAssertNil(rig.module.presence.owner)
+        XCTAssertTrue(rig.module.acceptsNewSession)
+        XCTAssertTrue(rig.channels[0].closed)
+    }
+
+    /// A second press of New code while the first replacement is minting. It is
+    /// refused rather than run: leaving and dismissing again would retire the
+    /// room the first one is about to open, and the two mints would race for
+    /// one `PairingCodeModel` generation.
+    func testASecondReplacementPressedDuringAMintIsRefused() async throws {
+        let rig = try rig()
+        await create(rig)
+
+        rig.pair.holdNextMint()
+        let replacing = Task { await rig.start.regenerate(token: "token") }
+        await settle()
+        XCTAssertEqual(rig.code.state, .minting)
+
+        await rig.start.regenerate(token: "token")
+        XCTAssertEqual(rig.code.state, .minting,
+                       "a second press restarted the mint the first one was waiting on")
+
+        rig.pair.answerHeldMint()
+        await replacing.value
+        await settle()
+        XCTAssertEqual(rig.joinedCodes, ["483920", "774051"],
+                       "one replacement opened two rooms")
+        XCTAssertEqual(rig.link.connection, .watching(code: "774051"))
+        XCTAssertEqual(rig.module.presence.owner, .pairingCode)
+    }
+
+    /// A replacement is only ever about a code that is still waiting. Once a
+    /// peer is claimed, the digits are gone and the room belongs to a link —
+    /// and an activation delivered from the card that has already been replaced
+    /// must not take it down.
+    func testAReplacementCannotTearDownALinkThatHasAlreadyClaimedThePeer() async throws {
+        let rig = try rig()
+        await create(rig)
+        await linkPeerArrives(rig)
+        XCTAssertTrue(rig.link.hasSession)
+
+        await rig.start.regenerate(token: "token")
+        await settle()
+
+        XCTAssertTrue(rig.link.hasSession, "a stale replacement ended a live link")
+        XCTAssertEqual(rig.module.pane, .link)
+        XCTAssertEqual(rig.joinedCodes, ["483920"], "a stale replacement opened a second room")
+        XCTAssertEqual(rig.code.state, .idle, "a stale replacement drew digits over a live link")
+    }
+
+    // MARK: - 6. the verification boundary, on the pairing path
+
+    /// **The SAS gate, exercised rather than read.**
+    ///
+    /// `requiresVerification` is passed by `makeCrossNetworkLinkWorkspaceModel`
+    /// and pinned as source text, which proves the wire and not the behaviour.
+    /// This drives the composition the iOS app builds with the preference ON:
+    /// nothing the user submits may reach the wire while the digits are
+    /// unanswered, and the work they asked for is HELD rather than dropped —
+    /// then released, once, by the confirmation.
+    func testAPairedLinkHoldsEveryTransferBehindItsDigits() async throws {
+        let rig = try rig(verifying: true)
+        await create(rig)
+        await linkPeerArrives(rig)
+        let transport = try XCTUnwrap(rig.transports.first)
+        transport.publish(peerId: "zzz-mac", role: .responder)
+        await settle()
+
+        XCTAssertTrue(rig.link.connection.isOpen)
+        XCTAssertEqual(rig.link.verification, .pending(sas: "424242"),
+                       "a pairing link opened without arming its verification boundary")
+        XCTAssertEqual(rig.link.sasToCompare, "424242")
+        XCTAssertFalse(rig.link.acceptsWork)
+        XCTAssertFalse(rig.link.canSendMessage)
+
+        XCTAssertFalse(rig.link.send(message: "before the digits"),
+                       "a message was taken while the digits were still unanswered")
+        XCTAssertFalse(rig.link.holdsLocalText,
+                       "the refused message was held on the link rather than handed back")
+        rig.link.send(files: [FileMeta(name: "held.bin", size: 4, path: nil)],
+                      sources: [DataSource(name: "held.bin", bytes: [1, 2, 3, 4])])
+        await settle()
+        XCTAssertEqual(rig.link.armedFiles.map(\.name), ["held.bin"],
+                       "a batch chosen behind the digits must be armed, not dropped")
+        XCTAssertNil(transport.sent[.file],
+                     "bytes left a pairing link before its digits were answered")
+        XCTAssertNil(transport.sent[.text])
+
+        rig.link.confirmSAS()
+        await settle()
+        XCTAssertEqual(rig.link.verification, .confirmed)
+        XCTAssertTrue(rig.link.acceptsWork)
+        XCTAssertTrue(rig.link.armedFiles.isEmpty,
+                      "the confirmation did not release the batch it was holding")
+        XCTAssertEqual(rig.link.fileModel?.batches.count, 1,
+                       "the held batch never reached the file lane")
+        XCTAssertTrue(rig.link.send(message: "after the digits"),
+                      "a confirmed pairing link still refuses messages")
+        await settle()
+        XCTAssertFalse(transport.sent[.text, default: []].isEmpty,
+                       "the message never reached the text lane")
     }
 }

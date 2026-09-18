@@ -348,6 +348,12 @@ struct DirectView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
+                // The exact negation of the `acceptsNewSession` guard the action
+                // re-asks at the instant of use. Drawn ONLY for a module that
+                // holds work with these controls still on screen — a failed mint
+                // nobody has dismissed — where it was a live-looking button that
+                // silently did nothing. macOS refuses the same state visibly.
+                .disabled(isLocked)
                 .accessibilityIdentifier("pairing-code-create")
             } else {
                 capabilityGate
@@ -584,7 +590,11 @@ struct DirectView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .disabled(!code.canJoin)
+            // Two independent refusals: an incomplete code, and a module that
+            // is still holding work. Only the first hides the control — an
+            // unreachable field is not worth announcing — while the second
+            // leaves it readable beside the failure that caused it.
+            .disabled(isLocked || !code.canJoin)
             .accessibilityHidden(!code.canJoin)
             .accessibilityIdentifier("pairing-code-join")
             if shouldExplainAnonymousJoin {

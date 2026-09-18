@@ -1457,16 +1457,66 @@ So the screen now follows the rule macOS, the Web and Android already follow:
   refusing the old one, the spent code retired, a waiting code admitting its own
   peer although the surface is owned, and backgrounding. The runtime path is
   `LocalSessionUITests.testCrossNetworkJoinsAMintedCodeAndOpensTheUnifiedWorkspace`,
-  against `pair-link` — the macOS Cross-network composition with the SwiftUI
-  removed.
+  against `pair-link` — a **headless counterpart that shares the same link
+  machinery, not the shipped Mac's composition**, because its legacy fallback
+  differs. The test asserts the strict iOS link with no fallback, which is what
+  makes its result meaningful and also what keeps it from standing in for a Mac.
 
-**Not yet verified for 0.4.0:** no simulator or physical run has been made — the
-development machine's CoreSimulator service was unavailable when this was
-written, so the first evidence is the hosted `ios.yml` run and the owner's own
-device test. The two-device harness's pairing FILE roles skip with a recorded
-reason (the batch is now chosen through the system document browser, which that
-harness cannot drive); its pairing conversation roles were re-authored and have
-not been run.
+**What 0.4.0 has actually been run against.** The package suite is green on this
+source: 4,941 `swift test` cases, 1 pre-existing skip, 0 failures — 4,935 before
+the 2026-09-18 repair added its regression cases — and the owning subset was
+re-run independently at 206 of 206, 0 failures. On an owned iPhone 17 Pro,
+iOS 26.5 simulator under Xcode 27: minting a code and the signed-out connect
+entry (2/2), cancelling a waiting code and dismissing a failed mint (2/2), and
+the reference layout in English Light and Chinese Dark (2/2).
+
+The whole Cross-network UI flow then passed end to end against the headless
+`pair-link` counterpart: the offer, accepting it, the receipt naming the file,
+messages in both directions, Leave's confirmation, and Done returning the screen
+to a clean state — with the counterpart independently confirming the link epoch
+and the app's message as a postcondition rather than the app asserting about
+itself. The harness exited 0, and root read the received file back separately:
+58 bytes, matching the source byte for byte.
+
+**Read that result at its real scope.** Every part of that harness networks over
+**local loopback on one machine** — a throwaway server bound to `127.0.0.1` that
+offers no public STUN and no TURN, and a headless peer beside it. It exercises
+the Cross-network screen's rendezvous, link and transfer behaviour; it is not a
+test across two real networks, through a relay, or against the shipped macOS
+app. It proves this client speaks a real `link/1` link with no fallback, and
+nothing about whether a Mac binary or relayium.com accepts it in the field.
+
+**The gates 0.4.0 has not passed.** These are open requirements, not predictions.
+
+- **The hosted rerun on the repaired source.** The first hosted `ios.yml` run
+  (`35295958893`, commit `34767bba`) built, passed the iPad shell and the UI
+  smoke, and **failed** the transfer job: the offered batch drew its summary
+  without the file's identity, so the assertion that the receiving side names the
+  file found nothing. That was a real product gap rather than a test to relax,
+  and the receipt UI now renders the identity — but the hosted run that would
+  demonstrate it has not been made.
+- **Nearby on hosted hardware.** Discovery could not see a peer on this
+  development machine, so its two local cases are unproven here. That run is
+  required specifically to tell a source defect apart from this machine's own
+  Bonjour behaviour. If it comes back green, the local environment is a
+  follow-up to look at the next time a local Nearby harness is needed, not a
+  blocker on this source.
+- **Physical acceptance, in both directions, before any channel handoff.** An
+  iPhone against a physical Mac running macOS `1.4.0`, and an iPhone against
+  relayium.com, each sending and receiving. This is the exact interaction whose
+  failure started this work, and no simulator or loopback result substitutes for
+  it. It is run from written, numbered test notes, so the result is legible
+  rather than an impression.
+- **Distribution gates, none of them authorized now.** No signed archive, no
+  export, no upload. Re-reading the highest consumed build number belongs to the
+  authorized distribution gate and is not this source's to settle.
+
+**A standing limitation of the harness, recorded rather than fixed.** The
+two-device harness's pairing FILE roles skip with a recorded reason — the batch
+is now chosen through the system document browser, which that harness cannot
+drive — and its pairing conversation roles were re-authored but have never been
+executed against two physical devices. Re-authored, unexecuted test code is not
+evidence, and is not counted as any above.
 
 The paragraphs below are R3-E's own account. Still true: the create/join account
 asymmetry, the one numeric join field, the large-file route, the verification

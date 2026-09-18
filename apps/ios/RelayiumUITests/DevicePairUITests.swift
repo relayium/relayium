@@ -225,7 +225,7 @@ final class DevicePairUITests: XCTestCase {
                     // atomic read-and-press, and a window one statement wide is
                     // not the seconds-long window scrolling used to open.
                     leave.tap()
-                    confirmLocalTextDiscardIfAsked(DevicePair.endConnectionLabel)
+                    confirmLocalTextDiscardIfAsked()
                     pressedLeave = true
                 } else if gesturesSpent < Self.exitReachGestures {
                     // One gesture, then back to the top of the loop to re-read
@@ -276,27 +276,54 @@ final class DevicePairUITests: XCTestCase {
         done.tap()
         // Only a PEER-ended link still holds its transcript here: this device's
         // own confirmed exit above already cleared it.
-        confirmLocalTextDiscardIfAsked(DevicePair.doneLabel)
+        confirmLocalTextDiscardIfAsked()
     }
 
     /// **Take the confirmation a workspace exit raises when it would destroy
     /// text.**
     ///
     /// Since iOS 0.4.0 the unified workspace asks before Leave or Done discards a
-    /// transcript or a draft — the conversation is stored nowhere else. The
+    /// transcript or a draft — the conversation is stored nowhere else. A run
+    /// that exchanged no text raises nothing, and this returns without pressing
+    /// anything.
+    ///
+    /// **Answered by identifier, because the label is ambiguous by design.** The
     /// dialog's destructive button carries the SAME title as the control that
-    /// raised it, so the label alone is ambiguous once it is up; the dialog is
-    /// the topmost match, which is the last one. A run that exchanged no text
-    /// raises nothing, and this returns without pressing anything.
-    private func confirmLocalTextDiscardIfAsked(_ label: String) {
+    /// raised it, so a label query returns both it and the workspace control
+    /// underneath. This used to take the last index on the belief that the
+    /// topmost element sorts last; it does not. The same selector in
+    /// `LocalSessionUITests` picked the obscured `link-leave-session` beneath
+    /// the sheet on 2026-09-18 and failed "not hittable" while the dialog was
+    /// genuinely up. `link-discard-local-text-confirm` is the shipped
+    /// identifier on the dialog's own button, while the workspace control
+    /// underneath carries `link-leave-session` — so the identifier picks the
+    /// sheet rather than the thing it covers.
+    ///
+    /// **`.firstMatch`, because the identifier is not unique — it is NESTED.**
+    /// The `a6f50064` run showed UIKit giving the sheet's action a wrapper
+    /// element and an inner one, BOTH carrying this identifier and this label;
+    /// existence was satisfied and only the tap failed on "Find single matching
+    /// element". Both matches are the same button, so taking the outer wrapper
+    /// is a choice between two views of one control rather than between two
+    /// controls — and it still holds if the pair collapses to one element on a
+    /// future OS. See `LocalSessionUITests.confirmLocalTextDiscard`, which
+    /// carries the captured hierarchy.
+    ///
+    /// The title read above still decides WHETHER anything is pressed, which is
+    /// what keeps this "if asked".
+    private func confirmLocalTextDiscardIfAsked() {
         let asked = app.staticTexts.matching(NSPredicate(
             format: "label == %@ OR label == %@",
             "Discard local text?", "Discard the unsent message?")).firstMatch
         guard asked.waitForExistence(timeout: 5) else { return }
-        let matches = app.buttons.matching(NSPredicate(format: "label == %@", label))
-        XCTAssertGreaterThan(matches.count, 0,
-                             "the discard confirmation offers no \"\(label)\"")
-        matches.element(boundBy: matches.count - 1).tap()
+        let confirm = app.buttons
+            .matching(identifier: "link-discard-local-text-confirm").firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10), """
+            the discard confirmation is up but carries no destructive button of \
+            its own.
+            \(app.debugDescription)
+            """)
+        confirm.tap()
     }
 
     /// The size of the scrolling repertoire below, which is `scrollUntilHittable`'s.

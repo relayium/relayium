@@ -13,7 +13,12 @@ of `0.3.2` against macOS `1.4.0` failed with "the other device is running an
 older version". `0.4.0` (in development, not distributed) replaces that screen
 with the connect-first unified workspace macOS has; the account is in
 `apps/README.md` under "Direct transfer". Statements below that describe the
-Cross-network mode picker or its two create cards describe `0.3.2`.
+Cross-network mode picker or its two create cards describe `0.3.2`. The layout
+evidence for the replacement screen is its own: the English Light and Chinese
+Dark reference captures, 2 of 2 on an owned iPhone 17 Pro, iOS 26.5 simulator
+under Xcode 27. The hosted rerun recorded at the end of this document gated
+`0.3.2`'s source and is not evidence for `0.4.0`, whose hosted rerun has not
+been made.
 
 ## What changed
 

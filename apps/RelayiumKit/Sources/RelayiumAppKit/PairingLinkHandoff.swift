@@ -77,6 +77,11 @@ public struct CrossNetworkPairingStart {
     public func createAndWatch(token: String) async -> Bool {
         await module.code.mint(token: token)
         guard let minted = module.code.state.code else { return false }
+        // A newer action may have resumed while this mint was in flight, and its
+        // room is the one this module now holds. `watchPairingCode` refuses a
+        // second room, and the refusal below retires the digits and the socket —
+        // which here would be somebody else's.
+        guard module.link.connection == .idle else { return false }
         return watch(code: minted)
     }
 
@@ -88,15 +93,35 @@ public struct CrossNetworkPairingStart {
         return watch(code: joined)
     }
 
-    /// Replace an expired code without letting go of the surface in between.
+    /// Replace an expired code: retire the dead room, take the surface back, and
+    /// only then mint.
     ///
-    /// The dead room is left and dismissed FIRST — `watchPairingCode` refuses
-    /// while a room is held — and `mint` is called while the code model is still
-    /// `.showing`, so the module never passes through `.idle` and the liveness
-    /// observer never releases the surface half way through the action.
+    /// **This action DOES pass the module through idle, and it cannot avoid it.**
+    /// `watchPairingCode` refuses a second room while one is held, so the dead
+    /// one must go first; `leave()` retires it, and `TransferModule.crossNetwork`
+    /// answers a retired room by cancelling the digits that named it. By the time
+    /// `dismiss()` returns the link to `.idle` this module holds nothing, and the
+    /// app-scoped liveness observer has already released the surface. Nothing
+    /// afterwards claimed it again: the replacement code was minted and its room
+    /// was watched, but `pane` stayed `.connect` for the rest of the process, so
+    /// the peer that linked on those digits was invisible.
+    ///
+    /// So the claim is retaken here, synchronously, BEFORE the asynchronous mint
+    /// — which is also what makes the wait for the replacement a surface this
+    /// module owns rather than one a second start could take.
     public func regenerate(token: String) async {
+        // Only a code this module is still showing may be replaced. A surface
+        // somebody else owns, a peer already claimed on this link, or a
+        // replacement still minting are each a reason this activation is stale —
+        // and acting on one would retire a room that is no longer this action's.
+        // Nothing between here and `.minting` suspends, so a second activation
+        // cannot slip past these three.
+        guard module.presence.owner == module.route,
+              !module.link.connection.hasPeer,
+              module.code.state != .minting else { return }
         module.link.leave()
         module.link.dismiss()
+        guard module.presence.claim(module.route) else { return }
         await createAndWatch(token: token)
     }
 

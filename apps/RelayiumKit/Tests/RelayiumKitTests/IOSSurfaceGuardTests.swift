@@ -3971,8 +3971,15 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// `TransferModule.acceptsNewSession`, which answers no for a code being
     /// minted, a code waiting, a failed mint nobody has dismissed, and a link
     /// that still holds its session or its ending. Each start re-asks it at the
-    /// instant of use: a `.disabled` modifier is a courtesy, and the connect
-    /// controls are not even drawn while the code model is active.
+    /// instant of use, because a `.disabled` modifier is a courtesy and a
+    /// credential decision may not rest on one.
+    ///
+    /// **But the courtesy is owed.** For a minting or waiting code the controls
+    /// are not drawn at all; for a FAILED mint they are, beside the message and
+    /// the Dismiss that clears it — and there they were fully pressable and did
+    /// nothing at all, because `acceptsNewSession` is false for an unread
+    /// failure. macOS refuses the same state visibly through `sessionLocked`.
+    /// So both controls carry the exact negation of that predicate.
     func testACrossNetworkStartIsRefusedWhileTheModuleHoldsWork() throws {
         let view = try direct()
         for start in ["private func createCode()", "private func join()"] {
@@ -3999,6 +4006,24 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // A connected or ended link is the workspace's, and only its own Done
         // gives the surface back.
         XCTAssertTrue(view.text.contains("case .link:\n                    NearbyLinkWorkspaceView("))
+
+        // `isLocked` IS `!acceptsNewSession`: owner held, or something live or
+        // retained. Pinned as the literal modifier on each control, because a
+        // button drawn over a state that refuses it is the misleading surface,
+        // not the refusal.
+        XCTAssertTrue(view.text.contains(
+            "private var isLocked: Bool {\n        module.presence.owner != nil "
+            + "|| module.sessionIsLiveOrRetained\n    }"))
+        let create = try XCTUnwrap(view.text.components(
+            separatedBy: "private var createCard:").dropFirst().first?
+            .components(separatedBy: "private var capabilityGate:").first)
+        XCTAssertTrue(create.contains(".disabled(isLocked)"),
+                      "Create is pressable over a failure that refuses it")
+        let joining = try XCTUnwrap(view.text.components(
+            separatedBy: "private var joinCard:").dropFirst().first?
+            .components(separatedBy: "private func applyScan(").first)
+        XCTAssertTrue(joining.contains(".disabled(isLocked || !code.canJoin)"),
+                      "Join is pressable over a failure that refuses it")
     }
 
     /// The receive folder is resolved BEFORE a connection is opened, and a

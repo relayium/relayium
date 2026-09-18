@@ -146,32 +146,8 @@ public final class ForegroundSessionCoordinator: ObservableObject {
         if ended { interruption = L10n.t(endedALink ? .linkInterrupted : .directInterrupted) }
     }
 
-    /// End an open or establishing link, and answer whether anything was ended.
-    ///
-    /// **`connection.isActive`, not `isOpen`.** An attempt that is `requesting`
-    /// or `establishing` is a handshake with deadlines running against a peer
-    /// that is answering, and leaving it to be resumed later would leave the peer
-    /// waiting on an establishment this process cannot finish. `watching` is
-    /// included by the same predicate and is unreachable on this platform — iOS
-    /// composes no pairing-code link — which is why this asks the model's own
-    /// question rather than enumerating states here.
-    ///
-    /// **A terminal link is deliberately left alone**, exactly as a `.completed`
-    /// receive is: `isActive` is false for `.ended`, and that state is holding a
-    /// transcript, a committed batch's saved paths and the reason it finished.
-    /// `dismiss()` is the user's to press.
-    ///
-    /// `leave()` is idempotent, so the guard is about the interruption NOTICE
-    /// rather than about safety: reporting an interruption for a link that had
-    /// already ended would be the app claiming to have taken something away that
-    /// the user had already been told about.
-    /// The sentence it produces is `.linkInterrupted` rather than the shipped
-    /// `.directInterrupted`, because the two describe different losses. The
-    /// shipped one names a *direct session* and a partly received file that was
-    /// removed. A link that ends takes the conversation with it as well, and this
-    /// app keeps no copy of that anywhere — no server-side history by design — so
-    /// "the direct session ended" would be accurate about the mechanism and
-    /// misleading about what is gone.
+    /// Which half of the Cross-network module a backgrounding took away, so the
+    /// notice can name the loss rather than the mechanism.
     private enum CrossNetworkEnding { case none, code, link }
 
     /// A code that is only WAITING is cancelled outright — digits, room and
@@ -191,6 +167,34 @@ public final class ForegroundSessionCoordinator: ObservableObject {
         return .code
     }
 
+    /// End an open or establishing link, and answer whether anything was ended.
+    ///
+    /// **`connection.isActive`, not `isOpen`.** An attempt that is `requesting`
+    /// or `establishing` is a handshake with deadlines running against a peer
+    /// that is answering, and leaving it to be resumed later would leave the peer
+    /// waiting on an establishment this process cannot finish. `watching` is
+    /// included by the same predicate, and this link is the SAME-NETWORK one:
+    /// that room is code-less, so it never watches. The Cross-network link does,
+    /// and it is ended by `endCrossNetworkIfLive` above rather than here.
+    /// Asking the model's own question is what keeps both true without
+    /// enumerating states.
+    ///
+    /// **A terminal link is deliberately left alone**, exactly as a `.completed`
+    /// receive is: `isActive` is false for `.ended`, and that state is holding a
+    /// transcript, a committed batch's saved paths and the reason it finished.
+    /// `dismiss()` is the user's to press.
+    ///
+    /// `leave()` is idempotent, so the guard is about the interruption NOTICE
+    /// rather than about safety: reporting an interruption for a link that had
+    /// already ended would be the app claiming to have taken something away that
+    /// the user had already been told about.
+    /// The sentence it produces is `.linkInterrupted` rather than the shipped
+    /// `.directInterrupted`, because the two describe different losses. The
+    /// shipped one names a *direct session* and a partly received file that was
+    /// removed. A link that ends takes the conversation with it as well, and this
+    /// app keeps no copy of that anywhere — no server-side history by design — so
+    /// "the direct session ended" would be accurate about the mechanism and
+    /// misleading about what is gone.
     private func endLinkIfLive() -> Bool {
         guard let link, link.connection.isActive else { return false }
         link.leave()

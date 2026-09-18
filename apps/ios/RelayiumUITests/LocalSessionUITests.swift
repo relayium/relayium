@@ -344,6 +344,59 @@ final class LocalSessionUITests: XCTestCase {
 
     // MARK: - shared UI helpers
 
+    /// Take the discard confirmation a workspace exit raises, by IDENTIFIER.
+    ///
+    /// **The label is ambiguous by design, and the last match is not the
+    /// dialog.** The confirmation's destructive button carries the same title as
+    /// the control that raised it — Leave's dialog says "End connection", Done's
+    /// says "Done" — so `buttons.matching(label == …)` returns both the dialog's
+    /// button and the workspace control underneath it. Both sites here took the
+    /// LAST index on the belief that the topmost element sorts last. It does
+    /// not: the 2026-09-18 local Cross-network run selected the obscured
+    /// `link-leave-session` beneath the sheet and failed
+    /// `LocalSessionUITests.swift:922` with "Failed to … not hittable". That is
+    /// the query's ordering, not the product — the dialog was up, and the title
+    /// assertion one line above had already proved it.
+    ///
+    /// `link-discard-local-text-confirm` is the shipped identifier on the
+    /// dialog's own destructive button (`NearbyLinkWorkspaceView`, and the same
+    /// identifier on macOS `TransferLinkPane`), and the workspace control
+    /// underneath carries `link-leave-session` instead — so the identifier picks
+    /// the sheet rather than the thing it covers, which is the whole repair.
+    ///
+    /// **`.firstMatch`, because the identifier is not unique — it is NESTED.**
+    /// The 2026-09-18 `a6f50064` run proved the identifier forwards through
+    /// `.confirmationDialog` and then found two elements carrying it:
+    ///
+    /// ```text
+    /// Sheet, label: 'Discard local text?'
+    ///   … ↳Button, identifier: 'link-discard-local-text-confirm', label: 'End connection'
+    ///        ↳Button, identifier: 'link-discard-local-text-confirm', label: 'End connection'
+    /// ```
+    ///
+    /// UIKit gives the sheet's action a wrapper element and an inner one, both
+    /// inheriting the identifier. `waitForExistence` was satisfied — a query
+    /// with matches exists — and only the TAP failed, on "Find single matching
+    /// element", at `LocalSessionUITests.swift:375`. So this is not an ambiguity
+    /// between two different controls, as the label form was: both matches are
+    /// the same button. `.firstMatch` takes the outer wrapper, which is the one
+    /// laid out and hit-testable, and it is stable under the pair collapsing to
+    /// one element on a future OS.
+    ///
+    /// A rename still cannot make this pass vacuously: neither element would be
+    /// found and the wait below fails loudly.
+    private func confirmLocalTextDiscard(file: StaticString = #filePath,
+                                         line: UInt = #line) {
+        let confirm = app.buttons
+            .matching(identifier: "link-discard-local-text-confirm").firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10), """
+            the discard confirmation is up but carries no destructive button of \
+            its own.
+            \(app.debugDescription)
+            """, file: file, line: line)
+        confirm.tap()
+    }
+
     private func scrollUntilHittable(_ element: XCUIElement, maxSwipes: Int = 6) {
         for _ in 0..<maxSwipes where !element.isHittable { app.swipeUp() }
         for _ in 0..<4 where !element.isHittable { drag(fraction: 0.22) }
@@ -585,6 +638,24 @@ final class LocalSessionUITests: XCTestCase {
         XCTAssertTrue(transfers.waitForExistence(timeout: 30),
                       "confirming the digits did not release the staged batch")
 
+        // The released batch still says WHAT it is sending, not only that it is
+        // sending one of something. The same identity row the staging section
+        // showed before Connect, now inside the transfer list — the outbound
+        // half of the receipt the Cross-network cell asserts inbound. The size
+        // is left to that cell, which derives it from the counterpart; here the
+        // fixture's name is the identity and the digest at the end of this test
+        // is the byte evidence.
+        let sending = transfers.descendants(matching: .any)["pendingFile.0"]
+        XCTAssertTrue(sending.waitForExistence(timeout: 30), """
+            the released batch is unnamed: the transfer list shows a count and \
+            no file identity.
+            \(app.debugDescription)
+            """)
+        XCTAssertTrue(sending.label.hasPrefix("Relayium product brief.txt,"), """
+            the outbound row names "\(sending.label)" rather than the staged fixture.
+            \(app.debugDescription)
+            """)
+
         // Now a message, over the same link, with no second connection and no
         // second set of digits — which is the claim the workspace makes.
         let composer = app.textFields["Message"]
@@ -645,13 +716,12 @@ final class LocalSessionUITests: XCTestCase {
         scrollUntilHittable(leave)
         leave.tap()
         // A message was exchanged above, so leaving would destroy the only copy
-        // of that conversation and the workspace asks first. The dialog's
-        // destructive button carries the same title as the control that raised
-        // it; the dialog is topmost, so it is the last match.
+        // of that conversation and the workspace asks first. The title is
+        // asserted here — that the question WAS asked is the product claim — and
+        // the answer is pressed by identifier; see `confirmLocalTextDiscard`.
         XCTAssertTrue(app.staticTexts["Discard local text?"].waitForExistence(timeout: 10),
                       "leaving a link that holds a conversation asked nothing")
-        let confirms = app.buttons.matching(NSPredicate(format: "label == %@", "End connection"))
-        confirms.element(boundBy: confirms.count - 1).tap()
+        confirmLocalTextDiscard()
 
         let done = app.buttons["Done"]
         XCTAssertTrue(done.waitForExistence(timeout: 30), """
@@ -766,6 +836,50 @@ final class LocalSessionUITests: XCTestCase {
                              body: ["command": "files", "name": fileName, "contents": contents])
         XCTAssertEqual(driven?["ok"] as? Bool, true,
                        "the counterpart could not offer a batch: \(String(describing: driven))")
+        // The size the SENDER says it enqueued, read back off its own answer
+        // rather than recomputed here — so the assertion below compares the two
+        // sides instead of comparing this test to itself.
+        let offeredBytes = try XCTUnwrap(driven?["size"] as? Int,
+                                         "the counterpart did not report the size it offered")
+
+        // **Everything about this batch is asked of the transfer list itself.**
+        //
+        // The assertions this replaces were `app.descendants(matching: .any)
+        // .containing(…)`, which is answered by every ANCESTOR of a match up to
+        // and including the application element: it can say that a string is
+        // somewhere on screen, never that it is on the row being accepted. That
+        // matters twice here. "Saved" is the committed batch's state, but this
+        // screen also permanently carries "Files you accept are saved to
+        // Relayium's folder in the Files app.", so a whole-app match for the
+        // word proves nothing about a transfer; and a file name found anywhere
+        // would have been satisfied by a conversation bubble quoting it.
+        //
+        // `linkA11yTransfers` is the list's own accessibility container, the
+        // same address the Nearby cell uses, and the hint above is outside it.
+        let transfers = app.otherElements["Files on this connection"]
+        XCTAssertTrue(transfers.waitForExistence(timeout: 60), """
+            the peer's batch never reached this app as a transfer at all.
+            \(app.debugDescription)
+            """)
+
+        // **Identity BEFORE consent.** Accept releases a write to this user's
+        // disk; a row that says only "1 file" is not something a person can
+        // agree to. Addressed by the file row's own identifier rather than by a
+        // text match, because the row is one combined accessibility element and
+        // a leaf query would depend on which element type SwiftUI happened to
+        // synthesise for it.
+        let offered = transfers.descendants(matching: .any)["pendingFile.0"]
+        XCTAssertTrue(offered.waitForExistence(timeout: 60), """
+            the offered batch is unnamed: the transfer list shows a count and no \
+            file identity, so there is nothing to accept or refuse on.
+            \(app.debugDescription)
+            """)
+        XCTAssertEqual(offered.label, "\(fileName), \(offeredBytes) B", """
+            the offered row names a different file or a different size than the \
+            counterpart enqueued.
+            \(app.debugDescription)
+            """)
+
         let accept = app.buttons["Accept files"]
         XCTAssertTrue(accept.waitForExistence(timeout: 60), """
             the peer's batch never reached this app as an offer.
@@ -773,15 +887,51 @@ final class LocalSessionUITests: XCTestCase {
             """)
         scrollUntilHittable(accept)
         accept.tap()
-        let saved = app.descendants(matching: .any)
-            .containing(NSPredicate(format: "label CONTAINS %@", "Saved")).firstMatch
-        XCTAssertTrue(saved.waitForExistence(timeout: 120), """
-            the accepted batch never committed.
+
+        // The SENDER's own verdict on the bytes, before this app is asked for
+        // its. `outboundStates` is `LinkFileBatchState` read straight off the
+        // counterpart's production file model, and `finished` there is the
+        // driver reporting the whole manifest was taken — evidence that bytes
+        // moved which no assertion on this app's screen can supply, because
+        // this app is the receiving end and has no digest seam here.
+        //
+        // EVERY outbound batch, not merely one of them. One resident
+        // counterpart serves the run, so `contains("finished")` could be
+        // answered by an earlier batch while the one this test drove is still
+        // moving — the same baseline mistake `counterpartEpoch` exists for.
+        // `allSatisfy` also rejects a `failed` batch, which `contains` would
+        // have read straight past.
+        awaitCounterpart(
+            harness.pairPort, timeout: 180,
+            describing: "reported its outbound batch complete") { facts in
+                let states = facts["outboundStates"] as? [String] ?? []
+                return !states.isEmpty && states.allSatisfy { $0 == "finished" }
+            }
+
+        // **The receipt.** `link.batchReceived` — "Saved" — is the ONLY state
+        // that carries committed URLs; `finished` on an inbound batch means the
+        // driver claimed a commit this app has seen no proof of, so matching it
+        // would be matching the weaker of the two. The row is one combined
+        // element ("1 file, 57 B, Saved"), so this matches the element itself
+        // inside the list rather than any ancestor that contains it.
+        let committed = transfers.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "Saved")).firstMatch
+        XCTAssertTrue(committed.waitForExistence(timeout: 120), """
+            the accepted batch never committed inside the transfer list.
             \(app.debugDescription)
             """)
-        let named = app.descendants(matching: .any)
-            .containing(NSPredicate(format: "label CONTAINS %@", fileName)).firstMatch
-        XCTAssertTrue(named.exists, "the committed batch does not name \"\(fileName)\"")
+        // And it still names what landed. A receipt that lost the identity at
+        // the moment of commit is the failure this whole block exists for.
+        let landed = transfers.descendants(matching: .any)["pendingFile.0"]
+        XCTAssertTrue(landed.exists, """
+            the committed batch does not name "\(fileName)".
+            \(app.debugDescription)
+            """)
+        XCTAssertEqual(landed.label, "\(fileName), \(offeredBytes) B", """
+            the committed row names a different file or a different size than \
+            the counterpart sent.
+            \(app.debugDescription)
+            """)
 
         // Outbound message, over the same connection.
         scrollUntilHittable(composer)
@@ -820,8 +970,7 @@ final class LocalSessionUITests: XCTestCase {
         leave.tap()
         XCTAssertTrue(app.staticTexts["Discard local text?"].waitForExistence(timeout: 10),
                       "leaving a link that holds a conversation asked nothing")
-        let confirms = app.buttons.matching(NSPredicate(format: "label == %@", "End connection"))
-        confirms.element(boundBy: confirms.count - 1).tap()
+        confirmLocalTextDiscard()
 
         let done = app.buttons["Done"]
         XCTAssertTrue(done.waitForExistence(timeout: 30), """

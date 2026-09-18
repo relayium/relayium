@@ -130,12 +130,41 @@ read-back of the highest consumed build before it is archived.
   its TestFlight *What to Test* item 6 now describes the connect-first workspace
   and asks for a test against macOS 1.4.0 and relayium.com in both directions.
   The App Store Connect observation is unchanged and still records `0.3.1`.
-- **Evidence so far.** `swift test` for `RelayiumKit` (4,935 tests, 0 failures),
-  including `PairingLinkHandoffTests`; the metadata validator and its 261 cases;
-  the candidate-script suite (72 mutations, 57 cases); `xcodebuild
-  build-for-testing` for the iOS Simulator. **Not run:** any simulator or device
-  UI test — CoreSimulator was unavailable on the development machine — so the
-  hosted `ios.yml` run and an owner device test are the first runtime evidence.
+- **Evidence so far — package and static.** `swift test` for `RelayiumKit` —
+  4,941 tests, 1 pre-existing skip, 0 failures, including
+  `PairingLinkHandoffTests`; the count was 4,935 before the 2026-09-18 repair
+  added its regression cases, and the owning subset was re-run independently at
+  206 of 206, 0 failures. The metadata validator and its 261 cases; the
+  candidate-script suite (72 mutations, 57 cases); `xcodebuild
+  build-for-testing` for the iOS Simulator.
+- **Evidence so far — runtime, on one machine over local loopback.** On an owned
+  iPhone 17 Pro, iOS 26.5 simulator under Xcode 27: code create and signed-out
+  connect (2/2), cancel and failed-mint dismissal (2/2), the reference layout in
+  English Light and Chinese Dark (2/2). The Cross-network UI flow then passed end
+  to end against the headless `pair-link` counterpart — offer, accept, the
+  receipt naming the file, messages both ways, Leave's confirmation and Done
+  returning a clean state — with the counterpart independently confirming the
+  link epoch and the app's message, harness exit 0 (run `d9c13b90`), and root
+  separately reading the received file back at 58 bytes matching the source. **Scope:** that harness
+  runs entirely over local loopback on one machine, against a throwaway
+  `127.0.0.1` server that offers no public STUN and no TURN, and `pair-link`
+  shares the link machinery without being the shipped Mac's composition. It is
+  evidence about this client's rendezvous, link and transfer behaviour — not
+  about two real networks, a relay, the shipped macOS app or relayium.com.
+- **Gates not passed for `0.4.0`.** Open requirements, stated as such: the hosted
+  `ios.yml` rerun on the repaired source (the first run, `35295958893` on
+  `34767bba`, passed build, iPad shell and UI smoke and **failed** the transfer
+  job on a missing file identity in the offered batch, which has since been
+  repaired in the product); the hosted Nearby cases, which this development
+  machine could not exercise because discovery saw no peer, and which are needed
+  to separate a source defect from this machine's own Bonjour behaviour; and
+  physical acceptance in both directions — an iPhone against a physical Mac on
+  macOS `1.4.0`, and an iPhone against relayium.com, each sending and receiving,
+  run from written numbered test notes. The two-device harness's pairing
+  conversation roles were re-authored and have never been executed, which is a
+  recorded scope limitation rather than evidence. No signed archive, no export
+  and no upload exists, and re-reading the highest consumed build number belongs
+  to the authorized distribution gate below.
 - **Distribution.** Not authorized by this change. A TestFlight upload needs an
   explicit owner instruction for that channel, a fresh highest-build read-back,
   and the candidate script's own gates.
