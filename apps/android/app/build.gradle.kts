@@ -18,6 +18,11 @@ android {
         applicationId = "com.relayium.android"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
+        // 0.2.4 (7): owner-reported fixes on a physical phone — a Device Inbox
+        // send can be removed or its delivery cancelled; Nearby leads with the
+        // relayium.com room the website and Mac app are in and shows the public
+        // IP; a cross-network code survives a dropped socket, holds the screen
+        // while it is waited on, offers a QR, and the scanner closes on a scan.
         // 0.2.3 (6): the macOS 1.4.0 aligned layout with a Device Inbox status
         // head and Check now, grouped layouts with a tablet reading width,
         // stored downloads that resume a dropped connection, the screen kept
@@ -28,8 +33,8 @@ android {
         // "0.1.10" sorts before "0.1.9" as text — so it must increase
         // monotonically for every published APK, forever.
         // `scripts/test/android-policy-test.mjs` asserts the two move together.
-        versionCode = 6
-        versionName = "0.2.3"
+        versionCode = 7
+        versionName = "0.2.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
