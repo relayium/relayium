@@ -234,6 +234,18 @@ class NearbyControllerTest {
         awaitTrue("ICE fetched once") { rig.iceCalls.get() == 1 }
     }
 
+    // The welcome carries the address relayium.com saw this device at, which is
+    // the room key. It used to be dropped on arrival, so the screen could not
+    // show the one value that says whether the computer is in the same room —
+    // the website shows it as "public IP" (owner report, 0.2.3).
+    @Test
+    fun `the public address in the welcome is published for the screen to show`() {
+        val rig = rig(source = ConnectionSource.Hub)
+        assertEquals("the rig's own welcome carried none", "", rig.nearby.publicIp)
+        rig.signaling.events.onSelfId(rig.selfId, "203.0.113.7")
+        awaitTrue("the address reaches the published state") { rig.nearby.publicIp == "203.0.113.7" }
+    }
+
     // ── no implicit peer, ever ──────────────────────────────────────────────
 
     @Test

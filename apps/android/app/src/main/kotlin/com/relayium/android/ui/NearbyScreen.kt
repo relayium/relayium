@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -122,6 +123,21 @@ internal fun NearbyScreen(
         ),
     ) {
         if (!nearby.direct) {
+            if (nearby.publicIp.isNotEmpty()) {
+                // The same line the website shows as "public IP". Two devices
+                // meet in this room only when it matches on both, so it is the
+                // first thing to compare when the other device does not appear.
+                Text(
+                    text = stringResource(R.string.nearby_public_ip, nearby.publicIp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.testTag("nearby-public-ip"),
+                )
+                Text(
+                    text = stringResource(R.string.nearby_public_ip_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             StatusCard(text = stringResource(R.string.nearby_mode_hub_warning), isError = false)
         }
     }
@@ -239,27 +255,33 @@ private fun NearbyStartCard(viewModel: TransferViewModel) {
         return
     }
 
-    SectionCard(title = stringResource(R.string.nearby_mode_direct)) {
-        Text(
-            text = stringResource(R.string.nearby_mode_direct_detail),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        PrimaryAction(
-            label = stringResource(R.string.nearby_start_direct),
-            onClick = viewModel::startNearbyDirect,
-        )
-    }
-
+    // Ordered by WHAT EACH MODE FINDS, not by how private it is. The relayium.com
+    // room is the only one a browser or the Mac app is ever in — neither
+    // advertises on the local link — so it is the one that matches what the
+    // website's LAN page does on this same phone. With the local-only mode first
+    // and filled, the computer could never appear and nothing said why (owner
+    // report, 0.2.3). The privacy difference is still stated, in each card.
     SectionCard(title = stringResource(R.string.nearby_mode_hub)) {
         Text(
             text = stringResource(R.string.nearby_mode_hub_detail),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        SecondaryAction(
+        PrimaryAction(
             label = stringResource(R.string.nearby_start_hub),
             onClick = viewModel::startNearbyHub,
+        )
+    }
+
+    SectionCard(title = stringResource(R.string.nearby_mode_direct)) {
+        Text(
+            text = stringResource(R.string.nearby_mode_direct_detail),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        SecondaryAction(
+            label = stringResource(R.string.nearby_start_direct),
+            onClick = viewModel::startNearbyDirect,
         )
     }
 

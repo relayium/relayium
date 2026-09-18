@@ -194,6 +194,13 @@ class TransferController(
          */
         val incomingPromptId: Int = 0,
         val roomId: Int = 0,
+        /**
+         * The address relayium.com observed this device at, from the welcome.
+         * Empty on the local-link path, which contacts no server, and until a
+         * room is joined. It IS the room key: two devices see each other in the
+         * relayium.com room exactly when this value is the same on both.
+         */
+        val publicIp: String = "",
     )
 
     data class State(
@@ -583,7 +590,7 @@ class TransferController(
         val client = deps.signals.create(
             source,
             object : SignalingClient.Events {
-                override fun onSelfId(id: String, ip: String) = postRoom(room) { onWelcome(id) }
+                override fun onSelfId(id: String, ip: String) = postRoom(room) { onWelcome(id, ip) }
                 override fun onPeers(peers: List<Envelope.Peer>) = postRoom(room) { onRoster(peers) }
                 override fun onPeerLeft(peerId: String) = postRoom(room) {
                     // The rendezvous saying a PHYSICAL connection closed. It
@@ -608,7 +615,7 @@ class TransferController(
         client.connect()
     }
 
-    private fun onWelcome(id: String) {
+    private fun onWelcome(id: String, ip: String) {
         if (id.isEmpty()) {
             if (admission == PeerAdmission.EXPLICIT) failRoom("error_nearby_unavailable")
             else endSession("error_network")
@@ -622,7 +629,15 @@ class TransferController(
         reconnectAttempt = 0
         if (admission == PeerAdmission.EXPLICIT) {
             _state.value = _state.value.copy(
-                nearby = _state.value.nearby.copy(room = NearbyRoom.JOINED),
+                nearby = _state.value.nearby.copy(
+                    room = NearbyRoom.JOINED,
+                    // What relayium.com SAW this device arrive from, and
+                    // therefore the room it was put in. It used to be dropped
+                    // here, so the screen could not answer the one question a
+                    // user with an empty list has — "am I even in the same room
+                    // as the computer?" — which the website answers on its face.
+                    publicIp = ip,
+                ),
             )
             publishNearby()
         }
