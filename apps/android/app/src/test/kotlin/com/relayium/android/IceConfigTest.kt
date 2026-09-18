@@ -6,6 +6,7 @@ import kotlin.concurrent.thread
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -252,6 +253,20 @@ class IceConfigTest {
             "quota",
             IceConfig.parse("""{"iceServers":[],"relays":[],"relayDenied":"quota"}""").relayDenied,
         )
+    }
+
+    // The refusal was parsed and dropped, so "out of relay traffic", "email not
+    // verified" and "no relay at all" all looked like a slow connection.
+    @Test
+    fun `the relay note names the server's refusal and otherwise only the absence of TURN`() {
+        fun servers(vararg urls: String) = listOf(IceConfig.Server(urls.toList(), null, null))
+        assertEquals("quota", IceConfig.Result(servers("stun:s.example:3478"), "quota").relayNote)
+        assertEquals("unverified", IceConfig.Result(emptyList(), "unverified").relayNote)
+        assertEquals("STUN alone is not a relay", "none", IceConfig.Result(servers("stun:s.example:3478"), "").relayNote)
+        assertEquals("an empty answer has no relay either", "none", IceConfig.Result(emptyList(), "").relayNote)
+        assertNull("TURN present and no refusal: nothing to say", IceConfig.Result(servers("turn:t.example:3478"), "").relayNote)
+        assertNull(IceConfig.Result(servers("stun:s.example:3478", "turns:t.example:5349"), "").relayNote)
+        assertEquals("an unknown token is not rendered as a reason", "none", IceConfig.Result(emptyList(), "surprise").relayNote)
     }
 }
 

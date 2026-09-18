@@ -1303,6 +1303,17 @@ private fun ConnectingScreen(
             style = MaterialTheme.typography.titleMedium,
             textAlign = TextAlign.Center,
         )
+        // Said BEFORE the wait, as the website does: without it an account out
+        // of relay traffic or a session with no relay looked exactly like a slow
+        // connection, for up to ninety seconds, and then like a broken one.
+        when (state.relayNote) {
+            "quota" -> R.string.relay_note_quota
+            "unverified" -> R.string.relay_note_unverified
+            "none" -> R.string.relay_note_none
+            else -> null
+        }?.let { note ->
+            InlineMessage(text = stringResource(note), tone = MessageTone.ERROR, announce = true)
+        }
         OutlinedButton(
             onClick = viewModel::disconnect,
             colors = accentOutlinedColors(),

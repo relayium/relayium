@@ -32,9 +32,29 @@ object IceConfig {
 
     data class Result(
         val servers: List<Server>,
-        /** The server's machine-readable refusal, or "" — never rendered. */
+        /** The server's machine-readable refusal, or "". Rendered through
+         *  [relayNote], never as raw text. */
         val relayDenied: String,
-    )
+    ) {
+        /**
+         * What to tell the user about relay BEFORE a cross-network attempt runs
+         * into it, or null when there is nothing to say.
+         *
+         * The refusal was parsed and then dropped, so an account out of relay
+         * traffic, an unverified email, or a session with no TURN at all looked
+         * identical: "Connecting…" for 30–90 s and then "The connection ended".
+         * The website says which it is, up front (`relayWarnNote`). Only the
+         * server's two named refusals are claimed; anything else without a TURN
+         * server is the plain fact that there is none.
+         */
+        val relayNote: String?
+            get() = when {
+                relayDenied == "quota" -> "quota"
+                relayDenied == "unverified" -> "unverified"
+                servers.none { s -> s.urls.any { it.startsWith("turn:") || it.startsWith("turns:") } } -> "none"
+                else -> null
+            }
+    }
 
     /** The whole ICE exchange is a small JSON document; anything bigger is not
      *  an answer, and reading it unboundedly hands the server a memory lever. */

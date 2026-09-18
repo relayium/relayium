@@ -229,6 +229,9 @@ class TransferController(
         val sas: String? = null,
         /** A stable identifier the UI maps to localised copy. Never raw text. */
         val errorKey: String? = null,
+        /** Why relay will not be available to this cross-network session —
+         *  "quota", "unverified" or "none" — or null. A key, never copy. */
+        val relayNote: String? = null,
         /** The connected link stopped answering and is being given a bounded
          *  chance to come back. Not an ending: nothing has been lost yet. */
         val linkInterrupted: Boolean = false,
@@ -603,6 +606,11 @@ class TransferController(
             val fetched = deps.fetchIce(source)
             if (roomGen != room) return@launch
             ice = fetched
+            // Pairing rooms only. The code-less relayium.com room is STUN-only by
+            // server policy, so "no relay" there is the design, not a warning.
+            if (source is ConnectionSource.Pairing) {
+                post { if (roomGen == room) _state.value = _state.value.copy(relayNote = fetched.relayNote) }
+            }
             openSignaling(room, source)
         }
     }
