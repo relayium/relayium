@@ -270,16 +270,110 @@ const SAVE_LEDGER = `
 `;
 
 /** Read the ledger's COMPLETED saves as `{name, size, hex}`. */
-const READ_SAVES = `(() => (window.__androidSaves ?? [])
-  .filter((r) => r.closed)
-  .map((r) => {
-    const total = r.chunks.reduce((n, c) => n + c.byteLength, 0);
-    const out = new Uint8Array(total);
-    let o = 0;
-    for (const c of r.chunks) { out.set(new Uint8Array(c), o); o += c.byteLength; }
-    return { name: r.name, size: total,
-             hex: [...out].map((b) => b.toString(16).padStart(2, '0')).join('') };
-  }))()`;
+// Reading what the page saved, in TWO steps, and the split is load-bearing.
+//
+// This used to be one expression that rebuilt every closed save and hex-encoded
+// it with `[...out].map(...).join('')`, and the wait loop ran it on EVERY poll.
+// That is work on the PAGE's main thread — the thread the product under test is
+// running on. It was invisible while saves were kilobytes. In the cancel=send
+// round the cancelled batch is 8 MiB + 4096 by design, so the partial the
+// browser commits on abort is megabytes; spreading a multi-megabyte Uint8Array
+// into an Array and mapping it, twice a second, exceeded the 30 s evaluate bound
+// and the harness reported its OWN cost as "page stopped responding — its main
+// thread is blocked". Rounds 1–2 passed and round 3 died identically on the
+// branch and on unmodified main (2026-09-18).
+//
+// The contract with the oracle is unchanged and deliberately so: it still gets
+// every byte as `hex` and computes the digest ITSELF, because a digest the page
+// computed would be the page vouching for its own bytes.
+//
+//   * READ_SAVE_INDEX — per poll, metadata only: no byte is touched.
+//   * the hex of a save — once per closed save, cached here in Node. A closed
+//     record is immutable (the sink's `close` is the commit), so encoding it a
+//     second time can only ever produce the same string. Table-driven, so an
+//     8 MiB save costs a few hundred milliseconds in the page.
+//
+// And it comes back IN SLICES. Caching alone was not enough, and the first
+// attempt at this fix proved it by failing the same way: measured on an idle
+// about:blank with no product code, a 1 MiB save returns by value over CDP in
+// 87 ms, and an 8 MiB one — a single 16.8-million-character string — had not
+// come back after 60 s. The ceiling is the transport, not the page. So the page
+// encodes once, keeps the string on the record, and hands it over two million
+// characters at a time.
+const READ_SAVE_INDEX = `(() => (window.__androidSaves ?? [])
+  .map((r, i) => ({ i, name: r.name, closed: !!r.closed,
+                    size: r.chunks.reduce((n, c) => n + c.byteLength, 0) }))
+  .filter((r) => r.closed))()`;
+
+/** How much hex one evaluate may return. 2,000,000 characters (1 MB of file) is
+ *  the size measured at 87 ms; the 16.8 M that did not return is 8x that. */
+const HEX_SLICE_CHARS = 2_000_000;
+
+/** Encode record `i` once, keep it on the record, and return its LENGTH. */
+const prepareSaveHexJs = (i) => `(() => {
+  const r = (window.__androidSaves ?? [])[${Number(i)}];
+  if (!r || !r.closed) return null;
+  if (typeof r.__hex === 'string') return r.__hex.length;
+  const table = new Array(256);
+  for (let b = 0; b < 256; b++) table[b] = b.toString(16).padStart(2, '0');
+  const parts = [];
+  for (const c of r.chunks) {
+    const bytes = new Uint8Array(c);
+    // 32 KiB of input per string, so no single concatenation is enormous.
+    for (let o = 0; o < bytes.length; o += 32768) {
+      const end = Math.min(o + 32768, bytes.length);
+      let piece = '';
+      for (let k = o; k < end; k++) piece += table[bytes[k]];
+      parts.push(piece);
+    }
+  }
+  r.__hex = parts.join('');
+  return r.__hex.length;
+})()`;
+
+const sliceSaveHexJs = (i, from, to) => `(() => {
+  const r = (window.__androidSaves ?? [])[${Number(i)}];
+  return r && typeof r.__hex === 'string' ? r.__hex.slice(${Number(from)}, ${Number(to)}) : null;
+})()`;
+
+/** Drop the page's copy once Node holds it: the page should not carry a second,
+ *  twice-as-large copy of every file for the rest of the round. */
+const releaseSaveHexJs = (i) => `(() => {
+  const r = (window.__androidSaves ?? [])[${Number(i)}];
+  if (r) delete r.__hex;
+  return true;
+})()`;
+
+/** Closed saves as `{name,size,hex}`, encoding each one exactly once. */
+async function readSaves(tab, cache) {
+  const index = await tab.evaluate(READ_SAVE_INDEX);
+  const out = [];
+  for (const { i, name, size } of index) {
+    let entry = cache.get(i);
+    if (!entry) {
+      const length = await tab.evaluate(prepareSaveHexJs(i));
+      // Raced with nothing in practice (closed is final), but never invent an
+      // entry: a save that cannot be read is simply not reported this poll.
+      if (typeof length !== "number") continue;
+      const pieces = [];
+      for (let from = 0; from < length; from += HEX_SLICE_CHARS) {
+        const piece = await tab.evaluate(sliceSaveHexJs(i, from, from + HEX_SLICE_CHARS));
+        if (typeof piece !== "string") throw new Error(`save ${JSON.stringify(name)} lost its encoding mid-read`);
+        pieces.push(piece);
+      }
+      await tab.evaluate(releaseSaveHexJs(i));
+      const hex = pieces.join("");
+      if (hex.length !== 2 * size) {
+        throw new Error(`save ${JSON.stringify(name)} changed while being read: `
+          + `${hex.length} hex chars for ${size} bytes — a closed record must be immutable`);
+      }
+      entry = { name, size, hex };
+      cache.set(i, entry);
+    }
+    out.push(entry);
+  }
+  return out;
+}
 
 /** Publish the page's own peer ids without changing any behaviour, so a round
  *  can REPORT which role assignment it exercised. The clients decide the role
@@ -573,6 +667,8 @@ async function run() {
     // acceptance means by "the peer received it" is that the page rendered it
     // at some point, so that is what is recorded.
     const seen = new Set();
+    // Index in `__androidSaves` -> the one encoding of that closed save.
+    const saveCache = new Map();
     let gateAnnounced = false;
     let released = false;
     for (;;) {
@@ -614,7 +710,7 @@ async function run() {
         return false;
       })()`).catch(() => false);
 
-      const saves = await tab.evaluate(READ_SAVES);
+      const saves = await readSaves(tab, saveCache);
       observed.receivedFiles = saves.map(({ name, size, hex }) => ({ name, size, hex }));
       // A forbidden name is EXPECTED to appear as a PARTIAL after a real
       // cancel (mixed-file-session closes the sink on abort, committing what
