@@ -40,8 +40,11 @@ was migrated to match, rather than the other way round.
 The two App Store provisioning profiles the Release configuration names —
 `Relayium iOS Universal App Store` and `Relayium iOS Share Extension App Store`
 — are named by this repository and **created in the developer account by the
-owner**. Nothing here provisions anything, and no profile has been observed to
-exist. `scripts/ios-app-store-candidate.sh` fails closed on a missing one: the
+owner**. Nothing here provisions anything. Both profiles do exist on the
+account: the `0.4.0 (9)` archive and export on 2026-09-18 signed the app and
+the extension against exactly those two names, manually and without
+`-allowProvisioningUpdates`, and Apple accepted the upload.
+`scripts/ios-app-store-candidate.sh` still fails closed on a missing one: the
 archive fails and an operator investigates.
 
 ### There are two records, and the wrong one looks right
@@ -103,12 +106,16 @@ purchase is accepted, not a conclusion this document may assert on its own.
 | Marketing version in the project source | `0.4.0` |
 | Build in the project source | `9` |
 
-#### In development — `0.4.0 (9)`, not archived, not uploaded (2026-09-17)
+#### Delivery checkpoint — `0.4.0 (9)` uploaded to internal TestFlight, 2026-09-18
 
-`0.4.0` exists only as source. Nothing has been archived, exported, uploaded or
-entered under it, no `0.4.0` TestFlight train or App Store version exists on the
-record, and build `9` is a project value that must be checked against a fresh
-read-back of the highest consumed build before it is archived.
+`0.4.0 (9)` was archived, exported and uploaded from frozen source `4d694a9e`
+after the owner asked for TestFlight; Apple reported `UPLOAD SUCCEEDED` at
+2026-09-18T03:53:01Z, processed the build `VALID`, and it is now
+`IN_BETA_TESTING` with the existing internal group. Build `9` is consumed. It
+is an internal TestFlight build only: not an App Store submission, not a
+release, and no `0.4.0` App Store version exists or was created. iOS remains
+non-public, and the owner's physical retest — the thing that started this
+work — has still not happened.
 
 - **Why it exists.** The owner's first cross-network test of `0.3.2 (8)` against
   the Relayium macOS app `1.4.0`, on the day it was delivered, was refused with
@@ -169,6 +176,81 @@ read-back of the highest consumed build before it is archived.
   pinned to commit `9097326b` and run `35299351635`; `main` integration is
   verified against its own selected checks, recorded with that integration
   rather than here.
+- **Signed source.** `4d694a9e4205ca5f040fdb5a55a1dd146f46f736`. That commit is
+  what was signed. Its executable code is identical to `9097326b`, the commit
+  the hosted gate ran on — the three files between them are prose — and later
+  documentation commits, including this one, do not change the bytes or move
+  the signed source SHA.
+- **Toolchain.** Archived with Xcode 27.0 (`27A266a`) and the iOS 27.0 SDK. The
+  hosted iOS lanes that gated this source select Xcode major 26, so the
+  uploaded binary was not built by the hosted toolchain; that difference is
+  recorded, not hidden, exactly as it was for `0.3.2 (8)`.
+- **Artifact.** Private workspace directory
+  `test-builds/ios/0.4.0-9-4d694a9e`, holding the archive, the export, the
+  candidate manifests and the owner's numbered test notes. IPA
+  `export/Relayium.ipa`, SHA-256
+  `5ee28a8757cf9948519bba0e900f39b11c8e7632733c1d5142100d73b51ac3bc`,
+  11,845,052 bytes. The candidate script exited 0 with no verification
+  findings: bundle identifiers, team, the two manual profiles, version and
+  build, entitlements, arm64, the purpose strings and the localization
+  boundaries all passed.
+- **The uploaded binary is the frozen source.** The archive was checked to have
+  compiled `main@4d694a9e` rather than any cached earlier state, and the check
+  was adversarial in both directions: the connect-first pairing type is present
+  in the archived and exported binaries and absent from the preserved signed
+  `0.3.2 (8)`, whose older pairing hint is present there and gone here.
+- **Apple validation.** `altool` returned `VERIFY SUCCEEDED` with no errors at
+  2026-09-18T03:46:33Z, after one transient TLS failure that its own internal
+  retry cleared. Validation is a separate gate from upload and both are
+  recorded.
+- **Pre-upload read-back, 2026-09-18T03:39:36Z.** A fresh, unfiltered, fully
+  paginated listing of every build on the record, with each build's platform
+  resolved: iOS `4` through `8` all `VALID`, highest consumed iOS build `8`, so
+  `9` was the next free number; macOS builds sit on their own train and were
+  reconciled rather than counted. The App Store version `0.3.1` selected
+  `0.3.1 (7)` (`5254bd55-c3cd-49a2-bc30-e461bea28bc0`). A second read-back
+  immediately before the upload agreed with it.
+- **Upload.** `altool` reported `UPLOAD SUCCEEDED with no errors`, delivery UUID
+  `960054c5-bab2-4ff9-9b09-adaf1fa446dd`, 11,845,052 bytes transferred, at
+  2026-09-18T03:53:01Z, for that exact IPA.
+- **Build `9` is now consumed** and is the highest consumed iOS build number. It
+  may not be rebuilt or re-uploaded under any version. The next archive needs a
+  number strictly above `9`, taken from a fresh read-back on the day of that
+  archive rather than from this checkpoint.
+- **Apple processing.** `VALID`, on pre-release version `0.4.0`, platform
+  `IOS`, app `6801142976`, not expired. The record's build id is
+  `960054c5-bab2-4ff9-9b09-adaf1fa446dd` — the same UUID as the delivery — and
+  Apple's own `uploadedDate` on it reads 2026-09-18T03:54:03Z. Processing is
+  not instant and was not assumed: a filtered read-back at 03:54:52Z still
+  matched no build `9`, and the state above is the later read-back, not that
+  one.
+- **Export compliance.** Non-exempt encryption **false** on the build, answered
+  over the API because neither `apps/ios/Relayium/Info.plist` nor
+  `apps/ios/RelayiumShare/Info.plist` declares
+  `ITSAppUsesNonExemptEncryption` — see the export-compliance section below for
+  why that key stays out of the build.
+- **TestFlight.** Internal state `IN_BETA_TESTING`, attached to the existing
+  internal group **Relayium Internal** only. The build is in no external group;
+  its external state is `READY_FOR_BETA_SUBMISSION` and no beta review was
+  requested. Automatic tester notification is **disabled**
+  (`autoNotifyEnabled` false), so nothing was pushed at a tester.
+- **Test information.** The `0.4.0` *What to Test* from
+  `docs/app-store-metadata-ios.json` is entered on this build, and `en-US` and
+  `zh-Hans` both read back matching the packet.
+- **How that configuration was made.** By a guarded internal-only step that
+  refuses a wrong app, train, platform or build number, a non-`VALID` or expired
+  build, an unexpected encryption declaration, an unexpected beta-group set, a
+  duplicated locale, or any movement of the App Store selected build — each
+  refusal before it writes anything — and that then reads every field back. Its
+  whole write surface is the five fields above; it can reach no App Store
+  version, external group, tester, review submission, account or key.
+- **What this delivery did not change.** No App Store version was created or
+  submitted; the iOS App Store version remains `0.3.1` with `0.3.1 (7)`
+  (`5254bd55-c3cd-49a2-bc30-e461bea28bc0`) selected, read back before and after
+  the internal configuration and unchanged, verified 2026-09-18T03:57:20Z. No
+  external group, no beta review request, no tester, account or key change, no
+  App Store metadata, screenshot or review-state edit, and no macOS, Android,
+  Web, ops or production change.
 - **Gates not passed for `0.4.0`.** Open requirements, stated as such. The final
   source passes the hosted Nearby gate, but that does not explain the local run
   where discovery saw no peer on the development machine under Xcode 27 and
@@ -176,22 +258,26 @@ read-back of the highest consumed build before it is archived.
   cause in the code cannot be ruled out from a green hosted job. That cause
   **remains unestablished** and is to be revisited at the next local Nearby
   validation — which is neither a release claim nor a general "no defect"
-  diagnosis. No signed archive, no export and no upload exists. **Ordering
-  matters and the earlier wording had it backwards:** the owner cannot retest an
-  uninstalled build, so explicit channel authorization, a fresh read-back of the
-  highest consumed build number and that channel's release-specific checks come
-  first, then a private candidate the owner can install; the owner's physical
-  retest — an iPhone against a Mac running **Relayium for macOS `1.4.0`** (the
+  diagnosis. **Ordering matters and the earlier wording had it backwards:** the
+  owner cannot retest an uninstalled build, so explicit channel authorization, a
+  fresh read-back of the highest consumed build number and that channel's
+  release-specific checks come first, then a candidate the owner can install.
+  Those steps have now happened — that is the checkpoint above — and the build
+  is installable from the internal group. The owner's physical retest — an iPhone against a Mac running **Relayium for macOS `1.4.0`** (the
   app's version, not the OS release) and an iPhone against relayium.com, each
   sending and receiving, from numbered notes kept privately with the task
   evidence — follows installation and is what gates physical-bug acceptance and
-  public-release readiness. No install candidate exists yet; the current
-  artifacts are simulator-only task evidence. The two-device harness's pairing
+  public-release readiness. It has not happened: nothing beyond the simulator
+  and loopback evidence above has been observed on a physical iPhone against a
+  real Mac or against relayium.com. The two-device harness's pairing
   conversation roles were re-authored and have never been executed, which is a
   recorded scope limitation rather than evidence.
-- **Distribution.** Not authorized by this change. A TestFlight upload needs an
-  explicit owner instruction for that channel, a fresh highest-build read-back,
-  and the candidate script's own gates.
+- **Distribution.** Internal TestFlight only, on the owner's explicit 2026-09-18
+  instruction for that channel, after the fresh highest-build read-back and the
+  candidate script's own gates. It is not a submission, not a release and not a
+  public launch: no App Store version was created, no external testing was
+  requested, and any later public submission is a separately authorized step
+  with its own gates.
 
 #### Delivery checkpoint — `0.3.2 (8)` on internal TestFlight, 2026-09-17
 
@@ -675,8 +761,8 @@ The values above match the candidate this document records — project `0.3.1 (7
 with build `6` the highest this record was known to have accepted at that
 moment. **Build 7 has since been uploaded and consumed**, so these exact values
 would now be refused as a re-upload. Build 8 was consumed on 2026-09-17 as
-`0.3.2 (8)`, so the next archive needs a number above `8` — or above whatever a
-fresh read-back then shows.
+`0.3.2 (8)` and build 9 on 2026-09-18 as `0.4.0 (9)`, so the next archive needs
+a number above `9` — or above whatever a fresh read-back then shows.
 **They are an example of the shape, not a licence to skip the read-back**: the timestamp is refused once it is more than 12 hours
 old, so supply what the record actually shows on the day.
 
@@ -2393,7 +2479,10 @@ own exact-source archive and checksum, which is what
 `0.3.1`; on 2026-09-07 it selected `0.3.1 (6)` and that internal TestFlight
 delivery left the selection untouched. The 2026-09-17 read-back shows it
 `WAITING_FOR_REVIEW` with `0.3.1 (7)` selected, and the `0.3.2 (8)` internal
-delivery above left that selection untouched, read back before and after. Selecting a different build on the version belongs to whichever App
+delivery above left that selection untouched, read back before and after. The
+`0.4.0 (9)` internal delivery of 2026-09-18 changed no version or selection
+either: `0.3.1 (7)` was read before and after that configuration and is
+unchanged. Selecting a different build on the version belongs to whichever App
 Store submission is authorized later, with screenshots and copy that match it. Upload
 only the exact candidate whose hosted Go, Swift, iOS Release build and UI gates
 are green. Every hosted iOS job

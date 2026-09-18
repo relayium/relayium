@@ -1,18 +1,25 @@
 # iOS alignment with macOS 1.4.0
 
-Status: delivered to internal TestFlight only as `0.3.2 (8)` from `9880648a`
-(see `docs/ios-app-store-submission.md`); not a public release. This records what the
-iOS app changed to read as the same product as macOS 1.4.0, what it
-deliberately did not copy, and how the change is verified.
+Status: this document is the `0.3.2 (8)` record. That alignment was delivered
+to internal TestFlight only, from `9880648a`, and was never a public release.
+The current iOS channel state is one version further on: `0.4.0 (9)`, from
+frozen source `4d694a9e`, was uploaded to the same record on 2026-09-18,
+processed `VALID` and is `IN_BETA_TESTING` with the internal group only — still
+internal, still not a public release — see `docs/ios-app-store-submission.md`
+for that checkpoint. This document records
+what the iOS app changed to read as the same product as macOS 1.4.0, what it
+deliberately did not copy, and how the change is verified; read every statement
+below as `0.3.2`.
 
 **Correction, 2026-09-17 — the alignment was visual, and Cross-network's RULES
 were not aligned.** `0.3.2` gave Cross-network the macOS 1.4.0 status head and
 cards while the screen underneath was still the Files/Text legacy product, which
 macOS and the Web refuse in a pairing room. The owner's first cross-network test
 of `0.3.2` against the Relayium macOS app `1.4.0` failed with "the other device
-is running an older version". `0.4.0` (in development, not distributed) replaces
-that screen with the connect-first unified workspace macOS has; the account is
-in `apps/README.md` under "Direct transfer". Statements below that describe the
+is running an older version". `0.4.0` — build `9`, on internal TestFlight since
+2026-09-18 and not public — replaces that screen with the connect-first unified
+workspace macOS has; the account is in `apps/README.md`
+under "Direct transfer". Statements below that describe the
 Cross-network mode picker or its two create cards describe `0.3.2`. The layout
 evidence for the replacement screen is its own: the English Light and Chinese
 Dark reference captures, 2 of 2 on an owned iPhone 17 Pro, iOS 26.5 simulator

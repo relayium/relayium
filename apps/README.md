@@ -148,7 +148,13 @@ That covers macOS only. iOS development resumed on 2026-09-01 at version 0.3.0:
 internal TestFlight builds were used for development acceptance before the
 earlier pause, and neither the iOS app nor its share extension is publicly
 offered. There is no public App Store release and no Relayium download surface
-offers iOS.
+offers iOS. The current internal candidate is **`0.4.0 (9)`**, archived from
+frozen source `4d694a9e`, uploaded on 2026-09-18, processed `VALID` and
+`IN_BETA_TESTING` with the internal group only — no external group, no beta
+review, tester notification off. `docs/ios-app-store-submission.md` holds that
+checkpoint. An internal TestFlight build is not a release: the App Store
+version is still `0.3.1`, nothing was submitted, and the owner's physical
+retest has not happened.
 
 iOS ships as the second platform of the macOS App Store record (Apple ID
 `6801142976`) rather than as a record of its own, so it inherits that record's
@@ -1526,9 +1532,13 @@ receipt UI renders the identity now, and `35299351635` is the run that shows it.
   not installed, so physical acceptance cannot precede delivery. The order is:
   explicit owner authorization for a channel, a fresh read-back of the highest
   consumed build number, and that channel's release-specific checks — then a
-  private candidate the owner can install. **This task authorizes no upload**,
-  and no install candidate exists yet; the only artifacts are simulator-only
-  task evidence.
+  candidate the owner can install. That order was followed on 2026-09-18: the
+  owner asked for TestFlight, a fresh all-build read-back showed `8` as the
+  highest consumed iOS build, the candidate script passed its gates, and
+  `0.4.0 (9)` was archived, validated and uploaded. Apple processed it `VALID`
+  and it is `IN_BETA_TESTING` with the internal group, with automatic tester
+  notification off, so it is installable from TestFlight by hand.
+  `docs/ios-app-store-submission.md` records the exact state, field by field.
 - **Owner physical retest, which follows installation.** With a candidate
   installed: an iPhone against a Mac running **Relayium for macOS `1.4.0`** (the
   app's version, not the operating system's), and an iPhone against
