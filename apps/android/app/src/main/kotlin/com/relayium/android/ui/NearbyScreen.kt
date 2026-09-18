@@ -127,15 +127,15 @@ internal fun NearbyScreen(
                 // The same line the website shows as "public IP". Two devices
                 // meet in this room only when it matches on both, so it is the
                 // first thing to compare when the other device does not appear.
+                // ONE line here. What it means is said below, and only when the
+                // list is empty — the one moment it helps. Spelled out in the head
+                // it cost two more lines on every visit and pushed a third device
+                // below the fold on an ordinary phone.
                 Text(
                     text = stringResource(R.string.nearby_public_ip, nearby.publicIp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.testTag("nearby-public-ip"),
-                )
-                Text(
-                    text = stringResource(R.string.nearby_public_ip_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("nearby-public-ip"),
                 )
             }
             StatusCard(text = stringResource(R.string.nearby_mode_hub_warning), isError = false)
@@ -200,6 +200,16 @@ internal fun NearbyScreen(
                 text = stringResource(R.string.nearby_empty),
                 style = MaterialTheme.typography.bodyMedium,
             )
+            if (!nearby.direct && nearby.publicIp.isNotEmpty()) {
+                // Nothing found in the relayium.com room: the first thing worth
+                // checking is whether the other device is in the SAME room, and
+                // the public IP shown above is that room's key.
+                Text(
+                    text = stringResource(R.string.nearby_public_ip_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (nearby.direct) {
                 Text(
                     text = stringResource(R.string.nearby_empty_direct_hint),

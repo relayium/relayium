@@ -612,7 +612,15 @@ class NearbyWebCounterpartTest {
                     ready = false
                     break
                 }
-                tops.add(name to nodes[0].boundsInRoot.top)
+                // `positionInRoot`, NOT `boundsInRoot`. The latter is CLIPPED to what
+                // is visible, so a row scrolled below the fold collapses to an empty
+                // rect at zero and sorts FIRST — and the target is named to sort
+                // last, which makes it the row most likely to be there. The round
+                // then reported the target as the first row on screen, the exact
+                // thing it exists to rule out, when the list had merely grown by a
+                // line (2026-09-18). The unclipped position is the layout order,
+                // which is what "top to bottom" means to a person scrolling it.
+                tops.add(name to nodes[0].positionInRoot.y)
             }
             if (ready) return tops.sortedBy { it.second }.map { it.first }
             Thread.sleep(100)
