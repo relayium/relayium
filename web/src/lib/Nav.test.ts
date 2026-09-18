@@ -250,6 +250,33 @@ describe("Nav compact header", () => {
     expect(css).not.toMatch(/\b(?:margin|padding)-(?:left|right)\b/);
     expect(css).not.toMatch(/\b(?:float|text-align)\s*:\s*(?:right|left)\b/);
   });
+
+  // jsdom paints nothing, so the layer order is pinned at the source. The
+  // sticky rail is a stacking context and `<Account>` is mounted inside it: the
+  // dialog's own z-index cannot lift it above the content pane, only the rail's
+  // can. With `z-index: auto` every positioned card on /cross-network painted
+  // over the open sign-in dialog and its backdrop (production, 2026-09-18).
+  it("gives the sticky rail the account dialog's place in the page layer scale", () => {
+    const read = (file: string) => readFileSync(resolve(process.cwd(), file), "utf8");
+    const layer = (src: string, selector: string) => {
+      const at = src.indexOf(`\n  ${selector} {`);
+      expect(at, `${selector} rule`).toBeGreaterThan(-1);
+      const z = /z-index:\s*(\d+)/.exec(src.slice(at, src.indexOf("}", at)));
+      expect(z, `${selector} z-index`).not.toBeNull();
+      return Number(z![1]);
+    };
+    const nav = read("src/lib/Nav.svelte");
+    const railAt = nav.indexOf("    .topnav.shell {\n      position: sticky;");
+    expect(railAt, "the sticky rail rule").toBeGreaterThan(-1);
+    const railZ = /\n\s*z-index:\s*(\d+);/.exec(nav.slice(railAt, nav.indexOf("\n    }", railAt)));
+    expect(railZ, "a sticky rail with z-index: auto traps the dialog under the page").not.toBeNull();
+    const rail = Number(railZ![1]);
+
+    const app = read("src/App.svelte");
+    expect(rail).toBe(layer(read("src/lib/Account.svelte"), ".backdrop"));
+    expect(rail).toBeGreaterThan(layer(app, ".toast"));
+    expect(rail).toBeLessThan(layer(app, ".dropzone"));
+  });
 });
 
 // The three rows that left the header: tools, language/theme, and the account

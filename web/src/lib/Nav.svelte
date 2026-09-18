@@ -425,6 +425,16 @@
     .topnav.shell {
       position: sticky;
       inset-block-start: 0;
+      /* `sticky` makes the rail a stacking context, and `<Account>` — the
+         sign-in dialog, its backdrop and the billing toasts, all `fixed` —
+         is mounted inside it. With `z-index: auto` their 40/41/42 only ordered
+         them WITHIN the rail, and `.appshell-main` comes later in the document,
+         so every positioned card on the page painted over the open dialog.
+         The rail therefore takes the dialog's place in the page's layer scale:
+         above the App toast (30), below the drop overlay (50) and ConfirmModal
+         (60). The rail and the content pane never overlap, so nothing else
+         moves. */
+      z-index: 40;
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
