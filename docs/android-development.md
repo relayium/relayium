@@ -150,10 +150,15 @@ Web, Apple and server halves recorded in `docs/TESTING.md`:
   requests. The gain is structural — one fewer API round trip before the peer
   can be seen — and is **not** a measured connection-time improvement.
 
-Gates passed on the branch: `:app:testDebugUnitTest` 1212 and `:protocol:test`
+Gates passed on the branch: `:app:testDebugUnitTest` 1213 and `:protocol:test`
 206, both re-run with `--rerun-tasks`, and `:app:lintDebug` (`warningsAsErrors`)
-in an ordinary run — its inputs were unchanged, so it was up to date rather than
-re-executed. The new suites are `LocalCandidateGateTest`,
+also re-executed. The 1213th is `PeerDepartureTest`'s delayed-close regression,
+added after hosted `android` run 35460630190 failed that suite: `endSession`
+publishes `Phase.ENDED` before it tears the transport down, so the test's
+original barrier — wait for the phase, then read the transport — could observe
+the phase inside that window. The product ordering is unchanged and was not the
+defect; the suite now waits on the session executor itself and carries a 100 ms
+close-delay fixture so the window is exercised on every run. The new suites are `LocalCandidateGateTest`,
 `LinkTransportCandidateOrderTest`, `PeerDepartureTest` and `RoomIceOverlapTest`.
 Each fix carries a targeted negative control: the peer-departure and room-overlap
 regressions were reproduced against the original `TransferController`, and the
