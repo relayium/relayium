@@ -189,6 +189,22 @@ func ServeWSObserved(h *Hub, idgen func() string, observe RoomJoinObserver) func
 				continue
 			}
 			malformed = 0 // 一条正常帧就重置：偶发的坏帧不该累积成断线
+
+			// Every decoded frame spends this connection's budget exactly once.
+			// The only exemption is the single join that admits the connection:
+			// it either sets joined (every later join is charged) or is refused
+			// and the socket closes, so one connection can spend it once.
+			//
+			// Charged HERE, above the switch, because a frame no branch handles —
+			// an unknown type, `null` (which decodes to a zero Envelope), a repeat
+			// join — costs the same read and JSON parse as one that is handled.
+			// The branches below must not charge again.
+			if !(e.Type == TypeJoin && !joined) {
+				if ok, reason := lim.admit(len(data)); !ok {
+					_ = c.Close(websocket.StatusPolicyViolation, reason)
+					return
+				}
+			}
 			switch e.Type {
 			case TypeJoin:
 				if !joined {
@@ -209,26 +225,31 @@ func ServeWSObserved(h *Hub, idgen func() string, observe RoomJoinObserver) func
 					}
 				}
 			case TypeActivate:
-				// Charged to the same per-connection budget as a signal frame,
-				// and charged BEFORE the joined check: otherwise this frame type
-				// would be a free flood channel for anyone holding a socket.
-				if ok, reason := lim.admit(len(data)); !ok {
-					_ = c.Close(websocket.StatusPolicyViolation, reason)
-					return
-				}
+				// Already charged above, including when this arrives before the
+				// join — otherwise this frame type would be a free flood channel
+				// for anyone holding a socket.
+				//
 				// Only ever this connection's own (room, id) — never a target
 				// named by the frame, which carries nothing the server reads.
 				if joined && lan {
 					h.Activate(room, id)
 				}
 			case TypeSignal:
-				// Count the raw frame bytes; join frames are never counted.
-				if ok, reason := lim.admit(len(data)); !ok {
-					_ = c.Close(websocket.StatusPolicyViolation, reason)
-					return
+				// Forwarding is a membership action, so it needs an admitted
+				// connection — not merely a budget. Hub.Relay resolves `to`
+				// inside the room and never checks the SENDER, so without this
+				// an un-joined socket holding an admitted peer's opaque
+				// server-issued id could push frames into a room it was never
+				// let into, bypassing room capacity and the join observer; and,
+				// never being on the roster, it would also never produce the
+				// `left` frame that tells the peer it is gone.
+				//
+				// Charged above regardless: a pre-join signal costs what it
+				// cost to receive, it just does not travel.
+				if joined {
+					e.From = id
+					h.Relay(room, e)
 				}
-				e.From = id
-				h.Relay(room, e)
 			}
 		}
 	}

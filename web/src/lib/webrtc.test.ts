@@ -470,6 +470,21 @@ describe("the setup deadline", () => {
   const candidate = (i: number): InboundSignal =>
     ({ link: true, ice: { candidate: `candidate:${i} 1 udp 2122260223 10.0.0.${i} 5000 typ host`, sdpMid: "0", sdpMLineIndex: 0 } });
 
+  /**
+   * The peer's answer, which is what makes its candidates applicable at all.
+   *
+   * The two tests below that pace a peer with trickled candidates inject this
+   * FIRST. Not decoration: `addIceCandidate` requires a remote description —
+   * a real browser REJECTS a candidate that arrives before one, which is why
+   * `webrtc-core` now holds such a candidate until a description exists rather
+   * than losing it (`webrtc-core.candidates.test.ts`). Progress is still
+   * counted where it always was, when the ICE agent accepts the candidate; a
+   * held one therefore counts when it is flushed. `FakePC.addIceCandidate`
+   * accepts anything, so without this line the tests would be pacing the
+   * window with evidence no browser would have admitted.
+   */
+  const answered = (): InboundSignal => ({ sdp: { type: "answer", sdp: "answer" }, commit: "AAAA", link: true });
+
   function startInitiator(hub: ReturnType<typeof makeHub>) {
     return connectLink({
       signaling: hub.I, peerId: "R", selfKey: generateKeyPair().publicKey,
@@ -521,6 +536,8 @@ describe("the setup deadline", () => {
     const settled = watch(p);
     const rejects = expect(p).rejects.toThrow(/connection timed out/);
     await flush();
+    hub.inject("I", "R", answered()); // see `answered`
+    await flush();
 
     // Candidates every 20 s. Each one would push the no-progress window to +30 s,
     // so on that timer alone this would still be alive at 110 s.
@@ -545,6 +562,8 @@ describe("the setup deadline", () => {
     const p = startInitiator(hub);
     const settled = watch(p);
     const rejects = expect(p).rejects.toThrow(/handshake timed out/);
+    await flush();
+    hub.inject("I", "R", answered()); // see `answered`
     await flush();
 
     // Genuine progress for 60 s, then the channel finally opens at ~80 s.

@@ -18,11 +18,32 @@ const FALLBACK: RTCIceServer[] = [];
 
 /** Whether the list carries a usable TURN relay (a turn:/turns: URL). Only then is
  *  it safe to force relay-only ICE — otherwise there would be no candidates at all. */
-export function hasTurnServer(servers: RTCIceServer[]): boolean {
-  return servers.some((s) => {
-    const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
-    return urls.some((u) => u.startsWith("turn:") || u.startsWith("turns:"));
-  });
+export function hasTurnServer(servers: readonly RTCIceServer[]): boolean {
+  return iceServerUrls(servers).some((u) => u.startsWith("turn:") || u.startsWith("turns:"));
+}
+
+/**
+ * Every `urls` string in a server list, skipping anything that is not one.
+ *
+ * Reads through `unknown` rather than trusting the declared type. `/api/ice` is
+ * untrusted input that reaches here: a `{ urls: 42 }` entry used to hit
+ * `u.startsWith` and throw a `TypeError` out of `relayStatusOf` — which runs
+ * OUTSIDE `readIceConfig`'s try/catch — and so out of `fetchIceConfig` itself.
+ * `sanitizeIceServers` is what stops such an entry reaching a caller; this is
+ * the same rule applied at the point of use, because `hasTurnServer` is
+ * exported and a caller may hand it a list this module never sanitised.
+ */
+function iceServerUrls(servers: unknown): string[] {
+  if (!Array.isArray(servers)) return [];
+  const out: string[] = [];
+  for (const server of servers) {
+    if (typeof server !== "object" || server === null) continue;
+    const urls = (server as { urls?: unknown }).urls;
+    for (const url of Array.isArray(urls) ? urls : [urls]) {
+      if (typeof url === "string") out.push(url);
+    }
+  }
+  return out;
 }
 
 /** One member of the multi-relay TURN pool: a stable id + a ready-to-use iceServers
@@ -95,9 +116,60 @@ type IceRead =
  * for authorization, but removing it is a behaviour change this seam has no
  * business making.
  */
-export type IceTransport = (url: string) => Promise<Response>;
+export type IceTransport = (url: string, init?: IceRequestInit) => Promise<Response>;
 
-const browserTransport: IceTransport = (url) => fetch(url, { credentials: "include" });
+/**
+ * The only request option the shared classifier imposes on a transport.
+ *
+ * Optional on purpose, in both directions. A transport is free to ignore
+ * `signal` — the Electron one does, because its request is performed in main,
+ * which owns that request's own deadline and its own socket cleanup and is the
+ * only process that can release them. Ignoring it costs that process one
+ * request still running for an answer nobody will read; it does NOT cost the
+ * renderer a room gate that never opens, because `readIceConfig` stops waiting
+ * on its own schedule either way. Honouring it is strictly better, and the
+ * browser transport does.
+ */
+export interface IceRequestInit {
+  /** Aborted when the attempt's whole-request deadline expires. */
+  signal?: AbortSignal;
+}
+
+const browserTransport: IceTransport = (url, init) =>
+  fetch(url, { credentials: "include", signal: init?.signal });
+
+/**
+ * The whole-attempt bound on one `/api/ice` request.
+ *
+ * ## Why this has to exist here, and why it covers the BODY
+ *
+ * `fetch` settles when the response HEADERS arrive; the body is a stream that
+ * may never complete. So a request can take its `200`, hand back a `Response`,
+ * and then hang forever inside `res.json()` — with no timer anywhere and no
+ * abort to fire. That is not hypothetical: driving this module with a response
+ * whose body stream never closes left `fetchIceConfig` unsettled with zero
+ * timers scheduled. A request whose headers never arrive at all had the same
+ * shape, and could not even reach the one retry.
+ *
+ * The room gate above this (`App.svelte`'s `roomIcePending`) deliberately has
+ * no deadline of its own, because the degraded configuration it would fall back
+ * to is the one being installed BY this answer. That is only sound while this
+ * call is guaranteed to produce an answer, so the guarantee has to live here:
+ * one deadline, armed before the request, covering the status line and the body
+ * alike, and cancelling the request when it expires.
+ *
+ * Sized against what it competes with rather than against a typical response.
+ * Android bounds the same call at 10 s in a single attempt with no retry; the
+ * web has two attempts, so a slightly tighter per-attempt bound keeps the worst
+ * case (8 + 1.2 + 8 ≈ 17.2 s) inside the transport's own 30 s no-progress
+ * window rather than stacking on top of it. A cellular radio waking from idle
+ * plus a TLS handshake fits inside 8 s with room to spare.
+ */
+const ICE_ATTEMPT_TIMEOUT_MS = 8_000;
+
+/** The deadline fired before the attempt produced anything. A sentinel rather
+ *  than a rejection, so it can never be mistaken for a transport failure. */
+const ATTEMPT_EXPIRED = Symbol("ice attempt expired");
 
 /**
  * One attempt at `/api/ice`.
@@ -112,10 +184,14 @@ const browserTransport: IceTransport = (url) => fetch(url, { credentials: "inclu
  * with a `relayDenied` body) is an answer, not a failure, and must reach the UI
  * verbatim.
  */
-async function readIceConfig(url: string, transport: IceTransport): Promise<IceRead> {
+async function attemptIceConfig(
+  url: string,
+  transport: IceTransport,
+  signal: AbortSignal,
+): Promise<IceRead> {
   let res: Response;
   try {
-    res = await transport(url);
+    res = await transport(url, { signal });
   } catch {
     return { ok: false, status: "unavailable", retryable: true };
   }
@@ -133,25 +209,161 @@ async function readIceConfig(url: string, transport: IceTransport): Promise<IceR
     };
   }
   try {
-    const body = (await res.json()) as {
-      iceServers?: RTCIceServer[];
-      relays?: RelayEntry[];
-      relayDenied?: string;
-    };
-    return {
-      ok: true,
-      config: {
-        iceServers: body.iceServers ?? FALLBACK,
-        relays: body.relays ?? [],
-        relayDenied: body.relayDenied,
-        relayStatus: "ok",
-      },
-    };
+    const config = toIceConfig(await res.json());
+    // Valid JSON that is not an object is not a configuration — `null`, a bare
+    // array, a quoted string. Same conclusion as unparseable bytes.
+    if (!config) return { ok: false, status: "unavailable", retryable: false };
+    return { ok: true, config };
   } catch {
     // 200 with a body that isn't JSON — a misconfigured proxy serving
     // index.html for /api/*. Repeating it will not help.
     return { ok: false, status: "unavailable", retryable: false };
   }
+}
+
+/**
+ * One attempt at `/api/ice`, bounded end to end.
+ *
+ * The deadline is raced against the attempt rather than relying on the abort
+ * alone, because an `IceTransport` may legitimately ignore `signal` (see
+ * `IceRequestInit`) and a transport that ignores it would otherwise keep this
+ * pending for ever. The abort is still issued first, so a transport that does
+ * honour it stops holding a connection open.
+ *
+ * A timed-out attempt is ABANDONED, not awaited: whatever it eventually
+ * produces has nothing left to overwrite, and the classification below was
+ * already made without it.
+ */
+async function readIceConfig(url: string, transport: IceTransport): Promise<IceRead> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<typeof ATTEMPT_EXPIRED>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve(ATTEMPT_EXPIRED);
+    }, ICE_ATTEMPT_TIMEOUT_MS);
+  });
+  const attempt = attemptIceConfig(url, transport, controller.signal);
+  // An abandoned attempt still rejects when the abort lands; observed here so
+  // that is a discarded result rather than an unhandled rejection.
+  void attempt.catch(() => {});
+  try {
+    const read = await Promise.race([attempt, expired]);
+    // A stall is exactly the transient shape the one retry exists for — and,
+    // unlike before, the retry is now reachable at all.
+    if (read === ATTEMPT_EXPIRED) return { ok: false, status: "unavailable", retryable: true };
+    return read;
+  } catch {
+    // `attemptIceConfig` classifies every failure it can reach, so anything
+    // thrown past it came from a transport that did not return a usable
+    // `Response` at all. Repeating that will not produce one.
+    return { ok: false, status: "unavailable", retryable: false };
+  } finally {
+    // No timer outlives the attempt, on any path — including success, where the
+    // body has already been read and an abort has nothing left to cancel.
+    clearTimeout(timer);
+    controller.abort();
+  }
+}
+
+/**
+ * Turn an untrusted `/api/ice` body into exactly the shape everything below
+ * this line assumes, or `null` when it is not a configuration at all.
+ *
+ * ## Why this is not paranoia
+ *
+ * `relayStatusOf` runs OUTSIDE the try/catch that reads the body, and reaches
+ * into the parsed value twice: `cfg.relays.some(...)` and `hasTurnServer(...)`.
+ * Four shapes that a `200` with perfectly valid JSON can carry — `relays: {}`,
+ * `iceServers: [null]`, an entry with `urls: 42`, a pool entry with no
+ * `iceServers` — each threw a `TypeError` out of `fetchIceConfig` rather than
+ * returning a classification. Both call sites `await` that with no `catch`, so
+ * the room's `roomIcePending` stayed `true` for the life of the page: the relay
+ * gate never opened and no link could be built in that room again. A malformed
+ * body is a bad answer; it must not be a wedged tab.
+ *
+ * Unusable members are DROPPED, never repaired, and valid siblings survive: a
+ * deployment that advertises four good relays and one malformed one keeps four.
+ * What is left then classifies normally — a code room whose pool sanitised down
+ * to nothing reports `none`, which is the true answer.
+ *
+ * A well-formed body comes back with its own objects, untouched, so nothing a
+ * server legitimately sends (`username`, `credential`, `region`, a field added
+ * later) is lost to this pass.
+ *
+ * ## What this is NOT
+ *
+ * **Not a schema validator, and not a guarantee that what survives builds an
+ * `RTCPeerConnection`.** It checks the TYPES this module and `relayStatusOf`
+ * index into — that a `urls` is a string, that a pool entry has an id — and
+ * nothing about URI syntax, scheme, or whether a credential shape is one the
+ * browser accepts. `turn:` with a malformed host, or a `username` of the wrong
+ * type, still reaches the peer connection constructor and is still that
+ * constructor's problem.
+ *
+ * The contract being kept is narrower and is the one the room gate rests on:
+ * `fetchIceConfig` returns a classification instead of throwing, whatever the
+ * server sent. Widening it into general validation would be a different change
+ * with a different risk — silently dropping a relay a browser would have
+ * accepted is how a working deployment becomes a STUN-only one.
+ */
+function toIceConfig(body: unknown): IceConfig | null {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return null;
+  const raw = body as { iceServers?: unknown; relays?: unknown; relayDenied?: unknown };
+  const iceServers = sanitizeIceServers(raw.iceServers);
+  return {
+    iceServers: iceServers.length ? iceServers : FALLBACK,
+    relays: sanitizeRelays(raw.relays),
+    // Any other type is not a reason the UI can show, and `relayStatusOf`
+    // compares it against two exact strings anyway.
+    relayDenied: typeof raw.relayDenied === "string" ? raw.relayDenied : undefined,
+    relayStatus: "ok",
+  };
+}
+
+/** Server entries that address at least one thing. Returned as the server sent
+ *  them whenever every URL was usable, so a caller sees the original objects. */
+function sanitizeIceServers(value: unknown): RTCIceServer[] {
+  if (!Array.isArray(value)) return [];
+  const out: RTCIceServer[] = [];
+  for (const server of value) {
+    if (typeof server !== "object" || server === null) continue;
+    const urls = (server as { urls?: unknown }).urls;
+    if (typeof urls === "string") {
+      if (urls !== "") out.push(server as RTCIceServer);
+      continue;
+    }
+    if (!Array.isArray(urls)) continue; // addresses nothing
+    const usable = urls.filter((u): u is string => typeof u === "string" && u !== "");
+    if (usable.length === 0) continue;
+    out.push(usable.length === urls.length ? (server as RTCIceServer) : { ...(server as RTCIceServer), urls: usable });
+  }
+  return out;
+}
+
+/**
+ * Pool entries with a usable id.
+ *
+ * An entry whose `iceServers` did not survive is KEPT, with an empty list,
+ * rather than dropped. The id is what the two peers agree on, and an entry that
+ * carries no URL contributes nothing to `chooseRtcConfig` and no relay to
+ * `hasTurnServer` — so keeping it is already harmless, while dropping it would
+ * be a pool that differs from the one the server described.
+ */
+function sanitizeRelays(value: unknown): RelayEntry[] {
+  if (!Array.isArray(value)) return [];
+  const out: RelayEntry[] = [];
+  for (const relay of value) {
+    if (typeof relay !== "object" || relay === null) continue;
+    const raw = relay as { id?: unknown; iceServers?: unknown };
+    if (typeof raw.id !== "string" || raw.id === "") continue;
+    const iceServers = sanitizeIceServers(raw.iceServers);
+    const unchanged = Array.isArray(raw.iceServers)
+      && iceServers.length === raw.iceServers.length
+      && iceServers.every((s, i) => s === (raw.iceServers as unknown[])[i]);
+    out.push(unchanged ? (relay as RelayEntry) : { ...(relay as RelayEntry), iceServers });
+  }
+  return out;
 }
 
 /** `Retry-After`, in ms, when it is a delta-seconds value we are willing to wait. */
@@ -172,10 +384,34 @@ async function deniedReason(res: Response): Promise<RelayAvailability | null> {
   return null;
 }
 
+/**
+ * The room's ICE configuration. **This function cannot reject, and cannot hang.**
+ *
+ * Both halves of that are load-bearing rather than tidy. `App.svelte` awaits
+ * this at every room join with no `catch` and no timeout of its own, and holds
+ * `roomIcePending` — the gate every transport for that room is built behind —
+ * until the answer lands. A rejection and a stall are therefore the same bug
+ * from the page's point of view: the gate stays shut for the life of the tab.
+ *
+ * So every failure is classified into a `relayStatus` and returned with the
+ * empty list (never a third-party STUN — see `FALLBACK`), the attempt is
+ * bounded by `ICE_ATTEMPT_TIMEOUT_MS`, and the catch below is the backstop for
+ * a bug in any of that: it degrades to the same answer an unreadable `/api/ice`
+ * produces, loudly, instead of wedging the room.
+ */
 export async function fetchIceConfig(
   code = "",
   transport: IceTransport = browserTransport,
 ): Promise<IceConfig> {
+  try {
+    return await readRoomIceConfig(code, transport);
+  } catch (err) {
+    console.error("relayium: /api/ice classification failed", err);
+    return { iceServers: FALLBACK, relays: [], relayStatus: "unavailable" };
+  }
+}
+
+async function readRoomIceConfig(code: string, transport: IceTransport): Promise<IceConfig> {
   const q = code ? `?code=${encodeURIComponent(code)}` : "";
   const url = `/api/ice${q}`;
   let read = await readIceConfig(url, transport);

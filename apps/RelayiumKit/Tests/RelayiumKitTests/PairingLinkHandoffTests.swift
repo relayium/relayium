@@ -113,6 +113,12 @@ final class PairingLinkHandoffTests: XCTestCase {
             lock.withLock { _sent[lane, default: []].append(bytes) }
         }
         func bufferedAmount(on lane: LinkLane) -> UInt64 { 0 }
+        /// A TRUTHFUL bounded stand-in, never `.infinity`. These tests drive
+        /// routing and lifecycle rather than frame sizing, and a double that
+        /// claimed "no ceiling at all" would be the one shape a real transport
+        /// must never report by default — it would let a lane size a frame from
+        /// local policy alone and call that negotiated.
+        var negotiatedMaxMessageBytes: Double { DEFAULT_MAX_FRAME_BYTES }
         private var _closed = false
         var isClosed: Bool { lock.withLock { _closed } }
         func close() { lock.withLock { _closed = true } }

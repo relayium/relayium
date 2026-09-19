@@ -91,6 +91,10 @@ class LinkTransport(
      *  handful, and an unbounded list is a lever a hostile relay can pull. */
     private val heldCandidates = ArrayList<IceCandidate>()
 
+    /** The LOCAL half of the same race: candidates this device gathered before
+     *  the description they belong to was signalled. See [LocalCandidateGate]. */
+    private val localCandidates = LocalCandidateGate<IceCandidate>()
+
     /** Pre-ready frames, in arrival order across both lanes, bounded combined
      *  in BYTES and in COUNT — a zero-byte frame costs no bytes but still costs
      *  an entry. Overflow fails closed: a dropped admitted frame is the one
@@ -302,12 +306,59 @@ class LinkTransport(
 
     /** The local description is APPLIED before the signal goes out. Sending
      *  first invites an answer to an offer the stack has not committed to, and
-     *  a setLocalDescription failure must fail the link, not be ignored. */
+     *  a setLocalDescription failure must fail the link, not be ignored.
+     *
+     *  JSEP starts ICE gathering as part of applying a local description, and
+     *  nothing orders the candidate callback against the observer below, so the
+     *  gate closes first: a candidate that overtakes the offer or the answer
+     *  reaches a peer that has no remote description to attach it to, and this
+     *  side never re-sends it. See [LocalCandidateGate]. */
     private fun setLocalAndSend(description: SessionDescription, sendSignal: () -> Unit) {
+        beginLocalDescription()
         connection?.setLocalDescription(
-            sdpSet(onSuccess = sendSignal, onFailure = { fail("sdp-failed") }),
+            sdpSet(
+                onSuccess = { onLocalDescriptionApplied(sendSignal) },
+                onFailure = { fail("sdp-failed") },
+            ),
             description,
         )
+    }
+
+    /** Hold local candidates until the description now being applied has been
+     *  signalled. Executor thread; the native `setLocalDescription` is the only
+     *  thing between this and [onLocalDescriptionApplied]. */
+    internal fun beginLocalDescription() {
+        localCandidates.arm()
+    }
+
+    /** The local description landed: its signal goes out FIRST, then every
+     *  candidate the gate held for it, in gathering order. Executor thread. */
+    internal fun onLocalDescriptionApplied(sendSignal: () -> Unit) {
+        if (closed) return
+        sendSignal()
+        for (candidate in localCandidates.release()) emitLocalCandidate(candidate)
+    }
+
+    /** One locally gathered candidate, from the native observer. Executor
+     *  thread; the ONLY path by which a local candidate becomes a signal. */
+    internal fun onLocalIceCandidate(candidate: IceCandidate) {
+        // A gathering callback that lands after teardown is inert HERE as well
+        // as in the observer: the two answer to different callers, and a gate
+        // that can be reopened by a late candidate is not a gate.
+        if (closed) return
+        when (localCandidates.admit(candidate)) {
+            LocalCandidateGate.Admission.SEND -> emitLocalCandidate(candidate)
+            LocalCandidateGate.Admission.HOLD -> Unit
+            // Fail closed rather than truncate: dropping either end of the
+            // backlog silently changes which paths the peer gets to try, and
+            // a named failure beats a connection that quietly took a worse
+            // path — or none at all — for a reason nothing recorded.
+            LocalCandidateGate.Admission.OVERFLOW -> fail("local-candidate-overflow")
+        }
+    }
+
+    private fun emitLocalCandidate(candidate: IceCandidate) {
+        send(profile.candidate(candidate.sdp, candidate.sdpMid, candidate.sdpMLineIndex))
     }
 
     private fun addCandidate(candidate: IceCandidate) {
@@ -516,6 +567,10 @@ class LinkTransport(
         disconnectGrace.cancel()
         cancelTimers()
         heldCandidates.clear()
+        // Both halves of the candidate race. A held local candidate belongs to a
+        // description nobody will answer, and a later native callback finds
+        // `closed` and returns before it can reopen anything.
+        localCandidates.discard()
         captured.clear()
         // This runs on the executor thread — never a WebRTC observer stack —
         // which is what the dispose javadoc requires.
@@ -540,7 +595,7 @@ class LinkTransport(
         override fun onIceCandidate(candidate: IceCandidate) {
             executor.execute {
                 if (closed) return@execute
-                send(profile.candidate(candidate.sdp, candidate.sdpMid, candidate.sdpMLineIndex))
+                onLocalIceCandidate(candidate)
             }
         }
 

@@ -252,6 +252,31 @@ public final class WebRTCLinkReplacementTransport: NSObject {
     private var localCandidates = LinkCandidateGate<RTCIceCandidate>()
     private var remoteCandidates = LinkCandidateGate<RTCIceCandidate>()
 
+    // MARK: - the negotiated per-message ceiling
+
+    /// Written exactly once, on `queue`, from the remote description that was
+    /// actually APPLIED — and on this path that description is also one whose
+    /// tag verified under the link's own key, so the ceiling cannot be lowered
+    /// by a signalling relay.
+    ///
+    /// It shares `callbackLock` because that lock is already this class's ONE
+    /// leaf: nothing is ever called while it is held, so a second leaf next to
+    /// it would buy nothing but another lock to reason about. A consumer reads
+    /// this from inside an attach that is about to take a driver lock, so it
+    /// must not enter `queue` — which may be occupied by `onReady` running that
+    /// consumer's own code.
+    private var _negotiatedMaxMessageBytes = LINK_CONSERVATIVE_MAX_MESSAGE_BYTES
+
+    /// `LinkLiveTransport.negotiatedMaxMessageBytes`. Settled before `onReady`
+    /// and constant afterwards.
+    ///
+    /// A rebuild negotiates its OWN association, so this is free to be smaller
+    /// than the transport it replaces — a relayed path or a peer that changed
+    /// stacks between generations. The lanes re-read it at attach for exactly
+    /// that reason; carrying the establishment-time number forward would keep
+    /// producing frames the new channel refuses.
+    public var negotiatedMaxMessageBytes: Double { callback { _negotiatedMaxMessageBytes } }
+
     /// - Parameters:
     ///   - identity: the authenticated link this transport is being rebuilt
     ///     under. Its peer, its deterministic role, its SAS, its authentication
@@ -549,6 +574,13 @@ public final class WebRTCLinkReplacementTransport: NSObject {
                 // so this block is a separate queue item.
                 let now = self.now()
                 guard !self.expiredLocked(at: now) else { return }
+                // The description APPLIED, so what it advertised is this
+                // rebuild's real ceiling — its own, not the one the transport it
+                // replaces negotiated. Parsed first and stored second:
+                // `callback` is this class's one leaf, and the rule that makes
+                // it a leaf is that nothing runs while it is held.
+                let ceiling = linkNegotiatedMaxMessageBytes(remoteSDP: description.sdp)
+                self.callback { self._negotiatedMaxMessageBytes = ceiling }
                 // The peer answered or offered, under this link's own key: the
                 // strongest evidence there is that the genuine peer is there.
                 self.noteLocked(milestone, at: now)

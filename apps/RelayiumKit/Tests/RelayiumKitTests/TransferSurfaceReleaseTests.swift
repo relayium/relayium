@@ -133,6 +133,12 @@ final class TransferSurfaceReleaseTests: XCTestCase {
         func receive(from: String, signal: JSONValue) {}
         func send(_ bytes: [UInt8], on lane: LinkLane) throws {}
         func bufferedAmount(on lane: LinkLane) -> UInt64 { 0 }
+        /// A TRUTHFUL bounded stand-in, never `.infinity`. These tests drive
+        /// routing and lifecycle rather than frame sizing, and a double that
+        /// claimed "no ceiling at all" would be the one shape a real transport
+        /// must never report by default — it would let a lane size a frame from
+        /// local policy alone and call that negotiated.
+        var negotiatedMaxMessageBytes: Double { DEFAULT_MAX_FRAME_BYTES }
         func close() { lock.lock(); _closed = true; lock.unlock() }
     }
 

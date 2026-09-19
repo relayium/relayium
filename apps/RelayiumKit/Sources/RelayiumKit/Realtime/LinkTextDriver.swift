@@ -178,9 +178,10 @@ public final class LinkTextDriver: @unchecked Sendable {
     private let identity: LinkIdentity
     private let session: LinkTextSession
     private let scheduler: LinkRecoveryScheduler
-    /// What the CONNECTION negotiated, not the product cap. A sealed 64 KiB
-    /// message is 65 557 B and does not fit a peer that negotiated the RFC 8841
-    /// default of 65 536.
+    /// LOCAL policy: the largest frame this side is willing to produce whatever
+    /// a peer advertises, and never the product cap. A sealed 64 KiB message is
+    /// 65 557 B and does not fit a peer that negotiated the RFC 8841 default of
+    /// 65 536 — which is why this is only half the answer; see `frameCeiling`.
     private let maxFrameBytes: Double
     private let sendBufferHighWater: UInt64
     private let sendBufferPollInterval: TimeInterval
@@ -193,6 +194,16 @@ public final class LinkTextDriver: @unchecked Sendable {
     /// Bumped on every transport change. Names the wire generation an emission
     /// belongs to and the drain, poll or timer that is allowed to carry it.
     private var epoch = 0
+    /// What a message has to fit inside RIGHT NOW: the smaller of
+    /// `maxFrameBytes` and what the CURRENT transport negotiated.
+    ///
+    /// Recomputed at exactly the two moments the transport changes — `init` and
+    /// `onAttach` — from the incoming transport, with no lock held. Text does
+    /// not fragment, so an oversized frame here is not a slow send: it is a
+    /// nonce burned on bytes the channel refuses, and no replacement can repair
+    /// the sequence that leaves. Carrying an establishment-time number across a
+    /// rebuild that negotiated LESS is precisely how that happens.
+    private var frameCeiling: Double = DEFAULT_MAX_FRAME_BYTES
 
     /// The TEXT lane is terminal. The link and the transport may be perfectly
     /// alive, and the file lane certainly is.
@@ -303,6 +314,10 @@ public final class LinkTextDriver: @unchecked Sendable {
         self.transport = transport
         self.currentToken = ObjectIdentifier(transport)
         self.epoch = 1
+        // With no lock held — this is `init`, and `negotiatedMaxMessageBytes` is
+        // the one transport property that never enters the transport's queue.
+        self.frameCeiling = linkFrameCeiling(localPolicy: maxFrameBytes,
+                                             negotiated: transport.negotiatedMaxMessageBytes)
         // Deliberately nothing else. `transport.onFrame` is not this driver's.
     }
 
@@ -597,7 +612,12 @@ public final class LinkTextDriver: @unchecked Sendable {
         }
         let effects: [LinkTextSessionEffect]
         do {
-            effects = try session.send(body, maxFrameBytes: maxFrameBytes)
+            // `frameCeiling`, not `maxFrameBytes`: this is re-proven to belong
+            // to the transport the caller probed — `epoch == mine` and
+            // `live === probed` above — so it is the CURRENT connection's
+            // ceiling, and the refusal it produces happens before the sender is
+            // touched and therefore costs no nonce.
+            effects = try session.send(body, maxFrameBytes: frameCeiling)
         } catch let error as LinkTextSessionError {
             return .refused(error)
         } catch {
@@ -695,6 +715,12 @@ public final class LinkTextDriver: @unchecked Sendable {
         guard let live = replacement as? LinkLiveTransport else {
             throw LinkTextDriverError.replacementNotLive
         }
+        // BEFORE the lock: a rebuild negotiates its own association and may have
+        // settled on LESS, and the very next message must already be bounded by
+        // it. Asking a transport anything under `state` — or under `sendGate` —
+        // is what this driver never does.
+        let ceiling = linkFrameCeiling(localPolicy: maxFrameBytes,
+                                       negotiated: live.negotiatedMaxMessageBytes)
 
         state.lock()
         guard !linkEnded else {
@@ -711,6 +737,7 @@ public final class LinkTextDriver: @unchecked Sendable {
         textTransportClosing = false
         transport = live
         currentToken = ObjectIdentifier(live)
+        frameCeiling = ceiling
         wireOwner = mine
         // Unreachable in the coordinator's ordering — a gap with unflushed work
         // has already failed this lane closed — but an attach is a publication

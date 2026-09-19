@@ -253,8 +253,16 @@ public final class LinkLaneOwner: @unchecked Sendable {
     ///     publication queue: the file driver installs the frame route as its
     ///     last initializer act, and `WebRTCLinkTransport` stores its callback
     ///     slots unsynchronised and replays nothing.
-    ///   - maxFrameBytes: what the CONNECTION negotiated. One number for both
-    ///     lanes, because it is a property of the channel rather than of a lane.
+    ///   - maxFrameBytes: LOCAL policy — the largest frame either lane may
+    ///     produce whatever a peer advertises. One number for both lanes,
+    ///     because it is a property of the channel rather than of a lane.
+    ///
+    ///     It is deliberately NOT the negotiated ceiling, and production passes
+    ///     nothing here for exactly that reason: each driver asks its CURRENT
+    ///     transport for `negotiatedMaxMessageBytes` and sends the smaller of
+    ///     the two, re-reading it whenever a replacement attaches. A ceiling
+    ///     handed in at construction could only ever be the one the first
+    ///     association negotiated.
     ///   - onTextEvent: the conversation's events. `received` is the only place
     ///     plaintext leaves this object.
     ///   - onFileEvent: the transfer's events.

@@ -1839,6 +1839,54 @@ with `-redis-addr <host:port>` and matching TURN flags.
 
 ---
 
+## Cross-network hardening regressions `[AUTOMATED]`
+
+A cross-client review of the pairing-code path (2026-09-19) landed fixes across
+four disjoint author scopes — Web, Apple, Android and the signalling server —
+each with permanent owning regressions.
+
+Each fix has a **targeted negative control**, recorded with it: the regression
+was demonstrated either against the original source or, where the fix introduced
+new API the original cannot compile against, by a targeted mutation of the
+shipped behaviour. That is per fix, not per test — the suites below also carry
+invariant tests that were green before and must stay green.
+
+**These are source-level fixes.** The published Android preview and the current
+native macOS/iOS builds were produced before them and do not contain them; see
+`docs/android-development.md` for the Android side of that boundary.
+
+| What it covers | Owning suite | Level | Command (from the repository root) |
+|---|---|---|---|
+| Web `/api/ice` attempt liveness, cancellation and body-shape classification — a stalled body ends on its own deadline, and the malformed shapes reproduced in review resolve a classified result instead of rejecting | `web/src/lib/ice-liveness.test.ts`, plus the owning `ice.test.ts` | Vitest unit | `cd web && npx vitest run src/lib/ice-liveness.test.ts src/lib/ice.test.ts` |
+| Web candidate ordering and lifetime — SDP leaves before its own candidates, remote candidates wait for a remote description and flush FIFO once, bounded at 64 and fail-closed, and the handshake and signal callbacks reproduced arriving after close no longer act | `web/src/lib/webrtc-core.candidates.test.ts`, plus the owning `webrtc.test.ts` | Vitest unit | `cd web && npx vitest run src/lib/webrtc-core.candidates.test.ts src/lib/webrtc.test.ts` |
+| Apple negotiated per-message ceiling — the RFC 8841 §6 SDP parser, and both real transports publishing what the applied remote description advertised | `LinkMessageCeilingTests` | Swift XCTest (creates real `RTCPeerConnection`s in-process; no peer, no network) | `cd apps/RelayiumKit && swift test --filter LinkMessageCeilingTests` |
+| Apple ceiling followed to the wire — file chunks, file manifests and text all bounded by the CURRENT transport, re-read when a replacement negotiates less | `LinkNegotiatedFrameCeilingTests` | Swift XCTest | `cd apps/RelayiumKit && swift test --filter LinkNegotiatedFrameCeilingTests` |
+| Android local candidate gate, remote peer departure, and room signalling/ICE overlap | `LocalCandidateGateTest`, `LinkTransportCandidateOrderTest`, `PeerDepartureTest`, `RoomIceOverlapTest` | JVM unit (no SDK for the pure gate; the rest need `ANDROID_HOME`) | `cd apps/android && ./gradlew -Prelayium.android=true :app:testDebugUnitTest` |
+| Server signalling admission and frame budget — an unknown type, a repeat `join` and a pre-join `signal` all cost what a `signal` costs, and forwarding now requires a joined connection rather than only a budget | `server/internal/signal/frame_budget_test.go` | Go, race-enabled, real WebSockets | `cd server && go test -race ./internal/signal` |
+
+The real-browser entry points that exercise these paths end to end already exist
+and are unchanged: `npm run test:e2e:code-room` and `npm run test:e2e:mixed` in
+`web/`, and `scripts/native-web-pairing-acceptance.sh` for macOS-native ↔ real
+browser. A review-time variant of that last one — the browser advertising
+`a=max-message-size:65536` so a native sender must fragment a 70 000-byte file,
+with the browser independently asserting every inbound frame — was run as private
+acceptance evidence and is deliberately NOT in the repository; the permanent
+script above is its unmodified parent.
+
+**What the table is, and is not.** Every suite in it is a unit or in-process
+test; the Apple ones drive real libwebrtc SDP generation in a single process,
+which is not interoperability with another stack.
+
+The private variant above is the one piece of real two-stack integration
+evidence: six rounds, both role assignments, the exact 65 536-byte maximum and
+the full 70 000 position-dependent bytes verified each round. It is review
+evidence rather than a repeatable repository gate, and both endpoints ran on one
+host over loopback signalling and host ICE candidates — no physical device, no
+Safari, no second real network and no throughput measurement. No claim about cross-network speed or connection time
+rests on any of this.
+
+---
+
 ## Ephemeral encrypted text transfer `[MANUAL]`
 
 Phase 1 of the messaging feature (spec:

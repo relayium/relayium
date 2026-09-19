@@ -35,6 +35,29 @@ public protocol LinkLiveTransport: AnyObject {
     /// initial transport that is this driver, and for a replacement it is
     /// `LinkRecoveryCoordinator`, which applies its own staleness rules first.
     var onFrame: ((LinkLane, [UInt8]) -> Void)? { get set }
+    /// The per-message ceiling THIS transport negotiated, in bytes — the number
+    /// every outbound frame on either lane has to fit inside.
+    ///
+    /// Two properties, and both are load-bearing:
+    ///
+    ///  - **Stable from publication onward.** A transport's remote description
+    ///    is applied once, before `onReady`, and never replaced; a rebuild is a
+    ///    different object with its own negotiation. So a driver may read this
+    ///    at the moment it takes the transport over and keep the answer for that
+    ///    transport's whole life — and MUST re-read it when it attaches another,
+    ///    because a replacement is free to negotiate less.
+    ///  - **Non-blocking.** Unlike `send`, `bufferedAmount` and `isClosed`, this
+    ///    does NOT enter the transport's serial queue: the real transports
+    ///    publish it into a leaf-locked slot from the queue and read it with
+    ///    nothing else held. That is what lets a driver read it from inside its
+    ///    own initializer and from an attach that is about to take a lock,
+    ///    without an inversion against a queue a client callback may be sitting
+    ///    on.
+    ///
+    /// `.infinity` is an ANSWER — the peer said it can receive a message of any
+    /// size — not an absence. `linkFrameCeiling` is what bounds it by what this
+    /// side is willing to send.
+    var negotiatedMaxMessageBytes: Double { get }
     /// Safe from any thread, including from inside a callback. May block: the
     /// real transports enter their own serial queue synchronously, which is why
     /// this driver never calls it while holding a lock of its own.
@@ -300,6 +323,10 @@ public final class LinkFileDriver: @unchecked Sendable {
     private let scheduler: LinkRecoveryScheduler
     private let makeProducer: LinkFileProducerFactory
     private let makeDestination: LinkFileDestinationFactory
+    /// LOCAL policy: the largest frame this side is willing to produce whatever
+    /// a peer advertises. `DEFAULT_MAX_FRAME_BYTES` in production, an injected
+    /// number in a test. It is a cap and never a floor — see `frameCeiling`,
+    /// which is what anything outbound actually asks.
     private let maxFrameBytes: Double
     private let maxBufferedInboundBytes: Int
     private let maxBufferedInboundFrames: Int
@@ -323,6 +350,21 @@ public final class LinkFileDriver: @unchecked Sendable {
     /// Bumped on every transport change. Names the wire generation an emission
     /// belongs to and the drain that is allowed to carry it.
     private var epoch = 0
+    /// What every frame this driver produces has to fit inside RIGHT NOW: the
+    /// smaller of `maxFrameBytes` and what the CURRENT transport negotiated.
+    ///
+    /// State rather than a derived read, and that is the whole fix. It used to
+    /// be `maxFrameBytes` alone — a `let` fixed at construction — so a rebuild
+    /// that negotiated LESS kept producing frames sized for the association
+    /// that died. It is recomputed at exactly the two moments the transport
+    /// changes, from the incoming transport, with no lock held: `init` and
+    /// `onAttach`. Both consumers below read it while `state` is held, which is
+    /// safe precisely because nothing here asks the transport anything under a
+    /// lock.
+    ///
+    /// A gap deliberately leaves it alone. Nothing may be produced without a
+    /// transport, and the next attach overwrites it before anything can be.
+    private var frameCeiling: Double = DEFAULT_MAX_FRAME_BYTES
 
     /// The FILE lane is terminal. The link may still be perfectly alive.
     private var fileTerminal = false
@@ -499,6 +541,10 @@ public final class LinkFileDriver: @unchecked Sendable {
 
         self.transport = transport
         self.epoch = 1
+        // With no lock held — this is `init`, and `negotiatedMaxMessageBytes` is
+        // the one transport property that never enters the transport's queue.
+        self.frameCeiling = linkFrameCeiling(localPolicy: maxFrameBytes,
+                                             negotiated: transport.negotiatedMaxMessageBytes)
         let token = ObjectIdentifier(transport)
         self.currentToken = token
         // LAST, and on the transport's own publication queue: from this line the
@@ -650,7 +696,12 @@ public final class LinkFileDriver: @unchecked Sendable {
 
     /// Launch the head of the queue if the lane can take it.
     public func pump() {
-        withState { applyLocked { session.pump() } }
+        // The CURRENT transport's ceiling, not the establishment-time one. A
+        // manifest is not a chunk: `LinkFileSession` seals it itself, so a
+        // ceiling that stopped at the driver would leave exactly one frame class
+        // — the largest one a folder send produces — sized for a connection that
+        // may be gone.
+        withState { applyLocked { session.pump(maxFrameBytes: frameCeiling) } }
     }
 
     /// Drop a batch that is still WAITING to launch.
@@ -753,6 +804,14 @@ public final class LinkFileDriver: @unchecked Sendable {
         guard let live = replacement as? LinkLiveTransport else {
             throw LinkFileDriverError.replacementNotLive
         }
+        // BEFORE the lock, for the reason `frameCeiling` documents: a rebuild
+        // negotiates its own association and may have settled on LESS than the
+        // transport it replaces, and the value has to be in hand before the swap
+        // so that the first producer this attach starts is already bounded by
+        // it. Asking a transport anything under `state` is what this driver
+        // never does.
+        let ceiling = linkFrameCeiling(localPolicy: maxFrameBytes,
+                                       negotiated: live.negotiatedMaxMessageBytes)
 
         let lock = state
         lock.lock()
@@ -769,6 +828,7 @@ public final class LinkFileDriver: @unchecked Sendable {
         outbox.removeAll()
         transport = live
         currentToken = ObjectIdentifier(live)
+        frameCeiling = ceiling
         wireOwner = mine
         if !fileTerminal {
             applyLocked { session.didAttachReplacementTransport() }
@@ -1368,7 +1428,11 @@ public final class LinkFileDriver: @unchecked Sendable {
         producerRun = ProducerRun(run: run, batch: batch, attempt: attempt, pumping: true)
         // The link's ONE sender, for the whole life of the link.
         let sender = identity.codecs.fileSender
-        let maxFrameBytes = self.maxFrameBytes
+        // Read HERE, per attempt, rather than captured once at construction: an
+        // attach installs a new ceiling and then starts a new attempt, so the
+        // producer a replacement starts is bounded by what that replacement
+        // negotiated.
+        let maxFrameBytes = self.frameCeiling
         let files = staged.files
         let stage = staged.stage
         producerQueue.async { [weak self] in

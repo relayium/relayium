@@ -227,6 +227,32 @@ public final class WebRTCLinkTransport: NSObject {
     private var localCandidates = LinkCandidateGate<RTCIceCandidate>()
     private var remoteCandidates = LinkCandidateGate<RTCIceCandidate>()
 
+    // MARK: - the negotiated per-message ceiling
+
+    /// Guards `_negotiatedMaxMessageBytes` and NOTHING else.
+    ///
+    /// A leaf, deliberately: it is taken around a single `Double` read or write
+    /// and nothing is ever called while it is held, so it cannot participate in
+    /// an inversion with `queue` or with a consumer's own lock. That is the
+    /// whole reason the value is not simply read off the queue on demand — a
+    /// driver asks for it from inside its own initializer and from an attach
+    /// that is about to take a driver lock, while `queue` may be occupied by
+    /// `onReady` running that very consumer's code.
+    private let ceilingLock = NSLock()
+    /// Written exactly once, on `queue`, from the remote description that was
+    /// actually APPLIED — never from one that failed, and never from a local
+    /// description, which says what THIS side can receive. Until then it is the
+    /// RFC 8841 floor, which is what an un-negotiated connection is worth.
+    private var _negotiatedMaxMessageBytes = LINK_CONSERVATIVE_MAX_MESSAGE_BYTES
+
+    /// `LinkLiveTransport.negotiatedMaxMessageBytes`. Settled before `onReady`
+    /// and constant afterwards: this transport applies one remote description
+    /// and `LinkSignalPolicy` drops a duplicate whole.
+    public var negotiatedMaxMessageBytes: Double {
+        ceilingLock.lock(); defer { ceilingLock.unlock() }
+        return _negotiatedMaxMessageBytes
+    }
+
     /// - Parameters:
     ///   - role: the deterministic role `LinkAdmission` decided (`linkRole`'s
     ///     smaller-id-offers rule). Never a preference of this transport's: two
@@ -552,6 +578,17 @@ public final class WebRTCLinkTransport: NSObject {
                 // deadline may have passed while it was in flight.
                 let now = self.now()
                 guard !self.expiredLocked(at: now) else { return }
+                // The description APPLIED, so what it advertised is now the
+                // association's real ceiling. Recorded here rather than at
+                // `onReady` because this is the only place the SDP exists, and
+                // before the milestone so that nothing which can publish runs
+                // ahead of it. Parsed first and stored second: `ceilingLock` is
+                // a leaf, and the rule that makes it one is that nothing runs
+                // while it is held.
+                let ceiling = linkNegotiatedMaxMessageBytes(remoteSDP: description.sdp)
+                self.ceilingLock.lock()
+                self._negotiatedMaxMessageBytes = ceiling
+                self.ceilingLock.unlock()
                 // The peer answered or offered: the strongest evidence there is
                 // that somebody is on the other end.
                 self.noteLocked(milestone, at: now)

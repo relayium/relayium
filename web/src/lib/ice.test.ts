@@ -25,8 +25,11 @@ describe("fetchIceServers", () => {
 
     const out = await fetchIceServers("424242");
     expect(out).toEqual(servers);
+    // `signal` carries fetchIceConfig's whole-attempt deadline; the browser
+    // transport is the one that can actually honour it, so it must pass it on.
     expect(fetchMock).toHaveBeenCalledWith("/api/ice?code=424242", {
       credentials: "include",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -37,7 +40,10 @@ describe("fetchIceServers", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await fetchIceServers("");
-    expect(fetchMock).toHaveBeenCalledWith("/api/ice", { credentials: "include" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/ice", {
+      credentials: "include",
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it("falls back to an empty list (never a third-party STUN) on a non-ok response", async () => {
@@ -454,7 +460,10 @@ describe("fetchIceConfig transport seam", () => {
 
     const cfg = await fetchIceConfig("424242");
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/ice?code=424242", { credentials: "include" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/ice?code=424242", {
+      credentials: "include",
+      signal: expect.any(AbortSignal),
+    });
     expect(cfg.iceServers).toEqual(STUN);
   });
 
@@ -473,11 +482,24 @@ describe("fetchIceConfig transport seam", () => {
   it("hands the transport the same URL the browser path would have requested", async () => {
     const transport = vi.fn().mockResolvedValue(reply({ iceServers: STUN }));
 
+    // The URL is the contract the Electron transport checks itself against; the
+    // second argument carries the attempt deadline and may be ignored (see
+    // `IceRequestInit`), so it is asserted separately below.
     await fetchIceConfig("", transport);
-    expect(transport).toHaveBeenLastCalledWith("/api/ice");
+    expect(transport).toHaveBeenLastCalledWith("/api/ice", expect.anything());
 
     await fetchIceConfig("424242", transport);
-    expect(transport).toHaveBeenLastCalledWith("/api/ice?code=424242");
+    expect(transport).toHaveBeenLastCalledWith("/api/ice?code=424242", expect.anything());
+  });
+
+  // A transport with ONE parameter is still an IceTransport — the Electron
+  // renderer's is exactly that, because its request runs in main under main's
+  // own deadline and the renderer may not cancel it. The deadline must not
+  // depend on the transport honouring it.
+  it("works with a transport that takes no request options at all", async () => {
+    const transport = (url: string) => Promise.resolve(reply({ iceServers: STUN }) as unknown as Response);
+    const cfg = await fetchIceConfig("424242", transport);
+    expect(cfg.iceServers).toEqual(STUN);
   });
 
   // The four verdicts a re-implementation is most likely to lose. Each is

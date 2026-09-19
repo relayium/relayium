@@ -15,6 +15,22 @@
 //
 // So this file does exactly one thing: turn main's reply back into the
 // `Response` the shared classifier already knows how to read.
+//
+// ## The `signal` this transport does not take
+//
+// `IceTransport` now offers an `AbortSignal` carrying `fetchIceConfig`'s
+// whole-attempt deadline. This transport deliberately ignores it, and the
+// signature below simply omits the parameter — a shorter function is still an
+// `IceTransport`, so that is a statement rather than an oversight.
+//
+// The request is not ours to cancel: it is running in main, behind an IPC
+// surface the renderer may not address, under main's own deadline and its own
+// per-room in-flight bound, and main releases it when the room's socket ends.
+// That timeout stays authoritative for the connection and its cleanup. What
+// the renderer needs from the deadline — that `fetchIceConfig` always settles
+// — it gets anyway: `readIceConfig` races the deadline against the attempt
+// rather than waiting for an abort to be honoured, so a reply that arrives
+// after it is discarded rather than awaited.
 
 import type { IceTransport } from "../../../../../web/src/lib/ice";
 import type { IceBridge } from "./bridge.js";

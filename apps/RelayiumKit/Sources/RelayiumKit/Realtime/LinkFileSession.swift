@@ -387,9 +387,34 @@ public final class LinkFileSession {
     /// nonce-bearing frame for a batch the lane never admitted is one the lane
     /// would refuse to count, leaving the peer's view of the sequence and this
     /// side's disagreeing with nothing able to repair it.
-    public func pump() -> [LinkFileSessionEffect] {
+    /// - Parameter maxFrameBytes: what THIS connection can carry, already
+    ///   reduced to local policy by the driver. It is not decoration: the
+    ///   manifest is the one nonce-bearing frame class this session seals
+    ///   itself, so a ceiling that reached the producer and stopped here would
+    ///   leave a folder send emitting a single up-to-200 KiB `BATCH_ENC` at a
+    ///   peer that negotiated 64 KiB — the largest frame the lane ever produces,
+    ///   and the first one it sends.
+    ///
+    ///   The default exists for the several dozen test call sites that predate
+    ///   the parameter and do not care about sizing. The ONE production caller,
+    ///   `LinkFileDriver.pump()`, always passes its current transport's
+    ///   ceiling; a new caller that relies on the default is relying on an
+    ///   establishment-time number and is wrong.
+    public func pump(maxFrameBytes: Double = DEFAULT_MAX_FRAME_BYTES) -> [LinkFileSessionEffect] {
         guard !lane.codecsPoisoned, !suspended, outbound == nil, let head = queue.first else {
             return []
+        }
+        // BEFORE the lane is reserved, before the era's realignment is spent and
+        // before a single nonce is: a connection whose ceiling cannot carry even
+        // the smallest conforming piece cannot carry this batch, and the only
+        // honest answer is to fail closed rather than emit one frame the peer
+        // will refuse. It ends the LANE rather than just this batch because the
+        // number is the PEER's advertised receive limit — a property of the peer,
+        // not of the path — so a rebuild to the same peer would negotiate it
+        // again, and a queue that silently never launches is the one outcome a
+        // user cannot act on.
+        guard (try? piecePlainBytes(maxFrameBytes: maxFrameBytes)) != nil else {
+            return failLane()
         }
         var effects: [LinkFileSessionEffect] = []
         let sizes = head.files.map(\.size)
@@ -429,14 +454,22 @@ public final class LinkFileSession {
         }
         queue.removeFirst()
         do {
-            for frame in try codecs.fileSender.batchFrames(head.files) {
+            // FRAGMENTED to what this connection negotiated. `batchFrame` — the
+            // single-frame form — cannot be used here for the reason its own
+            // header gives: `MANIFEST_MAX_BYTES` (200 KiB) is larger than
+            // `CHUNK_SIZE`, so a legal folder send can produce a manifest no
+            // 64 KiB peer can take, and one that is refused costs the lane every
+            // nonce it spent.
+            for frame in try codecs.fileSender.batchFrames(head.files,
+                                                           maxFrameBytes: maxFrameBytes) {
                 try lane.didProduceFrame(frame)
                 effects.append(.sendFrame(frame))
             }
         } catch {
-            // The manifest was validated at `enqueue`, so reaching here means a
-            // partially sealed manifest has already spent nonces the peer counts
-            // and this side cannot say which. Nothing later can repair that.
+            // The manifest was validated at `enqueue` and the ceiling above it,
+            // so reaching here means a partially sealed manifest has already
+            // spent nonces the peer counts and this side cannot say which.
+            // Nothing later can repair that.
             lane.retireOutboundBatch()
             return effects + failLane()
         }

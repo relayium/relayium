@@ -21,6 +21,20 @@ final class QueuedFakeTransport: LinkReplacementTransport, LinkLiveTransport, @u
     var onError: ((Error) -> Void)?
     var onClose: (() -> Void)?
 
+    /// What this fake says its association negotiated.
+    ///
+    /// `DEFAULT_MAX_FRAME_BYTES` by default, never `.infinity`: a double must
+    /// not claim "no ceiling at all" just to keep a suite green, and this value
+    /// leaves every test that does not care about sizing reading exactly the
+    /// driver's own `maxFrameBytes` — which is what they have always asserted
+    /// against. A test that DOES care sets it before the driver takes the
+    /// transport over, including to `.infinity` when unbounded is the subject.
+    private var _negotiatedMaxMessageBytes: Double = DEFAULT_MAX_FRAME_BYTES
+    var negotiatedMaxMessageBytes: Double {
+        get { slots.lock(); defer { slots.unlock() }; return _negotiatedMaxMessageBytes }
+        set { slots.lock(); defer { slots.unlock() }; _negotiatedMaxMessageBytes = newValue }
+    }
+
     init() { queue.setSpecific(key: key, value: true) }
 
     private func onQueue<T>(_ body: () -> T) -> T {

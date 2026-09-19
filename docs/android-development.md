@@ -108,6 +108,71 @@ the manifest says `available: false`, and every surface — the card, the
 static twins and the app itself — reports "no download is published" rather than
 inventing one.
 
+## Unreleased engineering changes — not in any published APK
+
+**Source only.** These landed on the cross-network review branch after 0.2.4 and
+are not signed, not published and not in the feed. The installed public preview
+is still `0.2.4` (versionCode 7) and does **not** contain them; a phone that
+updated to 0.2.4 has none of this. No version was bumped.
+
+Three fixes from a cross-client review of the pairing-code path, alongside the
+Web, Apple and server halves recorded in `docs/TESTING.md`:
+
+* **Local ICE candidates wait for the description they belong to.**
+  `onIceCandidate` no longer sends straight out. `setLocalAndSend` closes a gate
+  before `setLocalDescription`, sends the offer or answer first, then releases
+  held candidates in arrival order — the same rule on all three paths
+  (initiator offer, responder answer, restart), bounded at 64 with a fail-closed
+  overflow rather than a silent truncation. JSEP orders nothing between
+  `onIceCandidate` and the observer callback that sends the description, so a
+  candidate MAY overtake it; how often libwebrtc does that is not measured here
+  and is not claimed. What a peer does with an early candidate depends on the
+  peer — sending the description first removes the question instead of relying
+  on what the far end has constructed by then. Remote candidate handling
+  (`heldCandidates`) is unchanged, and candidate priority still comes from the
+  candidate fields, not from arrival order.
+* **A remote peer leaving the room no longer ends a healthy link.**
+  `onPeerLeft` ends the session only when the link is not yet established. A
+  signed, authenticated leave still ends it; a real `FAILED`/`CLOSED` still ends
+  it; departure before the handshake completes still ends it rather than leaving
+  a pending connection stranded; and this side's own socket paths are untouched.
+  This is not a resume layer — if the transport really dies afterwards, the
+  existing termination path still runs, and there is no UI marker for a departed
+  peer.
+* **Joining a room no longer waits on the ICE fetch.** `openRoom` opens
+  signalling first and fetches relay configuration in parallel, behind a
+  room-scoped gate: no `PeerConnection` is built before that room's ICE is
+  ready, and signalling that arrives meanwhile is held in arrival order, bounded
+  at 64 and fail-closed on overflow, re-fenced against both the room and link
+  generation. Frames held for a peer that has since left are dropped rather than
+  drained into a new connection, a failed fetch degrades to an empty relay list,
+  and a local-source (`usesBackend = false`) session still makes zero HTTP
+  requests. The gain is structural — one fewer API round trip before the peer
+  can be seen — and is **not** a measured connection-time improvement.
+
+Gates passed on the branch: `:app:testDebugUnitTest` 1212 and `:protocol:test`
+206, both re-run with `--rerun-tasks`, and `:app:lintDebug` (`warningsAsErrors`)
+in an ordinary run — its inputs were unchanged, so it was up to date rather than
+re-executed. The new suites are `LocalCandidateGateTest`,
+`LinkTransportCandidateOrderTest`, `PeerDepartureTest` and `RoomIceOverlapTest`.
+Each fix carries a targeted negative control: the peer-departure and room-overlap
+regressions were reproduced against the original `TransferController`, and the
+candidate gate — a new class the original cannot compile against — against a
+mutation that restores the old send-immediately behaviour. **All of it is
+host-JVM evidence** — no emulator run, no physical device, no second real network
+and no throughput measurement, so nothing here supports a claim about
+cross-network speed. The one step JVM tests cannot reach is the native
+`setLocalDescription` callback itself, between the three production functions the
+candidate-gate tests drive.
+
+One boundary worth stating: because the gate re-arms on every local description,
+a renegotiation whose `setLocalDescription` never calls back will fail an
+already-established link closed after 64 held candidates. That is the requested
+fail-closed semantics rather than an oversight.
+
+Not touched: the wire format, the protocol version, `heldCandidates`, the update
+feed, signing and publishing.
+
 ## Changes released in 0.2.4
 
 **Released in 0.2.4 (versionCode 7).** Fixes for three defects the owner

@@ -37,6 +37,7 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -499,10 +500,48 @@ class TransferController(
      * from a value the UI thread may have observed one edge ago.
      */
     private val isLegacy: Boolean get() = wireProfile is WireProfile.Legacy
+
+    /**
+     * Whether the CURRENT connection reached READY — both lanes open and the
+     * peer's key verified against its commitment.
+     *
+     * [keys] is written by [onLinkReady] and cleared by [closeConnection], both
+     * on the session thread, so this is the session's own answer rather than a
+     * value the UI thread may have observed one edge ago. A transport that
+     * merely EXISTS is mid-handshake and is not established.
+     */
+    private val isLinkEstablished: Boolean get() = transport != null && keys != null
+
     private var keys: Crypto.SessionKeys? = null
     private var selfId: String = ""
     private var peerId: String = ""
     private var ice: IceConfig.Result = IceConfig.Result(emptyList(), "")
+
+    /** The ROOM generation [ice] was issued for, or -1 before any grant. See
+     *  [roomIceReady]; room generations are monotonic and never reused. */
+    private var iceRoom = -1
+
+    /** The in-flight ICE fetch for the current room, so a room that ends can
+     *  cancel the HTTP call it started rather than leaving it to resolve into
+     *  a generation check. */
+    private var iceJob: Job? = null
+
+    /** Establishment frames that reached this room before its ICE grant did,
+     *  in arrival order and bounded by [LinkProtocol.HELD_SIGNAL_MAX].
+     *  Capability announcements are NOT held — they build nothing, and the
+     *  roster the user is looking at must not wait on an HTTP round trip. */
+    private val heldRoomSignals = ArrayList<Pair<String, Json>>()
+
+    /** The one connection this room decided to build before its ICE grant
+     *  existed, re-fenced so it drops itself if the link or the room moved on.
+     *  At most one: a connection is what it holds, and there is only ever one.
+     *  [peer] names it so a departure can invalidate it explicitly. Every
+     *  current caller sets [peerId] before it defers, so the link fence inside
+     *  `run` already covers today's departures on its own; the name is here so
+     *  that stays true of a caller that does not. */
+    private class HeldStart(val peer: String, val run: () -> Unit)
+
+    private var heldStart: HeldStart? = null
 
     /** This pairing room welcomed us since it was (re)opened. See [onRoomClosed]. */
     private var pairingWelcomed = false
@@ -595,24 +634,144 @@ class TransferController(
      * fence a later edit can move is not a promise.
      */
     private fun openRoom(room: Int, source: ConnectionSource) {
+        resetRoomIce()
         if (!source.usesBackend) {
+            // No grant to wait for, and none may be asked for. The gate below
+            // opens immediately so this path behaves exactly as it always has.
             ice = IceConfig.Result(emptyList(), "")
+            iceRoom = room
             openSignaling(room, source)
             return
         }
-        scope.launch(sessionDispatcher) {
-            // Bounded and cancellable, with the room check that stops an old
-            // join's completion opening a room the user already left.
-            val fetched = deps.fetchIce(source)
+        // The rendezvous socket and the ICE grant are INDEPENDENT acquisitions
+        // of the same room, and serialising them cost this client a whole API
+        // round trip — up to the fetch's own ten-second deadline on a bad
+        // network — before the peer could even see it arrive. The Web has
+        // always started both at once (`App.svelte`). So: join now, gather the
+        // grant alongside, and hold back only the ONE thing that genuinely
+        // needs it.
+        //
+        // That one thing is a `PeerConnection`. Built before the grant lands it
+        // is built with no STUN and no relay, so a cross-network pair gathers
+        // host candidates that cannot reach each other and the link fails on a
+        // room whose credential was sitting in flight. [startTransport] holds
+        // the decision instead, and [onSignalFrame] holds the establishment
+        // frames that would raise one, bounded and in arrival order.
+        openSignaling(room, source)
+        iceJob = scope.launch(sessionDispatcher) {
+            val fetched = try {
+                // Bounded and cancellable; [resetRoomIce] cancels it, and the
+                // room check below stops an old join's completion writing into
+                // the room that replaced it.
+                deps.fetchIce(source)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                // The same answer the fetch gives a failed request: an EMPTY
+                // list, never an invented third-party default. A throwing
+                // dependency must degrade to host candidates, not wedge the
+                // room behind a gate that never opens.
+                IceConfig.Result(emptyList(), "")
+            }
             if (roomGen != room) return@launch
             ice = fetched
+            iceRoom = room
             // Pairing rooms only. The code-less relayium.com room is STUN-only by
             // server policy, so "no relay" there is the design, not a warning.
             if (source is ConnectionSource.Pairing) {
-                post { if (roomGen == room) _state.value = _state.value.copy(relayNote = fetched.relayNote) }
+                _state.value = _state.value.copy(relayNote = fetched.relayNote)
             }
-            openSignaling(room, source)
+            onRoomIceReady(room)
         }
+    }
+
+    /** Whether THIS room's ICE grant has landed. A grant belongs to the room it
+     *  was issued for: an empty list left over from a previous room is not this
+     *  room's answer, and the generation is what says so. */
+    private fun roomIceReady(): Boolean = iceRoom == roomGen
+
+    /**
+     * Whether a frame is worth holding for the grant at all.
+     *
+     * The hold sits ABOVE the generation routing and the admission rules, so
+     * without this every frame those layers would have dropped on arrival
+     * would instead occupy one of sixty-four slots and, at the bound, end a
+     * session. That turns traffic this client already ignores into a lever.
+     *
+     * Two things qualify, and nothing else:
+     *
+     *  - an ASK — an SDP or the content-free link request. It is the only kind
+     *    of frame that can build a connection, which is the only thing waiting
+     *    for the grant.
+     *  - whatever CHASES an ask: a candidate, a reveal, a commitment from a
+     *    peer this room is already holding an ask for, or has already committed
+     *    to ([peerId]) or raised a prompt for ([pendingPeer]). Held so the
+     *    replay keeps the peer's own order.
+     *
+     * A candidate from a peer with no ask in flight is dropped, not held —
+     * exactly as it is dropped today when the grant is already in hand and
+     * there is no transport to route it into. The resume generation is
+     * excluded outright: this stage refuses it in silence on every path.
+     */
+    private fun heldSignalMatters(from: String, signal: Signal): Boolean {
+        if (signal.generation == Signal.Generation.RESUME) return false
+        if (signal.sdpType != null || signal.isLinkRequest) return true
+        return from == peerId || from == pendingPeer ||
+            heldRoomSignals.any { (held, _) -> held == from }
+    }
+
+    /**
+     * The room lost sight of [peer]: nothing held for it may still be acted on.
+     *
+     * Without this, the pre-handshake half of a departure is silent. A frame
+     * held for the grant has not established anything yet, so [peerId] is
+     * still empty and `onPeerLeft` has nothing to end — and when the grant
+     * lands, the departed peer's offer builds a `PeerConnection` to a device
+     * that is no longer in the room, which then burns the whole setup deadline
+     * before it can say so.
+     */
+    private fun forgetHeldRoomWork(peer: String) {
+        if (peer.isEmpty()) return
+        heldRoomSignals.removeAll { (from, _) -> from == peer }
+        if (heldStart?.peer == peer) heldStart = null
+    }
+
+    /**
+     * This room's ICE grant landed. Everything held for it runs now, in the
+     * order it was held, and nothing else is replayed.
+     *
+     * The held connection decision goes first because that is the order the two
+     * happened in: the roster (or the user's tap) chose a peer, and the frames
+     * arrived afterwards into a connection that should already have existed.
+     */
+    private fun onRoomIceReady(room: Int) {
+        if (roomGen != room) return
+        val start = heldStart
+        heldStart = null
+        start?.run?.invoke()
+        val held = ArrayList(heldRoomSignals)
+        heldRoomSignals.clear()
+        // Fenced by the LINK as well as the room, because in a Nearby room the
+        // two come apart: a frame in this list can end the connection and leave
+        // the room standing, and the frames behind it were captured against the
+        // link that just went away. Replaying them would re-prompt, or
+        // re-establish, under a generation nobody held them for.
+        val link = epoch
+        for ((from, data) in held) {
+            if (roomGen != room || epoch != link) return
+            onSignalFrame(from, data)
+        }
+    }
+
+    /** Drop everything the ICE acquisition of a room that is ending owned. A
+     *  held frame and a held connection decision both name a room identity that
+     *  is about to stop existing, so neither may survive into the next one. */
+    private fun resetRoomIce() {
+        iceJob?.cancel()
+        iceJob = null
+        iceRoom = -1
+        heldRoomSignals.clear()
+        heldStart = null
     }
 
     private fun openSignaling(room: Int, source: ConnectionSource) {
@@ -625,9 +784,45 @@ class TransferController(
                     // The rendezvous saying a PHYSICAL connection closed. It
                     // retires whatever is bound to that id and nothing else: a
                     // Nearby room keeps listing every other device.
-                    if (peerId == this@TransferController.peerId && peerId.isNotEmpty()) {
+                    //
+                    // And it is a statement about the ROOM, not about the
+                    // connection. A WebRTC link is peer-to-peer: an established
+                    // one keeps carrying bytes after the socket that introduced
+                    // the two devices is gone, which is the same reason
+                    // [failRoom] leaves a live transfer running when the whole
+                    // room drops. Ending it here cost a running transfer every
+                    // time the peer's signalling socket dropped — a screen
+                    // lock, a Wi-Fi handover, a server restart — while the data
+                    // channel was still healthy. The Web deliberately does not
+                    // (`peer-workspace.svelte.ts`, `departed`).
+                    //
+                    // `transport != null` is NOT the test, and the difference
+                    // is the whole rule: a connection still in its handshake
+                    // has nothing to preserve and no channel but signalling, so
+                    // a departure before READY must end it rather than strand
+                    // it until its own setup deadline expires.
+                    if (peerId == this@TransferController.peerId && peerId.isNotEmpty() &&
+                        !isLinkEstablished
+                    ) {
                         endSession("error_connection_lost")
                     }
+                    // The PRE-handshake half of the same departure, and the two
+                    // halves are not covered by the same thing.
+                    //
+                    // A QUEUED frame is the reachable one: it was held before
+                    // any establishment ran, so [peerId] is still empty, the
+                    // branch above does not fire, and when the grant lands the
+                    // held offer builds a `PeerConnection` to a device that
+                    // left — which then burns the whole setup deadline. Only
+                    // removing it here prevents that.
+                    //
+                    // A held connection DECISION is already fenced: every
+                    // caller of [startTransport] sets [peerId] before it
+                    // defers, so the branch above ends the session, the epoch
+                    // moves, and the decision drops itself. Invalidating it by
+                    // name is belt and braces for a future caller that does
+                    // not.
+                    forgetHeldRoomWork(peerId)
                     if (peerId == pendingPeer) clearPendingAdmission()
                     if (admission == PeerAdmission.EXPLICIT) publishNearby()
                 }
@@ -925,6 +1120,44 @@ class TransferController(
         }
         if (signal == null) return
 
+        // This room's ICE grant is still in flight, and there is no connection
+        // yet — so everything from here down can end in a `PeerConnection`: an
+        // offer establishes directly, a request or a prompt establishes a
+        // moment later, and one built now would be built with no STUN and no
+        // relay. Held in arrival order, so the offer that raised an admission
+        // still precedes the candidates that chased it, and replayed through
+        // this same function once the grant lands. See [openRoom].
+        //
+        // The `transport == null` clause scopes the hold to exactly what needs
+        // the grant. No room reopens under a live connection today — both
+        // [failRoom] and [onRoomClosed] defer that until the connection ends —
+        // so it changes no current path; it is there because a frame routed
+        // into an EXISTING transport builds nothing, and the day that ordering
+        // changes, a live link's own signalling (its peer's authenticated
+        // leave included) must not queue behind an HTTP round trip it has no
+        // use for.
+        if (transport == null && !roomIceReady()) {
+            // Only what could still MATTER when it is replayed takes the hold.
+            // Traffic this client discards on arrival anyway must not be able
+            // to spend a room's bounded buffer — and, past the bound, end a
+            // session with frames that would have been ignored.
+            if (!heldSignalMatters(from, signal)) return
+            if (heldRoomSignals.size >= LinkProtocol.HELD_SIGNAL_MAX) {
+                // More than a whole establishment's worth of REAL asks inside
+                // one ICE fetch. The buffer is dropped WITH the session rather
+                // than grown: a peer that can make it unbounded owns this
+                // process's memory. The FETCH is left alone — in a Nearby room
+                // the room survives this, and cancelling its grant would wedge
+                // the gate shut for good.
+                heldRoomSignals.clear()
+                heldStart = null
+                endSession("error_connection_lost")
+                return
+            }
+            heldRoomSignals.add(from to data)
+            return
+        }
+
         when (signal.generation) {
             Signal.Generation.LINK -> Unit
             // A rebuild offer for a link this stage does not rebuild: refused in
@@ -1069,8 +1302,7 @@ class TransferController(
         if (intent != Intent.JOINER) return
         if (lane == null) return
         peerId = from
-        startTransport(mine, from, WireProfile.Legacy(LinkProtocol.Role.RESPONDER, lane))
-        transport?.onSignal(data)
+        startTransport(mine, from, WireProfile.Legacy(LinkProtocol.Role.RESPONDER, lane), listOf(data))
     }
 
     // ── explicit admission (Nearby) ─────────────────────────────────────────
@@ -1365,13 +1597,11 @@ class TransferController(
         intent = Intent.JOINER
         val mine = beginConnection(peerId)
         this.peerId = peerId
-        startTransport(mine, peerId, profile)
-        // In arrival order, into a transport that exists: the offer that raised
-        // the prompt, then whatever chased it.
-        for (data in buffered) {
-            if (epoch != mine) return
-            transport?.onSignal(data)
-        }
+        // The offer that raised the prompt, then whatever chased it, carried
+        // WITH the decision: the user's consent is spent here, and a grant
+        // still in flight must defer the connection without losing the SDP the
+        // peer has already sent and will not repeat.
+        startTransport(mine, peerId, profile, buffered)
     }
 
     /** The user refused the prompt naming [peerId]. The room continues.
@@ -1505,6 +1735,7 @@ class TransferController(
     private fun failRoom(errorKey: String?) {
         // Bumped first, so the close below cannot be read back as another drop.
         roomGen++
+        resetRoomIce()
         helloTimer?.cancel(false)
         helloTimer = null
         clearPendingAdmission()
@@ -1567,7 +1798,32 @@ class TransferController(
         )
     }
 
-    private fun startTransport(mine: Int, peer: String, profile: WireProfile) {
+    /**
+     * Build the connection — the ONE place a `PeerConnection` comes into
+     * existence, and therefore the one place the room's ICE grant is required.
+     *
+     * @param replay establishment frames that already arrived for this
+     *   connection, fed in arrival order once it exists. They travel WITH the
+     *   decision rather than being sent afterwards, because a decision this
+     *   function defers would otherwise drop them into a null transport — the
+     *   offer that raised an admission prompt is exactly such a frame, and the
+     *   peer does not repeat it.
+     */
+    private fun startTransport(
+        mine: Int,
+        peer: String,
+        profile: WireProfile,
+        replay: List<Json> = emptyList(),
+    ) {
+        if (!roomIceReady()) {
+            // Held whole, with its frames, and re-fenced on replay: the link
+            // may have been retired and the room replaced while the grant was
+            // in flight, and [resetRoomIce] discards this outright when it is.
+            heldStart = HeldStart(peer) {
+                if (epoch == mine && transport == null) startTransport(mine, peer, profile, replay)
+            }
+            return
+        }
         requestRetryTimer?.cancel(false); requestRetryTimer = null
         requestDeadlineTimer?.cancel(false); requestDeadlineTimer = null
         legacyOfferTimer?.cancel(false); legacyOfferTimer = null
@@ -1599,6 +1855,11 @@ class TransferController(
         transport = link
         _state.value = _state.value.copy(phase = Phase.CONNECTING)
         link.start()
+        // In arrival order, into a transport that exists.
+        for (data in replay) {
+            if (epoch != mine) return
+            transport?.onSignal(data)
+        }
     }
 
     /**
@@ -2696,6 +2957,7 @@ class TransferController(
         roomRetryPending = false
         reconnectAttempt = 0
         ice = IceConfig.Result(emptyList(), "")
+        resetRoomIce()
     }
 
     /** Release the room's objects WITHOUT ending the Nearby session, so a

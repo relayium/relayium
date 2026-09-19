@@ -10,9 +10,11 @@ const (
 	// maxFrameBytes is the single-frame read limit set on the websocket. Real
 	// SDP/ICE is a few KB (the data channel carries no audio/video codecs).
 	maxFrameBytes = 32 << 10 // 32 KiB
-	// maxSignalBytes is the cumulative TypeSignal payload budget per connection.
-	// One real rendezvous is well under 100 KB; 1 MiB gives ~10x headroom while a
-	// bulk relay (MB/GB) trips it quickly.
+	// maxSignalBytes is the cumulative raw-frame budget per connection, over
+	// every charged frame rather than TypeSignal alone (the name predates the
+	// scope; see admit). One real rendezvous is well under 100 KB; 1 MiB gives
+	// ~10x headroom while a bulk relay (MB/GB) trips it quickly. Unlike the
+	// token bucket it never refills, which is what makes it deterministic.
 	maxSignalBytes = 1 << 20 // 1 MiB
 	// signalBurst / signalRefillPerSec form a token bucket bounding message rate
 	// (CPU-flood protection): burst of 50, refilled at 10 tokens/sec.
@@ -20,9 +22,16 @@ const (
 	signalRefillPerSec = 10.0
 )
 
-// connLimiter is per-connection local state (not shared/global). It counts only
-// TypeSignal payload bytes and TypeSignal message rate; TypeJoin is never passed
-// to admit. now is injected so the bucket refill is deterministically testable.
+// connLimiter is per-connection local state (not shared/global). now is injected
+// so the bucket refill is deterministically testable.
+//
+// It is charged once per inbound frame of ANY type — malformed frames included
+// — with one exemption, the single join that admits the connection. See the
+// charge site in client.go, which is above its type switch so that a frame no
+// branch handles cannot be free.
+//
+// It bounds RESOURCE use (reads, JSON parses, relay work) on one websocket.
+// It is not metering, not billing, and not tied to any quota a user pays for.
 type connLimiter struct {
 	bytesUsed  int64
 	tokens     float64
@@ -34,9 +43,12 @@ func newConnLimiter(now func() time.Time) *connLimiter {
 	return &connLimiter{tokens: signalBurst, lastRefill: now(), now: now}
 }
 
-// admit accounts for one TypeSignal frame of frameLen raw bytes. It returns
+// admit accounts for ONE inbound frame of frameLen raw bytes — raw, so a frame
+// costs what it cost to receive rather than what survived parsing. It returns
 // (false, reason) when the connection has exceeded its message rate or its
 // cumulative byte budget; the caller then closes the socket with that reason.
+//
+// Callers must charge each frame exactly once.
 func (l *connLimiter) admit(frameLen int) (bool, string) {
 	t := l.now()
 	if elapsed := t.Sub(l.lastRefill).Seconds(); elapsed > 0 {

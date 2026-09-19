@@ -441,9 +441,10 @@
    *
    * So readiness is ONE fact with ONE settler: `applyRoomIce`, running on this
    * room's real answer. There is deliberately no timeout of its own here.
-   * `fetchIceConfig` already owns the retry, the `Retry-After` cap and the
-   * decision about which failures are worth repeating, and it always resolves —
-   * an unreadable `/api/ice` comes back as an `unavailable` STUN-only
+   * `fetchIceConfig` already owns the per-attempt deadline, the retry, the
+   * `Retry-After` cap and the decision about which failures are worth
+   * repeating, and it can neither hang nor reject — an unreadable, stalled or
+   * malformed `/api/ice` comes back as an `unavailable` STUN-only
    * configuration rather than as silence. That answer IS the fallback boundary,
    * and it is installed by the same call that opens this, so the degraded path
    * is reached by being told, never by giving up on being told.
@@ -571,9 +572,14 @@
     roomIcePending = true;
     heldRelayRtt = [];
     heldRelayRoster = new Set();
-    // Deliberately no deadline of this window's own. `fetchIceConfig` bounds
-    // itself and always answers, so the only thing a timer here could do is
-    // permit the empty configuration it exists to forbid — see `whenRoomIce`.
+    // Deliberately no deadline of this window's own — because `fetchIceConfig`
+    // now genuinely has one. It bounds each attempt end to end (headers AND
+    // body, `ICE_ATTEMPT_TIMEOUT_MS`) and classifies every failure into a
+    // `relayStatus`, so it always answers; the only thing a timer here could do
+    // is permit the empty configuration it exists to forbid — see
+    // `whenRoomIce`. Until that bound existed this comment was a claim rather
+    // than a fact: a `/api/ice` whose body never completed left this window
+    // open for the life of the page.
     //
     // Suspended rather than emptied: the next room's pool is not known yet, and
     // saying "no relays" would open the gate for a window in which a link could

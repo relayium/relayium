@@ -174,6 +174,23 @@ const SETUP_HARD_CAP_MS = 90_000;
  */
 const MAX_CANDIDATE_PROGRESS = 6;
 
+/**
+ * 一条建连里最多**暂存**多少条候选（两个方向各自计数）。
+ *
+ * 暂存是有界的，因为两边的窗口都不是自己关的：本端候选等的是本端 SDP 交给信令，
+ * 远端候选等的是 `setRemoteDescription` 成功，而这两件事都可能永远不发生。真实
+ * 的一次 ICE 交换只有个位数条候选，64 给畸形 SDP、ICE 重启重新采集和慢速蜂窝留了
+ * 一个数量级的余量。
+ *
+ * **两个方向溢出后都 fail closed**，见 `holdRemoteCandidate` 和 `pc.onicecandidate`。
+ * 一度想过本端溢出只丢弃并记日志（"自己的采集，不该为它拆连接"），但那是错的：本端
+ * 队列只在等自己的 SDP 时增长，涨到 64 条说明这条连接遇上了它自己解释不了的情况
+ * （描述始终装不上、采集失控、资源到顶）。静默截断把一次资源上限失败伪装成"连上了、
+ * 只是候选少几条"，而少掉的那几条在跨网络上正是唯一能用的。拆掉并说明原因，是这两个
+ * 队列共用的规则。
+ */
+const MAX_HELD_CANDIDATES = 64;
+
 /** 8MB 在途窗口，让管道始终有货可发。 */
 const BUFFERED_LOW = 8 << 20;
 
@@ -450,20 +467,130 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
   // 外发信令统一走这里：盖世代标记 → 签名 → 发。签名是异步的，所以用一条串行链
   // 保序——offer 之后紧跟的 ICE 候选如果因为签名耗时反超到 offer 前面，对端会把它
   // 当作"remoteDescription 之前到达的候选"丢掉。
+  //
+  // **关闭之后一条都不再发。** 取消（abort / 握手校验失败 / 上层 close）会在
+  // `createOffer`、`setLocalDescription` 或者这条链里的签名还没落地时发生，而那些
+  // await 随后照样会恢复执行并走到下面的 send。那是一条属于已经放弃的连接的信令，
+  // 带着本世代的标记，对端无法把它和一次真实的建连尝试区分开。链内再查一次，因为
+  // 签名本身就是一个可以跨越 close 的 await。
+  let closed = false;
+  /**
+   * Everything `close()` and the candidate gates reach for, declared BEFORE the
+   * first handler that can call them.
+   *
+   * A peer connection may dispatch `onicecandidate` synchronously from inside
+   * `createDataChannel` or `setLocalDescription` — a native stack does, and so
+   * does the probe that models one. Those dispatches happen while `establish`
+   * is still running its own prologue, so a gate that fails closed from there
+   * would read `releaseSignalListener`/`stopTimers`/`failReady` in their
+   * temporal dead zone and throw a `ReferenceError` instead of tearing the
+   * connection down. Optional bindings assigned later make "not built yet" a
+   * state rather than a crash.
+   */
+  let opened = false;
+  let failReady: ((err: Error) => void) | undefined;
+  let releaseSignalListener: (() => void) | undefined;
+  let stopTimers: (() => void) | undefined;
   let sendChain: Promise<void> = Promise.resolve();
   function send(msg: Omit<InboundSignal, "resume" | "text" | "link" | "auth">) {
+    if (closed) return;
     sendChain = sendChain
       .then(async () => {
+        if (closed) return;
         const out: InboundSignal = tag(msg);
         if (opts.auth) out.auth = await opts.auth.sign(authPayload(out));
+        if (closed) return;
         signaling.sendSignal(peerId, out);
       })
       .catch((err) => console.error(`relayium ${what} send error`, err));
   }
 
+  /**
+   * **本端候选排在本端 SDP 之后。**
+   *
+   * `send` 的串行链保证的是*调用*顺序，而调用顺序本身就是错的：SDP 是在
+   * `await pc.setLocalDescription(...)` **之后**才交给 `send` 的，而候选是
+   * `onicecandidate` 在那个 await 期间就交出来的。于是候选排在了 SDP 前面。对端
+   * 收到一条 remoteDescription 还不存在时的候选，只能丢掉它——这正是下面
+   * `holdRemoteCandidate` 在入站侧修的那个洞，只是发生在发送侧。
+   *
+   * ## 这是硬化，不是一次浏览器复现
+   *
+   * 在符合 webrtc-pc 的浏览器里，`setLocalDescription` 的 promise 在一个排队的
+   * 任务里兑现，而 ICE 采集产生的候选事件排在它之后，所以真实浏览器先发 SDP。能
+   * 复现出 `[ice, sdp]` 的探针是用一个**同步**在 `setLocalDescription` 里触发
+   * `onicecandidate` 的假 pc 做的——那模拟的是原生栈（libwebrtc/Android），不是
+   * 浏览器。诚实的说法是：这个模块以前没有任何顺序防御，而不是浏览器会踩它。
+   *
+   * 保留它的理由是这个模块不只跑在浏览器里（Electron 渲染进程共用它），而且这条
+   * 不变式在 ICE 重启时要重新成立一次：重启的候选属于新的 ufrag，跑到重启 offer
+   * 前面就是同一个洞。
+   */
+  const abortError = () => Object.assign(new Error("relayium: connection aborted"), { name: "AbortError" });
+
+  let localSdpDue = true; // 本世代的本端 SDP 还没交给 send
+  /** 是否已经有过一条本端描述真的上线。见 `sendLocalDescription` 的失败分支。 */
+  let localSdpEverSent = false;
+  const heldLocalCandidates: RTCIceCandidate[] = [];
+  /** 远端在 `setRemoteDescription` 成功之前送来的候选。见 `holdRemoteCandidate`。 */
+  let remoteDescribed = false;
+  const heldRemoteCandidates: RTCIceCandidateInit[] = [];
+
   pc.onicecandidate = (e) => {
-    if (e.candidate) send({ ice: e.candidate });
+    if (!e.candidate || closed) return;
+    if (!localSdpDue) { send({ ice: e.candidate }); return; }
+    if (heldLocalCandidates.length >= MAX_HELD_CANDIDATES) {
+      // Fail closed, exactly as the remote hold does. See MAX_HELD_CANDIDATES.
+      failEstablishment(new Error(`relayium: ${what} gathered too many candidates before its description`));
+      return;
+    }
+    heldLocalCandidates.push(e.candidate);
   };
+
+  /** 放行暂存的本端候选，并重新打开闸门。SDP 已经先入队，所以这些候选排在它后面。 */
+  function releaseLocalCandidates() {
+    localSdpDue = false;
+    const held = heldLocalCandidates.splice(0, heldLocalCandidates.length);
+    if (closed) return; // 关掉之后闸门不再"打开"任何东西——一条都不出去
+    for (const ice of held) send({ ice });
+  }
+
+  /**
+   * 造一条本端 SDP、装上它，并让它**先于**属于它的候选上线。
+   *
+   * 三条路径共用：初始 offer、应答 answer、ICE 重启 offer。重启那条是闸门必须能
+   * **重新关上**的原因：重启期间采集的候选属于新的 ufrag。
+   */
+  async function sendLocalDescription(
+    create: () => Promise<RTCSessionDescriptionInit>,
+    extra?: () => Partial<InboundSignal> | undefined,
+  ): Promise<void> {
+    localSdpDue = true;
+    let sdp: RTCSessionDescriptionInit;
+    try {
+      sdp = await create();
+      if (opts.signal?.aborted) throw abortError();
+      await pc.setLocalDescription(sdp);
+    } catch (err) {
+      // **这一批一定丢掉，绝不放行。**
+      //
+      // 失败点可能在采集之后：`setLocalDescription` 完全可以先装上新描述、开始为
+      // 新 ufrag 采集，再拒绝掉。所以"它们属于上一条仍然有效的描述"是猜的，不是
+      // 证明。把一条属于从未上过线的 ufrag 的候选发给对端，对端只能拒绝它，而本
+      // 端还以为自己已经把路径告诉过对方了。
+      //
+      // 闸门怎么处理则可以分辨：之前真的发出过一条描述（ICE 重启失败就是这种），
+      // 那条描述仍然是对端手里的那条，此后采集到的候选属于它，必须继续放行；从来
+      // 没有过（初始 offer / 应答就失败），这条连接接下来只会走到 establish 的
+      // 失败清理，闸门保持关闭。
+      heldLocalCandidates.length = 0;
+      if (localSdpEverSent) localSdpDue = false;
+      throw err;
+    }
+    send({ sdp, ...extra?.() });
+    localSdpEverSent = true;
+    releaseLocalCandidates();
+  }
 
   const channels = new Map<string, RTCDataChannel>();
   const captures = new Map<string, {
@@ -474,8 +601,6 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
   const captureLimit = opts.captureBeforeReadyBytes ?? 0;
   let capturedBytes = 0;
   let captureOverflow = false;
-  let opened = false;
-  let failReady!: (err: Error) => void;
   const ready = new Promise<Map<string, RTCDataChannel>>((resolve, reject) => {
     failReady = reject;
     const arm = (ch: RTCDataChannel) => {
@@ -541,24 +666,26 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
   // observed now; the later await still receives and propagates the same error.
   void ready.catch(() => {});
 
-  const expire = () => { if (!opened) failReady(new Error(`relayium: ${what} timed out`)); };
+  const expire = () => { if (!opened) failReady?.(new Error(`relayium: ${what} timed out`)); };
   const hardTimer = setTimeout(expire, SETUP_HARD_CAP_MS); // never re-armed
   let idleTimer = setTimeout(expire, NO_PROGRESS_TIMEOUT_MS);
-  const clearTimers = () => { clearTimeout(hardTimer); clearTimeout(idleTimer); };
+  stopTimers = () => { clearTimeout(hardTimer); clearTimeout(idleTimer); };
   // Each kind of progress counts ONCE (the key is its identity), so nothing a
   // peer can repeat — the same candidate twice, a re-offer, a state that
   // flip-flops — buys a second extension.
   const progressSeen = new Set<string>();
   let remoteCandidates = 0;
   function progress(key: string) {
-    if (opened || progressSeen.has(key)) return;
+    // `closed` first: re-arming the no-progress timer for a torn-down
+    // connection keeps a timer alive for up to another 30 s with nothing left
+    // to bound.
+    if (closed || opened || progressSeen.has(key)) return;
     progressSeen.add(key);
     clearTimeout(idleTimer);
     idleTimer = setTimeout(expire, NO_PROGRESS_TIMEOUT_MS);
   }
 
   let abortListener: (() => void) | undefined;
-  let closed = false;
   function close() {
     if (closed) return;
     closed = true;
@@ -567,36 +694,137 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
       if (capture.channel.onmessage === capture.handler) capture.channel.onmessage = null;
     }
     captures.clear();
-    off();
+    // 两侧的暂存都属于这条已经结束的连接：本端的没人会发了，远端的没有 pc 可以
+    // 收了。留着只是让一次已经放弃的建连继续持有对端的候选。
+    heldLocalCandidates.length = 0;
+    heldRemoteCandidates.length = 0;
+    // Settle `ready` before the timers go, and the order is load bearing:
+    // `stopTimers` removes the only thing that would ever have settled it
+    // otherwise, so a caller that closed a still-pending establishment without
+    // failing it (a hook calling `ctx.close()` alone) would await forever.
+    // A no-op once `ready` has already resolved or rejected, so the specific
+    // error a real failure passed to `failReady` still wins.
+    failReady?.(new Error(`relayium: ${what} closed`));
+    // Both may still be unbuilt — see the hoisted bindings above — and the
+    // setup timers must not outlive the connection they were bounding.
+    stopTimers?.();
+    releaseSignalListener?.();
     try { pc.close(); } catch { /* already closed */ }
   }
-  const ctx: CoreContext = { fail: (err) => failReady(err), close };
 
+  /**
+   * End this establishment because an invariant it cannot recover from broke.
+   *
+   * `failReady` alone is not a notification. It settles the `ready` promise,
+   * which nothing is awaiting once the channels have opened — so on an
+   * ESTABLISHED link (an ICE restart is the reachable case) a bare `failReady`
+   * would close the peer connection while the owner still believed it held a
+   * live transport. `onStateChange` is the seam that owner already listens on
+   * for a terminal transport, and a connection we are about to close is
+   * terminal by exactly that definition.
+   */
+  function failEstablishment(err: Error) {
+    if (closed) return;
+    failReady?.(err);
+    if (opened) opts.onStateChange?.("failed");
+    close();
+  }
+  const ctx: CoreContext = { fail: (err) => failReady?.(err), close };
+
+  /**
+   * **远端候选必须等到 remoteDescription 立起来。**
+   *
+   * 这一条是这个批次里真正可达的那个缺陷。`addIceCandidate` 按 W3C 要求
+   * remoteDescription 已存在，而在这里它以前是「试一下，失败就静默吞掉」：注释
+   * 说「局域网上 SDP 里的 host 候选通常够用」，可跨网络那句话不成立——那条被吞掉
+   * 的正是 relay 候选。
+   *
+   * 触发它不需要任何人违反规范：本端作为 initiator 发出 offer 之后、对端的
+   * answer 回来之前，本端根本没有 remoteDescription；而对端只要在自己的 answer
+   * 上线之前就开始 trickle 候选（Android 的 `onIceCandidate` 就是无条件立刻发，
+   * 见同一轮评审的 C 批次），这些候选就全部落进那个空 catch。丢掉的候选越多，越
+   * 依赖 relay 的那一侧越连不上。
+   *
+   * 暂存有界且 fail closed：溢出时拆连接，而不是截断。用前缀候选建起来的连接不是
+   * 对端正在建的那条，而静默截断和"一条健康但永远连不完的连接"在界面上无法区分。
+   * `peer-link` 对它暂存的 offer 后续帧用的是同一条规则。
+   */
+  function holdRemoteCandidate(ice: RTCIceCandidateInit) {
+    if (closed) return;
+    if (heldRemoteCandidates.length >= MAX_HELD_CANDIDATES) {
+      failEstablishment(new Error(`relayium: ${what} held too many early candidates`));
+      return;
+    }
+    heldRemoteCandidates.push(ice);
+  }
+
+  /** 按到达顺序放行，且只放行一次：先取空再逐条加，所以重入不会重放。 */
+  async function flushRemoteCandidates() {
+    if (heldRemoteCandidates.length === 0) return;
+    const held = heldRemoteCandidates.splice(0, heldRemoteCandidates.length);
+    for (const ice of held) await addRemoteCandidate(ice);
+  }
+
+  async function addRemoteCandidate(ice: RTCIceCandidateInit) {
+    if (closed) return;
+    try {
+      await pc.addIceCandidate(ice);
+      // Only a candidate the pc actually accepted, and only the first few.
+      if (remoteCandidates < MAX_CANDIDATE_PROGRESS) progress(`ice:${remoteCandidates++}`);
+    } catch {
+      // 被 ICE agent 拒绝的一条——畸形的，或者属于它已经走过的那个世代。非致命，
+      // 而且**不能带走它的兄弟**：放行循环照常把剩下的加完。
+    }
+  }
+
+  /**
+   * **Nothing runs on a connection that is already gone.**
+   *
+   * Every `await` here is a point at which the caller can cancel, the hooks can
+   * fail the handshake, or the peer connection can go terminal — and the
+   * awaits resume regardless. Before the guards below, a `close()` that landed
+   * while `setRemoteDescription` was still pending still went on to re-arm the
+   * progress timer, call `onAnswer` (which reveals this side's key on the
+   * signalling channel) and call `afterSdp` (which verifies a reveal against a
+   * connection that no longer exists). Reproduced on the real module by
+   * `probe-core-late-close.mjs`: `postCloseOnAnswer: 1, postCloseAfterSdp: 1`.
+   *
+   * The guards are checks rather than an abort of the chain because the
+   * receive chain is shared: a signal abandoned here must still leave the chain
+   * usable, and after `close()` the listener is unsubscribed anyway.
+   */
   async function handleSignal(msg: InboundSignal) {
+    if (closed) return;
     opts.beforeSdp?.(msg);
     if (msg.sdp) {
       await pc.setRemoteDescription(msg.sdp);
+      if (closed) return; // cancelled while the description was being applied
+      remoteDescribed = true;
       // The peer answered (or re-offered): the strongest evidence there is that
       // somebody is on the other end and this setup is worth more time.
       progress(`sdp:${msg.sdp.type}`);
-      if (msg.sdp.type === "offer") {
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        send({ sdp: answer, ...opts.sdpExtra?.() });
-      } else if (msg.sdp.type === "answer") {
-        opts.onAnswer?.();
+      try {
+        if (msg.sdp.type === "offer") {
+          await sendLocalDescription(() => pc.createAnswer(), opts.sdpExtra);
+        } else if (msg.sdp.type === "answer") {
+          opts.onAnswer?.();
+        }
+      } finally {
+        // 放行排在这里而不是紧接 setRemoteDescription 之后：作为应答方，此刻两条
+        // 描述都已经装好，这是 `addIceCandidate` 最保守的时机。入站信令是串行的，
+        // 所以这中间不会有别的信令插进来。
+        //
+        // `finally` 而不是顺序执行：remoteDescription 已经立起来了，暂存窗口就已经
+        // 关闭，之后的候选都直接走。应答失败时若跳过这次放行，暂存的那几条就永远
+        // 没有第二次机会了。
+        await flushRemoteCandidates();
       }
     }
+    if (closed) return;
     opts.afterSdp?.(msg, ctx);
     if (msg.ice) {
-      try {
-        await pc.addIceCandidate(msg.ice);
-        // Only a candidate the pc actually accepted, and only the first few.
-        if (remoteCandidates < MAX_CANDIDATE_PROGRESS) progress(`ice:${remoteCandidates++}`);
-      } catch {
-        // A candidate arriving before remoteDescription is set, or after close,
-        // is non-fatal on a LAN where host candidates in the SDP usually suffice.
-      }
+      if (!remoteDescribed) { holdRemoteCandidate(msg.ice); return; }
+      await addRemoteCandidate(msg.ice);
     }
   }
 
@@ -604,31 +832,38 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
    *  is DROPPED, not fatal: the genuine peer's next signal still gets through,
    *  and if nothing genuine ever arrives the connect timeout ends it anyway. */
   async function accept(msg: InboundSignal) {
+    if (closed) return;
     if (opts.auth && !(await opts.auth.verify(authPayload(msg), msg.auth))) {
       console.warn(`relayium ${what}: dropped an unauthenticated signal`);
       return;
     }
+    // Verification is asynchronous, so cancellation can land inside it.
+    if (closed) return;
     await handleSignal(msg);
   }
 
   // 入站也串行：accept 里多了一次异步校验，两条信令并发跑 setRemoteDescription
   // 会互相踩。
   let recvChain: Promise<void> = Promise.resolve();
-  const off = signaling.onSignal((from, data) => {
+  releaseSignalListener = signaling.onSignal((from, data) => {
     const msg = data as InboundSignal;
     if (from !== peerId || signalGeneration(msg) !== generation) return; // 别的世代的信令不是我们的
     // The peer is mid-transfer and won't answer — stop waiting for a channel that
     // will never open and report it as "peer busy". A no-op once opened.
-    if (msg.busy) { if (!opened) failReady(new PeerBusyError()); return; }
+    if (msg.busy) { if (!opened) failReady?.(new PeerBusyError()); return; }
     recvChain = recvChain
       .then(() => accept(msg))
       .catch((err) => console.error(`relayium ${what} signal error`, err));
   });
+  // A gate that failed closed during the prologue ran `close()` before this
+  // line existed, so its `releaseSignalListener?.()` was a no-op. Undo the
+  // subscription here rather than leaving the peer routed into a dead pc.
+  if (closed) { releaseSignalListener(); releaseSignalListener = undefined; }
 
   abortListener = () => {
     const err = new Error("relayium: connection aborted");
     err.name = "AbortError";
-    if (!opened) failReady(err);
+    if (!opened) failReady?.(err);
     close();
   };
   opts.signal?.addEventListener("abort", abortListener, { once: true });
@@ -643,9 +878,17 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
     if (restarted || role !== "initiator") return;
     restarted = true;
     try {
-      const offer = await pc.createOffer({ iceRestart: true });
-      await pc.setLocalDescription(offer);
-      send({ sdp: offer });
+      // 重新关上本端候选闸门：重启采集出来的候选属于新的 ufrag，抢在重启 offer
+      // 前面到达对端就和初始那条一样会被丢掉。
+      await sendLocalDescription(() => pc.createOffer({ iceRestart: true }));
+      // 重启 offer 已经交给信令，于是**入站**那一侧也回到"还没有远端描述"的状态。
+      // 对端的重启 answer 会带来新的 ufrag，而它在那条 answer 之前 trickle 的候选
+      // 属于新 ufrag：这时直接 addIceCandidate，ICE agent 只会按 usernameFragment
+      // 对不上拒掉，和初始 offer 之前那个洞一模一样。暂存到重启 answer 落地为止。
+      //
+      // 只在 offer 真的发出去之后才重开：`sendLocalDescription` 失败时没有任何新
+      // ufrag 被告知过对端，远端描述也还是原来那条，入站不该改变。
+      remoteDescribed = false;
     } catch (err) {
       console.error(`relayium ${what} ice restart error`, err);
     }
@@ -660,19 +903,16 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
     if (state === "disconnected") tryIceRestart();
     // A failure before the channel ever opened must unblock the caller; after it
     // opened, `ready` is already settled and this reject is a harmless no-op.
-    if (state === "failed" && !opened) failReady(new Error(`relayium: ${what} failed`));
+    if (state === "failed" && !opened) failReady?.(new Error(`relayium: ${what} failed`));
     // Once the connection reaches a terminal state, stop routing this peer's
     // signals so listeners don't pile up across repeated transfers.
-    if (state === "closed" || state === "failed") off();
+    if (state === "closed" || state === "failed") releaseSignalListener?.();
   };
 
   try {
     if (!opts.signal?.aborted) {
       if (role === "initiator") {
-        const offer = await pc.createOffer();
-        if (opts.signal?.aborted) throw Object.assign(new Error("relayium: connection aborted"), { name: "AbortError" });
-        await pc.setLocalDescription(offer);
-        send({ sdp: offer, ...opts.sdpExtra?.() });
+        await sendLocalDescription(() => pc.createOffer(), opts.sdpExtra);
       } else if (opts.initialSignal) {
         // The signal that got us here goes through the same check as every later
         // one — it is the resume OFFER, i.e. exactly the message L3 is about.
@@ -681,7 +921,7 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
       }
     }
     const openChannels = await ready;
-    clearTimers();
+    stopTimers?.();
     if (opts.signal?.aborted) {
       const err = new Error("relayium: connection aborted");
       err.name = "AbortError";
@@ -716,7 +956,7 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
     // Establishment failed or timed out: clean up the listener and peer
     // connection, then propagate so the caller shows a retryable failure
     // instead of a progress bar frozen at 0%.
-    clearTimers();
+    stopTimers?.();
     close();
     throw err;
   }
