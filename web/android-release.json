@@ -3,14 +3,14 @@
   "android": {
     "available": true,
     "applicationId": "com.relayium.android",
-    "versionCode": 7,
-    "versionName": "0.2.4",
-    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.2.4/Relayium-0.2.4-7.apk",
-    "sha256": "2917fcb727b5f57582ec763a71616143cdbc7d6469240ac7b07fa052343270a5",
-    "size": 45910602,
+    "versionCode": 8,
+    "versionName": "0.2.5",
+    "downloadUrl": "https://github.com/relayium/relayium/releases/download/android-v0.2.5/Relayium-0.2.5-8.apk",
+    "sha256": "74547a88053c81d600704b2ec1d04adcbb8fb8e6cfcf4c023d08ba82322fd616",
+    "size": 45947466,
     "notes": {
-      "en": "Public preview 0.2.4. Fixes from real-device feedback. Device Inbox: an outgoing send can now be removed, and a delivery the other device has not saved yet can be cancelled; finished sends leave the Outgoing list on their own. Nearby: the mode that finds the Relayium website and the Mac app now comes first, and it shows your public IP, because devices find each other there only when it matches. Cross-network: a connection that drops while you wait no longer ends the session as \"code not active\"; the app rejoins the same code, keeps the screen on while your code is waiting, shows a QR for a code you create, and closes the scanner after a successful scan. A brief network interruption on a connected session gets a few seconds to recover instead of ending it. Messages open when you press Send and incoming conversations are accepted automatically, as on the website, and the app says up front when no relay is available. Everything still runs while the app is open, with no background transfer. Direct APK only, not on Google Play, and it contains no Play Services and no Play Billing.",
-      "zh": "公开预览版 0.2.4。根据真机反馈修复。设备收件箱：发送项现在可以移除，对方尚未保存的投递可以取消；已完成的发送会自动离开“发送中”列表。附近设备：能找到 Relayium 网页版和 Mac 应用的模式现在排在第一位，并显示你的公网 IP——只有两边的公网 IP 相同，设备才能在那里互相发现。跨网络：等待对方时连接断开，不再以“配对码无效”结束会话，应用会用同一个配对码重新连接；等待期间保持屏幕常亮；创建的配对码会显示二维码；扫码成功后扫码界面自动关闭。已连接的会话遇到短暂网络中断时，会给几秒钟恢复而不是直接结束。按“发送”即可开始消息对话，收到的对话请求会像网页版一样自动接受；没有可用中继时会提前说明。所有功能仍然只在应用打开时运行，没有后台传输。仅以 APK 直接分发，不在 Google Play 上架，不含 Play 服务与 Play 结算。"
+      "en": "Public preview 0.2.5. Cross-network connections can now renew their relay credential. A connection you have actually been using in the last ten minutes can ask for a fresh credential before its deadline instead of ending at it, and the deadline is extended only after the connection has moved onto the new credential and that move has been checked. Both devices need this update, and the account that showed the pairing code still decides: its quota and the relay policy can refuse, and a refusal is reported while the connection keeps the time it already had. This is about staying connected, not speed — no transfer-speed change is claimed or measured. Pairing and transfer limits are now checked explicitly, so a peer that negotiates a limit outside the allowed range is refused; the previous version still pairs normally, it just does not renew. Everything still runs while the app is open, with no background transfer. Direct APK only, not on Google Play, and it contains no Play Services and no Play Billing.",
+      "zh": "公开预览版 0.2.5。跨网络连接现在可以续期中继凭据：最近十分钟内你确实在用的连接，可以在到期前申请一份新的凭据，而不是到点直接结束；只有在连接已经切换到新凭据、并且这次切换通过校验之后，到期时间才会延后。两端设备都需要装这次更新，并且仍由出示配对码那一方的账户决定：该账户的配额和中继策略都可能拒绝，被拒绝时会如实提示，连接保持原有的到期时间。这针对的是连接的持续性，不是速度——没有声称也没有测量任何传输速度变化。配对与传输的上限现在会被明确校验，协商出超出允许范围的上限的对端会被拒绝；上一个版本仍然可以正常配对，只是不会续期。所有功能仍然只在应用打开时运行，没有后台传输。仅以 APK 直接分发，不在 Google Play 上架，不含 Play 服务与 Play 结算。"
     }
   }
 }

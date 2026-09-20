@@ -160,14 +160,17 @@ copy for both maintained languages.
 versions in this tree are ahead of what those channels serve, because the
 relay-credential renewal macOS shipped as `1.4.1 (39)` is prepared here for the
 others: Android `0.2.5 (versionCode 8)`, iOS `0.4.1 (10)`, Windows `0.0.2`.
-That is a fact about source on that date. **No signed or published deliverable
-exists under any of those numbers** — the Android source gate did assemble an
-unsigned `0.2.5` release APK as build evidence, and nothing beyond that has
-been signed, uploaded or distributed. What each channel actually serves is
-`web/android-release.json` for the Android APK, and a fresh App Store Connect
-read-back for iOS internal TestFlight, which is still `0.4.0 (9)`; Windows
-`0.0.2` is the next candidate on the existing internal-candidate track, which
-is not a distribution channel. Renewal needs both peers updated and compatible,
+That is a fact about source on that date, and Android has moved past it since:
+a signed `0.2.5 (8)` APK exists and was verified, including an in-place upgrade
+over the published `0.2.4` on an emulator, and `web/android-release.json` is
+staged against exactly those bytes — but **no release has been published at
+`android-v0.2.5`, so the download still serves `0.2.4`** until it is, and the
+site must not be advanced before the published asset is fetched back and
+verified. `docs/android-development.md` holds that provenance. **Neither iOS nor
+Windows has published anything under its prepared number**: the last verified
+iOS internal TestFlight build is still `0.4.0 (9)`, and Windows `0.0.2` is the
+next candidate on the existing internal-candidate track, which is not a
+distribution channel. Renewal needs both peers updated and compatible,
 its deadline moves later only after a verified migration, and the hosting
 account's quota and relay policy may refuse it; no transfer-speed effect is
 claimed or measured on any of them.

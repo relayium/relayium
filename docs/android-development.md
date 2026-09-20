@@ -3,8 +3,45 @@
 **Status: public preview.** `apps/android/` is the native Android client,
 applicationId `com.relayium.android`, distributed as a direct APK only — no
 Google Play listing, no Play Billing, and no Play Services or GMS dependency of
-any kind. The published build is 0.2.4 (versionCode 7), and it is the source:
-the update feed, the download surface and this tree describe one build.
+any kind. The published build is 0.2.4 (versionCode 7); 0.2.5 (versionCode 8)
+is signed, verified and staged in this tree but is **not published yet**, so
+until the release exists and the site is advanced, the download surface still
+serves 0.2.4 while `web/android-release.json` already describes 0.2.5.
+
+### Staged, not published: 0.2.5 (versionCode 8), 2026-09-20
+
+* the artifact `Relayium-0.2.5-8.apk`, SHA-256
+  `74547a88053c81d600704b2ec1d04adcbb8fb8e6cfcf4c023d08ba82322fd616`,
+  45,947,466 bytes, signing certificate SHA-256
+  `ac867828a511f15e9214498f234d8898bbd56033342edd7e70d8037c20380aad` — the same
+  certificate as 0.2.4, so an installed 0.2.4 updates in place — was built and
+  signed from **`15466b04`** on `main`. Every non-signature entry of the signed
+  file is byte-identical to the entry in the unsigned APK that was checked
+  (SHA-256 `8fc9054ffd70f23d49a597904bdb79d4f84d8bc9138fa005a1b6d1acb29c706a`),
+  the
+  build is not debuggable, its ABIs are `arm64-v8a` and `x86_64`, and the
+  permission set is unchanged;
+* **upgrade verified on the owned AOSP emulator**, from the published 0.2.4
+  bytes: the UID was retained, the private-file sentinel survived, cold launch
+  was clean, a downgrade was refused, and an APK with a modified DEX was
+  rejected by signature. That is a private-file-retention result on an
+  emulator — there is no physical-device result and no transfer-speed claim;
+* `web/android-release.json`, the generated `/apps/android/update.json` and the
+  maintained EN/zh pages are staged against exactly those bytes. **No GitHub
+  release exists at `android-v0.2.5` yet**, so the download URL in the manifest
+  does not resolve until the publication step runs. The site must not be
+  advanced before the published asset is fetched back and verified.
+
+What it changes, against 0.2.4: cross-network relay-credential renewal — a
+connection with real user activity in the last ten minutes can request a fresh
+credential before its deadline, and the deadline is extended only after the
+connection has migrated onto it and that migration has been verified. Both
+peers must be updated and compatible, and the hosting account's quota and relay
+policy may refuse; a refusal is reported and the connection keeps the expiry it
+had. Pairing and negotiated-transfer bounds are checked explicitly, so a peer
+negotiating a limit outside the allowed range is refused — the previous version
+still pairs normally and simply does not renew. No persisted format, store,
+manifest entry or backup rule changed.
 
 ### Provenance of the 0.2.4 release — read this before auditing the tag
 
