@@ -30,12 +30,19 @@ end-to-end encrypted connection with one verification step, a composer visible b
 file and folder controls under it, so files and messages travel together without reconnecting
 between them. Across networks that same one connection is carried by the encrypted relay, which
 forwards only ciphertext, and it runs under a bounded lifetime derived from the relay credential —
-the workspace warns before that boundary and ends the link truthfully at it. A browser peer that
-does not announce this exact capability — an older Relayium Web build — is shown a notice saying so
-and offered no transfer controls, rather than a quietly degraded path: the separate file and message
-flows the Web client used to fall back to have been removed. The released macOS client and the CLI
-are not that fallback; they are current clients connecting over their own supported protocol
-surfaces — see **Delivery status** below for what each one ships today.
+the workspace warns before that boundary and ends the link truthfully at it. Where both peers
+support it, a connection that has carried real user activity in the last ten minutes can ask for a
+fresh relay credential before that boundary, subject to current account, quota and relay policy
+checks. The boundary moves only once the connection has verifiably migrated onto the new credential:
+a connection with no such activity, one that is refused, or one whose migration does not complete
+keeps the expiry it already had and still ends truthfully at it. None of this promises a particular
+session length, an unlimited connection or a faster transfer, and the released macOS client and CLI
+do not renew. A browser peer that does not announce the shared-workspace capability — an older
+Relayium Web build — is shown a notice saying so and offered no transfer controls, rather than a
+quietly degraded path: the separate file and message flows the Web client used to fall back to have
+been removed. The released macOS client and the CLI are not that fallback; they are current clients
+connecting over their own supported protocol surfaces — see **Delivery status** below for what each
+one ships today.
 
 The same protocol also carries **ephemeral text**. When both devices are online, a message session
 opens an independent end-to-end encrypted connection — with its own optional verification code to compare — and carries a link,

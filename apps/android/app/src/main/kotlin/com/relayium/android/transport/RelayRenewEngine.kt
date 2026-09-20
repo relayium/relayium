@@ -329,7 +329,8 @@ class RelayRenewEngine(private val deps: Deps) {
         if (!RelayRenewSdp.localCandidateBelongsTo(pair.local, a.localUfrag)) return
         // The SDK can discover a local peer-reflexive address while checking
         // against the old remote allocation. Publish that actual address so the
-        // peer can also check it from its new allocation (RFC 8445 7.2.5.3.1).
+        // peer can also check it from its new allocation, which RFC 8445
+        // permits in section 7.2.5, subsection 3.1.
         // Discovery alone does not satisfy the remote-generation proof below.
         if (RelayRenewSdp.candidateType(pair.local) == "prflx") {
             val mid = deps.transport()?.baselinePin()?.mids?.singleOrNull()

@@ -329,7 +329,8 @@ candidates to the wrong generation.
 - Android also signals an SDK-selected local peer-reflexive candidate through
   the same authenticated `ice` envelope when both descriptions are applied and
   its own ufrag matches the epoch. This lets the peer check the discovered
-  address from its new allocation, as permitted by RFC 8445 §7.2.5.3.1.
+  address from its new allocation, as RFC 8445 permits in section 7.2.5,
+  subsection 3.1.
   Publication is deduplicated and capped at 64 selected addresses per epoch,
   and requires the pinned single data-channel mid. A mixed new-local/old-remote
   pair may supply this address, but still cannot start the migration proof or

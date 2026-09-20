@@ -298,13 +298,140 @@ for (const [name, source] of [["LegacyProtocol.kt", legacyProtocol], ["LegacyTex
 // without one invites a peer onto a connection that cannot open; implementing
 // it without announcing it is worse than useless, because the Apple factory
 // refuses to offer a message connection before hearing the exact string back.
-const announcesText = /ADVERTISED_CAPS[^\n]*TEXT_CAPABILITY/.test(linkProtocol);
+//
+// ## Why this reads the declaration structurally
+//
+// The list is no longer one line:
+//
+//     val ADVERTISED_CAPS: List<String> =
+//         listOf(TEXT_CAPABILITY, CAPABILITY, RelayRenewWire.CAPABILITY)
+//
+// so the line-bounded `ADVERTISED_CAPS[^\n]*TEXT_CAPABILITY` could not reach
+// the initialiser and answered "does not announce text/1" for a build that
+// announces it — the exact false report this rule exists to prevent, and a
+// green CI away from being read as a real capability change.
+//
+// Widening it to `[\s\S]*` would be strictly worse than leaving it broken:
+// `TEXT_CAPABILITY` is declared as a `const val` EARLIER in the same file and
+// named again in the KDoc, so a wildcard would keep passing after the entry
+// was deleted from the list.
+//
+// So the initialiser is matched by GRAMMAR, anchored to the declaration: the
+// name, an optional explicit type, `=`, then `listOf(` with only whitespace
+// between. Anything else — `buildCaps()`, a concatenation, a renamed
+// constant — is rejected outright rather than scanned past, because scanning
+// past it finds the next `listOf(` in the file, which may be an unrelated
+// member that happens to contain the string this rule is looking for.
+const advertisedCapsList = (source) => {
+  const anchor = /val\s+ADVERTISED_CAPS(?![A-Za-z0-9_])\s*(?::\s*List<String>\s*)?=\s*listOf\(/
+    .exec(source);
+  if (!anchor) return null;
+  const from = anchor.index + anchor[0].length - 1;
+  let depth = 0;
+  for (let i = from; i < source.length; i++) {
+    if (source[i] === "(") depth++;
+    else if (source[i] === ")" && --depth === 0) return source.slice(from + 1, i);
+  }
+  return null;
+};
+
+const capsList = advertisedCapsList(linkProtocol);
+check(
+  capsList !== null,
+  "LinkProtocol.ADVERTISED_CAPS could not be read as a `listOf(...)` declaration. This rule "
+  + "compares what the client ANNOUNCES against what it implements; a declaration it cannot "
+  + "find makes that comparison vacuous, so it fails here rather than reporting an answer it "
+  + "did not derive.",
+);
+const announcesText = capsList !== null && /\bTEXT_CAPABILITY\b/.test(capsList);
 const hasTextHandler = /class LegacyTextLane/.test(legacyText);
 check(
-  announcesText === hasTextHandler,
+  capsList === null || announcesText === hasTextHandler,
   "the announced capability set and the shipped-wire message handler must move together: "
   + `announces text/1 = ${announcesText}, has a handler = ${hasTextHandler}.`,
 );
+
+// ── PARSER FIXTURES for the reader above ────────────────────────────────────
+//
+// These exercise `advertisedCapsList` against sources whose answers are known.
+// They are NOT pipeline mutation proof: they say the reader reads correctly,
+// not that this file fails when the real source drifts. The executable mutants
+// that drive the WHOLE script against a mutated tree are run separately and
+// recorded with the batch evidence.
+//
+// The shapes that a looser reader gets wrong are the point: an entry deleted
+// while the constant survives elsewhere, no declaration at all, an initialiser
+// that is not a `listOf`, a DECOY `listOf(TEXT_CAPABILITY)` in the next member,
+// and a longer identifier that merely starts with the same name.
+const CAPS_MUTANTS = [
+  {
+    name: "the shipped multiline declaration",
+    source: 'const val TEXT_CAPABILITY = "text/1"\n'
+      + "    val ADVERTISED_CAPS: List<String> =\n"
+      + "        listOf(TEXT_CAPABILITY, CAPABILITY, RelayRenewWire.CAPABILITY)\n",
+    expect: "text",
+  },
+  {
+    name: "a single-line declaration",
+    source: "    val ADVERTISED_CAPS: List<String> = listOf(TEXT_CAPABILITY, CAPABILITY)\n",
+    expect: "text",
+  },
+  {
+    name: "text/1 dropped from the list while the constant survives",
+    source: 'const val TEXT_CAPABILITY = "text/1"\n'
+      + "    /** TEXT_CAPABILITY is named in this KDoc and nowhere else. */\n"
+      + "    val ADVERTISED_CAPS: List<String> =\n"
+      + "        listOf(CAPABILITY, RelayRenewWire.CAPABILITY)\n"
+      + "    const val FILE_CHANNEL = \"relayium\"\n",
+    expect: "no-text",
+  },
+  {
+    name: "no declaration at all",
+    source: 'const val TEXT_CAPABILITY = "text/1"\n',
+    expect: "missing",
+  },
+  {
+    name: "an initialiser that is not a listOf",
+    source: "    val ADVERTISED_CAPS: List<String> = buildCaps()\n"
+      + "    const val FILE_CHANNEL = \"relayium\"\n",
+    expect: "missing",
+  },
+  {
+    name: "a decoy listOf(TEXT_CAPABILITY) in the member that follows",
+    source: "    val ADVERTISED_CAPS: List<String> = buildCaps()\n"
+      + "    private val decoy = listOf(TEXT_CAPABILITY)\n",
+    expect: "missing",
+  },
+  {
+    name: "a decoy behind a modifier the old bound did not know",
+    source: "    val ADVERTISED_CAPS: List<String> = buildCaps()\n"
+      + "    internal override suspend fun caps() = listOf(TEXT_CAPABILITY)\n",
+    expect: "missing",
+  },
+  {
+    name: "a longer identifier that merely starts with the same name",
+    source: "    val ADVERTISED_CAPS_BACKUP: List<String> = listOf(TEXT_CAPABILITY)\n",
+    expect: "missing",
+  },
+  {
+    name: "the real declaration AFTER a longer lookalike",
+    source: "    val ADVERTISED_CAPS_BACKUP: List<String> = listOf(TEXT_CAPABILITY)\n"
+      + "    val ADVERTISED_CAPS: List<String> = listOf(CAPABILITY)\n",
+    expect: "no-text",
+  },
+];
+for (const mutant of CAPS_MUTANTS) {
+  const list = advertisedCapsList(mutant.source);
+  const actual = list === null
+    ? "missing"
+    : (/\bTEXT_CAPABILITY\b/.test(list) ? "text" : "no-text");
+  check(
+    actual === mutant.expect,
+    `the ADVERTISED_CAPS reader answered "${actual}" for ${mutant.name}; "${mutant.expect}" is `
+    + "correct. A reader that cannot tell these apart cannot tell a real capability change from "
+    + "a formatting one.",
+  );
+}
 
 // The role on this wire is the user's INTENT. A controller that derived it from
 // the hub ids instead would disagree with every already-deployed peer about who
