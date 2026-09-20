@@ -106,14 +106,20 @@ purchase is accepted, not a conclusion this document may assert on its own.
 | Marketing version in the project source | `0.4.1` |
 | Build in the project source | `10` |
 
-#### `0.4.1` (build `10`) — PREPARING for internal TestFlight, as of 2026-09-20
+#### Delivery checkpoint — `0.4.1 (10)` on internal TestFlight, 2026-09-20
 
-**Status as of 2026-09-20: source preparation only.** As of that date nothing
-had been archived, signed, uploaded or distributed under `0.4.1`; build `10` is
-a project value App Store Connect has never seen, and **the version iOS
-internal TestFlight is actually serving is still `0.4.0 (9)`**. This is a dated
-snapshot: `docs/app-store-metadata-ios.json` and a fresh authenticated
-read-back are the authority for what exists, never this sentence.
+**Status, read back on 2026-09-20: build `10` is `VALID` and
+`IN_BETA_TESTING`, in the existing internal group only.** Build
+`9f638aef-2c9d-47a7-a935-2e34971983ac`, marketing version `0.4.1`, built from
+frozen source `15466b04`; the exported IPA is SHA-256
+`61ffccbdf1697444247cc1ec676da99ee5d0623309f97ffb97f9d4a090522d99`. Automatic
+tester notification was off, and the English and Simplified Chinese What to Test
+were entered from `docs/app-store-metadata-ios.json` (packet SHA-256
+`b90f5b9fe7b88c31bfc1d97d0acfa6c495be4aa42234c45db744bd75fdef9aa2`). Build `10`
+is consumed. **It is an internal TestFlight build only: not an App Store
+submission, not a release, and no `0.4.1` App Store version exists or was
+created.** iOS remains non-public, and the owner's physical retest has still
+not happened.
 
 - **Why it exists.** `0.4.0 (9)` was archived from `4d694a9e`, which is an
   ancestor of the relay-credential renewal commit, so that build cannot contain
@@ -131,20 +137,26 @@ read-back are the authority for what exists, never this sentence.
   throughput measurement was taken, so its effect on real transfer speed is
   unmeasured in both directions — neither an improvement nor its absence is
   claimed. No physical-device result exists for it on iOS.
-- **Why a new visible version.** Build `9` is consumed, and the owner's
+- **Why a new visible version.** Build `9` was consumed, and the owner's
   2026-09-17 preference gives every newly distributed candidate a distinct
   visible version. iOS carries its own pre-release build sequence on the
   universal-purchase record, independent of macOS, whose builds reached `39`.
-  `10` is a project value; the highest consumed build must be read back again
-  before it is used.
+  Build `10` is now consumed too; the highest consumed build must be read back
+  again before another archive.
 - **Scope.** Existing internal TestFlight group only, notifications off. No App
   Store version, submission, external group or public launch is part of it.
 
-**Read-back, 2026-09-20.** The record's `0.3.1` App Store version reads
-`DEVELOPER_REJECTED` and is still set to manual release — an earlier reading in
-this document recorded it as `WAITING_FOR_REVIEW`, and this is the later state.
-It is recorded as an observation only: `0.3.1` is not this candidate's to
-rename, resubmit, withdraw or select a build on, and nothing here changed it.
+**Read-back of the App Store version, 2026-09-20.** Two readings were taken on
+this date and both are recorded, in order. Earlier, the record's `0.3.1` version
+read `DEVELOPER_REJECTED`, still set to manual release — superseding this
+document's earlier `WAITING_FOR_REVIEW` reading. Later in the day the record's
+editable App Store version read **`0.4.0`, `PREPARE_FOR_SUBMISSION`, manual
+release, with build `960054c5-…` (`9`) selected**. That change was made outside
+this task; it is recorded as an observation and was **preserved, not modified**.
+Nothing here renamed, resubmitted, withdrew or reselected a build on the App
+Store version, and `0.4.1 (10)` was delivered to TestFlight without touching it.
+The frozen metadata packet keeps its own older observations with their own
+dates; they are history and were not rewritten.
 
 #### Delivery checkpoint — `0.4.0 (9)` uploaded to internal TestFlight, 2026-09-18
 

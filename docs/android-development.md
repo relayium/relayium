@@ -3,12 +3,10 @@
 **Status: public preview.** `apps/android/` is the native Android client,
 applicationId `com.relayium.android`, distributed as a direct APK only — no
 Google Play listing, no Play Billing, and no Play Services or GMS dependency of
-any kind. The published build is 0.2.4 (versionCode 7); 0.2.5 (versionCode 8)
-is signed, verified and staged in this tree but is **not published yet**, so
-until the release exists and the site is advanced, the download surface still
-serves 0.2.4 while `web/android-release.json` already describes 0.2.5.
+any kind. The published build is 0.2.5 (versionCode 8), and it is the source:
+the update feed, the download surface and this tree describe one build.
 
-### Staged, not published: 0.2.5 (versionCode 8), 2026-09-20
+### Provenance of the 0.2.5 release — read this before auditing the tag
 
 * the artifact `Relayium-0.2.5-8.apk`, SHA-256
   `74547a88053c81d600704b2ec1d04adcbb8fb8e6cfcf4c023d08ba82322fd616`,
@@ -26,11 +24,15 @@ serves 0.2.4 while `web/android-release.json` already describes 0.2.5.
   was clean, a downgrade was refused, and an APK with a modified DEX was
   rejected by signature. That is a private-file-retention result on an
   emulator — there is no physical-device result and no transfer-speed claim;
-* `web/android-release.json`, the generated `/apps/android/update.json` and the
-  maintained EN/zh pages are staged against exactly those bytes. **No GitHub
-  release exists at `android-v0.2.5` yet**, so the download URL in the manifest
-  does not resolve until the publication step runs. The site must not be
-  advanced before the published asset is fetched back and verified.
+* the `android-v0.2.5` tag names the later metadata commit
+  **`6f077001`**: it changes release metadata, generated pages and documents
+  only, and `apps/android/` at the tag is identical to the APK source
+  `15466b04`. The release was published 2026-09-20T16:03:15Z as a
+  **pre-release**, so it does not hold the repository-wide `latest` alias —
+  that still names the CLI, `v0.25.1`. The published asset was downloaded back
+  and is byte-identical to the signed candidate, and
+  `web/android-release.json` and the generated `/apps/android/update.json`
+  describe exactly those bytes.
 
 What it changes, against 0.2.4: cross-network relay-credential renewal — a
 connection with real user activity in the last ten minutes can request a fresh
@@ -145,12 +147,12 @@ the manifest says `available: false`, and every surface — the card, the
 static twins and the app itself — reports "no download is published" rather than
 inventing one.
 
-## Unreleased engineering changes — not in any published APK
+## Cross-client pairing fixes — released in 0.2.5
 
-**Source only.** These landed on the cross-network review branch after 0.2.4 and
-are not signed, not published and not in the feed. The installed public preview
-is still `0.2.4` (versionCode 7) and does **not** contain them; a phone that
-updated to 0.2.4 has none of this. No version was bumped.
+**Released.** These landed on the cross-network review branch after 0.2.4 and
+shipped in `0.2.5` (versionCode 8); a phone still on `0.2.4` does **not** have
+them. They are described here rather than in the release notes because they are
+engineering detail about the pairing-code path.
 
 Three fixes from a cross-client review of the pairing-code path, alongside the
 Web, Apple and server halves recorded in `docs/TESTING.md`:

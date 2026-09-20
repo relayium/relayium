@@ -21,16 +21,16 @@
   inside the released 1.4.1 app. The system Share menu is verified to list it; a
   real Finder share has not yet been driven by hand.
 - `ios/` — iOS SwiftUI app (`com.relayium.mac`), same local package. **In
-  development at 0.4.0 and not public.** The bundle id is macOS's on purpose:
+  development at 0.4.1 and not public.** The bundle id is macOS's on purpose:
   iOS and macOS are two platforms of ONE universal-purchase App Store record
   (Apple ID `6801142976`), and Apple requires every platform in such a record to
   carry the same Bundle ID. That is also what puts an iOS build in front of the
   six already-Approved `com.relayium.mac.*` subscription products instead of a
   catalogue of its own.
 - `android/` — native Android client (`com.relayium.android`), Kotlin + Jetpack
-  Compose over a pure-JVM `:protocol` module. **Public preview at 0.2.4
-  (versionCode 7)**, which is what the download serves today; direct APK only, no Google Play, no Play Services, no Play
-  Billing. Five destinations — Transfer, Nearby, Inbox, Cloud, Account: it mints
+  Compose over a pure-JVM `:protocol` module. **Public preview at 0.2.5
+  (versionCode 8)**, which is what the download serves today; direct APK only,
+  no Google Play, no Play Services, no Play Billing. Five destinations — Transfer, Nearby, Inbox, Cloud, Account: it mints
   a six-digit code or `/cross-network#c=` link as well as joining one, finds
   devices with no code at all, receives Device Inbox deliveries into app-private
   account-scoped storage with a durable history, sends and opens zero-knowledge
@@ -50,6 +50,13 @@
   EXE outside the Microsoft Store is the intended distribution; there is no
   Authenticode credential in this repository and the lane builds an unsigned
   NSIS installer as build evidence only.
+
+  The current internal candidate is `0.0.2` x64, built from source `15466b04`
+  in hosted run `35519546403`: installer SHA-256
+  `5b822b592d29ea4aed66b2ffd72b87f21f391671e06ffa7860a23d1f9eeb08c1`,
+  118,160,849 bytes, **unsigned**, with its installed acceptance reporting no
+  failures. It is an internal candidate the owner can install; it is **not
+  publicly distributed**, and there is still no public Windows channel.
 
   Unlike every other client here it neither links `RelayiumKit` nor reimplements
   the wire: it **compiles the shipping TypeScript protocol modules out of
@@ -71,7 +78,7 @@
   outstanding gap are tracked in `windows/DURABLE-PARITY.md`.
 - `ios/RelayiumShare/` — the iOS Share Extension (`com.relayium.mac.ShareIOS`),
   embedded in the app at `PlugIns/RelayiumShare.appex`. Links `RelayiumShareKit`
-  only. **In development at 0.4.0 and not public.** Its identifier is *not*
+  only. **In development at 0.4.1 and not public.** Its identifier is *not*
   `com.relayium.mac.Share` — that is the macOS extension. The target record's
   iOS TestFlight build metadata reports extension application identifier
   `7PVYUG4YQS.com.relayium.mac.ShareIOS`, so that is what this project must
@@ -156,45 +163,51 @@ is the operator record: what the release changes, what it deliberately does not
 change, its channel state with the read-back evidence, and the What to Test
 copy for both maintained languages.
 
-**Source preparation across the remaining platforms, 2026-09-20.** The project
-versions in this tree are ahead of what those channels serve, because the
-relay-credential renewal macOS shipped as `1.4.1 (39)` is prepared here for the
-others: Android `0.2.5 (versionCode 8)`, iOS `0.4.1 (10)`, Windows `0.0.2`.
-That is a fact about source on that date, and Android has moved past it since:
-a signed `0.2.5 (8)` APK exists and was verified, including an in-place upgrade
-over the published `0.2.4` on an emulator, and `web/android-release.json` is
-staged against exactly those bytes — but **no release has been published at
-`android-v0.2.5`, so the download still serves `0.2.4`** until it is, and the
-site must not be advanced before the published asset is fetched back and
-verified. `docs/android-development.md` holds that provenance. **Neither iOS nor
-Windows has published anything under its prepared number**: the last verified
-iOS internal TestFlight build is still `0.4.0 (9)`, and Windows `0.0.2` is the
-next candidate on the existing internal-candidate track, which is not a
-distribution channel. Renewal needs both peers updated and compatible,
-its deadline moves later only after a verified migration, and the hosting
-account's quota and relay policy may refuse it; no transfer-speed effect is
-claimed or measured on any of them.
+**The remaining platforms carry the renewal too, 2026-09-20.** The
+relay-credential renewal macOS shipped as `1.4.1 (39)` went out on the other
+three channels from source `15466b04`, each through the channel it already had:
+Android `0.2.5 (versionCode 8)` as a public direct-APK pre-release, verified
+byte-identical after download; iOS `0.4.1 (10)` to the existing internal
+TestFlight group only, `VALID` and in beta testing with tester notification
+off; and Windows `0.0.2` as an **unsigned internal candidate**, which is not a
+distribution channel and is not publicly distributed. The `relayium` CLI and
+`relayium-node` binaries were republished together as `v0.25.1`, a dependency
+refresh: no command behaviour changed, the CLI's own cross-network transfer
+still runs over its pinned-TLS transport rather than WebRTC, and neither binary
+gains renewal. Nothing was rolled out to the node fleet. `docs/android-development.md` and
+`docs/ios-app-store-submission.md` hold the per-channel provenance.
+
+Renewal needs both peers updated and compatible, its deadline moves later only
+after a verified migration, and the hosting account's quota and relay policy may
+refuse it. **No physical-device, WAN or transfer-speed result is claimed for any
+of them**, and the public Mac App Store release is unchanged and out of scope.
 
 The macOS status above covers macOS only. iOS development resumed on
 2026-09-01 at version 0.3.0: internal TestFlight builds were used for
 development acceptance before the earlier pause, and neither the iOS app nor its share extension is publicly
 offered. There is no public App Store release and no Relayium download surface
-offers iOS. The current internal candidate is **`0.4.0 (9)`**, archived from
-frozen source `4d694a9e`, uploaded on 2026-09-18, processed `VALID` and
-`IN_BETA_TESTING` with the internal group only — no external group, no beta
-review, tester notification off. `docs/ios-app-store-submission.md` holds that
-checkpoint. An internal TestFlight build is not a release: the App Store
-version is still `0.3.1`, nothing was submitted, and the owner's physical
-retest has not happened.
+offers iOS. The current internal candidate is **`0.4.1 (10)`**, built from
+frozen source `15466b04`, processed `VALID` and `IN_BETA_TESTING` with the
+existing internal group only — no external group, no beta review, tester
+notification off. It carries the relay-credential renewal; `0.4.0 (9)`,
+uploaded on 2026-09-18 from `4d694a9e`, was the one before it and does not.
+`docs/ios-app-store-submission.md` holds both checkpoints. An internal
+TestFlight build is a real internal delivery but **not a public App Store
+release**: on a 2026-09-20 read-back the record's editable App Store version
+read `0.4.0`, `PREPARE_FOR_SUBMISSION`, manual release, with build `9`
+selected — a state changed outside this work and left exactly as found.
+Nothing was submitted, and the owner's physical retest has not happened.
 
 iOS ships as the second platform of the macOS App Store record (Apple ID
 `6801142976`) rather than as a record of its own, so it inherits that record's
 subscription group, its published App Privacy answers, its price schedule and
 its territory selection. Those gates are therefore already met for iOS — they
-were met for the released macOS app — and the iOS `0.3.1` version has **two
-open blocking gates**: no build is selected for it, and its required iPhone and
-iPad screenshot sets are missing. That is a shorter list than it was, not a
-finished one; `docs/app-store-metadata-ios.json` holds the field-by-field
+were met for the released macOS app. The blocking gates that remain are read
+from the record rather than restated here: the 2026-09-20 read-back found a
+build selected on the editable version, which closes the gate this document
+recorded as open while the version was `0.3.1`, and the required iPhone and
+iPad screenshot sets are still missing. That is a shorter list than it was, not
+a finished one; `docs/app-store-metadata-ios.json` holds the field-by-field
 read-back and remains the authoritative record of what is and is not done. It
 is also not a shorter list of *risks*: sharing a record with a released, paid
 macOS app is what makes an iOS mistake reach macOS customers.
@@ -1180,7 +1193,7 @@ Developer ID identity.
 
 `apps/ios/Relayium.xcodeproj` (bundle id `com.relayium.mac`,
 `IPHONEOS_DEPLOYMENT_TARGET = 16.0`, iPhone + iPad) is a SwiftUI app over the
-same local `RelayiumKit` package. **In development at 0.4.0 and not public** —
+same local `RelayiumKit` package. **In development at 0.4.1 and not public** —
 internal TestFlight builds were used for development acceptance before the
 earlier pause, but there is no public App Store listing and the website offers
 no iOS download.
