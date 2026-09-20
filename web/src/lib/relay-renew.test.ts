@@ -11,7 +11,7 @@
 // fence and the post-commit window are properties of the machine in motion,
 // not of any function in isolation.
 
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import {
   RENEW_ACK_VERIFY_RESERVE,
   RENEW_MAX_PREGRANT_ATTEMPTS,
@@ -82,6 +82,101 @@ function grantFor(round: number, rid: number, expirySeconds: number): IceGrant {
   };
 }
 
+// ── real crypto, observed ───────────────────────────────────────────────────
+
+/**
+ * How many REAL `crypto.subtle` operations this file has outstanding.
+ *
+ * Nothing here fakes a result, a tag or a timing: `sign` and `verify` are the
+ * genuine WebCrypto calls with the genuine key, and the wrapper only counts
+ * them in and out. The point is that the pump below can ask "has the HMAC
+ * finished?" instead of assuming six macrotask turns were enough — which is the
+ * assumption the hosted runner has now falsified three times.
+ *
+ * Only `sign` and `verify` are wrapped. A test that deliberately leaves a
+ * server promise unsettled must not become a test that hangs, so nothing about
+ * the request path is observed here.
+ */
+/**
+ * The real crypto in flight for the test that is running NOW.
+ *
+ * A Set per test, not one counter. The first version of this was a single
+ * count reset in `beforeEach`, and it was wrong in a way that reads as safe:
+ * an operation an earlier test started decrements the same counter when it
+ * finally settles, so `old starts (1) → reset (0) → new starts (1) → old
+ * settles (0)` reports quiescence while the new operation is still running —
+ * the exact "empty is not settled" premise this tracker exists to remove.
+ * Capturing the owning Set at CALL time fixes it: a late settlement deletes
+ * itself from the Set its own test owned, which nothing reads any more.
+ */
+let inFlight = new Set<Promise<unknown>>();
+const newCryptoEpoch = () => { inFlight = new Set<Promise<unknown>>(); };
+
+/** Track `p` for whichever test owned the tracker when the call was made. */
+function trackCrypto<T>(p: Promise<T>): Promise<T> {
+  const owner = inFlight;
+  owner.add(p);
+  // The bookkeeping chain swallows rejection so it can never surface as an
+  // unhandled one; `p` itself is returned untouched, so the caller still sees
+  // the real value and the real rejection.
+  void p.catch(() => {}).finally(() => { owner.delete(p); });
+  return p;
+}
+
+// Unbound, so `afterAll` restores the original function identities rather than
+// bound copies of them.
+const realSign = crypto.subtle.sign;
+const realVerify = crypto.subtle.verify;
+const counted = <A extends unknown[], R>(op: (...a: A) => Promise<R>) =>
+  function (this: SubtleCrypto, ...args: A): Promise<R> {
+    let started: Promise<R>;
+    try {
+      started = op.apply(this, args);
+    } catch (err) {
+      // A synchronous throw never became an operation, so nothing is tracked
+      // and the count cannot leak.
+      return Promise.reject(err);
+    }
+    return trackCrypto(Promise.resolve(started));
+  };
+beforeAll(() => {
+  crypto.subtle.sign = counted(realSign) as typeof crypto.subtle.sign;
+  crypto.subtle.verify = counted(realVerify) as typeof crypto.subtle.verify;
+});
+afterAll(() => {
+  crypto.subtle.sign = realSign;
+  crypto.subtle.verify = realVerify;
+});
+beforeEach(newCryptoEpoch);
+
+/**
+ * Turn the macrotask queue until the real HMACs have actually settled.
+ *
+ * `tail` is the small settling window this drain always had, and it is NOT a
+ * bigger pump: the tracker decides, and the tail is only counted across turns
+ * where nothing real is outstanding — a continuation that starts another
+ * `sign` resets it. So the loop ends on a condition rather than on a guess.
+ *
+ * Reaching `cap` THROWS. Falling through would hand the caller the very
+ * premise this exists to remove: queues that look empty because the work has
+ * not started. No fixture holds an HMAC open on purpose — the ones that hold
+ * something open hold SERVER promises, which are deliberately not tracked — so
+ * outstanding crypto at the budget is a finding and is reported as itself.
+ */
+const settleCrypto = async (tail = 30, cap = 600) => {
+  let quiet = 0;
+  for (let turns = 0; quiet < tail; turns++) {
+    if (turns >= cap) {
+      throw new Error(
+        `the harness observed ${cap} turns with ${inFlight.size} real crypto `
+        + `operation(s) still outstanding; empty queues would not mean settled`,
+      );
+    }
+    await new Promise((r) => setTimeout(r, 0));
+    quiet = inFlight.size === 0 ? quiet + 1 : 0;
+  }
+};
+
 let key: CryptoKey;
 beforeAll(async () => {
   key = await crypto.subtle.importKey(
@@ -104,10 +199,21 @@ function scheduler(start = 10 * HOUR) {
   const clearTimer = (id: ReturnType<typeof setTimeout>) => {
     timers.delete(id as unknown as number);
   };
-  /** Drain microtasks, including the ones Web Crypto settles on. */
-  const flush = async (turns = 30) => {
-    for (let i = 0; i < turns; i++) await new Promise((r) => setTimeout(r, 0));
-  };
+  /**
+   * Turn the macrotask queue until the real HMACs have actually settled.
+   *
+   * `tail` is the same small settling window this helper always had, and it is
+   * NOT a bigger pump: the counter is what decides, and the tail is only
+   * counted across turns where nothing is outstanding — a continuation that
+   * starts another `sign` resets it. So the loop ends on "no crypto is running
+   * and none started for `tail` turns", which is a condition, not a guess.
+   *
+   * `cap` exists so a test that parks a promise on purpose fails as itself
+   * rather than hanging. Reaching it is not an error here: it means something
+   * is legitimately still outstanding, and the caller's own barrier or
+   * assertion is what judges that.
+   */
+  const flush = settleCrypto;
   async function advance(ms: number) {
     const target = nowMs + ms;
     for (;;) {
@@ -362,6 +468,33 @@ function pair(clock: ReturnType<typeof scheduler>) {
 }
 
 /**
+ * Both sides have actually opened their ICE window for the round in flight.
+ *
+ * `land()` does two things: it sets `selected` to the transport's CURRENT
+ * `localU`, and it invokes the selected-pair callback if one is installed. The
+ * callback is NOT the only path to a commit — `beginIceWindow` also starts
+ * `pollObservation`, which re-reads `selectedGeneration()` every 500 ms and is
+ * described in the runtime as the guarantee to the event's wake-up. So a side
+ * with no callback installed is not thereby a side that can never commit, and
+ * this barrier must not be read as asserting that.
+ *
+ * What landing too early actually does is quieter. `beginIceWindow` refuses to
+ * start until BOTH descriptions for the epoch have been applied, and until a
+ * side has produced its own offer or answer its `localU` still names the
+ * PREVIOUS generation — so `land()` selects the old generation and every
+ * observation that follows correctly rejects it. The responder signs its answer
+ * asynchronously, so "the pump went quiet once" is no evidence that either side
+ * has reached the new generation.
+ *
+ * `pairCb` being installed is the observable that it has: the runtime sets it
+ * in `beginIceWindow`, after the ufrag guard, in the same step that arms the
+ * probe. Watching it is watching the event; counting turns is guessing how long
+ * HMAC took, which is what the hosted runner disproved.
+ */
+const iceWindowsOpen = (p: ReturnType<typeof pair>) => () =>
+  p.a.transport.pairCb !== null && p.b.transport.pairCb !== null;
+
+/**
  * Run a complete renewal to commit on both sides.
  *
  * Deliberately a helper the tests CALL rather than assert inside: several tests
@@ -369,16 +502,70 @@ function pair(clock: ReturnType<typeof scheduler>) {
  * to re-describe the happy path to get one.
  */
 async function renewBoth(clock: ReturnType<typeof scheduler>, p: ReturnType<typeof pair>) {
+  // Captured BEFORE the tick. "supports more than one renewal on the same link"
+  // calls this helper twice on one pair, and a barrier spelled
+  // `commits.length === 1` is ALREADY true when the second call begins: it
+  // would return without waiting for the second migration, and then time out on
+  // a pair that had legitimately committed twice. Per side, because the two
+  // commit independently. Exactly `prior + 1` rather than `>=`, so a side that
+  // somehow committed twice inside one call is a named timeout rather than a
+  // pass.
+  const priorA = p.a.commits.length;
+  const priorB = p.b.commits.length;
   p.a.renewal.tick();
-  await p.deliver();
+  await pumpUntil(p, iceWindowsOpen(p), "both sides opening their ICE window");
   // The migration lands on both sides.
   p.a.transport.land();
   p.b.transport.land();
   await clock.advance(600);
-  await p.deliver();
+  await pumpUntil(
+    p,
+    () => p.a.commits.length === priorA + 1 && p.b.commits.length === priorB + 1,
+    "both sides committing this migration",
+  );
   await clock.advance(600);
   await p.deliver();
 }
+
+// ── the harness's own tracker ───────────────────────────────────────────────
+
+describe("the harness tracks real crypto per test", () => {
+  it("lets a previous test's late HMAC settle without erasing work in flight now", async () => {
+    // R3 as an executable case rather than a comment. With one global counter
+    // reset between tests, this exact interleaving reported quiescence while a
+    // real operation was still running, and every drain built on it was
+    // answering about the wrong machine.
+    const previous = inFlight;
+    let releaseOld!: () => void;
+    const old = new Promise<void>((resolve) => { releaseOld = resolve; });
+    trackCrypto(old);
+    expect(previous.size).toBe(1);
+
+    // What `beforeEach` does between tests.
+    newCryptoEpoch();
+    const current = inFlight;
+    expect(current).not.toBe(previous);
+
+    let releaseFresh!: () => void;
+    const fresh = new Promise<void>((resolve) => { releaseFresh = resolve; });
+    trackCrypto(fresh);
+    expect(current.size).toBe(1);
+
+    // The old operation settles LATE, after the new one has started.
+    releaseOld();
+    await old;
+    await Promise.resolve();
+    expect(previous.size).toBe(0);
+    // The finding: the current test's work is untouched. A counter would read
+    // zero here and a drain would return on it.
+    expect(current.size).toBe(1);
+
+    releaseFresh();
+    await fresh;
+    await Promise.resolve();
+    expect(current.size).toBe(0);
+  });
+});
 
 // ── the trigger (W2) ────────────────────────────────────────────────────────
 
@@ -1123,11 +1310,12 @@ describe("the commit fence", () => {
     const clock = scheduler();
     const p = pair(clock);
     p.a.renewal.tick();
-    await p.deliver();
+    await pumpUntil(p, iceWindowsOpen(p), "both sides opening their ICE window");
     p.a.transport.land();
     p.b.transport.land();
     await clock.advance(600);
-    await p.deliver();
+    await pumpUntil(p, () => p.a.commits.length === 1 && p.b.commits.length === 1,
+      "both sides committing the migration");
     await clock.advance(600);
     await p.deliver();
     expect(p.a.commits).toHaveLength(1);
@@ -1320,13 +1508,23 @@ describe("W8: a peer's ready arriving before this side's own grant", () => {
  */
 async function oneSidedCommit(clock: ReturnType<typeof scheduler>, p: ReturnType<typeof pair>) {
   p.a.renewal.tick();
-  await p.deliver();
+  await pumpUntil(p, iceWindowsOpen(p), "both sides opening their ICE window");
+  // From here A hears nothing more, so its own nonce is never acknowledged.
+  //
+  // Armed BEFORE the landing rather than after the first advance. The barrier
+  // above pumps until the windows are open, and A's ack can now be produced
+  // inside that pump — which the original turn-counted sequence never reached
+  // this far. Arming earlier drops strictly more acks, which is the direction
+  // this helper wants; arming later would let the first one through and stop
+  // producing the asymmetry the R4 cases are built on.
+  p.a.dropInbound = (frame) => decodeRenewProbe(frame)?.type === RENEW_PROBE_TYPE_ACK;
   p.a.transport.land();
   p.b.transport.land();
   await clock.advance(600);
-  // From here A hears nothing more, so its own nonce is never acknowledged.
-  p.a.dropInbound = (frame) => decodeRenewProbe(frame)?.type === RENEW_PROBE_TYPE_ACK;
-  await p.deliver();
+  await pumpUntil(p, () => p.b.commits.length === 1, "B committing without A");
+  // The asymmetry is the helper's whole contract, so it is asserted here rather
+  // than assumed by every caller: B has committed and A has not.
+  expect(p.a.commits).toHaveLength(0);
   await clock.advance(600);
   await p.deliver();
   await clock.advance(RENEW_EPOCH_HARD_CAP_MS + 1000);
@@ -1406,12 +1604,23 @@ describe("R4: one side committed, the other did not", () => {
     await clock.advance(RENEW_RETRY_BACKOFF_MS + 1000);
     p.a.anchor = clock.now() - 50 * 60_000;
     p.a.deadline = deadlineAt(p.a.anchor, HOUR);
+    // The repair round has to reach the wire before the path is said to land.
+    // Both sides already opened an ICE window for the FIRST attempt, so the
+    // window observable alone cannot tell this round from that one; the
+    // candidate release each side performs for the new generation can.
+    const releasedA = p.a.transport.released;
+    const releasedB = p.b.transport.released;
     p.a.renewal.tick();
-    await p.deliver();
+    await pumpUntil(
+      p,
+      () => iceWindowsOpen(p)()
+        && p.a.transport.released > releasedA && p.b.transport.released > releasedB,
+      "both sides releasing the repair round's candidates",
+    );
     p.a.transport.land();
     p.b.transport.land();
     await clock.advance(600);
-    await p.deliver();
+    await pumpUntil(p, () => p.a.commits.length === 1, "A committing the repair");
     await clock.advance(600);
     await p.deliver();
 
@@ -1730,17 +1939,36 @@ describe("R5: verification budget", () => {
   });
 
   it("keeps an ACK chance that a probe flood cannot spend", async () => {
+    // **Ordering is the whole test.** Written as "flood, then assert a commit",
+    // it could pass with the flood arriving after A had already committed on
+    // B's ack — budget spent against a settled epoch, the reserve never under
+    // pressure. That is not a guess: adding `expect(A.commits).toHaveLength(0)`
+    // before the flood to the old test fails with 1. So the ack A is owed is
+    // WITHHELD until the flood has run, and the precondition is asserted.
     const clock = scheduler();
     const p = pair(clock);
+    const heldAcks: ArrayBuffer[] = [];
+    p.a.dropInbound = (frame) => {
+      if (decodeRenewProbe(frame)?.type !== RENEW_PROBE_TYPE_ACK) return false;
+      heldAcks.push(frame);
+      return true;
+    };
     p.a.renewal.tick();
-    await p.deliver();
+    await pumpUntil(p, iceWindowsOpen(p), "both sides opening their ICE window");
     p.a.transport.land();
     p.b.transport.land();
     await clock.advance(600);
     await p.deliver();
 
+    // The precondition the reserve claim needs: A is still waiting, so its ACK
+    // half is entirely unspent, and B really has acked — the withheld frame is
+    // a frame that existed, not an absence dressed up as one.
+    expect(p.a.commits).toHaveLength(0);
+    expect(heldAcks.length).toBeGreaterThan(0);
+
     // A junk flood: correctly shaped, correctly addressed, wrong tags. Each one
-    // that reaches an HMAC costs budget.
+    // that reaches an HMAC costs budget — and it is arriving while the ACK
+    // chance is still there to be stolen.
     for (let i = 0; i < 20; i++) {
       const junk = encodeRenewProbe({
         type: RENEW_PROBE_TYPE_PROBE, epoch: 1, round: 1,
@@ -1750,33 +1978,67 @@ describe("R5: verification budget", () => {
       p.a.renewal.frame(junk);
       await clock.flush(2);
     }
-    // The genuine ack still gets through, because the probe half cannot reach
-    // into the half reserved for it.
-    await clock.advance(600);
-    await p.deliver();
+    // Not one of them bought an ack, which is what "the tags are wrong" has to
+    // mean on the wire rather than in the comment.
+    expect(p.a.outFrames.filter((f) => decodeRenewProbe(f)?.type === RENEW_PROBE_TYPE_ACK))
+      .toHaveLength(0);
+
+    // Now hand A the ack it was owed. The probe half cannot reach into the half
+    // reserved for this frame, so it is verified and A commits.
+    p.a.dropInbound = null;
+    for (const ack of heldAcks) p.a.renewal.frame(ack);
+    await clock.flush();
     await clock.advance(600);
     await p.deliver();
     expect(p.a.commits).toHaveLength(1);
   });
 
   it("holds one eligible ACK while a verification is running rather than dropping it", async () => {
+    // The previous version of this case sent no junk probe at all, so no
+    // verification was ever in flight and the commit it asserted was the
+    // ordinary one: deleting the held slot from the product left it green.
+    // Everything below exists to make the slot the ONLY route to that commit.
     const clock = scheduler();
     const p = pair(clock);
+    const heldAcks: ArrayBuffer[] = [];
+    p.a.dropInbound = (frame) => {
+      if (decodeRenewProbe(frame)?.type !== RENEW_PROBE_TYPE_ACK) return false;
+      heldAcks.push(frame);
+      return true;
+    };
     p.a.renewal.tick();
-    await p.deliver();
+    await pumpUntil(p, iceWindowsOpen(p), "both sides opening their ICE window");
     p.a.transport.land();
     p.b.transport.land();
     await clock.advance(600);
-    // A has observed and is probing. Deliver a junk probe and the genuine ack
-    // in the SAME turn, so the ack arrives while the junk is being verified.
-    const ackFrames = p.b.frameLog.filter((f) => decodeRenewProbe(f)?.type === RENEW_PROBE_TYPE_ACK);
     await p.deliver();
-    const genuine = p.b.frameLog.filter((f) => decodeRenewProbe(f)?.type === RENEW_PROBE_TYPE_ACK);
-    expect(genuine.length).toBeGreaterThan(ackFrames.length - 1);
-    // The commit still happens: an ack displaced by a concurrent verification
-    // is held in the single slot and drained, not lost.
-    await clock.advance(600);
-    await p.deliver();
+    // A has observed its generation and is probing, B has acked, and that ack
+    // is in hand rather than delivered — so the commit below cannot already
+    // have happened by the ordinary path.
+    expect(p.a.commits).toHaveLength(0);
+    expect(heldAcks.length).toBeGreaterThan(0);
+
+    // Nothing further reaches A from the pump. A retransmitted ack arriving
+    // later would commit A whether the slot worked or not, which is exactly
+    // how the old case stayed green with the slot deleted.
+    p.a.dropInbound = () => true;
+
+    // SAME TURN, no await between the two: `frame()` runs to `handleControl`
+    // synchronously and sets `verifying` before it returns, so the genuine ack
+    // that follows the junk can only be kept by the held slot.
+    const junk = encodeRenewProbe({
+      type: RENEW_PROBE_TYPE_PROBE, epoch: 1, round: 1,
+      nonce: new Uint8Array(16).fill(0x11),
+      tag: new Uint8Array(32).fill(0xcc),
+    });
+    p.a.renewal.frame(junk);
+    p.a.renewal.frame(heldAcks[0]);
+    expect(p.a.commits).toHaveLength(0);
+
+    // Settled, not pumped: no new frame is delivered, so the only thing that
+    // can produce the commit is the ack drained out of the slot when the junk
+    // verification finishes.
+    await clock.flush();
     expect(p.a.commits).toHaveLength(1);
   });
 });
@@ -1794,10 +2056,15 @@ describe("R5: verification budget", () => {
  */
 const grantedEpochs = (side: Side) => side.transport.configs.length;
 
-/** Drain microtasks without needing the clock in scope. */
-const clock_flush = async (_p: ReturnType<typeof pair>) => {
-  for (let i = 0; i < 30; i++) await new Promise((r) => setTimeout(r, 0));
-};
+/**
+ * Drain without needing the clock in scope.
+ *
+ * The same observed drain as `clock.flush`, not a second fixed turn count: it
+ * carried its own `for (i < 30)` and therefore its own copy of the assumption
+ * the tracker exists to remove. It still delivers nothing — callers that want
+ * frames moved call `deliver()`.
+ */
+const clock_flush = async (_p: ReturnType<typeof pair>) => { await settleCrypto(); };
 
 describe("W9: three granted migrations per credential round, and no refunds", () => {
   it("does not let an authenticated peer abort restart this side immediately", async () => {
