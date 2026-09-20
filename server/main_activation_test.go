@@ -201,12 +201,61 @@ func TestMainWiresMintAdmissionAndOpaqueRoomGeneration(t *testing.T) {
 	text := string(source)
 	for _, required := range []string{
 		"resolvePair:  pairReg.RoomFor",
-		"pairReg.ObserveAdmittedRoom(room, peers)",
+		// The ATTRIB variant: it returns the generation's owner and attribution
+		// tag from the same critical section as the milestone, which is what
+		// lets the renewal grant be frozen against the generation that actually
+		// paired rather than against a second, later lookup of the same digits.
+		"pairReg.ObserveAdmittedRoomAttrib(room, peers)",
 		"pairActivity.Store(&observeActivity)",
 		"acct.PairMintRefusal, activationHook.afterMint",
 	} {
 		if !strings.Contains(text, required) {
 			t.Errorf("main activation wiring lacks %q", required)
 		}
+	}
+}
+
+// Renewal is wired entirely in main, from four separate pieces, and every one
+// of them is silent when absent: a missing hook does not fail to compile, it
+// just means renewal quietly never happens — or, worse, happens against an
+// authority nobody hydrated. Pinned here for the same reason the activation
+// wiring above is.
+func TestMainWiresRelayRenewal(t *testing.T) {
+	source, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	for _, required := range []string{
+		// Authority frozen on the paired transition, from the membership the
+		// hub captured under the admission lock.
+		"g.Open(room, owner, tag, members)",
+		// A departing frozen member ends the grant immediately.
+		"g.Depart(room, id)",
+		// The request path, and the issuer that decides it.
+		"g.Request(room, id, req)",
+		"acct.RenewRelayGrant,",
+		// What /api/ice already issued, so a grant inherits it instead of
+		// looking like it has nothing to renew.
+		"pairReg.IssuedSegmentForTag,",
+		// Attribution retention for an ACCEPTED round only — deliberately NOT
+		// the issuer's own notification.
+		"pairReg.RetainTag,",
+		"pairReg.SetIssuedObserver(grantReg.NoteIssued)",
+		// One sweep loop rather than a timer per grant.
+		"go grantReg.Run(context.Background(), time.Minute)",
+	} {
+		if !strings.Contains(text, required) {
+			t.Errorf("main renewal wiring lacks %q", required)
+		}
+	}
+	// The credential TTL and the renewal rate floor must come from ONE
+	// constant: two hour literals would let a TTL change move the credential
+	// and leave the floor behind.
+	if !strings.Contains(text, "TURNCredTTL:          turnCredTTL,") {
+		t.Error("main does not read the credential TTL from the shared constant")
+	}
+	if strings.Contains(text, "TURNCredTTL:          time.Hour") {
+		t.Error("main still hard-codes a second credential TTL literal")
 	}
 }

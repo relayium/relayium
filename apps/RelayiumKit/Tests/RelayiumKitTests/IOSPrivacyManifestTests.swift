@@ -569,7 +569,13 @@ final class IOSPrivacyManifestTests: XCTestCase {
 
         XCTAssertTrue(try RepoRoot.text(
             "apps/RelayiumKit/Sources/RelayiumKit/Account/ICEClient.swift").contains("api/ice"))
-        XCTAssertTrue(try RepoRoot.text("server/account/turn.go").contains("owner + \".\" + code"))
+        // The whole assignment, not a fragment: the credential names the ACCOUNT
+        // OWNER, joined to an immutable attribution tag (it used to be the
+        // pairing code, which recycles). Dropping the owner from the token must
+        // fail here; `attribToken` merely appearing somewhere must not pass.
+        XCTAssertTrue(try RepoRoot.text("server/account/turn.go")
+            .contains("token := owner + \".\" + attribToken"),
+                      "the TURN credential must still NAME THE OWNER; that is the linkage declared")
         XCTAssertTrue(try RepoRoot.text("server/account/nodes.go").contains("RecordUsage"))
         XCTAssertTrue(schema.contains("CREATE TABLE IF NOT EXISTS usage_events"))
         XCTAssertTrue(schema.contains("CREATE TABLE IF NOT EXISTS usage_periods"))

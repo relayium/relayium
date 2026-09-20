@@ -256,7 +256,8 @@ enum LinkSessionFactory {
                      receiveDirectory: URL,
                      admission: LinkAdmission,
                      deadlines: LinkDeadlines = LinkDeadlines(),
-                     initialSignal: JSONValue? = nil)
+                     initialSignal: JSONValue? = nil,
+                     renewal: LinkRenewalSeam? = nil)
     -> LinkSessionAssembly {
         make(signaling: signaling,
              peerId: peerId,
@@ -268,6 +269,7 @@ enum LinkSessionFactory {
              admission: admission,
              deadlines: deadlines,
              initialSignal: initialSignal,
+             renewal: renewal,
              buildInitialTransport: liveInitialTransport,
              buildReplacementFactory: liveReplacementFactory)
     }
@@ -288,16 +290,34 @@ enum LinkSessionFactory {
                      admission: LinkAdmission,
                      deadlines: LinkDeadlines,
                      initialSignal: JSONValue? = nil,
+                     renewal: LinkRenewalSeam? = nil,
                      buildInitialTransport: InitialTransportBuilder,
-                     buildReplacementFactory: ReplacementFactoryBuilder)
+                     buildReplacementFactory: @escaping ReplacementFactoryBuilder)
     -> LinkSessionAssembly {
         // ONE configuration, read once and handed to both halves — see
         // invariant 1. The rebuild factory is built BEFORE the transport for no
         // reason other than reading order; neither can observe the other.
-        let replacementFactory = buildReplacementFactory(signaling,
+        let replacementFactory: LinkReplacementFactory
+        if let currentServers = renewal?.currentICEServers {
+            // A renewing room: each rebuild is built with the credential that is
+            // live WHEN IT HAPPENS. Composed per rebuild rather than once,
+            // because the servers of this moment are the ones a renewal exists
+            // to replace — a rebuild on them, an hour on, gathers no relay
+            // candidate and fails looking like the network. The transport
+            // policy is still the link's own and is never re-decided.
+            replacementFactory = { identity in
+                let live = currentServers()
+                return try buildReplacementFactory(signaling,
+                                                   live.isEmpty ? iceServers : live,
+                                                   iceTransportPolicy,
+                                                   deadlines)(identity)
+            }
+        } else {
+            replacementFactory = buildReplacementFactory(signaling,
                                                          iceServers,
                                                          iceTransportPolicy,
                                                          deadlines)
+        }
         let transport = buildInitialTransport(signaling,
                                               peerId,
                                               role,
@@ -320,6 +340,10 @@ enum LinkSessionFactory {
                                              receiveDirectory: receiveDirectory,
                                              replacementFactory: replacementFactory,
                                              admission: admission,
+                                             // Travels through untouched, like
+                                             // `sink`: this factory composes,
+                                             // it does not answer for renewal.
+                                             renewal: renewal,
                                              onEvent: sink)
             assembled = runtime
             return runtime

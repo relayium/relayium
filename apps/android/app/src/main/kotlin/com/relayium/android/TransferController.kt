@@ -9,6 +9,8 @@ import com.relayium.android.storage.ReceiveStore
 import com.relayium.android.transport.IceConfig
 import com.relayium.android.transport.LinkTransport
 import com.relayium.android.transport.PeerScopedSignaling
+import com.relayium.android.transport.RelayRenewEngine
+import com.relayium.android.transport.RenewTransport
 import com.relayium.android.transport.SignalingClient
 import com.relayium.android.transport.SignalingFactory
 import com.relayium.android.transport.SignalingHandle
@@ -23,6 +25,9 @@ import com.relayium.protocol.LinkProtocol
 import com.relayium.protocol.LinkSession
 import com.relayium.protocol.PairCode
 import com.relayium.protocol.RealtimeFrame
+import com.relayium.protocol.RelayRenewPolicy
+import com.relayium.protocol.RelayRenewProbe
+import com.relayium.protocol.RelayRenewWire
 import com.relayium.protocol.Signal
 import com.relayium.protocol.TextLane
 import com.relayium.protocol.TextLaneSession
@@ -33,6 +38,7 @@ import com.relayium.protocol.legacy.LegacyTextLane
 import com.relayium.protocol.legacy.WireProfile
 import java.io.IOException
 import java.io.InputStream
+import java.security.SecureRandom
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.TimeUnit
@@ -236,6 +242,38 @@ class TransferController(
         /** The connected link stopped answering and is being given a bounded
          *  chance to come back. Not an ending: nothing has been lost yet. */
         val linkInterrupted: Boolean = false,
+        /**
+         * When this RELAYED link must end, on the local clock, or null.
+         *
+         * Null for every link nothing bounds: a LAN or Nearby session, a
+         * cross-network session whose selected path was classified direct, and
+         * a session whose selected path has not been reported at all.
+         *
+         * This is a CLIENT-side bound on this client's own behaviour. The
+         * server's grant authority expires on schedule and is not negotiable;
+         * what happens to the TURN allocation itself at that moment is a
+         * property of the relay engine, and is deliberately NOT claimed here.
+         * An allocation that already exists may outlive the credential that
+         * created it, so nothing in this file may be read as an instant cap or
+         * as automatic revocation.
+         *
+         * The honest statement is narrower, and is the one this bound rests on:
+         * past its expiry the credential can no longer be relied on, nothing
+         * tells the app when it stops working, and a link that keeps running on
+         * one is running on something neither end can account for.
+         */
+        val relayExpiresAt: Long? = null,
+        /** Inside the window where a live relayed link must say it is going to
+         *  end. Never true once a renewal has moved the boundary past it. */
+        val relayExpiryWarning: Boolean = false,
+        /**
+         * What renewal is doing, for truthful copy.
+         *
+         * Never `RENEWED` before an actual committed migration: an applied
+         * configuration, an open DataChannel and a server reply are each not a
+         * migration, and the UI must not claim one happened.
+         */
+        val renewState: RelayRenewEngine.State = RelayRenewEngine.State.IDLE,
         /** Incoming conversations this link admitted WITHOUT a prompt (link/1
          *  only). Zero on the older wire, which still asks. */
         val textAutoAdmits: Int = 0,
@@ -556,6 +594,47 @@ class TransferController(
     private var pendingExports = 0
     private var lastTextActivity = 0L
 
+    // ── relay renewal (`docs/protocol/relay-renew-v1.md`) ───────────────────
+
+    /**
+     * The INDEPENDENT real-user-data clock.
+     *
+     * Deliberately not [lastTextActivity], which is refreshed by lifecycle
+     * bytes and by the UI's own timers and is therefore unsuitable as a consent
+     * signal (section 7.1). This one moves on authenticated user-lane data
+     * only: received file plaintext, ACK progress that proves the peer took
+     * bytes, and user text that was sealed or authenticated. Renewal's own
+     * probes and acks are explicitly not activity, and neither are lifecycle
+     * bytes, queued work or a pending consent prompt.
+     */
+    private val userData = RelayRenewPolicy.Activity()
+
+    /** The epoch machine for the live link, or null when there is none. */
+    private var renewal: RelayRenewEngine? = null
+
+    /** The boundary this relayed link is bounded by, or null when nothing
+     *  bounds it. Armed only from an OBSERVED relay path. */
+    private var relayBound: RelayRenewPolicy.Deadline? = null
+
+    /**
+     * The renewed ICE configuration actually applied to the live connection, or
+     * null while it is still running on the one the room was issued.
+     *
+     * Held for the life of the LINK, outliving the renewal engine's short
+     * post-commit window: it is what a later path classification derives a
+     * boundary from, and the room's original `ice` may by then describe a
+     * credential nothing uses. Cleared with the connection, because a
+     * configuration issued for one link is not authority for the next.
+     */
+    private var installedIce: List<IceConfig.Server>? = null
+
+    /** Nonces and request ids. `SecureRandom` because a probe nonce is the only
+     *  thing standing between a replayed ack and a false commit. */
+    private val renewRandom = SecureRandom()
+
+    private var relayWarnTimer: ScheduledFuture<*>? = null
+    private var relayExpiryTimer: ScheduledFuture<*>? = null
+
     private var helloTimer: ScheduledFuture<*>? = null
     private var settleTimer: ScheduledFuture<*>? = null
     private var requestRetryTimer: ScheduledFuture<*>? = null
@@ -826,6 +905,14 @@ class TransferController(
                     if (peerId == pendingPeer) clearPendingAdmission()
                     if (admission == PeerAdmission.EXPLICIT) publishNearby()
                 }
+                override fun onIceGrant(data: Json) = postRoom(room) {
+                    // The grant belongs to the ROOM that asked. The engine
+                    // correlates it by rid on top of that, and a room switch
+                    // retires the engine with its link, so one room's
+                    // credentials cannot reach the next room's.
+                    renewal?.onGrant(data)
+                }
+
                 override fun onSignal(from: String, data: Json) = postRoom(room) {
                     onSignalFrame(from, data)
                 }
@@ -1119,6 +1206,22 @@ class TransferController(
             return
         }
         if (signal == null) return
+
+        // A renewal envelope, recognised by SHAPE before anything cryptographic
+        // and CONSUMED here whatever its contents.
+        //
+        // Routing stops at this line, and that is the point rather than an
+        // optimisation: a `link`-generation frame is also seen by any
+        // establishment in flight for this peer, and the whole reason SDP and
+        // ICE are nested inside `renew` is that a top-level one would be
+        // applied by the ordinary handler as a real, unauthenticated
+        // renegotiation against a live PeerConnection. An envelope from anyone
+        // but the established peer, or one that arrives with no renewal
+        // machinery at all, is dropped in silence.
+        if (RelayRenewWire.isRenewEnvelope(data)) {
+            if (from == peerId) renewal?.onSignal(data)
+            return
+        }
 
         // This room's ICE grant is still in flight, and there is no connection
         // yet — so everything from here down can end in a `PeerConnection`: an
@@ -1836,10 +1939,34 @@ class TransferController(
                     if (epoch == mine) onLinkReady(keys, sas, maxFrameBytes)
                 }
                 override fun onFileFrame(frame: ByteArray) {
-                    if (epoch == mine) fileLane?.let { apply(mine, it.onFrame(frame)) }
+                    if (epoch != mine) return
+                    val lane = fileLane ?: return
+                    // ACK progress is real user data: it is the peer stating
+                    // that bytes this side sent were durably received. Read
+                    // across the frame rather than from an action, because an
+                    // ACK produces no action of its own.
+                    val ackedBefore = lane.ackedContentBytes
+                    val actions = lane.onFrame(frame)
+                    if (lane.ackedContentBytes > ackedBefore) noteUserData()
+                    apply(mine, actions)
                 }
                 override fun onTextFrame(frame: ByteArray) {
-                    if (epoch == mine) textLane?.let {
+                    if (epoch != mine) return
+                    // A TRUE FRONT DEMUX, not an observer: a renewal control
+                    // frame is CONSUMED here and reaches nothing below.
+                    //
+                    // Three things must not see it, and each would be a real
+                    // failure rather than an untidiness: the text session's
+                    // inbound rate budget (a burst would fail the lane on
+                    // BOUNDS), the ten-minute idle clock (renewal traffic is
+                    // explicitly not user activity), and the AEAD receiver.
+                    // Because this runs inside the transport's own event, it
+                    // also covers frames replayed from pre-attachment capture.
+                    if (RelayRenewProbe.isControlFrame(frame)) {
+                        renewal?.onControlFrame(frame)
+                        return
+                    }
+                    textLane?.let {
                         lastTextActivity = System.currentTimeMillis()
                         applyText(mine, it.onFrame(frame))
                     }
@@ -1904,6 +2031,7 @@ class TransferController(
         legacyOfferTimer?.cancel(false); legacyOfferTimer = null
         lastTextActivity = System.currentTimeMillis()
         armTextIdle(epoch)
+        startRenewal(epoch)
         _state.value = _state.value.copy(
             phase = Phase.CONNECTED,
             wire = wire,
@@ -1913,6 +2041,230 @@ class TransferController(
             textLimit = text?.plainLimit ?: com.relayium.protocol.TextWire.MAX_BYTES,
             textCanRequest = text?.canRequest ?: false,
         )
+    }
+
+    // ── relay renewal (`docs/protocol/relay-renew-v1.md`) ───────────────────
+
+    /**
+     * Start the renewal machinery for a freshly ready link.
+     *
+     * Only for `link/1`: the older wires carry neither the signed envelope nor
+     * the control frame, and pretending otherwise would announce a capability
+     * this connection cannot honour.
+     *
+     * Nothing here arms a boundary. The link becomes bounded only when the ICE
+     * agent reports a selected pair that classifies as RELAY — see
+     * [onSelectedPair]. That is deliberately evidence-first: a link whose
+     * selected pair is never reported keeps exactly today's behaviour, which is
+     * the safe direction on a platform where the callback's availability is a
+     * runtime fact.
+     */
+    private fun startRenewal(mine: Int) {
+        renewal?.close()
+        renewal = null
+        relayBound = null
+        installedIce = null
+        cancelRelayTimers()
+        if (wireProfile !is WireProfile.Link) return
+        val surface = transport?.renew() ?: return
+        val engine = RelayRenewEngine(
+            object : RelayRenewEngine.Deps {
+                override fun now(): Long = System.currentTimeMillis()
+
+                override fun timers(): RelayRenewEngine.Timers =
+                    RelayRenewEngine.Timers { delayMs, task ->
+                        val future = session.schedule(
+                            { if (epoch == mine) task() },
+                            delayMs, TimeUnit.MILLISECONDS,
+                        )
+                        RelayRenewEngine.Timer { future.cancel(false) }
+                    }
+
+                override fun selfId(): String = selfId
+                override fun peerId(): String = peerId
+                override fun isInitiator(): Boolean =
+                    (wireProfile as? WireProfile.Link)?.role == LinkProtocol.Role.INITIATOR
+
+                override fun keys(): Crypto.SessionKeys? = keys
+                override fun transport(): RenewTransport? =
+                    if (epoch == mine) transport?.renew() else null
+
+                override fun peerSupportsRenew(): Boolean =
+                    linkSession?.peerAnnounced(peerId, RelayRenewWire.CAPABILITY) == true
+
+                override fun userActive(): Boolean = userData.active(System.currentTimeMillis())
+
+                override fun sendRenew(data: Json) {
+                    if (epoch != mine) return
+                    signaling?.sendSignal(peerId, data)
+                }
+
+                override fun requestRound(round: Long, rid: Long): Boolean {
+                    if (epoch != mine) return false
+                    // False on a rendezvous with no server to ask. A LAN or
+                    // direct session cannot make this call, because the handle
+                    // it holds does not implement it.
+                    return signaling?.requestIceRenew(round, rid) == true
+                }
+
+                override fun randomBytes(count: Int): ByteArray =
+                    ByteArray(count).also(renewRandom::nextBytes)
+
+                override fun randomUint32(): Long =
+                    renewRandom.nextInt().toLong() and RelayRenewWire.UINT32_MAX
+
+                override fun onConfigurationInstalled(servers: List<IceConfig.Server>) {
+                    if (epoch != mine) return
+                    // The live connection is running on THESE servers now.
+                    // Every later boundary derivation and path classification
+                    // must read them rather than the configuration the room was
+                    // originally issued, which may already have lapsed.
+                    installedIce = servers
+                }
+
+                override fun onRenewState(
+                    state: RelayRenewEngine.State,
+                    commit: RelayRenewEngine.Commit?,
+                ) {
+                    if (epoch != mine) return
+                    onRenewalState(mine, state, commit)
+                }
+            },
+        )
+        renewal = engine
+        // ALWAYS-ON, and owned here rather than by the engine: the FIRST
+        // observation is what classifies the path and decides whether this link
+        // is bounded at all, which is a question that exists with or without a
+        // renewal in flight.
+        surface.onSelectedPair { pair -> if (epoch == mine) onSelectedPair(mine, pair) }
+    }
+
+    /**
+     * The ICE agent reported the pair it is actually using.
+     *
+     * Two separate jobs, in this order:
+     *
+     *  - classify. A relay on either side means this link is bounded by the
+     *    ephemeral credential the server issued; host-to-host is a LAN hop and
+     *    anything else is a NAT-traversed direct path, and neither of those is
+     *    bounded by anything. A path that becomes direct RELEASES the boundary,
+     *    exactly as the existing rule does elsewhere.
+     *  - forward. Only the renewal engine can decide whether this observation
+     *    belongs to the generation an epoch is trying to migrate onto.
+     */
+    private fun onSelectedPair(mine: Int, pair: RenewTransport.SelectedPair) {
+        if (com.relayium.protocol.RelayRenewSdp.classifyPath(pair.local, pair.remote) ==
+            com.relayium.protocol.RelayRenewSdp.Path.RELAY
+        ) {
+            if (relayBound == null) armRelayBound(mine, deriveRelayBound())
+        } else if (relayBound != null) {
+            armRelayBound(mine, null)
+        }
+        renewal?.onSelectedPair(pair)
+    }
+
+    /**
+     * The boundary the configuration this connection is ACTUALLY running on
+     * states, or null when nothing in it can hold a TURN allocation.
+     *
+     * [installedIce] wins over the room's original grant whenever a renewal has
+     * applied one: after a migration the original credential may already have
+     * lapsed, and deriving a boundary from it would either end a healthy link
+     * early or — worse — read an expiry that no longer describes anything the
+     * connection uses.
+     */
+    private fun deriveRelayBound(): RelayRenewPolicy.Deadline? = RelayRenewPolicy.deadline(
+        (installedIce ?: ice.servers).map { RelayRenewPolicy.Credential(it.urls, it.username) },
+        System.currentTimeMillis(),
+    )
+
+    /**
+     * Arm, move or release the relayed link's boundary.
+     *
+     * The warning and the ending are the EXISTING truthful fallback whenever a
+     * renewal has not committed, and they are what renewal moves rather than
+     * replaces.
+     *
+     * Ending on the boundary is this CLIENT's policy, not a claim about the
+     * relay. Whether a TURN engine tears an existing allocation down when its
+     * credential expires is not established, and an allocation may outlive the
+     * credential that created it — so this does not end the link because the
+     * bytes have necessarily stopped. It ends it because the credential's
+     * authority has lapsed, nothing on the wire announces that, and continuing
+     * on a lapsed credential is the one state neither end can honestly report.
+     */
+    private fun armRelayBound(mine: Int, bound: RelayRenewPolicy.Deadline?) {
+        cancelRelayTimers()
+        relayBound = bound
+        renewal?.bindDeadline(bound)
+        if (bound == null) {
+            _state.value = _state.value.copy(relayExpiresAt = null, relayExpiryWarning = false)
+            return
+        }
+        val now = System.currentTimeMillis()
+        _state.value = _state.value.copy(
+            relayExpiresAt = bound.deadlineAt,
+            relayExpiryWarning = now >= bound.warnAt,
+        )
+        if (now < bound.warnAt) {
+            relayWarnTimer = session.schedule(
+                {
+                    relayWarnTimer = null
+                    if (epoch != mine || relayBound !== bound) return@schedule
+                    _state.value = _state.value.copy(relayExpiryWarning = true)
+                },
+                bound.warnAt - now, TimeUnit.MILLISECONDS,
+            )
+        }
+        relayExpiryTimer = session.schedule(
+            {
+                relayExpiryTimer = null
+                if (epoch != mine || relayBound !== bound) return@schedule
+                // Truthful, and named: the credential this relayed link was
+                // issued has run out. Left to itself the connection would sit
+                // `connected` and silently stop transferring until the
+                // disconnect grace gave up with a generic "connection lost".
+                endSession("error_relay_expired")
+            },
+            maxOf(0L, bound.deadlineAt - now), TimeUnit.MILLISECONDS,
+        )
+    }
+
+    /**
+     * One renewal state change. The boundary moves ONLY on a commit that says
+     * it moved.
+     *
+     * A same-round repair is a real, committed migration — the path was
+     * re-established and the UI may say so — and it still changes nothing about
+     * the credential, because it re-used the one already installed. Re-arming
+     * the timers on it would extend a boundary on no new authority, so the
+     * engine states the difference and this acts on exactly that.
+     */
+    private fun onRenewalState(
+        mine: Int,
+        state: RelayRenewEngine.State,
+        commit: RelayRenewEngine.Commit?,
+    ) {
+        if (commit != null && commit.boundaryMoved) {
+            armRelayBound(mine, commit.deadline)
+        }
+        _state.value = _state.value.copy(renewState = state)
+    }
+
+    private fun cancelRelayTimers() {
+        relayWarnTimer?.cancel(false)
+        relayWarnTimer = null
+        relayExpiryTimer?.cancel(false)
+        relayExpiryTimer = null
+    }
+
+    /** Real authenticated user-lane data moved. */
+    private fun noteUserData() {
+        userData.note(System.currentTimeMillis())
+        // Re-evaluated immediately, because the margin is a window rather than
+        // a moment: a conversation that resumes at minute 55 of a one-hour
+        // grant must still be able to renew.
+        renewal?.noteUserData()
     }
 
     private fun onTransportClosed(reason: String) {
@@ -1938,6 +2290,14 @@ class TransferController(
             if (epoch != mine) return
             when (action) {
                 is FileLaneSession.Action.Send -> {
+                    // Only a PROTECTED frame is user data. The lane's own
+                    // classifier decides, so consent bytes, ACK headers and
+                    // resume control can never be mistaken for content.
+                    if (LinkProtocol.fileFrameClass(action.frame) ==
+                        LinkProtocol.FileFrameClass.Protected
+                    ) {
+                        noteUserData()
+                    }
                     if (transport?.sendFile(action.frame) != true) {
                         // The nonce is spent and the frame never entered the
                         // channel: the peer's sequence is stranded. The
@@ -1955,7 +2315,13 @@ class TransferController(
                         savedBatch = false,
                     )
                 }
-                is FileLaneSession.Action.Write -> onWrite(mine, action)
+                is FileLaneSession.Action.Write -> {
+                    // Authenticated file plaintext, decrypted and about to be
+                    // written. There is no plainer statement of "this link is
+                    // being used" than this.
+                    noteUserData()
+                    onWrite(mine, action)
+                }
                 is FileLaneSession.Action.FileVerified -> onVerified(mine, action.fileIndex)
                 is FileLaneSession.Action.FileCorrupt -> {
                     discardStorage()
@@ -2532,14 +2898,21 @@ class TransferController(
         for (action in actions) {
             when (action) {
                 is TextLaneSession.Action.Send -> {
+                    // A CONTENT frame is user data; REQUEST, ACCEPT, REJECT and
+                    // END are consent and lifecycle, and section 7.1 is explicit
+                    // that a pending-consent flag is not activity.
+                    if (com.relayium.protocol.TextWire.isTextFrame(action.frame)) noteUserData()
                     if (!enqueueFailed && transport?.sendText(action.frame) != true) {
                         enqueueFailed = true
                     }
                 }
-                is TextLaneSession.Action.Received -> _state.value = _state.value.copy(
-                    messages = (_state.value.messages + Message(action.body, fromPeer = true))
-                        .takeLast(TextSessionLimits.HISTORY_MAX),
-                )
+                is TextLaneSession.Action.Received -> {
+                    noteUserData()
+                    _state.value = _state.value.copy(
+                        messages = (_state.value.messages + Message(action.body, fromPeer = true))
+                            .takeLast(TextSessionLimits.HISTORY_MAX),
+                    )
+                }
                 is TextLaneSession.Action.Fail -> {
                     // A visible failure, not a silently changed enum: the UI
                     // maps the key.
@@ -2556,6 +2929,12 @@ class TransferController(
                 }
                 is TextLaneSession.Action.Requested -> requestedNow = true
                 is TextLaneSession.Action.Opened -> openedNow = true
+                // A DRAIN is authenticated peer text this side deliberately
+                // does not show, because the local user ended the
+                // conversation. It is not counted as user data: the drain
+                // exists to keep the receive counter continuous, and treating
+                // it as consent would let a peer hold a relayed link renewable
+                // against the wishes of the person who closed it.
                 is TextLaneSession.Action.Drained,
                 is TextLaneSession.Action.Ended,
                 -> Unit
@@ -2869,6 +3248,12 @@ class TransferController(
                 fileLaneDown = false,
                 textState = TextLaneSession.State.IDLE,
                 textCanRequest = false,
+                // The boundary belonged to the link that just ended, not to the
+                // room: a stale expiry standing over a fresh list would count
+                // down to nothing.
+                relayExpiresAt = null,
+                relayExpiryWarning = false,
+                renewState = RelayRenewEngine.State.IDLE,
                 nearby = current.nearby.copy(selectedId = null),
             )
             publishNearby()
@@ -2885,6 +3270,9 @@ class TransferController(
             receiveProgress = null,
             sendProgress = null,
             awaitingFolder = false,
+            relayExpiresAt = null,
+            relayExpiryWarning = false,
+            renewState = RelayRenewEngine.State.IDLE,
         )
         closeOnSession()
     }
@@ -2895,12 +3283,14 @@ class TransferController(
         for (timer in listOf(
             settleTimer, requestRetryTimer, requestDeadlineTimer,
             textEndTimer, abortBarrierTimer, textIdleTimer, legacyOfferTimer,
+            relayWarnTimer, relayExpiryTimer,
         )) {
             timer?.cancel(false)
         }
         settleTimer = null; requestRetryTimer = null; requestDeadlineTimer = null
         textEndTimer = null; abortBarrierTimer = null; textIdleTimer = null
         legacyOfferTimer = null
+        relayWarnTimer = null; relayExpiryTimer = null
     }
 
     /**
@@ -2919,6 +3309,14 @@ class TransferController(
         bumpReceiveGen()
         textBarrierGen++
         retirePump()
+        // BEFORE the timers are cancelled and before the transport goes: every
+        // renewal timer, request, subscriber and retained nonce is disposed
+        // with the link that owns them, and no late callback can resurrect an
+        // epoch afterwards.
+        renewal?.close()
+        renewal = null
+        relayBound = null
+        installedIce = null
         cancelConnectionTimers()
         // The final disk cleanup is QUEUED, never awaited, and its outcome is
         // still surfaced: leftovers a teardown could not remove are as real as

@@ -532,6 +532,14 @@ func main() {
 	// The registry exists before the WebSocket observer is built, so that
 	// observer can never encounter an uninitialized resolver.
 	pairReg := signal.NewPairRegistry(signal.CodeTTLSeconds, func() int64 { return time.Now().Unix() })
+	// The type assertion inside SetPairCodes is what installs relay attribution
+	// in production, and a failed assertion is SILENT — issuance would simply
+	// go back to recyclable code-shaped tokens, which is the billing bug the
+	// whole mechanism exists to remove. Assert it here, against the concrete
+	// value production actually passes, so wrapping pairReg in anything that
+	// does not carry attribution is a compile error rather than a quiet
+	// downgrade discovered from a metering report.
+	var _ account.RelayAttribution = pairReg
 	go pairReg.Run(context.Background(), time.Minute)
 	hub := signal.NewHub()
 	// Pre-upload lifecycle hook. A pairing code whose sender staged files while
@@ -547,24 +555,58 @@ func main() {
 	// handed to a goroutine: a database write must never delay a peer's join.
 	var pairJoined atomic.Pointer[func(code string)]
 	var pairActivity atomic.Pointer[func(activity signal.PairActivity)]
-	handle := signal.ServeWSObserved(hub, newID, func(room string, peers int) {
-		// The registry verifies both the six digits and this mint's opaque room
-		// generation. An old socket left in a reused code's prior room is inert.
-		code, activity, current := pairReg.ObserveAdmittedRoom(room, peers)
-		if !current {
-			return
-		}
-		if fn := pairActivity.Load(); fn != nil {
-			// Non-blocking bounded enqueue only; no database operation runs on
-			// the WebSocket connection's join goroutine.
-			(*fn)(activity)
-		}
-		if peers < 2 {
-			return // the first admitted socket is not a pair-room lifecycle join
-		}
-		if fn := pairJoined.Load(); fn != nil {
-			go (*fn)(code)
-		}
+	// Renewal grants. Held behind an atomic for the same reason pairJoined is:
+	// /ws is registered before the account service exists, and with the
+	// database down there is no issuer to renew against — in which case a
+	// relayed transfer simply runs out its credential and ends truthfully,
+	// exactly as it does today.
+	var grants atomic.Pointer[signal.GrantRegistry]
+	handle := signal.ServeWSHooked(hub, newID, signal.WSHooks{
+		Join: func(room, id string, peers int, members []string) {
+			// The registry verifies both the six digits and this mint's opaque room
+			// generation. An old socket left in a reused code's prior room is inert.
+			// owner and tag come back from the SAME read, so the grant opened below
+			// can never be frozen against a generation these digits have since left.
+			code, owner, tag, activity, current := pairReg.ObserveAdmittedRoomAttrib(room, peers)
+			if !current {
+				return
+			}
+			if fn := pairActivity.Load(); fn != nil {
+				// Non-blocking bounded enqueue only; no database operation runs on
+				// the WebSocket connection's join goroutine.
+				(*fn)(activity)
+			}
+			if peers < 2 {
+				return // the first admitted socket is not a pair-room lifecycle join
+			}
+			// Renewal authority is frozen HERE, on the admission that first made
+			// this room hold two, from the membership the hub captured under the
+			// lock that admitted it. Only on the Paired transition: a later
+			// re-observation must never re-point authority at a replacement that
+			// took a slot a departure freed.
+			if activity.Paired {
+				if g := grants.Load(); g != nil {
+					g.Open(room, owner, tag, members)
+				}
+			}
+			if fn := pairJoined.Load(); fn != nil {
+				go (*fn)(code)
+			}
+		},
+		Leave: func(room, id string) {
+			// A frozen member's socket going away ends the grant immediately and
+			// irreversibly. A reconnect arrives with a new server-stamped id, so
+			// it is a different member — the same conclusion the clients reach
+			// from their own established identity.
+			if g := grants.Load(); g != nil {
+				g.Depart(room, id)
+			}
+		},
+		Renew: func(room, id string, req signal.RenewRequest) {
+			if g := grants.Load(); g != nil {
+				g.Request(room, id, req)
+			}
+		},
 	})
 	// Per-IP concurrent /ws connection cap (H4). Acquired after the room is
 	// resolved and before the websocket upgrade; released when the handler returns.
@@ -802,7 +844,7 @@ func main() {
 			TURNURLs:             splitURLs(*turnURLs),
 			TURNSecret:           *turnSecret,
 			TURNRelays:           parseTURNRelays(*turnRelays),
-			TURNCredTTL:          time.Hour,
+			TURNCredTTL:          turnCredTTL,
 			EnableGoogle:         *enableGoogle,
 			EnableApple:          *enableApple,
 			AppleClientIDs:       splitURLs(*appleClientIDs),
@@ -854,7 +896,58 @@ func main() {
 		//     code that expired on its own five-minute mint TTL while its upload
 		//     was still running would leave ciphertext behind a credential nobody
 		//     can present (server/account/pairroom.go, syncPairCode).
+		// It carries a THIRD thing, and it carries it in this one call on
+		// purpose: the relay attribution index (signal/attrib.go), which names
+		// what a credential's bytes are billed as for as long as anything can
+		// still report them — well past the point where those six digits have
+		// been minted again for somebody else. Wiring it separately would make
+		// "forgot the second call" a silent downgrade to recyclable code-shaped
+		// tokens in production, which is the billing bug it exists to remove.
+		// TestProductionWiringIssuesTaggedAttribution pins that this call alone
+		// is enough.
 		acct.SetPairCodes(pairReg)
+
+		// Renewal: a legitimately paired transfer may ask for a fresh relay
+		// credential instead of being forced to re-pair when its first hour
+		// runs out. Everything that decides WHO may ask lives in the grant
+		// registry; everything that decides WHETHER the account may have
+		// another hour is acct.RenewRelayGrant, and every one of its gates
+		// fails closed.
+		//
+		// Replies are delivered through the hub, so a peer that left between
+		// the request and the answer is simply not there to send to — the hub
+		// resolves the target under its own lock and drops the frame. Nothing
+		// here holds a reference to a socket.
+		grantReg := signal.NewGrantRegistry(
+			turnCredTTL,
+			func() int64 { return time.Now().Unix() },
+			acct.RenewRelayGrant,
+			func(room, peerID string, data json.RawMessage) {
+				hub.Relay(room, signal.Envelope{Type: signal.TypeICEGrant, To: peerID, Data: data})
+			},
+			// The current continuous credential segment for a generation —
+			// its first and latest expiry in one snapshot — so a grant created
+			// on the paired admission inherits what /api/ice already handed
+			// out, and anchors its rate floor to the EARLIEST of it.
+			pairReg.IssuedSegmentForTag,
+			// Attribution retention for an ACCEPTED round only. Deliberately
+			// not the issuer's own notification: that fires before anything
+			// decides to publish, and would extend the authority the decision
+			// is judged against.
+			pairReg.RetainTag,
+		)
+		// The initial /api/ice credentials count towards a grant's life too: a
+		// grant has to know the ACTUAL latest expiry for its generation, and the
+		// first pair of credentials is issued before — or after — the two peers
+		// ever meet. Without this a freshly paired room would look like it had
+		// nothing to renew.
+		pairReg.SetIssuedObserver(grantReg.NoteIssued)
+		grants.Store(grantReg)
+		// One sweep loop, no timer per grant: it retires grants whose last
+		// credential has expired. Departures are handled synchronously by the
+		// Leave hook, so this only has to catch the lapsed ones.
+		go grantReg.Run(context.Background(), time.Minute)
+
 		// Pre-upload (staging ciphertext against a waiting code) is opt-in and off
 		// by default: turning it on is a standing storage commitment, not a
 		// half-built feature. Both feature-specific exits are built and tested.

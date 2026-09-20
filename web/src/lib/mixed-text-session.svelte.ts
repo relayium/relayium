@@ -37,6 +37,42 @@ export interface MixedTextSessionDeps {
   now(): number;
   /** Link owner uses authenticated-lane traffic to refresh its idle lease. */
   onActivity?(): void;
+  /**
+   * The STRICTER signal: user text, in either direction.
+   *
+   * A second hook rather than a reinterpretation of `onActivity`, for the
+   * reason `MixedFileSessionDeps.onUserActivity` gives: the idle lease is
+   * bounded by ANY lane traffic, while a relay renewal (`relay-renew-v1.md`
+   * §7.1) rests on evidence that a person is actually using the link. A
+   * REQUEST, an ACCEPT, a REJECT, an END and a discarded drain frame are all
+   * lane traffic and none of them is a message somebody wrote.
+   */
+  onUserActivity?(): void;
+  /**
+   * The lane's FRONT DEMUX, consulted before anything else in `onData`.
+   *
+   * Returning true means the frame belonged to another protocol riding this
+   * DataChannel — today, the `relay-renew/1` control frame (`link:§7.3`
+   * already requires a text-lane frame whose first byte is not `0x09` to be
+   * ignored, so this lane is where such a frame legitimately arrives). The
+   * frame is then consumed OUTRIGHT: it never reaches `onActivity`, the
+   * conversation's rate budget, the lifecycle classifier or the AEAD receiver.
+   *
+   * ## Why it is here and not an `addEventListener` beside the handler
+   *
+   * `onmessage` is a single slot, and a listener added alongside it cannot
+   * STOP a frame — both would run, and the renewal probe would reset the
+   * ten-minute idle timer it must not touch. Putting the decision on the first
+   * line of `onData` also means it is on the one path every frame takes,
+   * including the pre-attachment frames the coordinator replays after a
+   * transport is rebuilt.
+   *
+   * Its lifetime is therefore the TRANSPORT's, not the conversation's: it runs
+   * whatever the conversation status is, and when no handler is attached at
+   * all the frame is dropped and never replayed — which is the correct answer
+   * for a control frame belonging to an epoch that has no owner.
+   */
+  consumeControl?(data: unknown): boolean;
 }
 
 export interface MixedTextSession {
@@ -319,7 +355,14 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
         if (link !== expectedLink || generation !== expectedGeneration) return;
         acceptedBudget.count += 1;
         acceptedBudget.bytes += data.byteLength;
-        if (!discard) record({ dir: "in", body, at: deps.now(), failed: false });
+        // `discard` is the drain window: the frame is consumed to keep the
+        // link-scoped sequence continuous but is never rendered and never
+        // carried into a later consent decision. It is not a message anybody
+        // is reading, so it is not evidence a person is using this link.
+        if (!discard) {
+          record({ dir: "in", body, at: deps.now(), failed: false });
+          deps.onUserActivity?.();
+        }
       } catch (err) {
         console.error("relayium mixed text receive error", err);
         if (link === expectedLink && generation === expectedGeneration) markFailed("failed", expectedLink);
@@ -444,6 +487,11 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
   }
 
   function onData(data: unknown) {
+    // FIRST. Before the activity hook, before the poison gate, before the
+    // codec. See MixedTextSessionDeps.consumeControl: a frame consumed here
+    // must not be able to touch this lane's idle lease or its budget, and the
+    // only way to guarantee that is to decide before either is reached.
+    if (deps.consumeControl?.(data) === true) return;
     if (!(data instanceof ArrayBuffer)) return;
     deps.onActivity?.();
     if (poisoned()) return;
@@ -734,6 +782,10 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
           if (expectedLink.textChannel.bufferedAmount === 0) protectedTransportPending = false;
           expectedLink.textChannel.send(frame);
           deps.onActivity?.();
+          // A protected text frame is a message the user wrote. The lifecycle
+          // controls that share this lane are not, and go through the broad
+          // hook alone.
+          deps.onUserActivity?.();
           protectedTransportPending = true;
           record({
             dir: "out",

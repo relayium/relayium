@@ -28,7 +28,23 @@ public let LINK_CAPS_ANNOUNCE_ATTEMPTS = 3
 /// `link/1`; this is the ROSTER-level announcement, which is the one that was
 /// over-promising.
 public func linkOnlyCapsHello(linkRoomActive: Bool) -> JSONValue {
-    capsField(linkRoomActive ? [LINK_CAPABILITY] : [])
+    capsField(linkOnlyCapabilities(linkRoomActive: linkRoomActive))
+}
+
+/// Exactly what `linkOnlyCapsHello` announces, as an array.
+///
+/// Named separately so the intended list is assertable without reaching
+/// through a `JSONValue`, and so the ORDER is pinned: the hello is compared
+/// against a fixture on the other ports, and an order that drifted would be a
+/// diff nobody could tell from a real change.
+///
+/// `relay-renew/1` rides with `link/1` here exactly as it does in
+/// `advertisedLinkCapabilities`, which the shared `capability.hello.native`
+/// vector pins: renewal is wired end to end in this build, which is spec §8's
+/// condition for announcing it. It is an unsigned hint (`link:§1.6`) — it gates
+/// which peer this side STARTS a renewal toward, never what it authenticates.
+public func linkOnlyCapabilities(linkRoomActive: Bool) -> [String] {
+    linkRoomActive ? [LINK_CAPABILITY, RELAY_RENEW_CAPABILITY] : []
 }
 
 /// How long between one peer's announcements.

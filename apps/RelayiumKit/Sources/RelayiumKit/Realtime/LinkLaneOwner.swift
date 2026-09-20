@@ -326,12 +326,32 @@ public final class LinkLaneOwner: @unchecked Sendable {
                                   onEvent: onTextEvent)
         self.text = text
 
+        // The renewal front demux is created and captured HERE, in the same
+        // literal that routes the text lane, and that placement is the whole
+        // requirement (`relay-renew/1` §6.2):
+        //
+        //  - It is a TRUE front demux. A claimed frame returns before
+        //    `admitTextFrame` is reached, so it cannot also arrive at the text
+        //    session's rate budget, its activity accounting or its AEAD
+        //    receiver. An additive observer could not stop a frame, only watch
+        //    one go past.
+        //  - Its lifetime is the TRANSPORT's, not the conversation's. This is
+        //    the same atomic attach point the two lanes are installed at, and
+        //    every inbound text frame reaches it — including the ones the file
+        //    driver replays out of `link:§2.2` pre-attachment capture and the
+        //    ones that arrive through `routeCurrentFrame` after a `link:§8`
+        //    rebuild, both of which funnel through this one closure.
+        //  - With no handler installed a claimed frame is dropped and never
+        //    replayed, which is `RelayRenewProbeDemux`'s documented behaviour.
+        let demux = RelayRenewProbeDemux()
+        self.renewDemux = demux
+
         // Then FILE, from the SAME identity and the SAME transport, and its
-        // `onTextFrame` captures the text driver DIRECTLY rather than through
-        // `self`. That is deliberate twice over: it cannot reference `self`
-        // before every stored property exists, and capturing this object would
-        // close a cycle — owner → file → closure → owner — that nothing would
-        // ever break.
+        // `onTextFrame` captures the text driver and the demux DIRECTLY rather
+        // than through `self`. That is deliberate twice over: it cannot
+        // reference `self` before every stored property exists, and capturing
+        // this object would close a cycle — owner → file → closure → owner —
+        // that nothing would ever break.
         self.file = LinkFileDriver(identity: identity,
                                    transport: transport,
                                    scheduler: scheduler,
@@ -344,7 +364,10 @@ public final class LinkLaneOwner: @unchecked Sendable {
                                    maxBufferedInboundFrames: maxBufferedInboundFrames,
                                    sendBufferHighWater: fileSendBufferHighWater,
                                    sendBufferPollInterval: sendBufferPollInterval,
-                                   onTextFrame: { bytes in text.admitTextFrame(bytes) },
+                                   onTextFrame: { bytes in
+                                       guard demux.route(bytes) == .pass else { return }
+                                       text.admitTextFrame(bytes)
+                                   },
                                    onEvent: onFileEvent)
     }
 
@@ -370,6 +393,27 @@ public final class LinkLaneOwner: @unchecked Sendable {
     /// nothing. Those frames belong to receiver codecs whose sequence has to
     /// stay continuous, so that is the missing-owner failure the attach barrier
     /// exists to prevent, arriving as a silent success.
+    /// The renewal control-frame front demux for this link's text lane.
+    ///
+    /// Public so `RelayRenewController` can install and clear its handler, and
+    /// deliberately nothing more: the routing itself is fixed in this object's
+    /// initializer and cannot be moved, replaced or bypassed from outside.
+    public private(set) var renewDemux: RelayRenewProbeDemux!
+
+    /// Put one renewal control frame on the CURRENT transport's text lane.
+    ///
+    /// Outside the conversation entirely: no outbox, no AEAD codec, no
+    /// sequence, no lifecycle state. A renewal probe is not a message, and
+    /// routing it through the text lane's send path would spend a nonce and
+    /// make a control-only buffer look like a pending protected frame.
+    ///
+    /// Returns false when there is no usable transport, which is an ordinary
+    /// outcome during a gap: the epoch then times out and the OLD deadline
+    /// stands.
+    public func sendRenewalControlFrame(_ bytes: [UInt8]) -> Bool {
+        text.sendRenewalControlFrame(bytes)
+    }
+
     public func bind(to coordinator: LinkRecoveryCoordinator) throws {
         guard identityMatches(coordinator.identity) else {
             throw LinkLaneOwnerError.foreignCoordinator

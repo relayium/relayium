@@ -195,6 +195,13 @@ type Service struct {
 	// is the honest behaviour: a room lifecycle whose codes still die at five
 	// minutes binds ciphertext to a rendezvous nobody can reach.
 	pairCodes PairCodes
+	// relayAttrib names what a relayed byte is BILLED as, which is a different
+	// question from pairCodeOwner's "whose code is this right now" — and the
+	// difference is a billing bug when the digits recycle. nil keeps the legacy
+	// code-shaped attribution, which is what an isolated test that wires only
+	// SetPairCodeOwner gets; production wires the registry (SetPairCodes) and so
+	// always issues tag-shaped tokens. See signal/attrib.go.
+	relayAttrib RelayAttribution
 	// clientIP resolves the request's rate-limit key IP. Defaults to the
 	// package clientIP (trusts XFF's left entry — legacy behavior kept so
 	// existing tests are unchanged); main.go injects signal.IPExtractor.IP,
@@ -404,7 +411,52 @@ func (s *Service) SetPairCodeOwner(fn func(string) (string, bool)) { s.pairCodeO
 func (s *Service) SetPairCodes(reg PairCodes) {
 	s.pairCodes = reg
 	s.pairCodeOwner = reg.OwnerOf
+	// A registry that can name billing identities brings them along with
+	// itself, for the same reason the owner lookup and the lifetime control
+	// arrive together: they describe ONE registry. Requiring a second,
+	// separate call here would make "forgot to wire attribution" a silent
+	// downgrade to recyclable code-shaped tokens in production, which is the
+	// exact bug this mechanism removes. SetRelayAttribution stays exported for
+	// a test that wants to install one on its own.
+	//
+	// The else branch is not defensive filler. Without it, calling this twice —
+	// first with a registry that carries attribution, then with one that does
+	// not — would leave the FIRST registry's resolver installed while issuance
+	// and the owner lookup had both moved to the second. Every credential would
+	// then be tagged out of a registry that no longer decides anything, and the
+	// heartbeat would resolve those tags against it too, so the mismatch would
+	// be invisible until the stale registry retired the tag. Both halves move
+	// together or neither does.
+	if attrib, ok := reg.(RelayAttribution); ok {
+		s.relayAttrib = attrib
+	} else {
+		s.relayAttrib = nil
+	}
 }
+
+// RelayAttribution is the pairing-code registry's billing-identity half: the
+// immutable per-generation tag a relay credential is issued and reported under.
+//
+// Separate from PairCodes because it answers a question with a different
+// lifetime. PairCodes is about a code that is alive now; this is about a
+// generation that may still have bytes in flight long after its digits have
+// been handed to somebody else. See signal/attrib.go.
+type RelayAttribution interface {
+	// AttribFor resolves a live code to its owner and its attribution tag in
+	// ONE read, so the two can never come from different generations.
+	AttribFor(code string) (owner, tag string, ok bool)
+	// OwnerForTag resolves a reported tag to the account it bills. false means
+	// "unknown to this process" — never "forged".
+	OwnerForTag(tag string) (string, bool)
+	// NoteIssuedCredential keeps a tag resolvable for as long as bytes can
+	// still be reported under a credential that expires at `expiry`.
+	NoteIssuedCredential(tag string, expiry int64)
+}
+
+// SetRelayAttribution installs the billing-identity resolver on its own.
+// SetPairCodes already does this for a registry that implements it; this exists
+// for tests that build the two halves separately.
+func (s *Service) SetRelayAttribution(a RelayAttribution) { s.relayAttrib = a }
 
 // SetClientIP overrides how per-IP rate-limit keys are derived. main.go
 // injects the trusted-proxy-aware signal.IPExtractor.IP so a forged

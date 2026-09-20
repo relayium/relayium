@@ -129,6 +129,10 @@ async function harness(opts: {
   receiveStallMs?: number;
   drainTimeoutMs?: number;
   gapTimeoutMs?: number;
+  /** The two lifetime hooks, so a test can watch what each one counts. */
+  onActivityA?: () => void;
+  onUserActivityA?: () => void;
+  onUserActivityB?: () => void;
 } = {}) {
   const aKey = generateKeyPair();
   const bKey = generateKeyPair();
@@ -183,6 +187,8 @@ async function harness(opts: {
     receiveStallMs: opts.receiveStallMs,
     drainTimeoutMs: opts.drainTimeoutMs,
     gapTimeoutMs: opts.gapTimeoutMs,
+    onActivity: opts.onActivityA,
+    onUserActivity: opts.onUserActivityA,
   });
   const b = createMixedFileSession({
     ensureLink: vi.fn(async () => links.b),
@@ -193,6 +199,7 @@ async function harness(opts: {
     receiveStallMs: opts.receiveStallMs,
     drainTimeoutMs: opts.drainTimeoutMs,
     gapTimeoutMs: opts.gapTimeoutMs,
+    onUserActivity: opts.onUserActivityB,
   });
   a.attach(aLink);
   b.attach(bLink);
@@ -2629,4 +2636,161 @@ describe("mixed file session send credit stall window", () => {
     expect(a.errorKey).toBe("failed");
     expect(vi.getTimerCount()).toBe(0);
   }, 120_000);
+});
+
+describe("user activity is real transfer progress, not frame arrival", () => {
+  /**
+   * The link's idle lease is refreshed by ANY lane traffic; renewing a paid
+   * relay credential is not. That stricter signal claims a person is actually
+   * moving data, so it may only fire where that has been established: an ACK
+   * that advanced a live batch, or payload that decrypted under this link's own
+   * key at the sequence this side expected, for a connection still current.
+   *
+   * These are the shapes that look like progress and are not.
+   */
+  const KIND_ACK = 6;
+  const ackFrame = (bytesAcked: number) => {
+    const buf = new Uint8Array(13);
+    buf[0] = KIND_ACK;
+    new DataView(buf.buffer).setFloat64(5, bytesAcked);
+    return buf;
+  };
+  const acksSentBy = (ch: { sent: ArrayBuffer[] }) =>
+    ch.sent.map((f) => new Uint8Array(f)).filter((f) => f[0] === KIND_ACK);
+
+  async function completedTransfer(opts: Parameters<typeof harness>[0] = {}) {
+    const h = await harness(opts);
+    h.a.enqueue("b", picked("hello.txt", "hello"));
+    await until(() => !!h.b.incoming);
+    h.b.accept();
+    await until(() => h.a.send?.done === true && h.b.recv?.done === true);
+    return h;
+  }
+
+  it("does not count an ACK when there is no outbound batch at all", async () => {
+    let fired = 0;
+    const { file } = await harness({ onUserActivityA: () => { fired++; } });
+    // Nothing has ever been sent from A. A bare, well-formed ACK arrives.
+    file.b.send(ackFrame(4096));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fired).toBe(0);
+  });
+
+  /**
+   * A transfer whose receiver is holding every protected CHUNK inside `feed`.
+   *
+   * That keeps the sender's batch live and in `sending`, which is the only
+   * state in which an ACK can be progress at all — a 5-byte file never emits a
+   * real ACK of its own, because ACKs are flow-control credit released on
+   * durable writes.
+   */
+  async function heldTransfer(opts: Parameters<typeof harness>[0] = {}) {
+    const h = await harness(opts);
+    const receiver = h.bLink.fileReceiver;
+    const realFeed = receiver.feed.bind(receiver);
+    let release!: () => void;
+    const held = new Promise<void>((r) => { release = r; });
+    (receiver as unknown as { feed: typeof receiver.feed }).feed = async (buf, keys) => {
+      const isChunk = buf[0] === FRAME.CHUNK || buf[0] === FRAME.CHUNK_PART;
+      const out = await realFeed(buf, keys);
+      if (isChunk) await held;
+      return out;
+    };
+    h.a.enqueue("b", picked("hello.txt", "hello"));
+    await until(() => !!h.b.incoming);
+    h.b.accept();
+    // Far enough for the sender to have emitted its payload and be waiting.
+    await until(() => h.a.send !== null && h.a.send.done !== true);
+    await new Promise((r) => setTimeout(r, 20));
+    return { ...h, release };
+  }
+
+  it("counts an ACK that advances the batch, and not the same one twice", async () => {
+    let fired = 0;
+    const { file, release } = await heldTransfer({ onUserActivityA: () => { fired++; } });
+    const before = fired;
+
+    // One byte acknowledged, within what this batch emitted: real progress.
+    file.b.send(ackFrame(1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fired, "an advancing ACK is progress").toBe(before + 1);
+
+    // The same ACK again. `advanceAck` clamps it, so nothing moved.
+    file.b.send(ackFrame(1));
+    file.b.send(ackFrame(1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fired, "a duplicate ACK is not progress").toBe(before + 1);
+
+    // And one that rewinds is no better.
+    file.b.send(ackFrame(0));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fired).toBe(before + 1);
+    release();
+  });
+
+  it("does not count an ACK beyond anything this side ever sent", async () => {
+    let fired = 0;
+    const { file, release } = await heldTransfer({ onUserActivityA: () => { fired++; } });
+    const before = fired;
+    // A forged cumulative ACK far past `sentBytes`; `advanceAck` refuses it.
+    file.b.send(ackFrame(1_000_000_000));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fired).toBe(before);
+    release();
+  });
+
+  it("does not count a frame that fails to decrypt", async () => {
+    let fired = 0;
+    const { file } = await completedTransfer({ onUserActivityB: () => { fired++; } });
+    const before = fired;
+    expect(before).toBeGreaterThan(0);
+
+    // Chunk-shaped, garbage ciphertext: `feed` throws, so the fire after it is
+    // never reached.
+    const junk = new Uint8Array(64);
+    junk[0] = FRAME.CHUNK;
+    file.a.send(junk);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(fired).toBe(before);
+  });
+
+  it("does not count a decryption that finished after the link moved on", async () => {
+    /**
+     * `feed` is awaited, so the link and its generation can change while it
+     * runs. Work belonging to a connection that has since been replaced is not
+     * new progress on the one that replaced it, and must not refresh it. The
+     * guard before the await covers everything that arrives earlier; this is
+     * the window it cannot see.
+     */
+    let fired = 0;
+    const { b, release } = await heldTransfer({ onUserActivityB: () => { fired++; } });
+    const before = fired;
+    // The decrypt is held. Take the transport away underneath it, then let it
+    // finish: its output belongs to a generation that is gone.
+    b.suspend();
+    release();
+    await new Promise((r) => setTimeout(r, 40));
+    expect(fired).toBe(before);
+  });
+
+  it("counts genuine progress on both sides of a real transfer", async () => {
+    let sender = 0;
+    let receiver = 0;
+    const h = await harness({
+      onUserActivityA: () => { sender++; },
+      onUserActivityB: () => { receiver++; },
+    });
+    h.a.enqueue("b", picked("hello.txt", "hello"));
+    await until(() => !!h.b.incoming);
+    // The manifest arrived and consent is pending. Neither is a person moving
+    // bytes, and the receiver has decrypted no payload.
+    expect(receiver).toBe(0);
+    h.b.accept();
+    await until(() => h.a.send?.done === true && h.b.recv?.done === true);
+    // The sender emitted protected frames and saw its ACK advance; the receiver
+    // decrypted payload under the link's own key.
+    expect(sender).toBeGreaterThan(0);
+    expect(receiver).toBeGreaterThan(0);
+    expect([...h.bTarget.output.get("hello.txt")!]).toEqual(bytes("hello"));
+  });
 });

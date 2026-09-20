@@ -35,7 +35,7 @@ func observedWSServer(t *testing.T, room string, maxPeers int) (*httptest.Server
 
 	var mu sync.Mutex
 	var seen []observation
-	handle := ServeWSObserved(hub, newID, func(room string, peers int) {
+	handle := ServeWSObserved(hub, newID, func(room, id string, peers int, members []string) {
 		mu.Lock()
 		seen = append(seen, observation{room, peers})
 		mu.Unlock()
@@ -126,7 +126,7 @@ func TestServeWSObservedReportsTheSecondParticipant(t *testing.T) {
 func TestServeWSObservedCallsObserverOutsideHubLock(t *testing.T) {
 	hub := NewHub()
 	observed := make(chan int, 1)
-	handle := ServeWSObserved(hub, func() string { return "outside-lock" }, func(room string, peers int) {
+	handle := ServeWSObserved(hub, func() string { return "outside-lock" }, func(room, id string, peers int, members []string) {
 		// PeerCount takes the hub mutex. If the observer is invoked while the
 		// admission lock is held, this synchronous call deadlocks.
 		observed <- hub.PeerCount(room)
@@ -162,15 +162,24 @@ func TestServeWSObservedConsumesAdmissionTimePeerSnapshot(t *testing.T) {
 	}
 	text := string(source)
 	for _, required := range []string{
-		"if admitted, peers := h.JoinDeviceLimitedObserved(",
-		"observe(room, peers)",
+		// The MEMBERS variant, and the members it returns: renewal authority is
+		// frozen from that list, and a list read after the admission lock could
+		// name a replacement that took a slot a departure freed rather than the
+		// pair that actually met.
+		"if admitted, peers, members := h.JoinDeviceLimitedObservedMembers(",
+		"observe(room, id, peers, members)",
 	} {
 		if !strings.Contains(text, required) {
 			t.Errorf("ServeWSObserved wiring lacks %q", required)
 		}
 	}
-	if strings.Contains(text, "observe(room, h.PeerCount(room))") {
-		t.Fatal("ServeWSObserved re-reads PeerCount after admission instead of consuming the locked snapshot")
+	for _, forbidden := range []string{
+		"observe(room, h.PeerCount(room))",
+		"h.MemberIDs(room)",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("ServeWSObserved re-reads room state after admission (%q) instead of consuming the locked snapshot", forbidden)
+		}
 	}
 }
 

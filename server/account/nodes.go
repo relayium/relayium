@@ -1283,7 +1283,12 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		if token == "" {
 			continue
 		}
-		userID, code := relayusage.SplitAttrib(token)
+		// `attrib` is the ATTRIBUTION half of the token, and it is no longer
+		// necessarily a pairing code: current issuance puts an immutable
+		// per-generation tag there (see attributionRefused). Named for what it
+		// is rather than for what it used to be, because "code" is exactly the
+		// reading that produced the recycling bug.
+		userID, attrib := relayusage.SplitAttrib(token)
 		// An unattributable username (no owner) can't be billed to anyone and
 		// would violate foreign_keys=ON; skip it.
 		if userID == "" {
@@ -1294,21 +1299,17 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 			log.Printf("node %s: dropping cross-user attribution to %s", req.NodeID, userID)
 			continue
 		}
-		// Attribution binding: the reported username embeds a pairing code whose
-		// true owner central assigned at ICE time. If that code still resolves to a
-		// DIFFERENT user, the node is forging attribution (e.g. billing a victim) —
-		// drop it. An expired/unknown code can't be contradicted, so it's accepted
-		// (magnitude is still bounded by RecordUsage's clamp).
-		if s.pairCodeOwner != nil && code != "" {
-			if realOwner, ok := s.pairCodeOwner(code); ok && realOwner != userID {
-				log.Printf("node %s: dropping forged attribution (code owner %s != reported %s)", req.NodeID, realOwner, userID)
-				continue
-			}
+		// Attribution binding: the reported username embeds a token central
+		// itself put there at ICE time, and the node may only claim the user
+		// central bound to it. See attributionRefused.
+		if why := s.attributionRefused(attrib, userID); why != "" {
+			log.Printf("node %s: dropping forged attribution (%s)", req.NodeID, why)
+			continue
 		}
-		// 限幅（报告 M1，方案 C）。跨用户伪造的既有防线对"过期/未知的码"是
-		// "无法反驳即接受"，所以持车队凭据的人仍然能给别人记账。真正的封堵要在
-		// 签发凭据时嵌不可伪造的归因标签，那要动计费链路；在那之前先把**单次爆发**
-		// 压下去。
+		// 限幅（报告 M1，方案 C）。归因防线对"中心认不出的 token"仍是"无法反驳
+		// 即接受"，所以持车队凭据的人仍然能给别人记账——归因 tag 修掉的是码回收
+		// 导致的**丢账**，不是伪造本身（见 attributionRefused 与 attrib.go）。
+		// 真正的封堵要在 tag 里嵌可校验的签名；在那之前先把**单次爆发**压下去。
 		//
 		// 卡的是条数而不是字节数，因为：
 		//   · 每条 usage 的字节已经被 RecordUsage 钳在约 3.25 GiB，攻击者要凑出
@@ -1330,7 +1331,7 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 		}
 		entries[userID]++
 		if err := s.store.RecordUsage(r.Context(), UsageEvent{
-			AllocID: u.AllocID, Token: code, UserID: userID, RelayedBytes: u.RelayedBytes,
+			AllocID: u.AllocID, Token: attrib, UserID: userID, RelayedBytes: u.RelayedBytes,
 			RecordedAt: now, NodeID: req.NodeID, Billable: billable,
 		}); err != nil {
 			// Log-and-continue: one bad alloc must not drop the rest.
@@ -1417,13 +1418,71 @@ const implausiblePerHeartbeat = 128 << 30
 // 有几千个并发中继分配；条数本身就是一个比字节数更早暴露的信号。
 const implausibleUsageCount = 512
 
+// attributionRefused reports why a heartbeat's (token, userID) pair must not be
+// billed, or "" to accept it.
+//
+// The rule is one sentence: a node may only claim the account central itself
+// bound to that token at issuance. A token central cannot speak to cannot be
+// contradicted, so it is accepted on the reporter's word — magnitude is still
+// bounded by RecordUsage's clamps and by maxAllocsPerUser, and refusing instead
+// would throw away real bytes every time this process restarts.
+//
+// Two token shapes, in the order that matters.
+//
+// The TAG is what issuance produces now (server/internal/signal/attrib.go), and
+// it is checked FIRST because it is the only one of the two that answers
+// correctly. It is drawn once per code generation and never recycles, so "whose
+// bytes are these" has ONE answer for the whole life of that generation — and,
+// unlike the digits, that answer never becomes somebody else's.
+//
+// A tag can still be reported after this server has retired it from the lookup
+// index: a coturn allocation may outlive its REST credential by an unbounded
+// amount (see signal/relayAttribGraceSeconds). Such a report lands on the
+// unknown-token branch below and is billed to the account its username names,
+// which is the existing accept-as-reported behaviour and loses nothing.
+//
+// The CODE branch is legacy — a credential issued before this server started,
+// or by a deployment wiring only SetPairCodeOwner. It is kept byte for byte,
+// and it is WRONG for a recycled code: the digits are free to be minted for
+// somebody else five minutes after they expire while the credential naming them
+// lives an hour, so for most of that hour it resolves to the NEW owner,
+// mismatches the original one the node correctly reported, and drops real bytes
+// that then bill to nobody. That is exactly why new issuance is tagged. The
+// branch survives only so credentials already in flight keep the behaviour they
+// were issued under; nothing this server mints can reach it.
+//
+// A tag never reaches the code branch by accident: it is not six digits, so
+// ValidCodeFormat is false for it and the registry lookup cannot resolve it.
+func (s *Service) attributionRefused(token, userID string) string {
+	if s.relayAttrib != nil {
+		if tagOwner, known := s.relayAttrib.OwnerForTag(token); known {
+			if tagOwner != userID {
+				return fmt.Sprintf("tag owner %s != reported %s", tagOwner, userID)
+			}
+			return ""
+		}
+	}
+	if s.pairCodeOwner != nil && token != "" {
+		if realOwner, ok := s.pairCodeOwner(token); ok && realOwner != userID {
+			return fmt.Sprintf("code owner %s != reported %s", realOwner, userID)
+		}
+	}
+	return ""
+}
+
 // warnImplausibleAttribution 在归因量级不像真的时喊一声。
 //
-// **不改计费**：跨用户伪造的既有防线（pairCodeOwner 比对）对**过期/未知**的码是
-// "无法反驳即接受"，所以持有节点凭据的人仍然可以给别人记账。真正的修复是让中心
-// 在签发凭据时嵌一个不可伪造的归因标签（报告 M1），那要动计费链路。在那之前，
-// 至少别让这件事发生得**完全无声**——一条日志就是"被记了 20 TB"和"有人在记 20 TB"
-// 的区别。
+// **不改计费**：归因防线（attributionRefused）对**中心认不出**的 token 仍然是
+// "无法反驳即接受"，所以持有节点凭据的人仍然可以给别人记账。
+//
+// 这条防线已经换过一半：签发现在嵌的是每一代独立随机的归因 tag 而不是会被回收的
+// 六位码，所以"码被重新铸给别人"不再能把合法上报判成伪造（那是**丢账**，见
+// attrib.go）。但 M1 的另一半没做——tag 是查表用的标识，不是 MAC，中心不认识它的
+// 时候（进程重启、超过保留宽限、别的实例）照样只能按上报接受。真正封死要在 tag 里
+// 嵌一个可无状态校验的签名，那需要一把新的服务端密钥，本次改动刻意没有引入。
+//
+// 在那之前，至少别让这件事发生得**完全无声**——一条日志就是"被记了 20 TB"和
+// "有人在记 20 TB"的区别。
 func warnImplausibleAttribution(nodeID string, entries int, attributed map[string]int64) {
 	if entries > implausibleUsageCount {
 		log.Printf("WARNING: node %s reported %d usage entries in one heartbeat (>%d) — possible forged attribution",

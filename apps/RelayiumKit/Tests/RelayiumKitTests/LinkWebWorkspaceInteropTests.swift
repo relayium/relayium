@@ -109,7 +109,8 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
             "link": .bool(true),
             "sdp": .object(["type": .string("offer"), "sdp": .string(sdp)]),
             "commit": .string(commit),
-            "caps": .array([.string("link/1"), .string("preupload/1")]),
+            "caps": .array([.string("link/1"), .string("preupload/1"),
+                            .string("relay-renew/1")]),
         ])
     }
 
@@ -286,7 +287,7 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
             requiresVerification: { requiresVerification },
             iceClient: nil,
             assemble: { signaling, peerId, role, ice, relayOnly, generation,
-                        directory, admission, signal in
+                        directory, admission, signal, _ in
                 let transport = InteropTransport()
                 box?.transports.append(transport)
                 box?.assembledPeers.append(peerId)

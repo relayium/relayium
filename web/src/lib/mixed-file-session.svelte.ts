@@ -197,6 +197,22 @@ export interface MixedFileSessionDeps {
   /** Link owner uses lane traffic to refresh its idle lease. */
   onActivity?(): void;
   /**
+   * The STRICTER signal: actual file bytes, or ACK progress on them.
+   *
+   * Deliberately a second hook rather than a reinterpretation of `onActivity`,
+   * because the two answer different questions and both are right.
+   * `onActivity` bounds a resource — any lane traffic means this link is not
+   * abandoned, and it keeps the ten-minute idle close honest. This one is the
+   * evidence a relay RENEWAL rests on (`relay-renew-v1.md` §7.1), and there the
+   * question is whether a person is actually moving data.
+   *
+   * So a control frame, a resume request, a pre-upload handoff and a batch
+   * abort all refresh the idle lease and none of them reaches this. Collapsing
+   * the two would mean a link that exchanges nothing but protocol chatter could
+   * renew a paid relay grant indefinitely.
+   */
+  onUserActivity?(): void;
+  /**
    * The complete set of pre-uploaded objects to hand THIS PEER, asked once per
    * (re)established transport and again whenever `sendStoredKeys()` is called.
    *
@@ -783,6 +799,9 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     try {
       candidate.fileChannel.send(frame);
       deps.onActivity?.();
+      // A protected file frame IS the transfer. The one outbound site that
+      // qualifies under §7.1: every other send on this lane is control.
+      deps.onUserActivity?.();
     } catch (err) {
       markLaneFailed(candidate, "sendFail", expectedGeneration);
       throw err;
@@ -833,6 +852,12 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         // already clamped a duplicate, a rewind and a forged value beyond what
         // this batch emitted back to `acked`. Only that progress buys the
         // receiver more time to answer with COMPLETE.
+        //
+        // …and for the same reason it is the only ACK that counts as a person
+        // moving data. The contract says "ACK progress", and progress is
+        // exactly what this branch has just established: a live batch, in a
+        // sending phase, acknowledged past where it was.
+        deps.onUserActivity?.();
         if (current.phase === "finishing") current.completeRearm?.();
         const wake = current.creditWake;
         current.creditWake = null;
@@ -916,6 +941,28 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         throw new Error("relayium: protected file frame before resume realignment");
       }
       const out = await candidate.fileReceiver.feed(new Uint8Array(buf), candidate.keys);
+      // Validated: it decrypted under this link's own key, at the sequence this
+      // side expected, for a batch already consented to — every one of which
+      // was checked above or inside `feed`, which throws otherwise. A frame
+      // that gets this far and carries file bytes is actual transfer progress,
+      // and nothing else can reach here claiming to be.
+      //
+      // `isChunkFrame`, not a bare CHUNK test: a fragmented chunk is file bytes
+      // exactly as an unfragmented one is, and on a small MTU a whole transfer
+      // is nothing but fragments.
+      //
+      // **Re-guarded after the await.** `feed` is asynchronous, and the link or
+      // its generation can change while it runs — a rebuild, a teardown, a new
+      // authentication step. The guard above this ran BEFORE that await, so
+      // without repeating it a decryption belonging to a connection that has
+      // since been replaced would refresh the CURRENT link's activity. Stale
+      // work is not new progress, and renewal consent is precisely what must
+      // not be bought with it. `handleInboundOutput` checks ownership too, but
+      // it runs after this line.
+      if (candidate === link && expectedGeneration === generation
+        && isChunkFrame(new Uint8Array(buf))) {
+        deps.onUserActivity?.();
+      }
       await handleInboundOutput(candidate, out);
     }).finally(() => {
       if (expectedGeneration === generation) {
@@ -1953,6 +2000,18 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       const buf = asBuffer(event.data);
       if (!buf || candidate !== link || expectedGeneration !== generation) return;
       deps.onActivity?.();
+      // **No user-activity decision here.** This is the raw arrival point: the
+      // frame has been parsed by shape and nothing more. `parseAck` reads a
+      // 13-byte header and no state, so a bare ACK — duplicated, rewound,
+      // beyond anything this side ever sent, or arriving with no outbound batch
+      // at all — looked exactly like progress. Thirteen bytes every ten minutes
+      // would have kept a paid relay grant renewable with no user and no
+      // transfer behind it.
+      //
+      // Both signals now fire where the claim is actually proven: an ACK at the
+      // point `advanceAck` moves the batch forward, and inbound payload at the
+      // point it has decrypted under the link's own key and been admitted in
+      // sequence. See MixedFileSessionDeps.onUserActivity.
       if (parseAck(buf) !== null || controlKind(buf) !== null || isResumeReq(buf)) {
         // Receiver->sender controls must not wait behind slow inbound disk writes,
         // or our independent outbound flow-control window can deadlock.

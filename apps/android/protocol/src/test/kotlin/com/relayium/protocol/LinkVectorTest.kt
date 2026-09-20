@@ -58,6 +58,12 @@ class LinkVectorTest {
         val expected = Fixtures.arr(Fixtures.wire, "capability", "hello", "native", "caps")
             .map { Fixtures.string(it) }
         assertEquals(expected, LinkProtocol.ADVERTISED_CAPS)
+        // The shared fixture now carries `relay-renew/1` in the native hello,
+        // which is what a build with the whole renewal path wired must
+        // announce (`docs/protocol/relay-renew-v1.md` section 8). Pinned
+        // explicitly so that announcing it and implementing it cannot drift
+        // apart in either direction.
+        assertTrue(expected.contains(RelayRenewWire.CAPABILITY))
     }
 
     @Test

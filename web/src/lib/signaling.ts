@@ -43,6 +43,7 @@ export class SignalingClient {
   private peerLeftCb: ((peerId: string) => void) | null = null;
   private signalCbs: ((from: string, data: unknown) => void)[] = [];
   private closeCb: (() => void) | null = null;
+  private grantCbs: ((data: unknown) => void)[] = [];
 
   constructor(
     url: string,
@@ -113,6 +114,32 @@ export class SignalingClient {
   }
 
   /**
+   * Ask this room's server for a relay-renewal round.
+   *
+   * Sent on the socket that holds the membership, deliberately: the server's
+   * authority for "this is one of the two original peers" is the connection
+   * itself, so a renewal cannot be requested by anything that is not in the
+   * room. Best effort like every other frame here — a reply that never comes is
+   * the same outcome as an older server that ignores it, and the caller's own
+   * bound is what ends the wait.
+   */
+  sendIceRenew(round: number, rid: number) {
+    this.send({ type: "ice-renew", data: { round, rid } });
+  }
+
+  /** Register an `ice-grant` listener; returns an unsubscribe function. The
+   *  payload stays opaque here — `parseIceGrant` is the one place that decides
+   *  what a grant is, for the same reason `data` on a signal is validated
+   *  downstream. */
+  onIceGrant(cb: (data: unknown) => void): () => void {
+    this.grantCbs.push(cb);
+    return () => {
+      const i = this.grantCbs.indexOf(cb);
+      if (i >= 0) this.grantCbs.splice(i, 1);
+    };
+  }
+
+  /**
    * 发一帧。**不抛**：底层 socket 在重连窗口里（CLOSING/CLOSED）send 会抛
    * InvalidStateError，而这里的调用点全是即发即忘的 UI 路径（busy 应答、relay RTT
    * 广播），一路抛上去就是一条 unhandled rejection，还可能把 onmessage 的分发循环
@@ -146,5 +173,8 @@ export class SignalingClient {
     else if (e.type === "peers" && Array.isArray(e.peers)) this.peersCb?.(e.peers);
     else if (e.type === "left" && typeof e.peer === "string" && e.peer !== "") this.peerLeftCb?.(e.peer);
     else if (e.type === "signal" && typeof e.from === "string") { const from = e.from; this.signalCbs.forEach((cb) => cb(from, e.data)); }
+    // A renewal grant is addressed to this socket, so it carries no `from`:
+    // unlike a signal it is the SERVER speaking, not a peer relayed through it.
+    else if (e.type === "ice-grant") { this.grantCbs.forEach((cb) => cb(e.data)); }
   }
 }

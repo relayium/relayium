@@ -132,7 +132,18 @@ describe("the browser composes link/1 and nothing else", () => {
     // `preupload/1` stay EXACT — contracting the announcement must not become
     // contracting the protocol.
     const caps = read("src/lib/peer-caps.svelte.ts");
-    expect(caps).toContain("return linkRoomActive() ? [CAP_LINK, CAP_PREUPLOAD] : [];");
+    // One expression still decides it, and it now has two steps because
+    // `relay-renew/1` is scoped by its own predicate. Both are pinned, so a
+    // future edit cannot add a capability to one path and forget the other —
+    // which would advertise something in a LAN room and withhold it in a code
+    // room, or the reverse.
+    expect(caps).toContain("if (!linkRoomActive()) return [];");
+    expect(caps).toContain(
+      "return renewRoomActive() ? [CAP_LINK, CAP_PREUPLOAD, CAP_RENEW] : [CAP_LINK, CAP_PREUPLOAD];",
+    );
+    // …and the renewal scope reads the SAME link predicate, so a narrowing of
+    // link/1 can never leave renewal announced on its own.
+    expect(caps).toMatch(/export function renewRoomActive\(\): boolean \{\s*return linkRoomActive\(\);/);
     // The constant survives the announcement, deliberately: a native peer still
     // sends `text/1`, and a fixture that has to describe such a peer should name
     // it rather than spell it. What must not survive is any production reader.

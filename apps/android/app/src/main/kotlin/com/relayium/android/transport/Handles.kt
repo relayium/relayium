@@ -25,6 +25,16 @@ interface TransportHandle {
     fun textBufferedAmount(): Long
     fun leaveAndClose(leave: Signal?)
     fun close(reason: String)
+
+    /**
+     * The relay-renewal surface, or null on a transport that has none.
+     *
+     * Optional on the interface so a test double is unaffected and so a caller
+     * has to state what it does without one — which, for renewal, is the
+     * correct and truthful answer: no surface means no migration, and the link
+     * runs out the deadline it already has.
+     */
+    fun renew(): RenewTransport? = null
 }
 
 fun interface TransportFactory {
@@ -42,6 +52,17 @@ fun interface TransportFactory {
 interface SignalingHandle {
     fun connect()
     fun sendSignal(to: String, data: Json)
+
+    /**
+     * Ask the room's own server for one renewal round (`relay-renew/1` §2.1).
+     *
+     * False — the DEFAULT — means this rendezvous has no server to ask. That is
+     * the structural reason a Nearby or direct-link session makes no backend
+     * call for renewal: the handle it holds does not implement this, so there
+     * is no policy to get wrong and no branch to forget.
+     */
+    fun requestIceRenew(round: Long, rid: Long): Boolean = false
+
     fun close()
 }
 

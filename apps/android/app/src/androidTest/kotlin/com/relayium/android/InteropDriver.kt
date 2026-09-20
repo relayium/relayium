@@ -64,6 +64,42 @@ internal object InteropDriver {
         return created
     }
 
+    /**
+     * Stage a LARGE outgoing file without ever holding it in memory.
+     *
+     * The renewal acceptance sends tens of megabytes, deliberately slowly, so
+     * that a credential expires mid-transfer. Materialising that as one
+     * `ByteArray` — and then a second copy inside the provider write — is a
+     * heap cost the instrumentation process has no reason to pay, and an OOM
+     * there would read as a transfer failure rather than a harness one.
+     *
+     * The digest is computed over the SAME bytes as they are written, so the
+     * value reported is what the provider actually holds rather than what the
+     * generator was asked for.
+     */
+    fun stageOutgoingLarge(name: String, size: Int, byteAt: (Int) -> Byte): Pair<Uri, String> {
+        val resolver = context.contentResolver
+        val parent = DocumentsContract.buildDocumentUri(authority, ROOT_DOC)
+        val existing = DocumentsContract.buildDocumentUri(authority, name)
+        runCatching { DocumentsContract.deleteDocument(resolver, existing) }
+        val created = DocumentsContract.createDocument(
+            resolver, parent, "application/octet-stream", name,
+        ) ?: error("could not create the outgoing document $name")
+        val digest = MessageDigest.getInstance("SHA-256")
+        val chunk = ByteArray(64 * 1024)
+        resolver.openOutputStream(created, "wt")?.use { out ->
+            var written = 0
+            while (written < size) {
+                val n = minOf(chunk.size, size - written)
+                for (i in 0 until n) chunk[i] = byteAt(written + i)
+                out.write(chunk, 0, n)
+                digest.update(chunk, 0, n)
+                written += n
+            }
+        } ?: error("the provider returned no stream for $name")
+        return created to digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
     /** The bytes the app actually SAVED, read back through the provider. */
     fun readSaved(name: String): ByteArray? {
         val uri = DocumentsContract.buildDocumentUri(authority, name)

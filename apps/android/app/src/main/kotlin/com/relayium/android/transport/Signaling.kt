@@ -4,6 +4,7 @@ import com.relayium.protocol.Envelope
 import com.relayium.protocol.Json
 import com.relayium.protocol.JoinInput
 import com.relayium.protocol.PairCode
+import com.relayium.protocol.RelayRenewWire
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -44,6 +45,14 @@ class SignalingClient(
         fun onPeerLeft(peerId: String)
         /** One opaque payload from one peer. */
         fun onSignal(from: String, data: Json)
+
+        /**
+         * The server's answer to an `ice-renew` request.
+         *
+         * Defaulted so a listener with no renewal machinery need not mention
+         * it, and so a reply to a request nobody made costs nothing.
+         */
+        fun onIceGrant(data: Json) = Unit
         /** The socket ended. `code` is the WebSocket close code, or -1. */
         fun onClosed(code: Int, reason: String)
         fun onFailure(error: Throwable)
@@ -82,6 +91,11 @@ class SignalingClient(
                             val data = envelope.data ?: return
                             events.onSignal(from, data)
                         }
+                        // The renewal round's reply. It carries no `from`: it
+                        // is the SERVER answering this socket, not a peer, and
+                        // reading one as a peer signal is exactly the confusion
+                        // the separate type exists to prevent.
+                        "ice-grant" -> envelope.data?.let(events::onIceGrant)
                         else -> Unit
                     }
                 }
@@ -102,6 +116,20 @@ class SignalingClient(
      *  from a fire-and-forget UI path would be worse than dropping one. */
     override fun sendSignal(to: String, data: Json) {
         send(Envelope.signal(to, data))
+    }
+
+    /**
+     * Ask this room's server for one renewal round.
+     *
+     * Best effort, like every other frame on this socket: a request lost during
+     * a reconnect is answered by the caller's own bounded timeout, which is the
+     * same outcome an older server that ignores `ice-renew` produces. True here
+     * means "this rendezvous HAS a server and the frame was handed to it", and
+     * nothing more — it is not an answer and confers nothing.
+     */
+    override fun requestIceRenew(round: Long, rid: Long): Boolean {
+        send(Envelope(type = "ice-renew", data = RelayRenewWire.renewRequestData(round, rid)))
+        return true
     }
 
     private fun send(envelope: Envelope) {

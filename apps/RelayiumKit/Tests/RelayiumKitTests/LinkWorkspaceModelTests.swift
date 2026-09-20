@@ -164,7 +164,7 @@ final class LinkWorkspaceModelTests: XCTestCase {
             iceClient: nil,
             pendingMessages: pendingMessages,
             assemble: { signaling, peerId, role, iceServers, relayOnly, generation,
-                        receiveDirectory, admission, initialSignal in
+                        receiveDirectory, admission, initialSignal, _ in
                 let transport = WorkspaceTransport()
                 box?.transports.append(transport)
                 box?.peers.append(peerId)
@@ -390,7 +390,7 @@ final class LinkWorkspaceModelTests: XCTestCase {
             capabilities: capabilities, receiveDirectory: { dir },
             requiresVerification: { required }, iceClient: nil,
             assemble: { signaling, peerId, role, ice, relayOnly, generation,
-                        directory, admission, signal in
+                        directory, admission, signal, _ in
                 let transport = WorkspaceTransport()
                 transports.append(transport)
                 return LinkSessionFactory.make(

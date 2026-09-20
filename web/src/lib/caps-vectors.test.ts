@@ -103,10 +103,17 @@ describe("capability vectors (shared with the native clients)", () => {
     // The rows are pinned against the source so a row deleted from the generator
     // fails loudly here instead of silently narrowing the loop below.
     expect(cap.promotion.map((row) => row.caps.join("+"))).toEqual([
-      "text/1+link/1+preupload/1", "text/1+link/1", "link/1",
+      "text/1+link/1+preupload/1",
+      // `relay-renew/1` is ORTHOGONAL to link promotion: it rides alongside a
+      // link/1 hello and, alone, is not a link/1 peer at all.
+      "link/1+preupload/1+relay-renew/1", "relay-renew/1",
+      "text/1+link/1", "link/1",
       "text/1", "", "link/2", "LINK/1", "text/2",
     ]);
-    expect(cap.promotion.filter((row) => row.link)).toHaveLength(3);
+    // Four promoting rows now: the three that always promoted plus the one
+    // that adds `relay-renew/1` to a link/1 hello. The renew-only row does NOT
+    // promote, which is the half of that pair worth counting.
+    expect(cap.promotion.filter((row) => row.link)).toHaveLength(4);
 
     for (const row of cap.promotion) {
       resetPeerCaps();

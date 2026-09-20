@@ -120,6 +120,22 @@ func (h *Hub) JoinDeviceLimited(room, id, name string, c Conn, max int, clientIP
 // that peer can leave before the second lock acquisition. Welcome and roster
 // delivery remain outside the lock, as does every caller's observer callback.
 func (h *Hub) JoinDeviceLimitedObserved(room, id, name string, c Conn, max int, clientIP, deviceID string, active bool) (admitted bool, peers int) {
+	admitted, peers, _ = h.JoinDeviceLimitedObservedMembers(room, id, name, c, max, clientIP, deviceID, active)
+	return admitted, peers
+}
+
+// JoinDeviceLimitedObservedMembers is JoinDeviceLimitedObserved plus the room's
+// exact membership at the admission instant.
+//
+// The membership is captured under the SAME lock that inserts the peer, for the
+// reason the count already is: reading it afterwards is a different question.
+// Renewal authority is frozen from this list (see GrantRegistry.Open), and a
+// pairing-code room that loses a peer frees a slot somebody else can take while
+// the code is still live — so a list read even microseconds later could name a
+// replacement rather than the pair that actually met.
+//
+// Order is Go map order and therefore arbitrary; callers must treat it as a set.
+func (h *Hub) JoinDeviceLimitedObservedMembers(room, id, name string, c Conn, max int, clientIP, deviceID string, active bool) (admitted bool, peers int, members []string) {
 	if !ValidDeviceID(deviceID) {
 		deviceID = ""
 	}
@@ -127,13 +143,13 @@ func (h *Hub) JoinDeviceLimitedObserved(room, id, name string, c Conn, max int, 
 	if h.rooms[room] == nil {
 		if len(h.rooms) >= maxRooms {
 			h.mu.Unlock()
-			return false, 0 // global room cap: refuse to create a new room
+			return false, 0, nil // global room cap: refuse to create a new room
 		}
 		h.rooms[room] = make(map[string]*peer)
 	}
 	if max > 0 && h.logicalDeviceCount(room) >= max && !h.hasDevice(room, deviceID) {
 		h.mu.Unlock()
-		return false, 0
+		return false, 0, nil
 	}
 	h.seq++
 	p := &peer{id: id, name: name, conn: c, deviceID: deviceID, joinSeq: h.seq}
@@ -142,11 +158,15 @@ func (h *Hub) JoinDeviceLimitedObserved(room, id, name string, c Conn, max int, 
 	}
 	h.rooms[room][id] = p
 	peers = len(h.rooms[room])
+	members = make([]string, 0, peers)
+	for member := range h.rooms[room] {
+		members = append(members, member)
+	}
 	h.mu.Unlock()
 
 	c.Send(Envelope{Type: TypeWelcome, Name: id, IP: clientIP})
 	h.scheduleRoster(room)
-	return true, peers
+	return true, peers, members
 }
 
 // PeerCount is how many connections the room currently holds.

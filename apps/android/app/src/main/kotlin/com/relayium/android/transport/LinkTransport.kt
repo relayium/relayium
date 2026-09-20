@@ -6,6 +6,7 @@ import com.relayium.protocol.Json
 import com.relayium.protocol.LinkProtocol
 import com.relayium.protocol.LinkSession
 import com.relayium.protocol.RealtimeFrame
+import com.relayium.protocol.RelayRenewSdp
 import com.relayium.protocol.Signal
 import com.relayium.protocol.legacy.WireProfile
 import java.nio.ByteBuffer
@@ -14,6 +15,7 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import org.webrtc.CandidatePairChangeEvent
 import org.webrtc.DataChannel
 import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
@@ -121,25 +123,40 @@ class LinkTransport(
     private var candidateProgress = 0
     private var keyWindowArmed = false
 
+    // ── relay renewal (`relay-renew-v1.md`) ─────────────────────────────────
+
+    /** The pin taken from the remote description applied at epoch 0. */
+    private var remoteBaselinePin: RelayRenewSdp.Pin? = null
+
+    /** The ICE generation this side's most recent applied local description
+     *  named. An ICE restart that does not change it did not restart. */
+    private var lastLocalUfrag: String = ""
+
+    /** Set once this link has verified any renewal signal from its peer. From
+     *  then on unsigned `link`-generation SDP and ICE are refused for the
+     *  remainder of this `PeerConnection` — `relay-renew-v1.md` section 4.1. */
+    private var unsignedSdpLocked = false
+
+    /** One subscriber, owned by the renewal controller. */
+    private var renewCandidates: ((RenewTransport.Candidate) -> Unit)? = null
+
+    /**
+     * The always-on selected-pair channel: the one subscriber, and the last
+     * real observation held for replay to it.
+     *
+     * The FIRST selection is what classifies the path and decides whether this
+     * link is bounded by a credential at all, and it routinely happens before
+     * the owner exists to subscribe. See [RelayRenewSelectedPairCache].
+     */
+    private val selectedPairs = RelayRenewSelectedPairCache()
+
     /** Must be called on the executor thread. */
     override fun start() {
         check(!closed)
         ensureFactoryInitialized(contextRef)
         factory = PeerConnectionFactory.builder().createPeerConnectionFactory()
 
-        val servers = iceServers.map { server ->
-            PeerConnection.IceServer.builder(server.urls).apply {
-                server.username?.let(::setUsername)
-                server.credential?.let(::setPassword)
-            }.createIceServer()
-        }
-        val config = PeerConnection.RTCConfiguration(servers).apply {
-            sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
-            continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
-            bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
-            rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE
-        }
-        connection = factory?.createPeerConnection(config, Observer())
+        connection = factory?.createPeerConnection(rtcConfiguration(iceServers), Observer())
         if (connection == null) {
             fail("no-peer-connection")
             return
@@ -182,6 +199,34 @@ class LinkTransport(
         }
     }
 
+    /**
+     * The connection's configuration for one set of ICE servers.
+     *
+     * Built in ONE place because a renewal re-applies it to the same
+     * `PeerConnection`: `setConfiguration` accepts a change to the ICE fields
+     * and refuses a change to the rest, so a second, quietly different literal
+     * would turn every renewal into a silent failure on a line nobody read.
+     *
+     * No `iceTransportPolicy` is set, here or on renewal. A migration that
+     * lands on a direct path is a legitimate success and is classified by the
+     * existing rule; renewal does not force relay where the original policy
+     * allowed direct.
+     */
+    private fun rtcConfiguration(servers: List<IceConfig.Server>): PeerConnection.RTCConfiguration {
+        val ice = servers.map { server ->
+            PeerConnection.IceServer.builder(server.urls).apply {
+                server.username?.let(::setUsername)
+                server.credential?.let(::setPassword)
+            }.createIceServer()
+        }
+        return PeerConnection.RTCConfiguration(ice).apply {
+            sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
+            continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
+            bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
+            rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE
+        }
+    }
+
     // ── inbound signalling (executor thread) ────────────────────────────────
 
     override fun onSignal(raw: Json) {
@@ -209,7 +254,14 @@ class LinkTransport(
             }
         }
 
-        if (signal.sdpType != null && signal.sdp != null) {
+        // Once this link has verified a renewal signal from its peer, unsigned
+        // `link`-generation SDP is refused for the remainder of this
+        // `PeerConnection` (`relay-renew-v1.md` section 4.1). The decision is
+        // monotonic and authenticated; it deliberately does not rest on the
+        // unsigned capability hint, and it is silent rather than fatal, because
+        // a renewal in flight legitimately produces the only SDP this
+        // connection should still accept — and that one arrives signed.
+        if (signal.sdpType != null && signal.sdp != null && !unsignedSdpLocked) {
             onRemoteSdp(signal)
         }
 
@@ -228,6 +280,10 @@ class LinkTransport(
         }
 
         signal.candidate?.let { candidate ->
+            // The same lock, for the same reason: an unsigned candidate would
+            // otherwise be added to a live PeerConnection whose migration is
+            // being authenticated.
+            if (unsignedSdpLocked) return
             val ice = IceCandidate(signal.sdpMid.orEmpty(), signal.sdpMLineIndex ?: 0, candidate)
             if (!remoteDescribed) {
                 // Held, not dropped: a candidate applied before the remote
@@ -269,6 +325,11 @@ class LinkTransport(
             sdpSet(
                 onSuccess = {
                     remoteDescribed = true
+                    // The pin is taken from the remote description ACTUALLY
+                    // applied at epoch 0, and only from the first one: it is
+                    // the peer's DTLS identity and m-line shape that a renewal
+                    // at epoch >= 1 must not change.
+                    if (remoteBaselinePin == null) remoteBaselinePin = RelayRenewSdp.pin(signal.sdp!!)
                     noteProgress("sdp:${signal.sdpType}")
                     parseMaxMessageSize(signal.sdp!!)?.let { advertised ->
                         // RFC 8841: the binding ceiling is what the REMOTE can
@@ -336,6 +397,7 @@ class LinkTransport(
     internal fun onLocalDescriptionApplied(sendSignal: () -> Unit) {
         if (closed) return
         sendSignal()
+        connection?.localDescription?.description?.let { lastLocalUfrag = RelayRenewSdp.iceUfrag(it) }
         for (candidate in localCandidates.release()) emitLocalCandidate(candidate)
     }
 
@@ -357,7 +419,32 @@ class LinkTransport(
         }
     }
 
+    /**
+     * One gathered local candidate leaves this transport.
+     *
+     * Three destinations, and the order is the rule:
+     *
+     *  - a renewal epoch owns the candidate stream while it runs. Its
+     *    candidates are signed and bound to an ICE generation, and emitting
+     *    them unsigned as well would hand a peer two copies of the same
+     *    candidate under two different trust levels.
+     *  - once unsigned SDP is locked and no epoch is running, a candidate is
+     *    DROPPED rather than sent. The peer refuses it by the same rule, so
+     *    sending it would be an unsigned frame on the wire that nothing acts
+     *    on. Continual gathering after a completed migration is an
+     *    optimisation, not the path: the path is already selected and proven.
+     *  - otherwise, today's behaviour, unchanged.
+     */
     private fun emitLocalCandidate(candidate: IceCandidate) {
+        renewCandidates?.let { subscriber ->
+            subscriber(
+                RenewTransport.Candidate(
+                    candidate.sdp, candidate.sdpMid, candidate.sdpMLineIndex,
+                ),
+            )
+            return
+        }
+        if (unsignedSdpLocked) return
         send(profile.candidate(candidate.sdp, candidate.sdpMid, candidate.sdpMLineIndex))
     }
 
@@ -519,6 +606,155 @@ class LinkTransport(
         }.getOrDefault(false)
     }
 
+    // ── the relay-renewal surface (executor thread) ─────────────────────────
+
+    override fun renew(): RenewTransport = renewSurface
+
+    /**
+     * The renewal's view of this transport.
+     *
+     * An inner object rather than a set of public methods, so the only thing
+     * outside this file that can restart ICE, re-apply a configuration or take
+     * the candidate stream is something holding this seam — and so every one of
+     * those calls is visible in one place.
+     *
+     * NOTHING here calls [fail]. A renewal that cannot proceed must leave the
+     * link exactly as it found it, running out the deadline it already has; a
+     * migration attempt is not allowed to be a way to lose a working
+     * connection.
+     */
+    private val renewSurface = object : RenewTransport {
+
+        override fun applyConfiguration(servers: List<IceConfig.Server>): Boolean {
+            if (closed) return false
+            return runCatching {
+                connection?.setConfiguration(rtcConfiguration(servers))
+            }.getOrNull() == true
+        }
+
+        override fun createRenewOffer(onResult: (RenewTransport.LocalSdp?) -> Unit) {
+            if (closed) { onResult(null); return }
+            val pc = connection ?: run { onResult(null); return }
+            // `restartIce()` is the modern API and is what marks the NEXT offer
+            // as a restart; the offer is then created and applied normally.
+            runCatching { pc.restartIce() }
+            pc.createOffer(
+                renewSdpCreate(onResult) { description -> applyRenewLocal(description, onResult) },
+                MediaConstraints(),
+            )
+        }
+
+        override fun createRenewAnswer(onResult: (RenewTransport.LocalSdp?) -> Unit) {
+            if (closed) { onResult(null); return }
+            val pc = connection ?: run { onResult(null); return }
+            pc.createAnswer(
+                renewSdpCreate(onResult) { description -> applyRenewLocal(description, onResult) },
+                MediaConstraints(),
+            )
+        }
+
+        override fun applyRemoteSdp(sdpType: String, sdp: String, onResult: (Boolean) -> Unit) {
+            if (closed) { onResult(false); return }
+            val type = when (sdpType) {
+                "offer" -> SessionDescription.Type.OFFER
+                "answer" -> SessionDescription.Type.ANSWER
+                else -> { onResult(false); return }
+            }
+            val pc = connection ?: run { onResult(false); return }
+            pc.setRemoteDescription(
+                sdpSet(onSuccess = { onResult(true) }, onFailure = { onResult(false) }),
+                SessionDescription(type, sdp),
+            )
+        }
+
+        override fun addCandidate(candidate: RenewTransport.Candidate): Boolean {
+            if (closed) return false
+            val ice = IceCandidate(
+                candidate.sdpMid.orEmpty(),
+                candidate.sdpMLineIndex ?: 0,
+                candidate.candidate,
+            )
+            return runCatching { connection?.addIceCandidate(ice) }.getOrNull() == true
+        }
+
+        override fun onCandidate(cb: ((RenewTransport.Candidate) -> Unit)?) {
+            renewCandidates = cb
+        }
+
+        override fun onSelectedPair(cb: ((RenewTransport.SelectedPair) -> Unit)?) {
+            // Attaching REPLAYS whatever this connection already observed.
+            selectedPairs.subscribe(cb)
+        }
+
+        override fun baselinePin(): RelayRenewSdp.Pin? = remoteBaselinePin
+
+        override fun sendControlFrame(frame: ByteArray): Boolean = write(textChannel, frame)
+
+        override fun lockUnsignedSdp() {
+            unsignedSdpLocked = true
+        }
+    }
+
+    /**
+     * Apply a renewal's local description and hand back the generation it
+     * named.
+     *
+     * Two things happen in a fixed order, and both matter. The candidate gate
+     * closes BEFORE the description is applied, so the new generation's
+     * candidates cannot overtake the SDP that explains them; the caller's
+     * `onResult` is what puts that SDP on the wire, so the gate opens
+     * immediately after it returns.
+     *
+     * A local description whose `a=ice-ufrag` is UNCHANGED is reported as a
+     * failure. The stack was asked for an ICE restart; if it produced the same
+     * generation then no restart happened, every later ufrag comparison would
+     * be vacuous, and a migration would be "proved" by the candidate that was
+     * already selected. Refusing keeps the old deadline, which is the outcome
+     * every failure path here shares.
+     */
+    private fun applyRenewLocal(
+        description: SessionDescription,
+        onResult: (RenewTransport.LocalSdp?) -> Unit,
+    ) {
+        val previous = lastLocalUfrag
+        beginLocalDescription()
+        connection?.setLocalDescription(
+            sdpSet(
+                onSuccess = {
+                    val ufrag = RelayRenewSdp.iceUfrag(description.description)
+                    if (ufrag.isEmpty() || ufrag == previous) {
+                        localCandidates.release()
+                        onResult(null)
+                        return@sdpSet
+                    }
+                    lastLocalUfrag = ufrag
+                    onResult(RenewTransport.LocalSdp(description.description, ufrag))
+                    for (candidate in localCandidates.release()) emitLocalCandidate(candidate)
+                },
+                onFailure = {
+                    localCandidates.release()
+                    onResult(null)
+                },
+            ),
+            description,
+        )
+    }
+
+    /** A CREATE observer for a renewal: failure is reported, never fatal. */
+    private fun renewSdpCreate(
+        onResult: (RenewTransport.LocalSdp?) -> Unit,
+        onCreated: (SessionDescription) -> Unit,
+    ) = object : SdpObserver {
+        override fun onCreateSuccess(description: SessionDescription) {
+            executor.execute { if (closed) onResult(null) else onCreated(description) }
+        }
+        override fun onCreateFailure(error: String?) {
+            executor.execute { onResult(null) }
+        }
+        override fun onSetSuccess() = Unit
+        override fun onSetFailure(error: String?) = Unit
+    }
+
     // ── deadlines (executor thread) ─────────────────────────────────────────
 
     private fun armNoProgress(delayMs: Long) {
@@ -572,6 +808,11 @@ class LinkTransport(
         // `closed` and returns before it can reopen anything.
         localCandidates.discard()
         captured.clear()
+        // Closing cancels every renewal queue, timer and pending verification
+        // by cutting them off at the source: no later callback can resurrect an
+        // epoch through a subscriber that no longer exists.
+        renewCandidates = null
+        selectedPairs.clear()
         // This runs on the executor thread — never a WebRTC observer stack —
         // which is what the dispose javadoc requires.
         fileChannel?.let { discardChannel(it, registered = true) }
@@ -653,6 +894,27 @@ class LinkTransport(
                     PeerConnection.PeerConnectionState.CLOSED -> fail("closed")
                     else -> Unit
                 }
+            }
+        }
+
+        /**
+         * The ICE agent changed its selected pair.
+         *
+         * This is the AUTHORITATIVE answer to "which path is carrying this
+         * connection", handed over by the stack with both candidates attached.
+         * It is deliberately the only source this port uses: scanning a stats
+         * report for a `nominated` + `succeeded` pair returns the OLD pair as
+         * readily as the new one after a restart, and an implementation that
+         * took the first match would report a migration that had not happened.
+         */
+        override fun onSelectedCandidatePairChanged(event: CandidatePairChangeEvent) {
+            val local = event.local?.sdp ?: return
+            val remote = event.remote?.sdp ?: return
+            executor.execute {
+                if (closed) return@execute
+                // Cached before it is forwarded, so an event that lands before
+                // anything has subscribed is retained rather than lost.
+                selectedPairs.record(RenewTransport.SelectedPair(local, remote))
             }
         }
 

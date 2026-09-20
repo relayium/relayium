@@ -443,6 +443,16 @@ const multiFileResume = {
 const CAP_TEXT = "text/1";
 const CAP_LINK = "link/1";
 const CAP_PREUPLOAD = "preupload/1";
+// Relay credential renewal (docs/protocol/relay-renew-v1.md).
+//
+// Announced by every client that has the WHOLE path wired on its platform, per
+// spec section 8 — which is now all of them: the browser and the Electron
+// renderer, the Apple clients (`RelayRenewController` composed per pairing
+// room) and Android (`RelayRenewEngine` plus its round exchange). This entry is
+// the amendment all three were waiting on: the native modules may only READ
+// this file, so until it named renewal they could implement the feature and
+// still not be allowed to say so.
+const CAP_RENEW = "relay-renew/1";
 
 // `LinkCapabilityAnnouncer` (Swift) and `CapsAnnouncer` (TS). Both rooms, both
 // languages, one cadence: three attempts at 1.5s land at 0, 1.5 and 3.0 seconds,
@@ -466,8 +476,12 @@ const capability = {
     // share is narrower and exact — both must name `link/1`, and that is the one
     // capability either side may act on. See `advertisedCaps` (peer-caps) and
     // `testBothHellosNameTheSameExactLink` (LinkCapabilityVectorTests).
-    web: { caps: [CAP_LINK, CAP_PREUPLOAD] },
-    native: { caps: [CAP_TEXT, CAP_LINK] },
+    web: { caps: [CAP_LINK, CAP_PREUPLOAD, CAP_RENEW] },
+    // `relay-renew/1` last, after the two capabilities that describe which
+    // TRANSPORTS this client speaks: renewal is a property of a link's
+    // credential lifetime, not another lane, and the order is byte-pinned on
+    // both native ports.
+    native: { caps: [CAP_TEXT, CAP_LINK, CAP_RENEW] },
     // What a NATIVE client announces in a room where link mode is not allowed —
     // an iOS pairing room today, and any future narrowed scope.
     //
@@ -500,6 +514,13 @@ const capability = {
   // kept because iOS still ships the legacy lane they describe.
   promotion: [
     { caps: [CAP_TEXT, CAP_LINK, CAP_PREUPLOAD], link: true, resolvesImmediately: true },
+    // `relay-renew/1` rides alongside and changes NOTHING about link promotion:
+    // a peer that announces it is still promoted on `link/1` alone, and a peer
+    // that announces only it is not a `link/1` peer at all. Both rows are here
+    // so a native reader can see that the new capability is orthogonal rather
+    // than having to infer it.
+    { caps: [CAP_LINK, CAP_PREUPLOAD, CAP_RENEW], link: true, resolvesImmediately: true },
+    { caps: [CAP_RENEW], link: false, resolvesImmediately: false, legacyLane: "files" },
     { caps: [CAP_TEXT, CAP_LINK], link: true, resolvesImmediately: true },
     { caps: [CAP_LINK], link: true, resolvesImmediately: true },
     { caps: [CAP_TEXT], link: false, resolvesImmediately: true, legacyLane: "text" },

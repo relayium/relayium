@@ -1,0 +1,771 @@
+{
+  "note": "GENERATED. The authority is web/src/lib/relay-renew-vectors.test.ts, which recomputes every value here from web/src/lib/relay-renew-wire.ts and asserts byte-equality. A native port asserts against these bytes; it must not re-derive them from a reading of the spec.",
+  "spec": "docs/protocol/relay-renew-v1.md",
+  "capability": "relay-renew/1",
+  "resumeAuthKeyHex": "2e1adead068eb24b6a158434dee123d018a587efac6e27be8b118e21c3d3395a",
+  "peers": {
+    "from": "peer-a1b2c3",
+    "to": "peer-d4e5f6",
+    "gnarly": "p\"\\\b\t\n\f\r\u0001  🚀z"
+  },
+  "constants": {
+    "probeKind": 13,
+    "probeVersion": 1,
+    "probeTypeProbe": 1,
+    "probeTypeAck": 2,
+    "probeFrameBytes": 59,
+    "nonceBytes": 16,
+    "tagBytes": 32,
+    "authLength": 44,
+    "maxEpochsPerRound": 3,
+    "maxProbeVerifications": 8,
+    "maxHeldCandidates": 64,
+    "probeRetryMs": 2000,
+    "probeMaxSends": 5,
+    "prepareToReadyMs": 15000,
+    "readyToAnswerMs": 15000,
+    "iceProbeMs": 30000,
+    "epochHardCapMs": 60000,
+    "prepareSilenceMs": 10000
+  },
+  "payloads": {
+    "prepare": [
+      {
+        "case": "first epoch",
+        "from": "peer-a1b2c3",
+        "to": "peer-d4e5f6",
+        "epoch": 1,
+        "payload": "{\"kind\":\"link-renew-prepare\",\"from\":\"peer-a1b2c3\",\"to\":\"peer-d4e5f6\",\"epoch\":1}",
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d70726570617265222c2266726f6d223a22706565722d613162326333222c22746f223a22706565722d643465356636222c2265706f6368223a317d",
+        "tag": "1Z0BE1la1y96SUJwITjkVqS91SpSKr9MYYD7lFC3S4s="
+      },
+      {
+        "case": "epoch zero",
+        "from": "peer-a1b2c3",
+        "to": "peer-d4e5f6",
+        "epoch": 0,
+        "payload": "{\"kind\":\"link-renew-prepare\",\"from\":\"peer-a1b2c3\",\"to\":\"peer-d4e5f6\",\"epoch\":0}",
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d70726570617265222c2266726f6d223a22706565722d613162326333222c22746f223a22706565722d643465356636222c2265706f6368223a307d",
+        "tag": "nUF6/4MMus938Adcdi2ou36EEU8Si4LHLLtsTtu3uaI="
+      },
+      {
+        "case": "max uint32 epoch",
+        "from": "peer-a1b2c3",
+        "to": "peer-d4e5f6",
+        "epoch": 4294967295,
+        "payload": "{\"kind\":\"link-renew-prepare\",\"from\":\"peer-a1b2c3\",\"to\":\"peer-d4e5f6\",\"epoch\":4294967295}",
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d70726570617265222c2266726f6d223a22706565722d613162326333222c22746f223a22706565722d643465356636222c2265706f6368223a343239343936373239357d",
+        "tag": "lclthWRoctNKNAxoswg8C/507rqXqjfMF9CMsHBGmfk="
+      },
+      {
+        "case": "every escaping rule in a peer id",
+        "from": "p\"\\\b\t\n\f\r\u0001  🚀z",
+        "to": "peer-d4e5f6",
+        "epoch": 7,
+        "payload": "{\"kind\":\"link-renew-prepare\",\"from\":\"p\\\"\\\\\\b\\t\\n\\f\\r\\u0001  🚀z\",\"to\":\"peer-d4e5f6\",\"epoch\":7}",
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d70726570617265222c2266726f6d223a22705c225c5c5c625c745c6e5c665c725c75303030317fe280a8e280a9f09f9a807a222c22746f223a22706565722d643465356636222c2265706f6368223a377d",
+        "tag": "OhCYu59f+5hEi9u/JClWqgZBw1ZfKTAdidAS76RlfDo="
+      },
+      {
+        "case": "reversed direction is a different payload",
+        "from": "peer-d4e5f6",
+        "to": "peer-a1b2c3",
+        "epoch": 1,
+        "payload": "{\"kind\":\"link-renew-prepare\",\"from\":\"peer-d4e5f6\",\"to\":\"peer-a1b2c3\",\"epoch\":1}",
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d70726570617265222c2266726f6d223a22706565722d643465356636222c22746f223a22706565722d613162326333222c2265706f6368223a317d",
+        "tag": "bzHc51Nc35ct/1ysPPwwKNHz99IxtGw6cbnVKNFMZgI="
+      }
+    ],
+    "ready": [
+      {
+        "case": "round one",
+        "from": "peer-a1b2c3",
+        "to": "peer-d4e5f6",
+        "epoch": 1,
+        "round": 1,
+        "payload": "{\"kind\":\"link-renew-ready\",\"from\":\"peer-a1b2c3\",\"to\":\"peer-d4e5f6\",\"epoch\":1,\"round\":1}",
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d7265616479222c2266726f6d223a22706565722d613162326333222c22746f223a22706565722d643465356636222c2265706f6368223a312c22726f756e64223a317d",
+        "tag": "qDDU4xITDFaFYgQNbdvoLWZhYEKlQxRxDOpYdAL4a9E="
+      },
+      {
+        "case": "round zero",
+        "from": "peer-a1b2c3",
+        "to": "peer-d4e5f6",
+        "epoch": 2,
+        "round": 0,
+        "payload": "{\"kind\":\"link-renew-ready\",\"from\":\"peer-a1b2c3\",\"to\":\"peer-d4e5f6\",\"epoch\":2,\"round\":0}",
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d7265616479222c2266726f6d223a22706565722d613162326333222c22746f223a22706565722d643465356636222c2265706f6368223a322c22726f756e64223a307d",
+        "tag": "k5s5Rb84qrDO1oaovvSfhvL7DSiUNE1T3qGzN87BT1c="
+      }
+    ],
+    "sdp": [
+      {
+        "case": "renewal offer",
+        "from": "peer-a1b2c3",
+        "to": "peer-d4e5f6",
+        "epoch": 1,
+        "round": 1,
+        "sdpType": "offer",
+        "sdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=ice-ufrag:9QmT\r\na=ice-pwd:2/1muCWoOi3uLifh0NuRHlZw\r\na=fingerprint:SHA-256 ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89\r\na=setup:actpass\r\na=mid:0\r\na=sctp-port:5000\r\n",
+        "payload": "{\"kind\":\"link-renew-sdp\",\"from\":\"peer-a1b2c3\",\"to\":\"peer-d4e5f6\",\"epoch\":1,\"round\":1,\"sdpType\":\"offer\",\"sdp\":\"v=0\\r\\no=- 4611731400430051336 2 IN IP4 127.0.0.1\\r\\ns=-\\r\\nt=0 0\\r\\na=group:BUNDLE 0\\r\\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\\r\\nc=IN IP4 0.0.0.0\\r\\na=ice-ufrag:9QmT\\r\\na=ice-pwd:2/1muCWoOi3uLifh0NuRHlZw\\r\\na=fingerprint:SHA-256 ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89\\r\\na=setup:actpass\\r\\na=mid:0\\r\\na=sctp-port:5000\\r\\n\"}",
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d736470222c2266726f6d223a22706565722d613162326333222c22746f223a22706565722d643465356636222c2265706f6368223a312c22726f756e64223a312c2273647054797065223a226f66666572222c22736470223a22763d305c725c6e6f3d2d2034363131373331343030343330303531333336203220494e20495034203132372e302e302e315c725c6e733d2d5c725c6e743d3020305c725c6e613d67726f75703a42554e444c4520305c725c6e6d3d6170706c69636174696f6e2039205544502f44544c532f53435450207765627274632d646174616368616e6e656c5c725c6e633d494e2049503420302e302e302e305c725c6e613d6963652d75667261673a39516d545c725c6e613d6963652d7077643a322f316d7543576f4f6933754c696668304e7552486c5a775c725c6e613d66696e6765727072696e743a5348412d3235362061623a63643a65663a30313a32333a34353a36373a38393a61623a63643a65663a30313a32333a34353a36373a38393a61623a63643a65663a30313a32333a34353a36373a38393a61623a63643a65663a30313a32333a34353a36373a38395c725c6e613d73657475703a616374706173735c725c6e613d6d69643a305c725c6e613d736374702d706f72743a353030305c725c6e227d",
+        "tag": "n05yk3NHvhyFD+ugfZ9DgrAlWVtrPIimV0DQccMKGuk="
+      },
+      {
+        "case": "renewal answer",
+        "from": "peer-d4e5f6",
+        "to": "peer-a1b2c3",
+        "epoch": 1,
+        "round": 1,
+        "sdpType": "answer",
+        "sdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=ice-ufrag:9QmT\r\na=ice-pwd:2/1muCWoOi3uLifh0NuRHlZw\r\na=fingerprint:SHA-256 ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89\r\na=setup:active\r\na=mid:0\r\na=sctp-port:5000\r\n",
+        "payload": "{\"kind\":\"link-renew-sdp\",\"from\":\"peer-d4e5f6\",\"to\":\"peer-a1b2c3\",\"epoch\":1,\"round\":1,\"sdpType\":\"answer\",\"sdp\":\"v=0\\r\\no=- 4611731400430051336 2 IN IP4 127.0.0.1\\r\\ns=-\\r\\nt=0 0\\r\\na=group:BUNDLE 0\\r\\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\\r\\nc=IN IP4 0.0.0.0\\r\\na=ice-ufrag:9QmT\\r\\na=ice-pwd:2/1muCWoOi3uLifh0NuRHlZw\\r\\na=fingerprint:SHA-256 ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89\\r\\na=setup:active\\r\\na=mid:0\\r\\na=sctp-port:5000\\r\\n\"}",
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d736470222c2266726f6d223a22706565722d643465356636222c22746f223a22706565722d613162326333222c2265706f6368223a312c22726f756e64223a312c2273647054797065223a22616e73776572222c22736470223a22763d305c725c6e6f3d2d2034363131373331343030343330303531333336203220494e20495034203132372e302e302e315c725c6e733d2d5c725c6e743d3020305c725c6e613d67726f75703a42554e444c4520305c725c6e6d3d6170706c69636174696f6e2039205544502f44544c532f53435450207765627274632d646174616368616e6e656c5c725c6e633d494e2049503420302e302e302e305c725c6e613d6963652d75667261673a39516d545c725c6e613d6963652d7077643a322f316d7543576f4f6933754c696668304e7552486c5a775c725c6e613d66696e6765727072696e743a5348412d3235362061623a63643a65663a30313a32333a34353a36373a38393a61623a63643a65663a30313a32333a34353a36373a38393a61623a63643a65663a30313a32333a34353a36373a38393a61623a63643a65663a30313a32333a34353a36373a38395c725c6e613d73657475703a6163746976655c725c6e613d6d69643a305c725c6e613d736374702d706f72743a353030305c725c6e227d",
+        "tag": "qqv3g1s4JmyJuaUkV4D4u1kikahlCvTRvX+VRB/Eu1k="
+      }
+    ],
+    "ice": [
+      {
+        "case": "relay candidate with ufrag extension",
+        "from": "peer-a1b2c3",
+        "to": "peer-d4e5f6",
+        "epoch": 1,
+        "round": 1,
+        "candidate": "candidate:842163049 1 udp 1677729535 203.0.113.9 54321 typ relay raddr 0.0.0.0 rport 0 generation 0 ufrag 9QmT network-cost 999",
+        "sdpMid": "0",
+        "sdpMLineIndex": 0,
+        "usernameFragment": "9QmT",
+        "payload": "{\"kind\":\"link-renew-ice\",\"from\":\"peer-a1b2c3\",\"to\":\"peer-d4e5f6\",\"epoch\":1,\"round\":1,\"candidate\":\"candidate:842163049 1 udp 1677729535 203.0.113.9 54321 typ relay raddr 0.0.0.0 rport 0 generation 0 ufrag 9QmT network-cost 999\",\"sdpMid\":\"0\",\"sdpMLineIndex\":0,\"usernameFragment\":\"9QmT\"}",
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d696365222c2266726f6d223a22706565722d613162326333222c22746f223a22706565722d643465356636222c2265706f6368223a312c22726f756e64223a312c2263616e646964617465223a2263616e6469646174653a3834323136333034392031207564702031363737373239353335203230332e302e3131332e39203534333231207479702072656c617920726164647220302e302e302e302072706f727420302067656e65726174696f6e20302075667261672039516d54206e6574776f726b2d636f737420393939222c227364704d6964223a2230222c227364704d4c696e65496e646578223a302c22757365726e616d65467261676d656e74223a2239516d54227d",
+        "tag": "/G4ocFMCBEIFbNREAGuzdeMyUuf7t/a0Cote13Q+n40="
+      },
+      {
+        "case": "explicit nulls for mid and index",
+        "from": "peer-a1b2c3",
+        "to": "peer-d4e5f6",
+        "epoch": 1,
+        "round": 1,
+        "candidate": "candidate:842163049 1 udp 1677729535 203.0.113.9 54321 typ relay raddr 0.0.0.0 rport 0 generation 0 ufrag 9QmT network-cost 999",
+        "sdpMid": null,
+        "sdpMLineIndex": null,
+        "usernameFragment": "9QmT",
+        "payload": "{\"kind\":\"link-renew-ice\",\"from\":\"peer-a1b2c3\",\"to\":\"peer-d4e5f6\",\"epoch\":1,\"round\":1,\"candidate\":\"candidate:842163049 1 udp 1677729535 203.0.113.9 54321 typ relay raddr 0.0.0.0 rport 0 generation 0 ufrag 9QmT network-cost 999\",\"sdpMid\":null,\"sdpMLineIndex\":null,\"usernameFragment\":\"9QmT\"}",
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d696365222c2266726f6d223a22706565722d613162326333222c22746f223a22706565722d643465356636222c2265706f6368223a312c22726f756e64223a312c2263616e646964617465223a2263616e6469646174653a3834323136333034392031207564702031363737373239353335203230332e302e3131332e39203534333231207479702072656c617920726164647220302e302e302e302072706f727420302067656e65726174696f6e20302075667261672039516d54206e6574776f726b2d636f737420393939222c227364704d6964223a6e756c6c2c227364704d4c696e65496e646578223a6e756c6c2c22757365726e616d65467261676d656e74223a2239516d54227d",
+        "tag": "EMzVb8inqfe6abSO1y2KtjzfJk/mZp8x161EQ2gby+k="
+      }
+    ],
+    "abort": [
+      {
+        "case": "timeout",
+        "from": "peer-a1b2c3",
+        "to": "peer-d4e5f6",
+        "epoch": 1,
+        "reason": "timeout",
+        "payload": "{\"kind\":\"link-renew-abort\",\"from\":\"peer-a1b2c3\",\"to\":\"peer-d4e5f6\",\"epoch\":1,\"reason\":\"timeout\"}",
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d61626f7274222c2266726f6d223a22706565722d613162326333222c22746f223a22706565722d643465356636222c2265706f6368223a312c22726561736f6e223a2274696d656f7574227d",
+        "tag": "lo39W0R322w31JJIEga/rHCAX8pvOIeh78tOowRxAlQ="
+      },
+      {
+        "case": "denied",
+        "from": "peer-a1b2c3",
+        "to": "peer-d4e5f6",
+        "epoch": 2,
+        "reason": "denied",
+        "payload": "{\"kind\":\"link-renew-abort\",\"from\":\"peer-a1b2c3\",\"to\":\"peer-d4e5f6\",\"epoch\":2,\"reason\":\"denied\"}",
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d61626f7274222c2266726f6d223a22706565722d613162326333222c22746f223a22706565722d643465356636222c2265706f6368223a322c22726561736f6e223a2264656e696564227d",
+        "tag": "So/cP6qSrJQekaMqOCALw5eAjTrdcO8aodxH7/By68Q="
+      },
+      {
+        "case": "unavailable",
+        "from": "peer-a1b2c3",
+        "to": "peer-d4e5f6",
+        "epoch": 3,
+        "reason": "unavailable",
+        "payload": "{\"kind\":\"link-renew-abort\",\"from\":\"peer-a1b2c3\",\"to\":\"peer-d4e5f6\",\"epoch\":3,\"reason\":\"unavailable\"}",
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d61626f7274222c2266726f6d223a22706565722d613162326333222c22746f223a22706565722d643465356636222c2265706f6368223a332c22726561736f6e223a22756e617661696c61626c65227d",
+        "tag": "0vILnOWGv6fhQ0GrMkqVBsQN7ZaAAqPSderfoHbC4fM="
+      },
+      {
+        "case": "sdp",
+        "from": "peer-a1b2c3",
+        "to": "peer-d4e5f6",
+        "epoch": 4,
+        "reason": "sdp",
+        "payload": "{\"kind\":\"link-renew-abort\",\"from\":\"peer-a1b2c3\",\"to\":\"peer-d4e5f6\",\"epoch\":4,\"reason\":\"sdp\"}",
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d61626f7274222c2266726f6d223a22706565722d613162326333222c22746f223a22706565722d643465356636222c2265706f6368223a342c22726561736f6e223a22736470227d",
+        "tag": "oQHn+jwXttA1KuBOacw87JV7jmjAoqq3PwAtUc6HlU4="
+      },
+      {
+        "case": "closed",
+        "from": "peer-a1b2c3",
+        "to": "peer-d4e5f6",
+        "epoch": 5,
+        "reason": "closed",
+        "payload": "{\"kind\":\"link-renew-abort\",\"from\":\"peer-a1b2c3\",\"to\":\"peer-d4e5f6\",\"epoch\":5,\"reason\":\"closed\"}",
+        "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d61626f7274222c2266726f6d223a22706565722d613162326333222c22746f223a22706565722d643465356636222c2265706f6368223a352c22726561736f6e223a22636c6f736564227d",
+        "tag": "lJVIRnoSssinPjblbY4DjmtzYm7Mj/T8HB7hLzdohig="
+      }
+    ]
+  },
+  "probeFrames": [
+    {
+      "case": "probe, epoch 1 round 1",
+      "type": 1,
+      "epoch": 1,
+      "round": 1,
+      "nonceHex": "000102030405060708090a0b0c0d0e0f",
+      "nonceBase64": "AAECAwQFBgcICQoLDA0ODw==",
+      "payload": "{\"kind\":\"link-renew-probe\",\"from\":\"peer-a1b2c3\",\"to\":\"peer-d4e5f6\",\"epoch\":1,\"round\":1,\"nonce\":\"AAECAwQFBgcICQoLDA0ODw==\"}",
+      "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d70726f6265222c2266726f6d223a22706565722d613162326333222c22746f223a22706565722d643465356636222c2265706f6368223a312c22726f756e64223a312c226e6f6e6365223a2241414543417751464267634943516f4c4441304f44773d3d227d",
+      "tagHex": "734f97868aae0660225989fd4522ccdd60ca5e5b19aaaf6cddcb47e6d7c4ec6c",
+      "frameHex": "0d01010000000100000001000102030405060708090a0b0c0d0e0f734f97868aae0660225989fd4522ccdd60ca5e5b19aaaf6cddcb47e6d7c4ec6c"
+    },
+    {
+      "case": "ack for the same nonce",
+      "type": 2,
+      "epoch": 1,
+      "round": 1,
+      "nonceHex": "000102030405060708090a0b0c0d0e0f",
+      "nonceBase64": "AAECAwQFBgcICQoLDA0ODw==",
+      "payload": "{\"kind\":\"link-renew-ack\",\"from\":\"peer-a1b2c3\",\"to\":\"peer-d4e5f6\",\"epoch\":1,\"round\":1,\"nonce\":\"AAECAwQFBgcICQoLDA0ODw==\"}",
+      "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d61636b222c2266726f6d223a22706565722d613162326333222c22746f223a22706565722d643465356636222c2265706f6368223a312c22726f756e64223a312c226e6f6e6365223a2241414543417751464267634943516f4c4441304f44773d3d227d",
+      "tagHex": "6a7cb30cb83007aa457fd8075282ba1b432494cb4f8ded54ac5cf6b32a4180d8",
+      "frameHex": "0d01020000000100000001000102030405060708090a0b0c0d0e0f6a7cb30cb83007aa457fd8075282ba1b432494cb4f8ded54ac5cf6b32a4180d8"
+    },
+    {
+      "case": "probe, high epoch and round",
+      "type": 1,
+      "epoch": 4294967295,
+      "round": 4294967294,
+      "nonceHex": "f0edeae7e4e1dedbd8d5d2cfccc9c6c3",
+      "nonceBase64": "8O3q5+Th3tvY1dLPzMnGww==",
+      "payload": "{\"kind\":\"link-renew-probe\",\"from\":\"peer-a1b2c3\",\"to\":\"peer-d4e5f6\",\"epoch\":4294967295,\"round\":4294967294,\"nonce\":\"8O3q5+Th3tvY1dLPzMnGww==\"}",
+      "payloadUtf8Hex": "7b226b696e64223a226c696e6b2d72656e65772d70726f6265222c2266726f6d223a22706565722d613162326333222c22746f223a22706565722d643465356636222c2265706f6368223a343239343936373239352c22726f756e64223a343239343936373239342c226e6f6e6365223a22384f3371352b54683374765931644c507a4d6e4777773d3d227d",
+      "tagHex": "86cfc57261251be8a23a00ee24250112c87e1caf16d66c38742690fe4a19eb1a",
+      "frameHex": "0d0101fffffffffffffffef0edeae7e4e1dedbd8d5d2cfccc9c6c386cfc57261251be8a23a00ee24250112c87e1caf16d66c38742690fe4a19eb1a"
+    }
+  ],
+  "envelopes": {
+    "accept": [
+      {
+        "case": "prepare",
+        "json": {
+          "link": true,
+          "renew": {
+            "type": "prepare",
+            "epoch": 1
+          },
+          "auth": "1Z0BE1la1y96SUJwITjkVqS91SpSKr9MYYD7lFC3S4s="
+        }
+      },
+      {
+        "case": "ice with explicit nulls",
+        "json": {
+          "link": true,
+          "renew": {
+            "type": "ice",
+            "epoch": 1,
+            "round": 1,
+            "candidate": "candidate:842163049 1 udp 1677729535 203.0.113.9 54321 typ relay raddr 0.0.0.0 rport 0 generation 0 ufrag 9QmT network-cost 999",
+            "sdpMid": null,
+            "sdpMLineIndex": null,
+            "usernameFragment": "9QmT"
+          },
+          "auth": "EMzVb8inqfe6abSO1y2KtjzfJk/mZp8x161EQ2gby+k="
+        }
+      }
+    ],
+    "reject": [
+      {
+        "case": "sdp hoisted to the top level",
+        "why": "an establishment sharing the link generation would apply it as a real renegotiation",
+        "json": {
+          "link": true,
+          "sdp": {
+            "type": "offer",
+            "sdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=ice-ufrag:9QmT\r\na=ice-pwd:2/1muCWoOi3uLifh0NuRHlZw\r\na=fingerprint:SHA-256 ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89\r\na=setup:actpass\r\na=mid:0\r\na=sctp-port:5000\r\n"
+          },
+          "renew": {
+            "type": "sdp",
+            "epoch": 1,
+            "round": 1,
+            "sdpType": "offer",
+            "sdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=ice-ufrag:9QmT\r\na=ice-pwd:2/1muCWoOi3uLifh0NuRHlZw\r\na=fingerprint:SHA-256 ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89\r\na=setup:actpass\r\na=mid:0\r\na=sctp-port:5000\r\n"
+          },
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      {
+        "case": "ice hoisted to the top level",
+        "why": "same reason; it would be added to the live peer connection unauthenticated",
+        "json": {
+          "link": true,
+          "ice": {
+            "candidate": "candidate:842163049 1 udp 1677729535 203.0.113.9 54321 typ relay raddr 0.0.0.0 rport 0 generation 0 ufrag 9QmT network-cost 999"
+          },
+          "renew": {
+            "type": "prepare",
+            "epoch": 1
+          },
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      {
+        "case": "extra outer key",
+        "why": "the envelope is exactly {link, renew, auth}",
+        "json": {
+          "link": true,
+          "renew": {
+            "type": "prepare",
+            "epoch": 1
+          },
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "commit": "AAAA"
+        }
+      },
+      {
+        "case": "missing auth",
+        "why": "there is no unauthenticated branch",
+        "json": {
+          "link": true,
+          "renew": {
+            "type": "prepare",
+            "epoch": 1
+          }
+        }
+      },
+      {
+        "case": "auth of the wrong length",
+        "why": "44 is checked before any decode or HMAC",
+        "json": {
+          "link": true,
+          "renew": {
+            "type": "prepare",
+            "epoch": 1
+          },
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      {
+        "case": "link not true",
+        "why": "it must ride the link generation explicitly",
+        "json": {
+          "link": 1,
+          "renew": {
+            "type": "prepare",
+            "epoch": 1
+          },
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      {
+        "case": "unknown inner type",
+        "why": "the type table is closed",
+        "json": {
+          "link": true,
+          "renew": {
+            "type": "resume",
+            "epoch": 1
+          },
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      {
+        "case": "extra inner key",
+        "why": "each type has an exact key set",
+        "json": {
+          "link": true,
+          "renew": {
+            "type": "prepare",
+            "epoch": 1,
+            "round": 1
+          },
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      {
+        "case": "missing inner key",
+        "why": "ready carries both epoch and round",
+        "json": {
+          "link": true,
+          "renew": {
+            "type": "ready",
+            "epoch": 1
+          },
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      {
+        "case": "epoch as a string",
+        "why": "every integer on this wire is an exact uint32",
+        "json": {
+          "link": true,
+          "renew": {
+            "type": "prepare",
+            "epoch": "1"
+          },
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      {
+        "case": "negative epoch",
+        "why": "uint32",
+        "json": {
+          "link": true,
+          "renew": {
+            "type": "prepare",
+            "epoch": -1
+          },
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      {
+        "case": "epoch above uint32",
+        "why": "uint32",
+        "json": {
+          "link": true,
+          "renew": {
+            "type": "prepare",
+            "epoch": 4294967296
+          },
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      {
+        "case": "fractional epoch",
+        "why": "uint32",
+        "json": {
+          "link": true,
+          "renew": {
+            "type": "prepare",
+            "epoch": 1.5
+          },
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      {
+        "case": "empty sdp",
+        "why": "an empty description would still cost a setRemoteDescription",
+        "json": {
+          "link": true,
+          "renew": {
+            "type": "sdp",
+            "epoch": 1,
+            "round": 1,
+            "sdpType": "offer",
+            "sdp": ""
+          },
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      {
+        "case": "sdpType pranswer",
+        "why": "offer and answer only",
+        "json": {
+          "link": true,
+          "renew": {
+            "type": "sdp",
+            "epoch": 1,
+            "round": 1,
+            "sdpType": "pranswer",
+            "sdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=ice-ufrag:9QmT\r\na=ice-pwd:2/1muCWoOi3uLifh0NuRHlZw\r\na=fingerprint:SHA-256 ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89\r\na=setup:actpass\r\na=mid:0\r\na=sctp-port:5000\r\n"
+          },
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      {
+        "case": "empty usernameFragment",
+        "why": "a candidate whose generation cannot be named cannot be bound to an epoch",
+        "json": {
+          "link": true,
+          "renew": {
+            "type": "ice",
+            "epoch": 1,
+            "round": 1,
+            "candidate": "candidate:842163049 1 udp 1677729535 203.0.113.9 54321 typ relay raddr 0.0.0.0 rport 0 generation 0 ufrag 9QmT network-cost 999",
+            "sdpMid": "0",
+            "sdpMLineIndex": 0,
+            "usernameFragment": ""
+          },
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      {
+        "case": "sdpMid omitted rather than null",
+        "why": "an encoder that omits an absent optional renders a payload the tag cannot cover",
+        "json": {
+          "link": true,
+          "renew": {
+            "type": "ice",
+            "epoch": 1,
+            "round": 1,
+            "candidate": "candidate:842163049 1 udp 1677729535 203.0.113.9 54321 typ relay raddr 0.0.0.0 rport 0 generation 0 ufrag 9QmT network-cost 999",
+            "sdpMLineIndex": 0,
+            "usernameFragment": "9QmT"
+          },
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      {
+        "case": "unknown abort reason",
+        "why": "the reason enum is closed",
+        "json": {
+          "link": true,
+          "renew": {
+            "type": "abort",
+            "epoch": 1,
+            "reason": "because"
+          },
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      {
+        "case": "renew is an array",
+        "why": "not an object",
+        "json": {
+          "link": true,
+          "renew": [
+            {
+              "type": "prepare",
+              "epoch": 1
+            }
+          ],
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      {
+        "case": "a leave signal",
+        "why": "a different message that must stay inert here",
+        "json": {
+          "link": true,
+          "leave": true,
+          "auth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      }
+    ]
+  },
+  "server": {
+    "request": {
+      "case": "ask for round 1",
+      "envelope": {
+        "type": "ice-renew",
+        "data": {
+          "round": 1,
+          "rid": 7
+        }
+      }
+    },
+    "grants": {
+      "accept": [
+        {
+          "case": "granted",
+          "json": {
+            "status": "granted",
+            "round": 1,
+            "rid": 7,
+            "iceServers": [
+              {
+                "urls": [
+                  "turn:relay.example:3478"
+                ],
+                "username": "1790000000:abc",
+                "credential": "zzz"
+              }
+            ],
+            "relays": [
+              {
+                "id": "r1",
+                "iceServers": [
+                  {
+                    "urls": [
+                      "turn:r1.example:3478"
+                    ],
+                    "username": "1790000000:def",
+                    "credential": "yyy"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "case": "denied on quota",
+          "json": {
+            "status": "denied",
+            "round": 1,
+            "rid": 7,
+            "relayDenied": "quota",
+            "reason": "quota"
+          }
+        },
+        {
+          "case": "unavailable",
+          "json": {
+            "status": "unavailable",
+            "round": 1,
+            "rid": 7,
+            "reason": "unavailable"
+          }
+        },
+        {
+          "case": "stale reports the server's current round",
+          "json": {
+            "status": "stale",
+            "round": 3,
+            "rid": 7
+          }
+        },
+        {
+          "case": "no reason field",
+          "json": {
+            "status": "denied",
+            "round": 2,
+            "rid": 9
+          }
+        }
+      ],
+      "reject": [
+        {
+          "case": "unknown status",
+          "why": "the status enum is closed",
+          "json": {
+            "status": "maybe",
+            "round": 1,
+            "rid": 7
+          }
+        },
+        {
+          "case": "round as a string",
+          "why": "uint32",
+          "json": {
+            "status": "granted",
+            "round": "1",
+            "rid": 7
+          }
+        },
+        {
+          "case": "missing rid",
+          "why": "a reply that cannot be correlated is not a reply",
+          "json": {
+            "status": "granted",
+            "round": 1
+          }
+        },
+        {
+          "case": "negative rid",
+          "why": "uint32",
+          "json": {
+            "status": "granted",
+            "round": 1,
+            "rid": -1
+          }
+        },
+        {
+          "case": "not an object",
+          "why": "not a grant",
+          "json": "granted"
+        }
+      ]
+    }
+  },
+  "sdpPin": [
+    {
+      "case": "baseline",
+      "sdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=ice-ufrag:4ZcD\r\na=ice-pwd:2/1muCWoOi3uLifh0NuRHlZw\r\na=fingerprint:sha-256 AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89\r\na=setup:actpass\r\na=mid:0\r\na=sctp-port:5000\r\n",
+      "pin": {
+        "fingerprints": [
+          "sha-256 AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89"
+        ],
+        "mids": [
+          "0"
+        ],
+        "setup": "actpass"
+      },
+      "ufrag": "4ZcD"
+    },
+    {
+      "case": "renewal offer: same identity, new ufrag, different hex case",
+      "sdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=ice-ufrag:9QmT\r\na=ice-pwd:2/1muCWoOi3uLifh0NuRHlZw\r\na=fingerprint:SHA-256 ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89\r\na=setup:actpass\r\na=mid:0\r\na=sctp-port:5000\r\n",
+      "matchesBaselineAsOffer": true,
+      "matchesBaselineAsAnswer": true,
+      "ufrag": "9QmT"
+    },
+    {
+      "case": "renewal answer picks a role",
+      "sdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=ice-ufrag:9QmT\r\na=ice-pwd:2/1muCWoOi3uLifh0NuRHlZw\r\na=fingerprint:SHA-256 ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89\r\na=setup:active\r\na=mid:0\r\na=sctp-port:5000\r\n",
+      "matchesBaselineAsOffer": true,
+      "matchesBaselineAsAnswer": false,
+      "ufrag": "9QmT"
+    },
+    {
+      "case": "foreign fingerprint",
+      "sdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=ice-ufrag:9QmT\r\na=ice-pwd:2/1muCWoOi3uLifh0NuRHlZw\r\na=fingerprint:SHA-256 11:22:33:44:55:66:77:88:99:00:11:22:33:44:55:66:77:88:99:00:11:22:33:44:55:66:77:88:99:00:11:22\r\na=setup:active\r\na=mid:0\r\na=sctp-port:5000\r\n",
+      "matchesBaselineAsOffer": false,
+      "matchesBaselineAsAnswer": false,
+      "ufrag": "9QmT"
+    },
+    {
+      "case": "flipped answer role",
+      "sdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=ice-ufrag:9QmT\r\na=ice-pwd:2/1muCWoOi3uLifh0NuRHlZw\r\na=fingerprint:SHA-256 ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89\r\na=setup:passive\r\na=mid:0\r\na=sctp-port:5000\r\n",
+      "matchesBaselineAsOffer": true,
+      "matchesBaselineAsAnswer": false,
+      "ufrag": "9QmT"
+    },
+    {
+      "case": "an added m-line",
+      "sdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=ice-ufrag:9QmT\r\na=ice-pwd:2/1muCWoOi3uLifh0NuRHlZw\r\na=fingerprint:SHA-256 ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89\r\na=setup:active\r\na=mid:0\r\na=sctp-port:5000\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=mid:1\r\n",
+      "matchesBaselineAsOffer": false,
+      "matchesBaselineAsAnswer": false,
+      "ufrag": "9QmT"
+    }
+  ],
+  "candidateUfrag": [
+    {
+      "case": "ufrag extension",
+      "candidate": "candidate:842163049 1 udp 1677729535 203.0.113.9 54321 typ relay raddr 0.0.0.0 rport 0 generation 0 ufrag 9QmT network-cost 999",
+      "ufrag": "9QmT"
+    },
+    {
+      "case": "previous generation",
+      "candidate": "candidate:842163049 1 udp 1677729535 203.0.113.9 54321 typ relay raddr 0.0.0.0 rport 0 generation 0 ufrag 4ZcD network-cost 999",
+      "ufrag": "4ZcD"
+    },
+    {
+      "case": "no extension",
+      "candidate": "candidate:842163049 1 udp 1677729535 203.0.113.9 54321 typ relay generation 0",
+      "ufrag": ""
+    }
+  ],
+  "inboundCandidateUfrag": [
+    {
+      "case": "both sources agree",
+      "candidate": "candidate:842163049 1 udp 1677729535 203.0.113.9 54321 typ relay raddr 0.0.0.0 rport 0 generation 0 ufrag 9QmT network-cost 999",
+      "usernameFragment": "9QmT",
+      "ufrag": "9QmT"
+    },
+    {
+      "case": "field only (a native peer that emits no extension)",
+      "candidate": "candidate:842163049 1 udp 1677729535 203.0.113.9 54321 typ relay generation 0",
+      "usernameFragment": "9QmT",
+      "ufrag": "9QmT"
+    },
+    {
+      "case": "extension only (a native peer that sets no field)",
+      "candidate": "candidate:842163049 1 udp 1677729535 203.0.113.9 54321 typ relay raddr 0.0.0.0 rport 0 generation 0 ufrag 9QmT network-cost 999",
+      "usernameFragment": "",
+      "ufrag": "9QmT"
+    },
+    {
+      "case": "they contradict each other",
+      "candidate": "candidate:842163049 1 udp 1677729535 203.0.113.9 54321 typ relay raddr 0.0.0.0 rport 0 generation 0 ufrag 9QmT network-cost 999",
+      "usernameFragment": "4ZcD",
+      "ufrag": ""
+    },
+    {
+      "case": "neither states one",
+      "candidate": "candidate:842163049 1 udp 1677729535 203.0.113.9 54321 typ relay generation 0",
+      "usernameFragment": "",
+      "ufrag": ""
+    }
+  ]
+}

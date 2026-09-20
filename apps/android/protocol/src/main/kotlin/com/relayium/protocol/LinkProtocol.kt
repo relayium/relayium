@@ -27,7 +27,7 @@ object LinkProtocol {
 
     /**
      * What this client announces, and the whole of it: the fixture's
-     * `capability.hello.native`, which is what both Apple clients say.
+     * `capability.hello.native`, which is what the native clients say.
      *
      * `text/1` is here because this client now IMPLEMENTS the shipped
      * single-generation message connection — see
@@ -44,10 +44,23 @@ object LinkProtocol {
      * derived key, and an unannounced kind is a hard error, so claiming it
      * without implementing it kills whole transfers.
      *
+     * `relay-renew/1` is here because this client now implements the WHOLE
+     * client path for `docs/protocol/relay-renew-v1.md`: the wire, the epoch
+     * machine, the probe demux, the SDP pinning, the ufrag binding, the
+     * transport surface and the round exchange. Section 8 is explicit that it
+     * is advertised only by a build with the whole path wired on that platform,
+     * and announcing it is what makes a conforming peer willing to spend an
+     * epoch on this one — without it the feature is inert in both directions.
+     *
+     * It is an unsigned HINT and confers no authority: a peer that acts on it
+     * still gets nothing but authenticated messages, and a session that cannot
+     * reach a round exchange refuses to spend an epoch regardless.
+     *
      * An untruthful capability is worse than a missing one; it is the one input
      * a peer is entitled to act on.
      */
-    val ADVERTISED_CAPS: List<String> = listOf(TEXT_CAPABILITY, CAPABILITY)
+    val ADVERTISED_CAPS: List<String> =
+        listOf(TEXT_CAPABILITY, CAPABILITY, RelayRenewWire.CAPABILITY)
 
     /** The file lane's SCTP label. */
     const val FILE_CHANNEL = "relayium"

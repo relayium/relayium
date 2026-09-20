@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 中继通行证到期与续期的文案。英文原文见 values/relay-renewal.xml。
+     三条规则同样适用：迁移真正完成之前不说"已续期"；提醒只说会发生什么、该做什么；
+     对端无法续期时如实说明，不用本机的成功掩盖对端的失败。 -->
+<resources>
+    <string name="status_relay_expiring">此连接经由中继，中继通行证即将到期，连接很快会结束。请先完成正在进行的传输，然后重新建立会话。</string>
+    <string name="status_relay_renewing">正在延长此连接的中继通行证……</string>
+    <string name="status_relay_renewed">中继通行证已延长，连接继续保持。没有重新配对，也没有重传任何内容。</string>
+    <string name="status_relay_renew_failed">未能延长中继通行证。当前通行证到期时，连接就会结束。</string>
+    <string name="status_relay_renew_unsupported">对方设备的版本不支持延长中继通行证。当前通行证到期时，连接就会结束。</string>
+    <string name="error_relay_expired">此连接的中继通行证已到期，连接已结束。不会再收到任何内容，请重新建立会话以继续。</string>
+</resources>

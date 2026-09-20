@@ -15,6 +15,23 @@ const (
 	// at". It carries no payload and can only ever affect the connection it
 	// arrives on; see Hub.Activate.
 	TypeActivate = "activate"
+	// TypeICERenew asks the server for fresh relay credentials for the transfer
+	// this connection is already part of. Data is exactly {round,rid}; see
+	// RenewRequest and docs/protocol/relay-renew-v1.md §2.
+	//
+	// It carries no pairing code, by construction. The connection itself is the
+	// capability: the server stamped its id and knows which room admitted it,
+	// so nothing the client says decides who it is.
+	TypeICERenew = "ice-renew"
+	// TypeICEGrant is the reply. Data carries {status,round,rid} plus, when
+	// granted, exactly the /api/ice configuration shape — one credential format
+	// on the wire, one parser on every client.
+	//
+	// A single-sided request gets NO reply at all, and that is the protocol
+	// rather than an omission: a server too old to know this type ignores it,
+	// so clients already treat silence as "unavailable" and retry within their
+	// own bounds. See grantCollectWindow.
+	TypeICEGrant = "ice-grant"
 )
 
 // Envelope is every message on the wire, client<->server, in both directions.

@@ -181,6 +181,38 @@ public final class AppPairLinkHost {
             let meta = FileMeta(name: name, size: bytes.count, path: nil)
             link.send(files: [meta], sources: [DataSource(name: name, bytes: bytes)])
             return ["ok": true, "size": bytes.count]
+        case "stagedFile":
+            // One file the HARNESS staged on disk, sent through the production
+            // entry point. It exists because a renewal has to be proven inside
+            // ONE long transfer, and `files` carries its bytes in the JSON body,
+            // which the control server caps. A path is a few bytes, so that cap
+            // — and the control server's authentication — are left exactly as
+            // they are. What this must never become is "read any file the
+            // process can": see `AppPairLinkStagedFile.admit`.
+            guard let name = body["name"] as? String, !name.isEmpty,
+                  let path = body["path"] as? String else {
+                return ["error": "stagedFile needs name and path"]
+            }
+            let root = AppPairLinkStagedFile.stagingRoot(besideReceiveRoot: options.receiveRoot)
+            let admitted: URL
+            switch AppPairLinkStagedFile.admit(path: path, stagingRoot: root) {
+            case let .success(url): admitted = url
+            case let .failure(refusal):
+                return ["error": "stagedFile refused", "reason": refusal.rawValue]
+            }
+            // The descriptor is the authority from here. `FileURLSource` opens
+            // with `O_NOFOLLOW | O_NONBLOCK`, checks `S_IFREG` with `fstat` on
+            // what it actually opened, and pins that descriptor for the whole
+            // transfer — so a leaf swapped for a symlink, a FIFO or a directory
+            // after `admit` looked is still refused, and the size below is the
+            // opened file's, never a number the caller supplied.
+            let source: FileURLSource
+            do { source = try FileURLSource(url: admitted, name: name) } catch {
+                return ["error": "stagedFile refused", "reason": "unreadable"]
+            }
+            let meta = FileMeta(name: name, size: source.size, path: nil)
+            link.send(files: [meta], sources: [source])
+            return ["ok": true, "size": source.size]
         default:
             return ["error": "unknown command", "command": command]
         }
@@ -213,6 +245,15 @@ public final class AppPairLinkHost {
             "allFiles": entries(counterpart.allReceipts()),
         ]
         if let sas = counterpart.current.sas { out["sas"] = sas }
+        // The relayed link's bound, read straight off the model and nothing
+        // else. An acceptance run has to SEE the initial boundary and see it
+        // advance — a link that merely survived proves nothing about renewal,
+        // because an existing TURN allocation can outlive its REST credential.
+        // Absent, not zero, when the link has no relayed bound at all.
+        if let deadline = link.relayDeadline {
+            out["relayExpiresAtMs"] = Int64(deadline.expiresAt.timeIntervalSince1970 * 1000)
+            out["relayDeadlineAtMs"] = Int64(deadline.deadlineAt.timeIntervalSince1970 * 1000)
+        }
         if case let .showingCode(code, _) = fileModel.state { out["code"] = code }
         if let batches = link.fileModel?.batches {
             out["batchStates"] = batches.map { "\($0.direction):\($0.state)" }
@@ -236,3 +277,126 @@ public final class AppPairLinkHost {
         try? FileManager.default.removeItem(at: options.receiveRoot)
     }
 }
+
+// staged-file gate: BEGIN — Foundation only, compiled and driven on its own by
+// `AppPairLinkStagedFileTests`. Nothing between the markers may name a product
+// type, or that test stops being able to execute this exact source.
+
+/// Why a staged path was refused. The raw value is what the launcher sees.
+public enum AppPairLinkStagedFileRefusal: String, Error {
+    /// Not an absolute path. A relative one would be resolved against a working
+    /// directory the launcher does not control.
+    case notAbsolute
+    /// The staging directory is missing, is not a directory, or is ITSELF a
+    /// symbolic link — which could point anywhere.
+    case stagingRootUnusable
+    /// Not a strict child of the staging directory: outside it, the directory
+    /// itself, or spelled with `.`/`..`/empty components.
+    case outsideStaging
+    /// A component INSIDE the staging directory — the leaf or any parent — is a
+    /// symbolic link.
+    case symlink
+    case missing
+    /// A directory, FIFO, socket or device where a regular file was required.
+    case notRegularFile
+}
+
+/// The one question `stagedFile` asks before it opens anything: is this path a
+/// regular file strictly inside the harness-owned staging directory, reached
+/// without following a single symbolic link inside that directory?
+public enum AppPairLinkStagedFile {
+    /// Beside `native-received`, so one run directory holds both and the
+    /// launcher can stage `run/native-staged/<file>` without being told a path.
+    public static let directoryName = "native-staged"
+
+    public static func stagingRoot(besideReceiveRoot receiveRoot: URL) -> URL {
+        receiveRoot.deletingLastPathComponent()
+            .appendingPathComponent(directoryName, isDirectory: true)
+    }
+
+    /// - Returns: the canonical URL to open, or why not.
+    ///
+    /// ## Symbolic links, and the one place they are allowed
+    ///
+    /// An ANCESTOR of the staging directory may be a link — the artifact root
+    /// this runs under routinely is — so both the staging directory and the
+    /// candidate are compared by their RESOLVED ancestry, consistently, rather
+    /// than by how either happened to be spelled. Everything from the staging
+    /// directory's own name downwards is examined with `lstat` and refused if
+    /// it is a link: that is the part a staged tree controls, and a link there
+    /// is how a staged name would reach a file outside it.
+    public static func admit(path: String,
+                             stagingRoot: URL) -> Result<URL, AppPairLinkStagedFileRefusal> {
+        guard path.hasPrefix("/") else { return .failure(.notAbsolute) }
+
+        // The staging directory: ancestors resolved, its own name NOT followed.
+        guard let parent = canonical(stagingRoot.deletingLastPathComponent().path) else {
+            return .failure(.stagingRootUnusable)
+        }
+        let root = parent == "/" ? "/" + stagingRoot.lastPathComponent
+                                 : parent + "/" + stagingRoot.lastPathComponent
+        guard kind(of: root) == .directory else { return .failure(.stagingRootUnusable) }
+
+        // No lexical games: a component that is empty, `.` or `..` is refused
+        // outright rather than normalised, so what is walked below is exactly
+        // what was asked for.
+        let components = path.split(separator: "/", omittingEmptySubsequences: false)
+            .dropFirst().map(String.init)
+        guard !components.isEmpty,
+              !components.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." }) else {
+            return .failure(.outsideStaging)
+        }
+
+        // Find where the candidate enters the staging directory, by resolved
+        // ancestry. Shortest prefix first, so a link INSIDE staging that points
+        // back at it cannot be mistaken for the way in.
+        var inside: [String]?
+        for end in 1..<components.count {
+            let prefix = "/" + components[0..<end].joined(separator: "/")
+            guard components[end - 1] == stagingRoot.lastPathComponent,
+                  let resolvedParent = canonical((prefix as NSString).deletingLastPathComponent),
+                  (resolvedParent == "/" ? "/" : resolvedParent + "/")
+                      + components[end - 1] == root else { continue }
+            inside = Array(components[end...])
+            break
+        }
+        guard let inside, !inside.isEmpty else { return .failure(.outsideStaging) }
+
+        // Walk it. Every parent a real directory, the leaf a real regular file.
+        var current = root
+        for (index, component) in inside.enumerated() {
+            current += "/" + component
+            let isLeaf = index == inside.count - 1
+            switch kind(of: current) {
+            case .symlink: return .failure(.symlink)
+            case .missing: return .failure(.missing)
+            case .directory: if isLeaf { return .failure(.notRegularFile) }
+            case .regular: if !isLeaf { return .failure(.outsideStaging) }
+            case .other: return .failure(.notRegularFile)
+            }
+        }
+        return .success(URL(fileURLWithPath: current, isDirectory: false))
+    }
+
+    private enum Kind { case regular, directory, symlink, other, missing }
+
+    /// `lstat`, so a link is reported as a link and never followed. It also
+    /// never opens anything, which is what keeps a FIFO from blocking here.
+    private static func kind(of path: String) -> Kind {
+        var st = stat()
+        guard lstat(path, &st) == 0 else { return .missing }
+        switch st.st_mode & S_IFMT {
+        case S_IFREG: return .regular
+        case S_IFDIR: return .directory
+        case S_IFLNK: return .symlink
+        default: return .other
+        }
+    }
+
+    private static func canonical(_ path: String) -> String? {
+        guard let resolved = realpath(path, nil) else { return nil }
+        defer { free(resolved) }
+        return String(cString: resolved)
+    }
+}
+// staged-file gate: END

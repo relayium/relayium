@@ -22,8 +22,16 @@ import {
   type PeerLinkManager,
   type PeerLinkStatus,
 } from "./peer-link.svelte";
-import { peerSupportsLink } from "./peer-caps.svelte";
+import { peerSupportsLink, peerSupportsRenew } from "./peer-caps.svelte";
 import { recoveryBlock, recoveryWindowMs, type RecoveryBlock } from "./link-recovery";
+import {
+  createRelayRenewal,
+  renewMarginMs,
+  type RelayRenewal,
+  type RenewState,
+  type RenewedConfig,
+} from "./relay-renew";
+import type { IceGrant } from "./relay-renew-wire";
 import type { RelayDeadline } from "./relay-deadline";
 import type { SignalingClient } from "./signaling";
 import type { ConnPath, RtcConfig } from "./webrtc";
@@ -37,6 +45,23 @@ import type { ConnPath, RtcConfig } from "./webrtc";
  * replaces the other, and the earlier of the two wins.
  */
 export const MIXED_LINK_IDLE_MS = 10 * 60_000;
+
+/**
+ * How recently a person must actually have moved data for this link to renew.
+ *
+ * The same ten minutes as the idle bound, and deliberately the same number for
+ * the same reason: renewal is only ever available to a link that would still be
+ * alive under today's rules. What differs is WHAT refreshes it — see
+ * `MixedFileSessionDeps.onUserActivity`. A link kept alive by protocol chatter
+ * stays alive exactly as it does today and cannot renew a paid relay grant.
+ */
+export const RENEW_ACTIVITY_WINDOW_MS = 10 * 60_000;
+
+/** How often the renewal trigger is re-evaluated once the link is inside its
+ *  renewal window. The answer can change between ticks — a user starts typing,
+ *  a transfer resumes — so it is a bounded poll rather than one shot. It stops
+ *  when the link does. */
+export const RENEW_TICK_MS = 5_000;
 
 /** Why a link ended in a way the user has to act on. "" while nothing has.
  *  Distinct from `status === "failed"`, which says a connection attempt failed
@@ -73,6 +98,20 @@ export interface MixedSessionDeps {
    *  or null when nothing in it relays (LAN, or a code room the server issued no
    *  TURN username for). Read when a link opens, not cached across rooms. */
   relayDeadline?(): RelayDeadline | null;
+  /**
+   * Ask the room's server for a renewal round (`relay-renew-v1.md` §2).
+   *
+   * Absent disables renewal entirely for this session — including the
+   * capability gate below — so a consumer that has not wired the round exchange
+   * never spends an epoch and never advertises something it cannot do.
+   */
+  requestRenewRound?(round: number, rid: number): Promise<IceGrant | null>;
+  /** Turn a granted body into the configuration this link migrates onto and the
+   *  boundary that configuration states. See `renewGrantConfig` in ice.ts. */
+  renewedConfig?(grant: IceGrant): RenewedConfig | null;
+  /** Whether the peer announced `relay-renew/1`. Defaults to the roster
+   *  predicate; a test seam may replace it. */
+  supportsRenew?(peerId: string): boolean;
   now?: () => number;
   idleMs?: number;
   setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
@@ -104,6 +143,12 @@ export interface MixedSession {
    *  Survives the teardown on purpose: the workspace has to be able to say
    *  "start again" instead of silently vanishing. */
   readonly endReason: LinkEndReason;
+  /** What the relay renewal is doing. Never `renewed` before a migration has
+   *  actually committed — see `relay-renew-v1.md` §6.5. */
+  readonly renewState: RenewState;
+  /** The server round this link's credentials come from. 0 is the original
+   *  grant; each committed renewal advances it. */
+  readonly renewRound: number;
   supports(peerId: string): boolean;
   ensure(peerId: string): Promise<MixedPeerLink>;
   active(): boolean;
@@ -174,6 +219,117 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   let relayExpiring = $state(false);
   let endReason = $state<LinkEndReason>("");
+  /**
+   * The boundary a COMMITTED renewal installed, or null.
+   *
+   * Takes precedence over the room's original `relayDeadline()` once it exists,
+   * and is cleared with the authentication step rather than with the transport:
+   * a rebuilt transport still runs on the credentials the renewal obtained, and
+   * re-reading the room's original answer there would silently move the
+   * boundary back to one that has already lapsed.
+   */
+  let renewedBound: RelayDeadline | null = null;
+  let renewState = $state<RenewState>("idle");
+  let renewTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The last STRICT user-lane activity — actual bytes, ACK progress, or a
+   *  message somebody wrote. 0 means "never on this link". Deliberately not
+   *  `lastActivity`, which any lane traffic refreshes. */
+  let lastUserActivity = 0;
+  let renewal!: RelayRenewal;
+
+  /** The bound whose anchor `boundAnchorAt` describes. Identity, not value. */
+  let anchoredBoundRef: RelayDeadline | null = null;
+  /**
+   * When the CURRENT boundary was installed, on this clock.
+   *
+   * The renewal margin is a fraction of the grant's LIFETIME, so it needs a
+   * fixed anchor; measured from "now" it becomes a fraction of the shrinking
+   * remainder and the trigger never fires (see `renewMarginMs`). Recorded here
+   * because this is the one place that knows when a boundary became current —
+   * a link opening, or a committed migration installing a new one.
+   */
+  let boundAnchorAt = 0;
+
+  /** The boundary this link is actually bounded by right now. */
+  function currentBound(): RelayDeadline | null {
+    const bound = renewedBound ?? deps.relayDeadline?.() ?? null;
+    if (bound !== anchoredBoundRef) {
+      anchoredBoundRef = bound;
+      boundAnchorAt = now();
+    }
+    return bound;
+  }
+
+  function clearRenewTimer() {
+    if (renewTimer !== undefined) clearTimer(renewTimer);
+    renewTimer = undefined;
+  }
+
+  /**
+   * §7.1's consent gate, and the reason an idle link still dies on schedule.
+   *
+   * Reads the STRICT signal only. A renewal control frame cannot reach it at
+   * all — the lane demux consumes those before the activity hooks run — and
+   * neither can a lifecycle control, a resume request, a pre-upload handoff or
+   * a pending-consent prompt.
+   */
+  function userActive(): boolean {
+    if (lastUserActivity === 0) return false;
+    return now() - lastUserActivity < RENEW_ACTIVITY_WINDOW_MS;
+  }
+
+  function touchUser() {
+    lastUserActivity = now();
+  }
+
+  /**
+   * Arm the renewal trigger for the current link.
+   *
+   * Nothing is armed for a LAN or classified-direct path, or for a link with no
+   * boundary: there is no credential to renew, and asking the server would be a
+   * backend call a local-only session must never make.
+   *
+   * Inside the window this becomes a bounded poll, because the trigger's answer
+   * can change between ticks: a user who was idle at the margin and starts
+   * typing two minutes later should still renew. It stops when the link does.
+   */
+  function armRenewal() {
+    clearRenewTimer();
+    if (!manager?.current) return;
+    if (path === "lan" || path === "p2p") return;
+    const bound = currentBound();
+    if (!bound) return;
+    const at = now();
+    // The same anchor the controller's own predicate uses, so the timer and the
+    // decision it wakes cannot disagree about when the window opens.
+    const start = bound.deadlineAt - renewMarginMs(bound.deadlineAt, boundAnchorAt);
+    renewTimer = setTimer(onRenewTick, start > at ? start - at : RENEW_TICK_MS);
+  }
+
+  function onRenewTick() {
+    renewTimer = undefined;
+    if (!manager.current) return;
+    renewal.tick();
+    armRenewal();
+  }
+
+  /**
+   * A migration committed (§6.5). This is the ONLY path that moves a deadline.
+   *
+   * The order matters and mirrors `onLinkChange`'s: install the new boundary,
+   * re-run path classification (the migration may have landed on a direct path,
+   * which the existing rule releases the boundary for), then re-arm. `armDeadline`
+   * reads `path`, which `observePath` has just reset to null, so the link stays
+   * bounded until the new path is classified rather than briefly unbounded.
+   */
+  function onRenewCommit(next: RelayDeadline) {
+    const live = manager.current;
+    if (!live) return;
+    renewedBound = next;
+    observePath(live);
+    armDeadline();
+    armRenewal();
+  }
 
   function clearIdle() {
     if (idleTimer !== undefined) clearTimer(idleTimer);
@@ -220,7 +376,7 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
       relayExpiring = false;
       return;
     }
-    deadline = deps.relayDeadline?.() ?? null;
+    deadline = currentBound();
     if (!deadline) {
       relayExpiring = false;
       return;
@@ -311,6 +467,10 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
           // A classified DIRECT path is the only thing that releases a link from
           // its credential boundary; "unknown" never does.
           armDeadline();
+          // …and a link with no boundary has nothing to renew, so the trigger
+          // is re-evaluated against the same answer rather than left armed for
+          // a credential that no longer bounds anything.
+          armRenewal();
           return;
         }
       } catch {
@@ -355,6 +515,12 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
       clearIdle();
       clearPathTimer();
       clearDeadlineTimers();
+      clearRenewTimer();
+      renewal.setLink(null);
+      renewedBound = null;
+      anchoredBoundRef = null;
+      boundAnchorAt = 0;
+      lastUserActivity = 0;
       // The bounded recovery window is itself clipped to the credential, so a
       // relayed link that ran its window out ended AT the boundary and has to say
       // so. Without this the clamped window would report the generic "connection
@@ -396,11 +562,25 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
     if (!transportReplacement) {
       endReason = "";
       establishedSelfId = deps.selfId();
+      // A NEW authentication step. Everything the renewal earned belonged to
+      // the previous link: its round, its epochs and above all the boundary it
+      // installed, which says nothing about credentials this link was issued.
+      renewedBound = null;
+      anchoredBoundRef = null;
+      boundAnchorAt = 0;
+      lastUserActivity = 0;
     }
+    // Told about the replacement too: the controller aborts any epoch in flight
+    // (a new PeerConnection means a new baseline, and the restart it was in the
+    // middle of belonged to a transport that no longer exists) while keeping
+    // the link-scoped epoch counter and round, so an aborted epoch's signed
+    // messages can never be replayed into a later attempt.
+    renewal.setLink(link);
     observePath(link);
     armIdle();
     // After observePath, which resets `path` to null — arming reads it.
     armDeadline();
+    armRenewal();
     deps.onLinkState?.(link, _status);
   }
 
@@ -439,6 +619,36 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
   }
 
   const ensureLink = (peerId: string) => manager.ensure(peerId);
+  const requestRenewRound = deps.requestRenewRound;
+  const renewedConfig = deps.renewedConfig;
+  /**
+   * Renewal is available only when this consumer wired BOTH halves of the
+   * server exchange.
+   *
+   * Otherwise the capability gate answers "no" for every peer, `due()` never
+   * fires, no epoch is ever spent — and, because the same predicate is what a
+   * future announcement would be gated on, nothing is advertised that this
+   * session could not honour.
+   */
+  const renewAvailable = !!requestRenewRound && !!renewedConfig;
+  const supportsRenewPeer = deps.supportsRenew ?? peerSupportsRenew;
+  renewal = createRelayRenewal({
+    selfId: deps.selfId,
+    now,
+    setTimer,
+    clearTimer,
+    sendSignal: (peerId, envelope) => deps.signaling().sendSignal(peerId, envelope),
+    requestRound: (round, rid) => requestRenewRound?.(round, rid) ?? Promise.resolve(null),
+    renewedConfig: (grant) => renewedConfig?.(grant) ?? null,
+    peerSupportsRenew: (peerId) => renewAvailable && supportsRenewPeer(peerId),
+    userActive,
+    deadline: currentBound,
+    // Read AFTER `deadline()`, which is what refreshes it. Both are called from
+    // `due()` in that order.
+    deadlineAnchor: () => boundAnchorAt,
+    commit: onRenewCommit,
+    onStateChange: (next) => { renewState = next; },
+  });
   file = createMixedFileSession({
     ensureLink,
     pickSaveTarget: deps.pickSaveTarget,
@@ -448,8 +658,18 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
     supportsPreupload: deps.supportsPreupload,
     now,
     onActivity: touch,
+    onUserActivity: touchUser,
   });
-  text = createMixedTextSession({ ensureLink, now, onActivity: touch });
+  text = createMixedTextSession({
+    ensureLink,
+    now,
+    onActivity: touch,
+    onUserActivity: touchUser,
+    // The lane's front demux. A renewal control frame is consumed here, ahead
+    // of the conversation's activity hook and its rate budget — which is what
+    // makes "probes are never user activity" structural rather than a promise.
+    consumeControl: (data) => renewal.frame(data),
+  });
   manager = createPeerLinkManager({
     selfId: deps.selfId,
     signaling: deps.signaling,
@@ -461,12 +681,14 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
     onLinkChange,
     onTransportLost,
     recoveryWindowMs: () => recoveryWindowMs(deadline?.deadlineAt ?? null, now()),
+    onRenewSignal: (peerId, envelope) => renewal.signal(peerId, envelope),
   });
 
   function close(clearFileState: boolean, announce = false) {
     clearIdle();
     clearPathTimer();
     clearDeadlineTimers();
+    clearRenewTimer();
     // Remove lane handlers first, so closing the shared Conn is not mistaken for
     // a lane-specific protocol failure. Explicit disconnect also drops queued
     // file intent; an automatic idle close can only run while the queue is empty.
@@ -499,6 +721,8 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
       return currentRecoveryBlock() === "";
     },
     get endReason() { return endReason; },
+    get renewState() { return renewState; },
+    get renewRound() { return renewal.round; },
     supports,
     ensure(peerId) {
       lastActivity = now();
@@ -563,6 +787,12 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
       clearIdle();
       clearPathTimer();
       clearDeadlineTimers();
+      clearRenewTimer();
+      renewal.stop();
+      renewedBound = null;
+      anchoredBoundRef = null;
+      boundAnchorAt = 0;
+      lastUserActivity = 0;
       deadline = null;
       relayExpiring = false;
       endReason = "";

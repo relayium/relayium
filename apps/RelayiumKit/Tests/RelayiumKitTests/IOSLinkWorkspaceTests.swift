@@ -185,7 +185,7 @@ final class IOSLinkWorkspaceTests: XCTestCase {
             requiresVerification: { requiresVerification },
             iceClient: nil,
             assemble: { signaling, peerId, role, iceServers, relayOnly, generation,
-                        assembledDirectory, admission, initialSignal in
+                        assembledDirectory, admission, initialSignal, _ in
                 let transport = IOSLinkTransport()
                 box?.transports.append(transport)
                 box?.receiveDirectories.append(assembledDirectory)

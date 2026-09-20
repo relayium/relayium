@@ -105,6 +105,15 @@ public final class SignalingClient {
 
     public var onClose: (() -> Void)?
 
+    /// One `ice-grant` reply to this socket's own `ice-renew` request.
+    ///
+    /// A ROOM-level callback rather than a per-connection one, and deliberately
+    /// so: the reply is addressed to this socket, not to a peer, and it carries
+    /// its own `rid` for correlation. Routing it through the per-connection
+    /// `onSignal` slot would hand it to whichever link happened to own the slot
+    /// — and to none at all during the window a link is being replaced.
+    public var onICEGrant: ((JSONValue) -> Void)?
+
     /// The id the hub assigned us, once `welcome` has arrived; nil before that.
     ///
     /// Stored, not merely announced through `onSelfId`, because the roster is
@@ -171,6 +180,22 @@ public final class SignalingClient {
 
     public func sendSignal(to: String, data: JSONValue) {
         send(Envelope(type: SignalType.signal, to: to, data: data))
+    }
+
+    /// Ask the hub for one renewal round (`relay-renew/1` §2.1).
+    ///
+    /// No `to`: the request is this socket's, about the room's frozen original
+    /// pair, and the server is the authority on both. `data` carries EXACTLY
+    /// `round` and `rid`.
+    ///
+    /// Best-effort, like every other send here. A server that does not
+    /// implement `ice-renew` ignores the frame, and the client's bounded wait
+    /// then falls back to today's behaviour: the link runs out its existing
+    /// deadline and ends truthfully. Silence is `unavailable`, never a retry
+    /// past the old deadline.
+    public func sendRenewRequest(round: UInt32, rid: UInt32) {
+        send(Envelope(type: RELAY_RENEW_REQUEST_TYPE,
+                      data: relayRenewRequestData(round: round, rid: rid)))
     }
 
     /// Observes every inbound signal, independently of `onSignal`, and never
@@ -290,6 +315,14 @@ public final class SignalingClient {
             guard let left = try? dec.decode(LeftFrame.self, from: Data(text.utf8)),
                   let peer = left.peer, !peer.isEmpty else { break }
             onPeerLeft?(peer)
+        case RELAY_RENEW_GRANT_TYPE:
+            // Deliberately NOT routed through the listener/slot chain below.
+            // That chain exists for peer-to-peer `signal` frames, and a grant
+            // is neither from a peer nor addressed to one; handing it to a
+            // per-connection handler would make it invisible whenever no link
+            // owned the slot.
+            guard let data = e.data else { break }
+            onICEGrant?(data)
         case SignalType.signal:
             guard let from = e.from, let data = e.data else { break }
             // Listeners first, then the per-connection slot, and the order is

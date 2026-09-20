@@ -2027,14 +2027,32 @@ final class LinkSessionRuntimeTests: XCTestCase {
         XCTAssertFalse(source.isEmpty, "the runtime source must be readable")
         XCTAssertFalse(source.contains("onFrame ="),
                        "the frame route is the file driver's and the coordinator's, never this one's")
-        // Three of the four hooks are still untouchable: taking one would REPLACE
+        // Two of the four hooks are still untouchable: taking one would REPLACE
         // what `bind` installed atomically, and the lane owner would never hear
         // the report it needs to suspend a lane with.
-        for piecemeal in ["coordinator.onAttach =", "coordinator.onFrame =",
-                          "coordinator.onEnded ="] {
+        for piecemeal in ["coordinator.onFrame =", "coordinator.onEnded ="] {
             XCTAssertFalse(source.contains(piecemeal),
                            "\(piecemeal) would take a hook the lane owner installed atomically")
         }
+        // `onAttach` is the SECOND composed exception, and it is pinned to the
+        // same shape as `onTransportLost` below for the same reason:
+        // `reportRebuilds` reads the owner's hook once, calls it FIRST on every
+        // attach — so the lanes take the replacement over, and a refusal still
+        // throws before anything is reported — and only then tells the room's
+        // renewal seam that this link is on a new transport. A future edit that
+        // stopped calling the owner's hook, or that called it after the report,
+        // would hand a renewal controller a transport whose frames had nowhere
+        // to go.
+        XCTAssertEqual(source.components(separatedBy: "coordinator.onAttach =").count - 1, 1,
+                       "exactly one composition site for onAttach")
+        let attachComposition = try XCTUnwrap(source.range(of: "coordinator.onAttach ="))
+        let attachTail = String(source[attachComposition.upperBound...])
+        let calledOwner = try XCTUnwrap(attachTail.range(of: "try attach?("),
+                                        "the owner's own attach must still run")
+        let reported = try XCTUnwrap(attachTail.range(of: "renewal.published("),
+                                     "and the rebuild must be reported")
+        XCTAssertTrue(calledOwner.lowerBound < reported.lowerBound,
+                      "the lanes take the replacement over BEFORE renewal hears about it")
         // `onTransportLost` is the ONE exception, and it is a composition rather
         // than a replacement: `narrowRecoveryWindow` reads the owner's hook once,
         // calls it on every report — preserving the suspension of BOTH lanes and

@@ -24,6 +24,10 @@ import {
   type RelayGate,
 } from "../../../../../web/src/lib/relay-selection";
 import { relayDeadline, type RelayDeadline } from "../../../../../web/src/lib/relay-deadline";
+import { renewGrantConfig } from "../../../../../web/src/lib/ice";
+import { createRenewRoundClient, type RenewRoundClient } from "../../../../../web/src/lib/relay-renew-round";
+import type { RenewedConfig } from "../../../../../web/src/lib/relay-renew";
+import type { IceGrant } from "../../../../../web/src/lib/relay-renew-wire";
 import { SignalingClient } from "../../../../../web/src/lib/signaling";
 import {
   createPeerWorkspace,
@@ -193,6 +197,16 @@ export class RoomController {
    * which is every LAN room and every STUN-only code.
    */
   #relayBound: RelayDeadline | null = null;
+  /**
+   * This room's `ice-renew` / `ice-grant` correlator.
+   *
+   * Per room, exactly like the relay selection and the capability registry
+   * beside it — and for the same reason those are: this client runs a LAN room
+   * and a pairing room at once, and a grant issued to one must never be
+   * applied to the other's link. The shared web module is the SAME code the
+   * browser runs (`relay-renew-round.ts`); only its owner differs.
+   */
+  readonly #renewRounds: RenewRoundClient;
   /**
    * True until this room's ICE answer has been installed.
    *
@@ -369,11 +383,23 @@ export class RoomController {
       // roles, and the credential boundary a relayed link ends at.
       relayGate: () => this.gate,
       relayDeadline: () => this.#relayBound,
+      // Relay renewal. Both halves, per room, and gated on this room's own
+      // capability registry rather than the web module's page global.
+      requestRenewRound: (round, rid) => this.#renewRounds.request(round, rid),
+      renewedConfig: (grant) => this.#renewedConfig(grant),
+      supportsRenew: (peerId) => this.caps.supportsRenew(peerId),
       // Injected only when this room actually has a privileged destination. The
       // shipping default would open a browser download, which is wrong here in
       // a way that would silently report success.
       ...(deps.receive ? { pickSaveTarget: (files: FileMetaLike[]) => this.#pickSaveTarget(files) } : {}),
     });
+
+    // After the socket exists, because the send arm writes to it. Registered
+    // once: `SignalingClient` keeps its listeners across a reconnect.
+    this.#renewRounds = createRenewRoundClient({
+      send: (r, rid) => this.#signaling.sendIceRenew(r, rid),
+    });
+    this.#signaling.onIceGrant((data) => this.#renewRounds.accept(data));
 
     this.#wire();
     this.#watchLink();
@@ -625,6 +651,24 @@ export class RoomController {
    * host/srflx candidates that cannot cross CGNAT. Relay MEASUREMENT and
    * selection belong to R-PAIR.
    */
+  /**
+   * A granted body, turned into the configuration this room's link migrates
+   * onto. The Web app's `renewedConfig`, with this room's own selection.
+   *
+   * Same sanitisers as `/api/ice` (`renewGrantConfig`), the relay this room
+   * already COMMITTED to rather than a re-measured one, and the boundary
+   * derived at receipt. Returned rather than installed: only a committed
+   * migration moves a deadline.
+   */
+  #renewedConfig(grant: IceGrant): RenewedConfig | null {
+    const sanitized = renewGrantConfig({ iceServers: grant.iceServers, relays: grant.relays });
+    if (!sanitized) return null;
+    return {
+      rtc: chooseRtcConfig(sanitized, this.#selection.selectedRelayId),
+      deadline: relayDeadline(sanitized, Date.now()),
+    };
+  }
+
   rtcConfig(): { iceServers: RTCIceServer[]; iceTransportPolicy?: RTCIceTransportPolicy } {
     const cfg = this.#ice;
     // `takeChoice`, not a mirrored id: this answer goes straight to the
@@ -1067,6 +1111,11 @@ export class RoomController {
     // of its own. See `createSignalingTransport`.
     this.#transport.close();
     this.caps.reset();
+    // Settled, not dropped: a renewal epoch may be awaiting a round request,
+    // and the reply that would have answered it belongs to a room that is
+    // gone. `null` is the same answer a silent server gives, which the
+    // controller already treats as `unavailable` and never as success.
+    this.#renewRounds.reset();
   }
 }
 

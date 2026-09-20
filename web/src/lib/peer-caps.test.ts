@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  CAP_LINK, CAP_PREUPLOAD, CAP_TEXT, LINK_BUILD_SUPPORT, advertisedCaps, capsSignal, linkRoomActive,
+  CAP_LINK, CAP_PREUPLOAD, CAP_RENEW, CAP_TEXT, LINK_BUILD_SUPPORT, advertisedCaps, capsSignal, linkRoomActive,
   recordPeerCaps, peerCapsKnown, peerSupportsLink, peerSupportsPreupload, retainPeers, resetPeerCaps,
 } from "./peer-caps.svelte";
 import { clearRoom, enterRoom } from "./room.svelte";
@@ -28,8 +28,8 @@ describe("peer caps", () => {
     // halves of the key handoff. It rides with link/1 and can never be
     // announced without it: frame kind 12 travels on the link's file channel.
     expect(CAP_PREUPLOAD).toBe("preupload/1");
-    expect(capsSignal()).toEqual({ caps: [CAP_LINK, CAP_PREUPLOAD] });
-    expect(advertisedCaps()).toEqual([CAP_LINK, CAP_PREUPLOAD]);
+    expect(capsSignal()).toEqual({ caps: [CAP_LINK, CAP_PREUPLOAD, CAP_RENEW] });
+    expect(advertisedCaps()).toEqual([CAP_LINK, CAP_PREUPLOAD, CAP_RENEW]);
     expect(LINK_BUILD_SUPPORT).toBe(true);
     expect(linkRoomActive()).toBe(true);
     // Both announcements come from this one source, so the roster hello and the
@@ -59,13 +59,13 @@ describe("peer caps", () => {
   it("announces the same capabilities in a pairing-code room", () => {
     enterRoom({ code: "123456" });
     expect(linkRoomActive()).toBe(true);
-    expect(capsSignal()).toEqual({ caps: [CAP_LINK, CAP_PREUPLOAD] });
-    expect(advertisedCaps()).toEqual([CAP_LINK, CAP_PREUPLOAD]);
+    expect(capsSignal()).toEqual({ caps: [CAP_LINK, CAP_PREUPLOAD, CAP_RENEW] });
+    expect(advertisedCaps()).toEqual([CAP_LINK, CAP_PREUPLOAD, CAP_RENEW]);
     // Still read at call time, not frozen at import time: entering and leaving a
     // room rewrites the URL fragment without a reload.
-    expect([...localCaps()]).toEqual([CAP_LINK, CAP_PREUPLOAD]);
+    expect([...localCaps()]).toEqual([CAP_LINK, CAP_PREUPLOAD, CAP_RENEW]);
     clearRoom();
-    expect([...localCaps()]).toEqual([CAP_LINK, CAP_PREUPLOAD]);
+    expect([...localCaps()]).toEqual([CAP_LINK, CAP_PREUPLOAD, CAP_RENEW]);
   });
 
   // The downgrade boundary that did NOT move. It is what keeps a speculative
@@ -159,7 +159,7 @@ describe("peer caps", () => {
   it("hands out a fresh array, so a caller cannot mutate what we announce", () => {
     const first = capsSignal();
     first.caps.push("forged/1");
-    expect(capsSignal()).toEqual({ caps: [CAP_LINK, CAP_PREUPLOAD] });
+    expect(capsSignal()).toEqual({ caps: [CAP_LINK, CAP_PREUPLOAD, CAP_RENEW] });
   });
 
   // The other piggybacks (relayRtt, rename) share this envelope and are handled

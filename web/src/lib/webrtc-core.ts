@@ -10,6 +10,7 @@
 // 继续存在，那条精确比较才有东西可以拒绝。
 import type { SignalingClient } from "./signaling";
 import { negotiatedMaxMessageBytes } from "./wire-limit";
+import { candidateAddressKey, candidateUfrag, sdpIceUfrag, sdpPin, statsAddressKey, type SdpPin } from "./relay-renew-wire";
 
 export interface RtcConfig {
   iceServers: RTCIceServer[];
@@ -106,6 +107,98 @@ export class PeerBusyError extends Error {
  *  selected (or on browsers that don't surface it). */
 export type ConnPath = "lan" | "p2p" | "relay" | "unknown";
 
+/**
+ * The per-epoch surface a relay renewal drives, and nothing else.
+ *
+ * ## Why this is an interface and not `pc`
+ *
+ * Renewal has to reach the PeerConnection: it applies a new configuration,
+ * restarts ICE, exchanges a description it signs itself, and reads which local
+ * candidate the agent actually selected. Handing out `pc` would give it all of
+ * that plus everything else, including the ability to open a third DataChannel
+ * or renegotiate outside the epoch machinery. This is the exact list, and every
+ * member exists because §5 or §6 of `relay-renew-v1.md` names it.
+ *
+ * ## Why the candidate gate is here rather than in the controller
+ *
+ * `establish` already owns the invariant "a local description reaches signalling
+ * before the candidates gathered for its ufrag" — the gate that
+ * `sendLocalDescription`/`releaseLocalCandidates` implement, and which an ICE
+ * restart has to re-establish. A renewal restart is exactly that case, so it
+ * reuses the same gate rather than growing a second one that could disagree.
+ * The DIFFERENCE is only where the bytes go: a renewal description is wrapped
+ * and signed by the controller, so core hands it back instead of sending it.
+ */
+export interface RenewTransport {
+  /**
+   * The pin of the REMOTE description this transport was established on.
+   *
+   * Epoch 0's remote description, taken as applied. A `link:§8` rebuild
+   * produces a new PeerConnection and therefore a new `Conn`, so the baseline
+   * is re-taken naturally rather than being carried across a transport it does
+   * not belong to.
+   *
+   * Null until a remote description has been applied at all — a responder that
+   * has not yet been offered to, which is not a state renewal runs in.
+   */
+  baseline(): SdpPin | null;
+  /** The `a=ice-ufrag` of the local description currently applied, or "". */
+  localUfrag(): string;
+  /** The `a=ice-ufrag` of the remote description currently applied, or "". */
+  remoteUfrag(): string;
+  /** Install fresh credentials. **Not** success by itself — see §6. */
+  setConfiguration(config: RtcConfig): void;
+  /** `createOffer({iceRestart:true})` + `setLocalDescription`, with the local
+   *  candidate gate CLOSED first so this ufrag's candidates are held. */
+  offer(): Promise<RTCSessionDescriptionInit>;
+  /** `createAnswer` + `setLocalDescription`, same gating. */
+  answer(): Promise<RTCSessionDescriptionInit>;
+  /** `setRemoteDescription`, returning the pin of exactly what was applied so
+   *  the caller compares the description the agent took, not the one it sent. */
+  applyRemote(sdp: RTCSessionDescriptionInit): Promise<SdpPin>;
+  /** Release held local candidates to `onCandidate` and reopen the gate. Called
+   *  once the description they belong to is on the wire. */
+  releaseCandidates(): void;
+  addCandidate(init: RTCIceCandidateInit): Promise<void>;
+  /** Local candidates for a renewal epoch. One subscriber; replacing it
+   *  replaces the previous. Null detaches. */
+  onCandidate(cb: ((candidate: RTCIceCandidate) => void) | null): void;
+  /** Wake-up when the ICE agent changes its selected pair, where the browser
+   *  exposes it. A no-op disposer where it does not; the caller polls
+   *  `selectedGeneration` either way, because the EVENT is not the answer. */
+  onSelectedPair(cb: (() => void) | null): void;
+  /**
+   * The ICE generation of the currently selected pair, both ends.
+   *
+   * `local` is the clause §6.3 rests on. Null is a real answer and the
+   * conservative one: no pair yet, a `prflx` candidate this side never
+   * gathered, an ambiguous transport address, or a report whose authoritative
+   * selection could not be read. Observation must FAIL in each of those cases
+   * rather than be assumed.
+   *
+   * `remote` is reported only where the stats actually carry it — no stack is
+   * required to, and nothing is inferred when it does not. Where it IS present
+   * it must match, because a selected pair whose far end still names the
+   * previous generation is a path that has not migrated. It is an additional
+   * refusal, never a substitute for the dual-endpoint proof: a remote ufrag is
+   * a fact about the local ICE agent's bookkeeping, not evidence that the peer
+   * observed anything.
+   */
+  selectedGeneration(): Promise<{ local: string | null; remote: string | null }>;
+  /** Hold off the unauthenticated `tryIceRestart` while an epoch is in flight;
+   *  two offers on one PeerConnection is glare neither side can resolve. */
+  suspendUnsignedRestart(active: boolean): void;
+  /**
+   * Refuse unsigned `link`-generation SDP and ICE for the remainder of this
+   * PeerConnection.
+   *
+   * Called once this link has verified ANY renewal signal from its peer. The
+   * decision is monotonic and authenticated, and deliberately does not rest on
+   * the unauthenticated `caps` hint.
+   */
+  lockUnsignedSdp(): void;
+}
+
 export interface Conn {
   channel: RTCDataChannel;
   /** Exact-label lookup for a connection's logical lanes. `channel` remains the
@@ -126,6 +219,62 @@ export interface Conn {
   path(): Promise<ConnPath>;
   /** Raw getStats() report — for the ?debug=1 diagnostics panel. */
   stats(): Promise<RTCStatsReport>;
+  /** The relay-renewal surface. Always present on a real transport; optional on
+   *  the type so the test seams that stand in for `Conn` are unaffected, and so
+   *  a caller has to state what it does without one. */
+  renew?: RenewTransport;
+}
+
+/**
+ * The candidate-pair stats row the ICE agent has ACTUALLY selected.
+ *
+ * ## Why the obvious scan is wrong, with real-browser evidence
+ *
+ * Scanning for the first row that is `selected`, or `nominated && succeeded`,
+ * finds a pair that WAS live. After an ICE restart Chrome keeps the previous
+ * generation's pair in the report, still flagged `nominated` and `succeeded`,
+ * alongside the new one — a capture of exactly that is in this task's evidence
+ * (`browser-selected-generation.json`: iteration order yields the old pair
+ * `CP1TxJaz0f_f9/5gSKr` while the transport points at `CPzZwbUqMe_G1a13d3r`).
+ * A renewal that read the old pair would conclude its migration had not
+ * happened — or, worse, that it had, on the generation it was migrating away
+ * from.
+ *
+ * The `transport` row's `selectedCandidatePairId` is the agent's own answer and
+ * is authoritative. It is consulted first and never overridden.
+ *
+ * ## The fallback, and why it refuses rather than guesses
+ *
+ * Not every stack publishes a `transport` row, and the synthetic reports this
+ * module's own tests are written against do not. So a scan remains, but it is
+ * trusted only when UNAMBIGUOUS: exactly one qualifying pair. Two qualifying
+ * pairs is precisely the post-restart shape above, and there the honest answer
+ * is "cannot tell" — which makes observation fail and the link keep the
+ * deadline it already had.
+ */
+export function selectedCandidatePair(stats: RTCStatsReport): Record<string, unknown> | null {
+  let selectedId: string | undefined;
+  stats.forEach((r) => {
+    const s = r as unknown as { type?: string; selectedCandidatePairId?: unknown };
+    if (s.type !== "transport") return;
+    if (typeof s.selectedCandidatePairId === "string" && s.selectedCandidatePairId !== "") {
+      selectedId = s.selectedCandidatePairId;
+    }
+  });
+  if (selectedId !== undefined) {
+    const pair = stats.get(selectedId) as unknown as Record<string, unknown> | undefined;
+    // An id that names nothing is a malformed report, not a licence to scan:
+    // the agent told us which pair it chose and we could not read it.
+    return pair ?? null;
+  }
+  const qualifying: Record<string, unknown>[] = [];
+  stats.forEach((r) => {
+    const s = r as unknown as { type?: string; selected?: boolean; nominated?: boolean; state?: string };
+    if (s.type === "candidate-pair" && (s.selected || (s.nominated && s.state === "succeeded"))) {
+      qualifying.push(r as unknown as Record<string, unknown>);
+    }
+  });
+  return qualifying.length === 1 ? qualifying[0] : null;
 }
 
 /** Classify the in-use ICE path from a getStats() report: find the selected
@@ -135,13 +284,12 @@ export interface Conn {
  *  `selected`; Chromium leaves `nominated` + `succeeded` on it — accept either.
  *  Exported for unit testing against synthetic stats. */
 export function classifyPath(stats: RTCStatsReport): ConnPath {
-  let pair: { localCandidateId?: string; remoteCandidateId?: string } | undefined;
-  stats.forEach((r) => {
-    const s = r as unknown as { type: string; selected?: boolean; nominated?: boolean; state?: string };
-    if (s.type === "candidate-pair" && (s.selected || (s.nominated && s.state === "succeeded"))) {
-      pair ??= r as unknown as typeof pair;
-    }
-  });
+  // The authoritative read, for the reason `selectedCandidatePair` documents: a
+  // stale nominated pair left behind by a restart would classify the path this
+  // connection has migrated AWAY from. "unknown" when it cannot be told, which
+  // every caller already treats as "no answer yet" rather than as a path.
+  const pair = selectedCandidatePair(stats) as
+    { localCandidateId?: string; remoteCandidateId?: string } | null;
   if (!pair) return "unknown";
   const typeOf = (id?: string) =>
     id ? (stats.get(id) as unknown as { candidateType?: string } | undefined)?.candidateType : undefined;
@@ -536,9 +684,72 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
   let remoteDescribed = false;
   const heldRemoteCandidates: RTCIceCandidateInit[] = [];
 
+  // ── renewal state (see RenewTransport) ────────────────────────────────────
+  /** Pin of the FIRST remote description applied on this pc. */
+  let renewBaseline: SdpPin | null = null;
+  /** Where a local candidate goes. Once a renewal has restarted ICE, every
+   *  later candidate belongs to a renewal ufrag and must travel signed inside a
+   *  renew envelope — never as an unsigned top-level `link` ICE. Set once and
+   *  never cleared: this pc has no route back to the unsigned generation. */
+  let renewOwnsCandidates = false;
+  let renewCandidateCb: ((candidate: RTCIceCandidate) => void) | null = null;
+  let renewSelectedPairCb: (() => void) | null = null;
+  /**
+   * `address key -> ufrag`, for the stacks whose stats rows carry no ufrag.
+   *
+   * **Fails closed on ambiguity.** The key is protocol/address/port/type, which
+   * is unique among one agent's simultaneously-live candidates but NOT across
+   * ICE generations: a TCP-active candidate is published on port 9 by every
+   * generation, so the same key legitimately names candidates from two ufrags.
+   * When that happens the entry is poisoned rather than overwritten — reading
+   * it answers "unknown", observation does not hold, the epoch times out, and
+   * the old deadline is kept. Overwriting would let a candidate from the OLD
+   * generation be read as the new one, which is the exact false positive §6.3
+   * exists to prevent.
+   *
+   * Bounded, because it is fed by whatever the ICE agent gathers: past the cap
+   * nothing more is recorded, which again only ever makes observation fail.
+   */
+  const localCandidateUfrags = new Map<string, string>();
+  /** The sentinel a poisoned key holds. Not a legal ufrag (RFC 8839 requires at
+   *  least 4 characters from a restricted alphabet, and this contains none). */
+  const UFRAG_AMBIGUOUS = "";
+  const MAX_CANDIDATE_UFRAG_KEYS = 128;
+  /** An epoch is in flight: hold off the unauthenticated restart. */
+  let renewInFlight = false;
+  /** This link has verified a renewal signal, so unsigned SDP/ICE on the `link`
+   *  generation is refused for the remainder of this pc. Monotonic. */
+  let unsignedSdpLocked = false;
+
+  /** One place decides where a local candidate goes, so the gate's release path
+   *  and the live path can never disagree about it. */
+  function emitLocalCandidate(ice: RTCIceCandidate) {
+    if (renewOwnsCandidates) { renewCandidateCb?.(ice); return; }
+    send({ ice });
+  }
+
   pc.onicecandidate = (e) => {
     if (!e.candidate || closed) return;
-    if (!localSdpDue) { send({ ice: e.candidate }); return; }
+    // Recorded BEFORE the gate, so a candidate that is held (or dropped on
+    // overflow) still contributes its generation to the mapping §6.3 reads.
+    const key = candidateAddressKey(e.candidate.candidate);
+    const ufrag = candidateUfrag(e.candidate.candidate)
+      || (typeof e.candidate.usernameFragment === "string" ? e.candidate.usernameFragment : "");
+    if (key !== "" && ufrag !== "") {
+      const known = localCandidateUfrags.get(key);
+      if (known === undefined) {
+        // Bounded. Past the cap nothing new is learned, which can only make a
+        // later lookup answer "unknown".
+        if (localCandidateUfrags.size < MAX_CANDIDATE_UFRAG_KEYS) {
+          localCandidateUfrags.set(key, ufrag);
+        }
+      } else if (known !== ufrag) {
+        // Two generations, one transport address. See the map's comment: this
+        // key can no longer identify a generation and must stop trying.
+        localCandidateUfrags.set(key, UFRAG_AMBIGUOUS);
+      }
+    }
+    if (!localSdpDue) { emitLocalCandidate(e.candidate); return; }
     if (heldLocalCandidates.length >= MAX_HELD_CANDIDATES) {
       // Fail closed, exactly as the remote hold does. See MAX_HELD_CANDIDATES.
       failEstablishment(new Error(`relayium: ${what} gathered too many candidates before its description`));
@@ -552,7 +763,7 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
     localSdpDue = false;
     const held = heldLocalCandidates.splice(0, heldLocalCandidates.length);
     if (closed) return; // 关掉之后闸门不再"打开"任何东西——一条都不出去
-    for (const ice of held) send({ ice });
+    for (const ice of held) emitLocalCandidate(ice);
   }
 
   /**
@@ -698,6 +909,13 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
     // 收了。留着只是让一次已经放弃的建连继续持有对端的候选。
     heldLocalCandidates.length = 0;
     heldRemoteCandidates.length = 0;
+    // A renewal controller holds callbacks into a connection that is gone. Its
+    // own epoch deadline would end it anyway; dropping them here means no
+    // candidate and no selected-pair wake-up can reach a controller that is
+    // about to be told the link is over.
+    renewCandidateCb = null;
+    renewSelectedPairCb = null;
+    localCandidateUfrags.clear();
     // Settle `ready` before the timers go, and the order is load bearing:
     // `stopTimers` removes the only thing that would ever have settled it
     // otherwise, so a caller that closed a still-pending establishment without
@@ -800,6 +1018,11 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
       await pc.setRemoteDescription(msg.sdp);
       if (closed) return; // cancelled while the description was being applied
       remoteDescribed = true;
+      // The renewal baseline is the FIRST remote description this pc applied,
+      // taken from what the agent holds rather than from the message, and never
+      // moved afterwards: a later description is the thing being checked, so
+      // re-pinning from it would make the check compare a value to itself.
+      renewBaseline ??= sdpPin(pc.currentRemoteDescription?.sdp ?? msg.sdp.sdp ?? "");
       // The peer answered (or re-offered): the strongest evidence there is that
       // somebody is on the other end and this setup is worth more time.
       progress(`sdp:${msg.sdp.type}`);
@@ -833,6 +1056,19 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
    *  and if nothing genuine ever arrives the connect timeout ends it anyway. */
   async function accept(msg: InboundSignal) {
     if (closed) return;
+    // **After the first verified renewal, this generation carries no more SDP.**
+    //
+    // A renewal proves the peer holds `resumeAuth`, so from that point on there
+    // is an authenticated channel for every description this transport will
+    // ever need — and an unsigned one can only have come from somebody who is
+    // not that peer. Dropped rather than fatal, for the same reason a failed
+    // tag is: the genuine peer's signed messages still get through, and a relay
+    // learns nothing from the silence. Commit/reveal and caps are untouched;
+    // by this point the handshake they belong to is long finished.
+    if (unsignedSdpLocked && (msg.sdp || msg.ice)) {
+      console.warn(`relayium ${what}: dropped unsigned SDP after renewal`);
+      return;
+    }
     if (opts.auth && !(await opts.auth.verify(authPayload(msg), msg.auth))) {
       console.warn(`relayium ${what}: dropped an unauthenticated signal`);
       return;
@@ -876,6 +1112,14 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
   let restarted = false;
   async function tryIceRestart() {
     if (restarted || role !== "initiator") return;
+    // A renewal epoch owns the negotiation while it runs, and once this link
+    // has locked unsigned SDP there is no unsigned restart left to make: the
+    // offer would be one the peer now refuses, and the candidates it gathered
+    // would belong to a ufrag the peer was never told about. Deliberately NOT
+    // setting `restarted` — a renewal that aborts leaves the ordinary one-shot
+    // restart available for a genuine later `disconnected`, which is the case
+    // this recovery exists for.
+    if (renewInFlight || unsignedSdpLocked) return;
     restarted = true;
     try {
       // 重新关上本端候选闸门：重启采集出来的候选属于新的 ufrag，抢在重启 offer
@@ -929,6 +1173,136 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
     }
     const primary = openChannels.get(channelLabels[0]);
     if (!primary) throw new Error("relayium: primary data channel missing");
+
+    /**
+     * Create a local description for a renewal epoch, with the candidate gate
+     * closed around it.
+     *
+     * The same three steps `sendLocalDescription` takes, and the same failure
+     * rule: a batch gathered against a description that never landed is dropped
+     * outright rather than guessed at. What differs is the last step — the
+     * bytes are RETURNED, for the controller to wrap and sign, instead of being
+     * handed to the unsigned `send`.
+     */
+    async function renewLocalDescription(
+      create: () => Promise<RTCSessionDescriptionInit>,
+    ): Promise<RTCSessionDescriptionInit> {
+      renewOwnsCandidates = true;
+      localSdpDue = true;
+      try {
+        const sdp = await create();
+        if (closed) throw new Error(`relayium: ${what} closed`);
+        await pc.setLocalDescription(sdp);
+        if (closed) throw new Error(`relayium: ${what} closed`);
+        localSdpEverSent = true;
+        return pc.localDescription ?? sdp;
+      } catch (err) {
+        // These belong to a ufrag the peer was never told about.
+        heldLocalCandidates.length = 0;
+        // The gate stays CLOSED on failure. Unlike the establishment path there
+        // is no "the previous description is still the live one" case worth
+        // reopening for: the controller aborts this epoch, and anything
+        // gathered afterwards belongs to a restart that did not happen.
+        throw err;
+      }
+    }
+
+    const renew: RenewTransport = {
+      baseline: () => renewBaseline,
+      localUfrag: () => sdpIceUfrag(pc.localDescription?.sdp ?? ""),
+      // **`remoteDescription`, never `currentRemoteDescription`.**
+      //
+      // A responder that has applied a renewal OFFER holds it as the PENDING
+      // remote description; `currentRemoteDescription` still returns the
+      // previous generation's until an answer completes the exchange. Reading
+      // the stale one there bound the responder's candidates to the OLD ufrag:
+      // every fresh candidate was dropped as foreign and the migration could
+      // not complete. Captured against real Chrome in this task's evidence
+      // (`browser-pending-remote.json`: current `24IM` while the newly applied
+      // remote/pending offer carries `IV8f`). `remoteDescription` is defined as
+      // pending ?? current — exactly "what the agent is working with now".
+      remoteUfrag: () => sdpIceUfrag(pc.remoteDescription?.sdp ?? ""),
+      setConfiguration(config) {
+        // Installs credentials and nothing more. The migration is what §6
+        // proves; this call is not evidence of anything.
+        pc.setConfiguration(config as RTCConfiguration);
+      },
+      offer: () => renewLocalDescription(() => pc.createOffer({ iceRestart: true })),
+      answer: () => renewLocalDescription(() => pc.createAnswer()),
+      async applyRemote(sdp) {
+        await pc.setRemoteDescription(sdp);
+        if (closed) throw new Error(`relayium: ${what} closed`);
+        remoteDescribed = true;
+        // The pin of what the AGENT holds — `remoteDescription`, for the reason
+        // `remoteUfrag` gives above. Returning the pin of
+        // `currentRemoteDescription` after applying an offer would hand the
+        // caller the PREVIOUS generation's pin, which compares equal to the
+        // baseline and so passes a check that never ran on the new description
+        // at all. A validation that always succeeds is worse than none.
+        return sdpPin(pc.remoteDescription?.sdp ?? sdp.sdp ?? "");
+      },
+      releaseCandidates: releaseLocalCandidates,
+      addCandidate: (init) => addRemoteCandidate(init),
+      onCandidate(cb) { renewCandidateCb = cb; },
+      onSelectedPair(cb) {
+        renewSelectedPairCb = cb;
+        // Best effort, and explicitly only a WAKE-UP. Firefox does not expose
+        // `RTCIceTransport` here at all, and even where the event fires it
+        // carries no ufrag — the answer always comes from `selectedGeneration`.
+        // A browser without it costs the controller's poll, nothing else.
+        const transport = (pc.sctp?.transport as { iceTransport?: RTCIceTransport } | undefined)?.iceTransport;
+        if (!transport) return;
+        try {
+          transport.onselectedcandidatepairchange = cb ? () => renewSelectedPairCb?.() : null;
+        } catch { /* not supported on this stack */ }
+      },
+      async selectedGeneration() {
+        const none = { local: null, remote: null };
+        let stats: RTCStatsReport;
+        try {
+          stats = await pc.getStats();
+        } catch {
+          return none;
+        }
+        const pair = selectedCandidatePair(stats) as
+          { localCandidateId?: string; remoteCandidateId?: string } | null;
+        if (!pair?.localCandidateId) return none;
+        const local = stats.get(pair.localCandidateId) as unknown as {
+          usernameFragment?: unknown; protocol?: unknown; address?: unknown;
+          ip?: unknown; port?: unknown; candidateType?: unknown;
+        } | undefined;
+        if (!local) return none;
+        // The remote end's generation, where the report states it. Nothing is
+        // inferred when it does not — there is no local mapping to fall back
+        // on, because this side never gathered the peer's candidates.
+        const remoteRow = pair.remoteCandidateId
+          ? stats.get(pair.remoteCandidateId) as unknown as { usernameFragment?: unknown } | undefined
+          : undefined;
+        const remote = typeof remoteRow?.usernameFragment === "string" && remoteRow.usernameFragment !== ""
+          ? remoteRow.usernameFragment
+          : null;
+
+        if (typeof local.usernameFragment === "string" && local.usernameFragment !== "") {
+          return { local: local.usernameFragment, remote };
+        }
+        // No ufrag in the report: fall back to the mapping recorded from the
+        // candidates this side gathered. A `prflx` candidate is never in it —
+        // this side did not gather it — so observation correctly fails.
+        const key = statsAddressKey(
+          local.protocol, local.address ?? local.ip, local.port, local.candidateType,
+        );
+        if (key === "") return { local: null, remote };
+        const mapped = localCandidateUfrags.get(key);
+        // `UFRAG_AMBIGUOUS` and "never recorded" are the same answer here: this
+        // transport address cannot name a generation.
+        return {
+          local: mapped === undefined || mapped === UFRAG_AMBIGUOUS ? null : mapped,
+          remote,
+        };
+      },
+      suspendUnsignedRestart(active) { renewInFlight = active; },
+      lockUnsignedSdp() { unsignedSdpLocked = true; },
+    };
     if (abortListener) opts.signal?.removeEventListener("abort", abortListener);
     abortListener = undefined;
     return {
@@ -951,6 +1325,7 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
       maxFrameBytes: () => negotiatedMaxMessageBytes(pc.sctp),
       path: (): Promise<ConnPath> => pc.getStats().then(classifyPath),
       stats: () => pc.getStats(),
+      renew,
     };
   } catch (err) {
     // Establishment failed or timed out: clean up the listener and peer

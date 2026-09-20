@@ -221,7 +221,7 @@ final class PairingLinkHandoffTests: XCTestCase {
             localHello: hello,
             scheduler: ManualScheduler(),
             assemble: { signaling, peerId, role, servers, relayOnly, generation,
-                        directory, admission, signal in
+                        directory, admission, signal, _ in
                 let transport = QuietTransport()
                 box?.transports.append(transport)
                 return LinkSessionFactory.make(

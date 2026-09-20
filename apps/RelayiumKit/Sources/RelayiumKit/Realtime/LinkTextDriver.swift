@@ -641,6 +641,45 @@ public final class LinkTextDriver: @unchecked Sendable {
     ///
     /// Inbound malformed, authentication, ordering and rate failures poison the
     /// TEXT codecs and nothing else — never the transport, never the file lane.
+    /// Put ONE renewal control frame on the current transport's text lane,
+    /// outside this driver's outbox, codecs and conversation state.
+    ///
+    /// ## Why it does not go through `send`
+    ///
+    /// A probe is not a message. Routing it through the outbox would put it
+    /// behind whatever the conversation is doing, make a control-only buffer
+    /// indistinguishable from a pending protected frame at the exact moment a
+    /// transport gap has to decide whether the codecs are still safe, and —
+    /// through `LinkTextSession.send` — spend a nonce on a frame that carries
+    /// no user content. Spec §6.2 and §6.4 both forbid all three.
+    ///
+    /// ## Why it can refuse
+    ///
+    /// The transport is read under `state` and the write happens with the lock
+    /// RELEASED, exactly as every other send here does: a lock held across a
+    /// transport call would close a cycle against the serial queue that
+    /// delivers inbound frames. Between the two there is a window in which the
+    /// transport can go away, and a write that fails then is reported as false
+    /// rather than being treated as a lane failure — a control frame that did
+    /// not make it costs the epoch, never the conversation.
+    ///
+    /// A poisoned or terminal text lane still refuses: there is no transport
+    /// this driver would write to, and a renewal must not be the one caller
+    /// that writes into a lane the conversation has given up on.
+    public func sendRenewalControlFrame(_ bytes: [UInt8]) -> Bool {
+        state.lock()
+        let target: LinkLiveTransport? =
+            (textTerminal || linkEnded || textTransportClosing) ? nil : transport
+        state.unlock()
+        guard let target else { return false }
+        do {
+            try target.send(bytes, on: .text)
+            return true
+        } catch {
+            return false
+        }
+    }
+
     public func admitTextFrame(_ bytes: [UInt8]) {
         withState {
             guard !linkEnded, !textTerminal, transport != nil else { return }

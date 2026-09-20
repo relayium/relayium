@@ -1,6 +1,9 @@
 package account
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // freePlanFallback is the in-memory Free tier used when a user's plan_id can't
 // be resolved (missing row, DB blip). Matches defaultPlans()[0] so enforcement
@@ -184,6 +187,105 @@ func (s *Service) trafficAllowanceSpent(ctx context.Context, userID string) (boo
 		return false, err
 	}
 	return remaining <= 0, nil
+}
+
+// --- Strict (fail-closed) variants, for renewal only ---------------------
+//
+// Renewal has to answer "may this account have ANOTHER hour of paid relay",
+// with an existing credential still running. Every read below therefore reports
+// its failure instead of substituting a default, because the alternative is
+// extending paid relay on a question nobody answered.
+//
+// The originals above are untouched and keep every caller they have. These are
+// separate functions rather than a policy flag threaded through the existing
+// chain for the reason the settings variant is: a shared body with a switch is
+// how one caller quietly acquires the other's behaviour.
+
+// effectivePlanIDStrict is effectivePlanID with its plan reads reported.
+//
+// The original folds a GetPlan failure into the user's own tier. That is a
+// reasonable default for a display or a fit check — the account keeps the plan
+// it is recorded as having — but for renewal it means the CAP is computed from
+// a tier nobody confirmed, in either direction: an unreadable admin grant
+// silently under-reads the allowance, and an unreadable current plan silently
+// decides the grant outranks it.
+func (s *Service) effectivePlanIDStrict(ctx context.Context, u User) (string, error) {
+	g := u.AdminGrant()
+	if !g.Active(s.Now().Unix()) {
+		return u.PlanID, nil
+	}
+	granted, grantedOK, err := s.Store().GetPlan(ctx, g.PlanID)
+	if err != nil {
+		return "", fmt.Errorf("granted plan %s: %w", g.PlanID, err)
+	}
+	current, currentOK, err := s.Store().GetPlan(ctx, u.PlanID)
+	if err != nil {
+		return "", fmt.Errorf("current plan %s: %w", u.PlanID, err)
+	}
+	// A grant naming a plan that does not exist is not an error — it is an
+	// expired or mistyped grant, and the account keeps its own tier, exactly as
+	// the original decides it.
+	if grantedOK && planRankOf(granted, true).higherThan(planRankOf(current, currentOK)) {
+		return granted.ID, nil
+	}
+	return u.PlanID, nil
+}
+
+// monthlyTrafficCapStrict is monthlyTrafficCap with the effective-tier read
+// reported rather than swallowed.
+//
+// The segmentation arithmetic is NOT reimplemented here: it is the same
+// expression, in the same order, reading the same columns. Only the two lookups
+// differ, so a future change to how a month is prorated lands in one place and
+// this one keeps agreeing with it by construction.
+func (s *Service) monthlyTrafficCapStrict(ctx context.Context, userID string) (int64, error) {
+	u, err := s.Store().GetUserByID(ctx, userID)
+	if err != nil {
+		// Including ErrNotFound. The original falls back to Free for a user it
+		// cannot find, which is right for a gate whose subject may legitimately
+		// be gone; renewal has already established this account exists, so not
+		// finding it here is a race or a corruption, not a free tier.
+		return 0, fmt.Errorf("user: %w", err)
+	}
+	planID, err := s.effectivePlanIDStrict(ctx, u)
+	if err != nil {
+		return 0, err
+	}
+	plan, ok, err := s.Store().GetPlan(ctx, planID)
+	if err != nil {
+		return 0, fmt.Errorf("plan %s: %w", planID, err)
+	}
+	if !ok {
+		plan = freePlanFallback()
+	}
+	period := periodOf(s.Now().Unix())
+	if u.QuotaAccruedPeriod != period {
+		return plan.TrafficBytes, nil
+	}
+	if plan.TrafficBytes <= 0 {
+		return plan.TrafficBytes, nil
+	}
+	segStart, monthStart, monthEnd := segmentBounds(period, u.PlanStartedAt)
+	return u.QuotaAccruedBytes + prorate(plan.TrafficBytes, monthEnd-segStart, monthEnd-monthStart), nil
+}
+
+// trafficAllowanceSpentStrict is trafficAllowanceSpent with every nested read
+// reported. Unlimited plans are never spent; anything else is spent once
+// nothing is left, including exactly zero — the same boundary, evaluated over
+// reads that cannot silently default.
+func (s *Service) trafficAllowanceSpentStrict(ctx context.Context, userID string) (bool, error) {
+	cap, err := s.monthlyTrafficCapStrict(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	if cap <= 0 {
+		return false, nil // unlimited
+	}
+	used, err := s.currentMonthTraffic(ctx, userID)
+	if err != nil {
+		return false, fmt.Errorf("month-to-date: %w", err)
+	}
+	return cap-used <= 0, nil
 }
 
 // overTraffic reports whether userID's month-to-date traffic plus add exceeds

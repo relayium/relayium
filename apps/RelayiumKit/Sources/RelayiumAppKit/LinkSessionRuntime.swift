@@ -1,5 +1,72 @@
 import Foundation
 import RelayiumKit
+import WebRTC
+
+// MARK: - the renewal seam
+
+/// The renewal seam of one link, as the layer that owns the room supplies it.
+///
+/// ## Why a value of closures and not a delegate
+///
+/// Two of these three callbacks fire on the transport's publication queue and
+/// on driver notice drains; the object that answers them is main-actor
+/// isolated. A protocol would have to pick one isolation for all three, and
+/// either choice would be wrong for the others: hopping `userData` to the main
+/// actor puts a thread hop on the transfer's hot path to move a timestamp, and
+/// NOT hopping `published` would touch main-actor state off the main actor.
+///
+/// Splitting them lets each answer where it belongs — `published` and `ended`
+/// hop, `userData` goes straight to a thread-safe sink — and keeps that
+/// decision visible at the composition site instead of buried in a conformance.
+///
+/// ## What the runtime promises
+///
+///  - `published` fires exactly once per published link, after this runtime has
+///    atomically claimed `.active`, with NO lock of this runtime's held.
+///  - `userData` fires only for authenticated user-lane traffic on a published
+///    link: actual file bytes, ACK progress, and user text sent or received.
+///    Never for lifecycle, consent, keepalives or renewal's own control frames.
+///  - `ended` fires exactly once, from the one terminal path.
+///
+/// Nothing here is called under this RUNTIME's `lock`, and nothing here may
+/// call back into the runtime synchronously.
+///
+/// ## One caller does hold a lock, and it is not this runtime's
+///
+/// On the `link:§8` rebuild path `published` is invoked from inside
+/// `LinkRecoveryCoordinator`'s `onAttach` hook, which that coordinator runs
+/// under its OWN lock — the same place `LinkLaneOwner.onAttach` already runs.
+/// So an implementation of `published` **must not block**: it may enqueue, take
+/// a leaf lock and return, but it may not wait on another thread, and it may
+/// not re-enter the coordinator. `LinkWorkspaceModel.renewalSeam` satisfies
+/// this by hopping with `Task { @MainActor in … }`, which only enqueues.
+///
+/// The alternative — reporting the rebuild after the hook returned — was
+/// rejected: at that point the replacement is already current and its frames
+/// are already being routed, so a renewal controller attached then could miss
+/// the first ones.
+public struct LinkRenewalSeam {
+    public let published: (RelayRenewLinkTransport, RelayRenewLanes, LinkIdentity) -> Void
+    public let userData: (RelayRenewUserData) -> Void
+    public let ended: (LinkIdentity) -> Void
+    /// The ICE servers a `link:§8` rebuild must be built with NOW, or nil to
+    /// keep the ones the link was assembled with. Thread-safe by contract: the
+    /// recovery coordinator calls it from its own thread, long after assembly.
+    /// An empty answer means "no opinion", never "no servers".
+    public let currentICEServers: (() -> [RTCIceServer])?
+
+    public init(
+        published: @escaping (RelayRenewLinkTransport, RelayRenewLanes, LinkIdentity) -> Void,
+        userData: @escaping (RelayRenewUserData) -> Void,
+        ended: @escaping (LinkIdentity) -> Void,
+        currentICEServers: (() -> [RTCIceServer])? = nil
+    ) {
+        self.published = published
+        self.userData = userData
+        self.ended = ended
+        self.currentICEServers = currentICEServers
+    }
+}
 
 // MARK: - the initial-transport seam
 
@@ -541,6 +608,12 @@ public final class LinkSessionRuntime: @unchecked Sendable {
 
     private let scheduler: LinkRecoveryScheduler
     private let replacementFactory: LinkReplacementFactory
+    /// The room's renewal seam, or nil for a composition that has none — the
+    /// headless acceptance hosts and every test that is not about renewal.
+    private let renewal: LinkRenewalSeam?
+    /// The identity this runtime published, so the one terminal path can name
+    /// the link that ended. Written once under `lock`, at publication.
+    private var publishedIdentity: LinkIdentity?
     private let admission: LinkAdmission?
     /// Whether this link may spend `LINK_RECOVERY_WINDOW` waiting for a rebuild.
     ///
@@ -598,6 +671,7 @@ public final class LinkSessionRuntime: @unchecked Sendable {
                 replacementFactory: @escaping LinkReplacementFactory,
                 admission: LinkAdmission? = nil,
                             holdsRecoveryWindow: Bool = LINK_TRANSPORT_REPLACEMENT_SUPPORTED,
+                            renewal: LinkRenewalSeam? = nil,
                 onEvent: @escaping (LinkSessionRuntimeEvent) -> Void) {
         self.init(transport: transport,
                   route: nil,
@@ -606,6 +680,7 @@ public final class LinkSessionRuntime: @unchecked Sendable {
                   replacementFactory: replacementFactory,
                   admission: admission,
                   holdsRecoveryWindow: holdsRecoveryWindow,
+                  renewal: renewal,
                   onEvent: onEvent)
     }
 
@@ -620,6 +695,7 @@ public final class LinkSessionRuntime: @unchecked Sendable {
                      replacementFactory: @escaping LinkReplacementFactory,
                      admission: LinkAdmission? = nil,
                      holdsRecoveryWindow: Bool = LINK_TRANSPORT_REPLACEMENT_SUPPORTED,
+                     renewal: LinkRenewalSeam? = nil,
                      onEvent: @escaping (LinkSessionRuntimeEvent) -> Void) {
         self.init(transport: transport,
                   // Captured strongly, and that is not a second owner: this
@@ -633,6 +709,7 @@ public final class LinkSessionRuntime: @unchecked Sendable {
                   replacementFactory: replacementFactory,
                   admission: admission,
                   holdsRecoveryWindow: holdsRecoveryWindow,
+                  renewal: renewal,
                   onEvent: onEvent)
     }
 
@@ -643,6 +720,7 @@ public final class LinkSessionRuntime: @unchecked Sendable {
                  replacementFactory: @escaping LinkReplacementFactory,
                  admission: LinkAdmission?,
                  holdsRecoveryWindow: Bool,
+                 renewal: LinkRenewalSeam?,
                  onEvent: @escaping (LinkSessionRuntimeEvent) -> Void) {
         self.transport = transport
         self.holdsRecoveryWindow = holdsRecoveryWindow
@@ -650,6 +728,7 @@ public final class LinkSessionRuntime: @unchecked Sendable {
         self.receiveDirectory = receiveDirectory
         self.scheduler = scheduler
         self.replacementFactory = replacementFactory
+        self.renewal = renewal
         self.admission = admission
         self.onEvent = onEvent
 
@@ -766,6 +845,7 @@ public final class LinkSessionRuntime: @unchecked Sendable {
             // separated those two constructions into a trap inside a publication
             // callback, on a queue with a peer waiting on the other end.
             try owner.bind(to: coordinator)
+            reportRebuilds(coordinator, owner: owner)
             narrowRecoveryWindow(coordinator)
         } catch {
             // `bind` throws BEFORE it installs anything, so this coordinator has
@@ -793,6 +873,7 @@ public final class LinkSessionRuntime: @unchecked Sendable {
             return
         }
         state = .active(owner: owner, coordinator: coordinator)
+        publishedIdentity = ready
         // The claim, the room's phase and the report are ONE step. A `stop()`
         // from another thread cannot get between them, so it can only find this
         // link already open and queue its end behind this — never in front of it.
@@ -835,6 +916,25 @@ public final class LinkSessionRuntime: @unchecked Sendable {
         admission?.didOpen(peerId: ready.peerId)
         pending.append(.opened(peerId: ready.peerId, sas: ready.sas))
         lock.unlock()
+
+        // OUTSIDE the lock, and after this runtime has claimed `.active`.
+        //
+        // This is the one moment the three things renewal needs exist together:
+        // the live transport, the lane owner that carries the text lane's front
+        // demux, and the authenticated identity whose `resumeAuthKey` signs
+        // every renewal message. Nothing above this line could have supplied
+        // all three, and nothing below it can — `owner` is internal to this
+        // runtime and the transport is private to it.
+        //
+        // The conditional cast is deliberate rather than a widened protocol: a
+        // composition whose transport does not implement renewal simply does
+        // not renew, which is exactly the honest outcome for the headless
+        // acceptance hosts and for every test double that is not about this
+        // feature. It is never a silent degradation of a real link, because the
+        // real initial transport and the real rebuild both conform.
+        if let renewal, let renewable = transport as? RelayRenewLinkTransport {
+            renewal.published(renewable, owner, ready)
+        }
 
         deliver()
     }
@@ -911,6 +1011,7 @@ public final class LinkSessionRuntime: @unchecked Sendable {
         }
 
         let work: Teardown
+        let ending: LinkIdentity?
         lock.lock()
         switch state {
         case .ending, .ended:
@@ -923,7 +1024,17 @@ public final class LinkSessionRuntime: @unchecked Sendable {
             state = .ending(published: true)
             work = .link(coordinator)
         }
+        ending = publishedIdentity
         lock.unlock()
+
+        // BEFORE the teardown, and outside the lock. The controller has to stop
+        // first: `coordinator.stop()` closes whichever transport is current and
+        // ends both lanes, and a renewal epoch still in flight against them
+        // would be writing into a transport that can no longer take a byte and
+        // arming timers for a link that is over. Closing it here means every
+        // renewal timer, the demux handler and the transport's epoch flag are
+        // already gone by the time the lanes are.
+        if let renewal, let ending { renewal.ended(ending) }
 
         switch work {
         case .transport:
@@ -980,13 +1091,62 @@ public final class LinkSessionRuntime: @unchecked Sendable {
     ///    by `report`, and the `end` below is a no-op either way. Nothing is lost:
     ///    the runtime is not waiting to be told something it decided.
     private func laneReported(text event: LinkTextDriverEvent) {
+        noteUserData(text: event)
         report(.text(event))
         if case .failed(.linkEnded) = event { end(.linkEnded) }
     }
 
     private func laneReported(file event: LinkFileDriverEvent) {
+        noteUserData(file: event)
         report(.file(event))
         if case .failed(.linkEnded) = event { end(.linkEnded) }
+    }
+
+    /// Which lane events are authenticated USER data, and which are not.
+    ///
+    /// The list is short and the exclusions are the point. Reported BEFORE the
+    /// event goes to the owner, so the renewal clock is current by the time any
+    /// surface reacts to it, and reported straight through the seam — no hop —
+    /// because this is the transfer's hot path.
+    ///
+    /// ## What counts
+    ///
+    /// Inbound progress is real bytes arriving. Outbound progress is bytes the
+    /// peer's flow-control credit actually let this side put on the wire, which
+    /// is exactly the "ACK progress" spec §7.1 names: a stalled-but-recovering
+    /// transfer keeps producing it, and there is deliberately no byte-volume
+    /// floor anywhere. A finished batch is the last of that progress.
+    ///
+    /// ## What deliberately does not
+    ///
+    ///  - `.status` — a conversation lifecycle transition, including the
+    ///    consent states. A pending consent is explicitly NOT activity, and a
+    ///    link whose peer merely opened a conversation and then went away must
+    ///    still be allowed to die on schedule.
+    ///  - `.inboundOffer` — a manifest arriving is what CREATES a pending
+    ///    consent. Counting it would let an unanswered offer hold a link open.
+    ///  - `.batchesFailed` and `.failed` — work that did not happen.
+    ///  - Renewal's own probes and acks, which never reach a lane at all: the
+    ///    front demux consumes them ahead of the text session.
+    private func noteUserData(text event: LinkTextDriverEvent) {
+        guard let renewal else { return }
+        if case .received = event { renewal.userData(.textReceived) }
+    }
+
+    private func noteUserData(file event: LinkFileDriverEvent) {
+        guard let renewal else { return }
+        switch event {
+        case .inboundProgress:
+            renewal.userData(.fileBytes)
+        case .outboundProgress:
+            renewal.userData(.fileAckProgress)
+        case let .inboundFinished(_, ok):
+            if ok { renewal.userData(.fileBytes) }
+        case let .outboundFinished(_, ok):
+            if ok { renewal.userData(.fileAckProgress) }
+        case .inboundOffer, .batchesFailed, .failed:
+            break
+        }
     }
 
     /// One report from a lane or from a committed destination, admitted only for
@@ -1167,7 +1327,19 @@ public final class LinkSessionRuntime: @unchecked Sendable {
     /// End the current conversation. An ordering BARRIER, not a hangup.
     public func endTextConversation() throws { try activeOwner().endTextConversation() }
     /// Seal and queue one message for the open conversation.
-    public func sendText(_ body: String) throws { try activeOwner().sendText(body) }
+    /// Send one user message.
+    ///
+    /// The renewal clock is moved HERE rather than from a lane event, because
+    /// there is no event for a successful send: the drivers report `status`,
+    /// `received` and `failed`, and none of those is "this person typed
+    /// something and it went". Recorded only after the owner accepted it, so a
+    /// refusal — a backpressured lane, a link between transports, a link that
+    /// has ended — moves nothing. Queued-but-unsent work is explicitly not
+    /// activity.
+    public func sendText(_ body: String) throws {
+        try activeOwner().sendText(body)
+        renewal?.userData(.textSent)
+    }
 
     // MARK: - the transfer
 
@@ -1330,6 +1502,37 @@ public final class LinkSessionRuntime: @unchecked Sendable {
     ///
     /// Installed inside the same `do` as `bind`, before publication, so no gap
     /// can be in flight while it is written.
+    /// Report a `link:§8` rebuild to the room's renewal seam, after the lanes
+    /// have taken the replacement over.
+    ///
+    /// Wrapping the owner's hook rather than adding a fifth one, exactly as
+    /// `narrowRecoveryWindow` does: the coordinator installs all four as ONE
+    /// step, and a hook this runtime added separately could fire against lanes
+    /// that had not attached yet.
+    ///
+    /// ORDER IS LOAD-BEARING. The owner's `onAttach` is what makes the
+    /// replacement current and installs the lane routes — including the text
+    /// lane's renewal demux, which is rebuilt with the new lane owner. Calling
+    /// the room before that returns would hand the controller a transport whose
+    /// frames still had nowhere to go, and a `throw` from it means the
+    /// replacement was refused, so there is nothing to report at all.
+    ///
+    /// The identity is the SAME authentication — `LinkIdentity.replacingTransport`
+    /// carries the peer, the role, the SAS and the one `LinkCodecs` across — so
+    /// the room keeps ONE controller here and does not reset its epoch counter.
+    private func reportRebuilds(_ coordinator: LinkRecoveryCoordinator,
+                                owner: LinkLaneOwner) {
+        guard let renewal else { return }
+        let attach = coordinator.onAttach
+        coordinator.onAttach = { [weak owner] ready, replacement in
+            try attach?(ready, replacement)
+            guard let owner, let renewable = replacement as? RelayRenewLinkTransport else {
+                return
+            }
+            renewal.published(renewable, owner, ready)
+        }
+    }
+
     private func narrowRecoveryWindow(_ coordinator: LinkRecoveryCoordinator) {
         guard !holdsRecoveryWindow else { return }
         let suspendLanes = coordinator.onTransportLost

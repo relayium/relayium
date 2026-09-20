@@ -96,7 +96,25 @@ func (w *wsConn) Send(e Envelope) {
 // two tabs of one browser. Gating it here rather than trusting the client to
 // omit the field makes that a property of the server.
 func ServeWS(h *Hub, idgen func() string) func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, clientIP string, lan bool) {
-	return ServeWSObserved(h, idgen, nil)
+	return ServeWSHooked(h, idgen, WSHooks{})
+}
+
+// WSHooks are the optional callbacks a connection's lifetime fires.
+//
+// Grouped into a struct rather than added as parameters because there are now
+// three of them and they arrive together from one wiring site. A zero WSHooks
+// is exactly the unobserved behaviour ServeWS has always had.
+//
+// Every one of them runs on the connection's READ GOROUTINE. None may block:
+// anything touching a database or the network belongs on a goroutine of its
+// own, or every frame that room handles waits behind it.
+type WSHooks struct {
+	// Join fires after a connection is admitted.
+	Join RoomJoinObserver
+	// Leave fires after an admitted connection has been removed from its room.
+	Leave RoomLeaveObserver
+	// Renew handles an `ice-renew` frame from an admitted, non-LAN connection.
+	Renew RenewRequestHandler
 }
 
 // RoomJoinObserver is told, after a connection is admitted, which room it joined
@@ -111,10 +129,35 @@ func ServeWS(h *Hub, idgen func() string) func(ctx context.Context, c *websocket
 // Called on the connection's read goroutine. An implementation MUST NOT block:
 // anything that touches a database or the network belongs on a goroutine of its
 // own, or every join in the room waits for it.
-type RoomJoinObserver func(room string, peers int)
+//
+// `id` is the server-stamped id of the connection that just joined and
+// `members` is the room's exact membership at that instant, both captured under
+// the admission lock. Renewal authority is frozen from `members`, so a list
+// read afterwards would not do: a pairing-code room that loses a peer frees a
+// slot a replacement can take while the code is still live.
+type RoomJoinObserver func(room, id string, peers int, members []string)
+
+// RoomLeaveObserver is told that an admitted connection has left its room.
+//
+// It is the end of a renewal grant, and it is deliberately the SOCKET leaving
+// rather than a roster change: a roster can lose an id to a device handover,
+// while this fires once, from the connection's own teardown, for a connection
+// that really is gone.
+type RoomLeaveObserver func(room, id string)
+
+// RenewRequestHandler receives one well-formed `ice-renew` payload from an
+// admitted connection, already attributed to the room and id the SERVER stamped
+// on it. It must return promptly; see WSHooks.
+type RenewRequestHandler func(room, id string, req RenewRequest)
 
 // ServeWSObserved is ServeWS plus a join observer. nil observer == ServeWS.
 func ServeWSObserved(h *Hub, idgen func() string, observe RoomJoinObserver) func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, clientIP string, lan bool) {
+	return ServeWSHooked(h, idgen, WSHooks{Join: observe})
+}
+
+// ServeWSHooked is ServeWS with every optional callback.
+func ServeWSHooked(h *Hub, idgen func() string, hooks WSHooks) func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, clientIP string, lan bool) {
+	observe := hooks.Join
 	return func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, clientIP string, lan bool) {
 		// Explicit single-frame cap: a real signaling frame is a few KB. Anything
 		// larger is rejected by coder/websocket at read time (ends the loop).
@@ -127,6 +170,12 @@ func ServeWSObserved(h *Hub, idgen func() string, observe RoomJoinObserver) func
 		defer func() {
 			if joined {
 				h.Leave(room, id)
+				// After the hub has removed it, so anything the hook decides
+				// (a renewal grant dying, above all) cannot be contradicted by
+				// a room this connection is somehow still in.
+				if hooks.Leave != nil {
+					hooks.Leave(room, id)
+				}
 			}
 		}()
 
@@ -212,13 +261,14 @@ func ServeWSObserved(h *Hub, idgen func() string, observe RoomJoinObserver) func
 					if lan {
 						device, active = e.DeviceID, e.Active
 					}
-					if admitted, peers := h.JoinDeviceLimitedObserved(room, id, e.Name, conn, maxPeers, clientIP, device, active); admitted {
+					if admitted, peers, members := h.JoinDeviceLimitedObservedMembers(room, id, e.Name, conn, maxPeers, clientIP, device, active); admitted {
 						joined = true
 						cancelJoin() // joined in time — stop the join deadline
 						if observe != nil {
-							// peers is the admission-time snapshot captured under the
-							// insertion lock. The callback itself is outside that lock.
-							observe(room, peers)
+							// peers and members are the admission-time snapshot
+							// captured under the insertion lock. The callback
+							// itself is outside that lock.
+							observe(room, id, peers, members)
 						}
 					} else {
 						return // room full — close the connection
@@ -233,6 +283,29 @@ func ServeWSObserved(h *Hub, idgen func() string, observe RoomJoinObserver) func
 				// named by the frame, which carries nothing the server reads.
 				if joined && lan {
 					h.Activate(room, id)
+				}
+			case TypeICERenew:
+				// Charged above like every other frame, so a flood of these
+				// costs a flood's worth of budget and closes the connection at
+				// the same point any other flood would.
+				//
+				// Gated on `joined` for the reason TypeSignal is: the room and
+				// the id are what the server stamped on an ADMITTED connection,
+				// and renewal authority is exactly membership of that room. A
+				// pre-join frame carries no membership to speak of.
+				//
+				// Never on the LAN room: it issues no relay credentials, so
+				// there is nothing there to renew.
+				//
+				// A payload that will not decode is dropped in silence. It has
+				// already been charged, and answering it would turn a malformed
+				// frame into a reply channel.
+				if joined && !lan && hooks.Renew != nil {
+					// Strict: exactly two positive uint32 keys, checked before
+					// anything reaches a grant. See ParseRenewRequest.
+					if req, ok := ParseRenewRequest(e.Data); ok {
+						hooks.Renew(room, id, req)
+					}
 				}
 			case TypeSignal:
 				// Forwarding is a membership action, so it needs an admitted

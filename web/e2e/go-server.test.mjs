@@ -2537,8 +2537,11 @@ describe("becoming the current page re-states this build's capabilities", () => 
     expect(caps).toMatch(
       /export function peerSupportsLink\(peerId: string\): boolean \{\n\s*if \(!linkRoomActive\(\)\) return false;\n\s*return \(announced\[peerId\] \?\? \[\]\)\.includes\(CAP_LINK\);\n\}/,
     );
+    // The announcement now has two steps, because `relay-renew/1` is scoped by
+    // its own predicate. What must NOT have changed is the link gate in front
+    // of both: a room that cannot open a link announces nothing at all.
     expect(caps).toMatch(
-      /export function advertisedCaps\(\): readonly string\[\] \{\n\s*return linkRoomActive\(\) \? \[CAP_LINK, CAP_PREUPLOAD\] : \[\];\n\}/,
+      /export function advertisedCaps\(\): readonly string\[\] \{\n\s*if \(!linkRoomActive\(\)\) return \[\];\n\s*return renewRoomActive\(\) \? \[CAP_LINK, CAP_PREUPLOAD, CAP_RENEW\] : \[CAP_LINK, CAP_PREUPLOAD\];\n\}/,
     );
     // And an old or non-announcing peer is unchanged: still pruned per roster,
     // still two-valued, still never inferred from `text/1`.

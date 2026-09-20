@@ -9,15 +9,26 @@ import Foundation
 /// URL and credential, so a code-less link cannot allocate a relay at all.
 /// Through a pairing code it does not: the ephemeral credential `/api/ice`
 /// issues is a TURN REST username of the form `<unix-expiry>:<token>`
-/// (`server/account/turn.go`), and when it lapses the allocation behind the link
-/// goes with it. Nothing tells the client that happened — a relayed link simply
-/// stops moving bytes.
+/// (`server/account/turn.go`), and once it lapses this link's AUTHORITY to be
+/// relayed has lapsed with it: no new allocation can be made, no refresh is
+/// owed to it, and a path that drops cannot be re-established.
 ///
-/// So the deadline is derived up front, from the config the room was handed, and
-/// the link is closed with a truthful "start again" BEFORE the credential dies
-/// rather than after. It is a CLIENT-side bound on the client's own behaviour:
-/// it changes nothing on the wire and grants nothing. Being wrong in the safe
-/// direction — ending slightly early — is the entire design goal.
+/// **What the expiry does NOT do is end an existing allocation, and nothing
+/// here may assume it does.** An earlier version of this comment said the
+/// allocation "goes with it". That is not something a client may rely on: an
+/// allocation that already exists may outlive the credential it was made
+/// under, and may go on carrying — and metering — bytes after this boundary.
+/// How long is not bounded by anything the client can see. So the expiry is
+/// not an instant cap on relayed usage and it revokes nothing automatically.
+///
+/// The deadline is therefore a bound on what the CLIENT does, not a claim about
+/// the relay: derived up front from the config the room was handed, it closes
+/// the link with a truthful "start again" at the point its grant ends rather
+/// than letting it run on an allocation nobody is entitled to any more — one
+/// that would die silently, at a time nobody can predict, mid-transfer. It
+/// changes nothing on the wire and grants nothing, and it is not a quota or
+/// revocation mechanism. Being wrong in the safe direction — ending slightly
+/// early — is the entire design goal.
 ///
 /// Ported from `web/src/lib/relay-deadline.ts`, and deliberately field-for-field:
 /// the two clients bound the same credential the same way, so a Web↔macOS link
@@ -120,4 +131,72 @@ public func relayDeadline(for config: ICEConfig, now: Date) -> RelayDeadline? {
     let deadlineAt = max(now, expiresAt.addingTimeInterval(-TURN_CLOCK_SKEW))
     let warnAt = max(now, deadlineAt.addingTimeInterval(-RELAY_DEADLINE_WARN))
     return RelayDeadline(expiresAt: expiresAt, deadlineAt: deadlineAt, warnAt: warnAt)
+}
+
+// MARK: - the renewal margin
+
+/// How far ahead of the terminal deadline a link that is being used tries to
+/// renew (spec §7.2).
+///
+/// Ten minutes on a normal one-hour credential: long enough to absorb a denied
+/// round, a retry under a fresh epoch and an ICE restart that has to gather
+/// again, and short enough that a link does not spend a sixth of its life
+/// renewing.
+public let RELAY_RENEW_MARGIN: TimeInterval = 10 * 60
+
+/// When a relayed link should first attempt renewal, or nil when it should not
+/// attempt one at all.
+///
+/// ## The margin is a fraction of the grant's LIFETIME, not of its remainder
+///
+/// `armedAt` is the instant the boundary was installed, and it is required
+/// rather than defaulted because measuring from "now" is the defect this
+/// signature exists to prevent. With `margin = min(10 min, remaining / 3)`
+/// recomputed against a shrinking remainder, the trigger condition
+/// `remaining <= margin` is `remaining <= remaining / 3`, which is false for
+/// every positive remaining — so the attempt never fires until the deadline has
+/// already passed. Root reproduced exactly that against the shipped Web
+/// controller: zero requests at 50 and 55 minutes of a 60-minute grant, and the
+/// first only at the deadline itself.
+///
+/// The rule, for a grant armed at `T` with a boundary at `T + L`:
+///
+/// ```
+/// margin  = min(10 min, floor(L / 3))
+/// attempt = (T + L) - margin
+/// ```
+///
+/// so a one-hour grant is renewed from 50 minutes in, and a 60-second
+/// accelerated test credential from 40 seconds in. Scaling by a THIRD rather
+/// than by a fixed ten minutes is what keeps an acceptance run's short-lived
+/// credential renewable at all, and flooring keeps the instant on a whole
+/// second.
+///
+/// ## Why it can never busy-loop
+///
+/// It is consulted ONCE per armed boundary, and the attempt it starts is
+/// bounded three ways: `RENEW_MAX_EPOCHS_PER_ROUND`, `RENEW_RETRY_BACKOFF_MS`
+/// between failures, and a denied round being terminal. The only thing that
+/// produces a new instant is a COMMIT, which by definition armed a later
+/// boundary from a credential that was actually issued.
+///
+/// Nil when the boundary is already at or behind `armedAt` — a link with
+/// nothing left to renew ends truthfully instead.
+public func relayRenewAttemptAt(_ deadline: RelayDeadline, armedAt: Date) -> Date? {
+    let lifetime = deadline.deadlineAt.timeIntervalSince(armedAt)
+    guard lifetime > 0 else { return nil }
+    let margin = min(RELAY_RENEW_MARGIN, (lifetime / 3).rounded(.down))
+    return deadline.deadlineAt.addingTimeInterval(-margin)
+}
+
+/// Whether a freshly granted configuration actually moves the boundary FORWARD.
+///
+/// A grant that would move it earlier, or leave it where it is, is refused: it
+/// would retire a live allocation in favour of a shorter-lived one, which is
+/// strictly worse than doing nothing. Committing to it would also be the one
+/// case where renewal SHORTENS a link — the opposite of what the user is told.
+public func relayRenewAdvancesDeadline(_ fresh: RelayDeadline,
+                                       beyond current: RelayDeadline?) -> Bool {
+    guard let current else { return true }
+    return fresh.deadlineAt > current.deadlineAt
 }

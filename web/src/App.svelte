@@ -30,6 +30,9 @@
   import { createRelaySelection, parseRelayRtt, type RelayGate } from "./lib/relay-selection";
   import { relayFailNote } from "./lib/relay-status";
   import { relayDeadline, type RelayDeadline } from "./lib/relay-deadline";
+  import { renewGrantConfig } from "./lib/ice";
+  import { createRenewRoundClient } from "./lib/relay-renew-round";
+  import type { IceGrant } from "./lib/relay-renew-wire";
   import type { Peer } from "./lib/protocol";
   import { lang, dir, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import { applyHeadMeta, pageMeta } from "./lib/page-meta";
@@ -130,6 +133,13 @@
     // terminal rather than recoverable.
     rejoinRefused: () => linkDead,
     relayDeadline: () => relayBound,
+    // Relay renewal (docs/protocol/relay-renew-v1.md). Both halves are wired
+    // here because both belong to the ROOM: the socket that carries the round
+    // request is the server's authority for "this is one of the two original
+    // peers", and the relay this page committed to is what a renewed
+    // configuration has to be built against.
+    requestRenewRound: (round, rid) => renewRounds.request(round, rid),
+    renewedConfig,
     peerIds: () => peers.map((peer) => peer.id),
     unsupported: () => unsupported,
     signaling: () => signaling,
@@ -556,8 +566,51 @@
     // replay before it ever awaits a probe.
     settleRoomIce(true);
   }
+  /**
+   * The room's round exchange. One per page, rebound with the socket.
+   *
+   * Not recreated on a room switch — the socket object is reused too — but
+   * `reset()` is called there, which settles every pending request with null.
+   * Without that a grant issued for the room being LEFT could arrive after the
+   * switch and be applied to the next room's link.
+   */
+  const renewRounds = createRenewRoundClient({
+    send: (round, rid) => signaling?.sendIceRenew(round, rid),
+  });
+
+  /**
+   * Turn a granted body into the configuration this link migrates onto.
+   *
+   * Three things happen here and each is deliberate:
+   *
+   *  - the body goes through the SAME sanitisers `/api/ice` does
+   *    (`renewGrantConfig`), because a renewal introduces no second credential
+   *    format and must not introduce a second parser;
+   *  - the transport configuration is built by `chooseRtcConfig` against the
+   *    relay this room already COMMITTED to, not a freshly re-measured one. A
+   *    migration is not an opportunity to move the link to a different relay:
+   *    the peers agreed on this one, and re-deciding here would mean the two
+   *    sides could pick differently and never meet;
+   *  - the boundary is derived at RECEIPT, against the clock now, exactly as
+   *    the room's first configuration is. It is returned rather than installed
+   *    — only a committed migration installs it.
+   */
+  function renewedConfig(grant: IceGrant) {
+    const sanitized = renewGrantConfig({ iceServers: grant.iceServers, relays: grant.relays });
+    if (!sanitized) return null;
+    return {
+      rtc: chooseRtcConfig(sanitized, relaySelection.selectedRelayId),
+      deadline: relayDeadline(sanitized, Date.now()),
+    };
+  }
+
   function resetRelaySelection() {
     relayMeasureEpoch++; // supersede any in-flight measurement from the previous room
+    // Round requests belong to the room being left, along with its socket and
+    // its credentials. Settled here — with the same discipline the gate's own
+    // waiters get — so nothing can still be awaiting a grant when the next
+    // room's window opens.
+    renewRounds.reset();
     // Every build parked on the room being LEFT is superseded, never carried:
     // its peer, its socket and its credentials all belong to that room. Settled
     // FIRST, and with `live: false`, so nothing is still parked when the next
@@ -1538,6 +1591,9 @@
       deviceId: () => (roomCode ? "" : lanDevice),
       active: () => isCurrentPage(),
     });
+    // The server's half of the renewal round exchange. Registered once on the
+    // client instance, so it survives the `reconnect()` a room switch performs.
+    signaling.onIceGrant((data) => renewRounds.accept(data));
     signaling.onSelfId((id, ip) => {
       selfId = id; selfIP = ip; joinedRoom = true;
       // A welcome means the socket is (re)connected — clear any reconnect state.

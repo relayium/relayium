@@ -1,6 +1,9 @@
 package account
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // Setting keys for the admin-editable stored-transfer limits.
 const (
@@ -101,6 +104,60 @@ func (s *Service) ResolveSettings(ctx context.Context) Settings {
 		DisableCentralFallback: s.settingOr(ctx, SettingDisableCentralFallback, 0) != 0,
 		NodeTrafficDefault:     s.settingOr(ctx, SettingNodeTrafficDefault, s.cfg.NodeTrafficDefault),
 	}
+}
+
+// ResolveSettingsStrict is ResolveSettings with the read errors returned
+// instead of folded into the env/flag defaults.
+//
+// ResolveSettings exists to be unfailing: every one of its callers is answering
+// "what limit applies", and a limit that cannot be read is better served by the
+// deployment's own default than by an error nobody can act on. That is the
+// right trade everywhere it is used today.
+//
+// It is the wrong trade for renewal. There the setting in question is
+// NodeTrafficDefault — the fleet's monthly per-node relay budget — and folding
+// an unreadable value into the env default can REMOVE a cap an administrator
+// configured, which hands a node another hour of relay past a budget it has
+// already spent. So this variant reads the same keys through the same store and
+// reports a failure as one.
+//
+// Deliberately a separate function rather than a flag on ResolveSettings: the
+// existing callers must keep the behaviour they were written against, and a
+// shared body with a policy switch is how one of them quietly acquires the
+// other's.
+func (s *Service) ResolveSettingsStrict(ctx context.Context) (Settings, error) {
+	var firstErr error
+	strict := func(key string, def int64) int64 {
+		v, ok, err := s.store.GetSetting(ctx, key)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("setting %s: %w", key, err)
+			}
+			return def
+		}
+		if !ok {
+			return def
+		}
+		return v
+	}
+	st := Settings{
+		MaxFileSize:            strict(SettingMaxFileSize, s.cfg.MaxFileSize),
+		DailyQuota:             strict(SettingDailyQuota, s.cfg.DailyQuota),
+		DefaultTTL:             strict(SettingDefaultTTL, s.cfg.DefaultTTL),
+		MaxTTL:                 strict(SettingMaxTTL, s.cfg.MaxTTL),
+		DefaultRetention:       strict(SettingDefaultRetention, s.cfg.DefaultRetention),
+		DefaultMaxDownloads:    strict(SettingDefaultMaxDownloads, s.cfg.DefaultMaxDownloads),
+		MaxMaxDownloads:        strict(SettingMaxMaxDownloads, s.cfg.MaxMaxDownloads),
+		AccountGraceDays:       strict(SettingAccountGraceDays, s.cfg.AccountGraceDays),
+		AccountReminderDays:    strict(SettingAccountReminderDays, s.cfg.AccountReminderDays),
+		StorageDiskCap:         strict(SettingStorageDiskCap, s.cfg.StorageDiskCap),
+		DisableCentralFallback: strict(SettingDisableCentralFallback, 0) != 0,
+		NodeTrafficDefault:     strict(SettingNodeTrafficDefault, s.cfg.NodeTrafficDefault),
+	}
+	if firstErr != nil {
+		return Settings{}, firstErr
+	}
+	return st, nil
 }
 
 // ReminderWindowSeconds returns the live pre-purge reminder window

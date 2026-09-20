@@ -12,11 +12,17 @@ import (
 
 // codeEntry is a live pairing code's expiry plus the userID that minted it.
 type codeEntry struct {
-	exp    int64
-	owner  string // userID that owns (and is billed for) this cross-network transfer
-	room   string // opaque per-mint room generation; never persisted or logged
-	opened bool   // first admitted socket observed for this live code
-	paired bool   // first transition to two admitted sockets observed for this live code
+	exp   int64
+	owner string // userID that owns (and is billed for) this cross-network transfer
+	room  string // opaque per-mint room generation; never persisted or logged
+	// tag is this generation's immutable relay-attribution identity: the token
+	// every credential issued for this code is billed under. Drawn in the same
+	// critical section as owner and room so no caller can ever observe a live
+	// code whose billing identity is not settled, and, unlike the digits, it
+	// never recycles. See attrib.go.
+	tag    string
+	opened bool // first admitted socket observed for this live code
+	paired bool // first transition to two admitted sockets observed for this live code
 }
 
 // PairRegistry mints short pairing codes for realtime rendezvous. Codes are
@@ -30,15 +36,24 @@ type PairRegistry struct {
 	now      func() int64
 	draw     func() string
 	drawRoom func() string
+	// attrib is the tag → owner index. Guarded by mu, like codes: see
+	// attribIndex for why it holds no lock of its own. Its entries are NOT
+	// bounded by the code's lifetime — that is the whole point of the split.
+	attrib *attribIndex
+	// issued, when set, is told about every credential issuance. See
+	// SetIssuedObserver; fired outside mu.
+	issued func(tag string, expiry int64)
 }
 
 func NewPairRegistry(ttlSeconds int64, now func() int64) *PairRegistry {
-	return &PairRegistry{codes: make(map[string]codeEntry), ttl: ttlSeconds, now: now, draw: randCode, drawRoom: randRoomGeneration}
+	return &PairRegistry{codes: make(map[string]codeEntry), ttl: ttlSeconds, now: now, draw: randCode, drawRoom: randRoomGeneration, attrib: newAttribIndex()}
 }
 
 // MintFor returns a fresh code not colliding with a live one, bound to owner,
 // plus its unix expiry. Returns ("", 0) if it could not find a free code — see
-// maxMintAttempts; callers must treat that as a failure, not as a valid code.
+// maxMintAttempts — or if this generation could not be given an attribution tag
+// (see attrib.go / maxRelayAttribTags). Callers must treat either as a failure,
+// not as a valid code.
 func (p *PairRegistry) MintFor(owner string) (string, int64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -54,10 +69,147 @@ func (p *PairRegistry) MintFor(owner string) (string, int64) {
 			continue // collide with a still-live code; try again
 		}
 		exp := now + p.ttl
-		p.codes[code] = codeEntry{exp: exp, owner: owner, room: pairRoomForGeneration(code, p.drawRoom())}
+		// The billing identity is settled HERE, in the same critical section
+		// that publishes the code, so nothing can observe a live code whose
+		// attribution is still undecided — and so the owner is read exactly
+		// once, at mint, by everything that will ever bill this generation.
+		//
+		// A refused tag refuses the whole mint. Issuing a code whose credentials
+		// would have to fall back to the recyclable digits is the bug this
+		// change exists to remove, and doing it under mint pressure is the worst
+		// moment to reintroduce it.
+		//
+		// Retained to the code's own expiry and no further. The reporting grace
+		// is bought by the first credential issued under this tag
+		// (NoteIssuedCredential); a tag that never reaches a username can never
+		// be reported, so granting it a grace up front would only make the
+		// index cheaper to fill. See attribEntry.retireAfter.
+		tag, ok := p.attrib.create(owner, exp, now)
+		if !ok {
+			return "", 0
+		}
+		p.codes[code] = codeEntry{exp: exp, owner: owner, room: pairRoomForGeneration(code, p.drawRoom()), tag: tag}
 		return code, exp
 	}
 	return "", 0
+}
+
+// AttribFor resolves a live code to its minting owner AND that generation's
+// immutable attribution tag, in ONE read under ONE lock.
+//
+// The single read is the point, not a convenience. The credential /api/ice
+// issues embeds both, and the digits it was asked about can be minted again for
+// a different account minutes later. Two lookups — "whose code is this" now,
+// "what do I bill it as" a moment later — can straddle that reissue and produce
+// a credential whose owner and whose billing identity belong to two different
+// generations. One read cannot.
+//
+// A code with no tag is impossible for anything MintFor produced; the empty
+// string is reported as not-ok rather than silently issued, so a registry built
+// some other way can never quietly fall back to code-shaped attribution.
+func (p *PairRegistry) AttribFor(code string) (owner, tag string, ok bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	e, found := p.codes[code]
+	if !found || e.exp <= p.now() || e.tag == "" {
+		return "", "", false
+	}
+	return e.owner, e.tag, true
+}
+
+// OwnerForTag resolves an attribution tag to the account that generation is
+// billed to, for a reporter that presents a credential username.
+//
+// known=false means "this server cannot speak to that tag" — it was retired,
+// or the process was restarted, or it was never ours. It does NOT mean forged:
+// see attrib.go for why an unknown tag must stay on the existing accept-on-the
+// -reporter's-word path rather than dropping real bytes.
+func (p *PairRegistry) OwnerForTag(tag string) (string, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.attrib.ownerOf(tag, p.now())
+}
+
+// NoteIssuedCredential records that a credential valid until `expiry` was just
+// issued under tag, extending how long that tag stays RESOLVABLE.
+//
+// Not "for as long as bytes can still be reported": on coturn a report can
+// arrive long after the window, because an existing allocation can outlive its
+// REST credential (see relayAttribGraceSeconds). A report past the window is
+// still billed — to the account its username names — it just cannot be
+// contradicted any more.
+//
+// Forward only, and a no-op for a tag this registry does not hold. Called by
+// the ICE issuer at the moment it actually mints credentials — the retention
+// has to follow issuance rather than the code, because a code that keeps being
+// extended (pre-upload) goes on issuing hour-long credentials long after the
+// five minutes its own TTL would have allowed for.
+func (p *PairRegistry) NoteIssuedCredential(tag string, expiry int64) {
+	p.mu.Lock()
+	p.attrib.noteIssued(tag, expiry, p.now())
+	observe := p.issued
+	p.mu.Unlock()
+	// Outside the lock, and deliberately: the observer is the renewal grant
+	// registry, which takes a lock of its own. Calling it while holding this
+	// one would order the two locks here and the other way round nowhere —
+	// which is a deadlock waiting for the first caller that goes the other
+	// direction.
+	if observe != nil {
+		observe(tag, expiry)
+	}
+}
+
+// RetainTag records an issued credential for RETENTION ONLY: it moves the
+// tag's lookup window and its recorded credential expiry forward exactly as
+// NoteIssuedCredential does, and fires no observer.
+//
+// The distinction is the one thing that keeps renewal authority honest. The
+// issuer stamps an expiry onto credentials BEFORE anything decides whether to
+// publish them, so if that stamping fed the renewal grant, a computation that
+// is about to be discarded — because the grant lapsed while the database was
+// being read — would first extend the very authority the discard depends on.
+// So the issuer records nothing, and the grant calls this only once it has
+// accepted and published a round.
+//
+// Retention is the conservative direction: a tag kept resolvable slightly
+// longer than strictly needed costs one map entry, while one retired early
+// costs a real account's billing.
+func (p *PairRegistry) RetainTag(tag string, expiry int64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.attrib.noteIssued(tag, expiry, p.now())
+}
+
+// IssuedSegmentForTag reports the current continuous credential segment for
+// this generation: the FIRST expiry of the segment and the LATEST, or (0, 0) if
+// nothing is outstanding.
+//
+// It is how a renewal grant learns what it inherited: /api/ice issues to each
+// peer independently and can do so before the two ever meet, so a grant created
+// on the paired admission has to ask rather than assume. (0, 0) means "nothing
+// has been issued", which is not permission to issue — it is the opposite.
+//
+// ONE call under ONE lock, and that is load-bearing rather than tidy. The two
+// values are read together to decide renewal authority, and reading them
+// separately could straddle a segment reset and combine a new anchor with an
+// old latest — a pairing that never existed at any instant.
+func (p *PairRegistry) IssuedSegmentForTag(tag string) (first, latest int64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.attrib.issuedSegment(tag)
+}
+
+// SetIssuedObserver installs a callback fired after every credential issuance,
+// with the attribution tag and the expiry stamped on it.
+//
+// It exists so the renewal layer can learn about credentials issued by
+// /api/ice, which it otherwise could not see: a grant has to know the ACTUAL
+// latest expiry for its generation, including the initial pair that was issued
+// before the two peers ever met. Called once at startup, before any request.
+func (p *PairRegistry) SetIssuedObserver(fn func(tag string, expiry int64)) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.issued = fn
 }
 
 // PairActivity reports which server-authoritative milestones became true for a
@@ -75,18 +227,32 @@ type PairActivity struct {
 // already sees two peers, Opened and Paired are returned together to backfill
 // the missing earlier observation. Unknown and expired codes return no activity.
 func (p *PairRegistry) ObserveAdmittedRoom(room string, peers int) (code string, activity PairActivity, current bool) {
+	code, _, _, activity, current = p.ObserveAdmittedRoomAttrib(room, peers)
+	return code, activity, current
+}
+
+// ObserveAdmittedRoomAttrib is ObserveAdmittedRoom plus this generation's
+// billing identity, read in the SAME critical section as the milestone.
+//
+// The renewal grant is opened from the `Paired` milestone and has to be frozen
+// against the owner and tag that generation was minted with. Looking them up in
+// a second call would reopen exactly the gap the single-read rule closes: these
+// six digits can expire and be minted for a different account between two
+// lookups, and a grant frozen against the wrong one would renew somebody else's
+// credential for the rest of the hour.
+func (p *PairRegistry) ObserveAdmittedRoomAttrib(room string, peers int) (code, owner, tag string, activity PairActivity, current bool) {
 	if peers < 1 {
-		return "", PairActivity{}, false
+		return "", "", "", PairActivity{}, false
 	}
 	code, shaped := codeFromGeneratedPairRoom(room)
 	if !shaped {
-		return "", PairActivity{}, false
+		return "", "", "", PairActivity{}, false
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	e, ok := p.codes[code]
 	if !ok || e.exp <= p.now() || e.room != room {
-		return "", PairActivity{}, false
+		return "", "", "", PairActivity{}, false
 	}
 	if !e.opened {
 		e.opened = true
@@ -97,7 +263,7 @@ func (p *PairRegistry) ObserveAdmittedRoom(room string, peers int) (code string,
 		activity.Paired = true
 	}
 	p.codes[code] = e
-	return code, activity, true
+	return code, e.owner, e.tag, activity, true
 }
 
 // RoomFor resolves a live external six-digit code to this mint's opaque room
@@ -156,6 +322,11 @@ func (p *PairRegistry) ExtendFor(code, owner string, until int64) bool {
 	if until > e.exp {
 		e.exp = until
 		p.codes[code] = e
+		// A code that lives longer goes on issuing credentials for longer, so
+		// its billing identity has to outlive the new deadline too. Forward
+		// only, like the expiry it follows, and without a grace for the same
+		// reason the mint has none: an extension issues nothing by itself.
+		p.attrib.keepUntil(e.tag, until)
 	}
 	return true
 }
@@ -184,6 +355,13 @@ func (p *PairRegistry) RevokeFor(code, owner string, notAfter int64) bool {
 	if !ok || e.owner != owner || e.exp > notAfter {
 		return false
 	}
+	// The DIGITS go; the attribution tag stays. Revoking ends a rendezvous, not
+	// an allocation: a relay holding a credential issued moments earlier can
+	// still be moving bytes, and it will report them for up to the grace after
+	// that credential expires. Dropping the tag here would make those reports
+	// unattributable at exactly the moment the digits become free to hand to
+	// someone else — which is the lost-billing shape this whole mechanism
+	// exists to close. The tag retires on its own clock (see attribIndex).
 	delete(p.codes, code)
 	return true
 }
@@ -217,6 +395,10 @@ func (p *PairRegistry) reap() {
 			delete(p.codes, c)
 		}
 	}
+	// Two clocks on one tick, not one clock for both: a tag outlives its code
+	// by the credential lifetime plus the reporting grace, so it is swept by
+	// its own deadline and never by the code's.
+	p.attrib.sweep(now)
 }
 
 // Run reaps expired codes every interval until ctx is cancelled.

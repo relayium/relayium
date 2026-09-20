@@ -366,6 +366,37 @@ function sanitizeRelays(value: unknown): RelayEntry[] {
   return out;
 }
 
+/**
+ * The credential body of a renewal grant, through the SAME sanitisers
+ * `/api/ice` goes through.
+ *
+ * ## Why this is the only way a grant becomes a configuration
+ *
+ * `relay-renew-v1.md` §2.2 requires a granted body to be in exactly the
+ * `/api/ice` shape, and the reason is this function: a second credential parser
+ * would be a second place to get a hostile body wrong, and the failures that
+ * matter here are the same four `toIceConfig` already documents — `relays: {}`,
+ * `iceServers: [null]`, an entry with `urls: 42`, a pool entry with no
+ * `iceServers`. Each of those threw a `TypeError` out of the classification
+ * path once already, and a throw on the renewal path would abandon an epoch
+ * with a live timer still holding the link's attention.
+ *
+ * Unusable members are dropped and valid siblings survive, exactly as they do
+ * for a room's first configuration. Returns null when the body is not an object
+ * at all — which is a failed epoch, never a success with no relay.
+ */
+export function renewGrantConfig(body: unknown): Pick<IceConfig, "iceServers" | "relays"> | null {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return null;
+  const raw = body as { iceServers?: unknown; relays?: unknown };
+  const iceServers = sanitizeIceServers(raw.iceServers);
+  const relays = sanitizeRelays(raw.relays);
+  // A grant that names no relay anywhere cannot be migrated onto. Reported as
+  // null rather than as an empty configuration, because an empty one applied to
+  // a live relayed transport is a link with no path at all.
+  if (!hasTurnServer(iceServers) && !relays.some((r) => hasTurnServer(r.iceServers))) return null;
+  return { iceServers, relays };
+}
+
 /** `Retry-After`, in ms, when it is a delta-seconds value we are willing to wait. */
 function retryAfterMs(res: Response): number | undefined {
   const raw = res.headers.get("Retry-After");

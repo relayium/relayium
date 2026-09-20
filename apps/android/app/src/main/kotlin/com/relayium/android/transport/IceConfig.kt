@@ -157,6 +157,20 @@ object IceConfig {
      */
     internal fun parse(body: String): Result {
         val root = Json.parseOrNull(body) as? Json.Obj ?: return Result(emptyList(), "")
+        return parse(root)
+    }
+
+    /**
+     * The same reader, over an already-parsed object.
+     *
+     * A renewal's `ice-grant` carries `iceServers` and, optionally, `relays` in
+     * EXACTLY the `/api/ice` shape, and `relay-renew-v1.md` section 2.2 is
+     * explicit that there is no second credential format and no second parser:
+     * the sanitiser that survives a hostile `/api/ice` body handles that one
+     * too. The grant's own `status`, `round` and `rid` are simply keys this
+     * reader does not look at.
+     */
+    internal fun parse(root: Json.Obj): Result {
         val denied = (root["relayDenied"] as? Json.Str)?.value.orEmpty()
         // Missing, null or non-array is an absent top level, NOT an absent
         // answer: the pool below may still carry the credential this room was

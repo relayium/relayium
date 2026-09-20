@@ -537,7 +537,15 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
                                      _ authenticationGeneration: Int,
                                      _ receiveDirectory: URL,
                                      _ admission: LinkAdmission,
-                                     _ initialSignal: JSONValue?) -> LinkSessionAssembly
+                                     _ initialSignal: JSONValue?,
+                                     /// The room's renewal seam, handed in at
+                                     /// COMPOSITION rather than installed after.
+                                     /// `LinkSessionRuntime.publish` is what
+                                     /// fires `published`, and a seam attached
+                                     /// afterwards would be attached after the
+                                     /// only call it exists to receive.
+                                     _ renewal: LinkRenewalSeam?)
+    -> LinkSessionAssembly
 
     private var session: LinkRoomSession!
 
@@ -716,7 +724,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// The real composition, and the only place a Workspace link is built.
     static let liveAssembly: Assemble = {
         signaling, peerId, role, iceServers, relayOnly, authenticationGeneration,
-        receiveDirectory, admission, initialSignal in
+        receiveDirectory, admission, initialSignal, renewal in
         LinkSessionFactory.make(signaling: signaling,
                                 peerId: peerId,
                                 role: role,
@@ -730,7 +738,8 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
                                 authenticationGeneration: authenticationGeneration,
                                 receiveDirectory: receiveDirectory,
                                 admission: admission,
-                                initialSignal: initialSignal)
+                                initialSignal: initialSignal,
+                                renewal: renewal)
     }
 
     init(capabilities: PeerCapabilityRegistry,
@@ -900,8 +909,8 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
             // relays. `applyRelayChoice` replaces this the moment the two peers
             // agree on one relay.
             let resolved = RelaySelection.resolve(ice, chosen: nil)
-            roomICE = RoomICE(config: ice,
-                              servers: resolved.servers, relayOnly: resolved.relayOnly)
+            roomICE = RoomICE(config: ice, servers: resolved.servers,
+                              relayOnly: resolved.relayOnly, chosenRelayID: nil)
         } else {
             roomICE = nil
         }
@@ -929,11 +938,25 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         let config: ICEConfig
         let servers: [ICEServerConfig]
         let relayOnly: Bool
+        /// The relay the two peers converged on, or nil before they had.
+        ///
+        /// Kept because a RENEWAL has to resolve a freshly issued pool the same
+        /// way this one was resolved. Re-running the choice against new
+        /// credentials would let a migration land on a different relay from the
+        /// one the peer is still using — two hops, and roughly twice the
+        /// metered bandwidth, for a link that had already agreed.
+        let chosenRelayID: String?
     }
     /// Held for the whole room rather than per attempt, which is what makes a
     /// REPLACEMENT transport reuse the relay the first one converged on:
     /// `buildAssembly` reads this, and a rebuild goes through the same path.
-    private var roomICE: RoomICE?
+    private var roomICE: RoomICE? {
+        // Published for the ONE reader that is not on the main actor: a
+        // `link:§8` rebuild, built on the recovery coordinator's thread. Every
+        // assignment goes through here — the first resolution, the relay
+        // choice, and a renewal commit — so the box can never lag the room.
+        didSet { renewICEBox.set((roomICE?.servers ?? []).map(rtcServer)) }
+    }
 
     /// Whether an authenticated link has published and has not ended.
     private var holdsLiveLink: Bool { session.isPublished }
@@ -1106,6 +1129,41 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         /// The relayed link's warning and deadline. Cancelled only when the room
         /// itself ends.
         var relayTimers: [LinkRecoveryTimer] = []
+        /// The INDEPENDENT `lastUserDataAt` clock this room's renewal decisions
+        /// are made from.
+        ///
+        /// Per room, and never the existing surface-idle flag: that one is
+        /// refreshed by the window being in front, so deriving a renewal from
+        /// it would let a link nobody is using renew its credential forever —
+        /// which is exactly what `relay-renew/1` §0.3 says renewal is not.
+        let renewActivity = RelayRenewActivityClock()
+        /// The live renewal controller for this room's link, if one has been
+        /// attached. Cleared with the room, and with every link that ends.
+        var renewController: RelayRenewController?
+        /// The authentication the current controller belongs to.
+        ///
+        /// Kept so a `link:§8` rebuild can be told apart from a NEW link. The
+        /// two look alike from here — both arrive as a published transport for
+        /// the same peer — and treating a rebuild as new would construct a
+        /// second controller, reset the epoch counter to zero, and make an
+        /// aborted epoch's signed messages replayable into the next attempt.
+        /// That is precisely what `relay-renew/1` §1 forbids, and it is why
+        /// the counter is documented as surviving a rebuild.
+        var renewIdentity: LinkIdentity?
+        /// The sink lane events report user data to, from any thread. Created
+        /// with the room so it exists before any link does.
+        let renewSink: RelayRenewUserDataSink
+        /// Whether the renewal margin of the CURRENT boundary has opened.
+        ///
+        /// Remembered by the room, because the margin timer is armed when the
+        /// room's credential arrives — which is before anybody has opened or
+        /// authenticated a link, and so routinely before a controller exists to
+        /// be told. A timer that fired into `renewController == nil` and was
+        /// forgotten would leave the controller built later believing its
+        /// margin had never opened, and it would then refuse every user-data
+        /// re-evaluation for the rest of the link. Reset only when a new
+        /// boundary is armed.
+        var renewMarginOpen = false
         /// Peers this room has already decided about, so a second roster frame
         /// cannot start a second capability window or a second fallback.
         var decided: Set<String> = []
@@ -1132,6 +1190,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
             self.legacyRole = legacyRole
             self.signaling = signaling
             self.capabilities = capabilities
+            self.renewSink = RelayRenewUserDataSink(clock: renewActivity)
         }
 
         /// Main-actor isolated because `LinkCapabilityAnnouncer` is, and the
@@ -1144,6 +1203,14 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
             capsTimers.removeAll()
             relayTimers.forEach { $0.cancel() }
             relayTimers.removeAll()
+            // Terminal and idempotent. Every renewal timer, the demux handler
+            // and the transport's epoch flag go with it, so no late
+            // `setConfiguration` completion, retransmit or grant can reach a
+            // room that is over.
+            renewController?.close()
+            renewController = nil
+            renewIdentity = nil
+            renewSink.attach(nil)
             capsSubscription?.cancel()
             capsSubscription = nil
             announcer?.stop()
@@ -1173,7 +1240,10 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// **The credential's lifetime.** A relayed link is bounded by the TURN REST
     /// expiry `/api/ice` issued — see `RelayDeadline` — and this arms both the
     /// warning and the terminal deadline from it. Without that a relayed link
-    /// does not end when its allocation lapses; it silently stops moving bytes.
+    /// would run on past the grant it was issued under, on an allocation that
+    /// may persist for an unmeasured time and then stop moving bytes with
+    /// nothing to tell the user why — see `RelayDeadline` for what the expiry
+    /// does and does not do to an existing allocation.
     ///
     /// ## The three outcomes, and none of them is a guess
     ///
@@ -1424,8 +1494,8 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // capped, and stays relay-only whenever anything in it relays.
         // `applyRelayChoice` replaces this the moment the two peers agree.
         let resolved = RelaySelection.resolve(config, chosen: nil)
-        roomICE = RoomICE(config: config,
-                          servers: resolved.servers, relayOnly: resolved.relayOnly)
+        roomICE = RoomICE(config: config, servers: resolved.servers,
+                          relayOnly: resolved.relayOnly, chosenRelayID: nil)
         armRelayDeadline(config)
 
         guard !config.relays.isEmpty else {
@@ -1651,8 +1721,8 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // recognise the room it wakes up in — see `relayGraceToken`.
         room.relayGraceToken &+= 1
         let resolved = RelaySelection.resolve(config, chosen: nil)
-        roomICE = RoomICE(config: config,
-                          servers: resolved.servers, relayOnly: resolved.relayOnly)
+        roomICE = RoomICE(config: config, servers: resolved.servers,
+                          relayOnly: resolved.relayOnly, chosenRelayID: nil)
         // A peer that is STILL here gets its own bounded grace rather than an
         // indefinite hold. A gate can be open on one peer's elapsed deadline
         // while another sits in the room having sent nothing, and after this
@@ -1704,8 +1774,8 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         room.relayGateOpen = true
         room.relayGracePeer = nil
         let resolved = RelaySelection.resolve(config, chosen: chosen?.id)
-        roomICE = RoomICE(config: config,
-                          servers: resolved.servers, relayOnly: resolved.relayOnly)
+        roomICE = RoomICE(config: config, servers: resolved.servers,
+                          relayOnly: resolved.relayOnly, chosenRelayID: chosen?.id)
         logRelayChoice(chosen, room: room, config: config)
         // Inbound first: an offer already claimed and buffered by the router is
         // older than anything this side is about to ask for, and the room owes
@@ -2099,6 +2169,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         peerLabel = nil
         relayDeadline = nil
         relayExpiringSoon = false
+        renewGrantDeadline = nil
         let armed = armedBatches
         armedBatches = []
         // Recorded BEFORE the legacy session starts, so the pane that draws that
@@ -2162,6 +2233,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         peerLabel = nil
         relayDeadline = nil
         relayExpiringSoon = false
+        renewGrantDeadline = nil
         // Published LAST, after every piece of room state has been cleared, so a
         // surface that redraws on this flag cannot catch the room half torn
         // down — it is the one edge the connect screen switches on.
@@ -2296,6 +2368,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         room.signaling.close()
         relayDeadline = nil
         relayExpiringSoon = false
+        renewGrantDeadline = nil
     }
 
     // MARK: - the relayed link's bound
@@ -2307,10 +2380,38 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// clock would move the boundary under a live link. Nothing is armed when
     /// nothing relays, which is every same-network room and a STUN-only code.
     private func armRelayDeadline(_ config: ICEConfig) {
-        guard let deadline = RelayiumKit.relayDeadline(for: config, now: now()) else { return }
+        // ONE reading, used as both the derivation clock and the margin's
+        // anchor. Two would let the boundary be derived against one instant and
+        // the margin measured from another, which is the whole defect
+        // `relayRenewAttemptAt` documents.
+        let armedAt = now()
+        guard let deadline = RelayiumKit.relayDeadline(for: config, now: armedAt) else { return }
         relayDeadline = deadline
         relayExpiringSoon = false
+        renewGrantDeadline = deadline.deadlineAt
+        // A new boundary has a new margin, and it has not opened yet.
+        pairing?.renewMarginOpen = false
         let mine = generation
+        // The renewal margin for THIS deadline. Scheduled beside the warning
+        // and the terminal wake-up because it belongs to the same credential
+        // and dies with the same room — and consulted once, which is what keeps
+        // the attempt bounded. See `relayRenewAttemptAt`.
+        if let attemptAt = relayRenewAttemptAt(deadline, armedAt: armedAt) {
+            let renewIn = max(0, attemptAt.timeIntervalSince(now()))
+            pairing?.relayTimers.append(scheduler.schedule(after: renewIn) { [weak self] in
+                Task { @MainActor in
+                    guard let self, self.generation == mine, let room = self.pairing else {
+                        return
+                    }
+                    // Recorded FIRST, whether or not a controller exists yet —
+                    // see `renewMarginOpen`. The instant itself was fixed when
+                    // the boundary was armed; nothing here recomputes it from
+                    // the time that happens to remain.
+                    room.renewMarginOpen = true
+                    room.renewController?.marginOpened()
+                }
+            })
+        }
         let warnIn = max(0, deadline.warnAt.timeIntervalSince(now()))
         let endIn = max(0, deadline.deadlineAt.timeIntervalSince(now()))
         pairing?.relayTimers.append(scheduler.schedule(after: warnIn) { [weak self] in
@@ -2322,12 +2423,262 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         pairing?.relayTimers.append(scheduler.schedule(after: endIn) { [weak self] in
             Task { @MainActor in
                 guard let self, self.generation == mine else { return }
-                // Terminal BEFORE the credential dies rather than after. A link
-                // left running past it does not fail — it stops moving bytes,
-                // which is the one outcome a user cannot diagnose.
+                // Terminal at the point the grant ends. The allocation is NOT
+                // known to end here — it can outlive its REST credential — but
+                // a link left running past it is relaying without a grant, and
+                // when that allocation does go it goes silently, which is the
+                // one outcome a user cannot diagnose.
                 self.leave(ending: .relayExpired)
             }
         })
+    }
+
+    // MARK: - active-transfer renewal (`relay-renew/1`)
+
+    /// The terminal deadline currently armed, readable from ANY thread.
+    ///
+    /// A locked box beside the `@Published` property rather than a second
+    /// source of truth: `armRelayDeadline` writes both in the same step. It
+    /// exists because `RelayRenewEngine` asks "does this side still hold a live
+    /// grant?" from its own serial queue, synchronously, while deciding whether
+    /// to consent to a peer's `prepare` — and a closure on that queue must not
+    /// read main-actor state. The closure captures THIS OBJECT, never `self`.
+    private let renewDeadlineBox = LockedValue<Date?>(nil)
+    private var renewGrantDeadline: Date? {
+        get { renewDeadlineBox.get() }
+        set { renewDeadlineBox.set(newValue) }
+    }
+
+    /// The ICE servers a `link:§8` rebuild must be built with RIGHT NOW.
+    ///
+    /// The replacement factory is composed once, when the link is assembled,
+    /// and used minutes or hours later from the recovery coordinator's thread.
+    /// Handing it the servers of that moment would rebuild a renewed link on
+    /// the credential it started with — which has since lapsed, so the rebuild
+    /// would gather no relay candidate and fail looking like a network problem.
+    /// It reads this box instead, and a commit refreshes it (reconcile-2 R7).
+    private let renewICEBox = LockedValue<[RTCIceServer]>([])
+
+    /// The renewal seam this room hands to every link it assembles.
+    ///
+    /// Built once per room and captured by the session factory, so a link that
+    /// publishes minutes later still reports to the room that admitted it. The
+    /// three callbacks are deliberately isolated differently — see
+    /// `LinkRenewalSeam` — and the split is visible here rather than hidden in
+    /// a conformance:
+    ///
+    ///  - `published` and `ended` hop to the main actor, because they touch
+    ///    this model's room state.
+    ///  - `userData` does NOT hop. It goes straight to the room's sink, which
+    ///    is thread-safe, because it runs on the transfer's hot path and a hop
+    ///    per progress notice would be both slower and out of order with the
+    ///    timestamp it is moving.
+    private func renewalSeam(for room: PairingRoom, generation mine: Int) -> LinkRenewalSeam {
+        LinkRenewalSeam(
+            published: { [weak self] transport, lanes, identity in
+                Task { @MainActor in
+                    self?.attachRenewal(transport: transport, lanes: lanes,
+                                        identity: identity, generation: mine)
+                }
+            },
+            userData: { [weak room] kind in room?.renewSink.record(kind) },
+            ended: { [weak self] identity in
+                Task { @MainActor in
+                    self?.detachRenewal(identity: identity, generation: mine)
+                }
+            },
+            // The box, not `self`: this is called off the main actor.
+            currentICEServers: { [renewICEBox] in renewICEBox.get() })
+    }
+
+    /// Take a published transport over for renewal — either by starting a
+    /// controller for a new authentication, or by handing an existing one its
+    /// rebuilt transport.
+    ///
+    /// ## Why the two cases must not be collapsed
+    ///
+    /// A `link:§8` rebuild and a brand-new link both arrive here as "a
+    /// transport published for this peer". They are not the same thing. A
+    /// rebuild carries the SAME authentication — the same `LinkCodecs`, the
+    /// same `resumeAuthKey`, the same role, the same SAS — and the renewal
+    /// epoch counter is defined to survive it, precisely so an aborted epoch's
+    /// signed messages can never be replayed into a later attempt. Building a
+    /// second controller would reset that counter to zero and reopen exactly
+    /// that replay. So the authentication is compared, and only a genuinely
+    /// different one gets a new controller.
+    ///
+    /// ## Why a same-authentication rebuild still re-pins
+    ///
+    /// The connection is new even though the authentication is not, so the
+    /// fingerprint baseline is taken again from the new transport and any epoch
+    /// that belonged to the dead connection is voided with the old deadline
+    /// intact. `RelayRenewController.transportRebuilt` does both.
+    ///
+    /// Returns without doing anything for a room with no relayed bound at all:
+    /// a same-network link has no credential to renew, and renewal makes no LAN
+    /// or backend call of its own.
+    func attachRenewal(transport: RelayRenewLinkTransport,
+                       lanes: RelayRenewLanes,
+                       identity: LinkIdentity,
+                       generation mine: Int) {
+        guard generation == mine, let room = pairing, let signaling = attached else { return }
+        guard relayDeadline != nil else { return }
+
+        if let controller = room.renewController,
+           let held = room.renewIdentity,
+           isSameAuthentication(held, identity) {
+            // The SAME link on a new transport. One controller, one epoch
+            // counter, one round.
+            room.renewIdentity = identity
+            controller.transportRebuilt(transport, lanes: lanes)
+            return
+        }
+
+        // A different authentication: whatever the old controller was for is
+        // over, so it is closed rather than left holding timers on a transport
+        // nobody owns.
+        room.renewController?.close()
+
+        // ACTOR-SAFE SNAPSHOTS. Every closure below runs on the controller's
+        // serial queue, not on the main actor, so none of them may read this
+        // model's mutable state. Each value it needs is captured here, on the
+        // actor, as an immutable — or is a thread-safe object in its own right.
+        //
+        //  - The relay the two peers converged on cannot change while this link
+        //    lives: the relay gate settles it before a link is assembled, and a
+        //    commit deliberately preserves it.
+        //  - The clock is the model's injected one, so a test that moves time
+        //    moves the activity window and the grant check together.
+        //  - The capability registry is documented thread-safe and is asked
+        //    live, because the peer's hello can land after publication.
+        let chosenRelayID = roomICE?.chosenRelayID
+        let clock = now
+        let capabilities = room.capabilities
+        let peerId = identity.peerId
+        let deadlineBox = renewDeadlineBox
+
+        let controller = RelayRenewController(
+            selfId: signaling.selfId ?? "",
+            peerId: identity.peerId,
+            role: identity.role,
+            // The link's EXISTING key. Renewal introduces no new secret and no
+            // new key agreement.
+            resumeAuthKey: identity.codecs.resumeAuthKey,
+            transport: transport,
+            lanes: lanes,
+            rounds: signaling,
+            scheduler: scheduler,
+            activity: room.renewActivity,
+            resolveServers: { config in
+                // The SAME resolution the link was built with, against the
+                // relay the two peers already converged on.
+                RelaySelection.resolve(config, chosen: chosenRelayID).servers.map(rtcServer)
+            },
+            grantIsLive: {
+                guard let deadline = deadlineBox.get() else { return false }
+                return deadline > clock()
+            },
+            peerAnnouncedRenewal: {
+                capabilities.supports(peerId, RELAY_RENEW_CAPABILITY)
+            },
+            now: { clock().timeIntervalSince1970 },
+            onCommit: { [weak self] round, config in
+                Task { @MainActor in
+                    self?.commitRenewal(round: round, config: config, generation: mine)
+                }
+            },
+            onRecommit: { round in
+                // nonlocalized: an os_log diagnostic, never shown to a user.
+                Self.relayLog.notice("link repaired round \(round, privacy: .public); deadline unchanged")
+            })
+        room.renewController = controller
+        room.renewIdentity = identity
+        room.renewSink.attach(controller)
+        // The margin may ALREADY be open: its timer is armed with the room's
+        // credential, long before a link exists. Tell the new controller now,
+        // or it would wait for a wake-up that has already happened.
+        if room.renewMarginOpen { controller.marginOpened() }
+
+        // The grant is a ROOM-level reply, not a peer signal, so it is routed
+        // from the socket rather than through the per-connection slot.
+        signaling.onICEGrant = { [weak controller] data in
+            guard let grant = parsedRelayRenewGrant(data) else { return }
+            controller?.receive(grant: grant)
+        }
+        transport.setRenewalEpochInFlight(false)
+    }
+
+    /// One authenticated link ended. Its controller goes with it.
+    ///
+    /// Identity-checked for the same reason `attachRenewal` is: a late `ended`
+    /// for a link that has already been replaced must not close the controller
+    /// the CURRENT link is using.
+    func detachRenewal(identity: LinkIdentity, generation mine: Int) {
+        guard generation == mine, let room = pairing else { return }
+        guard let held = room.renewIdentity, isSameAuthentication(held, identity) else { return }
+        room.renewSink.attach(nil)
+        room.renewController?.close()
+        room.renewController = nil
+        room.renewIdentity = nil
+        attached?.onICEGrant = nil
+    }
+
+    /// Whether two identities are the same AUTHENTICATION, as opposed to two
+    /// links to the same peer.
+    ///
+    /// The `LinkCodecs` object identity is the load-bearing comparison, and it
+    /// is the one `LinkIdentity` itself documents: a rebuild publishes a new
+    /// transport carrying the same keys, SAS and codecs, and that one object is
+    /// what a test can point at and say "still the same one". The peer id and
+    /// the authentication generation are compared too, so a later link whose
+    /// six displayed digits happen to collide cannot be mistaken for this one.
+    private func isSameAuthentication(_ a: LinkIdentity, _ b: LinkIdentity) -> Bool {
+        a.peerId == b.peerId
+            && a.authenticationGeneration == b.authenticationGeneration
+            && a.codecs === b.codecs
+    }
+
+    /// The renewal committed (`relay-renew/1` §6.5): this side observed the
+    /// selected local candidate belongs to the new ICE generation, and the peer
+    /// acknowledged this side's own fresh nonce afterwards.
+    ///
+    /// This is the ONLY path that moves a relayed link's deadline, and the new
+    /// one is derived from the configuration that round ACTUALLY issued —
+    /// never from the old one extended, and never from the mere fact that a
+    /// reply arrived. The old timers are cancelled first so the credential that
+    /// has been replaced cannot still end the link it no longer bounds.
+    ///
+    /// Everything else about the link is untouched: same SAS, same consent,
+    /// same keys, same AEAD sequences, same files, same conversation.
+    private func commitRenewal(round: UInt32, config: ICEConfig, generation mine: Int) {
+        guard generation == mine, let room = pairing else { return }
+        // A grant that would move the boundary EARLIER, or not at all, is
+        // refused (spec §7.2): retiring a live allocation in favour of a
+        // shorter-lived one is strictly worse than doing nothing, and it is the
+        // one case where renewal would SHORTEN a link. The old deadline stands
+        // and its timers are left exactly as they are.
+        guard let fresh = RelayiumKit.relayDeadline(for: config, now: now()),
+              relayRenewAdvancesDeadline(fresh, beyond: relayDeadline) else {
+            // nonlocalized: an os_log diagnostic, never shown to a user.
+            Self.relayLog.notice("link refused a renewal grant that would not extend it")
+            return
+        }
+        room.relayTimers.forEach { $0.cancel() }
+        room.relayTimers.removeAll()
+        // Re-resolve against the relay this link converged on, so the servers
+        // the room reports and a later `link:§8` rebuild uses are the renewed
+        // ones rather than the credentials that just lapsed.
+        let resolved = RelaySelection.resolve(config, chosen: roomICE?.chosenRelayID)
+        roomICE = RoomICE(config: config, servers: resolved.servers,
+                          relayOnly: resolved.relayOnly,
+                          chosenRelayID: roomICE?.chosenRelayID)
+        // Re-runs the existing derivation and arms the warning, the terminal
+        // wake-up and the next renewal margin from the new credential. A
+        // configuration that states no relay expiry arms nothing, which is the
+        // same answer it has always given.
+        armRelayDeadline(config)
+        // nonlocalized: an os_log diagnostic, never shown to a user.
+        Self.relayLog.notice("link renewed its relay credential at round \(round, privacy: .public)")
     }
 
     // MARK: - ICE
@@ -2525,6 +2876,10 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // hears nothing, and reaches the same truthful `establishmentFailed` its
         // own deadlines would have produced on a dead room.
         let signaling = attached ?? LinkWorkspaceModel.detachedSignaling()
+        // The room's renewal seam travels with the composition. Nil for a
+        // same-network room, which has no relayed bound to renew and must make
+        // no backend call of its own.
+        let renewal = pairing.map { renewalSeam(for: $0, generation: mine) }
         let assembly = assemble(signaling,
                                 peerId,
                                 role,
@@ -2533,7 +2888,8 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
                                 authenticationGeneration,
                                 receiveDirectory(),
                                 admission,
-                                initialSignal)
+                                initialSignal,
+                                renewal)
 
         attemptBinding = assembly.attempt
         textModel = assembly.attempt.model

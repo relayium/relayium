@@ -224,7 +224,7 @@ final class TransferSurfaceReleaseTests: XCTestCase {
             legacyFallback: .terminateUnsupported,
             scheduler: scheduler,
             assemble: { signaling, peerId, role, servers, relayOnly, generation,
-                        directory, admission, signal in
+                        directory, admission, signal, _ in
                 LinkSessionFactory.make(
                     signaling: signaling, peerId: peerId, role: role, iceServers: servers,
                     iceTransportPolicy: relayOnly ? .relay : .all,

@@ -332,7 +332,7 @@ final class LinkPairingRoomTests: XCTestCase {
             relayMeasure: relayMeasure,
             relayChoiceDeadline: relayChoiceDeadline,
             assemble: { signaling, peerId, role, servers, relayOnly, generation,
-                        directory, admission, signal in
+                        directory, admission, signal, _ in
                 let transport = PairingTransport()
                 box?.transports.append(transport)
                 box?.relayOnly.append(relayOnly)
@@ -435,7 +435,7 @@ final class LinkPairingRoomTests: XCTestCase {
                 channel.fireOpen()
                 return socket
             },
-            assemble: { _, _, _, _, _, _, _, _, _ in
+            assemble: { _, _, _, _, _, _, _, _, _, _ in
                 XCTFail("nothing may be assembled without a configuration")
                 fatalError()
             })
@@ -1369,7 +1369,7 @@ final class LinkPairingRoomTests: XCTestCase {
             },
             // NO `legacyFallback:` argument. Adding one here would defeat the test.
             scheduler: scheduler,
-            assemble: { _, _, _, _, _, _, _, _, _ in
+            assemble: { _, _, _, _, _, _, _, _, _, _ in
                 XCTFail("a stripped room must not assemble a link")
                 fatalError()
             })

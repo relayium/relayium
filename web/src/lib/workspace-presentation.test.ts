@@ -246,12 +246,18 @@ describe("unified mixed peer workspace presentation", () => {
     // parameter, a stored setting or an exported setter here would be a runtime
     // switch over a protocol scope.
     expect(caps).not.toMatch(/localStorage|location\.|searchParams|setAdvertised/);
-    // One expression decides it, and both the roster hello and the SDP
-    // confirmation are derived from that one expression. Asymmetry here is the
-    // failure mode: advertising a capability we then refuse to route (or the
-    // reverse) strands a peer that believed us.
-    expect(caps.match(/CAP_PREUPLOAD\]/g)).toHaveLength(1);
-    expect(caps).toContain("return linkRoomActive() ? [CAP_LINK, CAP_PREUPLOAD] : [];");
+    // One expression still decides it, and it now has two steps because
+    // `relay-renew/1` is scoped by its own predicate. Both are pinned, so a
+    // future edit cannot add a capability to one path and forget the other —
+    // which would advertise something in a LAN room and withhold it in a code
+    // room, or the reverse.
+    expect(caps).toContain("if (!linkRoomActive()) return [];");
+    expect(caps).toContain(
+      "return renewRoomActive() ? [CAP_LINK, CAP_PREUPLOAD, CAP_RENEW] : [CAP_LINK, CAP_PREUPLOAD];",
+    );
+    // …and the renewal scope reads the SAME link predicate, so a narrowing of
+    // link/1 can never leave renewal announced on its own.
+    expect(caps).toMatch(/export function renewRoomActive\(\): boolean \{\s*return linkRoomActive\(\);/);
     // …and the withdrawn lane is not in it. `text/1` is still a NAMED constant —
     // a native peer announces it and a fixture has to be able to say so — but
     // this build must never put it in its own hello, because the transport it

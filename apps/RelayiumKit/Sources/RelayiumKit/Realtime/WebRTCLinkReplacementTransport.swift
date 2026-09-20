@@ -230,6 +230,23 @@ public final class WebRTCLinkReplacementTransport: NSObject {
     private let now: () -> TimeInterval
 
     private let queue: LinkTransportQueue
+
+    // MARK: - renewal (`relay-renew/1`), all guarded by `queue`
+    //
+    // A rebuilt transport is a NEW PeerConnection carrying the SAME
+    // authentication, so renewal carries over with it: the epoch counter and
+    // the round survive (they belong to the link), and the pin baseline does
+    // not (it belongs to the connection). These are the same five seams
+    // `WebRTCLinkTransport` exposes, for the same reasons, so one controller
+    // can follow one authenticated link across a `link:§8` rebuild.
+
+    private let renewalPolicy: RTCIceTransportPolicy
+    private var _renewalBaselinePin: RelayRenewSDPPin?
+    private let renewalPinLock = NSLock()
+    private var renewalEpochInFlight = false
+
+    /// The controller's subscription. Written and read ONLY on `queue`.
+    private var renewalInputs: RelayRenewTransportInputs?
     /// Told its identity already exists, which is what retires the key-reveal
     /// window. Shared with `WebRTCLinkTransport`.
     private let clock: LinkDeadlineClock
@@ -307,6 +324,7 @@ public final class WebRTCLinkReplacementTransport: NSObject {
         // The identity goes in at construction, so this transport has no way to
         // produce one and the barrier is waiting on the lanes alone.
         self.establishment = LinkEstablishment(resuming: identity, capture: capture)
+        self.renewalPolicy = iceTransportPolicy
         self.now = now
         let queue = LinkTransportQueue(label: "im.relayium.WebRTCLinkReplacementTransport")
         self.queue = queue
@@ -479,6 +497,15 @@ public final class WebRTCLinkReplacementTransport: NSObject {
         // a candidate for a rebuild that is out of time only asks a peer that
         // has given up to keep gathering.
         guard !expiredLocked(at: now()) else { return }
+        // A renewal epoch owns this connection's ICE: its candidates travel
+        // signed, and must not ALSO go out on the rebuild's own resume-signed
+        // path, where they carry no epoch.
+        if renewalEpochInFlight {
+            renewalInputs?.localCandidate(candidate.sdp,
+                                          candidate.sdpMid,
+                                          UInt32(exactly: candidate.sdpMLineIndex))
+            return
+        }
         switch localCandidates.admit(candidate) {
         case .send:
             sendCandidateLocked(candidate)
@@ -500,6 +527,17 @@ public final class WebRTCLinkReplacementTransport: NSObject {
 
     private func handleLocked(from: String, signal: JSONValue) {
         guard !closed else { return }
+        // Claimed by shape before `policy.plan` runs, for the reason spec §3.1
+        // gives and which applies here too: this transport's filter is by
+        // generation, so a renewal envelope riding `link` is also its business
+        // as far as that filter is concerned. A malformed one is claimed and
+        // dropped rather than handed on.
+        if isRelayRenewEnvelope(signal), from == peerId {
+            if let envelope = parsedRelayRenewEnvelope(signal) {
+                renewalInputs?.signal(envelope)
+            }
+            return
+        }
         // The plan decides whether this signal is this rebuild's business AT ALL
         // — which includes verifying its tag — and it is therefore computed
         // before anything else happens. Arming ahead of that filter would let a
@@ -579,6 +617,12 @@ public final class WebRTCLinkReplacementTransport: NSObject {
                 // replaces negotiated. Parsed first and stored second:
                 // `callback` is this class's one leaf, and the rule that makes
                 // it a leaf is that nothing runs while it is held.
+                // Re-pinned from THIS connection's applied description: a
+                // rebuild is a new DTLS peer, so the baseline an epoch >= 1 is
+                // held against has to be the new one.
+                self.renewalPinLock.lock()
+                self._renewalBaselinePin = relayRenewPin(sdp: description.sdp)
+                self.renewalPinLock.unlock()
                 let ceiling = linkNegotiatedMaxMessageBytes(remoteSDP: description.sdp)
                 self.callback { self._negotiatedMaxMessageBytes = ceiling }
                 // The peer answered or offered, under this link's own key: the
@@ -765,6 +809,173 @@ public final class WebRTCLinkReplacementTransport: NSObject {
         queue.sync { closed }
     }
 
+    // MARK: - renewal operations (spec relay-renew/1)
+    //
+    // Structurally identical to `WebRTCLinkTransport`'s, and deliberately so:
+    // one `RelayRenewController` follows one authenticated link across a
+    // `link:§8` rebuild, and it can only do that if both connections answer
+    // the same five questions the same way.
+
+    /// Subscribe or unsubscribe the renewal controller.
+    ///
+    /// Stored on `queue`, which is also where every one of the three inputs is
+    /// delivered from — so an install cannot race a delivery and, once an
+    /// uninstall has run, nothing later reaches the old subscriber. Teardown
+    /// clears it too, so a closed transport holds no path back into a
+    /// controller.
+    public func installRenewalInputs(_ inputs: RelayRenewTransportInputs?) {
+        queue.nowOrLater { [weak self] in
+            guard let self else { return }
+            self.renewalInputs = self.closed ? nil : inputs
+        }
+    }
+
+    public var renewalBaselinePin: RelayRenewSDPPin? {
+        renewalPinLock.lock(); defer { renewalPinLock.unlock() }
+        return _renewalBaselinePin
+    }
+
+    public func setRenewalEpochInFlight(_ inFlight: Bool) {
+        queue.nowOrLater { [weak self] in self?.renewalEpochInFlight = inFlight }
+    }
+
+    /// A no-op here, and that is a finding rather than an omission.
+    ///
+    /// On the initial transport this flag turns off a real hazard: that
+    /// connection accepts UNSIGNED `link`-generation SDP, so once renewal has
+    /// authenticated, the unsigned path has to be closed. A rebuild has no such
+    /// path — `LinkResumePolicy.plan` returns actions only for the `resume`
+    /// generation and only after `resumeSignalIsAuthentic`, so there is no
+    /// unsigned description for this connection to refuse. Implemented as an
+    /// explicit no-op rather than left off the type, so the protocol stays one
+    /// shape and the reason is written down where somebody would look for it.
+    public func noteRenewalAuthenticated() {}
+
+    public func sendRenewalSignal(_ signal: JSONValue) {
+        queue.nowOrLater { [weak self] in
+            guard let self, !self.closed else { return }
+            self.sendLocked(signal)
+        }
+    }
+
+    public func renewalApplyConfiguration(_ servers: [RTCIceServer],
+                                          completion: @escaping (Bool) -> Void) {
+        queue.nowOrLater { [weak self] in
+            guard let self, !self.closed, let pc = self.pc else {
+                completion(false)
+                return
+            }
+            let config = RTCConfiguration()
+            config.iceServers = servers
+            config.sdpSemantics = .unifiedPlan
+            // Restated from what this rebuild was built with, never re-decided.
+            config.iceTransportPolicy = self.renewalPolicy
+            completion(pc.setConfiguration(config))
+        }
+    }
+
+    public func renewalCreateOffer(completion: @escaping (String?) -> Void) {
+        queue.nowOrLater { [weak self] in
+            guard let self, !self.closed, let pc = self.pc else {
+                completion(nil)
+                return
+            }
+            pc.restartIce()
+            let constraints = RTCMediaConstraints(mandatoryConstraints: nil,
+                                                  optionalConstraints: nil)
+            pc.offer(for: constraints) { [weak self] sdp, error in
+                guard let self else {
+                    completion(nil)
+                    return
+                }
+                self.queue.later {
+                    guard !self.closed, let sdp, error == nil else {
+                        completion(nil)
+                        return
+                    }
+                    self.setRenewalLocalLocked(sdp, completion: completion)
+                }
+            }
+        }
+    }
+
+    public func renewalCreateAnswer(completion: @escaping (String?) -> Void) {
+        queue.nowOrLater { [weak self] in
+            guard let self, !self.closed, let pc = self.pc else {
+                completion(nil)
+                return
+            }
+            let constraints = RTCMediaConstraints(mandatoryConstraints: nil,
+                                                  optionalConstraints: nil)
+            pc.answer(for: constraints) { [weak self] sdp, error in
+                guard let self else {
+                    completion(nil)
+                    return
+                }
+                self.queue.later {
+                    guard !self.closed, let sdp, error == nil else {
+                        completion(nil)
+                        return
+                    }
+                    self.setRenewalLocalLocked(sdp, completion: completion)
+                }
+            }
+        }
+    }
+
+    private func setRenewalLocalLocked(_ sdp: RTCSessionDescription,
+                                       completion: @escaping (String?) -> Void) {
+        guard let pc else {
+            completion(nil)
+            return
+        }
+        pc.setLocalDescription(sdp) { [weak self] error in
+            guard let self else {
+                completion(nil)
+                return
+            }
+            self.queue.later {
+                guard !self.closed, error == nil else {
+                    completion(nil)
+                    return
+                }
+                completion(pc.localDescription?.sdp ?? sdp.sdp)
+            }
+        }
+    }
+
+    public func renewalApplyRemoteDescription(sdp: String,
+                                              type: RelayRenewSDPType,
+                                              completion: @escaping (Bool) -> Void) {
+        queue.nowOrLater { [weak self] in
+            guard let self, !self.closed, let pc = self.pc else {
+                completion(false)
+                return
+            }
+            let description = RTCSessionDescription(type: type == .offer ? .offer : .answer,
+                                                    sdp: sdp)
+            pc.setRemoteDescription(description) { [weak self] error in
+                guard let self else {
+                    completion(false)
+                    return
+                }
+                self.queue.later { completion(!self.closed && error == nil) }
+            }
+        }
+    }
+
+    public func renewalAddRemoteCandidate(candidate: String,
+                                          sdpMid: String?,
+                                          sdpMLineIndex: UInt32?) {
+        queue.nowOrLater { [weak self] in
+            guard let self, !self.closed else { return }
+            self.addRemoteCandidateLocked(
+                RTCIceCandidate(sdp: candidate,
+                                sdpMLineIndex: Int32(sdpMLineIndex ?? 0),
+                                sdpMid: sdpMid))
+        }
+    }
+
     // MARK: - close
 
     /// Idempotent, and safe from any thread including from inside a callback.
@@ -828,6 +1039,12 @@ public final class WebRTCLinkReplacementTransport: NSObject {
             channel.close()
         }
         delegatedChannels = []
+        // No path back into a renewal controller survives teardown. Cleared
+        // here as well as by the controller, so a transport that dies on its
+        // own cannot deliver a late selected-pair change into an engine that
+        // has moved on to a replacement.
+        renewalInputs = nil
+        renewalEpochInFlight = false
         pc?.delegate = nil
         pc?.close()
         pc = nil
@@ -861,6 +1078,22 @@ extension WebRTCLinkReplacementTransport: RTCPeerConnectionDelegate {
     public func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) {}
     public func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {}
     public func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
+
+    /// Renewal's local observation entry point on a rebuilt connection. Raw:
+    /// whether the candidate belongs to the epoch's generation is the engine's
+    /// decision, from the candidate's own string.
+    public func peerConnection(_ peerConnection: RTCPeerConnection,
+                               didChangeLocalCandidate local: RTCIceCandidate,
+                               remoteCandidate remote: RTCIceCandidate,
+                               lastReceivedMs lastDataReceivedMs: Int32,
+                               changeReason reason: String) {
+        let localSDP = local.sdp
+        let remoteSDP = remote.sdp
+        queue.later { [weak self] in
+            guard let self, !self.closed else { return }
+            self.renewalInputs?.selectedCandidatePair(localSDP, remoteSDP)
+        }
+    }
 
     /// Local candidates are trickled as they are gathered, which starts inside
     /// `setLocalDescription` — before the completion block that sends the SDP

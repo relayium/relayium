@@ -540,13 +540,15 @@
       "web": {
         "caps": [
           "link/1",
-          "preupload/1"
+          "preupload/1",
+          "relay-renew/1"
         ]
       },
       "native": {
         "caps": [
           "text/1",
-          "link/1"
+          "link/1",
+          "relay-renew/1"
         ]
       },
       "linkRoomInactive": {
@@ -570,6 +572,23 @@
         ],
         "link": true,
         "resolvesImmediately": true
+      },
+      {
+        "caps": [
+          "link/1",
+          "preupload/1",
+          "relay-renew/1"
+        ],
+        "link": true,
+        "resolvesImmediately": true
+      },
+      {
+        "caps": [
+          "relay-renew/1"
+        ],
+        "link": false,
+        "resolvesImmediately": false,
+        "legacyLane": "files"
       },
       {
         "caps": [

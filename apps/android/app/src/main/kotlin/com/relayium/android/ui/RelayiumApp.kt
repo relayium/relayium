@@ -1374,6 +1374,7 @@ internal fun errorText(key: String): Int = when (key) {
     "error_peer_incompatible" -> R.string.error_peer_incompatible
     "error_handshake" -> R.string.error_handshake
     "error_connection_lost" -> R.string.error_connection_lost
+    "error_relay_expired" -> R.string.error_relay_expired
     "error_integrity" -> R.string.error_integrity
     "error_save_failed" -> R.string.error_save_failed
     "error_no_space" -> R.string.error_no_space

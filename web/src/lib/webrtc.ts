@@ -24,7 +24,7 @@ import type { Conn, ConnPath, Generation, InboundSignal, Reveal, RtcConfig, Sign
 // inbound resume signal BEFORE handing it to a connection primitive — the exact
 // bytes a tag covers must come from one place, never be re-derived at a call site.
 export { DEFAULT_ICE, PeerBusyError, authPayload, classifyPath, linkLeavePayload, signalGeneration } from "./webrtc-core";
-export type { Conn, ConnPath, Generation, InboundSignal, Reveal, RtcConfig, SignalAuth } from "./webrtc-core";
+export type { Conn, ConnPath, Generation, InboundSignal, RenewTransport, Reveal, RtcConfig, SignalAuth } from "./webrtc-core";
 
 /** What this build advertises to its peers. A list rather than a flag so a later
  *  capability needs no new field on the wire. See peer-caps.svelte.ts for why the

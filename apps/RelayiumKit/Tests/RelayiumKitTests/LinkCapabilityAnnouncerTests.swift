@@ -37,7 +37,8 @@ final class LinkCapabilityAnnouncerTests: XCTestCase {
         let (announcer, recorder, _) = make()
         announcer.rosterChanged(peerIds: ["p1", "p2"])
         XCTAssertEqual(Set(recorder.peers), ["p1", "p2"])
-        XCTAssertEqual(recorder.sent.first?.caps, [TEXT_CAPABILITY, LINK_CAPABILITY])
+        XCTAssertEqual(recorder.sent.first?.caps,
+                       [TEXT_CAPABILITY, LINK_CAPABILITY, RELAY_RENEW_CAPABILITY])
 
         recorder.sent = []
         announcer.rosterChanged(peerIds: ["p1", "p2"])
@@ -88,7 +89,7 @@ final class LinkCapabilityAnnouncerTests: XCTestCase {
             XCTAssertFalse(recorder.sent.isEmpty,
                            "every room must greet its peers, room: \(isCodelessRoom)")
             for (_, caps) in recorder.sent {
-                XCTAssertEqual(caps, [TEXT_CAPABILITY, LINK_CAPABILITY])
+                XCTAssertEqual(caps, [TEXT_CAPABILITY, LINK_CAPABILITY, RELAY_RENEW_CAPABILITY])
             }
         }
     }
@@ -290,7 +291,7 @@ final class LinkCapabilityAnnouncerHelloTests: XCTestCase {
     func testTheDefaultAnnouncementIsUnchanged() {
         XCTAssertEqual(sent().first, linkCapsHello(linkRoomActive: true))
         XCTAssertEqual(peerCaps(from: try! XCTUnwrap(sent().first)),
-                       [TEXT_CAPABILITY, LINK_CAPABILITY],
+                       [TEXT_CAPABILITY, LINK_CAPABILITY, RELAY_RENEW_CAPABILITY],
                        "the default hello stopped announcing the legacy lane iOS ships")
     }
 
@@ -304,9 +305,12 @@ final class LinkCapabilityAnnouncerHelloTests: XCTestCase {
 
     /// The override announces exactly `link/1`: not a superset, not a case
     /// variant, and never the lane the composition deleted.
-    func testTheLinkOnlyOverrideAnnouncesExactlyLinkOne() throws {
+    func testTheLinkOnlyOverrideAnnouncesExactlyTheLinkAndRenewalCapabilities() throws {
         let frame = try XCTUnwrap(sent(hello: linkOnlyCapsHello(linkRoomActive:)).first)
-        XCTAssertEqual(peerCaps(from: frame), [LINK_CAPABILITY])
+        // `relay-renew/1` joined it once renewal was wired end to end on this
+        // platform, which is exactly the condition `relay-renew/1` §8 sets for
+        // advertising it. It is an unsigned hint and nothing gates on it.
+        XCTAssertEqual(peerCaps(from: frame), [LINK_CAPABILITY, RELAY_RENEW_CAPABILITY])
         XCTAssertFalse(peerCaps(from: frame).contains(TEXT_CAPABILITY),
                        "a build that refuses every legacy session still advertised one")
     }
@@ -315,7 +319,8 @@ final class LinkCapabilityAnnouncerHelloTests: XCTestCase {
     /// "nothing here for you" rather than saying nothing.
     func testTheLinkOnlyHelloIsEmptyRatherThanAbsentWhenLinkModeIsOff() {
         XCTAssertEqual(linkOnlyCapsHello(linkRoomActive: false), capsField([]))
-        XCTAssertEqual(linkOnlyCapsHello(linkRoomActive: true), capsField([LINK_CAPABILITY]))
+        XCTAssertEqual(linkOnlyCapsHello(linkRoomActive: true),
+                       capsField([LINK_CAPABILITY, RELAY_RENEW_CAPABILITY]))
     }
 
     /// **The two hellos are read by the same rule**, so a peer on the other end

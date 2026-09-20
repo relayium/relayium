@@ -4,10 +4,23 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/relayium/relayium/internal/signal"
 )
+
+// turnCredTTL is how long an issued TURN credential is valid.
+//
+// One constant with two readers, and they must not drift. It is the lifetime
+// stamped into every credential (account.Config.TURNCredTTL) AND the basis of
+// the renewal rate floor: a grant may not be issued a new credential sooner
+// than half of it after the previous one (signal.NewGrantRegistry). Half a TTL
+// is what turns "a pair that keeps asking" into at most about two issuances per
+// credential lifetime, which is the bound the financial review asked for. Two
+// separate hour literals would let a future TTL change move the credential and
+// leave the rate floor behind.
+const turnCredTTL = time.Hour
 
 // wsJoinPerIPPerMinute is the per-IP REQUEST cap for /ws?code= join attempts —
 // how many code-bearing requests this one endpoint will process from an address

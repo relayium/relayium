@@ -289,16 +289,180 @@ describe("hand-written pairing-TTL copy outside the catalogue", () => {
     }
   });
 
-  // The manual test plan quotes the TTL twice and also documents an unrelated
-  // 10-minute idle timeout, so it gets the narrower rule: no stale pairing
-  // number may appear anywhere in it.
-  it("leaves no stale number in the manual test plan", () => {
+  /**
+   * The manual test plan, checked on its SUBJECT rather than on its numbers.
+   *
+   * ## Why the old rule had to go
+   *
+   * It required every duration anywhere in `docs/TESTING.md` to be either the
+   * pairing TTL or the 10-minute idle timeout. That rested on a premise —
+   * those are the only two durations the plan describes — and the premise is
+   * now false: the plan documents relay credential renewal, whose whole
+   * subject is a DIFFERENT lifetime. A one-hour grant, a trigger at 50 and 55
+   * minutes, a 60-second accelerated credential are all correct copy, and a
+   * guard that reddens on correct copy teaches people to widen it until it
+   * catches nothing.
+   *
+   * Widening the allowed-number list would have done exactly that: `5, 10, 50,
+   * 55, 59` admits a stale TTL of 10 or 50 without a murmur. Cutting whole
+   * sections out would be worse — line 1845 of the plan states the real
+   * pairing TTL *inside* the renewal narrative ("the six digits that produced
+   * it live five minutes (`signal.CodeTTLSeconds`)"), so a section-level
+   * exclusion would have blinded the guard in the one place it matters most.
+   *
+   * ## What it checks instead
+   *
+   * Which lifetime a number is a claim ABOUT, decided by the nearest subject
+   * word on either side of it. `codes`, `digits` and `CodeTTLSeconds` mean the
+   * pairing code; `credential`, `grant`, `renewal`, `idle`, `session` and the
+   * rest mean something this guard has no opinion on. Nearest-wins is what
+   * separates the two clauses of a sentence that mentions both — "a TURN
+   * credential lives an hour … and the six digits … live five minutes" — which
+   * no proximity window can.
+   *
+   * A duration with NO subject near it keeps the old conservative rule, so an
+   * unlabelled number still cannot drift in unnoticed.
+   *
+   * The negative control below is what makes this a test rather than a
+   * description: the same scan, run against a pretended server TTL, must
+   * report the plan as stale.
+   */
+  const PAIRING_SUBJECT = /\b(codes?|digits|CodeTTLSeconds)\b/giu;
+  const OTHER_SUBJECT =
+    /\b(credentials?|grants?|renewals?|renews?|renewing|idle|TURNCredTTL|sessions?|messages?|warns?|warning|boundary|allocation)\b/giu;
+
+  /**
+   * The markdown block a character offset falls in.
+   *
+   * Blocks break at blank lines AND at headings, because a heading is a new
+   * subject by definition. Without the heading barrier, the scenario title
+   * "Cross-network room — relay path, one SAS, ten minutes" reaches across into
+   * the next paragraph's "pairing code" and reads as a TTL claim — a false
+   * positive produced entirely by proximity, which is the failure mode a
+   * character window cannot avoid on its own.
+   */
+  const blockAround = (doc: string, at: number): { from: number; to: number } => {
+    const isBreak = (line: string) => line.trim() === "" || /^#{1,6}\s/.test(line);
+    const lines = doc.split("\n");
+    let offset = 0;
+    const spans = lines.map((line) => {
+      const span = { line, from: offset, to: offset + line.length };
+      offset += line.length + 1;
+      return span;
+    });
+    let i = spans.findIndex((sp) => at >= sp.from && at <= sp.to);
+    if (i < 0) i = 0;
+    let lo = i;
+    // A heading holds only itself; otherwise walk back to the block's start.
+    if (!/^#{1,6}\s/.test(spans[i].line)) {
+      while (lo > 0 && !isBreak(spans[lo - 1].line)) lo--;
+    }
+    let hi = i;
+    while (hi + 1 < spans.length && !isBreak(spans[hi + 1].line)) hi++;
+    return { from: spans[lo].from, to: spans[hi].to };
+  };
+
+  /** The nearest match of `re` to `[at, end)` WITHIN that block, as a character
+   *  gap, or Infinity when the block names no such subject. */
+  const nearest = (doc: string, re: RegExp, at: number, end: number): number => {
+    const { from, to } = blockAround(doc, at);
+    const slice = doc.slice(from, to);
+    let best = Infinity;
+    for (const m of slice.matchAll(re)) {
+      const start = from + m.index!;
+      const stop = start + m[0].length;
+      const gap = stop <= at ? at - stop : start >= end ? start - end : 0;
+      if (gap < best) best = gap;
+    }
+    return best;
+  };
+
+  /**
+   * Every duration in the plan that claims to be the pairing TTL and is not
+   * `minutes`, plus every duration with no subject at all that is neither the
+   * TTL nor the idle timeout.
+   */
+  const stalePairingClaims = (doc: string, minutes: number): string[] => {
+    const wrong: string[] = [];
+    for (const m of doc.matchAll(DURATIONS)) {
+      const [whole, count] = m;
+      const at = m.index!;
+      const n = /^\d+$/.test(count)
+        ? Number(count)
+        : { five: 5, ten: 10, fifteen: 15, thirty: 30 }[count as string];
+      const pairing = nearest(doc, PAIRING_SUBJECT, at, at + whole.length);
+      const other = nearest(doc, OTHER_SUBJECT, at, at + whole.length);
+      if (pairing < other) {
+        if (n !== minutes) {
+          wrong.push(`"${whole.trim()}" is stated as the pairing TTL but the server says ${minutes}`);
+        }
+        continue;
+      }
+      if (other < Infinity) continue; // a different lifetime, clearly identified
+      if (n !== minutes && n !== 10) {
+        wrong.push(`"${whole.trim()}" names no subject and is neither the ${minutes}-minute TTL nor the 10-minute idle timeout`);
+      }
+    }
+    return wrong;
+  };
+
+  it("leaves no stale pairing TTL in the manual test plan", () => {
+    expect(stalePairingClaims(repoFile("docs/TESTING.md"), serverTtlMinutes())).toEqual([]);
+  });
+
+  /**
+   * The plan's pairing-TTL claims, as this scan sees them.
+   *
+   * Pinned as a COUNT rather than left implicit, because the two controls below
+   * are only meaningful if the scan is finding these at all. A refactor that
+   * quietly classified every duration as "some other lifetime" would leave both
+   * controls green and this one red, which is the right way round.
+   */
+  const PAIRING_CLAIMS_IN_PLAN = 4;
+
+  it("finds the plan's pairing-TTL claims, including the one inside the renewal copy", () => {
+    // Four: two in the pairing scenarios, one in the CLI transcript, and — the
+    // one that matters most — "the six digits that produced it live five
+    // minutes (`signal.CodeTTLSeconds`)", which sits in the middle of the relay
+    // renewal narrative. Any rule that excluded that section wholesale would
+    // blind this guard exactly where the TTL is most likely to be restated.
+    const doc = repoFile("docs/TESTING.md");
+    const drifted = stalePairingClaims(doc, serverTtlMinutes() + 1);
+    expect(drifted).toHaveLength(PAIRING_CLAIMS_IN_PLAN);
+  });
+
+  it("NEGATIVE CONTROL: reports the plan stale when the server's TTL drifts", () => {
+    // Without this the assertion above is indistinguishable from one that
+    // classifies everything as "some other lifetime" and asserts nothing.
+    // Pretend the server moved `CodeTTLSeconds`: every place the plan quotes
+    // the old number as the CODE's lifetime must now be reported, and nothing
+    // else may be.
+    const doc = repoFile("docs/TESTING.md");
+    const real = serverTtlMinutes();
+    const drifted = real === 30 ? 15 : 30;
+    const reported = stalePairingClaims(doc, drifted);
+    expect(reported, "the scan must still bite when the TTL drifts")
+      .toHaveLength(PAIRING_CLAIMS_IN_PLAN);
+    for (const line of reported) {
+      expect(line).toContain("stated as the pairing TTL");
+      // The renewal copy — a one-hour grant, a 50-minute trigger, a 60-second
+      // accelerated credential — is a different lifetime and stays silent.
+      expect(line).not.toMatch(/\b(59|50|55|40) minutes\b/);
+    }
+  });
+
+  it("NEGATIVE CONTROL: catches a pairing claim that drifted in the DOC", () => {
+    // The other direction, and the one that actually happens: the server keeps
+    // its TTL and somebody edits the plan. Mutated in memory — the plan is not
+    // this suite's to edit — so the check is on the scan, not on a doctored
+    // file left behind.
     const minutes = serverTtlMinutes();
     const doc = repoFile("docs/TESTING.md");
-    for (const [whole, count] of doc.matchAll(DURATIONS)) {
-      const n = /^\d+$/.test(count) ? Number(count) : { five: 5, ten: 10, fifteen: 15, thirty: 30 }[count as string];
-      expect(n === minutes || n === 10, `docs/TESTING.md: "${whole.trim()}" is neither the ${minutes}-minute TTL nor the 10-minute idle timeout`).toBe(true);
-    }
+    const stale = doc.replace("codes live 5 minutes", "codes live 45 minutes");
+    expect(stale, "the sentence this control mutates must still exist").not.toBe(doc);
+    const reported = stalePairingClaims(stale, minutes);
+    expect(reported).toHaveLength(1);
+    expect(reported[0]).toContain("45 minutes");
   });
 });
 

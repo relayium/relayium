@@ -384,7 +384,7 @@ final class TransferModuleTests: XCTestCase {
                 return socket
             },
             pairingRoomHandle: LinkRoomHandle(),
-            assemble: { _, _, _, _, _, _, _, _, _ in
+            assemble: { _, _, _, _, _, _, _, _, _, _ in
                 XCTFail("nothing may be assembled while the room has no configuration")
                 fatalError()
             })

@@ -4,7 +4,17 @@ export interface Peer {
 }
 
 export type Envelope = {
-  type: "join" | "welcome" | "peers" | "left" | "signal" | "activate";
+  /**
+   * `ice-renew` / `ice-grant` carry the relay-renewal round exchange
+   * (`docs/protocol/relay-renew-v1.md` §2). They ride this existing envelope
+   * rather than a new HTTP endpoint so the request is bound to the SOCKET that
+   * holds the room membership — the server's authority for "these are the two
+   * original peers" is the connection, not a cookie.
+   *
+   * A server that does not implement them ignores the frame, and a client that
+   * does not send them is unaffected by their presence here.
+   */
+  type: "join" | "welcome" | "peers" | "left" | "signal" | "activate" | "ice-renew" | "ice-grant";
   from?: string;
   to?: string;
   name?: string;

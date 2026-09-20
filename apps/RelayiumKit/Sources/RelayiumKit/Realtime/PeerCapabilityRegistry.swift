@@ -120,7 +120,11 @@ public func linkRoomActive(isCodelessRoom: Bool) -> Bool {
 /// neither can disagree with the routing predicate below, which reads the same
 /// room rule.
 public func advertisedLinkCapabilities(linkRoomActive: Bool) -> [String] {
-    linkRoomActive ? [TEXT_CAPABILITY, LINK_CAPABILITY] : [TEXT_CAPABILITY]
+    // `relay-renew/1` rides with `link/1` and never without it: renewal exists
+    // only on a link, and the path is wired end to end in every composition
+    // that can open one. Byte-pinned to `capability.hello.native`.
+    linkRoomActive ? [TEXT_CAPABILITY, LINK_CAPABILITY, RELAY_RENEW_CAPABILITY]
+                   : [TEXT_CAPABILITY]
 }
 
 /// The roster-level hello this build sends to each peer on joining a room and

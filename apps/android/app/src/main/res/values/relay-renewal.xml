@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copy for the relayed link's credential boundary and its renewal.
+
+  Its own file rather than an addition to strings.xml, matching inbox.xml and
+  scan.xml: a feature's copy in one place is one place for a translator to
+  read, and it keeps two writers off one resource. AppStringsParityTest
+  discovers resource files rather than naming them, so a file added in one
+  language and forgotten in the other fails the gate.
+
+  Three rules these strings follow, and all three are the product requirement
+  rather than a style preference:
+
+    - nothing here claims a renewal happened before the migration actually
+      committed. "Extending" is what an attempt says; "Extended" is said only
+      after this device observed the new path AND the peer acknowledged it.
+    - the warning says what will happen and what to do, without blaming the
+      network or promising a recovery that may not come.
+    - a peer that cannot renew is named truthfully rather than hidden behind
+      this side's own success.
+-->
+<resources>
+    <string name="status_relay_expiring">This connection runs through a relay, and the relay pass it was issued is about to run out. It will end shortly — finish what is in flight, then start a new session.</string>
+    <string name="status_relay_renewing">Extending this connection\'s relay pass…</string>
+    <string name="status_relay_renewed">The relay pass was extended. The connection keeps going — nothing was re-paired and nothing was re-sent.</string>
+    <string name="status_relay_renew_failed">The relay pass could not be extended. The connection will end when the current one runs out.</string>
+    <string name="status_relay_renew_unsupported">The other device is running a version that cannot extend a relay pass. The connection will end when the current one runs out.</string>
+    <string name="error_relay_expired">The relay pass this connection was issued ran out, so it ended. Nothing more can arrive on it — start a new session to continue.</string>
+</resources>

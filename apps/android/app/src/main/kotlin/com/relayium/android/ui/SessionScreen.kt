@@ -34,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.relayium.android.R
 import com.relayium.android.TransferController
 import com.relayium.android.TransferViewModel
+import com.relayium.android.transport.RelayRenewEngine
 import com.relayium.protocol.TextLaneSession
 
 /**
@@ -64,6 +65,50 @@ internal fun SessionScreen(
     } else {
         UnavailableLaneCard(R.string.text_title, R.string.text_legacy_unavailable)
     }
+}
+
+/**
+ * What this RELAYED connection's credential boundary is doing, if anything.
+ *
+ * Shown only when there is something true to say, and never a claim a renewal
+ * happened before it did:
+ *
+ *  - an attempt in flight is "extending", because that is all it is. An applied
+ *    configuration, a server reply and an open DataChannel are each not a
+ *    migration.
+ *  - a committed migration says so ONCE — while the connection is no longer
+ *    inside the warning window, which is what having moved the boundary means.
+ *  - a failure, a refusal, and a peer that cannot renew each keep the warning
+ *    standing, because the connection really will end on the boundary it has.
+ *
+ * A link nothing bounds — LAN, Nearby, a path classified direct, a path the
+ * platform never reported — renders nothing at all. That is not an omission:
+ * such a link has no credential to lose.
+ */
+@Composable
+private fun RelayBoundaryNote(state: TransferController.State) {
+    if (state.relayExpiresAt == null) return
+    val note = when {
+        state.renewState == RelayRenewEngine.State.RENEWING ->
+            R.string.status_relay_renewing to MessageTone.NEUTRAL
+        !state.relayExpiryWarning ->
+            // Outside the warning window there is nothing urgent to say. The
+            // one exception is a renewal that just moved the boundary out of
+            // it, which is worth confirming exactly because the connection
+            // silently kept going.
+            if (state.renewState == RelayRenewEngine.State.RENEWED) {
+                R.string.status_relay_renewed to MessageTone.NEUTRAL
+            } else {
+                return
+            }
+        state.renewState == RelayRenewEngine.State.UNSUPPORTED ->
+            R.string.status_relay_renew_unsupported to MessageTone.ERROR
+        state.renewState == RelayRenewEngine.State.DENIED ||
+            state.renewState == RelayRenewEngine.State.FAILED ->
+            R.string.status_relay_renew_failed to MessageTone.ERROR
+        else -> R.string.status_relay_expiring to MessageTone.ERROR
+    }
+    InlineMessage(text = stringResource(note.first), tone = note.second, announce = true)
 }
 
 /** One capability this connection does not have, named and explained. */
@@ -104,6 +149,7 @@ private fun VerificationCard(
                     announce = true,
                 )
             }
+            RelayBoundaryNote(state)
             when (state.wire) {
                 TransferController.Wire.LEGACY_FILES -> R.string.status_legacy_files
                 TransferController.Wire.LEGACY_TEXT -> R.string.status_legacy_text

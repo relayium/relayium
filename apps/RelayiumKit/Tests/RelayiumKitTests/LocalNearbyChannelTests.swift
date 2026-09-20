@@ -281,8 +281,11 @@ final class LocalNearbyChannelTests: XCTestCase {
         discover()
 
         let signals = envelopes.filter { $0.type == SignalType.signal }
-        XCTAssertEqual(signals.first?.data,
-                       linkCapsHello(linkRoomActive: linkRoomActive(isCodelessRoom: true)))
+        // The DISCOVERED PEER's own advertisement, which is what this frame
+        // carries. It used to be spelled with this build's `linkCapsHello`
+        // because the two lists happened to be equal; they are different facts,
+        // and stopped being equal when this build began announcing renewal.
+        XCTAssertEqual(signals.first?.data, capsField(peerCaps))
         XCTAssertEqual(Array(signals.dropFirst().compactMap(\.data)),
                        [.string("first"), .string("second")])
         let roster = try XCTUnwrap(envelopes.firstIndex { $0.type == SignalType.peers })

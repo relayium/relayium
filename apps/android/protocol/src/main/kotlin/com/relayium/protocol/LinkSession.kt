@@ -78,6 +78,22 @@ class LinkSession(private val selfId: String) {
     fun peerSupportsText(peerId: String): Boolean =
         announced[peerId]?.contains(LinkProtocol.TEXT_CAPABILITY) == true
 
+    /**
+     * Whether this peer positively named one capability, by EXACT match.
+     *
+     * The general form of the two predicates above, for a capability whose
+     * admission rule lives with its feature rather than here —
+     * `relay-renew/1` is the first: it decides only whether spending a renewal
+     * epoch on this peer is worth it, never whether a connection may exist.
+     *
+     * Exact, for the reason the link predicate gives: `relay-renew/2` would be
+     * a different wire, and inferring support from `link/1` would be inventing
+     * a claim the peer never made. An unsigned hint either way (`link:§1.6`):
+     * only authenticated messages confer proof.
+     */
+    fun peerAnnounced(peerId: String, capability: String): Boolean =
+        announced[peerId]?.contains(capability) == true
+
     /** Drop announcements for peers no longer in the roster. A reconnecting peer
      *  gets a fresh id from the hub, so nothing stale is inherited. */
     fun retainPeers(ids: Collection<String>) {

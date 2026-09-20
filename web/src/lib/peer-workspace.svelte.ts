@@ -95,6 +95,9 @@ export interface PeerWorkspace {
   /** The relayed link is inside its credential warning window. False on any
    *  link with no credential boundary. */
   readonly relayExpiring: boolean;
+  /** What the relay renewal is doing, for a truthful status line. Never
+   *  `renewed` before a migration has actually committed. */
+  readonly renewState: MixedSession["renewState"];
   /** False while a live link could NOT be rebuilt if its transport died — the
    *  signalling socket is gone, rejoined under a new identity, or was refused.
    *  The link itself is untouched; this is a statement about its future. */
@@ -250,6 +253,12 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
     // this is where it stops a link being described as rebuildable.
     peerPresent: (peerId) => !departed.has(peerId),
     relayDeadline: deps.relayDeadline,
+    // Relay renewal, forwarded verbatim. All three are inherited from
+    // MixedSessionDeps and mean exactly what they mean there; this workspace
+    // adds no policy of its own, and omitting any of them leaves renewal off.
+    requestRenewRound: deps.requestRenewRound,
+    renewedConfig: deps.renewedConfig,
+    supportsRenew: deps.supportsRenew,
     now,
     idleMs: deps.idleMs,
     setTimer: deps.setTimer,
@@ -346,6 +355,7 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
     get linkPath() { return usingMixed() ? mixed.path ?? undefined : undefined; },
     get queuedBatches() { return usingMixed() ? mixed.file.queued : []; },
     get relayExpiring() { return mixed.relayExpiring; },
+    get renewState() { return mixed.renewState; },
     get recoveryAvailable() { return mixed.recoveryAvailable; },
     get linkEndReason() { return mixed.endReason; },
     dismissLinkEnd() { mixed.dismissEnded(); },

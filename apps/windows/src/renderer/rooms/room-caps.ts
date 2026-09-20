@@ -45,6 +45,7 @@ import { SvelteMap } from "svelte/reactivity";
 import {
   CAP_LINK,
   CAP_PREUPLOAD,
+  CAP_RENEW,
   linkRoomActive,
 } from "../../../../../web/src/lib/peer-caps.svelte";
 
@@ -117,6 +118,15 @@ export class RoomCaps {
   supportsPreupload(peerId: string): boolean {
     if (!linkRoomActive()) return false;
     return (this.#announced.get(peerId) ?? []).includes(CAP_PREUPLOAD);
+  }
+
+  /** Whether this room's peer announced `relay-renew/1`. Per room for the same
+   *  reason every predicate here is: a LAN roster's ordinary churn must not
+   *  delete the pairing room's record of what its peer can do. Exact
+   *  membership, never a prefix match — `relay-renew/2` is a different wire. */
+  supportsRenew(peerId: string): boolean {
+    if (!linkRoomActive()) return false;
+    return (this.#announced.get(peerId) ?? []).includes(CAP_RENEW);
   }
 
   /** Drop announcements for peers no longer in THIS room's roster. A

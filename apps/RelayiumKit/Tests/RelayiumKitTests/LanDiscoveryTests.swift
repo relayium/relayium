@@ -1003,14 +1003,18 @@ final class LanDiscoveryLocalHelloTests: XCTestCase {
         XCTAssertEqual(discovery.localHello(true), linkCapsHello(linkRoomActive: true),
                        "the code-less room's default hello drifted from the shared one")
         XCTAssertEqual(peerCaps(from: discovery.localHello(true)),
-                       [TEXT_CAPABILITY, LINK_CAPABILITY])
+                       [TEXT_CAPABILITY, LINK_CAPABILITY, RELAY_RENEW_CAPABILITY])
     }
 
     /// The macOS override, exactly `link/1`.
-    func testTheLinkOnlyOverrideIsExactlyLinkOne() {
+    func testTheLinkOnlyOverrideIsExactlyTheLinkAndRenewalCapabilities() {
         let discovery = LanDiscoveryModel(connect: { fatalError("no socket needed") })
         discovery.localHello = linkOnlyCapsHello(linkRoomActive:)
-        XCTAssertEqual(peerCaps(from: discovery.localHello(true)), [LINK_CAPABILITY])
+        // `relay-renew/1` joined the link-only hello once renewal was wired end
+        // to end. It is an unsigned hint; a same-network room never renews,
+        // because it has no relayed credential to renew.
+        XCTAssertEqual(peerCaps(from: discovery.localHello(true)),
+                       [LINK_CAPABILITY, RELAY_RENEW_CAPABILITY])
         XCTAssertFalse(peerCaps(from: discovery.localHello(true)).contains(TEXT_CAPABILITY))
     }
 }

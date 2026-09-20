@@ -38,13 +38,13 @@ All file/line references are relative to `server/` in the
 - What relayium.com meters is **hosted bytes**, and they arrive by two
   different routes: encrypted data it *stores* for you, and bytes it *relays*
   for you through a TURN server. Both land in one figure —
-  `currentMonthTraffic` (`account/plan_enforce.go:62`) adds hosted upload and
+  `currentMonthTraffic` (`account/plan_enforce.go:71`) adds hosted upload and
   download (`usage_monthly`) to billable relay (`usage_events`) — so "monthly
   traffic" is not a relay meter with storage bolted on; it is the sum.
 - **Four separate limits, not one.** Monthly traffic (above) is how much moved.
   **Storage** is a different question — how much ciphertext you are keeping
   live *right now*, checked by `remainingStorage`
-  (`account/plan_enforce.go:208`) against `CurrentStorage`, so deleting a file
+  (`account/plan_enforce.go:310`) against `CurrentStorage`, so deleting a file
   frees storage and refunds no traffic. **Retention** is how long a stored file
   may live, and the **daily upload quota** is a rolling 24-hour window. This
   document describes each separately because the code does; see
@@ -69,7 +69,7 @@ Which path a transfer takes, precisely — this is narrower than "it tries direc
 first" and the difference is what decides whether anything is billed:
 
 - **Same LAN, browser:** direct. The server issues no relay for a code-less LAN
-  room, so `chooseRtcConfig` (`web/src/lib/ice.ts:462-475`) leaves the policy at
+  room, so `chooseRtcConfig` (`web/src/lib/ice.ts:509-522`) leaves the policy at
   `all` and host candidates carry the bytes.
 - **Cross-network, browser:** **relay, by design — not as a fallback.** As soon
   as a TURN server is present in the ICE list, that same function returns
@@ -97,19 +97,42 @@ paths — LAN browser, and the CLI's direct modes — run through neither.
 `handleICE` (`account/turn.go:59`) is the endpoint that hands out
 ICE/TURN credentials for a pairing-code transfer. It:
 
-1. Resolves the pairing code to its owner account (`account/turn.go:71-73`).
-   An invalid or expired code gets STUN-only servers — no TURN credential, so
-   no relay is even possible.
+1. Resolves the pairing code to its owner account and that transfer's billing
+   identity in one lookup (`AttribFor`, `account/turn.go:98`). An invalid or
+   expired code gets STUN-only servers — no TURN credential, so no relay is
+   even possible.
 2. Refuses to mint a TURN credential if the owner's email isn't verified
-   (`account/turn.go:112-120`, the "Sybil dampener" comment) or if the owner's
-   monthly traffic allowance is already spent (`account/turn.go:122-135`,
-   calling `s.trafficAllowanceSpent` from `account/plan_enforce.go:181`, which
+   (`account/turn.go:132-140`, the "Sybil dampener" comment) or if the owner's
+   monthly traffic allowance is already spent (`account/turn.go:142-155`,
+   calling `s.trafficAllowanceSpent` from `account/plan_enforce.go:184`, which
    treats exactly zero remaining as spent). P2P direct still works in both
    cases; only relay is withheld.
-3. Embeds the owner's user ID and the pairing code into the TURN username as
-   `<expiry>:<userID>.<code>` (`account/turn.go:139`, `turnCredentials` at
-   `account/turn.go:276`) — this is the only mechanism that ties relay bytes
-   back to an account.
+3. Embeds the owner's user ID and that transfer's **attribution tag** into the
+   TURN username as `<expiry>:<userID>.<tag>` (`account/turn.go:167`,
+   `turnCredentials` at `account/turn.go:236`) — this is the only mechanism
+   that ties relay bytes back to an account.
+
+   The tag, not the pairing code itself. A tag is 128 random bits drawn once per
+   minted code and never reused (`drawRelayAttribTag` at
+   `internal/signal/attrib.go:211`). It has to be something that never recycles,
+   because a credential outlives its code by most of an hour — `TURNCredTTL` is
+   an hour, `signal.CodeTTLSeconds` five minutes — and the digits go back into
+   circulation as soon as the code expires. While the token was the code, a
+   report arriving after those digits had been minted for somebody else was read
+   as a forgery and dropped, so bytes that were really relayed were billed to
+   nobody at all.
+
+   The tag stays **lookupable** until the last credential issued under it
+   expires plus a fifteen-minute reporting grace (`relayAttribGraceSeconds`,
+   `internal/signal/attrib.go:101`), independently of the code and of the
+   signalling room. That window is sized from how our own relay nodes behave;
+   it is **not** a billing deadline and not a claim about other providers. A
+   report arriving after it — a node that was offline, a server that has
+   restarted, or a coturn allocation that outlived its credential — is still
+   recorded and still billed to the account its username names. What lapses is
+   only the server's ability to contradict a mismatched claim, which returns
+   that report to the same accept-as-reported path an expired code has always
+   taken. Nothing is lost.
 
 **Ingesting what was actually relayed** is a separate, one-way pipeline:
 coturn (the TURN server) reports each allocation's cumulative relayed bytes
@@ -278,7 +301,7 @@ list, and it can change.)
 
 The dimensions actually checked, each fail-closed at write time:
 
-- **Daily upload quota** — a rolling 24-hour window (`account/plan_enforce.go:217`,
+- **Daily upload quota** — a rolling 24-hour window (`account/plan_enforce.go:343`,
   `remainingDailyQuota`), reserved atomically per upload
   (`account/sqlite.go:5239`, `ReserveUpload`) so concurrent uploads can't
   race past it. A near-empty file still debits a 64 KiB floor
@@ -287,19 +310,48 @@ The dimensions actually checked, each fail-closed at write time:
 - **Monthly traffic cap** — relay bytes (billable rows in `usage_periods`)
   plus stored upload/download bytes (`usage_monthly`), summed by
   `currentMonthTraffic` (`account/plan_enforce.go:68`) against
-  `monthlyTrafficCap` (`account/plan_enforce.go:78`), which pro-rates a
+  `monthlyTrafficCap` (`account/plan_enforce.go:94`), which pro-rates a
   mid-month plan change into segments rather than granting a full month's
   cap on every upgrade. Exceeding it: `429` "monthly traffic limit reached"
   on upload (`account/files.go:195`), and TURN credential issuance is
-  withheld for relay (`account/turn.go:122-135`).
+  withheld for relay (`account/turn.go:142-155`).
+
+  **The relay quota gate runs at ISSUANCE, and that is the whole of it.** It
+  decides whether another TURN credential is handed out. It does not reach an
+  allocation that already exists, cannot revoke one, and does not stop bytes as
+  they move. Renewal (`account/renew.go`) re-runs exactly this check on every
+  round; it did not introduce that boundary and does not change it.
+
+  Two limits follow, and both are true of the hosted service today:
+
+  - **An existing relay allocation is not revoked when its credential
+    expires.** A credential's lifetime governs what may be newly allocated.
+    Retiring an allocation that is already running is the relay server's
+    business, and on the third-party TURN server this deployment uses it is not
+    something a credential expiry compels.
+  - **Relay usage is metered after the fact**, not as it moves: from a node's
+    own periodic report, or — on the third-party path — when an allocation
+    ends. So a long transfer's usage is recognised per credential round rather
+    than at the instant it happens.
+
+  What this document must therefore not be read as claiming: an instantaneous
+  cap; that a credential lifetime bounds an allocation's lifetime; that a
+  migration retires the old allocation within any fixed time; or that an old
+  allocation costs nothing.
+
+  The precise behaviour of each relay implementation, and the measurements
+  behind these statements, are held in the project's internal engineering
+  records rather than here. They are operational detail, and this document's
+  job is to state the limits accurately — which it does above — not to describe
+  how to sit inside them.
 - **Storage cap** (how much can be live at once, not how much has moved) —
-  `overStorage` (`account/plan_enforce.go:201`) against the plan's
+  `overStorage` (`account/plan_enforce.go:327`) against the plan's
   `StorageBytes`, enforced atomically at persist time in
   `CreateStoredFileWithinStorageCaps` so concurrent uploads can't collectively
-  bust it (`account/plan_enforce.go:264-277`, `persistStoredFile`).
+  bust it (`account/plan_enforce.go:390`, `persistStoredFile`).
   Exceeding it: `413` "storage limit reached."
 - **Global disk cap** — a deployment-wide ceiling across all users
-  (`SettingStorageDiskCap`, `account/plan_enforce.go:253-265`), independent
+  (`SettingStorageDiskCap`, `account/plan_enforce.go:356`), independent
   of any one plan. Exceeding it: `507` "server storage is full."
 - **Retention (TTL) and download-count limits** — every stored file gets an
   expiry and/or a max-download count resolved from the request plus admin

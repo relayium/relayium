@@ -528,7 +528,16 @@ final class MacPrivacyManifestTests: XCTestCase {
         // them and each has a table that outlives the transfer: uploads and
         // stored downloads are metered into usage_monthly (and the ciphertext's
         // size into stored_files), while relayed bytes reach the account through
-        // the TURN username's `<owner>.<code>` and a node's heartbeat.
+        // the TURN username's `<owner>.<attribution tag>` and a node's heartbeat.
+        //
+        // The second half used to be the pairing CODE. It is now an immutable
+        // attribution tag, because a credential outlives its code and recycled
+        // digits would resolve to a different owner. What this declaration
+        // rests on did not change and is what is pinned: the ACCOUNT OWNER is
+        // still named in the credential, which is what links relayed usage to
+        // a person. So the pin is the whole assignment — a token built from the
+        // tag alone, with the owner dropped, must fail here, and a mere mention
+        // of `attribToken` elsewhere in the file must not pass.
         let files = try text("server/account/files.go")
         XCTAssertTrue(try text("apps/RelayiumKit/Sources/RelayiumKit/Cloud/ResumableTransport.swift")
             .contains("api/uploads"))
@@ -540,7 +549,9 @@ final class MacPrivacyManifestTests: XCTestCase {
 
         XCTAssertTrue(try text("apps/RelayiumKit/Sources/RelayiumKit/Account/ICEClient.swift")
             .contains("api/ice"))
-        XCTAssertTrue(try text("server/account/turn.go").contains("owner + \".\" + code"))
+        XCTAssertTrue(try text("server/account/turn.go")
+            .contains("token := owner + \".\" + attribToken"),
+                      "the TURN credential must still NAME THE OWNER; that is the linkage declared")
         XCTAssertTrue(try text("server/account/nodes.go").contains("RecordUsage"))
         XCTAssertTrue(schema.contains("CREATE TABLE IF NOT EXISTS usage_events"))
         XCTAssertTrue(schema.contains("CREATE TABLE IF NOT EXISTS usage_periods"))

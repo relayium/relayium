@@ -1,6 +1,7 @@
 package account
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/base64"
@@ -80,10 +81,29 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
 		return
 	}
+	// Whose code this is AND what its bytes are billed as, resolved together.
+	//
+	// These used to be one lookup because they used to be one string: the token
+	// embedded in the credential WAS the six digits. They are two now, and
+	// reading them separately would be a bug rather than a style choice — the
+	// digits are recycled minutes after they expire, so a second lookup can
+	// land on a different generation than the first and issue a credential
+	// whose owner and whose billing identity disagree. AttribFor answers both
+	// under one lock. See signal/attrib.go.
 	owner := ""
+	attribToken := ""
 	validCode := false
-	if code != "" && s.pairCodeOwner != nil {
-		owner, validCode = s.pairCodeOwner(code)
+	if code != "" {
+		switch {
+		case s.relayAttrib != nil:
+			owner, attribToken, validCode = s.relayAttrib.AttribFor(code)
+		case s.pairCodeOwner != nil:
+			// No attribution resolver wired: an isolated test, or a deployment
+			// whose registry predates tags. The token stays the code, which is
+			// exactly the behaviour every existing caller already has.
+			owner, validCode = s.pairCodeOwner(code)
+			attribToken = code
+		}
 	}
 
 	// Feed every invalid non-empty code into the process-wide brute-force breaker
@@ -134,9 +154,32 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// The credential username embeds the owner userID (and code) so coturn→Redis→
-	// metering attributes relay bytes to the owning account.
-	token := owner + "." + code
+	// The credential username embeds the owner userID and this generation's
+	// attribution tag, so coturn→Redis→metering and the node heartbeat both
+	// attribute relay bytes to the owning account.
+	//
+	// The tag, NOT the code. A credential outlives its code by most of an hour
+	// (TURNCredTTL against signal.CodeTTLSeconds), and once those digits have
+	// been minted again the attribution guard in nodes.go resolves them to the
+	// NEW owner, sees a mismatch against the original one this credential names,
+	// and drops the report as forged — bytes relayed at our expense and billed
+	// to nobody. A tag never recycles, so that question has one answer for as
+	// long as anything can still report under it. See signal/attrib.go.
+	token := owner + "." + attribToken
+	// Retention follows ISSUANCE, not the code, so the tag stays resolvable for
+	// as long as a credential minted here can still have bytes reported against
+	// it. It has to be issuance: a pre-upload code whose deadline keeps moving
+	// goes on handing out hour-long credentials for hours after the five
+	// minutes its own TTL would have covered.
+	//
+	// Placed after the gates above, so it runs only for a code that is actually
+	// getting credentials below. Strict mode with no own nodes is the one case
+	// that reaches here and still issues nothing; it costs one map entry held a
+	// quarter-hour too long, against a dropped entry costing a real user's
+	// billing, so it is not worth a second condition.
+	if validCode && s.relayAttrib != nil && attribToken != "" {
+		s.relayAttrib.NoteIssuedCredential(attribToken, expiry)
+	}
 
 	// Strict mode ("only my nodes") withholds our fleet pool and legacy TURN,
 	// offering only the owner's own self-hosted nodes. Computed once and reused
@@ -161,98 +204,15 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 	// Multi-relay pool: the owner's own nodes are always included (free
 	// self-hosted relay); the fleet pool (online self-registered fleet nodes ∪
 	// legacy static RELAYIUM_TURN_RELAYS) is unioned in only when not strict.
-	// Each entry carries its own ephemeral credential so the client can measure
-	// RTT and pick the fastest. Dynamic nodes win a shared id.
+	//
+	// Assembled by relayPool, which renewal also calls. The ERROR POLICY is the
+	// parameter, and it is the only thing that differs between the two: this
+	// endpoint keeps its historical fail-open behaviour — a database blip
+	// degrades the pool rather than stranding a transfer that is only now
+	// starting — while renewal fails closed, because there an unreadable gate
+	// would extend paid relay on the strength of a question nobody answered.
 	if validCode {
-		relays := make([]relayEntry, 0)
-		seen := map[string]bool{}
-		// Second dedup key: the physical relay. `seen` catches a repeated id;
-		// this catches one machine offered under two ids -- a static config
-		// entry and a registered node at the same address, or a node that lost
-		// state.json and re-registered with a fresh id while its old row is
-		// still inside nodeOnlineWindow. See claimAddrs.
-		//
-		// Precedence across sources is positional, not freshness-based: the
-		// own-nodes loop below claims an address before the fleet loop ever
-		// runs, so an own-node row wins regardless of which heartbeat is newer.
-		// A stale own-node row (up to nodeOnlineWindow, 90s, after the box
-		// actually died) can therefore suppress a live fleet row at the same
-		// address, handing the client only the dead credential -- before this
-		// dedup existed, the client would have probed both and the dead one
-		// would simply have failed to answer. Near-unreachable in practice --
-		// one process binds a host:port, and the node agent owns its own TURN
-		// secret, so the surviving row is normally the authoritative one anyway
-		// -- but it is the one scenario where this dedup turns "one working
-		// entry plus one dead entry" into "only the dead one". Worth knowing
-		// before reordering these three loops.
-		seenAddr := map[string]bool{}
-		since := now.Add(-nodeOnlineWindow).Unix()
-
-		// Node URLs go out exactly as the node registered them: relayium-node
-		// is UDP-only, so widening them would advertise a candidate that can
-		// never allocate. See withTCPTransport.
-		//
-		// The owner's own nodes (free relay), always included.
-		if own, err := s.store.UserNodes(r.Context(), owner, since); err == nil {
-			for _, n := range own {
-				if n.ID == "" || n.TURNSecret == "" || len(n.URLs) == 0 {
-					continue
-				}
-				if !claimAddrs(seenAddr, n.URLs) {
-					continue
-				}
-				relays = append(relays, relayEntry{ID: n.ID, Region: n.Region,
-					ICEServers: []ICEServer{turnCredentials(n.TURNSecret, token, expiry, n.URLs)}})
-				seen[n.ID] = true
-			}
-		} else {
-			log.Printf("ice: UserNodes read failed: %v (own-node routing skipped)", err)
-		}
-
-		if !strict {
-			// Per-node monthly traffic cap: withhold any fleet node that has
-			// reached 90% of its effective cap. The 90% is a *scheduling*
-			// reserve, not the hard stop — traffic is checked once at ICE time
-			// but accrues for the whole session, so a node sitting at 99.9%
-			// would still be handed out and then blow well past its cap. The
-			// node's own 100% blackhole (counter.go overTraffic) is the hard
-			// gate; this leaves it 10% to drain established sessions with.
-			// Computed once per request; a read error fails open.
-			monthStart, _ := monthRange(periodOf(now.Unix()))
-			monthlyUsed, muErr := s.store.NodeRelayedSince(r.Context(), monthStart)
-			if muErr != nil {
-				log.Printf("ice: NodeRelayedSince read failed: %v (traffic caps not enforced this request)", muErr)
-			}
-			st := s.ResolveSettings(r.Context())
-			if nodes, err := s.store.OnlineNodes(r.Context(), since); err == nil {
-				for _, n := range nodes {
-					if n.ID == "" || n.TURNSecret == "" || len(n.URLs) == 0 || seen[n.ID] {
-						continue
-					}
-					if cap := usableTraffic(resolveNodeTrafficLimit(n, st)); cap > 0 && monthlyUsed[n.ID] >= cap {
-						continue // at/over the 90% scheduling reserve — withhold this node
-					}
-					if !claimAddrs(seenAddr, n.URLs) {
-						continue
-					}
-					relays = append(relays, relayEntry{ID: n.ID, Region: n.Region,
-						ICEServers: []ICEServer{turnCredentials(n.TURNSecret, token, expiry, n.URLs)}})
-					seen[n.ID] = true
-				}
-			} else {
-				log.Printf("ice: OnlineNodes read failed: %v (static-only)", err)
-			}
-			for _, rc := range s.cfg.TURNRelays {
-				if rc.ID == "" || rc.Secret == "" || len(rc.URLs) == 0 || seen[rc.ID] {
-					continue // skip misconfigured or already-covered-by-a-dynamic-node
-				}
-				if !claimAddrs(seenAddr, rc.URLs) {
-					continue // a dynamic node already covers this machine
-				}
-				relays = append(relays, relayEntry{ID: rc.ID, Region: rc.Region, STUN: rc.STUN,
-					ICEServers: []ICEServer{turnCredentials(rc.Secret, token, expiry, withTCPTransport(rc.URLs))}})
-			}
-		}
+		relays, _ := s.relayPool(r.Context(), owner, token, expiry, strict, now, false)
 		if len(relays) > 0 {
 			resp["relays"] = relays
 		}
@@ -319,4 +279,139 @@ func withTCPTransport(urls []string) []string {
 		add(u + "?transport=tcp")
 	}
 	return out
+}
+
+// relayPool assembles the multi-relay pool for an authorised owner: their own
+// self-hosted nodes (free relay, always included) unioned — unless strict —
+// with the online fleet and the legacy static relays. Each entry carries its
+// own ephemeral credential so the client can measure RTT and pick the fastest.
+//
+// failClosed selects the error policy, and it is the ONLY difference between
+// the two callers:
+//
+//   - /api/ice passes false and keeps the behaviour it has always had. A failed
+//     read logs and degrades the pool. That is right for a transfer that has
+//     not started: a smaller pool still connects, and refusing would strand a
+//     user over a transient database blip.
+//   - Renewal passes true. There the same failure means an entitlement question
+//     went unanswered, and answering it optimistically would extend paid relay
+//     on no evidence. It returns the error and issues nothing.
+//
+// The two must not drift, which is why this is one function with a flag rather
+// than two copies that agree today.
+func (s *Service) relayPool(ctx context.Context, owner, token string, expiry int64, strict bool, now time.Time, failClosed bool) ([]relayEntry, error) {
+	relays := make([]relayEntry, 0)
+	seen := map[string]bool{}
+	// Second dedup key: the physical relay. `seen` catches a repeated id;
+	// this catches one machine offered under two ids -- a static config
+	// entry and a registered node at the same address, or a node that lost
+	// state.json and re-registered with a fresh id while its old row is
+	// still inside nodeOnlineWindow. See claimAddrs.
+	//
+	// Precedence across sources is positional, not freshness-based: the
+	// own-nodes loop below claims an address before the fleet loop ever
+	// runs, so an own-node row wins regardless of which heartbeat is newer.
+	// A stale own-node row (up to nodeOnlineWindow, 90s, after the box
+	// actually died) can therefore suppress a live fleet row at the same
+	// address, handing the client only the dead credential -- before this
+	// dedup existed, the client would have probed both and the dead one
+	// would simply have failed to answer. Near-unreachable in practice --
+	// one process binds a host:port, and the node agent owns its own TURN
+	// secret, so the surviving row is normally the authoritative one anyway
+	// -- but it is the one scenario where this dedup turns "one working
+	// entry plus one dead entry" into "only the dead one". Worth knowing
+	// before reordering these three loops.
+	seenAddr := map[string]bool{}
+	since := now.Add(-nodeOnlineWindow).Unix()
+
+	// Node URLs go out exactly as the node registered them: relayium-node
+	// is UDP-only, so widening them would advertise a candidate that can
+	// never allocate. See withTCPTransport.
+	//
+	// The owner's own nodes (free relay), always included.
+	if own, err := s.store.UserNodes(ctx, owner, since); err == nil {
+		for _, n := range own {
+			if n.ID == "" || n.TURNSecret == "" || len(n.URLs) == 0 {
+				continue
+			}
+			if !claimAddrs(seenAddr, n.URLs) {
+				continue
+			}
+			relays = append(relays, relayEntry{ID: n.ID, Region: n.Region,
+				ICEServers: []ICEServer{turnCredentials(n.TURNSecret, token, expiry, n.URLs)}})
+			seen[n.ID] = true
+		}
+	} else if failClosed {
+		return nil, fmt.Errorf("own nodes: %w", err)
+	} else {
+		log.Printf("ice: UserNodes read failed: %v (own-node routing skipped)", err)
+	}
+
+	if !strict {
+		// Per-node monthly traffic cap: withhold any fleet node that has
+		// reached 90% of its effective cap. The 90% is a *scheduling*
+		// reserve, not the hard stop — traffic is checked once at ICE time
+		// but accrues for the whole session, so a node sitting at 99.9%
+		// would still be handed out and then blow well past its cap. The
+		// node's own 100% blackhole (counter.go overTraffic) is the hard
+		// gate; this leaves it 10% to drain established sessions with.
+		// Computed once per request; a read error fails open.
+		monthStart, _ := monthRange(periodOf(now.Unix()))
+		monthlyUsed, muErr := s.store.NodeRelayedSince(ctx, monthStart)
+		if muErr != nil {
+			if failClosed {
+				// Without this read the per-node traffic caps are simply not
+				// applied. Degrading that on a first connection is a trade the
+				// endpoint has always made; silently un-capping a RENEWAL is
+				// how an over-budget node keeps relaying for another hour.
+				return nil, fmt.Errorf("node traffic: %w", muErr)
+			}
+			log.Printf("ice: NodeRelayedSince read failed: %v (traffic caps not enforced this request)", muErr)
+		}
+		// The per-node budget is read strictly for renewal: folding an
+		// unreadable NodeTrafficDefault into the env default can REMOVE a cap an
+		// administrator configured, which is how an over-budget node keeps
+		// relaying for another hour.
+		var st Settings
+		if failClosed {
+			var stErr error
+			st, stErr = s.ResolveSettingsStrict(ctx)
+			if stErr != nil {
+				return nil, fmt.Errorf("node policy: %w", stErr)
+			}
+		} else {
+			st = s.ResolveSettings(ctx)
+		}
+		if nodes, err := s.store.OnlineNodes(ctx, since); err == nil {
+			for _, n := range nodes {
+				if n.ID == "" || n.TURNSecret == "" || len(n.URLs) == 0 || seen[n.ID] {
+					continue
+				}
+				if cap := usableTraffic(resolveNodeTrafficLimit(n, st)); cap > 0 && monthlyUsed[n.ID] >= cap {
+					continue // at/over the 90% scheduling reserve — withhold this node
+				}
+				if !claimAddrs(seenAddr, n.URLs) {
+					continue
+				}
+				relays = append(relays, relayEntry{ID: n.ID, Region: n.Region,
+					ICEServers: []ICEServer{turnCredentials(n.TURNSecret, token, expiry, n.URLs)}})
+				seen[n.ID] = true
+			}
+		} else if failClosed {
+			return nil, fmt.Errorf("online nodes: %w", err)
+		} else {
+			log.Printf("ice: OnlineNodes read failed: %v (static-only)", err)
+		}
+		for _, rc := range s.cfg.TURNRelays {
+			if rc.ID == "" || rc.Secret == "" || len(rc.URLs) == 0 || seen[rc.ID] {
+				continue // skip misconfigured or already-covered-by-a-dynamic-node
+			}
+			if !claimAddrs(seenAddr, rc.URLs) {
+				continue // a dynamic node already covers this machine
+			}
+			relays = append(relays, relayEntry{ID: rc.ID, Region: rc.Region, STUN: rc.STUN,
+				ICEServers: []ICEServer{turnCredentials(rc.Secret, token, expiry, withTCPTransport(rc.URLs))}})
+		}
+	}
+	return relays, nil
 }

@@ -118,7 +118,7 @@ final class PeerCapabilityRegistryTests: XCTestCase {
 
     func testAdvertisedCapabilitiesAreRoomScoped() {
         XCTAssertEqual(advertisedLinkCapabilities(linkRoomActive: true),
-                       [TEXT_CAPABILITY, LINK_CAPABILITY])
+                       [TEXT_CAPABILITY, LINK_CAPABILITY, RELAY_RENEW_CAPABILITY])
         XCTAssertEqual(advertisedLinkCapabilities(linkRoomActive: false), [TEXT_CAPABILITY])
     }
 
@@ -156,10 +156,10 @@ final class PeerCapabilityRegistryTests: XCTestCase {
 
         for isCodelessRoom in [true, false] {
             let active = linkRoomActive(isCodelessRoom: isCodelessRoom)
-            XCTAssertEqual(advertisedLinkCapabilities(linkRoomActive: active),
-                           active ? [TEXT_CAPABILITY, LINK_CAPABILITY] : [TEXT_CAPABILITY])
-            XCTAssertEqual(peerCaps(from: linkCapsHello(linkRoomActive: active)),
-                           active ? [TEXT_CAPABILITY, LINK_CAPABILITY] : [TEXT_CAPABILITY])
+            let expected = active
+                ? [TEXT_CAPABILITY, LINK_CAPABILITY, RELAY_RENEW_CAPABILITY] : [TEXT_CAPABILITY]
+            XCTAssertEqual(advertisedLinkCapabilities(linkRoomActive: active), expected)
+            XCTAssertEqual(peerCaps(from: linkCapsHello(linkRoomActive: active)), expected)
 
             let registry = PeerCapabilityRegistry(
                 linkRoomActive: { linkRoomActive(isCodelessRoom: isCodelessRoom) })
@@ -303,7 +303,8 @@ final class PeerCapabilityRegistryTests: XCTestCase {
     /// confirmation, so the two announcements cannot disagree.
     func testCapsHelloCarriesExactlyTheAdvertisedList() {
         let hello = linkCapsHello(linkRoomActive: true)
-        XCTAssertEqual(peerCaps(from: hello), [TEXT_CAPABILITY, LINK_CAPABILITY])
+        XCTAssertEqual(peerCaps(from: hello),
+                       [TEXT_CAPABILITY, LINK_CAPABILITY, RELAY_RENEW_CAPABILITY])
         let registry = registry()
         XCTAssertTrue(registry.record(peerId: "self-echo", signal: hello))
     }

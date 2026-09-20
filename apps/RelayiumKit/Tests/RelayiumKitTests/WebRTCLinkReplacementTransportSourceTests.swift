@@ -192,36 +192,84 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
 
     // MARK: - exactly one negotiation
 
-    /// This driver negotiates ONCE, and the absence of an ICE restart is a gate
-    /// rather than an oversight.
+    /// The REBUILD negotiates exactly once, and the only second negotiation on
+    /// this connection is renewal's — which brings its own gate.
     ///
-    /// It is a deliberate divergence from `webrtc-core.ts`, which fires one
-    /// restart offer as initiator on `disconnected` and which the web's own
-    /// resume path inherits — so this is precisely the code a later reader
-    /// assumes is present. Adding it here without first building a
-    /// per-negotiation gate breaks three one-shot invariants at once:
-    /// `LinkResumePolicy` refuses a second remote description before it even
-    /// checks the tag, both `LinkCandidateGate`s are already open and would let
-    /// a restart's candidates overtake the description they belong to, and
-    /// `LinkEstablishment` has already published lanes whose AEAD sequences are
-    /// running.
+    /// ## What the original absence was protecting
     ///
-    /// Pinned here because absence is not observable at runtime: a driver that
-    /// grew a restart would still pass every behavioural test in this batch,
-    /// and would simply be unsafe on the second negotiation.
-    func testTheDriverNegotiatesExactlyOnceAndNeverRestartsICE() throws {
+    /// An unguarded ICE restart here would have broken three one-shot
+    /// invariants at once: `LinkResumePolicy` refuses a second remote
+    /// description before it even checks the tag, both `LinkCandidateGate`s are
+    /// already open and would let a restart's candidates overtake the
+    /// description they belong to, and `LinkEstablishment` has already
+    /// published lanes whose AEAD sequences are running.
+    ///
+    /// ## Why renewal's restart is not that
+    ///
+    /// Each of the three is addressed, and this test now pins the addressing
+    /// rather than the absence:
+    ///
+    ///  - **The policy is not involved.** A renewal envelope is claimed by
+    ///    shape in `handleLocked` and returns BEFORE `policy.plan`, and
+    ///    `renewalApplyRemoteDescription` applies its description directly. The
+    ///    rebuild's own once-only slots are untouched.
+    ///  - **Neither candidate gate is used.** Local candidates during an epoch
+    ///    are diverted to `onRenewalLocalCandidate` before `localCandidates`,
+    ///    and inbound ones arrive through `renewalAddRemoteCandidate`, which
+    ///    skips `remoteCandidates`. The ordering those gates provided is
+    ///    provided instead by `RelayRenewEngine`, per epoch, keyed by the ufrag
+    ///    a candidate itself names — which is strictly stronger, because the
+    ///    old gate could not tell two generations apart at all.
+    ///  - **The lanes are untouched.** An ICE restart renegotiates ICE, not
+    ///    DTLS or SCTP, so no sequence is reset and no lane is republished.
+    ///
+    /// Still pinned as source, for the original reason: the difference between
+    /// a gated and an ungated restart is not observable at runtime here.
+    func testTheRebuildNegotiatesOnceAndOnlyRenewalRestartsICE() throws {
         let source = try self.code()
-        for forbidden in ["iceRestart", "restartIce", "RTCOfferAnswerOptions", ".disconnected"] {
+        // Never driven by connection state, and never by an options object that
+        // could smuggle `iceRestart` into the ESTABLISHMENT offer.
+        for forbidden in ["iceRestart", "RTCOfferAnswerOptions", ".disconnected"] {
             XCTAssertFalse(source.contains(forbidden),
                            "\(forbidden) needs a per-negotiation SDP/candidate gate first")
         }
-        XCTAssertEqual(occurrences(of: "pc.offer(for:", in: source), 1,
-                       "one offer for the transport's whole life")
-        XCTAssertEqual(occurrences(of: "pc.answer(for:", in: source), 1)
-        XCTAssertEqual(occurrences(of: "pc.setLocalDescription(", in: source), 2,
-                       "one per role, and neither is reachable twice")
-        XCTAssertEqual(occurrences(of: "pc.setRemoteDescription(", in: source), 1,
-                       "one application site, guarded by the policy's once-only slots")
+        // Exactly one restart, and it is renewal's.
+        XCTAssertEqual(occurrences(of: "restartIce", in: source), 1,
+                       "one restart site, on the renewal path alone")
+        let restart = try XCTUnwrap(source.range(of: "pc.restartIce()"))
+        let renewalOffer = try XCTUnwrap(source.range(of: "public func renewalCreateOffer"))
+        XCTAssertTrue(renewalOffer.lowerBound < restart.lowerBound,
+                      "the restart belongs to renewalCreateOffer and to nothing else")
+
+        // One negotiation for the rebuild, plus one for renewal.
+        XCTAssertEqual(occurrences(of: "pc.offer(for:", in: source), 2,
+                       "the rebuild's offer, and renewal's")
+        XCTAssertEqual(occurrences(of: "pc.answer(for:", in: source), 2)
+        XCTAssertEqual(occurrences(of: "pc.setLocalDescription(", in: source), 3,
+                       "one per rebuild role, and one shared renewal site")
+        XCTAssertEqual(occurrences(of: "pc.setRemoteDescription(", in: source), 2,
+                       "the rebuild's, guarded by the policy's once-only slots, and renewal's")
+
+        // Renewal's inbound envelope is claimed BEFORE the resume policy runs,
+        // which is what keeps the rebuild's own once-only slots intact.
+        let claimed = try XCTUnwrap(source.range(of: "isRelayRenewEnvelope(signal)"))
+        let planned = try XCTUnwrap(source.range(of: "policy.plan(from: from, signal: signal)"))
+        XCTAssertTrue(claimed.lowerBound < planned.lowerBound,
+                      "a renewal envelope must never reach the resume policy")
+
+        // And renewal's candidates bypass both gates.
+        XCTAssertTrue(source.contains("if renewalEpochInFlight {"),
+                      "local candidates during an epoch must skip localCandidates")
+        let diverted = try XCTUnwrap(source.range(of: "renewalInputs?.localCandidate("))
+        let admitted = try XCTUnwrap(source.range(of: "localCandidates.admit(candidate)"))
+        XCTAssertTrue(diverted.lowerBound < admitted.lowerBound,
+                      "the diversion has to come first, or both paths send the candidate")
+
+        // The three inputs are ONE required subscription, not settable
+        // properties nobody has to assign — which is how they went unwired.
+        XCTAssertTrue(source.contains("public func installRenewalInputs("))
+        XCTAssertFalse(source.contains("public var onRenewal"),
+                       "a bare settable input can be left unassigned by every composition")
         XCTAssertTrue(
             source.contains("peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {}"),
             "the renegotiation callback is answered with nothing, on purpose")

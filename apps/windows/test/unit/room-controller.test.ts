@@ -18,6 +18,7 @@ import type { TransportBridge } from "../../src/renderer/transport/bridge.js";
 import {
   CAP_LINK,
   CAP_PREUPLOAD,
+  CAP_RENEW,
   peerCapsKnown,
   peerSupportsLink,
   resetPeerCaps,
@@ -97,6 +98,16 @@ function fakeBridge() {
         token: this.tokenOf(index),
         kind: "message",
         data: JSON.stringify({ type: "peers", peers: ids.map((id) => ({ id, name: id })) }),
+      });
+    },
+    /** An `ice-grant` frame from the SERVER. Unlike a signal it carries no
+     *  `from`: it is the server speaking to this socket, not a peer relayed
+     *  through it. */
+    grant(index: number, data: unknown) {
+      emit({
+        token: this.tokenOf(index),
+        kind: "message",
+        data: JSON.stringify({ type: "ice-grant", data }),
       });
     },
     /** A `signal` frame from one peer to this client. */
@@ -417,7 +428,73 @@ describe("two concurrent rooms are independent", () => {
     const codeHello = hellos.find((h) => h.token === fake.tokenOf(1));
     expect(lanHello?.frame.to).toBe("lan-peer");
     expect(codeHello?.frame.to).toBe("code-peer");
-    expect(lanHello?.frame.data.caps).toEqual([CAP_LINK, CAP_PREUPLOAD]);
+    // The Electron renderer announces exactly what the browser does — it
+    // composes the same modules — including `relay-renew/1`, whose whole path
+    // is wired here too (see RoomController's `requestRenewRound`).
+    expect(lanHello?.frame.data.caps).toEqual([CAP_LINK, CAP_PREUPLOAD, CAP_RENEW]);
+  });
+
+  /**
+   * Relay renewal is wired PER ROOM, exactly as the relay selection and the
+   * capability registry beside it are.
+   *
+   * This client runs a LAN room and a pairing room at once. A renewal round is
+   * a paid relay grant issued against one room's membership, so a reply landing
+   * on the wrong room's controller would apply one room's credentials to the
+   * other room's link. The socket token is what keeps them apart, and these
+   * assert that it actually does.
+   */
+  it("routes an ice-grant only to the room whose socket carried it", async () => {
+    const fake = fakeBridge();
+    makeRoom(fake.bridge, { kind: "lan" }, "windows");
+    makeRoom(fake.bridge, { kind: "code", code: "424242" }, "windows");
+    fake.join(0, "lan-self", ["lan-peer"]);
+    fake.join(1, "code-self", ["code-peer"]);
+    await settle();
+
+    // A grant for a request nobody made, a non-object body, and an unknown
+    // status. None may throw out of the message loop: an unparseable server
+    // frame must never be able to wedge a room, and none of them correlates
+    // with anything, so all three are dropped in silence.
+    expect(() => fake.grant(0, { status: "granted", round: 1, rid: 7 })).not.toThrow();
+    expect(() => fake.grant(1, "not an object")).not.toThrow();
+    expect(() => fake.grant(1, { status: "nonsense", round: 1, rid: 7 })).not.toThrow();
+    await settle();
+
+    // The proof that the loop survived: the room still processes ordinary
+    // traffic afterwards. A frame that wedged the dispatch would leave this
+    // roster change unobserved, which is how such a defect actually presents.
+    fake.roster(1, ["code-self", "code-peer", "code-peer-2"]);
+    await settle();
+    fake.signal(1, "code-peer-2", { caps: [CAP_LINK, CAP_PREUPLOAD, CAP_RENEW] });
+    await settle();
+    const controller = controllers[1]!;
+    expect(controller.caps.supportsLink("code-peer-2")).toBe(true);
+    expect(controller.caps.supportsRenew("code-peer-2")).toBe(true);
+    // …and the LAN room, whose socket carried none of it, is untouched.
+    expect(controllers[0]!.caps.supportsRenew("code-peer-2")).toBe(false);
+  });
+
+  it("keeps each room's renewal capability record separate", async () => {
+    const fake = fakeBridge();
+    makeRoom(fake.bridge, { kind: "lan" }, "windows");
+    makeRoom(fake.bridge, { kind: "code", code: "424242" }, "windows");
+    fake.join(0, "lan-self", ["lan-peer"]);
+    fake.join(1, "code-self", ["code-peer"]);
+    await settle();
+
+    // The pairing peer can renew; the LAN peer is an older build that cannot.
+    fake.signal(1, "code-peer", { caps: [CAP_LINK, CAP_PREUPLOAD, CAP_RENEW] });
+    fake.signal(0, "lan-peer", { caps: [CAP_LINK, CAP_PREUPLOAD] });
+    await settle();
+
+    expect(controllers[1]!.caps.supportsRenew("code-peer")).toBe(true);
+    expect(controllers[0]!.caps.supportsRenew("lan-peer")).toBe(false);
+    // The LAN roster churning must not delete the pairing room's record — the
+    // whole reason this registry is per room rather than the page global.
+    fake.roster(0, ["lan-self"]);
+    await settle();
+    expect(controllers[1]!.caps.supportsRenew("code-peer")).toBe(true);
   });
 
   it("does not greet itself", async () => {

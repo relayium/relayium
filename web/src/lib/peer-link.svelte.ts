@@ -20,6 +20,7 @@ import {
   type RtcConfig,
   type SignalAuth,
 } from "./webrtc";
+import { parseRenewEnvelope, type RenewEnvelope } from "./relay-renew-wire";
 import type { SignalingClient } from "./signaling";
 import type { RelayGate } from "./relay-selection";
 
@@ -209,6 +210,22 @@ export interface PeerLinkDeps {
    * immediately rather than showing a recovery that cannot succeed.
    */
   recoveryWindowMs?: () => number;
+  /**
+   * An authenticated relay-renewal signal for the current link.
+   *
+   * Routed here — ahead of every other `link`-generation handler — because a
+   * renewal envelope must be inert everywhere else. It shares the generation
+   * with an establishment in flight for the same peer, so reaching the ordinary
+   * handlers is not hypothetical: `establish()` filters by generation, not by
+   * kind. See `parseRenewEnvelope`, whose exact-shape allow-list is what makes
+   * this routable at all, and `relay-renew-v1.md` §3.1 for why the SDP is
+   * nested rather than top-level.
+   *
+   * The manager does not verify the tag: the key belongs to the link, the
+   * epoch state belongs to the controller, and splitting the check across both
+   * would mean two places deciding what a renewal signal is.
+   */
+  onRenewSignal?: (peerId: string, envelope: RenewEnvelope) => void;
 }
 
 export function isLinkOffer(data: unknown): data is InboundSignal {
@@ -1098,6 +1115,19 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
         // a caps list past the handlers that share this generation.
         if (isLinkLeave(data)) {
           void handleLeave(from, data);
+          return;
+        }
+        // A relay-renewal signal. Recognised by the same exact-shape discipline
+        // and consumed here, so its nested SDP and ICE can never reach the
+        // establishment handlers below — which would apply them as a real,
+        // unauthenticated renegotiation of a live transport.
+        //
+        // Scoped to the CURRENT link's peer. A renewal envelope from anybody
+        // else is dropped in silence rather than answered: replying would tell
+        // a signalling relay which peer this page holds a link with.
+        const renewEnvelope = parseRenewEnvelope(data);
+        if (renewEnvelope) {
+          if (current?.peerId === from) deps.onRenewSignal?.(from, renewEnvelope);
           return;
         }
         // A rebuild offer for an interrupted link. Deliberately first: it shares

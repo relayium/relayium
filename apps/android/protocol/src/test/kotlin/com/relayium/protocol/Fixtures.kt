@@ -43,6 +43,16 @@ object Fixtures {
     val crypto: Json.Obj by lazy { load("crypto-vectors.json") }
     val wire: Json.Obj by lazy { load("realtime-wire-vectors.json") }
 
+    /**
+     * The frozen `relay-renew/1` vectors.
+     *
+     * READ-ONLY here, like every other fixture: the authority is
+     * `web/src/lib/relay-renew-vectors.test.ts`, which recomputes every value
+     * in the file from the reference implementation. This port asserts against
+     * it and never writes it.
+     */
+    val relayRenew: Json.Obj by lazy { load("relay-renew-vectors.json") }
+
     // ── typed accessors, so a test reads like the thing it asserts ──────────
 
     fun obj(parent: Json.Obj, vararg path: String): Json.Obj {

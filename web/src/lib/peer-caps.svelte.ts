@@ -15,6 +15,7 @@
 // "降级成不加密"这条路径。能改写信令的攻击者本来就能直接让连接建不起来。
 
 import { CAP_PREUPLOAD } from "./preupload-handoff";
+import { CAP_RENEW } from "./relay-renew-wire";
 
 /**
  * The single-lane legacy conversation wire. **This build does not speak it.**
@@ -36,6 +37,10 @@ export const CAP_LINK = "link/1";
  *  codec that owns it so the announcement and the frame it promises cannot
  *  drift apart in two files. */
 export { CAP_PREUPLOAD };
+
+/** Relay credential renewal (`docs/protocol/relay-renew-v1.md`). Re-exported
+ *  from the wire module that owns it, for the same reason as above. */
+export { CAP_RENEW };
 
 /**
  * Whether this BUILD implements link/1 at all.
@@ -103,7 +108,8 @@ export function linkRoomActive(): boolean {
  * "nothing here for you" rather than nothing.
  */
 export function advertisedCaps(): readonly string[] {
-  return linkRoomActive() ? [CAP_LINK, CAP_PREUPLOAD] : [];
+  if (!linkRoomActive()) return [];
+  return renewRoomActive() ? [CAP_LINK, CAP_PREUPLOAD, CAP_RENEW] : [CAP_LINK, CAP_PREUPLOAD];
 }
 
 /** What each peer in the room has told us it supports. Reactive: the peer cards
@@ -203,6 +209,55 @@ export function peerSupportsLink(peerId: string): boolean {
 export function peerSupportsPreupload(peerId: string): boolean {
   if (!linkRoomActive()) return false;
   return (announced[peerId] ?? []).includes(CAP_PREUPLOAD);
+}
+
+/**
+ * Whether this build may ANNOUNCE `relay-renew/1`.
+ *
+ * True: the browser and the Electron renderer implement the whole client path —
+ * the wire, the epoch machine, the probe demux, the SDP pinning, the ufrag
+ * binding and the transport surface — and the server's `ice-renew` round
+ * endpoint lands in the same accepted change.
+ *
+ * Kept as a named predicate rather than inlined for the reason `linkRoomActive`
+ * is: one expression decides both what this build announces and, through
+ * `peerSupportsRenew`, what it will spend an epoch on. A future scope has one
+ * place to live and cannot be applied to the announcement while the router
+ * forgets it.
+ *
+ * Announcing it is still not the same as being able to use it. A session that
+ * has not wired the round exchange refuses to spend an epoch regardless (see
+ * `MixedSessionDeps.requestRenewRound`), and an announcement is a hint that
+ * confers no authority on its own (`link:§1.6`).
+ *
+ * This value is mirrored in `capability.hello.web` of
+ * `apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json`, which the Swift
+ * `LinkCapabilityVectorTests` reads. Changing it means regenerating that file
+ * (`node scripts/gen-realtime-wire-vectors.mjs`) in the same change.
+ */
+export function renewRoomActive(): boolean {
+  return linkRoomActive();
+}
+
+/**
+ * Exact match, and never inferred from link/1.
+ *
+ * Gates whether this side will spend a renewal epoch on a peer at all. It is a
+ * HINT and nothing more (`link:§1.6`): a relay can strip it, which costs a
+ * renewal that would have worked, or forge it, which costs two `prepare`
+ * signals into silence and then a permanent `unsupported` verdict for that
+ * link. Neither reaches a key, a deadline or an entitlement — only an
+ * authenticated message does, and the announcement is not one.
+ *
+ * Unlike `link/1` this is announced by a build that has the WHOLE path wired,
+ * not merely one that understands the frames. A peer that advertises it and
+ * then never answers a prepare is indistinguishable from one that never
+ * advertised, and both end in the same truthful place: the link runs out the
+ * deadline it already had.
+ */
+export function peerSupportsRenew(peerId: string): boolean {
+  if (!linkRoomActive()) return false;
+  return (announced[peerId] ?? []).includes(CAP_RENEW);
 }
 
 /** Drop announcements for peers no longer in the roster. A reconnecting peer is

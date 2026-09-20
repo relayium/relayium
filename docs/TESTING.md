@@ -1839,6 +1839,183 @@ with `-redis-addr <host:port>` and matching TURN flags.
 
 ---
 
+## Relay attribution survives a recycled pairing code `[AUTOMATED]`
+
+A TURN credential lives an hour (`TURNCredTTL`) and the six digits that produced
+it live five minutes (`signal.CodeTTLSeconds`), so for most of that hour the
+digits may already have been minted for a different account. While the
+credential's attribution token WAS those digits, a heartbeat arriving in that
+window was read as a forged claim and dropped: bytes relayed at our expense,
+billed to nobody. Issuance now embeds an immutable per-generation attribution
+tag instead (`server/internal/signal/attrib.go`).
+
+| What it covers | Owning suite | Command (from the repository root) |
+|---|---|---|
+| The tag itself: shape that can never parse as a pairing code, one fresh 128-bit draw per generation, the same digits reissued to another account getting a new tag while the old one keeps its owner, retention outliving the code / the reap / a revocation and then retiring on its own grace, and an exhausted or entropy-starved index refusing the mint rather than falling back to code-shaped attribution | `server/internal/signal/attrib_test.go` | `cd server && go test ./internal/signal` |
+| The billing path end to end through the real `/api/ice` handler and a real authenticated node heartbeat: the original owner keeps being metered after the digits are reassigned and the new owner is charged nothing, a known tag claimed by the wrong account is refused, a BYO node still cannot bill a stranger, an unknown tag (a restart, or past the grace) still bills the account its username names, repeated issuance before the peers pair yields one stable identity, and the one production wiring call is enough to make issuance tagged | `server/account/relay_attrib_test.go` | `cd server && go test ./account -run 'Attrib\|TaggedCredential\|IssuedGrant\|ReusedDigits\|KnownTag\|BYONode\|UnknownTag\|ProductionWiring\|RepeatedIssuance\|LegacyOwnerOnly'` |
+
+**Negative controls**, each run as a targeted mutation of the shipped behaviour
+and each caught: issuing the code instead of the tag (reproduces the original
+loss exactly — 100 billed where 300 was relayed); retiring the tag with its
+code; dropping it on revocation; treating an unknown tag as a forgery instead of
+accepting it as reported; accepting any claimed owner for a known tag; and
+minting a code anyway when no tag could be drawn.
+
+Deliberately unchanged, and covered by its own case: a deployment wiring only
+the legacy owner lookup keeps today's behaviour, recycling bug included, so
+credentials already in flight when a build ships behave as they were issued.
+
+---
+
+## Server-side relay renewal `[AUTOMATED]`
+
+A relayed transfer used to end when its hour-long credential did, and the two
+people had to pair again. Renewal lets the pair ask for a fresh credential for
+the SAME generation instead. The authority is the original opaque room, its
+minting account, its attribution tag and the two hub peer ids frozen when the
+room first held two connections — never the pairing code, which recycles, and
+never a bearer token, which would be something to steal.
+
+Server-side only. The client half (`relay-renew/1`, the link signalling
+envelope and the data-lane migration proof) lives with the Web/Windows, Apple
+and Android suites; nothing below claims a cross-client end-to-end result.
+
+| What it covers | Owning suite | Command (from the repository root) |
+|---|---|---|
+| Grant authority and lifetime: both frozen members must ask before anything is issued, a stranger or a replaced socket gets nothing, a departure kills the grant irreversibly, a generation whose last credential expired is never revived, rounds are cached and replayed without reissuing, the issuance floor is half a credential TTL from the ACTUAL last issuance, one in-flight issuance per grant, a result computed for a grant that has since died or lapsed is discarded | `server/internal/signal/grant_test.go` | `cd server && go test ./internal/signal` |
+| The exact wire: `ice-renew` is two positive uint32 keys and nothing else — an extra key, a missing one, a null, a float, an exponent, a quoted number, a negative, a zero or a trailing value is refused before any grant state is touched | `server/internal/signal/grant_test.go` (`TestParseRenewRequestIsStrict`) | as above |
+| Production wiring end to end: a real `PairRegistry`, the real `/api/ice` issuing the original credential **before** the second peer joins, the grant opened the way main.go's join hook opens it, and the real `account.RenewRelayGrant` deciding each round — including quota exhaustion, an unverified account, a duplicate round, a departure, and a generation whose digits have since been recycled to a stranger | `server/internal/signal/renew_wiring_integration_test.go` | as above |
+| Every nested policy read fails CLOSED: the account row, email verification, the plan behind an administrator grant, month-to-date traffic, the node-budget setting, own nodes, the fleet pool and the per-node monthly budget are each broken in turn and must produce `unavailable` with no credentials and no stamped expiry | `server/account/renew_failclosed_test.go` | `cd server && go test ./account -run 'TestRenew'` |
+
+| The rate floor's anchor — the CONTINUOUS SEGMENT rule. Pre-upload lets the two peers fetch far apart while both credentials are live (A at minute 0, B at 25, 40 or 59), so the floor runs from the segment's EARLIEST issuance and not its latest; a later peer joining a live run never moves the anchor; an accepted renewal becomes the new anchor; and a first issuance at the same instant as the pairing is legitimately floored | `grant_test.go`, `attrib_test.go`, and the same three B-join times through real `/api/ice` in `renew_wiring_integration_test.go` | as above |
+| Unissued, lapsed and historical states kept apart: a grant with nothing issued is `unavailable` and SURVIVES for the initial fetch that is about to arrive; a grant that was live and lapsed is `denied`/`expired` and never revived; expired history hydrates as unissued rather than as ancient authority | `grant_test.go`, `renew_wiring_integration_test.go` | as above |
+| Observer ordering: issuances are recorded under the pairing registry's lock but announced outside it, so the grant hydrates from the registry's atomic segment snapshot rather than from whichever callback arrived first, and an already-expired notification activates nothing | `grant_test.go` | as above |
+| Bounded DATABASE work, separately from the issuance floor: a refusal advances no round and charges no floor, so without a cooldown the same pair can re-run the issuer immediately — twenty invocations were reproduced where one was correct. One issuer run per grant per thirty seconds, charged even when the run timed out, per grant rather than globally, and never ahead of membership, expiry or a cached replay | `grant_test.go` | as above |
+| The strict quota chain equals the original whenever nothing fails — across paid and unlimited tiers, mid-month proration, admin grants that win, lose or name a missing plan, usage at and past the cap, and admin-edited settings. The two differ only in what an unreadable row means; a difference in the ARITHMETIC would judge a renewal and a first credential against different caps | `server/account/renew_strict_equality_test.go` | `cd server && go test ./account -run StrictQuotaChain` |
+
+**Negative controls**, each a targeted mutation of the shipped behaviour and
+each caught — several reproduce independent-review oracles verbatim:
+
+- the grant does not inherit the credential `/api/ice` issued before pairing
+  (reports as `denied`/`expired` for a legitimate transfer);
+- `complete` skips its lapse re-check (an expired generation is resurrected by
+  the answer to a question it had already lost the right to ask);
+- the issuer records its own issuance again (which would extend the very
+  authority the discard decision is judged against);
+- the anchor follows the LATEST issuance instead of the segment's first (the
+  liveness counterexample: A's renewal at minute 50 refused because B joined at
+  minute 59, with ten minutes still on A's credential);
+- a later issuance moves a live segment's anchor;
+- expired history hydrates as authority;
+- a rate refusal is terminal rather than retryable;
+- an unissued grant is destroyed by a request, stranding the room;
+- `NoteIssued` extends a grant that has already lapsed;
+- the issuer cooldown is absent, or is charged only on success rather than on
+  every run;
+- the strict quota chain drifts from the original (proration base dropped, or a
+  losing admin grant allowed to win).
+
+**On the rate refusal specifically:** too early is reported as `unavailable`,
+not `denied`. A client that read it as terminal would abandon a renewal it is
+entitled to make minutes later, while its credential is still live. Nothing is
+issued, no round advances and the database is not touched, so the bounded retry
+costs the account nothing.
+
+**Not covered here, and not claimed:** any client behaviour, any real TURN
+engine, and any cross-client migration. Relay telemetry is explicitly NOT an
+authorisation gate — a transfer that migrates from a pion node to coturn goes
+quiet in the metering stream while perfectly healthy, so treating silence as
+idleness would refuse the legitimate case. Activity remains a property honest
+clients enforce.
+
+**And not claimed about TURN engines:** a credential's expiry does not end an
+allocation that is already running on the third-party TURN server this
+deployment uses. Our own relay nodes do re-authenticate and stop, but that is a
+property of those nodes and is not asserted for any other implementation, and
+no fixed retirement interval is claimed for either. The grant authority in this
+package expires on its own clock regardless — it governs what may be ISSUED —
+but no test here, and no comment in this package, may be read as bounding an
+allocation's life, promising prompt retirement after a migration, or claiming
+an instantaneous quota cap. The residual that follows is pre-existing and is
+tracked as a separate deferred money-path task, with its evidence in the
+project's internal records rather than here.
+
+---
+
+## Web/Windows relay renewal `[AUTOMATED]`
+
+The client half of `relay-renew/1` — the counterpart to the server section
+above. The contract is `docs/protocol/relay-renew-v1.md`; the Electron renderer
+composes the same modules as the browser, so one implementation is tested once
+and wired twice.
+
+The single rule everything below defends: **a deadline moves only on §6.5
+commit.** A denial, a timeout, a failed pin, an unparseable grant, a peer that
+does not implement renewal and a server that never answers all leave the
+boundary exactly where it was, and the existing warning and expiry take over.
+
+| What it pins | Where | How to run |
+|---|---|---|
+| The shared wire, byte for byte: every canonical payload and its UTF-8 bytes, the 59-byte control frame, 20 envelope rejects (including SDP or ICE hoisted to the top level), the server grant envelopes, SDP pinning and ufrag binding — all recomputed from the production module and compared to the fixture the native ports read | `web/src/lib/relay-renew-vectors.test.ts` against `apps/RelayiumKit/Tests/Fixtures/relay-renew-vectors.json` | `cd web && npx vitest run src/lib/relay-renew-vectors.test.ts` |
+| The state machine in motion: two REAL controllers wired to each other through a signalling shim and a data lane. The trigger arithmetic at 40/50/55/59 minutes of a one-hour grant and at 40 s of a 60-second one; replay of a validly signed `prepare` for a spent epoch; the counter surviving a transport rebuild that publishes null; glare; the commit fence; the post-commit ack window; a nonce reused with a different tag; the front demux | `web/src/lib/relay-renew.test.ts` | `cd web && npx vitest run src/lib/relay-renew.test.ts` |
+| The transport surface against the three real-browser behaviours that broke the first implementation: a retained nominated pair from the previous ICE generation, a transport address shared across generations, and a responder whose `currentRemoteDescription` is still the old generation while the new offer is pending | `web/src/lib/relay-renew-transport.test.ts` | `cd web && npx vitest run src/lib/relay-renew-transport.test.ts` |
+| Renewal is wired PER ROOM in the Electron renderer, so a LAN roster churning cannot delete the pairing room's record and a grant cannot cross rooms | `apps/windows/test/unit/room-controller.test.ts` | `cd apps/windows && npx vitest run test/unit/room-controller.test.ts` |
+| A REAL Chrome migration: the shipped modules bundled from source, two real `RTCPeerConnection`s, a genuine `createOffer({iceRestart:true})`, and `getStats()` reporting the new generation as selected rather than the retained old pair | `web/e2e/relay-renewal.mjs` | `cd web && npm run build && npm run test:e2e:relay-renewal` |
+
+### Product interoperability and evidence limits
+
+The checked-in browser engine acceptance above uses a local grant stub and no
+TURN relay. Separate controlled product runs exercise the actual server, real
+coturn or Pion allocations, the built Web UI, and native application composition
+across accelerated credential lifetimes. Their acceptance requires selected new
+ICE generations, each endpoint's fresh nonce acknowledgement, unchanged session
+identity, exact file hashes, bytes continuing after old allocations retire, and
+relay totals matching the owner ledger.
+
+Web positive and failed-migration runs and a Pion run that exhausts the
+allowance and refuses the next issuance have passed those relevant checks.
+Apple senders have passed in both connection roles with one 24 MiB plus 17 byte
+file: all three grants occurred while that same file was unfinished, its exact
+hash matched, the session stayed intact, and transfer continued after the
+initial allocations were forcibly removed. The allocation totals matched the
+owner ledger and period buckets. Earlier multi-file passes and failed
+within-file sampling or natural-retirement runs remain separate evidence.
+Android–Web runs have also passed with both reachable
+and unreachable STUN, covering both connection roles: each transferred 24 MiB
+plus 17 bytes with an exact hash and three committed renewals, retained the
+same link and SAS, continued after initial allocations retired, and reconciled
+relay totals with the owner ledger. Earlier failures remain recorded separately,
+including a pre-join instrumentation assertion and an actual second-renewal
+candidate-discovery failure; neither is counted as a passing run.
+
+The Apple acceptance host's authenticated `stagedFile` command reads from the
+harness-owned `native-staged` directory beside its receive root, using the
+production file source and send entry point. This permits a file larger than
+the flow-control window without expanding the control request body limit.
+`AppPairLinkStagedFileTests` covers the actual path validation and descriptor
+checks (`cd apps/RelayiumKit && swift test --filter AppPairLinkStagedFileTests`).
+The command belongs to the acceptance fixture, not the shipped apps.
+
+Remaining limits:
+
+- These are local controlled slow-transfer tests, not WAN speed measurements,
+  real-phone coverage, or proof across all proxies and carrier NATs.
+- A real Android emulator path selected prflx; blanket rejection by candidate
+  type was too strict. A candidate's own matching ufrag can establish its
+  generation, while missing or stale ufrags still fail closed.
+- Android now publishes the SDK-selected current-generation prflx address
+  through authenticated, bounded candidate signaling. This supplies the peer's
+  new relay with an address to check; it does not relax the migration proof.
+  The failed old-path run and the corrected unreachable-STUN pass are distinct.
+- Successful migration does not guarantee that every old allocation retires
+  promptly. An Apple run retained unselected initial allocations after three
+  migrations. Forced-retirement acceptance tests continued transfer after those
+  allocations are removed; it is not evidence of automatic resource cleanup.
+- A TCP-active address reused across generations cannot prove migration via
+  the address map alone. An explicit authoritative generation is still needed.
+- Windows composes the Web renewal modules and has renderer wiring tests;
+  shared implementation alone does not establish every native platform pairing.
+
 ## Cross-network hardening regressions `[AUTOMATED]`
 
 A cross-client review of the pairing-code path (2026-09-19) landed fixes across
