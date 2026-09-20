@@ -135,11 +135,11 @@ function accepts(label, text, extraArgs = []) {
 // ── the baseline ─────────────────────────────────────────────────────────────
 
 accepts("the shipped packet passes", shippedRaw);
-accepts("the shipped packet passes against its own declared version", shippedRaw, ["--expect-version", "0.4.0"]);
+accepts("the shipped packet passes against its own declared version", shippedRaw, ["--expect-version", "0.4.1"]);
 
 // ── the candidate version and the observed version are different facts ─────
 //
-// The packet is drafted for 0.4.0 while App Store Connect was last read back
+// The packet is drafted for 0.4.1 while App Store Connect was last read back
 // holding 0.3.1, which is in review. The validator lets those two differ, and
 // that permission is exactly what these cases exist to keep narrow: it must not
 // turn into "any mismatch is fine", and it must not let the observation be
@@ -149,22 +149,22 @@ accepts("the shipped packet passes against its own declared version", shippedRaw
   const shipped = clone();
   const observed = shipped.appStoreConnectObservation.records.find((entry) => entry.targetForIosRelease);
   cases += 1;
-  if (shipped.record.marketingVersion !== "0.4.0" || observed?.observedVersion !== "0.3.1") {
+  if (shipped.record.marketingVersion !== "0.4.1" || observed?.observedVersion !== "0.3.1") {
     bad(
-      "the shipped packet drafts 0.4.0 against an observed 0.3.1",
+      "the shipped packet drafts 0.4.1 against an observed 0.3.1",
       `record.marketingVersion is ${shipped.record.marketingVersion}, observedVersion is ${observed?.observedVersion}`,
     );
   } else {
-    ok("the shipped packet drafts 0.4.0 against an observed 0.3.1");
+    ok("the shipped packet drafts 0.4.1 against an observed 0.3.1");
   }
 }
 
 const iosTarget = (p) => p.appStoreConnectObservation.records.find((entry) => entry.targetForIosRelease);
 
 rejects(
-  "an observation rewritten to the candidate version, as though 0.4.0 had been read back",
+  "an observation rewritten to the candidate version, as though 0.4.1 had been read back",
   (p) => {
-    iosTarget(p).observedVersion = "0.4.0";
+    iosTarget(p).observedVersion = "0.4.1";
   },
   "never to match the candidate",
 );
@@ -202,29 +202,29 @@ rejects(
   (p) => {
     p.record.marketingVersion = "0.3.1";
   },
-  "not the '0.4.0' this packet was written for",
+  "not the '0.4.1' this packet was written for",
 );
 
 rejects(
   "an observation note claiming the candidate version was observed",
   (p) => {
     const field = p.appStoreConnectObservation.observedFields.find((entry) => entry.id === "version");
-    field.observed = `${field.observed} On a later reading the record showed 0.4.0 selected for review.`;
+    field.observed = `${field.observed} On a later reading the record showed 0.4.1 selected for review.`;
   },
-  "no read-back of '0.4.0' exists",
+  "no read-back of '0.4.1' exists",
 );
 
 rejects(
   "an observed record note naming the candidate version",
   (p) => {
-    iosTarget(p).note = `${iosTarget(p).note} It now reads 0.4.0.`;
+    iosTarget(p).note = `${iosTarget(p).note} It now reads 0.4.1.`;
   },
-  "no read-back of '0.4.0' exists",
+  "no read-back of '0.4.1' exists",
 );
 
 // The guard names WHOLE versions. A different version that merely contains the
 // candidate's digits is not a claim about the candidate, and refusing it would
-// make the guard noise that somebody eventually deletes. (`0.4.00` would be the
+// make the guard noise that somebody eventually deletes. (`0.4.10` would be the
 // sharper probe, but the packet's decimal-price rule refuses it on its own.)
 cases += 1;
 {
@@ -242,9 +242,9 @@ cases += 1;
 rejects(
   "TestFlight text left describing the previous version",
   (p) => {
-    p.testFlight.betaAppDescription["en-US"] = p.testFlight.betaAppDescription["en-US"].replace("the 0.4.0 line", "the 0.3.1 line");
+    p.testFlight.betaAppDescription["en-US"] = p.testFlight.betaAppDescription["en-US"].replace("the 0.4.1 line", "the 0.3.1 line");
   },
-  "names version '0.3.1', but this packet is drafted for '0.4.0'",
+  "names version '0.3.1', but this packet is drafted for '0.4.1'",
 );
 
 rejects(
@@ -252,7 +252,7 @@ rejects(
   (p) => {
     p.testFlight.whatToTest["zh-Hans"] = `${p.testFlight.whatToTest["zh-Hans"]}\n9. 与 0.3.1 对照。`;
   },
-  "names version '0.3.1', but this packet is drafted for '0.4.0'",
+  "names version '0.3.1', but this packet is drafted for '0.4.1'",
 );
 
 rejects(
@@ -644,7 +644,7 @@ rejects(
   (p) => {
     p.record.marketingVersion = "0.5.0";
   },
-  "not the '0.4.0' this packet was written for",
+  "not the '0.4.1' this packet was written for",
 );
 
 cases += 1;

@@ -103,8 +103,48 @@ purchase is accepted, not a conclusion this document may assert on its own.
 
 | Field | Value |
 | --- | --- |
-| Marketing version in the project source | `0.4.0` |
-| Build in the project source | `9` |
+| Marketing version in the project source | `0.4.1` |
+| Build in the project source | `10` |
+
+#### `0.4.1` (build `10`) — PREPARING for internal TestFlight, as of 2026-09-20
+
+**Status as of 2026-09-20: source preparation only.** As of that date nothing
+had been archived, signed, uploaded or distributed under `0.4.1`; build `10` is
+a project value App Store Connect has never seen, and **the version iOS
+internal TestFlight is actually serving is still `0.4.0 (9)`**. This is a dated
+snapshot: `docs/app-store-metadata-ios.json` and a fresh authenticated
+read-back are the authority for what exists, never this sentence.
+
+- **Why it exists.** `0.4.0 (9)` was archived from `4d694a9e`, which is an
+  ancestor of the relay-credential renewal commit, so that build cannot contain
+  renewal. A build from this tree does, which makes it a product change rather
+  than a rebuild.
+- **What it changes.** A cross-network link that has carried real user activity
+  in the last ten minutes can ask for a fresh relay credential before its
+  deadline; the deadline moves only once the connection has verifiably migrated
+  onto the new credential. **Both peers must support it**, and account, quota
+  and relay policy may refuse — a refusal is reported and the link keeps the
+  expiry it already had. The pairing and negotiated-transfer bounds hardening
+  rides with it. No wire, payment, entitlement, bundle-identifier or subscription
+  change.
+- **What is not claimed.** The work targets connection continuity, not speed. No
+  throughput measurement was taken, so its effect on real transfer speed is
+  unmeasured in both directions — neither an improvement nor its absence is
+  claimed. No physical-device result exists for it on iOS.
+- **Why a new visible version.** Build `9` is consumed, and the owner's
+  2026-09-17 preference gives every newly distributed candidate a distinct
+  visible version. iOS carries its own pre-release build sequence on the
+  universal-purchase record, independent of macOS, whose builds reached `39`.
+  `10` is a project value; the highest consumed build must be read back again
+  before it is used.
+- **Scope.** Existing internal TestFlight group only, notifications off. No App
+  Store version, submission, external group or public launch is part of it.
+
+**Read-back, 2026-09-20.** The record's `0.3.1` App Store version reads
+`DEVELOPER_REJECTED` and is still set to manual release — an earlier reading in
+this document recorded it as `WAITING_FOR_REVIEW`, and this is the later state.
+It is recorded as an observation only: `0.3.1` is not this candidate's to
+rename, resubmit, withdraw or select a build on, and nothing here changed it.
 
 #### Delivery checkpoint — `0.4.0 (9)` uploaded to internal TestFlight, 2026-09-18
 

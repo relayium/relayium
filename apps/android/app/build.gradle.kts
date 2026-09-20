@@ -18,6 +18,12 @@ android {
         applicationId = "com.relayium.android"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
+        // 0.2.5 (8): relay-credential renewal. A cross-network link that has
+        // carried real user activity in the last ten minutes can ask for a
+        // fresh relay credential before its deadline, and the deadline moves
+        // only once the connection has verifiably migrated onto it; both peers
+        // must support it, and account, quota and relay policy may refuse.
+        // Pairing and negotiated-transfer bounds are hardened with it.
         // 0.2.4 (7): owner-reported fixes on a physical phone — a Device Inbox
         // send can be removed or its delivery cancelled; Nearby leads with the
         // relayium.com room the website and Mac app are in and shows the public
@@ -33,8 +39,8 @@ android {
         // "0.1.10" sorts before "0.1.9" as text — so it must increase
         // monotonically for every published APK, forever.
         // `scripts/test/android-policy-test.mjs` asserts the two move together.
-        versionCode = 7
-        versionName = "0.2.4"
+        versionCode = 8
+        versionName = "0.2.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

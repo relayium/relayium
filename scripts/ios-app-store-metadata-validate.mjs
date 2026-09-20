@@ -152,6 +152,15 @@ const RECORD_NAME = "relayium";
 // statements hold for it — it is a candidate decision, and no 0.4.0 App Store
 // version exists on the record.
 //
+// 0.4.0 (9) reached internal TestFlight on 2026-09-18 from `4d694a9e`, which is
+// an ancestor of the relay-credential renewal commit, so that build cannot
+// contain it. The candidate prepared from this tree carries renewal and is
+// therefore a product change rather than a rebuild: it takes 0.4.1 under the
+// same preference. The two statements hold again — a candidate decision, and no
+// 0.4.1 App Store version exists on the record. A 2026-09-20 read-back found the
+// record's 0.3.1 version DEVELOPER_REJECTED and still manual; that is an
+// observation about 0.3.1 and changes nothing here.
+//
 // So:
 //   * `MARKETING_VERSION` is a candidate decision and moves with the project;
 //   * `OBSERVED_IOS_VERSION` moves only with a fresh read-back of the record —
@@ -161,7 +170,7 @@ const RECORD_NAME = "relayium";
 //     version, because nothing observed it. A mismatch is not a waiver: an older
 //     or unrelated candidate, or an observation rewritten to the candidate, is
 //     refused.
-const MARKETING_VERSION = "0.4.0";
+const MARKETING_VERSION = "0.4.1";
 const OBSERVED_IOS_VERSION = "0.3.1";
 // The name the record actually holds. This is NOT a place to propose a rename:
 // the App Store name is owner-controlled, changing it is an App Store Connect

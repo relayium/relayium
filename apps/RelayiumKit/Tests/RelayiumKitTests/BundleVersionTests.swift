@@ -190,14 +190,25 @@ final class BundleVersionTests: XCTestCase {
         // version rather than reuse the old one: `0.4.0`. It is still not an
         // App Store version on the record and does not touch the 0.3.1
         // submission or its build.
-        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.4.0", occurrences: 4)
         //
-        // 8 was consumed by the 0.3.2 internal TestFlight upload (read back
-        // VALID / IN_BETA_TESTING on 2026-09-17), so the next candidate is 9.
-        // The build number stays monotonic across version changes — it did not
-        // restart for 0.3.2 and does not restart for 0.4.0. 9 is a project
-        // value here: nothing has been archived or uploaded under it, and the
-        // highest consumed build must be read back again before it is.
-        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "9", occurrences: 4)
+        // 0.4.1 carries the relay-credential renewal that 0.4.0 (9) predates:
+        // build 9 was archived from `4d694a9e`, an ancestor of the renewal
+        // commit, so a build from this tree is a product change rather than a
+        // rebuild and takes its own visible version under the same 2026-09-17
+        // preference. It is still not an App Store version on the record. The
+        // 0.3.1 App Store version is separate and, on a 2026-09-20 read-back,
+        // DEVELOPER_REJECTED and still manual; nothing here touches it.
+        try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "0.4.1", occurrences: 4)
+        //
+        // 9 is consumed: 0.4.0 (9) was archived, exported and uploaded to
+        // internal TestFlight on 2026-09-18 from `4d694a9e` and read back
+        // VALID, so this candidate takes 10. The build number stays monotonic
+        // across version changes — it did not restart for 0.3.2 or 0.4.0 and
+        // does not restart for 0.4.1 — and iOS carries its own pre-release
+        // sequence on the universal-purchase record, independent of macOS,
+        // whose builds reached 39. 10 is a project value here: nothing has
+        // been archived or uploaded under it, and the highest consumed build
+        // must be read back again before it is.
+        try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "10", occurrences: 4)
     }
 }

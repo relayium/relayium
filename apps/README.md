@@ -29,7 +29,7 @@
   catalogue of its own.
 - `android/` — native Android client (`com.relayium.android`), Kotlin + Jetpack
   Compose over a pure-JVM `:protocol` module. **Public preview at 0.2.4
-  (versionCode 7)**; direct APK only, no Google Play, no Play Services, no Play
+  (versionCode 7)**, which is what the download serves today; direct APK only, no Google Play, no Play Services, no Play
   Billing. Five destinations — Transfer, Nearby, Inbox, Cloud, Account: it mints
   a six-digit code or `/cross-network#c=` link as well as joining one, finds
   devices with no code at all, receives Device Inbox deliveries into app-private
@@ -156,9 +156,25 @@ is the operator record: what the release changes, what it deliberately does not
 change, its channel state with the read-back evidence, and the What to Test
 copy for both maintained languages.
 
-That covers macOS only. iOS development resumed on 2026-09-01 at version 0.3.0:
-internal TestFlight builds were used for development acceptance before the
-earlier pause, and neither the iOS app nor its share extension is publicly
+**Source preparation across the remaining platforms, 2026-09-20.** The project
+versions in this tree are ahead of what those channels serve, because the
+relay-credential renewal macOS shipped as `1.4.1 (39)` is prepared here for the
+others: Android `0.2.5 (versionCode 8)`, iOS `0.4.1 (10)`, Windows `0.0.2`.
+That is a fact about source on that date. **No signed or published deliverable
+exists under any of those numbers** — the Android source gate did assemble an
+unsigned `0.2.5` release APK as build evidence, and nothing beyond that has
+been signed, uploaded or distributed. What each channel actually serves is
+`web/android-release.json` for the Android APK, and a fresh App Store Connect
+read-back for iOS internal TestFlight, which is still `0.4.0 (9)`; Windows
+`0.0.2` is the next candidate on the existing internal-candidate track, which
+is not a distribution channel. Renewal needs both peers updated and compatible,
+its deadline moves later only after a verified migration, and the hosting
+account's quota and relay policy may refuse it; no transfer-speed effect is
+claimed or measured on any of them.
+
+The macOS status above covers macOS only. iOS development resumed on
+2026-09-01 at version 0.3.0: internal TestFlight builds were used for
+development acceptance before the earlier pause, and neither the iOS app nor its share extension is publicly
 offered. There is no public App Store release and no Relayium download surface
 offers iOS. The current internal candidate is **`0.4.0 (9)`**, archived from
 frozen source `4d694a9e`, uploaded on 2026-09-18, processed `VALID` and

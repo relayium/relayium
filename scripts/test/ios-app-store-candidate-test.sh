@@ -1726,7 +1726,7 @@ if [ "$show_settings" -eq 1 ]; then
   printf '    CODE_SIGN_STYLE = %s\n' "${STUB_SIGN_STYLE:-Manual}"
   printf '    CURRENT_PROJECT_VERSION = %s\n' "${STUB_BUILD:-6}"
   printf '    DEVELOPMENT_TEAM = %s\n' "${STUB_TEAM:-7PVYUG4YQS}"
-  printf '    MARKETING_VERSION = %s\n' "${STUB_MARKETING:-0.4.0}"
+  printf '    MARKETING_VERSION = %s\n' "${STUB_MARKETING:-0.4.1}"
   printf '    PRODUCT_BUNDLE_IDENTIFIER = %s\n' "$bundle"
   printf '    PROVISIONING_PROFILE_SPECIFIER = %s\n' "$profile"
   exit 0
@@ -1835,7 +1835,7 @@ fi
 metadata_probe=''
 if ! metadata_probe="$(node "$pristine/repo/scripts/ios-app-store-metadata-validate.mjs" \
     --packet "$pristine/repo/docs/app-store-metadata-ios.json" \
-    --expect-version 0.4.0 --quiet 2>&1)"; then
+    --expect-version 0.4.1 --quiet 2>&1)"; then
   printf 'the fixture repository cannot pass the metadata gate, so no case beyond it would test what it claims:\n%s\n' \
     "$metadata_probe" >&2
   exit 2
@@ -1875,7 +1875,7 @@ reset_stubs() {
   export STUB_XCODE_VERSION='26.3'
   export STUB_XCODE_BUILD='17C529'
   export STUB_IPHONEOS_SDK='26.2'
-  export STUB_MARKETING='0.4.0'
+  export STUB_MARKETING='0.4.1'
   export STUB_BUILD='6'
   export STUB_TEAM='7PVYUG4YQS'
   export STUB_SIGN_STYLE='Manual'
@@ -1901,11 +1901,11 @@ run_candidate() {
 DEFAULT_ARGS=()
 set_default_args() {
   DEFAULT_ARGS=(
-    --marketing-version 0.4.0
+    --marketing-version 0.4.1
     --build 6
     --readback-highest-build 5
     --readback-observed-at "$(now_iso)"
-    --artifact-root "$fixture/out/relayium-ios-0.4.0-6-$short_sha"
+    --artifact-root "$fixture/out/relayium-ios-0.4.1-6-$short_sha"
   )
 }
 
@@ -1942,44 +1942,44 @@ expect_refusal 'an unknown argument is refused' "$REFUSED" 'unknown argument' "$
 new_fixture
 set_default_args
 expect_refusal 'a missing read-back timestamp is refused' "$REFUSED" 'missing --readback-observed-at' \
-  --marketing-version 0.4.0 --build 6 --readback-highest-build 5 \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-6-$short_sha"
+  --marketing-version 0.4.1 --build 6 --readback-highest-build 5 \
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-6-$short_sha"
 
 new_fixture
 expect_refusal 'a build that is not the next free one is refused' "$REFUSED" 'is not the next free build' \
-  --marketing-version 0.4.0 --build 9 --readback-highest-build 5 \
+  --marketing-version 0.4.1 --build 9 --readback-highest-build 5 \
   --readback-observed-at "$(now_iso)" \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-9-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-9-$short_sha"
 
 new_fixture
 expect_refusal 'a build below the observed highest is refused' "$REFUSED" 'is not the next free build' \
-  --marketing-version 0.4.0 --build 3 --readback-highest-build 5 \
+  --marketing-version 0.4.1 --build 3 --readback-highest-build 5 \
   --readback-observed-at "$(now_iso)" \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-3-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-3-$short_sha"
 
 new_fixture
 expect_refusal 'a stale read-back is refused' "$REFUSED" 'older than' \
-  --marketing-version 0.4.0 --build 6 --readback-highest-build 5 \
+  --marketing-version 0.4.1 --build 6 --readback-highest-build 5 \
   --readback-observed-at "$(iso_offset -100000)" \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-6-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-6-$short_sha"
 
 new_fixture
 expect_refusal 'a read-back in the future is refused' "$REFUSED" 'is in the future' \
-  --marketing-version 0.4.0 --build 6 --readback-highest-build 5 \
+  --marketing-version 0.4.1 --build 6 --readback-highest-build 5 \
   --readback-observed-at "$(iso_offset 7200)" \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-6-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-6-$short_sha"
 
 new_fixture
 expect_refusal 'a malformed read-back timestamp is refused' "$REFUSED" 'is not a UTC timestamp' \
-  --marketing-version 0.4.0 --build 6 --readback-highest-build 5 \
+  --marketing-version 0.4.1 --build 6 --readback-highest-build 5 \
   --readback-observed-at 'yesterday' \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-6-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-6-$short_sha"
 
 new_fixture
 expect_refusal 'a non-numeric build is refused' "$REFUSED" 'is not a canonical positive decimal build number' \
-  --marketing-version 0.4.0 --build '6; rm -rf /' --readback-highest-build 5 \
+  --marketing-version 0.4.1 --build '6; rm -rf /' --readback-highest-build 5 \
   --readback-observed-at "$(now_iso)" \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-6-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-6-$short_sha"
 
 # ── the build numbers must be CANONICAL decimal ──────────────────────────────
 #
@@ -1991,10 +1991,10 @@ expect_refusal 'a non-numeric build is refused' "$REFUSED" 'is not a canonical p
 
 new_fixture
 expect_refusal 'a --build with a leading zero is refused' "$REFUSED" 'is not a canonical positive decimal build number' \
-  --marketing-version 0.4.0 --build '08' --readback-highest-build 7 \
+  --marketing-version 0.4.1 --build '08' --readback-highest-build 7 \
   --readback-observed-at "$(now_iso)" \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-8-$short_sha"
-if [ -e "$fixture/out/relayium-ios-0.4.0-8-$short_sha" ]; then
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-8-$short_sha"
+if [ -e "$fixture/out/relayium-ios-0.4.1-8-$short_sha" ]; then
   bad 'a leading-zero build creates nothing' 'the artifact root exists'
 else
   ok 'a leading-zero build creates nothing'
@@ -2002,16 +2002,16 @@ fi
 
 new_fixture
 expect_refusal 'a --build of 0 is refused' "$REFUSED" 'is not a canonical positive decimal build number' \
-  --marketing-version 0.4.0 --build 0 --readback-highest-build 0 \
+  --marketing-version 0.4.1 --build 0 --readback-highest-build 0 \
   --readback-observed-at "$(now_iso)" \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-0-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-0-$short_sha"
 
 new_fixture
 expect_refusal 'a --readback-highest-build with a leading zero is refused' "$REFUSED" \
   'is not a canonical nonnegative decimal build number' \
-  --marketing-version 0.4.0 --build 9 --readback-highest-build '08' \
+  --marketing-version 0.4.1 --build 9 --readback-highest-build '08' \
   --readback-observed-at "$(now_iso)" \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-9-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-9-$short_sha"
 
 # `010` is the quiet one: it is VALID octal, evaluates to 8, and an operator who
 # wrote it meaning ten would have had `--build 9` accepted as the next free
@@ -2019,9 +2019,9 @@ expect_refusal 'a --readback-highest-build with a leading zero is refused' "$REF
 new_fixture
 expect_refusal 'a --readback-highest-build of 010 is refused rather than read as octal 8' "$REFUSED" \
   'is not a canonical nonnegative decimal build number' \
-  --marketing-version 0.4.0 --build 9 --readback-highest-build '010' \
+  --marketing-version 0.4.1 --build 9 --readback-highest-build '010' \
   --readback-observed-at "$(now_iso)" \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-9-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-9-$short_sha"
 
 # ── the next-free check must not be fixed-width arithmetic ───────────────────
 #
@@ -2037,16 +2037,16 @@ expect_refusal 'a --readback-highest-build of 010 is refused rather than read as
 new_fixture
 expect_refusal 'a build that wraps 64-bit arithmetic is refused rather than read as its remainder' \
   "$REFUSED" 'is not the next free build' \
-  --marketing-version 0.4.0 --build 18446744073709551617 --readback-highest-build 0 \
+  --marketing-version 0.4.1 --build 18446744073709551617 --readback-highest-build 0 \
   --readback-observed-at "$(now_iso)" \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-wrap-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-wrap-$short_sha"
 if grep -qF -e 'the next free build is 1' "$fixture/stderr.log"; then
   ok 'the wrapping build is refused against the exact next free build'
 else
   bad 'the wrapping build is refused against the exact next free build' \
     "the message did not name 1 as the next free build; stderr: $(tail -3 "$fixture/stderr.log" | tr '\n' ' ')"
 fi
-if [ -e "$fixture/out/relayium-ios-0.4.0-wrap-$short_sha" ]; then
+if [ -e "$fixture/out/relayium-ios-0.4.1-wrap-$short_sha" ]; then
   bad 'a wrapping build creates nothing' 'the artifact root exists'
 else
   ok 'a wrapping build creates nothing'
@@ -2057,18 +2057,18 @@ fi
 new_fixture
 expect_refusal 'a highest consumed build that wraps 64-bit arithmetic is refused' \
   "$REFUSED" 'is not the next free build' \
-  --marketing-version 0.4.0 --build 1 --readback-highest-build 18446744073709551616 \
+  --marketing-version 0.4.1 --build 1 --readback-highest-build 18446744073709551616 \
   --readback-observed-at "$(now_iso)" \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-wraphigh-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-wraphigh-$short_sha"
 
 # Carrying across a run of 9s is where a digit-at-a-time increment goes wrong if
 # it goes wrong at all: 999 + 1 must be 1000, not 9910 or 100.
 new_fixture
 expect_refusal 'a carry across a run of 9s is refused against the right successor' \
   "$REFUSED" 'the next free build is 1000' \
-  --marketing-version 0.4.0 --build 9910 --readback-highest-build 999 \
+  --marketing-version 0.4.1 --build 9910 --readback-highest-build 999 \
   --readback-observed-at "$(now_iso)" \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-9910-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-9910-$short_sha"
 
 # And the successor itself must be ACCEPTED by this check — a cross-check that
 # refuses the correct pair is as broken as one that accepts a wrong one. It gets
@@ -2077,9 +2077,9 @@ expect_refusal 'a carry across a run of 9s is refused against the right successo
 new_fixture
 expect_refusal 'the correct successor across a carry passes the read-back check' "$REFUSED" \
   'CURRENT_PROJECT_VERSION' \
-  --marketing-version 0.4.0 --build 1000 --readback-highest-build 999 \
+  --marketing-version 0.4.1 --build 1000 --readback-highest-build 999 \
   --readback-observed-at "$(now_iso)" \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-1000-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-1000-$short_sha"
 
 # An attestation ABOVE the observed floor still has to reach the project's own
 # numbers to be refused: the floor is a lower bound on one operand, not a second
@@ -2088,9 +2088,9 @@ expect_refusal 'the correct successor across a carry passes the read-back check'
 new_fixture
 expect_refusal 'a highest consumed build above the floor passes the shape check' "$REFUSED" \
   'CURRENT_PROJECT_VERSION' \
-  --marketing-version 0.4.0 --build 8 --readback-highest-build 7 \
+  --marketing-version 0.4.1 --build 8 --readback-highest-build 7 \
   --readback-observed-at "$(now_iso)" \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-8-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-8-$short_sha"
 
 # 0 consumed builds used to be a real state of the record this candidate
 # targeted, and it is not a real state of THIS one: the universal-purchase
@@ -2107,9 +2107,9 @@ expect_refusal 'a highest consumed build above the floor passes the shape check'
 new_fixture
 expect_refusal 'a highest consumed build of 0 is refused against the observed floor' "$REFUSED" \
   'is below 5' \
-  --marketing-version 0.4.0 --build 1 --readback-highest-build 0 \
+  --marketing-version 0.4.1 --build 1 --readback-highest-build 0 \
   --readback-observed-at "$(now_iso)" \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-1-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-1-$short_sha"
 
 # One below the floor, which is the off-by-one a `<=` would let through. It is
 # also exactly the attestation an operator would write from the pre-upload
@@ -2118,9 +2118,9 @@ expect_refusal 'a highest consumed build of 0 is refused against the observed fl
 new_fixture
 expect_refusal 'a highest consumed build one below the floor is refused' "$REFUSED" \
   'is below 5' \
-  --marketing-version 0.4.0 --build 5 --readback-highest-build 4 \
+  --marketing-version 0.4.1 --build 5 --readback-highest-build 4 \
   --readback-observed-at "$(now_iso)" \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-5-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-5-$short_sha"
 
 # And the floor itself is ACCEPTED. A gate that refuses the exact observed value
 # is as broken as one that accepts a value below it. Proved by pushing the
@@ -2130,9 +2130,9 @@ new_fixture
 STUB_XCODE_VERSION='28.0'
 expect_refusal 'the observed floor itself passes the read-back section' "$REFUSED" \
   'not a supported major' \
-  --marketing-version 0.4.0 --build 6 --readback-highest-build 5 \
+  --marketing-version 0.4.1 --build 6 --readback-highest-build 5 \
   --readback-observed-at "$(now_iso)" \
-  --artifact-root "$fixture/out/relayium-ios-0.4.0-6-$short_sha"
+  --artifact-root "$fixture/out/relayium-ios-0.4.1-6-$short_sha"
 reset_stubs
 
 new_fixture
@@ -2175,7 +2175,7 @@ expect_unsupported_xcode() {
   expect_refusal "$label" "$REFUSED" "$message" "${DEFAULT_ARGS[@]}"
   if grep -qF -- '-showBuildSettings' "$fixture/xcodebuild-argv.log" 2>/dev/null; then
     bad "$label: refused before the project is read" 'the project settings were read after an unsupported toolchain'
-  elif [ -e "$fixture/out/relayium-ios-0.4.0-6-$short_sha" ]; then
+  elif [ -e "$fixture/out/relayium-ios-0.4.1-6-$short_sha" ]; then
     bad "$label: refused before the project is read" 'the artifact root was created after an unsupported toolchain'
   else
     ok "$label: refused before the project is read"
@@ -2225,20 +2225,20 @@ expect_refusal 'a commit that is not pushed is refused' "$REFUSED" 'differs from
 
 new_fixture
 expect_refusal 'a relative artifact root is refused' "$REFUSED" 'must be absolute' \
-  --marketing-version 0.4.0 --build 6 --readback-highest-build 5 \
+  --marketing-version 0.4.1 --build 6 --readback-highest-build 5 \
   --readback-observed-at "$(now_iso)" --artifact-root "out/relayium-$short_sha"
 
 new_fixture
 expect_refusal 'an artifact root not naming the commit is refused' "$REFUSED" 'must end with the candidate commit' \
-  --marketing-version 0.4.0 --build 6 --readback-highest-build 5 \
+  --marketing-version 0.4.1 --build 6 --readback-highest-build 5 \
   --readback-observed-at "$(now_iso)" --artifact-root "$fixture/out/relayium-ios-candidate"
 
 new_fixture
-mkdir -p "$fixture/out/relayium-ios-0.4.0-6-$short_sha"
-printf 'the operator kept something here\n' >"$fixture/out/relayium-ios-0.4.0-6-$short_sha/keep.txt"
+mkdir -p "$fixture/out/relayium-ios-0.4.1-6-$short_sha"
+printf 'the operator kept something here\n' >"$fixture/out/relayium-ios-0.4.1-6-$short_sha/keep.txt"
 set_default_args
 expect_refusal 'an artifact root that already exists is refused' "$REFUSED" 'already exists' "${DEFAULT_ARGS[@]}"
-if [ -f "$fixture/out/relayium-ios-0.4.0-6-$short_sha/keep.txt" ]; then
+if [ -f "$fixture/out/relayium-ios-0.4.1-6-$short_sha/keep.txt" ]; then
   ok 'the refused, pre-existing caller directory is left untouched'
 else
   bad 'the refused, pre-existing caller directory is left untouched' 'the file inside it is gone'
@@ -2246,17 +2246,17 @@ fi
 
 new_fixture
 expect_refusal 'an artifact root inside the repository is refused' "$REFUSED" 'inside the repository' \
-  --marketing-version 0.4.0 --build 6 --readback-highest-build 5 \
+  --marketing-version 0.4.1 --build 6 --readback-highest-build 5 \
   --readback-observed-at "$(now_iso)" --artifact-root "$fixture/repo/build-$short_sha"
 
 new_fixture
 expect_refusal 'an artifact root directly under / is refused' "$REFUSED" 'directly under /' \
-  --marketing-version 0.4.0 --build 6 --readback-highest-build 5 \
+  --marketing-version 0.4.1 --build 6 --readback-highest-build 5 \
   --readback-observed-at "$(now_iso)" --artifact-root "/relayium-ios-$short_sha"
 
 new_fixture
 expect_refusal 'an artifact root directly in the home directory is refused' "$REFUSED" 'would write directly into' \
-  --marketing-version 0.4.0 --build 6 --readback-highest-build 5 \
+  --marketing-version 0.4.1 --build 6 --readback-highest-build 5 \
   --readback-observed-at "$(now_iso)" --artifact-root "$HOME/relayium-ios-candidate-$short_sha"
 if [ -e "$HOME/relayium-ios-candidate-$short_sha" ]; then
   bad 'a refused artifact root is never created' "$HOME/relayium-ios-candidate-$short_sha exists"
@@ -2282,7 +2282,7 @@ metadata_stopped_before_the_project() {
     bad "$label" 'an archive was attempted after a rejected metadata packet'
     return
   fi
-  if [ -e "$fixture/out/relayium-ios-0.4.0-6-$short_sha" ]; then
+  if [ -e "$fixture/out/relayium-ios-0.4.1-6-$short_sha" ]; then
     bad "$label" 'the artifact root was created before the packet was accepted'
     return
   fi
@@ -2360,7 +2360,7 @@ expect_refusal 'a packet drafted for another version stops the candidate' "$REFU
 
 # The other direction: the packet is right and the CANDIDATE names the version
 # that is already in App Store review. Even with the project stubbed to agree, a
-# 0.3.1 candidate must not get past a packet drafted for 0.4.0 — that is how an
+# 0.3.1 candidate must not get past a packet drafted for 0.4.1 — that is how an
 # in-review version would quietly be rebuilt under its old visible number.
 new_fixture
 STUB_MARKETING='0.3.1'
@@ -2392,7 +2392,7 @@ new_fixture
 STUB_MARKETING='0.2.9'
 set_default_args
 expect_refusal 'a project marketing version that disagrees is refused' "$REFUSED" "MARKETING_VERSION = '0.2.9'" "${DEFAULT_ARGS[@]}"
-if [ -e "$fixture/out/relayium-ios-0.4.0-6-$short_sha/Relayium.xcarchive" ]; then
+if [ -e "$fixture/out/relayium-ios-0.4.1-6-$short_sha/Relayium.xcarchive" ]; then
   bad 'a project mismatch stops before the archive' 'an archive path exists'
 else
   ok 'a project mismatch stops before the archive'
@@ -2464,7 +2464,7 @@ reset_stubs
 # ── every precondition satisfied: what the script actually asks xcodebuild ───
 
 new_fixture
-artifact="$fixture/out/relayium-ios-0.4.0-6-$short_sha"
+artifact="$fixture/out/relayium-ios-0.4.1-6-$short_sha"
 set_default_args
 run_candidate "${DEFAULT_ARGS[@]}" && status=0 || status=$?
 
@@ -2556,7 +2556,7 @@ fi
 # whose every check reads a real signed bundle.
 
 new_fixture
-export_artifact="$fixture/out/relayium-ios-0.4.0-6-$short_sha"
+export_artifact="$fixture/out/relayium-ios-0.4.1-6-$short_sha"
 STUB_ARCHIVE_MODE='succeed'
 set_default_args
 run_candidate "${DEFAULT_ARGS[@]}" && status=0 || status=$?
