@@ -362,6 +362,33 @@ function pair(clock: ReturnType<typeof scheduler>) {
 }
 
 /**
+ * Both sides have actually opened their ICE window for the round in flight.
+ *
+ * `land()` does two things: it sets `selected` to the transport's CURRENT
+ * `localU`, and it invokes the selected-pair callback if one is installed. The
+ * callback is NOT the only path to a commit — `beginIceWindow` also starts
+ * `pollObservation`, which re-reads `selectedGeneration()` every 500 ms and is
+ * described in the runtime as the guarantee to the event's wake-up. So a side
+ * with no callback installed is not thereby a side that can never commit, and
+ * this barrier must not be read as asserting that.
+ *
+ * What landing too early actually does is quieter. `beginIceWindow` refuses to
+ * start until BOTH descriptions for the epoch have been applied, and until a
+ * side has produced its own offer or answer its `localU` still names the
+ * PREVIOUS generation — so `land()` selects the old generation and every
+ * observation that follows correctly rejects it. The responder signs its answer
+ * asynchronously, so "the pump went quiet once" is no evidence that either side
+ * has reached the new generation.
+ *
+ * `pairCb` being installed is the observable that it has: the runtime sets it
+ * in `beginIceWindow`, after the ufrag guard, in the same step that arms the
+ * probe. Watching it is watching the event; counting turns is guessing how long
+ * HMAC took, which is what the hosted runner disproved.
+ */
+const iceWindowsOpen = (p: ReturnType<typeof pair>) => () =>
+  p.a.transport.pairCb !== null && p.b.transport.pairCb !== null;
+
+/**
  * Run a complete renewal to commit on both sides.
  *
  * Deliberately a helper the tests CALL rather than assert inside: several tests
@@ -369,13 +396,27 @@ function pair(clock: ReturnType<typeof scheduler>) {
  * to re-describe the happy path to get one.
  */
 async function renewBoth(clock: ReturnType<typeof scheduler>, p: ReturnType<typeof pair>) {
+  // Captured BEFORE the tick. "supports more than one renewal on the same link"
+  // calls this helper twice on one pair, and a barrier spelled
+  // `commits.length === 1` is ALREADY true when the second call begins: it
+  // would return without waiting for the second migration, and then time out on
+  // a pair that had legitimately committed twice. Per side, because the two
+  // commit independently. Exactly `prior + 1` rather than `>=`, so a side that
+  // somehow committed twice inside one call is a named timeout rather than a
+  // pass.
+  const priorA = p.a.commits.length;
+  const priorB = p.b.commits.length;
   p.a.renewal.tick();
-  await p.deliver();
+  await pumpUntil(p, iceWindowsOpen(p), "both sides opening their ICE window");
   // The migration lands on both sides.
   p.a.transport.land();
   p.b.transport.land();
   await clock.advance(600);
-  await p.deliver();
+  await pumpUntil(
+    p,
+    () => p.a.commits.length === priorA + 1 && p.b.commits.length === priorB + 1,
+    "both sides committing this migration",
+  );
   await clock.advance(600);
   await p.deliver();
 }
@@ -1123,11 +1164,12 @@ describe("the commit fence", () => {
     const clock = scheduler();
     const p = pair(clock);
     p.a.renewal.tick();
-    await p.deliver();
+    await pumpUntil(p, iceWindowsOpen(p), "both sides opening their ICE window");
     p.a.transport.land();
     p.b.transport.land();
     await clock.advance(600);
-    await p.deliver();
+    await pumpUntil(p, () => p.a.commits.length === 1 && p.b.commits.length === 1,
+      "both sides committing the migration");
     await clock.advance(600);
     await p.deliver();
     expect(p.a.commits).toHaveLength(1);
@@ -1320,13 +1362,23 @@ describe("W8: a peer's ready arriving before this side's own grant", () => {
  */
 async function oneSidedCommit(clock: ReturnType<typeof scheduler>, p: ReturnType<typeof pair>) {
   p.a.renewal.tick();
-  await p.deliver();
+  await pumpUntil(p, iceWindowsOpen(p), "both sides opening their ICE window");
+  // From here A hears nothing more, so its own nonce is never acknowledged.
+  //
+  // Armed BEFORE the landing rather than after the first advance. The barrier
+  // above pumps until the windows are open, and A's ack can now be produced
+  // inside that pump — which the original turn-counted sequence never reached
+  // this far. Arming earlier drops strictly more acks, which is the direction
+  // this helper wants; arming later would let the first one through and stop
+  // producing the asymmetry the R4 cases are built on.
+  p.a.dropInbound = (frame) => decodeRenewProbe(frame)?.type === RENEW_PROBE_TYPE_ACK;
   p.a.transport.land();
   p.b.transport.land();
   await clock.advance(600);
-  // From here A hears nothing more, so its own nonce is never acknowledged.
-  p.a.dropInbound = (frame) => decodeRenewProbe(frame)?.type === RENEW_PROBE_TYPE_ACK;
-  await p.deliver();
+  await pumpUntil(p, () => p.b.commits.length === 1, "B committing without A");
+  // The asymmetry is the helper's whole contract, so it is asserted here rather
+  // than assumed by every caller: B has committed and A has not.
+  expect(p.a.commits).toHaveLength(0);
   await clock.advance(600);
   await p.deliver();
   await clock.advance(RENEW_EPOCH_HARD_CAP_MS + 1000);
@@ -1406,12 +1458,23 @@ describe("R4: one side committed, the other did not", () => {
     await clock.advance(RENEW_RETRY_BACKOFF_MS + 1000);
     p.a.anchor = clock.now() - 50 * 60_000;
     p.a.deadline = deadlineAt(p.a.anchor, HOUR);
+    // The repair round has to reach the wire before the path is said to land.
+    // Both sides already opened an ICE window for the FIRST attempt, so the
+    // window observable alone cannot tell this round from that one; the
+    // candidate release each side performs for the new generation can.
+    const releasedA = p.a.transport.released;
+    const releasedB = p.b.transport.released;
     p.a.renewal.tick();
-    await p.deliver();
+    await pumpUntil(
+      p,
+      () => iceWindowsOpen(p)()
+        && p.a.transport.released > releasedA && p.b.transport.released > releasedB,
+      "both sides releasing the repair round's candidates",
+    );
     p.a.transport.land();
     p.b.transport.land();
     await clock.advance(600);
-    await p.deliver();
+    await pumpUntil(p, () => p.a.commits.length === 1, "A committing the repair");
     await clock.advance(600);
     await p.deliver();
 

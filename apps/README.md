@@ -10,7 +10,7 @@
   (`SharedLocalizationExport.swift`), so `import RelayiumAppKit` still sees
   `L10n` and nothing at any call site changed.
 - `mac/` — macOS SwiftUI app (`com.relayium.mac`), depends on the local RelayiumKit
-  package. Released publicly as **1.4.0** (GitHub Release `macos-v1.4.0`).
+  package. Released publicly as **1.4.1** (GitHub Release `macos-v1.4.1`).
 - `mac/RelayiumShare/` — the macOS Share Extension (`com.relayium.mac.Share`),
   embedded in the app at `Contents/PlugIns/RelayiumShare.appex`. Links
   `RelayiumShareKit` only, exactly as the iOS one does, and shares its model —
@@ -18,7 +18,7 @@
   authorize `group.com.relayium.shared` and the team-prefixed wildcard and never
   `group.com.relayium.app`, and Apple documents the macOS form of an App Group
   as `<team>.<group>`, so `AppGroup.identifier` resolves per platform. It ships
-  inside the released 1.4.0 app. The system Share menu is verified to list it; a
+  inside the released 1.4.1 app. The system Share menu is verified to list it; a
   real Finder share has not yet been driven by hand.
 - `ios/` — iOS SwiftUI app (`com.relayium.mac`), same local package. **In
   development at 0.4.0 and not public.** The bundle id is macOS's on purpose:
@@ -123,11 +123,11 @@ operational requirement in `docs/CI-PLATFORM-BOUNDARY.md`.
 package. Views live in the app target; all logic worth testing lives in the
 `RelayiumAppKit` target inside that package and is covered by `swift test`.
 
-**Status: released as 1.4.0.** The owner requested this 1.4.0 release, the
+**Status: released as 1.4.1.** The owner requested this 1.4.1 release, the
 recorded decision in `apps/mac/release-readiness.json` remains approved
 (`"approved": true`), and the GitHub release workflow published the notarized
 build as GitHub Release
-[`macos-v1.4.0`](https://github.com/relayium/relayium/releases/tag/macos-v1.4.0):
+[`macos-v1.4.1`](https://github.com/relayium/relayium/releases/tag/macos-v1.4.1):
 a Developer ID-signed, Apple-notarized and stapled `Relayium.dmg` with its
 SHA-256 alongside. Public releases before the 1.4 series are universal; from the 1.4
 series on, every macOS build — Developer ID, Sparkle update, TestFlight, Mac App
@@ -1440,7 +1440,7 @@ until macOS and the Web stopped adopting legacy pairing peers
 (`LinkPairingFallbackPolicy.terminateUnsupported`): from then on every current
 Mac and browser refused an iPhone on a code, with copy saying the *iPhone* was
 "running an older version". The owner met exactly that testing iOS `0.3.2`
-against the Relayium macOS app `1.4.0` on 2026-09-17. The decision to make iOS
+against the Relayium macOS app `1.4.0 (38)` on 2026-09-17. The decision to make iOS
 a `link/1` pairing client had been recorded on 2026-08-21 and lived only on an
 unmerged branch.
 
@@ -1553,7 +1553,7 @@ receipt UI renders the identity now, and `35299351635` is the run that shows it.
   notification off, so it is installable from TestFlight by hand.
   `docs/ios-app-store-submission.md` records the exact state, field by field.
 - **Owner physical retest, which follows installation.** With a candidate
-  installed: an iPhone against a Mac running **Relayium for macOS `1.4.0`** (the
+  installed: an iPhone against a Mac running **Relayium for macOS `1.4.0 (38)`** (the
   app's version, not the operating system's), and an iPhone against
   relayium.com, each sending and receiving. This is the exact interaction whose
   failure started this work, and no simulator or loopback result substitutes for
