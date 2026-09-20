@@ -1440,7 +1440,7 @@ until macOS and the Web stopped adopting legacy pairing peers
 (`LinkPairingFallbackPolicy.terminateUnsupported`): from then on every current
 Mac and browser refused an iPhone on a code, with copy saying the *iPhone* was
 "running an older version". The owner met exactly that testing iOS `0.3.2`
-against the Relayium macOS app `1.4.1` on 2026-09-17. The decision to make iOS
+against the Relayium macOS app `1.4.0 (38)` on 2026-09-17. The decision to make iOS
 a `link/1` pairing client had been recorded on 2026-08-21 and lived only on an
 unmerged branch.
 
@@ -1553,7 +1553,7 @@ receipt UI renders the identity now, and `35299351635` is the run that shows it.
   notification off, so it is installable from TestFlight by hand.
   `docs/ios-app-store-submission.md` records the exact state, field by field.
 - **Owner physical retest, which follows installation.** With a candidate
-  installed: an iPhone against a Mac running **Relayium for macOS `1.4.1`** (the
+  installed: an iPhone against a Mac running **Relayium for macOS `1.4.0 (38)`** (the
   app's version, not the operating system's), and an iPhone against
   relayium.com, each sending and receiving. This is the exact interaction whose
   failure started this work, and no simulator or loopback result substitutes for
