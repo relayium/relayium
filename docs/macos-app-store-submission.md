@@ -88,30 +88,78 @@ consumed by `1.4.0` twice over: it was uploaded to TestFlight on 2026-09-16
 (see below), it is the build the Mac App Store `1.4.0` release published on
 2026-09-17 answers to, and the separately signed Developer ID `1.4.0` package
 on GitHub answers to the same number. **The next archive of any version needs a
-build number strictly above `38`.** The prepared `1.4.1` candidate takes `39`;
-that is a project value only — nothing has been archived or uploaded under it,
-and the consumed floor must be read back again before it is. The published minimum is
+build number strictly above `38`.** `39` is now consumed by `1.4.1`: it was
+archived, notarized and published on GitHub, and the same build number was
+uploaded to App Store Connect for internal TestFlight (see below). **The next
+archive of any version needs a build number strictly above `39`**, and the
+consumed floor must be read back again before it is used. The published minimum is
 macOS 13.0, and the published build does not remove compatibility with older
 Relayium clients.
 
 The Developer ID/GitHub download channel is versioned, released and verified
 separately from this record. Its state is never evidence about what the Mac App
 Store is serving, in either direction, even when the two version numbers happen
-to agree. Today they do agree — both channels are public at `1.4.0` — and that
-is a coincidence of timing, not a rule. It ends as soon as either channel moves,
-which the `1.4.1` preparation below already begins.
+to agree. They agreed briefly at `1.4.0` and have come apart again: the
+Developer ID/GitHub channel is at `1.4.1` and the Mac App Store is still serving
+`1.4.0`, which is the ordinary state of two independent release lines rather
+than a defect in either.
 
-#### `1.4.1` (build `39`) — PREPARING for GitHub and internal TestFlight, Apple silicon only
+#### `1.4.1` (build `39`) — RELEASED on GitHub and in internal TestFlight, Apple silicon only
 
-**Status as of 2026-09-20: PREPARING.** As of that date no archive had been
-produced and nothing was signed, notarized, uploaded, tagged or published under
-`1.4.1`; build `39` was a project value App Store Connect had never seen, and
-the `1.4.0` releases on GitHub and the Mac App Store were untouched by this
-preparation. This paragraph is a dated snapshot of the preparation, not a
-standing claim — it is superseded the moment an artifact exists, and the
-authoritative answer to "what is published" is always
-`web/native-releases.json` for the direct channel and
-`web/mac-app-store-release.json` for the App Store, never this sentence.
+**Status, read back on 2026-09-20: `macos-v1.4.1` is a public, stable GitHub
+Release, and build `39` is in internal TestFlight testing. It is not on the Mac
+App Store and not in any external TestFlight group.** Evidence is retained in
+the workspace release artifact `artifacts/macos-renewal-release-20260920/`.
+
+- **GitHub (Developer ID).** Release `macos-v1.4.1`, "Relayium for macOS 1.4.1",
+  published 2026-09-20T13:45:48Z, not a draft and not a pre-release, and not the
+  repository's `latest` alias (that still names the CLI's `v0.25.0`). The tag
+  targets the signed product source
+  `ddacb736e51d87f677dde3f33294fa97e1cb7144`. Its three assets —
+  `Relayium.dmg` (21,084,547 bytes, SHA-256
+  `49ba4f3c4e391e0f6d612c48d7788afe16ccfabfa60071a95d5f493762433560`),
+  `Relayium.dmg.sha256` and `appcast.xml` — were read back from the published
+  release and are byte-identical to the workflow artifact
+  (`public-assets-verification.json`, `github-release-1.4.1.json`). The DMG was
+  notarized by Apple (submission `75114043-335d-402d-920b-7b14a6d0c72a`,
+  `Accepted`, "Ready for distribution", no issues) and stapled: the notary log
+  records the submitted bytes as `3523411f…` and the published, stapled asset is
+  the `49ba…` above, which is the difference stapling makes and not a
+  discrepancy.
+- **How it was delivered.** Workflow run `35508650434` on the signed source.
+  Its first publish attempt froze the metadata and then stopped, because
+  repository policy does not let GitHub Actions open pull requests — the same
+  recovery this document records for `1.4.0`. The candidate finally accepted and
+  delivered was `c8d26f08c19fc1ec68f42a2626b0ec50a4cf83d7` as PR #124 — a single
+  metadata commit whose only non-metadata content is a test-only correction to
+  the renewal harness, carrying **no change to the signed source `ddacb736`**
+  the release is built and tagged from — and both required gates passed on it
+  (`35513293480` normal, `35513302386` exact-head). Earlier frozen candidates
+  were superseded and never delivered. `main` was then fast-forwarded and
+  **only the failed publish job was rerun** (attempt 2, job `106087426999`,
+  `success`; `release-run-recovery-latest.json`). Nothing was rebuilt, re-signed
+  or re-notarized, and no repository permission or setting was changed.
+- **Internal TestFlight.** Build `3a2ebd6e-7cc1-4710-bb8c-f1cd9de9a373`, macOS
+  `1.4.1 (39)`, uploaded 2026-09-20, `processingState` `VALID`, internal build
+  state `IN_BETA_TESTING`, `usesNonExemptEncryption` `false`, `minOsVersion`
+  `13.0`. Automatic tester notification was **off** (`autoNotifyEnabled: false`)
+  before the build was added to the existing **Relayium Internal** group
+  `35cb330d-04d0-4072-a6ad-a96c67b97201`. The external group read back after the
+  assignment still contains only builds `38` and the two iOS builds — **`39` is
+  not in it** — and App Store Connect still shows macOS `1.4.0`
+  `READY_FOR_SALE` (`provider-build-39-final.json`,
+  `provider-beta-detail-39-final.json`, `provider-internal-group-builds-39.json`,
+  `provider-external-group-after-39.json`, `provider-store-after-39.json`). The
+  signed App Store package verified locally before upload (`arm64` app and
+  Share extension, sandboxed, no Sparkle, one privacy manifest each; package
+  SHA-256 `6e661d6375e4000afd42b63943029151ab32e469eb23ac9c3680fb75a8c4b1e0`).
+- **Not done by this release.** No Mac App Store version record, App Review
+  submission, store metadata or screenshot edit, external beta group or tester
+  notification. **Production promotion of the website download metadata is a
+  separate step and is not claimed here**: publishing a GitHub Release is not
+  deploying relayium.com, and the served minimum-supported-version floors are
+  unchanged. The dynamic client-version policy is separately owned (OA-034) and
+  was not touched; nothing here claims the dynamic and static policies agree.
 
 **Why `1.4.1` and not `1.5.0`.** Recorded so the choice is not re-litigated:
 `docs/MACOS-RELEASE-POLICY.md` reserves PATCH for a compatible correction and
@@ -122,9 +170,9 @@ a relayed link that used to end at its credential boundary can now carry on
 past it — rather than a new user workflow, screen or API. No owner decision was
 required.
 
-Channels the owner selected for this candidate, and nothing wider: the
+Channels the owner selected for this release, and nothing wider: the
 Developer ID/GitHub direct download, and internal TestFlight in the existing
-**Relayium Internal** group. **No Mac App Store submission or release is part
+**Relayium Internal** group. **No Mac App Store submission or release was part
 of it** — no App Store version record, no App Review submission, no metadata or
 screenshot edit, no external beta group and no tester notification. `1.4.0`
 stays what Apple is serving until the owner separately decides otherwise.
@@ -146,7 +194,7 @@ the shared base app source and core transport both are built from:
   and still end truthfully at it.
 - **What that is not.** The work targets connection CONTINUITY, not speed. It
   does not promise a particular session length, an unlimited connection or a
-  faster transfer, and no throughput measurement was taken for this candidate,
+  faster transfer, and no throughput measurement was taken for this release,
   so its effect on real WAN throughput is unmeasured in both directions — it is
   neither claimed as an improvement nor asserted to be absent. It does not
   raise, lower or bypass any quota; a renewal is a request that the existing
@@ -169,9 +217,9 @@ commit, so no encryption, account, cloud-storage, subscription product, price,
 entitlement, purchase, restore or provider behaviour moves. The minimum remains
 macOS 13.0, both products stay Apple silicon (`arm64`) only, the Mac App Store
 target still links no Sparkle, and the served minimum-supported-version floors
-are not changed by this candidate.
+are not changed by this release.
 
-Draft What to Test for `1.4.1` (**not yet entered on any build**, English):
+What to Test for `1.4.1` (entered on build `39`, English):
 
 > This build lets a cross-network connection refresh its relay credential while
 > you are still using it, instead of ending when that credential expires.
@@ -207,8 +255,7 @@ Draft What to Test for `1.4.1` (**not yet entered on any build**, English):
 > Please report the exact wording of any message about the connection expiring,
 > and anything that claims a transfer finished when it did not.
 
-Draft What to Test for `1.4.1` (**not yet entered on any build**, Simplified
-Chinese):
+What to Test for `1.4.1` (entered on build `39`, Simplified Chinese):
 
 > 本次更新让跨网络连接可以在使用过程中刷新中继凭据，而不是在凭据到期时结束连接，
 > 其余行为保持不变。它针对的是连接的持续性，不是速度——我们没有测量过它对传输速度
@@ -235,10 +282,12 @@ Chinese):
 > 请反馈任何关于连接即将到期的提示的确切文字，以及任何在传输未完成时却显示已完成的
 > 情况。
 
-The copy above is a DRAFT. It has not been entered in App Store Connect,
-because no build exists to enter it on. When build `39` is uploaded, enter it
-for `en-US` and `zh-Hans` and read it back character for character, the way the
-`1.4.0` copy below was.
+The copy above is the What to Test text entered on build `39` for `en-US` and
+`zh-Hans`. The read-back (`provider-beta-localizations-39.json`) matches the
+prepared text (`what-to-test-39-prepared.json`) character for character: 2,150
+characters for `en-US` and 772 for `zh-Hans`, equal SHA-256 on both. The
+upload, processing, export-compliance answer and group assignment are recorded
+in the status above.
 
 #### `1.4.0` (build `38`) — RELEASED on GitHub, in internal TestFlight, and since 2026-09-17 on the Mac App Store
 
