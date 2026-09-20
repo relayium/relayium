@@ -94,9 +94,12 @@ describe("the canonical Mac App Store release record", () => {
     const nativeKeys = JSON.stringify(native);
     expect(nativeKeys).not.toMatch(/appStore|appleId|apps\.apple\.com/i);
     // Deliberately NOT an inequality against the direct version. The two
-    // channels are at the same version today (both 1.3.10) and that is an
-    // ordinary, expected state — asserting they differ would encode a
-    // coincidence as a rule and fail the next time they converge.
+    // channels are at the same version today — they converged again when Apple
+    // published the App Store build on 2026-09-17 — and that is an ordinary,
+    // expected state. Asserting they differ would encode a coincidence as a
+    // rule and fail the next time they converge; asserting they AGREE would
+    // encode the opposite coincidence and fail the moment one channel moves,
+    // which is the state the very next macOS candidate is already in.
     expect(typeof native.macos.version).toBe("string");
   });
 });
@@ -176,7 +179,7 @@ describe("the release operator's document agrees with the canonical record", () 
     expect(text, "the app-record table must name the published version")
       .toContain(`| Current published version | \`${record.version}\``);
     expect(text, "the current-state section must say the version is published, not pending")
-      .toContain(`**\`${record.version}\` (build \`28\`) is PUBLISHED on the Mac App Store, public since ${record.publishedAt}.**`);
+      .toContain(`**\`${record.version}\` (build \`38\`) is PUBLISHED on the Mac App Store, public since ${record.publishedAt}.**`);
     expect(text, "the document must point at the canonical record rather than restate it")
       .toContain("web/mac-app-store-release.json");
   });

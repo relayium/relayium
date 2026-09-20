@@ -109,6 +109,16 @@ const APP_STORE_CLAIM = new RegExp(
 
 const appStoreClaims = (text) => text.match(APP_STORE_CLAIM) ?? [];
 
+/**
+ * An App Store version the READMEs cannot be naming, for the drift case below.
+ *
+ * Derived from the live record by moving its last segment, so it differs from
+ * whatever Apple is serving today no matter what that is. A literal here is the
+ * one thing this file's header rules out: it is a claim about which state the
+ * two channels are in, and it goes stale the moment they move.
+ */
+const DRIFTED = APP_STORE.version.replace(/(\d+)$/, (n) => `${Number(n) + 1}`);
+
 /** A throwaway copy of the release documents and the App Store record they are
  *  checked against, so the real ones are never written by a test run. */
 async function stagedDocs({ appStore = APP_STORE } = {}) {
@@ -358,9 +368,18 @@ describe("bumping the documents that name the published macOS release", () => {
     // says is live. A README stuck at a superseded App Store version would be
     // protected from the bump and left wrong — protected staleness is still
     // staleness, and this is the state the repository was actually in.
-    const root = await stagedDocs({ appStore: { ...APP_STORE, version: "1.4.0" } });
+    //
+    // The drifted version is DERIVED from the live record rather than written
+    // down, for the same reason this file's header gives for not asserting
+    // which channel state is live. It was the literal `1.4.0`, chosen while the
+    // App Store record said `1.3.10`; Apple published `1.4.0` on 2026-09-17,
+    // the record caught up, and the synthesized "drift" became the truth — so
+    // the bump legitimately succeeded and this case failed, having encoded a
+    // transient premise exactly as the earlier `APP_STORE.version === PUBLISHED`
+    // line did. `DRIFTED` cannot collide with the record by construction.
+    const root = await stagedDocs({ appStore: { ...APP_STORE, version: DRIFTED } });
     await expect(bumpReleaseDocs({ repoRoot: root, from: PUBLISHED, to: NEXT }))
-      .rejects.toThrow(/Mac App Store release 1\.4\.0/);
+      .rejects.toThrow(new RegExp(`Mac App Store release ${quoteRegExp(DRIFTED)}`));
   });
 
   it("refuses a document that lost its App Store claim entirely", async () => {

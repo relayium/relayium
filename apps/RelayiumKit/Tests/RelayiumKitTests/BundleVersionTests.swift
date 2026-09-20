@@ -60,6 +60,21 @@ final class BundleVersionTests: XCTestCase {
         // release of the same app through two channels, and a user who installs
         // one after the other must not see the version go backwards.
         //
+        // `1.4.1 (39)`: the relay-credential renewal release. A cross-network
+        // link that has carried real user activity can now ask for a fresh
+        // relay credential before its deadline, and the deadline moves only
+        // once the connection has verifiably migrated onto the new credential;
+        // the pairing and negotiated-transfer bounds hardening rides with it.
+        // **Build `38` is spent twice over**: it is the build number of the
+        // public Developer ID/GitHub `macos-v1.4.0` DMG AND of the App Store
+        // Connect upload that went to internal TestFlight on 2026-09-16 and
+        // that Apple has since published as the Mac App Store `1.4.0` release
+        // (public 2026-09-17). Newly signed distribution artifacts cannot
+        // answer to a number two public artifacts already answer to, so
+        // this candidate takes `39` and, per the owner's 2026-09-17 preference
+        // for a distinct visible version on every newly distributed candidate,
+        // its own marketing version.
+        //
         // `1.4.0 (38)`: the same release, with the window chrome fix for the
         // opaque title bar that covered the toolbar on macOS 15. **Build `37`
         // is spent**: its Mac App Store package was archived, exported and
@@ -108,8 +123,8 @@ final class BundleVersionTests: XCTestCase {
         // approved and awaiting release on the App Store — so a candidate that
         // carries the newer cross-platform navigation work cannot reuse that
         // number without making the version string stop identifying a build.
-        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.0", occurrences: 10)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "38", occurrences: 10)
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.4.1", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "39", occurrences: 10)
     }
 
     /// macOS: both shipped products and both Share extensions are Apple Silicon

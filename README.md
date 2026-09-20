@@ -36,8 +36,8 @@ fresh relay credential before that boundary, subject to current account, quota a
 checks. The boundary moves only once the connection has verifiably migrated onto the new credential:
 a connection with no such activity, one that is refused, or one whose migration does not complete
 keeps the expiry it already had and still ends truthfully at it. None of this promises a particular
-session length, an unlimited connection or a faster transfer, and the released macOS client and CLI
-do not renew. A browser peer that does not announce the shared-workspace capability — an older
+session length, an unlimited connection or a faster transfer, and the CLI does not renew at all.
+A browser peer that does not announce the shared-workspace capability — an older
 Relayium Web build — is shown a notice saying so and offered no transfer controls, rather than a
 quietly degraded path: the separate file and message flows the Web client used to fall back to have
 been removed. The released macOS client and the CLI are not that fallback; they are current clients
@@ -65,7 +65,7 @@ Public macOS releases before the 1.4 series are universal (Apple silicon and Int
 from the 1.4 series on, every macOS release on every channel is built for Macs
 with Apple silicon only, on macOS 13 or later.
 A separately versioned Mac App Store release is also public, currently
-[1.3.10](https://apps.apple.com/app/id6801142976). The two channels share the
+[1.4.0](https://apps.apple.com/app/id6801142976). The two channels share the
 app's core transfer capabilities but are released independently, so a version on
 one channel may include changes the other does not have yet. An Android public preview is published as a
 direct APK. There is no Relayium app for iOS or Windows — on those platforms the
@@ -315,7 +315,7 @@ pairing code requires sign-in; joining with that code does not.
 | --- | --- | --- |
 | **Web** | [Live at relayium.com](https://relayium.com/) | LAN and cross-network file/text transfer, encrypted stored links, accounts, and usage controls. |
 | **CLI and nodes** | [Published on GitHub](https://github.com/relayium/relayium/releases) | Pairing-code transfer, encrypted links, direct transfer, folder sync, self-hosting, and relay/storage nodes. |
-| **macOS** | [1.4.0 direct download](https://github.com/relayium/relayium/releases/tag/macos-v1.4.0) and [1.3.10 on the Mac App Store](https://apps.apple.com/app/id6801142976) | The independently versioned channels share the core transfer capabilities, are released on their own schedules, and use Developer ID/Sparkle and Mac App Store/StoreKit delivery respectively. |
+| **macOS** | [1.4.0 direct download](https://github.com/relayium/relayium/releases/tag/macos-v1.4.0) and [1.4.0 on the Mac App Store](https://apps.apple.com/app/id6801142976) | The independently versioned channels share the core transfer capabilities, are released on their own schedules, and use Developer ID/Sparkle and Mac App Store/StoreKit delivery respectively. |
 | **Android** | Direct-APK public preview, from its own `android-v*` GitHub Release | Five screens — Transfer, Nearby, Inbox, Cloud, Account: pairing transfers either direction, nearby devices with no code, Device Inbox receiving with durable history, encrypted stored links, and an account. Foreground only — no background delivery and no resident session. Received files live in app-private storage; exporting elsewhere is explicit. No Google Play listing and no Play Services. |
 | **iPhone, iPad, Windows, Linux** | The web app, plus the CLI on Windows and Linux | Relayium publishes no app for these platforms. The browser is the client and is not a fallback there — it carries the same end-to-end encrypted transfer, with nothing to install. |
 

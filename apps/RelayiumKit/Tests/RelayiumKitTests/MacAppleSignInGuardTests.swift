@@ -280,7 +280,7 @@ final class MacAppleSignInGuardTests: XCTestCase {
 
     // MARK: - version
 
-    /// This release is 1.4.0, and the App Store review fixes it carries
+    /// This release is 1.4.1, and the App Store review fixes it carries
     /// forward are still in place.
     ///
     /// The version read here is the one the project is BUILT at, which is not
@@ -301,12 +301,25 @@ final class MacAppleSignInGuardTests: XCTestCase {
     /// were neither submitted nor published on either channel. `1.4.0`
     /// (build 38, Apple silicon only; build 36 was a universal App Store
     /// archive abandoned unexported, and build 37's App Store package was
-    /// validated but abandoned unuploaded) is being prepared for GitHub and internal
-    /// TestFlight; it is not an App Store release.
-    func testTheReleaseIsVersionOnePointFourPointZero() throws {
+    /// validated but abandoned unuploaded) went public on BOTH channels: the
+    /// Developer ID/GitHub release `macos-v1.4.0` on 2026-09-16, and — after
+    /// the owner submitted and released the build that had gone to internal
+    /// TestFlight — the Mac App Store on 2026-09-17, which is what
+    /// `mac-app-store-release.json` names today. So the gap between the two
+    /// facts is closed at `1.4.0` for the moment, which is an ordinary state
+    /// rather than a rule: it reopens the instant either channel moves.
+    ///
+    /// It reopens here. The project is now BUILT at `1.4.1` (build `39`), the
+    /// relay-credential renewal release, and it is being prepared for GitHub
+    /// and internal TestFlight only. **Nothing answers to `1.4.1` on either
+    /// public channel yet**, so this assertion is deliberately about the
+    /// project file alone; the published-version assertions elsewhere still
+    /// read `1.4.0` out of the two canonical records, and must not be moved to
+    /// follow this one.
+    func testTheReleaseIsVersionOnePointFourPointOne() throws {
         let project = projectText
-        XCTAssertTrue(project.contains("MARKETING_VERSION = 1.4.0;"))
-        XCTAssertFalse(project.contains("MARKETING_VERSION = 1.3.14;"),
+        XCTAssertTrue(project.contains("MARKETING_VERSION = 1.4.1;"))
+        XCTAssertFalse(project.contains("MARKETING_VERSION = 1.4.0;"),
                        "a target was left on the previous version")
         // **The App Store review fixes must not come back.** The app is named
         // `Relayium`, never "… for Mac", and the login item is never registered

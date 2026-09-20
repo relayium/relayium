@@ -17,7 +17,7 @@ or releasing a version. Relayium uses manual App Store release.
 | Platforms | macOS only |
 | Bundle ID | `com.relayium.mac` |
 | SKU | `relayium-macos` |
-| Current published version | `1.3.10` (build `28`), public since 2026-09-14 — from `web/mac-app-store-release.json` |
+| Current published version | `1.4.0` (build `38`), public since 2026-09-17 — from `web/mac-app-store-release.json` |
 | Release method | Manual |
 | Primary category | Utilities |
 | Secondary category | Productivity |
@@ -27,24 +27,50 @@ or releasing a version. Relayium uses manual App Store release.
 
 ### Current release state
 
-**`1.3.10` (build `28`) is PUBLISHED on the Mac App Store, public since
-2026-09-14.** It is not a pending submission and must not be described as the
+**`1.4.0` (build `38`) is PUBLISHED on the Mac App Store, public since 2026-09-17.**
+It is not a pending submission and must not be described as the
 next release. The canonical record is `web/mac-app-store-release.json`
 (`version`, `publishedAt`, `appleId`, `url`); every other surface that prints
 the App Store version — the root `README.md`, `apps/README.md`, the nine
 `/releases` pages — interpolates or is checked against that file, and
 `web/scripts/pages/app-store-release.test.mjs` holds this document to it too.
 
-Evidence for that state, read on 2026-09-16 and retained in the workspace
-release artifact `artifacts/macos-1.4.0-release-20260916/provider/`: the
-authenticated App Store Connect read-back (`store-before.json`) returns the
-macOS `1.3.10` version, attached to build `28`, in `READY_FOR_SALE`, above
-`1.3.8`, `1.3.6`, `1.3.1` and `1.3.0`; Apple's public lookup
-(`store-public-before.json`) returns version `1.3.10` with
+Evidence for that state, read on 2026-09-20 and retained in the workspace
+release artifact `artifacts/macos-renewal-release-20260920/`: the authenticated
+App Store Connect read-back (`provider-store-before.json`) returns a macOS
+`1.4.0` version in `READY_FOR_SALE` above `1.3.10`, `1.3.8`, `1.3.6`, `1.3.1`
+and `1.3.0`; Apple's public lookup (`provider-public-store-before.json`)
+returns version `1.4.0` with `currentVersionReleaseDate`
+`2026-09-17T19:41:23Z`. The build the published version answers to is `38`,
+read directly rather than inferred: `provider-public-store-build-before.json`
+is the response to
+`GET /v1/appStoreVersions/17576eac-1caa-4b25-8ce2-9dbe5c0e402d/build` — the
+`build` relationship of the very App Store version `provider-store-before.json`
+returns as `1.4.0` / `READY_FOR_SALE` — and it returns build
+`b6d57581-df38-453e-9cfc-85f665da4181`, `CFBundleVersion` `38`,
+`processingState` `VALID`, uploaded `2026-09-16T11:00:03-07:00`, `minOsVersion`
+`13.0`, `usesNonExemptEncryption` `false`.
+
+The `1.4.0` App Store release therefore happened after the 2026-09-16 read-back
+recorded below, and this document was corrected on 2026-09-20 to say so;
+nothing recorded about the earlier state was backdated or rewritten. **Who
+submitted or released it, and by what mechanism, is deliberately not stated
+here.** The provider state proves that a `1.4.0` version is live and which
+build it carries; it is not evidence of an actor or of a manual-versus-phased
+release, and no such attribution belongs in this document without its own
+evidence.
+
+The previous state, for continuity: read on 2026-09-16 and retained in
+`artifacts/macos-1.4.0-release-20260916/provider/`, the authenticated read-back
+(`store-before.json`) returned the macOS `1.3.10` version, attached to build
+`28`, in `READY_FOR_SALE`, and Apple's public lookup
+(`store-public-before.json`) returned version `1.3.10` with
 `currentVersionReleaseDate` `2026-09-14T15:57:27Z`. Until that read-back,
 `web/mac-app-store-release.json` still named `1.3.8` (public since
 2026-08-26), two days after Apple had moved on; the record was corrected with
-the `1.4.0` release work below, not backdated.
+the `1.4.0` release work below, not backdated. It went stale the same way a
+second time — naming `1.3.10` for three days after Apple published `1.4.0` —
+which is why the correction is recorded here rather than only in the JSON.
 
 Build numbers consumed so far, none of which may be rebuilt or re-uploaded:
 `5`, `6`, `7`, `11`, `12`, `24` (`1.3.6`), `25` (`1.3.7`), `26` (`1.3.8`),
@@ -58,20 +84,172 @@ uploaded, when the owner dropped Intel support. Build `37` is spent as well:
 its Apple silicon Mac App Store package was archived, exported and passed
 Apple's validation on 2026-09-16, but was never uploaded, and was abandoned
 when a macOS 15 window-chrome defect required a product change. Build `38` is
-consumed by `1.4.0`: it was uploaded to TestFlight on 2026-09-16 and is in
-internal testing (see below), and the separately signed Developer ID `1.4.0`
-package on GitHub answers to the same build number. **The next archive of any
-version needs a build number strictly above `38`.** The published minimum is
+consumed by `1.4.0` twice over: it was uploaded to TestFlight on 2026-09-16
+(see below), it is the build the Mac App Store `1.4.0` release published on
+2026-09-17 answers to, and the separately signed Developer ID `1.4.0` package
+on GitHub answers to the same number. **The next archive of any version needs a
+build number strictly above `38`.** The prepared `1.4.1` candidate takes `39`;
+that is a project value only — nothing has been archived or uploaded under it,
+and the consumed floor must be read back again before it is. The published minimum is
 macOS 13.0, and the published build does not remove compatibility with older
 Relayium clients.
 
 The Developer ID/GitHub download channel is versioned, released and verified
 separately from this record. Its state is never evidence about what the Mac App
 Store is serving, in either direction, even when the two version numbers happen
-to agree. Today they do not: the Mac App Store serves `1.3.10`, while the public
-Developer ID/GitHub release is `macos-v1.4.0`.
+to agree. Today they do agree — both channels are public at `1.4.0` — and that
+is a coincidence of timing, not a rule. It ends as soon as either channel moves,
+which the `1.4.1` preparation below already begins.
 
-#### `1.4.0` (build `38`) — RELEASED on GitHub and in internal TestFlight, Apple silicon only
+#### `1.4.1` (build `39`) — PREPARING for GitHub and internal TestFlight, Apple silicon only
+
+**Status as of 2026-09-20: PREPARING.** As of that date no archive had been
+produced and nothing was signed, notarized, uploaded, tagged or published under
+`1.4.1`; build `39` was a project value App Store Connect had never seen, and
+the `1.4.0` releases on GitHub and the Mac App Store were untouched by this
+preparation. This paragraph is a dated snapshot of the preparation, not a
+standing claim — it is superseded the moment an artifact exists, and the
+authoritative answer to "what is published" is always
+`web/native-releases.json` for the direct channel and
+`web/mac-app-store-release.json` for the App Store, never this sentence.
+
+**Why `1.4.1` and not `1.5.0`.** Recorded so the choice is not re-litigated:
+`docs/MACOS-RELEASE-POLICY.md` reserves PATCH for a compatible correction and
+MINOR for a backward-compatible user-visible capability, and `1.5.0` was
+considered on that reading. It was classified as a PATCH because what changes
+is the continuity of the cross-network transfer that `1.4.0` already offers —
+a relayed link that used to end at its credential boundary can now carry on
+past it — rather than a new user workflow, screen or API. No owner decision was
+required.
+
+Channels the owner selected for this candidate, and nothing wider: the
+Developer ID/GitHub direct download, and internal TestFlight in the existing
+**Relayium Internal** group. **No Mac App Store submission or release is part
+of it** — no App Store version record, no App Review submission, no metadata or
+screenshot edit, no external beta group and no tester notification. `1.4.0`
+stays what Apple is serving until the owner separately decides otherwise.
+
+**What it changes on macOS**, relative to the public `1.4.0`. The two channels
+are not the same bytes — the Developer ID product links Sparkle and the Mac App
+Store product links StoreKit, and each is signed separately — so this describes
+the shared base app source and core transport both are built from:
+
+- **A cross-network link can renew its relay credential instead of ending at
+  it.** A relayed connection runs under a bounded lifetime derived from the
+  relay credential it was issued, and the workspace warns before that boundary.
+  Where both peers support it, a connection that has carried real user activity
+  in the last ten minutes can now ask for a fresh credential before the
+  boundary, subject to the current account, quota and relay policy checks. The
+  boundary moves only once the connection has **verifiably migrated** onto the
+  new credential: a link with no such activity, one whose request is refused,
+  and one whose migration does not complete all keep the expiry they already had
+  and still end truthfully at it.
+- **What that is not.** The work targets connection CONTINUITY, not speed. It
+  does not promise a particular session length, an unlimited connection or a
+  faster transfer, and no throughput measurement was taken for this candidate,
+  so its effect on real WAN throughput is unmeasured in both directions — it is
+  neither claimed as an improvement nor asserted to be absent. It does not
+  raise, lower or bypass any quota; a renewal is a request that the existing
+  account and quota checks may refuse, and a refusal is reported rather than
+  retried around.
+- **Bounds hardening on the pairing and transfer path.** The negotiated message
+  ceiling, the file and text lanes and the replacement transport are held to
+  explicit bounds, and a peer that negotiates outside them is refused rather
+  than adopted.
+
+**What it does not change.** Every macOS app-target source under `apps/mac/**`
+is byte-identical to the published `1.4.0` **apart from the version settings in
+`Relayium.xcodeproj/project.pbxproj`** — `MARKETING_VERSION` and
+`CURRENT_PROJECT_VERSION`, twenty lines, nothing else; no `.swift`, `.plist`,
+`.entitlements` or asset in that tree moved. Across the whole shared package
+there is no change under `RelayiumKit/Crypto`, `RelayiumKit/Account`,
+`RelayiumKit/Cloud`, `RelayiumStoreKit` or the subscription surfaces, measured
+as a diff over the cumulative range `f2a8e48a..f13d0042` rather than over one
+commit, so no encryption, account, cloud-storage, subscription product, price,
+entitlement, purchase, restore or provider behaviour moves. The minimum remains
+macOS 13.0, both products stay Apple silicon (`arm64`) only, the Mac App Store
+target still links no Sparkle, and the served minimum-supported-version floors
+are not changed by this candidate.
+
+Draft What to Test for `1.4.1` (**not yet entered on any build**, English):
+
+> This build lets a cross-network connection refresh its relay credential while
+> you are still using it, instead of ending when that credential expires.
+> Everything else works as before. What it is about is staying connected, not
+> speed — we have not measured its effect on transfer speed either way, so
+> please report what you actually see rather than expecting a change. It runs
+> only on Macs with Apple silicon (M1 or later).
+>
+> 1. Pair in both directions. Once with the Mac showing the pairing code and the
+>    browser joining it, and once with the browser showing the code and the Mac
+>    joining. Both should connect and show the same verification code.
+> 2. Files and text on one connection. In each pairing, send text and then a
+>    file in both directions without reconnecting in between. Everything must
+>    arrive complete and unchanged.
+> 3. Folders. Send a folder with subfolders in both directions. The structure
+>    and the file names must arrive as they were sent.
+> 4. A long transfer across the credential boundary. Send a file large enough
+>    that the transfer is still running when the connection warns that its
+>    relay credential is about to expire. The transfer should continue and
+>    finish complete. If the connection instead ends at the warned time, that is
+>    a valid outcome to report — please say whether it ended at the time it had
+>    warned about.
+> 5. Change networks during that long transfer. While a large cross-network
+>    transfer is running, switch the Mac's network — Wi-Fi to a different
+>    network, or Wi-Fi to a phone hotspot. Report whether it recovers and
+>    finishes, or ends; either way, report what the app said.
+> 6. Lock and wake, on its own. Separately from step 5 and without changing
+>    networks, start a large transfer, lock the Mac or let it sleep, then wake
+>    it. Report what the transfer and the connection status show afterwards.
+> 7. Everything else. Send to a device on the same network, share a file with
+>    Share a link, and send a file to Relayium from Finder's Share menu.
+>
+> Please report the exact wording of any message about the connection expiring,
+> and anything that claims a transfer finished when it did not.
+
+Draft What to Test for `1.4.1` (**not yet entered on any build**, Simplified
+Chinese):
+
+> 本次更新让跨网络连接可以在使用过程中刷新中继凭据，而不是在凭据到期时结束连接，
+> 其余行为保持不变。它针对的是连接的持续性，不是速度——我们没有测量过它对传输速度
+> 的影响，所以请如实反馈你实际观察到的情况，不必预期会变快或变慢。本版本仅支持搭载
+> Apple 芯片（M1 或更新）的 Mac。
+>
+> 1. 两种角色都配对一次。一次由 Mac 出示配对码、浏览器加入，一次由浏览器出示配对码、
+>    Mac 加入。两次都应连接成功，并显示相同的验证码。
+> 2. 同一条连接上的文件与文本。每次配对后，在两个方向上都先发送文本再发送文件，
+>    中途不要重新连接。所有内容都应完整送达、内容不变。
+> 3. 文件夹。在两个方向上各发送一个带子文件夹的文件夹，目录结构与文件名都应与
+>    发送时一致。
+> 4. 跨越凭据边界的长传输。发送一个足够大的文件，使传输在连接提示中继凭据即将到期时
+>    仍在进行。传输应继续并完整完成。如果连接仍在提示的时间点结束，这也是有效结果，
+>    请反馈它是否正好在它此前提示的时间结束。
+> 5. 在该长传输过程中切换网络。在一个大文件的跨网络传输进行时，切换 Mac 的网络——
+>    从一个 Wi-Fi 切到另一个，或从 Wi-Fi 切到手机热点。请反馈它是恢复并完成，还是
+>    结束了；无论哪种，都请反馈 App 当时的提示内容。
+> 6. 锁屏与唤醒，单独测试。与第 5 项分开，并且不要切换网络：开始一个大文件传输，
+>    锁定 Mac 或让它休眠，然后唤醒。请反馈唤醒后传输和连接状态分别显示什么。
+> 7. 其余功能。向同一网络中的设备发送；通过“分享链接”分享一个文件；在访达中通过
+>    共享菜单把文件发送给 Relayium。
+>
+> 请反馈任何关于连接即将到期的提示的确切文字，以及任何在传输未完成时却显示已完成的
+> 情况。
+
+The copy above is a DRAFT. It has not been entered in App Store Connect,
+because no build exists to enter it on. When build `39` is uploaded, enter it
+for `en-US` and `zh-Hans` and read it back character for character, the way the
+`1.4.0` copy below was.
+
+#### `1.4.0` (build `38`) — RELEASED on GitHub, in internal TestFlight, and since 2026-09-17 on the Mac App Store
+
+> **Later outcome, read back 2026-09-20.** Build `38` is now the build a live
+> Mac App Store `1.4.0` version carries (public since 2026-09-17), so the "not
+> on the Mac App Store" status below is the state as of the 2026-09-16
+> read-back and is no longer current. This records the provider state, not who
+> submitted or released it. It is kept unedited because it is what was true and verified then;
+> see "Current release state" above for what Apple is serving now. Nothing else
+> in this section changed: the GitHub release, the TestFlight delivery and the
+> external-group exclusion are all still accurate.
 
 **Status, read back on 2026-09-16: `macos-v1.4.0` is a public, stable GitHub
 Release, and build `38` is in internal TestFlight testing. It is not on the Mac
@@ -168,6 +346,11 @@ Scope of the request, and nothing wider: internal TestFlight in the existing
 **Relayium Internal** group only. No external beta group, beta review, App Store
 version, App Review submission, App Store metadata or screenshot edit, and no
 public App Store release is part of it; `1.3.10` stays what Apple is serving.
+(That scope describes the 2026-09-16 release request and is accurate about it.
+The same build later became the one a live Mac App Store `1.4.0` version
+carries, public since 2026-09-17 — recorded in the banner above and in "Current
+release state". That outcome was not part of this request, and a release
+request does not carry an App Store submission with it.)
 The public Developer ID/GitHub release is `macos-v1.4.0`, published by the
 release workflow as recorded above.
 

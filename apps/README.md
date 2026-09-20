@@ -135,7 +135,7 @@ Store and private candidates — is Apple silicon (`arm64`) only, and its Sparkl
 feed item carries `<sparkle:hardwareRequirements>arm64` so an Intel Mac is never
 offered it. Distribution is that direct download and Sparkle
 updates from it. The separately versioned Mac App Store channel is also public,
-currently at [1.3.10](https://apps.apple.com/app/id6801142976) under App Apple ID
+currently at [1.4.0](https://apps.apple.com/app/id6801142976) under App Apple ID
 `6801142976`. [`web/mac-app-store-release.json`](../web/mac-app-store-release.json)
 is the record of that version and the day Apple published it. The generated
 release pages interpolate it; the two READMEs state it in prose, and the macOS
@@ -143,6 +143,19 @@ surface guards hold that prose to the record and keep a direct-download bump
 from rewriting it. Its StoreKit build excludes Sparkle. See "Delivery status" in
 the root [`README.md`](../README.md) for what this release does and does not
 include.
+
+**Source preparation, 2026-09-20: the project moved to `1.4.1` (build `39`),
+the relay-credential renewal release.** That is a dated fact about this source
+tree, and deliberately says nothing about distribution — the `Status:` line
+above is what this directory keeps current, and what each channel actually
+serves is `web/native-releases.json` for the direct download and
+`web/mac-app-store-release.json` for the App Store. The selected channels are
+the Developer ID/GitHub download and internal TestFlight; a Mac App Store
+submission is not part of it.
+[`docs/macos-app-store-submission.md`](../docs/macos-app-store-submission.md)
+is the operator record for `1.4.1`: what the candidate changes, what it
+deliberately does not change, its release state, and the What to Test copy for
+both maintained languages.
 
 That covers macOS only. iOS development resumed on 2026-09-01 at version 0.3.0:
 internal TestFlight builds were used for development acceptance before the

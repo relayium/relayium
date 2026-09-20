@@ -39,9 +39,28 @@ describe("README product facts", () => {
     // no controls at all. This assertion required the old sentence verbatim,
     // which made the README's correction a red build: the same defect shape as
     // the CLI guard below. State what the product does, not the prose it used.
-    expect(prose).toContain("does not announce this exact capability");
+    //
+    // It required "does not announce this exact capability" until 2026-09-20,
+    // and went RED on `f13d0042` — which added the relay-renewal paragraph and
+    // reworded this clause to name WHICH capability is gated. That rewording is
+    // the correction, not the regression: the paragraph now describes two
+    // different capabilities a peer may or may not announce, and "this exact
+    // capability" had stopped resolving to one of them. So what is pinned is
+    // the disambiguation — the gate names the shared workspace — rather than
+    // the older wording, and the boundary it produces is still asserted
+    // verbatim below. Neither half is relaxed: dropping the capability name or
+    // the no-controls outcome still fails.
+    expect(prose, "the gated capability is no longer named").toContain(
+      "does not announce the shared-workspace capability",
+    );
     expect(prose, "the unsupported-peer notice is no longer stated").toMatch(
       /is shown a notice saying so and offered no transfer controls/,
+    );
+    // …and the renewal capability, which the same paragraph now also describes,
+    // must stay a DIFFERENT and separately conditioned thing. A rewrite that
+    // collapsed the two would make the workspace gate read as the renewal gate.
+    expect(prose, "renewal is no longer conditioned on both peers").toContain(
+      "Where both peers support it",
     );
     // Relayed links are bounded — the half a "one workspace everywhere" rewrite
     // is most likely to drop (web/src/lib/relay-deadline.ts).
