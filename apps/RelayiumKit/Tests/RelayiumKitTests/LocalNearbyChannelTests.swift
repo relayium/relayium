@@ -2,9 +2,36 @@ import XCTest
 @testable import RelayiumKit
 @testable import RelayiumLocalPeerKit
 
+/// A synchronous stand-in for `NetworkLocalPeerConnection`.
+///
+/// Its close handler is owned by the same pure rules production uses
+/// (`LocalPeerStreamHandlers`), so the double cannot be weaker than the
+/// contract it stands for: an end observed before a close handler exists
+/// remains owed to the first handler installed afterwards, a close is delivered
+/// at most once, and clearing the handler does not consume an owed close. A
+/// plain stored `onClosed` fired only from `cancel()` honoured none of that,
+/// which let a channel that attaches to an already-ended stream look correct.
+///
+/// Two differences from production are deliberate and are the fake's, not the
+/// contract's: `cancel()` delivers the close synchronously on the caller's
+/// thread (production hears `.cancelled` from Network.framework on its queue),
+/// and there is no lock, because every test here drives it from one thread at
+/// a time. `LocalNearbyConcurrencyTests` owns the cross-queue case.
 private final class LocalChannelFakeConnection: LocalPeerConnection {
-    var onBytes: ((Data) -> Void)?
-    var onClosed: (() -> Void)?
+    private var handlers = LocalPeerStreamHandlers()
+    var onBytes: ((Data) -> Void)? {
+        get { handlers.onBytes }
+        set { handlers.onBytes = newValue }
+    }
+    var onClosed: (() -> Void)? {
+        get { handlers.onClosed }
+        set {
+            // Decide under the state, call after it: the owed handler may
+            // re-enter this connection.
+            let owed = handlers.installCloseHandler(newValue)
+            owed?()
+        }
+    }
     var written: [Data] = []
     var cancelled = false
     var started = false
@@ -16,9 +43,16 @@ private final class LocalChannelFakeConnection: LocalPeerConnection {
     }
     func send(_ bytes: Data) { written.append(bytes) }
     func cancel() {
-        guard !cancelled else { return }
+        guard handlers.cancel() == .cancel else { return }
         cancelled = true
-        onClosed?()
+        end()
+    }
+    /// The stream ended without this side cancelling it: the remote closed, or
+    /// the connection failed. Production reaches the same one-shot through
+    /// `fireClosed()`.
+    func end() {
+        let callback = handlers.takeCloseCallback()
+        callback?()
     }
     func deliver(_ envelope: Envelope) {
         let data = try! JSONEncoder().encode(envelope)
@@ -560,5 +594,113 @@ final class LocalNearbyChannelTests: XCTestCase {
         XCTAssertEqual(envelopes.filter { $0.type == SignalType.signal }.compactMap(\.data),
                        [.string("first")])
         XCTAssertEqual(envelopes.filter { $0.type == "left" }.count, 1)
+    }
+
+    // MARK: - the double honours the close contract it stands for
+
+    func testFakeCloseHandlerInstalledBeforeTheCloseFiresOnce() {
+        let connection = LocalChannelFakeConnection()
+        var calls = 0
+        connection.onClosed = { calls += 1 }
+
+        connection.end()
+        XCTAssertEqual(calls, 1)
+        XCTAssertNil(connection.onClosed, "a delivered close keeps no handler to fire again")
+
+        connection.end()
+        connection.cancel()
+        XCTAssertEqual(calls, 1, "one stream ends once, however many times it is told")
+    }
+
+    func testFakeCloseHandlerInstalledAfterTheCloseIsOwedItImmediatelyAndOnce() {
+        let connection = LocalChannelFakeConnection()
+        connection.end()
+
+        var first = 0
+        connection.onClosed = { first += 1 }
+        XCTAssertEqual(first, 1, "an end observed before a handler existed was never delivered")
+        XCTAssertNil(connection.onClosed)
+
+        var second = 0
+        connection.onClosed = { second += 1 }
+        connection.end()
+        connection.cancel()
+        XCTAssertEqual(first, 1)
+        XCTAssertEqual(second, 0, "the owed close belongs to the first handler only")
+    }
+
+    func testFakeClearingTheHandlerDoesNotConsumeAnOwedClose() {
+        let connection = LocalChannelFakeConnection()
+        var disowned = 0
+        connection.onClosed = { disowned += 1 }
+        connection.onClosed = nil
+        connection.cancel()
+        connection.onClosed = nil
+
+        var calls = 0
+        connection.onClosed = { calls += 1 }
+        XCTAssertEqual(disowned, 0)
+        XCTAssertEqual(calls, 1)
+    }
+
+    func testFakeReplacingTheCloseHandlerDoesNotDoubleFire() {
+        let connection = LocalChannelFakeConnection()
+        var replaced = 0
+        var current = 0
+        connection.onClosed = { replaced += 1 }
+        connection.onClosed = { current += 1 }
+
+        connection.end()
+        XCTAssertEqual(replaced, 0)
+        XCTAssertEqual(current, 1)
+
+        var afterwards = 0
+        connection.onClosed = { afterwards += 1 }
+        XCTAssertEqual(current, 1)
+        XCTAssertEqual(afterwards, 0, "a close already delivered is not delivered to a replacement")
+    }
+
+    func testFakeCancelTwiceDoesNotDoubleFire() {
+        let connection = LocalChannelFakeConnection()
+        var calls = 0
+        connection.onClosed = { calls += 1 }
+
+        connection.cancel()
+        connection.cancel()
+        XCTAssertTrue(connection.cancelled)
+        XCTAssertEqual(calls, 1)
+
+        let unheard = LocalChannelFakeConnection()
+        unheard.cancel()
+        unheard.cancel()
+        var owed = 0
+        unheard.onClosed = { owed += 1 }
+        XCTAssertEqual(owed, 1, "two cancels with nobody listening still owe exactly one close")
+    }
+
+    /// What the owed close is FOR. A stream can end between the transport
+    /// accepting it and the channel attaching to it; the channel installs its
+    /// handler afterwards and must still hear the end, or the record sits in
+    /// `pending` holding a dead stream until the grace timer happens to fire.
+    /// No timer is run here, so the only thing that can release it is the owed
+    /// close.
+    func testAStreamThatEndedBeforeTheChannelAttachedIsReleasedWithoutTheGraceTimer() {
+        openAndJoin()
+        discover()
+        texts = []
+        let connection = LocalChannelFakeConnection()
+        connection.end()
+
+        transport.delegate?.localPeerTransport(didAccept: connection)
+        // Twice: the owed close is heard inside the accept block, and the drop
+        // it schedules is queued behind the first barrier.
+        drain()
+        drain()
+
+        XCTAssertTrue(connection.cancelled, "the channel never learned the stream had ended")
+        XCTAssertNil(connection.onBytes)
+        XCTAssertNil(connection.onClosed)
+        XCTAssertFalse(envelopes.contains { $0.type == "left" },
+                       "a stream that never named a peer has nobody to announce as departed")
     }
 }
