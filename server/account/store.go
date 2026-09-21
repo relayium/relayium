@@ -131,6 +131,22 @@ type Session struct {
 	Revoked   bool
 }
 
+// ResetOutcome is what ResetPasswordWithToken did. Only ResetApplied changed
+// anything; the other two left the account and the token exactly as they were.
+type ResetOutcome int
+
+const (
+	// ResetTokenInvalid: no unspent, unexpired reset token has this hash — or
+	// another request spent it first.
+	ResetTokenInvalid ResetOutcome = iota
+	// ResetApplied: token spent, password replaced, email verified, every
+	// session revoked — committed together.
+	ResetApplied
+	// ResetAccountFrozen: the account is pending deletion, so its password was
+	// not replaced.
+	ResetAccountFrozen
+)
+
 // MagicToken is a one-time email login token. Only its hash is stored.
 type MagicToken struct {
 	TokenHash string
@@ -1838,6 +1854,15 @@ type Store interface {
 	CreateEmailToken(ctx context.Context, t EmailToken) error
 	PeekEmailToken(ctx context.Context, tokenHash, purpose string, now int64) (EmailToken, bool, error)
 	UseEmailToken(ctx context.Context, tokenHash, purpose string, now int64) (EmailToken, bool, error)
+	// ResetPasswordWithToken spends a reset token, replaces the password, marks
+	// the email verified and revokes every session of the token's user in ONE
+	// transaction. Any outcome other than ResetApplied changed nothing and left
+	// the token unspent. The returned string is the token's user id.
+	ResetPasswordWithToken(ctx context.Context, tokenHash string, now int64, passwordHash string) (ResetOutcome, string, error)
+	// ChangePasswordAndRevokeSessions replaces the password, links the "password"
+	// identity when linkSubject is non-empty, and revokes every session except
+	// exceptSessionID (the raw token) in ONE transaction.
+	ChangePasswordAndRevokeSessions(ctx context.Context, userID, passwordHash, linkSubject, exceptSessionID string) error
 	DeleteSpentEmailTokens(ctx context.Context, now int64) error
 	// devices
 	UpsertDevice(ctx context.Context, d Device) (Device, error)

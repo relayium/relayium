@@ -61,7 +61,13 @@ func (s *Service) ResetPassword(ctx context.Context, rawToken, newPassword strin
 	if err := validateNewPassword(newPassword); err != nil {
 		return Session{}, err
 	}
-	tok, ok, err := s.store.UseEmailToken(ctx, authx.HashToken(rawToken), "reset", s.now().Unix())
+	// The token is only LOOKED AT here. Spending it happens inside the same
+	// transaction as the password write and the session revocation below, so an
+	// interruption anywhere leaves the link usable and the account untouched
+	// instead of a new password with every old session still valid. The peek is
+	// what keeps bcrypt out of reach of a bogus, expired or spent token.
+	tokenHash := authx.HashToken(rawToken)
+	tok, ok, err := s.store.PeekEmailToken(ctx, tokenHash, "reset", s.now().Unix())
 	if err != nil {
 		return Session{}, err
 	}
@@ -72,31 +78,52 @@ func (s *Service) ResetPassword(ctx context.Context, rawToken, newPassword strin
 	// pending-deletion account must not get a live session via password reset
 	// either, and its password must not be silently changed while frozen — GC
 	// still hard-purges it on schedule regardless, and reactivation is the only
-	// path meant to bring it back. Checked immediately after the token is
-	// consumed, before any state mutation below.
+	// path meant to bring it back. The link is spent on this path, as before.
 	u, err := s.store.GetUserByID(ctx, tok.UserID)
 	if err != nil {
 		return Session{}, err
 	}
 	if u.DeletedAt > 0 {
-		raw, terr := s.issueReactivateToken(ctx, u.ID, u.Email)
-		if terr != nil {
-			return Session{}, terr
-		}
-		return Session{}, &PendingDeletionError{PurgeAfter: u.PurgeAfter, ReactivateToken: raw}
+		return s.refuseResetOfFrozenAccount(ctx, tokenHash, u)
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return Session{}, err
 	}
-	if err := s.store.SetPassword(ctx, tok.UserID, string(hash)); err != nil {
+	outcome, userID, err := s.store.ResetPasswordWithToken(ctx, tokenHash, s.now().Unix(), string(hash))
+	if err != nil {
 		return Session{}, err
 	}
-	if err := s.store.SetEmailVerified(ctx, tok.UserID); err != nil {
+	switch outcome {
+	case ResetApplied:
+	case ResetAccountFrozen:
+		// Deletion was requested between the check above and the transaction,
+		// which rolled back without spending the link.
+		frozen, err := s.store.GetUserByID(ctx, userID)
+		if err != nil {
+			return Session{}, err
+		}
+		return s.refuseResetOfFrozenAccount(ctx, tokenHash, frozen)
+	default:
+		// Another request spent the link while this one was hashing.
+		return Session{}, ErrInvalidToken
+	}
+	// Outside the transaction on purpose: if this fails, everything above is
+	// committed and the user signs in with the new password.
+	return s.IssueSession(ctx, userID)
+}
+
+// refuseResetOfFrozenAccount spends the reset link and answers with the
+// reactivation offer, leaving the password alone.
+func (s *Service) refuseResetOfFrozenAccount(ctx context.Context, tokenHash string, u User) (Session, error) {
+	if _, ok, err := s.store.UseEmailToken(ctx, tokenHash, "reset", s.now().Unix()); err != nil {
+		return Session{}, err
+	} else if !ok {
+		return Session{}, ErrInvalidToken
+	}
+	raw, err := s.issueReactivateToken(ctx, u.ID, u.Email)
+	if err != nil {
 		return Session{}, err
 	}
-	if err := s.store.RevokeUserSessions(ctx, tok.UserID, ""); err != nil {
-		return Session{}, err
-	}
-	return s.IssueSession(ctx, tok.UserID)
+	return Session{}, &PendingDeletionError{PurgeAfter: u.PurgeAfter, ReactivateToken: raw}
 }

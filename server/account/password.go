@@ -269,13 +269,11 @@ func (s *Service) ChangePassword(ctx context.Context, u User, currentSessionID, 
 	if err != nil {
 		return err
 	}
-	if err := s.store.SetPassword(ctx, u.ID, string(newHash)); err != nil {
-		return err
-	}
+	// One transaction: a change that fails part-way must not leave the new
+	// password live with the other sessions still valid.
+	linkSubject := ""
 	if !hasPass {
-		if err := s.store.LinkIdentity(ctx, "password", normEmail(u.Email), u.ID); err != nil {
-			return err
-		}
+		linkSubject = normEmail(u.Email)
 	}
-	return s.store.RevokeUserSessions(ctx, u.ID, currentSessionID)
+	return s.store.ChangePasswordAndRevokeSessions(ctx, u.ID, string(newHash), linkSubject, currentSessionID)
 }
