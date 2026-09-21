@@ -171,6 +171,48 @@ private final class LoaderGate: @unchecked Sendable {
 
 private enum TestError: Error { case boom }
 
+/// A real `FileManager` that refuses ONE operation with a chosen error, so a
+/// full device can be produced at `makeBatch()` and at the move inside `adopt`
+/// without filling a disk. Everything it is not armed for is the real thing —
+/// cleanup in particular, because the assertions after a failure are about what
+/// is left on disk.
+private final class RefusingFileManager: FileManager, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _createDirectoryFailure: Error?
+    private var _moveFailure: Error?
+
+    func refuseCreateDirectory(with error: Error) {
+        lock.lock(); _createDirectoryFailure = error; lock.unlock()
+    }
+
+    func refuseMove(with error: Error) {
+        lock.lock(); _moveFailure = error; lock.unlock()
+    }
+
+    override func createDirectory(at url: URL,
+                                  withIntermediateDirectories createIntermediates: Bool,
+                                  attributes: [FileAttributeKey: Any]? = nil) throws {
+        lock.lock(); let failure = _createDirectoryFailure; lock.unlock()
+        if let failure { throw failure }
+        try super.createDirectory(at: url, withIntermediateDirectories: createIntermediates,
+                                  attributes: attributes)
+    }
+
+    override func moveItem(at srcURL: URL, to dstURL: URL) throws {
+        lock.lock(); let failure = _moveFailure; lock.unlock()
+        if let failure { throw failure }
+        try super.moveItem(at: srcURL, to: dstURL)
+    }
+}
+
+/// What Foundation actually hands back from a write on a full volume: a Cocoa
+/// error whose POSIX cause is one level down, under `NSUnderlyingErrorKey`.
+private func cocoaError(_ code: CocoaError.Code, causedBy errno: Int32) -> NSError {
+    NSError(domain: NSCocoaErrorDomain, code: code.rawValue, userInfo: [
+        NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain, code: Int(errno)),
+    ])
+}
+
 // MARK: - tests
 
 /// Everything the send flow owns that is not a view: the security-scope
@@ -251,6 +293,16 @@ final class SendSelectionModelTests: XCTestCase {
         let file = provider.appendingPathComponent(name)
         try Data(repeating: 9, count: 16).write(to: file)
         return try PhotoInbox.take(file, in: inbox)
+    }
+
+    /// The same candidate, owned through `fileManager` — the move in `adopt`
+    /// is the CANDIDATE's own operation, so that is whose file manager it uses.
+    private func candidate(_ name: String, using fileManager: FileManager) throws -> PhotoCandidate {
+        let provider = scratch.appendingPathComponent("provider-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: provider, withIntermediateDirectories: true)
+        let file = provider.appendingPathComponent(name)
+        try Data(repeating: 9, count: 16).write(to: file)
+        return try PhotoInbox.take(file, in: inbox, fileManager)
     }
 
     /// Batch directories that exist anywhere under this test's imports root.
@@ -465,6 +517,171 @@ final class SendSelectionModelTests: XCTestCase {
         XCTAssertNil(m.summary)
         XCTAssertTrue(inboxCandidatesOnDisk().isEmpty, "the failed move left it owning; it discarded")
         XCTAssertTrue(batchDirectoriesOnDisk().isEmpty)
+    }
+
+    // MARK: - a full device is named, at each of the three places staging can fail
+
+    /// Site 1 of 3: the batch directory cannot be made. Nothing has been loaded
+    /// yet, so nothing is asked of the picker either.
+    func testAFullDeviceAtMakeBatchIsNamedAndLoadsNothing() async {
+        let refusing = RefusingFileManager()
+        photos = PhotoStagingArea(root: importsRoot, fileManager: refusing)
+        let m = makeModel()
+        refusing.refuseCreateDirectory(with: cocoaError(.fileWriteOutOfSpace, causedBy: ENOSPC))
+        let loads = Counter()
+
+        await m.importPhotos(count: 2) { index in
+            loads.bump()
+            return try self.candidate("IMG_\(index).HEIC")
+        }
+
+        XCTAssertEqual(m.importError, L10n.t(.errorPhotoImportNoSpace))
+        XCTAssertEqual(loads.count, 0, "no batch, so no candidate may be created")
+        XCTAssertNil(m.summary)
+        XCTAssertFalse(m.isImportingPhotos)
+        XCTAssertTrue(batchDirectoriesOnDisk().isEmpty)
+    }
+
+    /// Site 2 of 3: the copy out of the provider's storage — `PhotoInbox.take`,
+    /// reached through `load` — is the step that writes the bytes, so it is the
+    /// likeliest one to run out of room. The cleanup is the generic failure's.
+    func testAFullDeviceWhileLoadingIsNamedAndLeavesNothingBehind() async {
+        let m = makeModel()
+        m.chooseFiles(.success([fileURL("a.txt")]))
+        guard case .picked = upload.state else { return XCTFail("got \(upload.state)") }
+
+        await m.importPhotos(count: 3) { index in
+            if index == 2 { throw POSIXError(.ENOSPC) }
+            return try self.candidate("IMG_\(index).HEIC")
+        }
+
+        XCTAssertEqual(m.importError, L10n.t(.errorPhotoImportNoSpace))
+        XCTAssertNil(m.summary)
+        XCTAssertFalse(m.isImportingPhotos)
+        upload.reset()
+        XCTAssertEqual(upload.state, .idle, "the previous files must not be restorable")
+        XCTAssertTrue(batchDirectoriesOnDisk().isEmpty)
+        XCTAssertTrue(inboxCandidatesOnDisk().isEmpty)
+    }
+
+    /// Site 3 of 3: the move into the batch. A quota refusal is the same
+    /// condition to the person holding the device, and the candidate — which the
+    /// failed move left owning its bytes — is still discarded.
+    func testAFullDeviceAtAdoptIsNamedAndDiscardsTheCandidateAndTheBatch() async {
+        let refusing = RefusingFileManager()
+        refusing.refuseMove(with: POSIXError(.EDQUOT))
+        let m = makeModel()
+
+        await m.importPhotos(count: 2) { index in
+            try self.candidate("IMG_\(index).HEIC", using: refusing)
+        }
+
+        XCTAssertEqual(m.importError, L10n.t(.errorPhotoImportNoSpace))
+        XCTAssertNil(m.summary)
+        XCTAssertFalse(m.isImportingPhotos)
+        XCTAssertTrue(inboxCandidatesOnDisk().isEmpty, "the failed move left it owning; it discarded")
+        XCTAssertTrue(batchDirectoriesOnDisk().isEmpty)
+    }
+
+    /// Foundation rarely throws the bare `errno`: the cause sits under
+    /// `NSUnderlyingErrorKey`, sometimes more than one level down and under a
+    /// Cocoa code that says nothing about space. Driven through the real seam,
+    /// not against the classifier alone, so it is the MESSAGE that is proven.
+    func testAnOutOfSpaceCauseIsRecognisedHoweverItIsWrapped() async {
+        let twoDeep = NSError(domain: "com.example.transfer", code: 7, userInfo: [
+            NSUnderlyingErrorKey: cocoaError(.fileWriteUnknown, causedBy: ENOSPC),
+        ])
+        let cases: [(String, Error)] = [
+            ("POSIXError ENOSPC", POSIXError(.ENOSPC)),
+            ("POSIXError EDQUOT", POSIXError(.EDQUOT)),
+            ("NSPOSIXErrorDomain ENOSPC", NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC))),
+            ("bare Cocoa out-of-space, no cause", CocoaError(.fileWriteOutOfSpace)),
+            ("Cocoa out-of-space caused by ENOSPC", cocoaError(.fileWriteOutOfSpace, causedBy: ENOSPC)),
+            ("Cocoa unknown-write caused by ENOSPC", cocoaError(.fileWriteUnknown, causedBy: ENOSPC)),
+            ("Cocoa unknown-write caused by EDQUOT", cocoaError(.fileWriteUnknown, causedBy: EDQUOT)),
+            ("foreign domain, ENOSPC two levels down", twoDeep),
+            ("foreign domain over a bare Cocoa out-of-space",
+             NSError(domain: "com.example.transfer", code: 7,
+                     userInfo: [NSUnderlyingErrorKey: CocoaError(.fileWriteOutOfSpace) as NSError])),
+        ]
+        let m = makeModel()
+        for (name, error) in cases {
+            await m.importPhotos(count: 1) { _ in throw error }
+            XCTAssertEqual(m.importError, L10n.t(.errorPhotoImportNoSpace), name)
+            XCTAssertTrue(batchDirectoriesOnDisk().isEmpty, name)
+        }
+    }
+
+    /// The other half: only a full device gets the full-device message. A
+    /// permission refusal wrapped exactly the way a full disk is must not borrow
+    /// it, and "free up space" for an undecodable item would be a lie.
+    func testAnythingOtherThanAFullDeviceKeepsTheGeneralMessage() async {
+        let cases: [(String, Error)] = [
+            ("unusable item", PhotoImportError.unusable),
+            ("ownership released", PhotoImportError.ownershipReleased),
+            ("test error", TestError.boom),
+            ("cancellation", CancellationError()),
+            ("POSIXError EACCES", POSIXError(.EACCES)),
+            ("POSIXError EIO", POSIXError(.EIO)),
+            ("Cocoa no-permission caused by EACCES", cocoaError(.fileWriteNoPermission, causedBy: EACCES)),
+            ("Cocoa unknown-write caused by EROFS", cocoaError(.fileWriteUnknown, causedBy: EROFS)),
+            ("bare Cocoa no-such-file", CocoaError(.fileNoSuchFile)),
+            ("foreign domain whose own code happens to be 28",
+             NSError(domain: "com.example.transfer", code: Int(ENOSPC))),
+            ("foreign domain whose own code happens to be 640",
+             NSError(domain: "com.example.transfer", code: CocoaError.Code.fileWriteOutOfSpace.rawValue)),
+        ]
+        let m = makeModel()
+        for (name, error) in cases {
+            await m.importPhotos(count: 1) { _ in throw error }
+            XCTAssertEqual(m.importError, L10n.t(.errorPhotoImportFailed), name)
+        }
+        XCTAssertNotEqual(L10n.t(.errorPhotoImportNoSpace), L10n.t(.errorPhotoImportFailed))
+    }
+
+    /// A superseded import reports NOTHING, and a full device is no exception:
+    /// the failure belongs to a selection the user has already replaced.
+    func testASupersededImportReportsNoFullDeviceEither() async {
+        let m = makeModel()
+        let gate = LoaderGate()
+        let importing = Task { await m.importPhotos(count: 2) { index in
+            await gate.wait(at: index)
+            throw POSIXError(.ENOSPC)
+        } }
+        await waitUntil { gate.has(reached: 0) }
+
+        m.chooseFiles(.success([fileURL("a.txt")]))     // supersedes, synchronously
+        let latePublications = Counter()
+        let subscription = m.objectWillChange.sink { _ in latePublications.bump() }
+
+        gate.release()
+        await importing.value
+
+        XCTAssertNil(m.importError, "a superseded import reports no failure")
+        XCTAssertEqual(latePublications.count, 0)
+        XCTAssertEqual(m.summary, expectedSummaryForOneFile)
+        XCTAssertFalse(m.isImportingPhotos)
+        XCTAssertTrue(batchDirectoriesOnDisk().isEmpty)
+        XCTAssertEqual(stagedNames(), ["a.txt"])
+        subscription.cancel()
+    }
+
+    /// The owner-approved copy, pinned: it is about SENDING, it names no
+    /// platform, and it is not the receive-side sentence.
+    func testTheFullDeviceCopyIsAboutSendingAndNamesNoPlatform() {
+        XCTAssertEqual(L10n.t(.errorPhotoImportNoSpace, language: .en),
+                       "There isn't enough free space on this device to prepare what you chose "
+                       + "for sending, so nothing was selected. Free up space, or send fewer "
+                       + "items at once.")
+        XCTAssertEqual(L10n.t(.errorPhotoImportNoSpace, language: .zh),
+                       "此设备的可用空间不足，无法准备所选内容用于发送，因此这次什么都没有选中。请清理空间，或一次少选一些。")
+        for language in AppLanguage.allCases {
+            let text = L10n.t(.errorPhotoImportNoSpace, language: language)
+            XCTAssertNotEqual(text, L10n.t(.errorDestinationNoSpace, language: language))
+            for platform in ["Mac", "macOS", "iPhone", "iPad", "iOS"] {
+                XCTAssertFalse(text.contains(platform), "[\(language.rawValue)] \(text)")
+            }
+        }
     }
 
     /// Choosing files is a NEWER intent and must win. Refusing it because an

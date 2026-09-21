@@ -1685,6 +1685,12 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// staged name is this app's own invention, not the one they chose in the
     /// Photos picker.
     case errorPhotoImportFailed = "error.photoImport.failed"
+    /// The same refusal, when the reason is known to be a full device: staging
+    /// copies every picked item, so it is the step that runs out of room, and
+    /// "choose again" would send the user round the same failure. Not
+    /// `error.destination.noSpace` — that one is about SAVING a received
+    /// transfer, and nothing is being saved here.
+    case errorPhotoImportNoSpace = "error.photoImport.noSpace"
     /// The App Group container could not be resolved, so there is nowhere the
     /// app would ever find what was shared. Deliberately not "try again": a
     /// missing entitlement does not fix itself, and the honest remedy is to open

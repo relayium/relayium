@@ -561,6 +561,7 @@
 "error.selection.symbolicLink" = "“%@”是一个符号链接。Relayium 不会跟随它 — 那可能会发送你所选范围之外的文件 — 也不会悄悄跳过它。请把它从选择中移除，或直接发送它指向的真实文件夹。";
 "error.selection.pathTooLong" = "路径“%@”太长，无法在一次传输中描述。请从更浅的文件夹发送，或缩短名称。";
 "error.photoImport.failed" = "所选内容中有一部分无法准备好发送，因此这次什么都没有选中。请重新选择，或一次少选一些。";
+"error.photoImport.noSpace" = "此设备的可用空间不足，无法准备所选内容用于发送，因此这次什么都没有选中。请清理空间，或一次少选一些。";
 "error.share.unavailable" = "Relayium 无法访问共享存储，因此没有复制任何内容。请直接打开 Relayium 选择文件。";
 "error.share.nothingUsable" = "这里没有 Relayium 能发送的内容。它支持文件、文件夹、照片和视频。";
 "error.share.duplicatePath" = "有两个分享项都会以“%@”发送。请分开分享，或先重命名其中一个。";

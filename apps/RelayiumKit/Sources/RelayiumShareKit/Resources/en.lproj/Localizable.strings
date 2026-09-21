@@ -575,6 +575,7 @@
 "error.selection.symbolicLink" = "“%@” is a symbolic link. Relayium won't follow it — that could send files from outside what you chose — and won't skip it silently either. Remove it from the selection, or send the real folder it points at.";
 "error.selection.pathTooLong" = "The path “%@” is too long to describe in a transfer. Send from a shallower folder, or shorten the names.";
 "error.photoImport.failed" = "Some of what you chose couldn't be prepared for sending, so nothing was selected. Choose again, or send fewer items at once.";
+"error.photoImport.noSpace" = "There isn't enough free space on this device to prepare what you chose for sending, so nothing was selected. Free up space, or send fewer items at once.";
 "error.share.unavailable" = "Relayium could not reach its shared storage, so nothing was copied. Open Relayium and choose the files there instead.";
 "error.share.nothingUsable" = "There was nothing here Relayium can send. It takes files, folders, photos and videos.";
 "error.share.duplicatePath" = "Two of the shared items would both be sent as “%@”. Share them separately, or rename one first.";

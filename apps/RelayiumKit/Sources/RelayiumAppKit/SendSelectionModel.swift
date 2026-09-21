@@ -319,7 +319,7 @@ public final class SendSelectionModel: ObservableObject {
         let batch: PhotoStagingBatch
         do { batch = try photos.makeBatch() }
         catch {
-            if g == photoGeneration { importError = L10n.t(.errorPhotoImportFailed) }
+            if g == photoGeneration { importError = Self.photoImportFailureMessage(for: error) }
             return
         }
 
@@ -331,7 +331,7 @@ public final class SendSelectionModel: ObservableObject {
                 photos.discard(batch)
                 // A superseded import reports nothing: the failure belongs to a
                 // selection the user has already replaced.
-                if g == photoGeneration { importError = L10n.t(.errorPhotoImportFailed) }
+                if g == photoGeneration { importError = Self.photoImportFailureMessage(for: error) }
                 return
             }
             guard g == photoGeneration, !upload.isBusy else {
@@ -343,7 +343,7 @@ public final class SendSelectionModel: ObservableObject {
             catch {
                 candidate.discard()                 // the failed move left it owning
                 photos.discard(batch)
-                if g == photoGeneration { importError = L10n.t(.errorPhotoImportFailed) }
+                if g == photoGeneration { importError = Self.photoImportFailureMessage(for: error) }
                 return
             }
         }
@@ -368,6 +368,47 @@ public final class SendSelectionModel: ObservableObject {
         }
         photos.clear()
         store.clear()
+    }
+
+    /// What a failed photo import says, decided in ONE place for all three
+    /// places staging can fail — making the batch, the picker's copy out of the
+    /// provider (`PhotoInbox.take`, reached through `load`), and the move into
+    /// the batch.
+    ///
+    /// A full device gets its own sentence because the general one ends in
+    /// "choose again", which sends the user straight back into the same failure
+    /// without ever naming it. Everything else keeps the general sentence: this
+    /// does not guess at causes it cannot read.
+    nonisolated static func photoImportFailureMessage(for error: Error) -> String {
+        L10n.t(isOutOfSpace(error) ? .errorPhotoImportNoSpace : .errorPhotoImportFailed)
+    }
+
+    /// Whether `error` is, at any depth, the volume or the quota being full.
+    ///
+    /// The `errno` half is the receive side's own and is REUSED rather than
+    /// restated: `InboxClassify.filesystem` digs the POSIX cause out of
+    /// Foundation's `NSUnderlyingErrorKey` chain and holds the single list of
+    /// which codes mean *disk full* (`ENOSPC`, `EDQUOT`) — so the two sides
+    /// cannot come to disagree about it. Only its `.diskFull` verdict is read;
+    /// every other category it knows is the general message here.
+    ///
+    /// The Cocoa half exists because `NSFileWriteOutOfSpaceError` is allowed to
+    /// arrive with no POSIX cause attached at all, and then there is no `errno`
+    /// to find. The domain is checked, not just the number: 640 in somebody
+    /// else's domain means whatever they say it means. The walk is bounded so a
+    /// self-referential `userInfo` cannot spin it.
+    nonisolated static func isOutOfSpace(_ error: Error) -> Bool {
+        if InboxClassify.filesystem(error).code == .diskFull { return true }
+        var link: NSError? = error as NSError
+        for _ in 0..<8 {
+            guard let current = link else { return false }
+            if current.domain == NSCocoaErrorDomain,
+               current.code == CocoaError.Code.fileWriteOutOfSpace.rawValue {
+                return true
+            }
+            link = current.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        return false
     }
 
     // MARK: - drafts the share extension left behind

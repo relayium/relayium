@@ -879,7 +879,7 @@ final class LocalizedCopyTests: XCTestCase {
         .sendAccountUnavailableBody, .sendChoosePhotos, .sendPreparingPhotos,
         .commonSend, .commonClear, .commonCancel, .commonShare, .commonExpires,
         .commonTryAgain, .commonChooseFilesOrFolders, .commonStarting,
-        .errorPhotoImportFailed, .errorCloudUnauthorized,
+        .errorPhotoImportFailed, .errorPhotoImportNoSpace, .errorCloudUnauthorized,
         .errorSelectionNoFiles, .errorSelectionTooManyFiles, .errorSelectionUnreadable,
         .errorSelectionSymbolicLink, .errorSelectionPathTooLong,
         .ttlOneHour, .ttlOneDay, .ttlThreeDays, .ttlSevenDays, .ttlFourteenDays,
