@@ -941,8 +941,12 @@ Two ordering rules, both deliberate:
 A blob whose node is unreachable goes onto the existing `pending_node_deletes`
 retry queue, the same as every other orphan; it is never silently dropped.
 
-Deleting the object directly (`DELETE /api/files/{id}`) remains available to its
-owner and keeps its Phase 1B cascade: unfinished referencing tasks become
+Deleting a **share-purpose** object directly (`DELETE /api/files/{id}`) remains
+available to its owner and keeps its Phase 1B cascade (below). That route refuses
+every other purpose with `404`: a task-purpose object leaves only through the
+task delete above or the reclaim pass, never through a direct delete — not even
+when a preceding read says it is unbound, because a concurrent create could bind
+it between that read and the blob removal. For a share-purpose object: unfinished referencing tasks become
 `expired` past TTL, or `failed_terminal`/`stored_object_unavailable` when the
 deletion is early.
 

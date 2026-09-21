@@ -385,7 +385,9 @@ rather than as one sentence.
 | **Native releases** (macOS/iOS) | Their own signing, notarization, packaging and store/update-feed pipelines | **No.** No merge publishes a native artifact. |
 
 **`auto-release.yml` is not the central deploy path.** It is a weekly green-gated
-tag cutter for the CLI/node release line. Attributing the central production
+tag cutter for the CLI/node release line (since 2026-09-21 “green” means two
+fail-closed gates: every check run on HEAD, and a successful `go.yml` run over an
+identical server tree — see `docs/CI-PLATFORM-BOUNDARY.md`). Attributing the central production
 deploy to it — as earlier drafts of this review did — points every promotion
 conversation at the wrong repository.
 

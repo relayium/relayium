@@ -50,8 +50,14 @@ TypeError。现在同一份选择器由每次推送都跑的 `QueuedBatches.test
 而它独有的断言当时已经全部搬到托管道次上或按确定性证据退役。下面"迁移方向（分阶段）"
 一节完整记着这件事的账，因为托管道次里好几条断言的来历只有对着它才说得清。）
 
-- `page-shell.mjs` —— auth 落地页、`/apps`、`/pricing` 和不安全上下文单列兜底这四条
-  **页面**契约（不是传输契约），`npm run test:e2e:page-shell`，**在 CI 里跑**。
+- `page-shell.mjs` —— **页面**契约（不是传输契约），`npm run test:e2e:page-shell`，**在 CI 里跑**。
+  现在是六幕（清单钉在 `page-shell-contract.test.mjs` 的 `SCENARIO_NAMES`）：auth 落地页、
+  `/apps` 层级、`/pricing` 层级、`/cli` 移动端、不安全上下文单列兜底、外壳登录导航。最后一幕里
+  还带一个不计入幕数的用例（2026-09-21）：离线页的“对比”链接在真实浏览器里落到
+  `/cross-network#compare`——同一条历史记录、不重载文档、对比表所在的折叠区已打开、表格在入场
+  动画结束后仍在视口内，Back/Forward 往返一致。它只覆盖**立即导航**；导航守卫延迟确认那条路径
+  需要经真实信令服务器配对的对端，这个只对 `vite preview` 的 runner 到不了，其证明仍是
+  `router.test.ts` 与 `OfflinePage.test.ts`。契约测试钉住了这个用例“恰好被 await 一次”。
   2026-08-29（Phase 3D C2）从 `lan-transfer.mjs` 搬出来单独成套，见下面专门一节。
 - `mixed-link.mjs` —— 两个新版本浏览器在 LAN 房间里的统一链路（`link/1`），
   `npm run test:e2e:mixed`，**在 CI 里跑**（`.github/workflows/web.yml` 的
@@ -74,7 +80,7 @@ TypeError。现在同一份选择器由每次推送都跑的 `QueuedBatches.test
 | 道次 | 脚本 | 作业 |
 |---|---|---|
 | 已构建产物的无障碍扫描 | `test:a11y` | `test` |
-| 页面外壳契约（auth 落地页、`/apps`、`/pricing`、不安全上下文布局） | `test:e2e:page-shell` | `test` |
+| 页面外壳契约（auth 落地页、`/apps`、`/pricing`、`/cli` 移动端、不安全上下文布局、外壳登录导航 + 离线页对比链接） | `test:e2e:page-shell` | `test` |
 | 配对码房间里的统一工作区 | `test:e2e:code-room` | `test` |
 | 设备发现可发现性走查 | `test:device-discovery` | `test` |
 | Device Inbox 入口走查 | `test:device-inbox-entry` | `test` |
