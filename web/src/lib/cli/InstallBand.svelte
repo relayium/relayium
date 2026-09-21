@@ -77,9 +77,18 @@
     max-inline-size: 62ch;
   }
 
-  /* Two open columns divided by a hairline, not two cards. The command surface
-     is already a bordered block; wrapping it in a second box is one rim too
-     many, and it is what makes a page read as a bento grid. */
+  /* Two open blocks, one above the other at every width — not two cards, and
+     not two columns. The command surface is already a bordered block; wrapping
+     it in a second box is one rim too many, and it is what makes a page read as
+     a bento grid.
+
+     This was a 1.15fr/1fr pair of columns from 760px up. Side by side the two
+     never end together: one shell command against three paragraphs left 148px
+     of nothing under the macOS/Linux command at 1440px and 245px at 1180px.
+     Moving the platform-neutral links below into that hole does not close it at
+     any width, and it puts `go build` directly above "not the command above".
+     Stacked, there is no second column to fall short of. CliPage.structure.test
+     pins that no breakpoint brings the columns back. */
   /* minmax(0, 1fr), not the implicit `auto` track, for the same reason .layout
      spells it out: an `auto` track floors at its items' min-content, and a
      command block's min-content is a whole shell command wide. On a 390px phone
@@ -92,16 +101,6 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-5);
-  }
-  @media (min-width: 760px) {
-    .platforms {
-      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-      gap: var(--space-6);
-    }
-    .windows {
-      padding-inline-start: var(--space-6);
-      border-inline-start: 1px solid var(--border);
-    }
   }
 
   h3 {
@@ -156,6 +155,12 @@
   }
   .alt {
     margin: var(--space-5) 0 var(--space-3);
+  }
+  /* One measure for the band's small prose. The Windows paragraphs used to be
+     held to a readable line by their 349px column; at the band's full width
+     they would run past 110 characters. */
+  .alt,
+  .windows p {
     max-inline-size: 62ch;
   }
   .install :global(a) {

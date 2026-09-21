@@ -535,6 +535,23 @@ describe("产品事实", () => {
     }
   });
 
+  it("安装带在任何宽度下都是单列：macOS/Linux 在上，Windows 在下", () => {
+    // 产品负责人的决定。两列并排时两边内容永远不等高：实测 1440px 下 macOS/Linux 那条
+    // 命令下面空着 148px，1180px 下空 245px；而把下面的平台无关链接挪进左列，Windows
+    // 那句"不是上面那条命令"指的就成了 go build。jsdom 不做排版，量不出高度，所以这里
+    // 守的是源码：去掉 CSS 注释后，任何断点都不许再给 .platforms 声明多列轨道。
+    const src = readFileSync(resolve(process.cwd(), "src/lib/cli/InstallBand.svelte"), "utf8");
+    const css = src.slice(src.indexOf("<style>")).replace(/\/\*[\s\S]*?\*\//g, "");
+    const tracks = [...css.matchAll(/grid-template-columns:\s*([^;]+);/g)].map((m) => m[1].trim());
+    // 防空转：那条单列轨道本身是 390px 不溢出的原因（见组件里的注释），不能连它一起删。
+    expect(tracks.length, "InstallBand 不再声明 .platforms 的列轨道").toBeGreaterThan(0);
+    for (const t of tracks) expect(t, "安装带又出现了多列网格").toBe("minmax(0, 1fr)");
+    // 竖向分隔线是给并排的列用的；单列之后还留着，就是一条没有右邻的孤儿左边框。
+    expect(css, ".windows 还留着列分隔用的行内边框/内边距").not.toMatch(
+      /\.windows\s*\{[^}]*(border|padding)-(inline|left|right)/,
+    );
+  });
+
   it("整页不写死任何版本号", async () => {
     const target = await render();
     const text = target.textContent ?? "";
