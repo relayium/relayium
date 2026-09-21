@@ -121,6 +121,16 @@ jobs:
       # A red main must stop the release, and must stop it LOUDLY. Skipping
       # quietly here would reproduce the exact failure this workflow exists to
       # prevent: everything looks fine and nothing ships.
+      #
+      # And a main that could not be SHOWN to be green is a red main. This step
+      # used to read the check runs with `|| true` and no pagination, so three
+      # different kinds of missing evidence all read as "nothing is red": a
+      # request that failed, a red or still-running check beyond the first 30
+      # runs (main carries more than that), and a commit with no checks at all.
+      # Each of them would have tagged and published. The step now only
+      # fetches; scripts/release/checks-green.sh decides, offline-testable, and
+      # scripts/test/checks-green-test.sh runs this very step against a stub
+      # `gh` so the hole cannot be reopened from the YAML side either.
       - name: Require the checks on this commit to be green
         if: steps.scan.outputs.skip == 'false'
         env:
@@ -128,21 +138,46 @@ jobs:
         run: |
           set -euo pipefail
           sha="$(git rev-parse HEAD)"
-          # A check that is queued or in progress counts as not-green: the point
-          # is to release something already verified, not to race it.
-          bad="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs" \
-                   --jq '.check_runs[]
-                         | select(.name != "tag")
-                         | select(.conclusion != "success" and .conclusion != "neutral" and .conclusion != "skipped")
-                         | "\(.name): \(.status)/\(.conclusion // "pending")"' || true)"
-          if [ -n "$bad" ]; then
+          runs="$(mktemp)"
+          withheld() {
+            # withheld HEADING DETAIL — the same summary block for every refusal.
             {
-              echo "### Release withheld — checks are not green on \`$sha\`"
+              echo "### Release withheld — $1 on \`$sha\`"
               echo '```'
-              printf '%s\n' "$bad"
+              printf '%s\n' "$2"
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::main is not green; refusing to tag it"
+          }
+          # EVERY page, to a file. `--paginate` writes one JSON document per
+          # page and the script checks their number of runs against the API's
+          # own total_count, so a page that went missing refuses the release
+          # instead of shortening the list. The default `filter=latest` is
+          # relied on: after a re-run, the newest attempt is the one that counts.
+          #
+          # No fallback on this command. If the read fails there is no evidence,
+          # and no evidence is not the same thing as no failures.
+          if ! gh api --paginate \
+                 "repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs?per_page=100" >"$runs"; then
+            withheld "the check runs could not be read" "gh api failed; see this step's log"
+            echo "::error::could not read the check runs for $sha; refusing to tag a commit nobody could verify"
+            exit 1
+          fi
+          # A check that is queued or in progress counts as not-green: the point
+          # is to release something already verified, not to race it. The script
+          # exits 1 and names the checks when any is not green, and 3 when the
+          # response cannot prove anything — not JSON, an API error body, fewer
+          # runs than total_count, or no check runs at all besides this job.
+          if verdict="$(sh scripts/release/checks-green.sh "$runs")"; then
+            echo "Checks on \`$sha\`: $verdict" >> "$GITHUB_STEP_SUMMARY"
+          else
+            rc=$?
+            if [ "$rc" -eq 1 ]; then
+              withheld "checks are not green" "$verdict"
+              echo "::error::main is not green; refusing to tag it"
+            else
+              withheld "the checks could not be shown to be green" "$verdict"
+              echo "::error::could not establish that main is green; refusing to tag it"
+            fi
             exit 1
           fi
 

@@ -401,6 +401,18 @@ jobs:
       # be released.
       - name: server-tag.sh selection, version arithmetic and release gate
         run: sh scripts/test/server-tag-test.sh
+      # scripts/release/checks-green.sh is the other thing auto-release.yml
+      # takes on trust: whether the commit it is about to tag is green. The gate
+      # it replaced read the check runs with `|| true` and no pagination, so a
+      # failed read, a red check beyond the first 30 runs and a commit with no
+      # checks at all each read as "nothing is red" and would have published.
+      # The suite runs the old step to show that, the script over every refusal
+      # it documents with a mutation probe per refusal, and then the step as it
+      # is written in auto-release.yml against a stub `gh` — the hole was in the
+      # YAML, so the YAML is what is executed. Offline: jq and bash, both on the
+      # runner image; no token, no network.
+      - name: checks-green.sh and the auto-release gate step refuse without evidence
+        run: sh scripts/test/checks-green-test.sh
 
   macos-ui-selection:
     runs-on: ubuntu-latest
