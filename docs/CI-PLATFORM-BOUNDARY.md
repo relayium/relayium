@@ -1250,6 +1250,34 @@ Change the boundary and you change that file in the same commit. If this documen
 and the test disagree, the test is the boundary and this document is stale — fix
 the document.
 
+### Checks that live in `repo-hygiene.yml` because nothing else would run them
+
+Two further checks sit in the unfiltered workflow for the same reason the
+policies do — the change that breaks them selects no other lane:
+
+* `scripts/test/document-claims-test.mjs` owns what `README.md`,
+  `apps/README.md` and `apps/mac/release-readiness.json` may claim (versions,
+  the iOS status, what is distributed, banned sentences). These were Swift guard
+  tests until 2026-09-21. They ran only in `swift-package.yml`, which a document
+  never selects — deliberately, so a README edit cannot buy a macOS runner — and
+  on 2026-09-20 a docs-only commit moved `apps/README.md` to iOS 0.4.1 while a
+  guard still pinned 0.4.0: no Swift test ran, every hosted check was green, and
+  `main` was red for a day. **Editing one of those documents now fails here, on
+  Linux, on the same push.** When a claim legitimately changes, change it in that
+  file; it proves each claim can fail with its own mutations.
+* `scripts/test/checks-green-test.sh` and `scripts/test/go-evidence-test.sh`
+  exercise the two gates `auto-release.yml` applies before it tags `main`: every
+  check run on HEAD is green (all pages, `total_count` reconciled, unreadable
+  evidence refuses), and a successful `go.yml` run exists on a commit whose Go
+  lane inputs are identical to HEAD's — HEAD itself may be a docs commit on which
+  `go.yml` was never selected. Both helpers live in `scripts/release/` next to
+  `server-tag.sh`.
+
+Still open, recorded rather than solved: `macos.yml` runs no `swift test`, so the
+Mac guards that read `apps/mac/**` are not exercised by an `apps/mac/**`-only
+change, and several web suites read root documents that `web.yml` does not
+watch.
+
 ### What has been observed, and what has not
 
 The `swift-package.yml` split, the three ordered exclusions and the four fixture
