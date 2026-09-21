@@ -6,31 +6,26 @@ import XCTest
 /// on a queue the owner does not control. Locked internally so a race this test
 /// reports is the channel's and not the double's.
 private final class ConcurrentFakeConnection: LocalPeerConnection, @unchecked Sendable {
-    private let lock = NSLock()
-    private var _onBytes: ((Data) -> Void)?
-    private var _onClosed: (() -> Void)?
-    private var _cancelled = false
+    // The same locked one-shot rules production uses, so the double owes what a
+    // real stream owes: a close observed before a handler exists goes to the
+    // first handler installed afterwards, and a close is delivered once.
+    private let handlers = LocalPeerStreamHandlerBox()
 
     var onBytes: ((Data) -> Void)? {
-        get { lock.lock(); defer { lock.unlock() }; return _onBytes }
-        set { lock.lock(); _onBytes = newValue; lock.unlock() }
+        get { handlers.onBytes }
+        set { handlers.onBytes = newValue }
     }
     var onClosed: (() -> Void)? {
-        get { lock.lock(); defer { lock.unlock() }; return _onClosed }
-        set { lock.lock(); _onClosed = newValue; lock.unlock() }
+        get { handlers.onClosed }
+        set { handlers.installCloseHandler(newValue)?() }
     }
-    var cancelled: Bool { lock.lock(); defer { lock.unlock() }; return _cancelled }
+    var cancelled: Bool { handlers.snapshot.hasCancelled }
 
     func start() {}
     func send(_ bytes: Data) {}
     func cancel() {
-        lock.lock()
-        let first = !_cancelled
-        _cancelled = true
-        let closed = _onClosed
-        lock.unlock()
-        guard first else { return }
-        closed?()
+        guard handlers.cancel() == .cancel else { return }
+        handlers.takeCloseCallback()?()
     }
     func deliver(_ envelope: Envelope) {
         let json = String(data: try! JSONEncoder().encode(envelope), encoding: .utf8)!
