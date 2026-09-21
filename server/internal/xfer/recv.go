@@ -252,13 +252,31 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 //
 // ok=false with a nil error is ONE failed file, not a failed transfer.
 func receiveOneFile(rw io.ReadWriter, base, dest string, f FileEntry, offset int64, replace bool, progress func(path string, received, total int64)) (ok bool, err error) {
-	sum, staged, werr := writeFileBody(rw, base, dest, f, offset, progress)
+	// The sender streams f.Size-offset bytes whether or not they can be written
+	// here -- it learns about a failed file only from the final result. So the body
+	// is fenced off, and whatever writeFileBody left unread is drained before the
+	// next frame is parsed. Without the drain a file refused BEFORE its first byte
+	// (a symlinked destination, an unwritable directory) left its whole content in
+	// the stream, and the FileHash read below parsed file bytes as a frame header:
+	// "frame payload too large: 1869881441" was the text "ot a", and one refused
+	// file became a failed transfer.
+	body := &io.LimitedReader{R: rw, N: f.Size - offset}
+	sum, staged, werr := writeFileBody(body, base, dest, f, offset, progress)
 	installed := false
 	defer func() {
 		if staged != "" && !installed {
 			_ = os.Remove(staged)
 		}
 	}()
+	if werr != nil && body.N > 0 {
+		// A read error here is the stream's, not the file's: it ends the transfer.
+		if _, err := io.Copy(io.Discard, body); err != nil {
+			return false, err
+		}
+		if body.N > 0 {
+			return false, io.ErrUnexpectedEOF
+		}
+	}
 
 	var fh FileHash
 	if _, err := ReadJSON(rw, &fh); err != nil {
