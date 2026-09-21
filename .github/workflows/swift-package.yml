@@ -28,8 +28,11 @@ name: swift-package
 #
 # ## What this file is the sole owner of
 #
-# The unfiltered `swift test`. `ios.yml` runs five named `--filter` selectors
-# over `apps/ios` guards and nothing else; `macos.yml` runs none at all any more.
+# The unfiltered `swift test`. Neither Apple build lane runs a `swift test` of
+# its own: `macos.yml` lost its copy when this file was created, and `ios.yml`'s
+# ten hand-kept `--filter` selectors over `apps/ios` guards were retired when
+# this filter gained `apps/ios/**`, because they had become a strict subset of
+# this job. `contracts.yml` runs one filtered contract class and nothing else.
 # `scripts/test/swift-ci-boundary-test.mjs` asserts that exactly one unfiltered
 # `swift test` exists in this repository and that it is this job — zero would
 # leave every Swift assertion in the package unexecuted behind a green board, and
@@ -39,7 +42,7 @@ name: swift-package
 # carry; `scripts/test/ci-event-policy-test.mjs` governs the repository-wide
 # properties every workflow has — triggers, concurrency, runner budgets.
 #
-# ## Why the filter is exactly two entries
+# ## Why the filter is exactly four entries
 #
 #   apps/RelayiumKit/**             the package this job tests: Sources, Tests,
 #                                   Fixtures, `Package.swift` and
@@ -48,13 +51,37 @@ name: swift-package
 #                                   input to `swift test` exactly like a source
 #                                   file, and this is the workflow that has to
 #                                   notice.
+#   apps/mac/**                     the two app trees. This job compiles neither,
+#   apps/ios/**                     and it READS both: dozens of the package's
+#                                   XCTest cases are guards over a project file,
+#                                   a plist, an entitlement, a privacy manifest,
+#                                   a `.strings` catalog or a Swift source under
+#                                   one of these roots. A file a test opens is an
+#                                   input to that test exactly like a fixture is,
+#                                   and until these two entries existed an
+#                                   `apps/mac/**`-only change ran NONE of its
+#                                   guards — `macos.yml` runs no `swift test` —
+#                                   while an `apps/ios/**`-only change ran the
+#                                   ten selectors `ios.yml` listed by hand out of
+#                                   the thirty-odd files that read that tree. A
+#                                   hand-kept selector list is what drifted; the
+#                                   whole suite cannot.
 #   .github/workflows/…             this file, so an edit to its own triggers
 #                                   runs under them rather than landing
 #                                   unverified.
 #
 # Nothing else. This job builds no app, signs nothing, reads no secret, uploads
-# no artifact and publishes nothing, so it has no reason to watch `apps/mac`,
-# `apps/ios`, `web/`, `server/` or `scripts/`.
+# no artifact and publishes nothing. Its guards also open a few files under
+# `server/`, `scripts/` and `web/`; those trees are NOT here on purpose — they
+# would start the whole suite on every server and web commit — and the claims
+# that matter on them belong in the Linux checks `repo-hygiene.yml` runs on
+# every push (`scripts/test/document-claims-test.mjs` is the pattern).
+#
+# This is the ONE workflow whose filter spans two platform roots, and
+# `scripts/test/ci-event-policy-test.mjs` section 6b names it as the only
+# exception: the rule exists because a workflow that BUILDS one platform must be
+# startable for that platform alone, and this one builds neither — the same
+# suite answers for both.
 on:
   push:
     # Only `main`, and this trigger is LOAD-BEARING. Branch work is gated by
@@ -73,6 +100,8 @@ on:
     # dangling one, and the gate is the pull-request entry point now.
     paths:
       - 'apps/RelayiumKit/**'
+      - 'apps/mac/**'
+      - 'apps/ios/**'
       - '.github/workflows/swift-package.yml'
   # Called by `.github/workflows/merge-gate.yml`, and by nothing else.
   #

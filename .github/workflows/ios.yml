@@ -26,14 +26,12 @@ name: ios
 #                        simulator UI smoke and three acceptance runs that
 #                        could not observe it.
 #
-#                        That is not a coverage loss, including for the ten
-#                        iOS guard selectors below, which ARE files under
-#                        `apps/RelayiumKit/Tests/`: editing one of them starts
-#                        `swift-package.yml`, whose unfiltered `swift test`
-#                        runs those very classes along with the rest of the
-#                        suite. This workflow runs them for the other
-#                        direction — an `apps/ios/**` change, which
-#                        `swift-package.yml` does not watch.
+#                        That is not a coverage loss: editing a file under
+#                        `apps/RelayiumKit/Tests/` starts `swift-package.yml`,
+#                        whose unfiltered `swift test` runs the whole suite.
+#                        The same lane also starts on `apps/ios/**`, because
+#                        its guard tests READ this tree, so this workflow
+#                        runs no `swift test` of its own.
 #
 #                        A MIXED diff — package source plus package tests in
 #                        one commit — still starts this workflow, because the
@@ -338,44 +336,14 @@ jobs:
       - name: Select and verify the Xcode 26 upload toolchain
         timeout-minutes: 10
         run: ${{ env.RELAYIUM_SELECT_XCODE }}
-      # Every selector here reads something under `apps/ios`, and this step is
-      # the ONLY place those reads happen for an `apps/ios/**`-only change:
-      # `swift-package.yml` watches `apps/RelayiumKit/**` and never
-      # `apps/ios/**`, so a change to a plist, a `.strings` file, a view or the
-      # project file starts THIS workflow and nothing else.
-      #
-      # Whole class where every case is an `apps/ios` reader; `Class/method`
-      # where the class is not iOS-only. The second form is not tidiness — a
-      # bare `BundleVersionTests` drags `testTheMacAppAndItsExtensionShipOneVersion`,
-      # and a bare `LocalizationIntegrityTests` drags twenty-odd catalog and
-      # plural cases plus two Mac bundle assertions, onto a lane that
-      # deliberately does not trigger on `apps/mac/**`.
-      #
-      # `LocalizationSourceGuardTests`' scanned roots DO include `apps/mac`, and
-      # that one is unavoidable: the guard is a single sweep over every surface
-      # that renders the shared catalogs, and `apps/ios/Relayium` and
-      # `apps/ios/RelayiumShare` are two of them. Its other two cases are
-      # self-tests of the detector against literal fixtures — no repository read
-      # — so the method selector is what an `apps/ios` change actually needs.
-      #
-      # `scripts/test/ci-event-policy-test.mjs` section 6k holds this list by
-      # equality in both directions and checks each class and method exists, so
-      # a dropped guard and a silently widened one both fail there.
-      - name: iOS project, privacy, distribution, icon, version, permission, scanner and localization guards
-        working-directory: apps/RelayiumKit
-        timeout-minutes: 20
-        run: |
-          swift test \
-            --filter 'RelayiumKitTests.IOSSurfaceGuardTests' \
-            --filter 'RelayiumKitTests.IOSPrivacyManifestTests' \
-            --filter 'RelayiumKitTests.IOSDistributionSigningTests' \
-            --filter 'RelayiumKitTests.IOSAppIconAssetTests' \
-            --filter 'RelayiumKitTests.IOSLocalNetworkPermissionTests' \
-            --filter 'RelayiumKitTests.IOSPairingScannerTests' \
-            --filter 'RelayiumKitTests.BundleVersionTests/testTheIOSAppAndItsExtensionShipOneVersion' \
-            --filter 'RelayiumKitTests.LocalizationIntegrityTests/testTheIOSAppDeclaresExactlyTheShippedLocalizations' \
-            --filter 'RelayiumKitTests.LocalizationIntegrityTests/testTheIOSProjectKnownRegionsCarryNoFrozenLocale' \
-            --filter 'RelayiumKitTests.LocalizationSourceGuardTests/testNoUserFacingEnglishLiteralsInTheAppOrViewModelLayer'
+      # No `swift test` here, on purpose. The package's guard tests over this
+      # tree — project file, privacy manifest, signing, icons, plists, `.strings`
+      # catalogs — ran in this job until 2026-09-21 as ten hand-kept `--filter`
+      # selectors. `swift-package.yml` now starts on `apps/ios/**` and runs the
+      # WHOLE suite, so that list was a strict and drifting subset of it and a
+      # second package build on this runner. `scripts/test/ci-event-policy-test.mjs`
+      # section 6k holds both halves: the package lane starts on every class of
+      # file those guards read, and this workflow does not grow the step back.
       # `generic/platform=iOS Simulator` builds for the simulator SDK without
       # booting a device or needing a runtime download.
       - name: Build (unsigned, iOS Simulator)

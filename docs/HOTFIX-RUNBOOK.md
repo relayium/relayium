@@ -307,7 +307,7 @@ is the selector's decision, not yours.
 | `web/**` | the web lane (`web.yml`) — **and `native-web-pairing.yml`**, which `vite build`s and serves the bundle |
 | Wire formats or stored formats | **every** implementation, plus the wire-vector fixtures regenerated to a zero diff |
 | `apps/RelayiumKit/**` (outside `Tests/`) | **both** Apple workflows, `swift-package.yml` and `native-web-pairing.yml` — it is shared, and it fans out on purpose |
-| A platform root under `apps/` | that root's single heavy owner workflow, and only that one |
+| A platform root under `apps/` | that root's single heavy owner workflow — plus, for `apps/mac/**` and `apps/ios/**`, `swift-package.yml`: the package suite's guard tests read those two trees, and it is a `macos-15` runner |
 | Anything at all | `repo-hygiene` and `compat`, unconditionally — see below |
 
 **A server hotfix is not a `go.yml`-only event, and treating it as one is how a

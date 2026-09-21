@@ -600,7 +600,10 @@ const MUTATIONS = [
       "contracts/device-inbox-admission-v1.json", "apps/**", ".github/workflows/contracts.yml",
     ]),
     path: "apps/ios/Relayium/RelayiumApp.swift",
-    expectSelected: ["contracts", "ios"],
+    // `swift-package` is selected on its own account — its filter names
+    // `apps/ios/**` because its guards read that tree — so the kill is
+    // `contracts` appearing, which only the widened filter explains.
+    expectSelected: ["contracts", "ios", "swift-package"],
   },
   {
     name: "a lane's filter is narrowed off the tree it owns",

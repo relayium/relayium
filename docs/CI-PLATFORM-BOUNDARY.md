@@ -178,10 +178,28 @@ above, and on everything else. They are omitted for that reason, not because
 they are optional.
 
 `swift-package.yml` watches `apps/RelayiumKit/**` with **no exclusion** and runs
-one job: the repository's **sole unfiltered `swift test`**. `ios.yml` still runs
-five named `--filter` selectors over `apps/ios` guards — that is the *other*
-direction, an `apps/ios/**` change, which `swift-package.yml` does not watch —
-and `macos.yml` runs no `swift test` at all any more. The uniqueness is asserted
+one job: the repository's **sole unfiltered `swift test`**. Since 2026-09-21 it
+also watches `apps/mac/**` and `apps/ios/**`. It compiles neither tree; it
+**reads** both — dozens of the package's XCTest cases are guards over a project
+file, a plist, an entitlement, a privacy manifest, a `.strings` catalog or a
+Swift source under one of those roots, and a file a test opens is an input to it
+exactly like a fixture. Before that, an `apps/mac/**`-only change ran none of
+its guards (`macos.yml` runs no `swift test` at all any more) and an
+`apps/ios/**`-only change ran only the ten `--filter` selectors `ios.yml` listed
+by hand, out of roughly thirty test files that read that tree: the hand-kept
+list is what drifted, and the whole suite cannot. That `ios.yml` step was
+retired in the same change — it had become a strict subset of this job and a
+second package build on a paid runner — and `ci-event-policy-test.mjs` section
+6k now holds the two facts that replaced it: this lane starts on every class of
+file the guards read, and neither Apple build lane grows a `swift test` back.
+This makes it the **one**
+workflow whose filter spans two platform roots; `ci-event-policy-test.mjs`
+section 6b names it as the only exception and holds it to exactly those two,
+because the rule protects a workflow that *builds* a platform and this one
+builds none. `server/`, `scripts/` and `web/` files that a few guards also open
+are deliberately **not** in the filter — they would start the whole suite on
+every server and web commit — and such claims belong in the Linux checks
+`repo-hygiene.yml` runs on every push. The uniqueness is asserted
 both structurally over the parsed workflows and as a text scan over every
 workflow file on disk, because a workflow the policy does not parse can run
 `swift test` just as well as one it does.
@@ -321,7 +339,7 @@ cost is the whole reason:
 | ------------ | --------------------------------- |
 | `go.yml` | the **eight-shard** `-race` account lane, plus build, vet, suite and govulncheck |
 | `web.yml` | the full Vite suite, `npm run build`, an accessibility scan and three headless-Chrome journeys |
-| `swift-package.yml` | the whole package suite on a **paid** macOS runner — and a third filter entry, where the file's own rules require exactly two and no exclusion |
+| `swift-package.yml` | the whole package suite on a **paid** macOS runner — and a fifth filter entry, where the file's own rules require exactly four (the package, the two app trees its guards read, itself) and no exclusion |
 
 The fixture rule is right for the frozen vectors: those bytes are what the Go and
 TypeScript manifest implementations are *reproduced against*, so a regenerated
@@ -365,8 +383,10 @@ stopped matching the document.
 
 #### The third `swift test`, costed deliberately
 
-`swift-contract` is a third host for `swift test` and a third paid macOS runner,
-which `scripts/test/swift-ci-boundary-test.mjs` refused by name until this
+`swift-contract` was the third host for `swift test` when it was added — after
+`swift-package.yml` and `ios.yml`'s filtered guard step, since retired, which
+leaves it the second — and a paid macOS runner of its own,
+which `scripts/test/swift-ci-boundary-test.mjs` refused by name until that
 commit. It is here because the alternatives were worse in both directions:
 widening `swift-package.yml` spends the whole package suite on a document edit,
 and omitting Swift lets a contract change land with two implementations compared
@@ -1273,10 +1293,13 @@ policies do — the change that breaks them selects no other lane:
   `go.yml` was never selected. Both helpers live in `scripts/release/` next to
   `server-tag.sh`.
 
-Still open, recorded rather than solved: `macos.yml` runs no `swift test`, so the
-Mac guards that read `apps/mac/**` are not exercised by an `apps/mac/**`-only
-change, and several web suites read root documents that `web.yml` does not
-watch.
+Closed 2026-09-21: `macos.yml` runs no `swift test`, so the Mac guards that read
+`apps/mac/**` were not exercised by an `apps/mac/**`-only change.
+`swift-package.yml` now watches both app trees (see
+[above](#the-shared-swift-package-source-tests-and-fixtures)). Still open,
+recorded rather than solved: a few Swift guards read `server/`, `scripts/` and
+`web/` files that select no Swift lane, and several web suites read root
+documents that `web.yml` does not watch.
 
 ### What has been observed, and what has not
 

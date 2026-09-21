@@ -75,17 +75,24 @@ export const PATH_MATRIX = [
     + "pairing change here breaks them directly. windows.yml is a NATIVE BUILD lane and is in "
     + "this set on purpose: the Windows client compiles this module out of `web/src/lib` rather "
     + "than vendoring a copy, which is why this row cannot claim that no native build starts"],
-  ["apps/mac/Relayium/AccountView.swift", ["macos.yml"],
-    "macOS-only source: no iOS runner, and no pairing runner either. The acceptance builds "
+  ["apps/mac/Relayium/AccountView.swift", ["macos.yml", "swift-package.yml"],
+    "macOS-only source: the macOS build lane, plus the package suite — which compiles nothing "
+    + "under apps/mac and READS it: the Mac surface, privacy, signing and localization guards are "
+    + "XCTest cases in apps/RelayiumKit, macos.yml runs no `swift test`, and until the package "
+    + "lane watched this tree a Mac-only change ran none of them. No iOS runner, and no pairing "
+    + "runner either. The acceptance builds "
     + "`server` and `apps/RelayiumKit` and serves the Web bundle; it never reads, compiles or "
     + "serves a file under apps/mac, so watching this tree would buy a 45-minute macOS runner "
     + "for evidence the run cannot produce. The app's logic lives in apps/RelayiumKit, which the "
     + "pairing filter does name"],
-  ["apps/mac/scripts/package-dmg.sh", ["macos.yml"],
+  ["apps/mac/scripts/package-dmg.sh", ["macos.yml", "swift-package.yml"],
     "a macOS release script the macOS `test` job runs: macOS, not iOS, and not the pairing "
-    + "acceptance, which does not package a DMG"],
-  ["apps/ios/Relayium/RelayiumApp.swift", ["ios.yml"],
-    "iOS-only source: no macOS signing lane, and — since the pairing filter was narrowed off "
+    + "acceptance, which does not package a DMG. The package suite starts too, because its "
+    + "filter is the whole apps/mac tree rather than a hand-kept list of the files its guards "
+    + "open — that list is what drifted on the iOS side"],
+  ["apps/ios/Relayium/RelayiumApp.swift", ["ios.yml", "swift-package.yml"],
+    "iOS-only source: the iOS build lane, plus the package suite, whose guards read this tree "
+    + "the way they read apps/mac. No macOS signing lane, and — since the pairing filter was narrowed off "
     + "`apps/**` — no 45-minute macOS pairing runner either. That acceptance builds "
     + "apps/RelayiumKit and the Web bundle; nothing under apps/ios is an input to it"],
   ["apps/RelayiumKit/Sources/RelayiumKit/Crypto/SealedBox.swift",

@@ -106,6 +106,16 @@ const PACKAGE_TEST_DIR = `${PACKAGE_TESTS_ROOT}/${SWIFT_TEST_TARGET}`;
 
 const SWIFT_PACKAGE = "swift-package.yml";
 const SWIFT_PACKAGE_JOB = "swift-test";
+/**
+ * The two app trees the package suite READS and does not compile.
+ *
+ * They are inputs to `swift test` for the same reason a fixture is: a guard case
+ * opens a file under one of them and fails when it changes. The package lane's
+ * filter therefore names both — and ONLY these two, because a tree the suite
+ * merely touches (`server/`, `web/`, `scripts/`) would start the whole suite on
+ * every commit to it.
+ */
+const APP_TREE_GLOBS = ["apps/mac/**", "apps/ios/**"];
 const MACOS = "macos.yml";
 const IOS = "ios.yml";
 const NWP = "native-web-pairing.yml";
@@ -116,11 +126,11 @@ const AUTO_RELEASE = "auto-release.yml";
 /**
  * The root contract lane, and the ONE `swift test` it is allowed to run.
  *
- * `contracts.yml` is a third host for `swift test` and therefore a third PAID
+ * `contracts.yml` is a second host for `swift test` and therefore a second PAID
  * macOS runner. It is here rather than refused because the alternative was
- * worse in both available shapes: widening `swift-package.yml`'s filter to a
- * tree it does not compile would spend the WHOLE package suite on a document
- * edit, and leaving the Swift consumer out entirely would let a contract change
+ * worse in both available shapes: widening `swift-package.yml`'s filter to the
+ * contract tree would spend the WHOLE package suite on a document edit that one
+ * test class reads, and leaving the Swift consumer out entirely would let a contract change
  * land with two implementations compared and the third not — which is the same
  * "fails later against an innocent commit" shape the fixture entries in `go.yml`
  * and `web.yml` exist to prevent.
@@ -941,13 +951,19 @@ function laneFailures(w) {
       + `PAID macOS runner on documentation, server and web commits alike.`,
     );
     if (paths !== null) {
+      const wantPaths = [PACKAGE_SOURCE_GLOB, ...APP_TREE_GLOBS, `.github/workflows/${SWIFT_PACKAGE}`];
       need(
-        deepEqual(paths, [PACKAGE_SOURCE_GLOB, `.github/workflows/${SWIFT_PACKAGE}`]),
+        deepEqual(paths, wantPaths),
         `${SWIFT_PACKAGE}'s path filter is ${JSON.stringify(paths)}; want exactly `
-        + `["${PACKAGE_SOURCE_GLOB}", ".github/workflows/${SWIFT_PACKAGE}"]. It tests one package `
-        + `and nothing else: a wider entry charges a macOS runner for a tree it does not compile, `
-        + `and ANY exclusion under \`${SWIFT_PACKAGE_DIR}\` is the failure this workflow was `
-        + `created to prevent — three heavy filters exclude the test target on the strength of `
+        + `${JSON.stringify(wantPaths)}. It tests one package, and its inputs are that package `
+        + `plus the two app trees its guard tests READ — a project file, a plist, an entitlement or `
+        + `a \`.strings\` catalog under ${APP_TREE_GLOBS.join(" or ")} is opened by dozens of `
+        + `XCTest cases and compiled by none, and no other workflow runs them: ${MACOS} runs no `
+        + `\`swift test\` at all. A MISSING app tree is a platform whose guards run on no change `
+        + `to it; a WIDER entry (\`server/**\`, \`web/**\`, \`scripts/**\`) charges a macOS `
+        + `runner and the whole suite for every commit to a tree whose claims belong in a Linux `
+        + `check; and ANY exclusion under \`${SWIFT_PACKAGE_DIR}\` is the failure this workflow `
+        + `was created to prevent — three heavy filters exclude the test target on the strength of `
         + `this one covering it.`,
       );
       need(
@@ -1135,7 +1151,7 @@ function laneFailures(w) {
   // 1d. Exactly ONE unfiltered `swift test`, and it is this job.
   //
   //     Zero leaves every Swift assertion in the package unexecuted while
-  //     `ios.yml`'s five narrow guard selectors keep the board green. Two is the
+  //     every build lane keeps the board green. Two is the
   //     same suite on two PAID macOS runners per commit for one answer — and,
   //     historically, one of the two sitting behind a signing workflow's filter.
   const unfiltered = swiftTestSteps(w).filter((entry) => entry.filters.length === 0);
@@ -1144,7 +1160,7 @@ function laneFailures(w) {
     `${unfiltered.length} unfiltered \`swift test\` step(s) exist across the parsed workflows `
     + `(${unfiltered.map((e) => `${e.file}/${e.jobName}`).join(", ") || "none"}); want exactly `
     + `one. Zero leaves the shared package's ${SWIFT_TEST_TARGET} suite unexecuted everywhere — `
-    + `${IOS}'s \`--filter\` selectors are not a substitute and were never meant to be. Two `
+    + `${CONTRACTS}'s one \`--filter\` class is not a substitute and was never meant to be. Two `
     + `charges a PAID macOS runner twice for one answer.`,
   );
   for (const entry of unfiltered) {
@@ -1171,15 +1187,16 @@ function laneFailures(w) {
     .filter(([, text]) => /\bswift\s+test\b/.test(text))
     .map(([file]) => file)
     .sort();
-  const wantHosts = [CONTRACTS, IOS, SWIFT_PACKAGE].sort();
+  const wantHosts = [CONTRACTS, SWIFT_PACKAGE].sort();
   need(
     deepEqual(hosts, wantHosts),
     `\`swift test\` appears in [${hosts.join(", ")}]; want exactly `
     + `[${wantHosts.join(", ")}]. Read from every workflow file on disk rather `
     + `than from the parsed subset, because a workflow this policy does not parse can run `
-    + `\`swift test\` just as well as one it does — and a FOURTH host is another PAID macOS runner `
-    + `nobody costed. ${IOS} is expected: it runs named \`--filter\` selectors over `
-    + `\`apps/ios\` guards for the other direction, an \`apps/ios/**\` change. ${CONTRACTS} is `
+    + `\`swift test\` just as well as one it does — and a THIRD host is another PAID macOS runner `
+    + `nobody costed. ${IOS} is NOT expected any more: its hand-kept \`--filter\` selectors over `
+    + `\`apps/ios\` guards were retired when ${SWIFT_PACKAGE} began watching \`apps/ios/**\` and `
+    + `\`apps/mac/**\` and running the whole suite on them. ${CONTRACTS} is `
     + `expected: it runs the Swift half of the root contract tree, always filtered — see 1f.`,
   );
 
@@ -1810,6 +1827,30 @@ const MUTATIONS = [
     expect: /AeadTests\.swift" starts NO path-filtered workflow/,
   },
   {
+    // The gap this filter's two app-tree entries closed, re-opened: with
+    // `apps/mac/**` gone, an `apps/mac`-only change starts `macos.yml` — which
+    // runs no `swift test` — and none of the package's Mac guards.
+    name: "swift-package.yml stops watching apps/mac, so a Mac-only change runs none of its guards",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, [
+      PACKAGE_SOURCE_GLOB,
+      "apps/ios/**",
+      `.github/workflows/${SWIFT_PACKAGE}`,
+    ]),
+    expect: /swift-package\.yml's path filter is .*A MISSING app tree is a platform whose guards run on no change/,
+  },
+  {
+    // The opposite edit: a tree the suite merely touches. Every server commit
+    // would buy the whole package suite on a macOS runner.
+    name: "swift-package.yml is widened to a tree whose claims belong in a Linux check",
+    mutate: (w) => withPaths(w, SWIFT_PACKAGE, [
+      PACKAGE_SOURCE_GLOB,
+      ...APP_TREE_GLOBS,
+      "server/**",
+      `.github/workflows/${SWIFT_PACKAGE}`,
+    ]),
+    expect: /swift-package\.yml's path filter is .*a WIDER entry/,
+  },
+  {
     // The same failure written as an exclusion inside the one filter that may
     // not have one.
     name: "swift-package.yml excludes the fixtures it is the only owner of",
@@ -1974,8 +2015,8 @@ const MUTATIONS = [
 
   // ── the sole unfiltered `swift test` ──────────────────────────────────────
   {
-    // Filtered, so nothing runs the whole suite. `ios.yml`'s five narrow guard
-    // selectors would be the only Swift testing left.
+    // Filtered, so nothing runs the whole suite. One contract class in
+    // `contracts.yml` would be the only Swift testing left.
     name: "swift-package.yml's swift test gains a filter",
     mutate: (w) => withCommandJob(w, SWIFT_PACKAGE, "swift test", (job, step) => {
       step.run = "swift test --filter 'RelayiumKitTests.AeadTests'\n";
@@ -2006,14 +2047,14 @@ const MUTATIONS = [
     expect: /the unfiltered `swift test` declares working-directory undefined/,
   },
   {
-    // The third host, in a workflow this policy does not parse — invisible to
+    // A third host, in a workflow this policy does not parse — invisible to
     // the structural count, caught by the on-disk text scan.
     name: "an unparsed workflow gains a swift test of its own",
     mutate: (w) => {
       w.texts.set(AUTO_RELEASE, `${w.texts.get(AUTO_RELEASE)}\n        run: swift test\n`);
       return w;
     },
-    expect: /`swift test` appears in \[auto-release\.yml, contracts\.yml, ios\.yml, swift-package\.yml\]/,
+    expect: /`swift test` appears in \[auto-release\.yml, contracts\.yml, swift-package\.yml\]/,
   },
 
   // ── the contract lane's third `swift test` (1f, 1g) ───────────────────────
