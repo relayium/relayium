@@ -193,7 +193,7 @@
 
 ### M-1 跨网络传输与设备收件箱支持文件拖拽
 
-> **状态：in progress（实现完成，待 Codex 独立评审与验收）。2026-08-26。**
+> **状态：completed（2026-09-21 对代码与发布记录复核后更正）。** 实现为提交 `d44a5239`（macOS 1.3.8 build 26），已随 2026-08-26 公开发布的 Mac App Store 1.3.8 交付，代码在 `main` 上（`FileDropAdmission.swift`、`FileDropZone.swift`、`TransferLinkPane.swift`、`DeviceConversationPage.swift` 及对应守卫测试）；macOS 公开版本此后已推进到 1.4.x。原状态：in progress（实现完成，待 Codex 独立评审与验收），2026-08-26。
 > 分支 `work/macos-1.3.8-drag-drop`，随 macOS 1.3.8 / build 26 交付。
 > **实现**：新增可复用投放适配器 `RelayiumAppKit/FileDropAdmission.swift`
 > （`admitFileDrop` 决定接受/整批拒绝/忙碌拒绝）与 SwiftUI 修饰符
@@ -288,6 +288,7 @@
 
 ### M-2 传输性能与等待体验专项
 
+> **状态更正（2026-09-21）：第一阶段 completed**——已随 macOS 1.3.7 → 公开 1.3.8 发布（工作区 DECISION-LOG 2026-08-26 条目标记为 completed/superseded）；**第二阶段**（提升最低客户端版本、删除旧路径）仍是需要 Owner 单独授权的延期项，条件见 `docs/transfer-performance-compatibility.md`。原记录：
 > **2026-08-25 第一阶段已实施并进入验证。** 当前改动保持线协议不变，旧版与新版可共用；具体兼容边界、已采纳/拒绝/延期项和第二阶段剥离条件见 `docs/transfer-performance-compatibility.md`。本轮不提升最低 macOS 版本，也不删除旧路径。
 
 - **现状**：各模块功能可用，但设备收件箱等路径的上传与接收等待明显，整体尚未达到“好用”的体验标准。
@@ -298,7 +299,7 @@
 
 ### M-3 设备收件箱「发送内容」在切换目的地后失效（1.3.8 阻断项）
 
-> **状态：in progress（实现完成并本地验证，待 Codex 独立评审与验收）。2026-08-26。**
+> **状态：completed（2026-09-21 对代码与发布记录复核后更正）。** 同一提交 `d44a5239` 交付并随公开的 macOS 1.3.8 (26) 发布：`DeviceInboxSurface` 只从 `deliveries.focusedPeerID` 派生，`InboxNavigationAuthorityTests` 八项与 `DeviceInboxUITests` 两条 UI 回归均在 `main` 上。原状态：in progress（实现完成并本地验证，待 Codex 独立评审与验收），2026-08-26。
 > 分支 `work/macos-1.3.8-drag-drop`，随 macOS 1.3.8 / build 26 交付。
 > 未改动发布标识（1.3.8 / build 26）与最低系统版本（macOS 13.0）。
 
@@ -376,3 +377,10 @@
 - **剩余人工 QA**：真实双机跨网络配对完成后切换到设备收件箱并发送；设备页打开状态下
   在对端关闭接收/吊销设备；切换账号；从菜单栏关闭并重开窗口；连续在多台设备页之间
   切换并确认草稿与已选文件不串台。
+  > **2026-09-21 复核：五项中四项已有自动化覆盖，仅第一项仍需真机。** 吊销/关闭接收 →
+  > `InboxNavigationAuthorityTests`（`testARevokedDeviceStopsBeingTheTargetWithoutClosingItsPage`、
+  > `testADeviceRemovedFromTheAccountLeavesItsPageOpenAndUnaimable`）；切换账号 →
+  > `testAnAccountChangeClosesTheOpenPage`；关闭并重开窗口 → `DeviceInboxUITests`
+  > `testTheOpenDeviceSpaceSurvivesClosingAndReopeningTheWindow`（真实 App 运行）；多设备页切换不串台 →
+  > `.id(peer.id)` 宿主标识 + 每页 `StagedSelectionLifetime`，由 `FileDropAdmissionTests`、`MacSurfaceGuardTests` 守住。
+  > **仍未有记录的**：签名构建上的真实双机跨网络配对后切到设备收件箱发送——这是真机项，不是代码项。

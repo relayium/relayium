@@ -68,6 +68,14 @@ Known, deferred edge cases:
   peer-id suffix;
 - Cross with multiple LAN peers has no paste-selected target because
   `effectiveSelected` is empty without a radar selection; this is existing behavior;
+  > **Status 2026-09-21 for the two edge cases above.** Duplicate names — **completed**:
+  > `web/src/lib/peer-labels.ts` `labelPeers()` appends `· <last six of the peer id>` to the
+  > DISPLAYED name of colliding peers only, documented as matching the native `shortPeerID`,
+  > applied in `App.svelte`, covered by `peer-labels.test.ts` (`0a3128dc`). Paste with several
+  > peers — **closed as intended behaviour**: paste pre-fills the composer for the explicitly
+  > selected peer (`effectiveSelected`) and is ignored when none is selected, because a paste is
+  > not a choice of recipient; the window-level file drop follows the same rule (`dropTarget`
+  > sends only when there is exactly one peer).
 - pairing-room capacity is currently two participants. If the server later permits
   group rooms, the Cross heading predicate must be revisited.
 

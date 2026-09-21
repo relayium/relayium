@@ -565,6 +565,14 @@ git commit -m "feat(native): CloudClient.download (meta+blob, StoreDecryptor, 30
 
 ## Deferred (not in R1-D)
 
+> **Status 2026-09-21:** two of the three are delivered. **Resumable upload** —
+> `CloudUploader` does the 3-phase chunked upload with bounded memory and keeps
+> the single-shot fallback for older servers (`d6f0a834`, `664b7252`, `605f2551`).
+> **Progress callbacks** — `onProgress(sent, total)` on the uploader, wired into
+> `CloudUploadModel` (`49c08e40`). **Background `URLSession`** is still absent,
+> deliberately: `apps/ios/Relayium/RelayiumApp.swift` states it and
+> `IOSSurfaceGuardTests` forbids a stub; adding it is an owner decision.
+
 - **Resumable upload** (`POST /api/uploads` 3-phase init/PATCH/finalize) + its memory-bounded streaming — a follow-up; the single-shot `POST /api/files` is the R1-D deliverable (matches the web's `uploadFile` fallback path and is sufficient for a working transfer).
 - **Background `URLSession`** (survives app suspension) — an iOS-round (R3) concern; macOS transfers run fine in the foreground. R1-D uses foreground async `URLSession`.
 - **Upload/download progress callbacks** — the interfaces can grow an `onProgress` later; R1-D proves correctness first.

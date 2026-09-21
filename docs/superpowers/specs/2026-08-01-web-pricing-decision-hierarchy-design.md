@@ -112,3 +112,9 @@ control and the cycle actually used by displayed prices and checkout requests.
 Global typography changes, currency localization beyond USD bidi isolation,
 Apps/Me/CLI migration, PlanCard, Account redesign, SEO/static pricing pages and
 any product-copy rewrite remain separate batches.
+
+> **Status 2026-09-21:** the Apps/Me/CLI migration is **done** — the application shell covers
+> every route but `/d/<id>` with a shared 1040px track (`fbb290cf`, 2026-09-16; pricing aligned
+> to it in `69d9ffcd`). Still open and owner-gated: currency localization, localized static
+> pricing pages (`/pricing` is an English-only SPA route), the Account redesign, a global type
+> scale and any product-copy rewrite. What "PlanCard" meant here was never specified.

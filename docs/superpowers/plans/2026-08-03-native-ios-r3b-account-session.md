@@ -1736,6 +1736,12 @@ Recorded rather than claimed:
 
 ## Follow-ups this slice deliberately does not do
 
+> **Status 2026-09-21, each bullet checked against `main`:** `SignInPresentation` on macOS —
+> **done / superseded** (no `ContentView`; `AccountDestination.swift` and `LoginView.swift` use
+> it). Token-persistence failure — **done**: `ErrorCopy` maps the keychain failure to
+> `error.keychain.signIn`. Catalog strings that say Mac — **done except two**
+> (`notify.incomingFiles`, `notify.incomingText`; see the guard list in `IOSSurfaceGuardTests`).
+
 - Adopt `SignInPresentation` in the macOS `ContentView`, replacing its derived
   `loginError` / `isAuthenticating` — a real simplification, and a macOS view
   change this iOS slice has no business making.

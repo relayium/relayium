@@ -1907,6 +1907,26 @@ prove the sandbox behaves, because it is not a signed device build:
 
 ## Follow-ups this slice deliberately does not do
 
+> **Status 2026-09-21, each bullet checked against `main`:**
+> - macOS `UploadPane` adopting `SendSelectionModel` — **still open**: `UploadPane.swift`
+>   keeps its view-scoped `SelectionStore` and the `selection.revision` bridge; only iOS
+>   builds the model. An ownership change, so it needs scheduling, not a drive-by.
+> - `SignInPresentation` in the macOS `ContentView` — **done / superseded**: macOS has no
+>   `ContentView` any more; `AccountDestination.swift` and `LoginView.swift` render through
+>   `SignInPresentation`.
+> - `ServerConfig.maxFileSize` on macOS — **still open, blocked on the first bullet**:
+>   `fetchConfig()` is now called (wired into `SendSelectionModel`), but macOS does not build
+>   that model and has no `maxFileSize` reference.
+> - Notice when account isolation abandons an upload — **still open**, a product/copy decision.
+> - Own message for an out-of-space staging failure — **still open**, small: the three
+>   staging catches in `SendSelectionModel` still use `error.photoImport.failed`. The existing
+>   `error.destination.noSpace` copy is written for receiving ("nothing was saved"), so this
+>   needs its own English and Simplified Chinese string rather than a key swap.
+> - Catalog strings that name a platform — **done except two**: the guard list in
+>   `IOSSurfaceGuardTests` is down to `notify.incomingFiles` and `notify.incomingText`,
+>   pending the notifications slice; `error.keychain.signIn` is surfaced through `ErrorCopy`.
+> - The Share Extension bullet was not re-verified in this pass.
+
 - Adopt `SendSelectionModel` (or at least `SecurityScopedAccess`) in the macOS
   `UploadPane`, replacing its view-scoped `SelectionStore` and its
   `.onChange(of: selection.revision)` bridge.

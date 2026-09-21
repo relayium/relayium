@@ -1,6 +1,6 @@
 # macOS Share extension — framing and settled decisions
 
-**Status:** `framed, not started`. Written 2026-08-06 while the 1.0 notarization run was in
+**Status (corrected 2026-09-21):** `shipped` — implemented the same day in `6d25f2ab` ("feat(mac): add the Share extension") as `apps/mac/RelayiumShare`, and released with the app ever since (App + extension 1.4.x). The text below is the original framing. **Original status:** `framed, not started`. Written 2026-08-06 while the 1.0 notarization run was in
 flight, so the next session starts from settled decisions rather than reconstructing them.
 
 **Topology:** Claude single-agent mode. **Run policy:** automated continuous work, active.
