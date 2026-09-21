@@ -1918,10 +1918,12 @@ prove the sandbox behaves, because it is not a signed device build:
 >   `fetchConfig()` is now called (wired into `SendSelectionModel`), but macOS does not build
 >   that model and has no `maxFileSize` reference.
 > - Notice when account isolation abandons an upload — **still open**, a product/copy decision.
-> - Own message for an out-of-space staging failure — **still open**, small: the three
->   staging catches in `SendSelectionModel` still use `error.photoImport.failed`. The existing
->   `error.destination.noSpace` copy is written for receiving ("nothing was saved"), so this
->   needs its own English and Simplified Chinese string rather than a key swap.
+> - Own message for an out-of-space staging failure — **done 2026-09-21**: the three staging
+>   catches in `SendSelectionModel` ask one classifier (the receive side's ENOSPC/EDQUOT walk
+>   plus Cocoa `fileWriteOutOfSpace` in the underlying chain) and show the new
+>   `error.photoImport.noSpace` in English and Simplified Chinese; `error.destination.noSpace`
+>   was not reused because its copy is written for receiving. Not yet proven on a full device:
+>   whether `loadTransferable` hands the importing closure's error through intact.
 > - Catalog strings that name a platform — **done except two**: the guard list in
 >   `IOSSurfaceGuardTests` is down to `notify.incomingFiles` and `notify.incomingText`,
 >   pending the notifications slice; `error.keychain.signIn` is surfaced through `ErrorCopy`.
