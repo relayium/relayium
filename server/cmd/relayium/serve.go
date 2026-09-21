@@ -16,6 +16,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/relayium/relayium/internal/secure"
+	"github.com/relayium/relayium/internal/termtext"
 	"github.com/relayium/relayium/internal/trust"
 	"github.com/relayium/relayium/internal/xfer"
 )
@@ -497,7 +498,7 @@ func (h *serveHandler) serve(conn net.Conn) (ok bool) {
 	_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))
 	tconn, fp, err := secure.ServerAny(conn, h.id)
 	if err != nil {
-		fmt.Fprintf(h.stderr, "handshake failed from %s: %v\n", remote, err)
+		fmt.Fprintf(h.stderr, "handshake failed from %s: %s\n", remote, termtext.Safe(err.Error()))
 		return false
 	}
 	_ = conn.SetDeadline(time.Time{})
@@ -515,18 +516,18 @@ func (h *serveHandler) serve(conn net.Conn) (ok bool) {
 	// `receive`/`pull` do not set it.
 	rep, err := xfer.Receive(&idleConn{Conn: tconn, idle: transferIdleTimeout}, h.dir, xfer.RecvOpts{NoResume: h.noResume, AllowSync: true, AllowDelete: h.allowDelete})
 	if err != nil {
-		fmt.Fprintf(h.stderr, "receive from %s (%s): %v\n", fp, remote, err)
+		fmt.Fprintf(h.stderr, "receive from %s (%s): %s\n", fp, remote, termtext.Safe(err.Error()))
 		return false
 	}
 	if rep.DeleteRefusedReason != "" {
-		fmt.Fprintf(h.stderr, "warning: refused the sender's --delete because %s; nothing was deleted\n", rep.DeleteRefusedReason)
+		fmt.Fprintf(h.stderr, "warning: refused the sender's --delete because %s; nothing was deleted\n", termtext.Safe(rep.DeleteRefusedReason))
 	} else if rep.DeletePartial != "" {
-		fmt.Fprintf(h.stderr, "warning: the mirror delete did not finish: %s\n", rep.DeletePartial)
+		fmt.Fprintf(h.stderr, "warning: the mirror delete did not finish: %s\n", termtext.Safe(rep.DeletePartial))
 	} else if rep.DeleteDenied {
 		fmt.Fprintf(h.stderr, "warning: sender requested --delete but this listener isn't started with --allow-delete; nothing was deleted\n")
 	}
 	if len(rep.Failed) > 0 {
-		fmt.Fprintf(h.stderr, "%d file(s) failed integrity check from %s: %v\n", len(rep.Failed), fp, rep.Failed)
+		fmt.Fprintf(h.stderr, "%d file(s) failed integrity check from %s: %v\n", len(rep.Failed), fp, termtext.SafeAll(rep.Failed))
 		return false
 	}
 	fmt.Fprintf(h.stdout, "received %d file(s), %d bytes from %s\n", rep.Files, rep.Bytes, fp)

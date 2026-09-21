@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/relayium/relayium/internal/termtext"
 )
 
 // WireVersion is the protocol version carried in Hello; bump on breaking changes.
@@ -133,11 +135,14 @@ type RemoteError struct {
 	Msg  string
 }
 
+// Error is display text, and both fields are the PEER's words: they are made
+// terminal-safe here, where they become a message, and left verbatim on the
+// struct for anything that compares them.
 func (e *RemoteError) Error() string {
 	if e.Msg == "" {
-		return "receiver refused the transfer: " + e.Code
+		return "receiver refused the transfer: " + termtext.Safe(e.Code)
 	}
-	return "receiver refused the transfer: " + e.Msg
+	return "receiver refused the transfer: " + termtext.Safe(e.Msg)
 }
 
 // readExpect reads one frame into v, translating a MsgError frame into a

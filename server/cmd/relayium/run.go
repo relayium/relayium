@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/relayium/relayium/internal/sshx"
+	"github.com/relayium/relayium/internal/termtext"
 	"github.com/relayium/relayium/internal/xfer"
 )
 
@@ -488,7 +489,8 @@ func runSend(args []string, stdout, stderr io.Writer) int {
 
 func reportExit(rep xfer.Report, stderr io.Writer) int {
 	if len(rep.Failed) > 0 {
-		fmt.Fprintf(stderr, "%d file(s) failed integrity check: %v\n", len(rep.Failed), rep.Failed)
+		// The names are the peer's manifest paths on a pull or a receive.
+		fmt.Fprintf(stderr, "%d file(s) failed integrity check: %v\n", len(rep.Failed), termtext.SafeAll(rep.Failed))
 		return 1
 	}
 	return 0

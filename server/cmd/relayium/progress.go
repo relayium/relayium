@@ -3,12 +3,10 @@ package main
 import (
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
+	"github.com/relayium/relayium/internal/termtext"
 	"golang.org/x/term"
 )
 
@@ -225,43 +223,8 @@ func (s *transferProgress) finish() {
 	}
 }
 
-// termSafe returns path fit to print on a terminal line. On a receive the path
-// is the PEER's manifest entry, and the receiving terminal is also where the SAS
-// was just printed: an escape sequence in a file name must not be able to move
-// the cursor and repaint it, and a newline must not forge a line of output. An
-// ordinary name comes back unchanged; control characters, the Unicode line
-// separators and bytes that are not UTF-8 come back as visible Go-style escapes.
-func termSafe(path string) string {
-	clean := utf8.ValidString(path)
-	for _, r := range path {
-		if termUnsafe(r) {
-			clean = false
-			break
-		}
-	}
-	if clean {
-		return path
-	}
-	var b strings.Builder
-	for i := 0; i < len(path); {
-		r, width := utf8.DecodeRuneInString(path[i:])
-		switch {
-		case r == utf8.RuneError && width == 1:
-			fmt.Fprintf(&b, `\x%02x`, path[i])
-		case termUnsafe(r):
-			q := strconv.QuoteRuneToASCII(r)
-			b.WriteString(q[1 : len(q)-1])
-		default:
-			b.WriteRune(r)
-		}
-		i += width
-	}
-	return b.String()
-}
-
-func termUnsafe(r rune) bool {
-	return unicode.IsControl(r) || r == '\u2028' || r == '\u2029'
-}
+// termSafe returns path fit to print on a terminal line; see termtext.Safe.
+func termSafe(path string) string { return termtext.Safe(path) }
 
 // humanBytes formats a byte count with a binary (1024) unit and one decimal.
 func humanBytes(n int64) string {

@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/relayium/relayium/internal/termtext"
 )
 
 // refuse reports a structural refusal to an already-authorized sender as a
@@ -105,9 +107,11 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 			}
 			if _, err := os.Lstat(dest); err == nil {
 				// The relative manifest path is the sender's own name for the
-				// file, so it is safe to echo; the absolute receive path is not.
+				// file, so it discloses nothing to echo it; the absolute receive
+				// path would. It is still the sender's text on THIS terminal, so
+				// it is made terminal-safe.
 				return Report{}, refuse(rw, ErrCodeDestinationExists,
-					fmt.Errorf("destination already exists: %s (use `sync` to replace, or remove it on the receiver)", f.Path))
+					fmt.Errorf("destination already exists: %s (use `sync` to replace, or remove it on the receiver)", termtext.Safe(f.Path)))
 			} else if !os.IsNotExist(err) {
 				return Report{}, err
 			}
