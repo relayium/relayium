@@ -125,6 +125,7 @@ const ANDROID_TAG = ANDROID_AVAILABLE ? `android-v${ANDROID.versionName}` : null
  * 2026-08-03 needs no translation and cannot be read as 2026-03-08.
  */
 export const RELEASES = [
+  { version: "v0.26.0", date: "2026-09-21" },
   { version: "v0.25.1", date: "2026-09-20" },
   { version: "v0.25.0", date: "2026-09-14" },
   { version: "v0.24.0", date: "2026-09-01" },
