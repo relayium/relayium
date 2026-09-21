@@ -11,8 +11,14 @@
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/send-a-file-to-someone/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/send-a-file-to-someone/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="用 Relayium CLI 跨网络把文件发给对方" />
@@ -30,37 +36,88 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 跨网络把文件发给对方","description":"使用 relayium send 和 receive，凭一个简短的配对码，把文件直接在两个不同网络上的人之间传输。端到端加密，用 SAS 码验证，而且免费——文件径直在你们之间传输，从不经过我们的服务器。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/send-a-file-to-someone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"用 Relayium CLI 跨网络把文件发给对方"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"配对码是从哪来的？","acceptedAnswer":{"@type":"Answer","text":"由 Relayium 生成。登录后运行 relayium send ./release.zip，CLI 会打印一个 6 位数字、5 分钟内有效的码，以及对面要执行的完整命令。这个码不能自己指定——服务器只认它自己签发的。"}},{"@type":"Question","name":"文件会上传到什么地方吗？","acceptedAnswer":{"@type":"Answer","text":"不会。文件在你们两个之间直接流式传输，端到端加密。只有一次很小的会合握手会经过 Relayium 来介绍双方——文件本身从不经过。"}},{"@type":"Question","name":"如果连接不上怎么办？","acceptedAnswer":{"@type":"Answer","text":"如果两端都在严格 NAT 之后、没有可达地址，就无法建立直连，传输会失败——CLI 按设计没有中继兜底。当没有直连路径时，可以在两台可达的服务器之间用 daemon 直连，或者用 SSH push。"}},{"@type":"Question","name":"我怎么知道对面真的是对的人？","acceptedAnswer":{"@type":"Answer","text":"两边的终端会打印出一个从固定 TLS 证书指纹派生的相同 6 位 SAS 码。通过带外方式核对；一致就能确认指纹没有被替换、会合服务没有冒充任一端。它认证的是端点，而不是网络路径上的每一跳。加上 --verify 可以要求在任何字节移动之前先完成这个确认。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -78,7 +135,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">用 Relayium CLI 跨网络把文件发给对方</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -102,13 +159,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <p class="lead">连接是点对点、端到端加密的。只有一次极小的会合握手会经过 Relayium 来介绍双方；文件字节从不经过。</p>
       <h2>开始之前</h2>
       <p>下面用到的都是 relayium CLI，所以没装的话先装上。在 macOS 或 Linux 上，一条命令就能把预编译二进制放进你的 PATH：</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul>
       <h2>先 send，再把打印出来的码转告对方</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">你需要准备</p><ul><li>两台机器上都装好 CLI。在各自终端里 relayium version 会打印版本号；如果 shell 回的是 “command not found”，说明那台还没装。</li><li>发送方已登录。relayium whoami 会打印账号邮箱；生成配对码之前必须先 relayium login。接收方那台机器全程不用登录。</li><li>两个人同时守在终端前。码只有五分钟寿命，所以先约好时间再生成。</li><li>一个能把六位数字带外告诉对方的渠道——一通电话、一个聊天窗口，或者你们同处的那个房间。</li></ul></div>
       <p>用 relayium login 登录一次，然后直接 send 就行。CLI 会生成一个配对码，连同对面要执行的完整命令一起打印出来，然后等待。把这个码用带外方式转告对方——打电话说一下，或者丢进聊天里：</p>
-      <ol class="steps" data-block="steps"><li><p>在发送方机器上登录一次。如果 relayium whoami 已经能打印出你的账号邮箱，就跳过这步。</p><pre><code>relayium login</code></pre></li><li><p>在文件所在目录里开始发送。CLI 会生成配对码，打印出对面要执行的命令，然后等待。</p><pre><code>relayium send ./release.zip</code></pre></li><li><p>把它打印出来的六位数字用带外方式念给对方。这串数字在生成五分钟后就不再有效。</p></li><li><p>在接收方机器上，切到文件该落地的目录，执行发送方看到的那条命令。想放到别处就在后面加一个目录。</p><pre><code>relayium receive 483920</code></pre><pre><code>relayium receive 483920 ./downloads</code></pre></li><li><p>两边的终端都别关，直到接收端回到 shell 提示符。这是一次实时会话：任何一端关掉，传输就停了。</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">成功时你会看到什么</p><p>发送方先打印交接信息块并等待，然后打印校验码和它拿到的路径。两边终端显示同一个校验码，而且都以 0 退出。</p><pre><code># 发送方
+      <ol class="steps" data-block="steps"><li><p>在发送方机器上登录一次。如果 relayium whoami 已经能打印出你的账号邮箱，就跳过这步。</p><pre tabindex="0"><code>relayium login</code></pre></li><li><p>在文件所在目录里开始发送。CLI 会生成配对码，打印出对面要执行的命令，然后等待。</p><pre tabindex="0"><code>relayium send ./release.zip</code></pre></li><li><p>把它打印出来的六位数字用带外方式念给对方。这串数字在生成五分钟后就不再有效。</p></li><li><p>在接收方机器上，切到文件该落地的目录，执行发送方看到的那条命令。想放到别处就在后面加一个目录。</p><pre tabindex="0"><code>relayium receive 483920</code></pre><pre tabindex="0"><code>relayium receive 483920 ./downloads</code></pre></li><li><p>两边的终端都别关，直到接收端回到 shell 提示符。这是一次实时会话：任何一端关掉，传输就停了。</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">成功时你会看到什么</p><p>发送方先打印交接信息块并等待，然后打印校验码和它拿到的路径。两边终端显示同一个校验码，而且都以 0 退出。</p><pre tabindex="0"><code># 发送方
 Code: 483920   (valid 5 minutes)
 On the other machine:  relayium receive 483920
   not installed there?  curl -fsSL https://relayium.com/install.sh | sh
@@ -119,7 +176,7 @@ path: direct</code></pre></div>
       <h2>用 SAS 码验证</h2>
       <p>两端连接建立后，两边的终端会打印出同一个从固定 TLS 证书指纹派生的 6 位 SAS（简短认证串）。通过带外方式核对——例如在通话中念出来——可以确认指纹没有被替换、会合服务没有冒充任一端。SAS 认证的是端点，并不证明网络路径上的每一跳。</p>
       <p>为获得最强保护，加上 --verify：传输会等你确认两边的码一致后，才会移动哪怕一个字节。</p>
-      <pre><code>relayium send --verify ./release.zip</code></pre>
+      <pre tabindex="0"><code>relayium send --verify ./release.zip</code></pre>
       <h2>只走直连——免费，否则失败</h2>
       <p>传输会在两端之间竞速建立直连。一旦能建立——这是常见情况，只要至少一方有可达地址——文件就会直接、加密地全速传输，不收费。</p>
       <p>Relayium CLI 的 send/receive 和 text 都只走 P2P 直连：文件或消息字节绝不会通过 TURN 或任何其他 Relayium 服务器中继。两端无法建立直连时，会话会直接失败，不会回退到中继。</p>
@@ -127,10 +184,10 @@ path: direct</code></pre></div>
       <ul><li>直连成功 → 免费、全速、端到端加密。</li><li>两端在地理上可以在任何地方——发送方直接运行 send，接收方用它打印出来的码运行 receive。</li></ul>
       <h2>传不过去的时候</h2>
       <p>几乎所有失败都落在下面四种里。每一种都有一行可读的输出或一条可执行的命令来判定，你不必靠猜来判断是哪一端出了问题。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>发送方直接拒绝启动：“minting a pairing code needs an account”。</dt><dd><pre><code>relayium whoami
-# not logged in (run `relayium login`)</code></pre><p>这台机器上没有存下凭据。运行 relayium login 并在浏览器里批准；之后 whoami 就能打印出账号邮箱，发送也能继续。此时还没有生成过码，所以没浪费任何一个。</p></dd><dt>接收方输入了码，会合服务却不认。</dt><dd><pre><code># 发送方——交接信息块里写着确切的有效期
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>发送方直接拒绝启动：“minting a pairing code needs an account”。</dt><dd><pre tabindex="0"><code>relayium whoami
+# not logged in (run `relayium login`)</code></pre><p>这台机器上没有存下凭据。运行 relayium login 并在浏览器里批准；之后 whoami 就能打印出账号邮箱，发送也能继续。此时还没有生成过码，所以没浪费任何一个。</p></dd><dt>接收方输入了码，会合服务却不认。</dt><dd><pre tabindex="0"><code># 发送方——交接信息块里写着确切的有效期
 relayium send ./release.zip
-Code: 483920   (valid 5 minutes)</code></pre><p>码过期了。在发送方按 Ctrl-C，重新运行 relayium send ./release.zip，然后在新交接信息块写明的五分钟内把新的六位数字念过去。</p></dd><dt>两边终端打印出的校验码不一样。</dt><dd><pre><code>relayium send --verify ./release.zip</code></pre><p>停下，别把文件发出去。校验码不一致意味着两端固定下来的证书指纹对不上，也就是说对面那台机器并不是你以为的那台。用 --verify 重跑一次，它会在这一步停住等你确认，同时跟对方核对他们到底在哪台机器上操作。</p></dd><dt>“no direct connection to the peer (both ends behind strict NAT?)”。</dt><dd><pre><code>relayium send ./release.zip
+Code: 483920   (valid 5 minutes)</code></pre><p>码过期了。在发送方按 Ctrl-C，重新运行 relayium send ./release.zip，然后在新交接信息块写明的五分钟内把新的六位数字念过去。</p></dd><dt>两边终端打印出的校验码不一样。</dt><dd><pre tabindex="0"><code>relayium send --verify ./release.zip</code></pre><p>停下，别把文件发出去。校验码不一致意味着两端固定下来的证书指纹对不上，也就是说对面那台机器并不是你以为的那台。用 --verify 重跑一次，它会在这一步停住等你确认，同时跟对方核对他们到底在哪台机器上操作。</p></dd><dt>“no direct connection to the peer (both ends behind strict NAT?)”。</dt><dd><pre tabindex="0"><code>relayium send ./release.zip
 # no direct connection to the peer (both ends behind strict NAT?): …</code></pre><p>两端谁也够不着谁，而 CLI 刻意如此，没有给文件字节留任何中继通路。把其中一端换到有可达地址的网络上——一台服务器，或者手机热点——或者改用 relayium up 上传文件，把下载链接交给对方。</p></dd></dl></div>
       <h2>常见问题</h2>
       <h3>配对码是从哪来的？</h3>

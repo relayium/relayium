@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ar/how-to/send-files-between-two-computers-over-the-internet/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="إرسال الملفات بين حاسوبين عبر الإنترنت" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"إرسال الملفات بين حاسوبين عبر الإنترنت","description":"دليل لنقل الملفات بين متصفحين: اتصال مباشر على شبكة LAN نفسها، أو نقل مشفَّر من الطرف إلى الطرف عبر TURN بين الشبكات، دون رفع سحابي أو تثبيت.","inLanguage":"ar","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/how-to/send-files-between-two-computers-over-the-internet/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"إرسال الملفات بين حاسوبين عبر الإنترنت"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل هو فعلًا من الند للند، أم يمرّ الملف عبر خادم؟","acceptedAnswer":{"@type":"Answer","text":"هو من الند للند بالمعنى الذي يهم: يُبَث الملف من متصفح إلى آخر ولا يُخزَّن على خادم. على شبكة LAN نفسها يتصل المتصفحان مباشرةً؛ وعبر الشبكات يستخدم رمز الاقتران TURN بحكم التصميم. لا يمرّر المُرحِّل إلا نصًا مشفَّرًا من الطرف إلى الطرف، فلا يستطيع قراءة الملف أو فك تشفيره، ولا يحتفظ بنسخة محتوى فوري أو سجل على الخادم."}},{"@type":"Question","name":"هل يحتاج كلا الشخصين إلى حساب؟","acceptedAnswer":{"@type":"Answer","text":"لا. على نفس الشبكة، لا يحتاج أي من الطرفين إلى حساب. أما عبر شبكات مختلفة، فالشخص الذي يُرسل يسجّل الدخول لإنشاء رمز الاقتران — وهذا ما يتيح لـ Relayium إنشاء الرمز وإدارته — لكن الشخص الذي يستقبل لا يحتاج أبدًا إلى حساب، سواء أدخل الرمز أو فتح الرابط فحسب."}},{"@type":"Question","name":"هل يعمل عبر شبكات وبلدان مختلفة؟","acceptedAnswer":{"@type":"Answer","text":"نعم. رمز الاقتران موجود تحديدًا لهذه الحالة: حاسوبان ليسا على نفس الشبكة المحلية، أينما كان كل منهما في العالم. وهذا المسار يمر عبر مُرحِّل TURN مشفَّر لا عبر وصلة مباشرة، وذلك عن قصد: يسلك Relayium طريق الترحيل حتى لا يتوقف تجاوز NAT وجدران الحماية على توفّر مسار مباشر أصلًا."}},{"@type":"Question","name":"هل هناك حد لحجم الملف أو لعدد الملفات التي يمكنني إرسالها؟","acceptedAnswer":{"@type":"Answer","text":"يمكنك إرسال حتى 1,000 ملف في دفعة واحدة. لا يفرض أي خادم من خوادم Relayium حدًّا أقصى للحجم، والباقي حدود عملية: يبثّ المتصفح الدفعة مباشرةً إلى القرص في Chrome أو Edge على الحاسوب (بثًّا إلى القرص)، بينما يحتفظ Firefox وSafari بالدفعة في الذاكرة، وينبّهك Relayium فوق نحو 256 ميغابايت. وهذه العتبة تقدير متحفّظ لا سقف صارم؛ أما السقف الحقيقي فيتوقف على الجهاز نفسه."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ar/guides/" aria-current="true">الأدلة</a><a href="/ar/apps/">التطبيقات</a><a href="/pricing">الأسعار</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ar/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ar/guides/">الأدلة</a> <span aria-hidden="true">›</span> <span aria-current="page">إرسال الملفات بين حاسوبين عبر الإنترنت</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -111,14 +168,14 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>خطوة بخطوة: إرسال ملف عبر الإنترنت</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">قبل أن تبدأ</p><ul><li>حساب مسجَّل الدخول على جهاز الإرسال وحده. إنشاء رمز الاقتران يحتاج حسابًا، أما الجهاز الذي ينضم بالرمز أو الرابط فلا يسجّل الدخول أبدًا.</li><li>بريد إلكتروني موثَّق في ذلك الحساب. لا يُمنَح مُرحِّل الجلسة عبر الشبكات إلا للحسابات الموثَّقة، وتقول بطاقة الاقتران ذلك صراحةً عند الرفض.</li><li>أن تكونا أمام حاسوبيكما في الوقت نفسه. يعيش رمز الاقتران خمس دقائق، وهذه جلسة حيّة لا رفعٌ يأتي أحدهم لاحقًا ليأخذه.</li><li>وسيلة لتمرير ستة أرقام أو رابط عبر قناة أخرى — مكالمة هاتفية، نافذة محادثة، رسالة نصية.</li></ul></div>
       <p>إليك مسار النقل الكامل لحاسوبين على شبكتين مختلفتين:</p>
-      <ol class="steps" data-block="steps"><li><p>على جهاز الإرسال، افتح صفحة النقل الفوري وسجّل الدخول.</p><pre dir="ltr"><code>https://relayium.com/cross-network</code></pre></li><li><p>اختر الملفات أو المجلد المراد إرساله — حتى 1,000 ملف في الدفعة الواحدة — ثم أنشِئ رمز الاقتران. تعرض البطاقة عندئذٍ الأرقام الستة، وزرًا لنسخ الرابط، ورمز QR، وعدًّا تنازليًا.</p><pre dir="ltr"><code>رمز اقترانك — اقرأه للطرف الآخر
+      <ol class="steps" data-block="steps"><li><p>على جهاز الإرسال، افتح صفحة النقل الفوري وسجّل الدخول.</p><pre tabindex="0" dir="ltr"><code>https://relayium.com/cross-network</code></pre></li><li><p>اختر الملفات أو المجلد المراد إرساله — حتى 1,000 ملف في الدفعة الواحدة — ثم أنشِئ رمز الاقتران. تعرض البطاقة عندئذٍ الأرقام الستة، وزرًا لنسخ الرابط، ورمز QR، وعدًّا تنازليًا.</p><pre tabindex="0" dir="ltr"><code>رمز اقترانك — اقرأه للطرف الآخر
 483920
-تنتهي صلاحية رمز الاقتران خلال 4:52</code></pre></li><li><p>شارك ذلك الرمز أو الرابط مع الطرف الآخر بأي طريقة مناسبة — اقرأه بصوت عالٍ، أرسله برسالة نصية، الصقه في المحادثة. والرابط يحمل الرمز نفسه في جزئه المرجعي، فمشاركة أيٍّ منهما فعل واحد.</p><pre dir="ltr"><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>على جهاز الاستقبال، افتح ذلك الرابط، أو افتح الصفحة نفسها واكتب الأرقام الستة ثم اضغط «اتصال». لا تسجيل دخول على هذا الطرف.</p><pre dir="ltr"><code>https://relayium.com/cross-network</code></pre></li><li><p>يبدأ النقل بمجرد انضمام الجهاز الآخر. اترك التبويبين مفتوحين حتى ينتهي عدّاد الملفات: فالعدّ التنازلي يحكم الانضمام الجديد فقط، وانتهاؤه لا يقطع نقلًا جاريًا. وتفعيل «التحقّق المتقدّم» قبل البدء يضيف رمز تحقق (SAS) للمقارنة — والتطابق يؤكد أن المفاتيح لم تُستبدل وأن الحاسوبين انضما إلى جلسة التشفير من الطرف إلى الطرف نفسها، لكنه لا يثبت أي مسار شبكي يسلكه النص المشفّر.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">كيف يبدو نقل ناجح</p><p>يحلّ محلَّ سطر «في انتظار انضمام الجهاز الآخر…» لدى المُرسِل بطاقةُ الاتصال، ويقرأ وسم المسار عليها «مُرحَّل». وهذه هي القيمة المتوقَّعة هنا لا عطلًا: فجلسة المتصفح عبر الشبكات تمرّ بحكم التصميم عبر مُرحِّل TURN مُشفَّر، ولن ترى «مباشر عبر LAN» إلا إذا تبيّن أن الحاسوبين يتشاركان شبكة واحدة فعلًا.</p><p>ثم يمضي عدّاد الملفات إلى آخر ملف في الدفعة على الشاشتين، ويكون الملف نفسه حيث قال السطر أسفل الطلب إن متصفح الاستقبال سيضعه.</p><pre dir="ltr"><code>مُرحَّل
+تنتهي صلاحية رمز الاقتران خلال 4:52</code></pre></li><li><p>شارك ذلك الرمز أو الرابط مع الطرف الآخر بأي طريقة مناسبة — اقرأه بصوت عالٍ، أرسله برسالة نصية، الصقه في المحادثة. والرابط يحمل الرمز نفسه في جزئه المرجعي، فمشاركة أيٍّ منهما فعل واحد.</p><pre tabindex="0" dir="ltr"><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>على جهاز الاستقبال، افتح ذلك الرابط، أو افتح الصفحة نفسها واكتب الأرقام الستة ثم اضغط «اتصال». لا تسجيل دخول على هذا الطرف.</p><pre tabindex="0" dir="ltr"><code>https://relayium.com/cross-network</code></pre></li><li><p>يبدأ النقل بمجرد انضمام الجهاز الآخر. اترك التبويبين مفتوحين حتى ينتهي عدّاد الملفات: فالعدّ التنازلي يحكم الانضمام الجديد فقط، وانتهاؤه لا يقطع نقلًا جاريًا. وتفعيل «التحقّق المتقدّم» قبل البدء يضيف رمز تحقق (SAS) للمقارنة — والتطابق يؤكد أن المفاتيح لم تُستبدل وأن الحاسوبين انضما إلى جلسة التشفير من الطرف إلى الطرف نفسها، لكنه لا يثبت أي مسار شبكي يسلكه النص المشفّر.</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">كيف يبدو نقل ناجح</p><p>يحلّ محلَّ سطر «في انتظار انضمام الجهاز الآخر…» لدى المُرسِل بطاقةُ الاتصال، ويقرأ وسم المسار عليها «مُرحَّل». وهذه هي القيمة المتوقَّعة هنا لا عطلًا: فجلسة المتصفح عبر الشبكات تمرّ بحكم التصميم عبر مُرحِّل TURN مُشفَّر، ولن ترى «مباشر عبر LAN» إلا إذا تبيّن أن الحاسوبين يتشاركان شبكة واحدة فعلًا.</p><p>ثم يمضي عدّاد الملفات إلى آخر ملف في الدفعة على الشاشتين، ويكون الملف نفسه حيث قال السطر أسفل الطلب إن متصفح الاستقبال سيضعه.</p><pre tabindex="0" dir="ltr"><code>مُرحَّل
 الملف 1/1</code></pre></div>
       <h2>عندما يُرفض الرمز أو يتوقف النقل</h2>
       <p>النقل عبر الشبكات فيه أجزاء متحركة أكثر من النقل على نفس الشبكة — رمز له عمر، وحساب، وحصة مُرحِّل — وكل واحد منها يذكر نفسه على بطاقة الاقتران بدل أن يفشل بصمت. فاقرأ تلك البطاقة أولًا.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">العَرَض والفحص والحل</p><dl><dt>يكتب جهاز الاستقبال الرمز فيظهر «رمز الاقتران غير صالح أو منتهي الصلاحية».</dt><dd><pre dir="ltr"><code>https://relayium.com/cross-network   # بطاقة المُرسِل تعرض العدّ التنازلي الحي</code></pre><p>مضت خمس دقائق على إنشائه، أو أُدخِل رقم خطأ. أنشِئ رمزًا جديدًا على جهاز الإرسال واطلب من الطرف الآخر إدخاله فورًا — أو أرسِل له رابط الانضمام بدلًا من ذلك فلا يحتاج إلى كتابة شيء.</p></dd><dt>تقول البطاقة إن المُرحِّل لا يُمنَح إلا للحسابات الموثَّقة.</dt><dd><pre dir="ltr"><code>https://relayium.com/cross-network   # بطاقة الاقتران تسمّي سبب الرفض</code></pre><p>بريد الطرف المُرسِل لم يُوثَّق بعد. افتح لوحة الحساب، ووثِّق العنوان من الرسالة التي أرسلها Relayium، ثم أنشِئ رمز اقتران جديدًا — فالرمز القديم لن يلتقط مُرحِّلًا سبق أن رُفض له. ولا يتأثر بهذا النقل على نفس الشبكة ولا سطر الأوامر.</p></dd><dt>تقول البطاقة إن حصة الترحيل لهذا الشهر استُنفدت.</dt><dd><pre dir="ltr"><code>https://relayium.com/me   # «استخدام هذا الشهر» يبيّن ما تبقّى من حصة الترحيل</code></pre><p>لا يمكن لجلسات المتصفح عبر الشبكات أن تبدأ أو تستمر حتى تُصفَّر الحصة الشهر القادم. وللإرسال الآن ارفع الملفات كرابط تنزيل على https://relayium.com/offline-transfer، أو ارفع الباقة، أو شغّل عقدتك الخاصة؛ ويبقى النقل على نفس الشبكة عاملًا في الحالتين.</p></dd><dt>يتوقف النقل في منتصفه ولا يستأنف.</dt><dd><pre dir="ltr"><code>https://relayium.com/cross-network   # يجب أن يبقى التبويبان على هذه الصفحة</code></pre><p>هذه جلسة حيّة، فانقطاع الشبكة المؤقت يمكن أن يستأنف من حيث توقّف، لكن إغلاق التبويب أو إعادة تحميل الصفحة ينهيها ولا توجد نسخة على الخادم تكمل عنها. ابدأ من جديد برمز جديد — وإن تعذّر على الطرف الآخر البقاء متصلًا، فاستخدم رابط التنزيل غير المتزامن على https://relayium.com/offline-transfer.</p></dd><dt>النقل يعمل، لكنه أبطأ بكثير من إرسال الملفات نفسها على شبكة واحدة.</dt><dd><pre dir="ltr"><code>https://relayium.com/cross-network   # وسم المسار على البطاقة المتصلة يقرأ «مُرحَّل»</code></pre><p>الجلسة المُرحَّلة محكومة باتصالَي الإنترنت لدى الطرفين إضافةً إلى قفزة المُرحِّل، فهي أبطأ فعلًا من النقل على الشبكة المحلية ولا يغيّر ذلك أي إعداد. وللدفعات الكبيرة جدًا يكون رابط التنزيل على https://relayium.com/offline-transfer المسار الأهدأ، لأنه لا يشترط اتصال الطرفين في الوقت نفسه.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">العَرَض والفحص والحل</p><dl><dt>يكتب جهاز الاستقبال الرمز فيظهر «رمز الاقتران غير صالح أو منتهي الصلاحية».</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/cross-network   # بطاقة المُرسِل تعرض العدّ التنازلي الحي</code></pre><p>مضت خمس دقائق على إنشائه، أو أُدخِل رقم خطأ. أنشِئ رمزًا جديدًا على جهاز الإرسال واطلب من الطرف الآخر إدخاله فورًا — أو أرسِل له رابط الانضمام بدلًا من ذلك فلا يحتاج إلى كتابة شيء.</p></dd><dt>تقول البطاقة إن المُرحِّل لا يُمنَح إلا للحسابات الموثَّقة.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/cross-network   # بطاقة الاقتران تسمّي سبب الرفض</code></pre><p>بريد الطرف المُرسِل لم يُوثَّق بعد. افتح لوحة الحساب، ووثِّق العنوان من الرسالة التي أرسلها Relayium، ثم أنشِئ رمز اقتران جديدًا — فالرمز القديم لن يلتقط مُرحِّلًا سبق أن رُفض له. ولا يتأثر بهذا النقل على نفس الشبكة ولا سطر الأوامر.</p></dd><dt>تقول البطاقة إن حصة الترحيل لهذا الشهر استُنفدت.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/me   # «استخدام هذا الشهر» يبيّن ما تبقّى من حصة الترحيل</code></pre><p>لا يمكن لجلسات المتصفح عبر الشبكات أن تبدأ أو تستمر حتى تُصفَّر الحصة الشهر القادم. وللإرسال الآن ارفع الملفات كرابط تنزيل على https://relayium.com/offline-transfer، أو ارفع الباقة، أو شغّل عقدتك الخاصة؛ ويبقى النقل على نفس الشبكة عاملًا في الحالتين.</p></dd><dt>يتوقف النقل في منتصفه ولا يستأنف.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/cross-network   # يجب أن يبقى التبويبان على هذه الصفحة</code></pre><p>هذه جلسة حيّة، فانقطاع الشبكة المؤقت يمكن أن يستأنف من حيث توقّف، لكن إغلاق التبويب أو إعادة تحميل الصفحة ينهيها ولا توجد نسخة على الخادم تكمل عنها. ابدأ من جديد برمز جديد — وإن تعذّر على الطرف الآخر البقاء متصلًا، فاستخدم رابط التنزيل غير المتزامن على https://relayium.com/offline-transfer.</p></dd><dt>النقل يعمل، لكنه أبطأ بكثير من إرسال الملفات نفسها على شبكة واحدة.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/cross-network   # وسم المسار على البطاقة المتصلة يقرأ «مُرحَّل»</code></pre><p>الجلسة المُرحَّلة محكومة باتصالَي الإنترنت لدى الطرفين إضافةً إلى قفزة المُرحِّل، فهي أبطأ فعلًا من النقل على الشبكة المحلية ولا يغيّر ذلك أي إعداد. وللدفعات الكبيرة جدًا يكون رابط التنزيل على https://relayium.com/offline-transfer المسار الأهدأ، لأنه لا يشترط اتصال الطرفين في الوقت نفسه.</p></dd></dl></div>
       <h2>عبر الشبكات: المُرحِّل المشفَّر</h2>
       <p>يتصل متصفحان على الشبكة نفسها ببعضهما مباشرةً. أمّا عبر الشبكات — حيث تحجب جدران الحماية المؤسسية وأنواع NAT الصارمة المسار المباشر عادةً — فيحمل Relayium التدفق المشفَّر عبر مُرحِّل TURN، فيتم الاتصال بموثوقية.</p>
       <p>لا يرى المُرحِّل سوى النص المُشفَّر أبدًا: فالملف مشفَّر من الطرف إلى الطرف (تبادل مفاتيح X25519 إضافةً إلى AES-256-GCM) قبل أن يغادر متصفح الإرسال أصلًا، لذا لا يمكن للمُرحِّل قراءته أكثر مما يستطيع أي حاسوب عشوائي على الإنترنت. وإذا انقطع الاتصال في منتصف الطريق، يُستأنف النقل بدلًا من البدء من جديد.</p>

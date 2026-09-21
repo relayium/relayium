@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ko/guides/push-to-cloud-pull-on-another-computer/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="클라우드에 올리고 다른 컴퓨터에서 받기" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"클라우드에 올리고 다른 컴퓨터에서 받기","description":"Relayium 계정을 통한 비동기 파일 전송. relayium up으로 한 기기에서 업로드하고, 편할 때 relayium down으로 다른 기기에서 다운로드 — 종단간 암호화이며 계정이 필요한 것은 업로드뿐입니다.","inLanguage":"ko","datePublished":"2026-07-12","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/push-to-cloud-pull-on-another-computer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"클라우드에 올리고 다른 컴퓨터에서 받기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"업로드할 때, 그리고 코드를 발급해야 하는 보내기일 때요. relayium up은 파일을 내 계정에 저장해야 하므로 언제나 relayium login이 필요합니다. relayium send는 서버가 새 페어링 코드를 발급해야 할 때만 필요합니다 — 누군가 건네준 코드로 send를 실행하면 아무것도 발급하지 않으므로 로그인이 필요 없습니다. relayium down과 relayium receive는 계정이 필요 없고, push/pull, 데몬 다이렉트, sync도 계정 없이 동작합니다."}},{"@type":"Question","name":"파일은 암호화되나요?","acceptedAnswer":{"@type":"Answer","text":"네, 종단간으로요. 업로드 전에 내 기기에서 암호화되며, 키는 링크의 #k= 조각에만 있고 서버로 전송되지 않습니다. Relayium은 읽을 수 없는 암호문을 파일 이름까지 포함해 저장합니다."}},{"@type":"Question","name":"링크를 잃어버리면요?","acceptedAnswer":{"@type":"Answer","text":"링크는 복호화 키의 유일한 사본을 담고 있어, 잃으면 파일은 복구할 수 없습니다 — 서버에 복원할 수 있는 것이 전혀 없습니다."}},{"@type":"Question","name":"누가 다운로드할지 제한할 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"링크를 가진 누구나 다운로드할 수 있으니 비공개로 공유하세요. --burn으로 한 번만, --max-downloads \u003cn>으로 횟수를 제한하고, --ttl \u003c기간>으로 일정 시간 후 만료시킬 수 있습니다."}},{"@type":"Question","name":"웹사이트와 연동되나요?","acceptedAnswer":{"@type":"Answer","text":"네. relayium up의 링크는 브라우저에서 열리고, relayium.com에서 만든 공유 링크는 다른 기기에서 relayium down으로 받을 수 있습니다."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -78,19 +135,19 @@ ol.steps>li>pre{margin:8px 0 0}
 .fix dd>pre{margin:6px 0}
 </style>
     <style>
-.builder{margin:16px 0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+.builder{margin:16px 0;padding:18px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .builder .bf{display:block;margin:0 0 12px}
-.builder .bf span{display:block;font-size:14px;color:var(--text);margin:0 0 5px}
-.builder .bf input{width:100%;font:15px ui-monospace,SFMono-Regular,Menlo,monospace;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h)}
+.builder .bf span{display:block;font-size:var(--fs-sm);color:var(--text-h);font-weight:600;margin:0 0 5px}
+.builder .bf input{inline-size:100%;min-block-size:44px;font:15px ui-monospace,SFMono-Regular,Menlo,monospace;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text-h)}
 .builder .bcmd{margin:14px 0 0}
 .builder .bcmd pre{margin:0}
-.builder .bcopy{margin:10px 0 0;padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h);font:inherit;font-size:14px;cursor:pointer}
-.builder .bcopy:hover{border-color:var(--accent)}
+.builder .bcopy{margin:10px 0 0;min-block-size:44px;padding:8px 16px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text-h);font:inherit;font-size:var(--fs-sm);cursor:pointer}
+.builder .bcopy:hover{border-color:var(--accent-border)}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ko/guides/" aria-current="true">가이드</a><a href="/ko/apps/">앱</a><a href="/pricing">요금제</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">클라우드에 올리고 다른 컴퓨터에서 받기</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -118,26 +175,26 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>시작하기 전에</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">필요한 것</p><ul><li>먼저 CLI를 설치해 relayium 명령이 존재하게 합니다. 아래 한 줄이 미리 빌드된 바이너리를 PATH에 올립니다(macOS와 Linux; Windows는 releases 페이지에서 .zip을 받으세요). relayium --version으로 설치를 확인할 수 있고, relayium.com/cli에 모든 설치 방법이 있습니다. 이 단계를 건너뛰면 relayium login은 “command not found”만 출력합니다.</li><li>무료 Relayium 계정을 준비합니다. 브라우저 단계는 본인 계정에 대해 로그인을 승인하므로, 승인하려면 먼저 계정이 있어야 합니다 — relayium.com에서 로그인하거나 없으면 거기서 새로 만드세요. 계정이 필요한 것은 업로드뿐이고 다운로드에는 필요 없습니다.</li><li>링크를 다른 기기로 옮길 수단 — 메모 앱, 채팅 창, 비밀번호 관리자 무엇이든 좋습니다. 링크를 가진 누구나 파일을 받을 수 있으니 비밀번호처럼 다루세요.</li></ul></div>
       <p>첫 up 전에 한 번만 해두면 되는 두 가지 — CLI 설치와 계정 준비입니다. 둘 다 있으면 건너뛰세요.</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <h2>이 기기를 계정에 바인딩하기 (한 번만)</h2>
       <p>up은 누구의 계정에 저장할지 알아야 하므로 기기마다 한 번 로그인합니다. 브라우저에서 승인하는 기기 로그인이며, 터미널에는 확인할 코드 외에는 아무것도 입력하지 않습니다:</p>
-      <pre><code>relayium login</code></pre>
+      <pre tabindex="0"><code>relayium login</code></pre>
       <ul><li>CLI가 짧은 코드와 URL(relayium.com/device)을 표시합니다. relayium.com에 로그인된 브라우저에서 열어(로그인되어 있지 않으면 먼저 거기서 로그인) 코드를 입력하고 승인하면 이 기기가 바인딩됩니다.</li><li>로그인 정보는 ~/.config/relayium/ 아래 저장되므로 기기마다 한 번이면 됩니다. relayium whoami로 바인딩 대상을 보고, relayium logout으로 지웁니다.</li><li>나중에 기기를 취소하려면 브라우저의 계정 &#39;기기&#39; 페이지에서 해당 기기를 삭제하세요.</li></ul>
       <h2>첫 번째 컴퓨터에서 업로드</h2>
       <p>up은 준 파일들을 훑어 로컬에서 암호화하고 암호문을 업로드한 뒤 수령용 링크를 출력합니다:</p>
-      <ol class="steps" data-block="steps"><li><p>이 기기가 아직 계정에 묶여 있는지 확인합니다. 계정과 묶여 있는 서버를 출력하며, 로그인되어 있지 않다고 하면 위의 로그인 단계를 먼저 하세요.</p><pre><code>relayium whoami</code></pre></li><li><p>파일을 올립니다. up은 로컬에서 암호화해 암호문만 보내고, 수령용 링크를 표준 출력에 찍습니다.</p><pre><code>relayium up ./report.pdf</code></pre></li><li><p>기본값인 24시간이 원하는 바가 아니면 보관 플래그를 붙이세요. 서버가 실제로 얼마나 보관할지의 상한은 요금제가 정합니다.</p><pre><code># 얼마나 살려둘지 고르기(기본값 24시간):
+      <ol class="steps" data-block="steps"><li><p>이 기기가 아직 계정에 묶여 있는지 확인합니다. 계정과 묶여 있는 서버를 출력하며, 로그인되어 있지 않다고 하면 위의 로그인 단계를 먼저 하세요.</p><pre tabindex="0"><code>relayium whoami</code></pre></li><li><p>파일을 올립니다. up은 로컬에서 암호화해 암호문만 보내고, 수령용 링크를 표준 출력에 찍습니다.</p><pre tabindex="0"><code>relayium up ./report.pdf</code></pre></li><li><p>기본값인 24시간이 원하는 바가 아니면 보관 플래그를 붙이세요. 서버가 실제로 얼마나 보관할지의 상한은 요금제가 정합니다.</p><pre tabindex="0"><code># 얼마나 살려둘지 고르기(기본값 24시간):
 relayium up ./report.pdf --burn              # 한 번 다운로드 후 삭제
 relayium up ./report.pdf --ttl 7d            # 7일간 보관(상한은 요금제에 따라 다름)
-relayium up ./report.pdf --max-downloads 5   # 5회까지 허용 후 삭제</code></pre></li><li><p>두 번째 기기가 읽을 수 있는 곳으로 링크를 옮깁니다. 표준 출력에는 링크만 나오므로 파이프가 깨끗합니다.</p><pre><code>relayium up ./report.pdf | pbcopy</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">업로드가 성공했을 때 보이는 것</p><p>올리는 동안 표준 오류에 진행 막대가 떴다가 끝나면 지워집니다. 링크는 표준 출력에 한 줄로 나오고, 사람이 읽을 안내와 보관 기간 안내는 표준 오류에 이어집니다.</p><pre><code>relayium up ./report.pdf
+relayium up ./report.pdf --max-downloads 5   # 5회까지 허용 후 삭제</code></pre></li><li><p>두 번째 기기가 읽을 수 있는 곳으로 링크를 옮깁니다. 표준 출력에는 링크만 나오므로 파이프가 깨끗합니다.</p><pre tabindex="0"><code>relayium up ./report.pdf | pbcopy</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">업로드가 성공했을 때 보이는 것</p><p>올리는 동안 표준 오류에 진행 막대가 떴다가 끝나면 지워집니다. 링크는 표준 출력에 한 줄로 나오고, 사람이 읽을 안내와 보관 기간 안내는 표준 오류에 이어집니다.</p><pre tabindex="0"><code>relayium up ./report.pdf
 https://relayium.com/d/7fK2p…#k=Xr8s…
 opens in a browser, or fetch it with `relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39;`</code></pre></div>
       <ul><li>보관: --burn은 한 번 다운로드하면 삭제, --ttl &lt;기간&gt;은 정해진 시간 보관, --max-downloads &lt;n&gt;은 정해진 횟수 허용. 셋 다 주지 않으면 링크는 24시간 살아 있습니다 — --ttl이 없을 때의 기본값입니다.</li><li>--ttl은 단위가 붙은 기간(30m, 12h, 7d, 2w)이나 초 단위 숫자를 받습니다. 그래서 --ttl 3600과 --ttl 1h는 같은 요청입니다. 상한은 요금제가 정합니다: Free 1일, Plus 3일, Pro 7일, Max 14일. 상한보다 길게 요청하면 서버는 조용히 상한까지만 보관하며, up이 실제로 얼마나 보관되는지 한 줄로 알려줍니다.</li></ul>
       <h2>두 번째 컴퓨터에서 다운로드</h2>
       <p>다른 기기에서 링크를 down에 건넵니다. 로그인도 설정도 필요 없습니다 — 파일을 복호화하는 키가 링크 안에 있으므로 down은 계정에서 아무것도 필요로 하지 않습니다:</p>
-      <div class="builder" data-download-builder><label class="bf"><span>공유 링크</span><input data-link type="text" placeholder="https://relayium.com/d/…#k=…" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" data-token="내 링크" /></label><label class="bf"><span>저장 위치 (pwd 출력을 붙여넣기)</span><input data-dest type="text" placeholder="/home/you/downloads" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" /></label><div class="bcmd"><pre><code data-cmd>relayium down &#39;&lt;내 링크&gt;&#39; &lt;대상 디렉터리&gt;</code></pre><button type="button" class="bcopy" data-copy data-copied="복사됨" hidden>명령 복사</button></div></div>
-      <ol class="steps" data-block="steps"><li><p>편한 방법으로 링크를 두 번째 기기로 옮깁니다. 그쪽에는 CLI 자체 말고는 설치할 것도 로그인할 것도 없습니다.</p></li><li><p>작은따옴표로 감싼 링크와, 파일이 저장될 디렉터리를 down에 건넵니다.</p><pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads</code></pre></li><li><p>디렉터리를 빼면 현재 디렉터리에 저장됩니다.</p><pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39;</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">다운로드가 성공했을 때 보이는 것</p><p>쓴 파일이 표준 출력에 한 줄씩 나열되고, 개수와 대상 디렉터리가 표준 오류에서 확인됩니다.</p><pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads
+      <div class="builder" data-download-builder><label class="bf"><span>공유 링크</span><input data-link type="text" placeholder="https://relayium.com/d/…#k=…" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" data-token="내 링크" /></label><label class="bf"><span>저장 위치 (pwd 출력을 붙여넣기)</span><input data-dest type="text" placeholder="/home/you/downloads" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" /></label><div class="bcmd"><pre tabindex="0"><code data-cmd>relayium down &#39;&lt;내 링크&gt;&#39; &lt;대상 디렉터리&gt;</code></pre><button type="button" class="bcopy" data-copy data-copied="복사됨" hidden>명령 복사</button></div></div>
+      <ol class="steps" data-block="steps"><li><p>편한 방법으로 링크를 두 번째 기기로 옮깁니다. 그쪽에는 CLI 자체 말고는 설치할 것도 로그인할 것도 없습니다.</p></li><li><p>작은따옴표로 감싼 링크와, 파일이 저장될 디렉터리를 down에 건넵니다.</p><pre tabindex="0"><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads</code></pre></li><li><p>디렉터리를 빼면 현재 디렉터리에 저장됩니다.</p><pre tabindex="0"><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39;</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">다운로드가 성공했을 때 보이는 것</p><p>쓴 파일이 표준 출력에 한 줄씩 나열되고, 개수와 대상 디렉터리가 표준 오류에서 확인됩니다.</p><pre tabindex="0"><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads
 downloads/report.pdf
 ✓ downloaded 1 file(s) to ./downloads</code></pre></div>
       <ul><li>파일이 번(burn) 설정이거나 다운로드 한도에 도달했거나 만료되었으면 링크는 소진된 것이고, down은 사라졌다고 알립니다.</li></ul>
@@ -149,10 +206,10 @@ downloads/report.pdf
       <ul><li>파일은 업로드 전에 내 기기에서 암호화됩니다. 복호화 키는 링크의 #k= 조각에만 있고 서버로 전송되지 않습니다 — Relayium은 읽을 수 없는 암호문을 파일 이름까지 포함해 저장합니다.</li><li>그래서 링크가 파일로 돌아가는 유일한 길입니다: 잃으면 파일은 복구할 수 없습니다. 본인도, 저희도.</li></ul>
       <h2>링크가 듣지 않을 때</h2>
       <p>실패하는 up과 down은 거의 다 아래 네 가지입니다. 어느 것도 추측이 필요 없습니다. 판정을 가르는 상태는 명령이 출력해 주거나, 직접 친 명령 안에 보입니다.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 해결</p><dl><dt>up이 “run relayium login first”를 내며 거부합니다.</dt><dd><pre><code>relayium whoami
-# not logged in (run `relayium login`)</code></pre><p>업로드는 파일을 계정 아래에 보관하므로 이 기기에 자격 증명이 필요합니다. relayium login 을 실행하고 브라우저의 relayium.com/device 에서 승인하세요. 그 뒤 whoami가 계정과 묶여 있는 서버를 출력합니다.</p></dd><dt>down이 링크를 해석하지 못하고, 키가 사라진 것처럼 보입니다.</dt><dd><pre><code>echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
-# relayium down https://relayium.com/d/7fK2p</code></pre><p>대부분의 셸에서 따옴표 없는 #은 주석을 시작하므로 #k= 이후는 명령에 닿지도 못했습니다. echo가 살아남은 부분을 그대로 보여 줍니다. 링크 전체를 작은따옴표로 감싸면 복호화 키인 그 조각이 온전히 전달됩니다.</p></dd><dt>요청한 --ttl보다 링크가 일찍 끊깁니다.</dt><dd><pre><code>relayium up ./report.pdf --ttl 7d
-# note: your plan caps retention, so this link is kept 1d, not the 7d you asked for</code></pre><p>요금제 상한을 넘는 요청을 서버는 조용히 상한으로 깎습니다 — Free 1일, Plus 3일, Pro 7일, Max 14일 — 그리고 up이 실제로 받은 기간을 이 안내로 알려 줍니다. --burn이나 --max-downloads로도 링크는 일찍 끝납니다. 새 링크가 필요하면 다시 올리세요.</p></dd><dt>로그인해 두었는데도 up이 다른 곳에 로그인되어 있다고 합니다.</dt><dd><pre><code>relayium whoami
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 해결</p><dl><dt>up이 “run relayium login first”를 내며 거부합니다.</dt><dd><pre tabindex="0"><code>relayium whoami
+# not logged in (run `relayium login`)</code></pre><p>업로드는 파일을 계정 아래에 보관하므로 이 기기에 자격 증명이 필요합니다. relayium login 을 실행하고 브라우저의 relayium.com/device 에서 승인하세요. 그 뒤 whoami가 계정과 묶여 있는 서버를 출력합니다.</p></dd><dt>down이 링크를 해석하지 못하고, 키가 사라진 것처럼 보입니다.</dt><dd><pre tabindex="0"><code>echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
+# relayium down https://relayium.com/d/7fK2p</code></pre><p>대부분의 셸에서 따옴표 없는 #은 주석을 시작하므로 #k= 이후는 명령에 닿지도 못했습니다. echo가 살아남은 부분을 그대로 보여 줍니다. 링크 전체를 작은따옴표로 감싸면 복호화 키인 그 조각이 온전히 전달됩니다.</p></dd><dt>요청한 --ttl보다 링크가 일찍 끊깁니다.</dt><dd><pre tabindex="0"><code>relayium up ./report.pdf --ttl 7d
+# note: your plan caps retention, so this link is kept 1d, not the 7d you asked for</code></pre><p>요금제 상한을 넘는 요청을 서버는 조용히 상한으로 깎습니다 — Free 1일, Plus 3일, Pro 7일, Max 14일 — 그리고 up이 실제로 받은 기간을 이 안내로 알려 줍니다. --burn이나 --max-downloads로도 링크는 일찍 끝납니다. 새 링크가 필요하면 다시 올리세요.</p></dd><dt>로그인해 두었는데도 up이 다른 곳에 로그인되어 있다고 합니다.</dt><dd><pre tabindex="0"><code>relayium whoami
 # you@example.com (https://relayium.com)</code></pre><p>토큰을 발급하지 않은 --server에는 자격 증명을 보내지 않고 거부합니다. 보내면 유출이 되고, 그쪽에서 인증되지도 않기 때문입니다. --server를 빼서 whoami가 방금 출력한 서버를 쓰거나, 먼저 그 호스트를 상대로 relayium login 을 실행하세요.</p></dd></dl></div>
       <h2>자주 묻는 질문</h2>
       <h3>계정이 필요한가요?</h3>

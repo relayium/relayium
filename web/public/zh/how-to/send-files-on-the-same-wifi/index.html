@@ -11,8 +11,14 @@
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-files-on-the-same-wifi/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-files-on-the-same-wifi/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="同一 Wi-Fi 下的设备之间互传文件" />
@@ -30,37 +36,88 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"同一 Wi-Fi 下的设备之间互传文件","description":"如何在同一 Wi-Fi 或局域网下的任意设备之间传文件——无需账号，无需配对码，两端都打开 relayium.com 即可直传，全程端到端加密。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-files-on-the-same-wifi/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"同一 Wi-Fi 下的设备之间互传文件"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"在同一 Wi-Fi 下传文件需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。同网络传输两端都无需账号，也无需配对码——每台设备打开 relayium.com 就行。"}},{"@type":"Question","name":"Relayium 怎么知道哪些设备在我的网络里？","acceptedAnswer":{"@type":"Answer","text":"同网络下的设备通常共享同一个公网 IP，Relayium 会自动把公网 IP 相同的设备归到同一个房间里，无需任何配对码。"}},{"@type":"Question","name":"能不能同时有两台以上的设备互相看见？","acceptedAnswer":{"@type":"Answer","text":"可以——从该网络打开 relayium.com 的每台设备都会列在房间里，手机、笔记本、台式机可以并排出现。但一次传输是一对一的：你和列表里的某一台设备打开工作区，文件就发给它。要分享给同一个房间里的几个人，就依次和每个人各开一次工作区。"}},{"@type":"Question","name":"如果传输从未离开我的网络，还是加密的吗？","acceptedAnswer":{"@type":"Answer","text":"是的。每一次同网络传输都使用和跨网络传输一样的 X25519 密钥交换与 AES-256-GCM 加密，有你能亲自核对的校验码，还有逐文件的 SHA-256 完整性校验。"}},{"@type":"Question","name":"如果一台设备用 Wi-Fi，另一台用移动数据怎么办？","acceptedAnswer":{"@type":"Answer","text":"那它们就不在同一网络，自动发现连不上。改用配对码：发送方登录后创建配对码，接收方无需账号。跨网络时传输不走直连，而是经一个加密的 TURN 中继转发，但全程仍是端到端加密：中继只转发密文，读不到文件内容。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -78,7 +135,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">同一 Wi-Fi 下的设备之间互传文件</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -106,13 +163,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>分步操作</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">开始之前</p><ul><li>每台设备都在同一个 Wi-Fi 或局域网里，并且路由器没有把客户端互相隔开。设备列表下方 Relayium 自己的提示就写着要找的那个开关：「AP 隔离 / 客户端隔离」。</li><li>每台设备上都有一个较新的浏览器（Chrome、Edge、Firefox 或 Safari），并且是通过 https://relayium.com/ 打开页面。加密传输需要 HTTPS，用普通 http:// 打开时页面会直接这么告诉你，而不会列出设备。</li><li>不需要账号，也不需要配对码。同网络发现两端都不问这两样，所以第一次传输之前没有任何要配置的东西。</li><li>接收端要有地方存文件。存到哪里由接收端的浏览器和操作系统决定，不由我们决定：电脑上的 Chrome 和 Edge 可以让你选保存位置，其他浏览器会写进自己的下载目录。落到哪里，要在那个浏览器自己的下载列表里确认——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。</li></ul></div>
       <p>整个流程都在浏览器里完成——任何设备都不用装 App。</p>
-      <ol class="steps" data-block="steps"><li><p>把你要用到的每台设备都连接到同一个 Wi-Fi 或局域网，然后在每台设备上打开传输页面。</p><pre><code>https://relayium.com/</code></pre></li><li><p>在两台设备上读一下标题下方的状态条，对比里面的公网 IP。地址相同才会把两台设备放进同一个房间；地址不同就说明是两个网络，Wi-Fi 名字叫什么都不算。</p><pre><code>已连接 · 本机 MacBook · 公网 IP 203.0.113.9</code></pre></li><li><p>看「附近的设备」这一栏。凡是从该网络打开页面的设备，都会以卡片形式列在那里，卡片上是它自己的名字——不用输入，也不用确认。</p></li><li><p>在发送端点开对方的卡片，按「打开工作区」。在较新的浏览器上，这是附近设备卡片提供的唯一动作：文件、文件夹和消息都走它打开的那一条加密连接。房间里可能列着好几台设备，打开工作区就是在其中挑定这次要发给谁；轮到下一个人时，再打开一个工作区。</p></li><li><p>工作区会取代那张卡片。从这一刻起，连接状态要看工作区顶部的标题栏——连的是哪台设备、链路处于什么状态、以及唯一的那个路径标签——发送则用它下面的控件：一批文件用「发送文件」，整个目录树用「发送文件夹」（需要浏览器支持选择文件夹），或者在消息框里输入后按「发送」。一批文件最多 1,000 个。</p></li><li><p>接收端会收到请求，上面写着文件数量和总大小，下面那行说明按「接收」之后会发生什么——要么浏览器问你存到哪，要么文件进入它的下载目录。按「接收」就开始。</p></li><li><p>看着两块屏幕上的文件计数走到最后一个文件。如果希望在任何字节移动之前先核对校验码（SAS），请先在两台设备上打开「高级验证」：它默认关闭，打开后多出来的是一次核对和一步确认，而不是加密——无论开不开，传输都是加密的。</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">传输成功时是什么样</p><p>这时对方的卡片已经不在了——工作区取代了它。状态改看工作区的标题栏：连的是哪台设备、链路状态显示「已连接」、以及唯一的那个路径标签显示「局域网直连」，也就是在你自己网络里的主机到主机一跳。「P2P 直连」是另一种诚实的情况：两台设备确实共享同一个公网 IP，但浏览器最终选中的那一跳并不在本地。</p><p>接收端的计数停在最后一个文件，而文件本身就在保存提示所说的位置。确认这一点要看接收端浏览器自己的下载列表，而不是看本页面——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。</p><pre><code>已连接到 MacBook · 已连接 · 局域网直连
+      <ol class="steps" data-block="steps"><li><p>把你要用到的每台设备都连接到同一个 Wi-Fi 或局域网，然后在每台设备上打开传输页面。</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>在两台设备上读一下标题下方的状态条，对比里面的公网 IP。地址相同才会把两台设备放进同一个房间；地址不同就说明是两个网络，Wi-Fi 名字叫什么都不算。</p><pre tabindex="0"><code>已连接 · 本机 MacBook · 公网 IP 203.0.113.9</code></pre></li><li><p>看「附近的设备」这一栏。凡是从该网络打开页面的设备，都会以卡片形式列在那里，卡片上是它自己的名字——不用输入，也不用确认。</p></li><li><p>在发送端点开对方的卡片，按「打开工作区」。在较新的浏览器上，这是附近设备卡片提供的唯一动作：文件、文件夹和消息都走它打开的那一条加密连接。房间里可能列着好几台设备，打开工作区就是在其中挑定这次要发给谁；轮到下一个人时，再打开一个工作区。</p></li><li><p>工作区会取代那张卡片。从这一刻起，连接状态要看工作区顶部的标题栏——连的是哪台设备、链路处于什么状态、以及唯一的那个路径标签——发送则用它下面的控件：一批文件用「发送文件」，整个目录树用「发送文件夹」（需要浏览器支持选择文件夹），或者在消息框里输入后按「发送」。一批文件最多 1,000 个。</p></li><li><p>接收端会收到请求，上面写着文件数量和总大小，下面那行说明按「接收」之后会发生什么——要么浏览器问你存到哪，要么文件进入它的下载目录。按「接收」就开始。</p></li><li><p>看着两块屏幕上的文件计数走到最后一个文件。如果希望在任何字节移动之前先核对校验码（SAS），请先在两台设备上打开「高级验证」：它默认关闭，打开后多出来的是一次核对和一步确认，而不是加密——无论开不开，传输都是加密的。</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">传输成功时是什么样</p><p>这时对方的卡片已经不在了——工作区取代了它。状态改看工作区的标题栏：连的是哪台设备、链路状态显示「已连接」、以及唯一的那个路径标签显示「局域网直连」，也就是在你自己网络里的主机到主机一跳。「P2P 直连」是另一种诚实的情况：两台设备确实共享同一个公网 IP，但浏览器最终选中的那一跳并不在本地。</p><p>接收端的计数停在最后一个文件，而文件本身就在保存提示所说的位置。确认这一点要看接收端浏览器自己的下载列表，而不是看本页面——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。</p><pre tabindex="0"><code>已连接到 MacBook · 已连接 · 局域网直连
 文件 3/3</code></pre></div>
       <ul><li>同网络房间不限于两台设备，所以房间里每部手机、每台笔记本都出现一张卡片是正常的，不是哪里出错了。</li><li>这里不存在先上传、后下载：服务器上没有可以稍后再取的副本，所以两台设备都要停在页面上，直到计数走完。</li></ul>
       <h2>两台设备互相看不到时</h2>
       <p>同网络发现依据的是你的浏览器从哪个网络连过来，所以先从这里查起：两台设备其实不在同一个网络、路由器把客户端隔开了、页面不是用 HTTPS 打开的，或者接收端浏览器被要求装下超出它能力的内容。这些是常见的第一批排查项，而不是全部原因；每一项在屏幕上都有能判定它的东西。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>「附近的设备」一直是空的，或者只列出你正在看的这一台。</dt><dd><pre><code>https://relayium.com/   # 两台都打开，然后对比状态条里的公网 IP</code></pre><p>两个不同的公网 IP 就是两个不同的房间。VPN、iCloud 专用代理，或者把客户端从另一个地址送出去的访客 SSID 都是常见原因，但不是全部原因。如果你愿意改动它们：关掉 VPN，或只对当前这个 Wi-Fi 关闭专用代理，或者把两台设备都挪到主网络，然后在每台设备上重新加载 https://relayium.com/。如果你不想改，用 https://relayium.com/cross-network 上的配对码也能接上对方，两个设置都不用动，而且同样是端到端加密。</p></dd><dt>两台设备显示的公网 IP 相同，卡片却仍然一张都不出现。</dt><dd><pre><code>https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关</code></pre><p>路由器把自己的客户端隔开了。在它的 Wi-Fi 设置里关闭「AP 隔离 / 客户端隔离」——Mesh 系统、酒店和访客网络经常默认开着——然后在两台设备上重新加载页面。如果路由器不由你管，那就改走 https://relayium.com/cross-network 上的配对码。</p></dd><dt>页面提示加密传输需要 HTTPS，设备列表根本没出现。</dt><dd><pre><code>https://relayium.com/   # 地址栏必须是 https，不是 http</code></pre><p>页面是用 http:// 或裸 IP 打开的，浏览器不会把加密传输所需的接口交给它。relayium.com 本身会跳转到 HTTPS，所以这通常意味着一个用 http:// 访问的自托管实例——请改用 https://relayium.com/ 打开，或者给你自己的实例配一张证书。</p></dd><dt>还没点接收，接收端就警告说它必须把整批文件放在内存里。</dt><dd><pre><code>chrome://downloads   # Chrome 用这个 / Edge 用 edge://downloads / Firefox 用 about:downloads</code></pre><p>那个浏览器无法把下载直接流式写入磁盘，于是会把整批缓存起来，批次一大就可能以标签页崩溃收场。请改用电脑上的 Chrome 或 Edge 接收，或者一次少发几个文件，并在接收端浏览器自己的下载列表里逐个确认到达情况——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)——而不是想当然认为已经保存。</p></dd><dt>传输能跑，但标签显示的是「P2P 直连」而不是「局域网直连」。</dt><dd><pre><code>https://relayium.com/   # 看工作区标题栏里的路径标签</code></pre><p>两台设备共享同一个公网 IP，却没有共享本地的那一跳——运营商级 NAT、同一条上行下的两个 VLAN，或者工作在客户端模式的信号扩展器都会这样。传输仍然是直连，也仍然端到端加密；如果你要的是走局域网而不是浏览器找到的那条路径，就把两台设备接到同一个接入点上。</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>「附近的设备」一直是空的，或者只列出你正在看的这一台。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 两台都打开，然后对比状态条里的公网 IP</code></pre><p>两个不同的公网 IP 就是两个不同的房间。VPN、iCloud 专用代理，或者把客户端从另一个地址送出去的访客 SSID 都是常见原因，但不是全部原因。如果你愿意改动它们：关掉 VPN，或只对当前这个 Wi-Fi 关闭专用代理，或者把两台设备都挪到主网络，然后在每台设备上重新加载 https://relayium.com/。如果你不想改，用 https://relayium.com/cross-network 上的配对码也能接上对方，两个设置都不用动，而且同样是端到端加密。</p></dd><dt>两台设备显示的公网 IP 相同，卡片却仍然一张都不出现。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关</code></pre><p>路由器把自己的客户端隔开了。在它的 Wi-Fi 设置里关闭「AP 隔离 / 客户端隔离」——Mesh 系统、酒店和访客网络经常默认开着——然后在两台设备上重新加载页面。如果路由器不由你管，那就改走 https://relayium.com/cross-network 上的配对码。</p></dd><dt>页面提示加密传输需要 HTTPS，设备列表根本没出现。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 地址栏必须是 https，不是 http</code></pre><p>页面是用 http:// 或裸 IP 打开的，浏览器不会把加密传输所需的接口交给它。relayium.com 本身会跳转到 HTTPS，所以这通常意味着一个用 http:// 访问的自托管实例——请改用 https://relayium.com/ 打开，或者给你自己的实例配一张证书。</p></dd><dt>还没点接收，接收端就警告说它必须把整批文件放在内存里。</dt><dd><pre tabindex="0"><code>chrome://downloads   # Chrome 用这个 / Edge 用 edge://downloads / Firefox 用 about:downloads</code></pre><p>那个浏览器无法把下载直接流式写入磁盘，于是会把整批缓存起来，批次一大就可能以标签页崩溃收场。请改用电脑上的 Chrome 或 Edge 接收，或者一次少发几个文件，并在接收端浏览器自己的下载列表里逐个确认到达情况——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)——而不是想当然认为已经保存。</p></dd><dt>传输能跑，但标签显示的是「P2P 直连」而不是「局域网直连」。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 看工作区标题栏里的路径标签</code></pre><p>两台设备共享同一个公网 IP，却没有共享本地的那一跳——运营商级 NAT、同一条上行下的两个 VLAN，或者工作在客户端模式的信号扩展器都会这样。传输仍然是直连，也仍然端到端加密；如果你要的是走局域网而不是浏览器找到的那条路径，就把两台设备接到同一个接入点上。</p></dd></dl></div>
       <h2>为什么这么快：中间没有服务器</h2>
       <p>两台设备是从同一个网络连上来的，所以 Relayium 让它们点对点直连：字节直接从一台设备流向另一台，不绕道 Relayium 的服务器往返，既没有什么要先上传，也没有什么要等着下载。至于到底有多快，取决于两个浏览器最终选中的是哪一跳，而路径标签会把它说出来。「局域网直连」是本地的那一跳——数据不出你自己的网络，跑的是局域网的速度，而不是宽带的速度。「P2P 直连」同样是直连，中间同样没有服务器，但浏览器找到的那条路已经离开了本地网段，因此受限于它实际经过的链路。共享同一个公网 IP 只是把两台设备放进同一个房间，它本身并不保证两者之间那一跳是本地的。</p>
       <p>这也是为什么两端都不需要账号：既然大家已经在同一个可信网络里，Relayium 不需要靠登录来判断谁能连谁。</p>

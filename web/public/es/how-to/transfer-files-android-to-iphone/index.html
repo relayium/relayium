@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/es/how-to/transfer-files-android-to-iphone/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Cómo transferir archivos de Android a iPhone (sin cable)" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Cómo transferir archivos de Android a iPhone (sin cable)","description":"Una guía paso a paso para enviar fotos, vídeos y documentos de Android a iPhone en un navegador — sin AirDrop, sin cable, sin subir a la nube. Solo abre Relayium en ambos dispositivos.","inLanguage":"es","datePublished":"2026-07-03","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/es/how-to/transfer-files-android-to-iphone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/es/"},{"@type":"ListItem","position":2,"name":"Guías","item":"https://relayium.com/es/guides/"},{"@type":"ListItem","position":3,"name":"Cómo transferir archivos de Android a iPhone (sin cable)"}]},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿Necesito instalar una app en alguno de los teléfonos?","acceptedAnswer":{"@type":"Answer","text":"No. Relayium se ejecuta por completo en el navegador tanto en Android como en iPhone. Abre relayium.com en cada dispositivo y ya está — sin descarga de ningún tipo. En la misma red una transferencia en tiempo real no necesita cuenta; emparejar entre redes solo le pide al remitente que inicie sesión. Puedes, opcionalmente, añadirlo a tu pantalla de inicio como PWA, pero eso es solo un acceso directo."}},{"@type":"Question","name":"¿Los dos teléfonos tienen que estar en la misma Wi-Fi?","acceptedAnswer":{"@type":"Answer","text":"No. La misma red es la vía más rápida porque los dispositivos se descubren automáticamente, pero un código de emparejamiento conecta dos teléfonos entre redes distintas — incluso uno con datos móviles y otro con Wi-Fi. La transferencia sigue cifrada de extremo a extremo en ambos casos, aunque emparejar entre redes requiere que el remitente inicie sesión — el destinatario nunca necesita una cuenta."}},{"@type":"Question","name":"¿Se comprimen o alteran las fotos de alguna forma?","acceptedAnswer":{"@type":"Answer","text":"No. El archivo original se transfiere byte a byte sin compresión, y cada archivo se comprueba de extremo a extremo con un hash SHA-256, así que lo que llega al iPhone es idéntico bit a bit a lo que enviaste desde Android."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/es/guides/" aria-current="true">Guías</a><a href="/es/apps/">Apps</a><a href="/pricing">Precios</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/es/">Relayium</a> <span aria-hidden="true">›</span> <a href="/es/guides/">Guías</a> <span aria-hidden="true">›</span> <span aria-current="page">Cómo transferir archivos de Android a iPhone (sin cable)</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -107,12 +164,12 @@ ol.steps>li>pre{margin:8px 0 0}
       <p>Nada que instalar. En la misma red tampoco hay nada que registrar — las transferencias en tiempo real funcionan directamente desde el navegador en ambos dispositivos.</p>
       <h2>Paso a paso: ambos dispositivos en la misma Wi-Fi</h2>
       <p>Esta es la vía más sencilla. En la misma red, los dos teléfonos se descubren automáticamente, así que casi no hay nada que escribir.</p>
-      <ol class="steps" data-block="steps"><li><p>Tanto en el teléfono Android como en el iPhone, abre la página de transferencia en el navegador.</p><pre><code>https://relayium.com/</code></pre></li><li><p>Compara la IP pública de la línea de estado en los dos teléfonos. Direcciones iguales meten a los dos en una sala; una distinta en el iPhone suele significar iCloud Private Relay o datos móviles, no una Wi-Fi averiada.</p><pre><code>Conectado · este dispositivo iPhone · IP pública 203.0.113.9</code></pre></li><li><p>Ahora cada teléfono lista al otro bajo «Dispositivos cercanos». En el que envía, toca el que recibe y pulsa «Abrir espacio de trabajo». En un navegador actual esa es la única acción de la tarjeta, porque a partir de ahí archivos y mensajes comparten la única conexión cifrada que abre.</p></li><li><p>El espacio de trabajo sustituye a esa tarjeta, y sus controles llevan ambas cosas: «Enviar archivos» para un lote de hasta 1.000, o escribe en el cuadro de mensaje y pulsa «Enviar». «Enviar una carpeta» aparece en el teléfono Android pero no en el iPhone, porque ningún navegador de iOS permite que una página elija una carpeta. Luego, en el iPhone que recibe, lee la línea bajo la solicitud antes de aceptar — dice si Safari preguntará dónde guardar o escribirá en sus propias descargas — y toca «Aceptar».</p></li><li><p>Deja las dos pestañas delante hasta que el contador llegue al último archivo. Para comparar antes un código de verificación (SAS), activa «Verificación avanzada» en los dos teléfonos antes de empezar: una coincidencia confirma que ambos teléfonos se unieron a la misma sesión cifrada de extremo a extremo, no la ruta de red que transporta el texto cifrado. Si la dejas desactivada no hay ningún código que comparar, y la sesión sigue igualmente cifrada.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">Qué se ve cuando la transferencia funciona</p><p>A esas alturas la tarjeta del otro teléfono ya no está — el espacio de trabajo ocupó su lugar —, así que el estado se lee en el encabezado del espacio de trabajo: el dispositivo al que estás conectado, un estado de enlace «Conectado» y una única etiqueta de ruta que marca «Directo por LAN». El contador de archivos termina en el último archivo del lote en las dos pantallas.</p><p>Después confirma el archivo, no la página. En el iPhone eso es la carpeta Descargas de la app Archivos, donde Safari deja una descarga; en el teléfono Android, la lista de descargas del propio navegador — chrome://downloads en Chrome, about:downloads en Firefox.</p><pre><code>Conectado a iPhone · Conectado · Directo por LAN
+      <ol class="steps" data-block="steps"><li><p>Tanto en el teléfono Android como en el iPhone, abre la página de transferencia en el navegador.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>Compara la IP pública de la línea de estado en los dos teléfonos. Direcciones iguales meten a los dos en una sala; una distinta en el iPhone suele significar iCloud Private Relay o datos móviles, no una Wi-Fi averiada.</p><pre tabindex="0"><code>Conectado · este dispositivo iPhone · IP pública 203.0.113.9</code></pre></li><li><p>Ahora cada teléfono lista al otro bajo «Dispositivos cercanos». En el que envía, toca el que recibe y pulsa «Abrir espacio de trabajo». En un navegador actual esa es la única acción de la tarjeta, porque a partir de ahí archivos y mensajes comparten la única conexión cifrada que abre.</p></li><li><p>El espacio de trabajo sustituye a esa tarjeta, y sus controles llevan ambas cosas: «Enviar archivos» para un lote de hasta 1.000, o escribe en el cuadro de mensaje y pulsa «Enviar». «Enviar una carpeta» aparece en el teléfono Android pero no en el iPhone, porque ningún navegador de iOS permite que una página elija una carpeta. Luego, en el iPhone que recibe, lee la línea bajo la solicitud antes de aceptar — dice si Safari preguntará dónde guardar o escribirá en sus propias descargas — y toca «Aceptar».</p></li><li><p>Deja las dos pestañas delante hasta que el contador llegue al último archivo. Para comparar antes un código de verificación (SAS), activa «Verificación avanzada» en los dos teléfonos antes de empezar: una coincidencia confirma que ambos teléfonos se unieron a la misma sesión cifrada de extremo a extremo, no la ruta de red que transporta el texto cifrado. Si la dejas desactivada no hay ningún código que comparar, y la sesión sigue igualmente cifrada.</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">Qué se ve cuando la transferencia funciona</p><p>A esas alturas la tarjeta del otro teléfono ya no está — el espacio de trabajo ocupó su lugar —, así que el estado se lee en el encabezado del espacio de trabajo: el dispositivo al que estás conectado, un estado de enlace «Conectado» y una única etiqueta de ruta que marca «Directo por LAN». El contador de archivos termina en el último archivo del lote en las dos pantallas.</p><p>Después confirma el archivo, no la página. En el iPhone eso es la carpeta Descargas de la app Archivos, donde Safari deja una descarga; en el teléfono Android, la lista de descargas del propio navegador — chrome://downloads en Chrome, about:downloads en Firefox.</p><pre tabindex="0"><code>Conectado a iPhone · Conectado · Directo por LAN
 Archivo 2/2</code></pre></div>
       <h2>Cuando los dos teléfonos no se ven</h2>
       <p>Hay una causa que vale la pena conocer en el iPhone: iCloud Private Relay está activo en muchas cuentas de iCloud+ y cambia la IP pública con la que aparece el teléfono, que es exactamente por lo que el descubrimiento en la misma red agrupa los dispositivos. Es una causa común entre varias y no la única, y las comprobaciones de abajo son las primeras habituales más que una lista exhaustiva; cada una decide su caso con lo que ya está en pantalla.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Síntoma, comprobación, solución</p><dl><dt>El iPhone nunca aparece en el teléfono Android, o al revés.</dt><dd><pre><code>https://relayium.com/   # compara la IP pública de la línea de estado en los dos teléfonos</code></pre><p>Dos direcciones IP públicas distintas son dos salas. En un iPhone iCloud Private Relay es una causa común, y que el teléfono se haya quedado en datos móviles es otra; ninguna de las dos es la única posibilidad. Si estás dispuesto a cambiarlas, desactiva Private Relay solo para esa Wi-Fi en Ajustes › Wi-Fi › la red › Limitar seguimiento de dirección IP, o conéctalo a la Wi-Fi, y recarga después https://relayium.com/. Si prefieres dejar Private Relay o una VPN activos, un código de emparejamiento en https://relayium.com/cross-network llega al teléfono sin tocar ninguno de los dos.</p></dd><dt>Los dos teléfonos muestran la misma IP pública y no aparece ninguna tarjeta.</dt><dd><pre><code>https://relayium.com/   # la indicación bajo la lista de dispositivos nombra el ajuste del router</code></pre><p>El router separa a sus propios clientes. Desactiva «aislamiento de AP / aislamiento de clientes» en sus ajustes de Wi-Fi, o empareja los dos teléfonos entre redes con un código en https://relayium.com/cross-network cuando el router no sea tuyo.</p></dd><dt>Antes de aceptar, el iPhone avisa de que tiene que sostener todo el lote en memoria.</dt><dd><pre><code>https://relayium.com/   # el aviso indica el tamaño del lote que tendría que sostener</code></pre><p>Todos los navegadores del iPhone son WebKit y no tienen la API File System Access, así que el lote se monta en memoria y Relayium avisa a partir de unos 256 MiB. Manda menos archivos de una vez, o manda ese archivo a un Chrome o Edge de ordenador, que lo escribe directamente en el disco sin tope de tamaño.</p></dd><dt>El contador terminó pero no encuentras el archivo en el iPhone.</dt><dd><pre><code>https://relayium.com/   # la línea bajo la solicitud ya decía dónde guarda este navegador</code></pre><p>Safari no deja una descarga en la fototeca. Mira en la app Archivos, en Descargas — la ubicación exacta es la que apunta Ajustes › Safari › Descargas, iCloud Drive o el propio iPhone — y ábrelo desde ahí; una foto solo llega a la app Fotos si la guardas tú mismo desde el archivo.</p></dd><dt>La transferencia se para o falla al cambiar de aplicación o cuando se bloquea la pantalla.</dt><dd><pre><code>https://relayium.com/   # en los dos teléfonos, la pestaña de Relayium tiene que ser la de delante</code></pre><p>Una pestaña en segundo plano puede frenarse o incluso suspenderse en cualquiera de los dos teléfonos, y mientras eso pasa no se mueve ningún byte. Relayium pide un bloqueo de pantalla donde el navegador lo ofrece, lo que cubre que la pantalla se apague pero no compra ejecución en segundo plano ni sobrevive a un cambio de aplicación: deja las dos pestañas delante hasta que el contador acabe.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Síntoma, comprobación, solución</p><dl><dt>El iPhone nunca aparece en el teléfono Android, o al revés.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # compara la IP pública de la línea de estado en los dos teléfonos</code></pre><p>Dos direcciones IP públicas distintas son dos salas. En un iPhone iCloud Private Relay es una causa común, y que el teléfono se haya quedado en datos móviles es otra; ninguna de las dos es la única posibilidad. Si estás dispuesto a cambiarlas, desactiva Private Relay solo para esa Wi-Fi en Ajustes › Wi-Fi › la red › Limitar seguimiento de dirección IP, o conéctalo a la Wi-Fi, y recarga después https://relayium.com/. Si prefieres dejar Private Relay o una VPN activos, un código de emparejamiento en https://relayium.com/cross-network llega al teléfono sin tocar ninguno de los dos.</p></dd><dt>Los dos teléfonos muestran la misma IP pública y no aparece ninguna tarjeta.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # la indicación bajo la lista de dispositivos nombra el ajuste del router</code></pre><p>El router separa a sus propios clientes. Desactiva «aislamiento de AP / aislamiento de clientes» en sus ajustes de Wi-Fi, o empareja los dos teléfonos entre redes con un código en https://relayium.com/cross-network cuando el router no sea tuyo.</p></dd><dt>Antes de aceptar, el iPhone avisa de que tiene que sostener todo el lote en memoria.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # el aviso indica el tamaño del lote que tendría que sostener</code></pre><p>Todos los navegadores del iPhone son WebKit y no tienen la API File System Access, así que el lote se monta en memoria y Relayium avisa a partir de unos 256 MiB. Manda menos archivos de una vez, o manda ese archivo a un Chrome o Edge de ordenador, que lo escribe directamente en el disco sin tope de tamaño.</p></dd><dt>El contador terminó pero no encuentras el archivo en el iPhone.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # la línea bajo la solicitud ya decía dónde guarda este navegador</code></pre><p>Safari no deja una descarga en la fototeca. Mira en la app Archivos, en Descargas — la ubicación exacta es la que apunta Ajustes › Safari › Descargas, iCloud Drive o el propio iPhone — y ábrelo desde ahí; una foto solo llega a la app Fotos si la guardas tú mismo desde el archivo.</p></dd><dt>La transferencia se para o falla al cambiar de aplicación o cuando se bloquea la pantalla.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # en los dos teléfonos, la pestaña de Relayium tiene que ser la de delante</code></pre><p>Una pestaña en segundo plano puede frenarse o incluso suspenderse en cualquiera de los dos teléfonos, y mientras eso pasa no se mueve ningún byte. Relayium pide un bloqueo de pantalla donde el navegador lo ofrece, lo que cubre que la pantalla se apague pero no compra ejecución en segundo plano ni sobrevive a un cambio de aplicación: deja las dos pestañas delante hasta que el contador acabe.</p></dd></dl></div>
       <h2>Entre redes: emparejamiento y retransmisión</h2>
       <p>El servidor genera exactamente seis dígitos decimales (0–9, incluido un cero inicial). El remitente inicia sesión para crear el código; quien se une por código, enlace o QR nunca necesita una cuenta. Acepta nuevas conexiones durante cinco minutos; una transferencia ya conectada no se corta cuando termina la cuenta atrás.</p>
       <p>Entre redes distintas, los navegadores usan por diseño un retransmisor TURN cifrado en vez de intentar primero una ruta directa. La clave permanece en los dos dispositivos, así que el retransmisor solo reenvía texto cifrado de extremo a extremo, no puede leer los archivos ni conserva una copia o historial del contenido en tiempo real.</p>

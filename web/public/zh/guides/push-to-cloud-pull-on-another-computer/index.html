@@ -11,8 +11,14 @@
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/push-to-cloud-pull-on-another-computer/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/push-to-cloud-pull-on-another-computer/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="在一台电脑上传到云端，在另一台电脑取回" />
@@ -30,37 +36,88 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"在一台电脑上传到云端，在另一台电脑取回","description":"通过 Relayium 账号做异步文件传输：用 relayium up 从一台机器上传，之后随时用 relayium down 在另一台机器下载——端到端加密，且只有上传才需要账号。","inLanguage":"zh-Hans","datePublished":"2026-07-12","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/push-to-cloud-pull-on-another-computer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"在一台电脑上传到云端，在另一台电脑取回"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"我需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"上传时需要；发送时，只在必须签发配对码的情况下需要。relayium up 始终需要 relayium login，这样文件才能存到你的账号下。relayium send 只在服务器必须为你签发一个新的配对码时才需要——用别人给你的配对码运行 send，它不会签发任何东西，因此也不需要登录。relayium down 和 relayium receive 不需要账号，push/pull、daemon 直连、sync 也都不需要。"}},{"@type":"Question","name":"我的文件加密吗？","acceptedAnswer":{"@type":"Answer","text":"是的，端到端加密。上传前就在你的机器上加密；密钥只存在于链接的 #k= 片段里，从不发给服务器。Relayium 存的是它读不了的密文，连文件名也是。"}},{"@type":"Question","name":"如果我把链接弄丢了呢？","acceptedAnswer":{"@type":"Answer","text":"链接携带解密密钥的唯一副本，所以链接一丢，文件就无法找回——服务器上没有任何东西能恢复它。"}},{"@type":"Question","name":"能限制谁来下载吗？","acceptedAnswer":{"@type":"Answer","text":"任何拿到链接的人都能下载，所以要私密分享。用 --burn 只允许下载一次，或 --max-downloads \u003cn> 限制次数，再用 --ttl \u003c时长> 让它到期自动删除。"}},{"@type":"Question","name":"能和网页端互通吗？","acceptedAnswer":{"@type":"Answer","text":"能。relayium up 产出的链接能在浏览器里打开；在 relayium.com 上创建的分享链接也能在另一台机器上用 relayium down 取回。"}},{"@type":"Question","name":"下载被中断了会怎样？","acceptedAnswer":{"@type":"Answer","text":"在同一次运行内，down 自己会处理：最多重连五次，并用 HTTP Range 从最后一个完整密文帧继续；服务端若忽略 Range，它就在这一次运行里重头再下。尝试用尽后它会删掉半截的输出，而不是留下一个截断文件——所以之后再跑 relayium down 是从头开始的，而不是接着上一次。只有 relayium sync 才会跨运行续传。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -76,19 +133,19 @@ ol.steps>li>pre{margin:8px 0 0}
 .fix dd>pre{margin:6px 0}
 </style>
     <style>
-.builder{margin:16px 0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+.builder{margin:16px 0;padding:18px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .builder .bf{display:block;margin:0 0 12px}
-.builder .bf span{display:block;font-size:14px;color:var(--text);margin:0 0 5px}
-.builder .bf input{width:100%;font:15px ui-monospace,SFMono-Regular,Menlo,monospace;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h)}
+.builder .bf span{display:block;font-size:var(--fs-sm);color:var(--text-h);font-weight:600;margin:0 0 5px}
+.builder .bf input{inline-size:100%;min-block-size:44px;font:15px ui-monospace,SFMono-Regular,Menlo,monospace;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text-h)}
 .builder .bcmd{margin:14px 0 0}
 .builder .bcmd pre{margin:0}
-.builder .bcopy{margin:10px 0 0;padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h);font:inherit;font-size:14px;cursor:pointer}
-.builder .bcopy:hover{border-color:var(--accent)}
+.builder .bcopy{margin:10px 0 0;min-block-size:44px;padding:8px 16px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text-h);font:inherit;font-size:var(--fs-sm);cursor:pointer}
+.builder .bcopy:hover{border-color:var(--accent-border)}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">在一台电脑上传到云端，在另一台电脑取回</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -116,26 +173,26 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>开始之前</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">你需要准备</p><ul><li>先装 CLI，这样 relayium 命令才存在。下面这行会把预编译好的二进制放到你的 PATH 上（macOS 和 Linux；Windows 请从发布页下载 .zip）；relayium --version 可确认是否装好，relayium.com/cli 列出了所有安装方式。不装这一步，relayium login 只会报「command not found」。</li><li>有一个免费的 Relayium 账号。浏览器那一步是拿你的账号来批准这次登录，所以你得先有账号才能批准——先在 relayium.com 登录，没有就在那里注册一个。只有上传才需要账号；下载从不需要。</li><li>一个能把链接送到另一台机器的办法——备忘录、聊天窗口、密码管理器都行。任何拿到链接的人都能下载该文件，所以要像对待密码一样对待它。</li></ul></div>
       <p>第一次 up 之前有两件一次性的事——装好 CLI，以及有个账号。两样都齐了就往下跳。</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <h2>把这台机器绑定到你的账号（一次即可）</h2>
       <p>up 需要知道存到谁的账号下，所以每台机器登录一次。这是浏览器授权的设备登录——终端里除了你要确认的那个码，什么都不用输：</p>
-      <pre><code>relayium login</code></pre>
+      <pre tabindex="0"><code>relayium login</code></pre>
       <ul><li>CLI 会打印一个短码和一个网址（relayium.com/device）。在已登录 relayium.com 的浏览器里打开它（若尚未登录，先在那里登录），输入短码并确认——这台机器就绑定好了。</li><li>登录信息存在 ~/.config/relayium/ 下，所以每台机器只需做一次。relayium whoami 显示当前绑定的账号；relayium logout 清除它。</li><li>以后要撤销某台机器，在浏览器里从账号的「设备」页删掉对应设备即可。</li></ul>
       <h2>从第一台电脑上传</h2>
       <p>up 会遍历你给的文件，在本地加密，上传密文，并打印一个取件链接：</p>
-      <ol class="steps" data-block="steps"><li><p>确认这台机器还绑定在你的账号上。它会打印账号和所绑定的服务器；如果显示未登录，先回到上面那步登录。</p><pre><code>relayium whoami</code></pre></li><li><p>上传文件。up 会在本地加密，只把密文发出去，并把取件链接打印到 stdout。</p><pre><code>relayium up ./report.pdf</code></pre></li><li><p>如果 24 小时的默认值不合适，就加一个保留策略参数。服务器实际保留多久，上限由你的套餐决定。</p><pre><code># 选择它能存活多久（默认 24 小时）：
+      <ol class="steps" data-block="steps"><li><p>确认这台机器还绑定在你的账号上。它会打印账号和所绑定的服务器；如果显示未登录，先回到上面那步登录。</p><pre tabindex="0"><code>relayium whoami</code></pre></li><li><p>上传文件。up 会在本地加密，只把密文发出去，并把取件链接打印到 stdout。</p><pre tabindex="0"><code>relayium up ./report.pdf</code></pre></li><li><p>如果 24 小时的默认值不合适，就加一个保留策略参数。服务器实际保留多久，上限由你的套餐决定。</p><pre tabindex="0"><code># 选择它能存活多久（默认 24 小时）：
 relayium up ./report.pdf --burn              # 下载一次后即删除
 relayium up ./report.pdf --ttl 7d            # 保留 7 天（上限取决于套餐）
-relayium up ./report.pdf --max-downloads 5   # 允许下载 5 次，之后删除</code></pre></li><li><p>把链接送到第二台机器能读到的地方。只有链接会走 stdout，所以管道里很干净。</p><pre><code>relayium up ./report.pdf | pbcopy</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">上传成功是什么样</p><p>上传过程中 stderr 上会有一个进度条，结束后清除。链接会单独一行落在 stdout 上，随后是给人看的提示行——以及可能出现的保留时长提示——都在 stderr 上。</p><pre><code>relayium up ./report.pdf
+relayium up ./report.pdf --max-downloads 5   # 允许下载 5 次，之后删除</code></pre></li><li><p>把链接送到第二台机器能读到的地方。只有链接会走 stdout，所以管道里很干净。</p><pre tabindex="0"><code>relayium up ./report.pdf | pbcopy</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">上传成功是什么样</p><p>上传过程中 stderr 上会有一个进度条，结束后清除。链接会单独一行落在 stdout 上，随后是给人看的提示行——以及可能出现的保留时长提示——都在 stderr 上。</p><pre tabindex="0"><code>relayium up ./report.pdf
 https://relayium.com/d/7fK2p…#k=Xr8s…
 opens in a browser, or fetch it with `relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39;`</code></pre></div>
       <ul><li>保留策略：--burn 下载一次后即删；--ttl &lt;时长&gt; 保留固定时间；--max-downloads &lt;n&gt; 允许固定下载次数。三者都不给时，链接保留 24 小时——这就是不带 --ttl 时的默认值。</li><li>--ttl 接受带单位的时长——30m、12h、7d、2w——也接受纯秒数，所以 --ttl 3600 和 --ttl 1h 是同一个请求。上限由你的套餐决定：Free 1 天、Plus 3 天、Pro 7 天、Max 14 天。要求超过上限时，服务器会静默地只按上限保留——up 随后会打印一行提示，告诉你它实际保留了多久。</li></ul>
       <h2>在第二台电脑下载</h2>
       <p>在另一台机器上，把链接交给 down。无需登录、无需配置——解密文件的密钥就在链接里，所以 down 完全不需要你的账号：</p>
-      <div class="builder" data-download-builder><label class="bf"><span>你的分享链接</span><input data-link type="text" placeholder="https://relayium.com/d/…#k=…" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" data-token="你的链接" /></label><label class="bf"><span>保存到（粘贴你的 pwd 输出）</span><input data-dest type="text" placeholder="/home/you/downloads" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" /></label><div class="bcmd"><pre><code data-cmd>relayium down &#39;&lt;你的链接&gt;&#39; &lt;目标目录&gt;</code></pre><button type="button" class="bcopy" data-copy data-copied="已复制" hidden>复制命令</button></div></div>
-      <ol class="steps" data-block="steps"><li><p>用你顺手的方式把链接弄到第二台机器上。那边除了 CLI 本身，不需要安装或登录任何东西。</p></li><li><p>把链接用单引号括起来交给 down，后面跟上文件该落地的目录。</p><pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads</code></pre></li><li><p>省略目录就落到当前目录。</p><pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39;</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">下载成功是什么样</p><p>它写下的每个文件都会逐行列在 stdout 上，数量和目标目录则在 stderr 上确认。</p><pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads
+      <div class="builder" data-download-builder><label class="bf"><span>你的分享链接</span><input data-link type="text" placeholder="https://relayium.com/d/…#k=…" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" data-token="你的链接" /></label><label class="bf"><span>保存到（粘贴你的 pwd 输出）</span><input data-dest type="text" placeholder="/home/you/downloads" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" /></label><div class="bcmd"><pre tabindex="0"><code data-cmd>relayium down &#39;&lt;你的链接&gt;&#39; &lt;目标目录&gt;</code></pre><button type="button" class="bcopy" data-copy data-copied="已复制" hidden>复制命令</button></div></div>
+      <ol class="steps" data-block="steps"><li><p>用你顺手的方式把链接弄到第二台机器上。那边除了 CLI 本身，不需要安装或登录任何东西。</p></li><li><p>把链接用单引号括起来交给 down，后面跟上文件该落地的目录。</p><pre tabindex="0"><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads</code></pre></li><li><p>省略目录就落到当前目录。</p><pre tabindex="0"><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39;</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">下载成功是什么样</p><p>它写下的每个文件都会逐行列在 stdout 上，数量和目标目录则在 stderr 上确认。</p><pre tabindex="0"><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads
 downloads/report.pdf
 ✓ downloaded 1 file(s) to ./downloads</code></pre></div>
       <ul><li>如果该文件设了阅后即焚、已达下载次数上限或已过期，链接就失效了，down 会告知它已不存在。</li><li>连接中断或卡死时，同一次运行内会自动重试：down 最多重连五次，并用 HTTP Range 请求从最后一个完整密文帧继续，所以一个大文件不会因为被代理重置就从头再下。对着忽略 Range 的服务端——老版本，或者阅后即焚／限次的文件——它会在这同一次运行里重头再下。</li><li>这种恢复不会跨越命令本身。尝试用尽后，down 会把已经写下的内容删掉，而不是留下一个看起来完整的截断文件；再跑一次 down 是从头开始的。这和 relayium sync 那种跨运行的续传不是一回事。</li></ul>
@@ -147,10 +204,10 @@ downloads/report.pdf
       <ul><li>你的文件在上传前就已在你的机器上加密。解密密钥只存在于链接的 #k= 片段里，从不发给服务器——Relayium 存的是它读不了的密文，连文件名也是。</li><li>这也意味着链接是回到文件的唯一途径：丢了链接，文件就无法找回，你和我们都不行。</li></ul>
       <h2>链接不管用的时候</h2>
       <p>几乎所有失败的 up 或 down 都落在下面四种里，而且没有一种需要靠猜——决定性的状态要么由一条命令打印出来，要么就摆在你敲的那行命令里。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>up 直接拒绝并提示 “run relayium login first”。</dt><dd><pre><code>relayium whoami
-# not logged in (run `relayium login`)</code></pre><p>上传是把文件存到你的账号名下，所以这台机器需要凭据。运行 relayium login，在浏览器的 relayium.com/device 上批准；之后 whoami 就会打印出你的账号和它绑定的服务器。</p></dd><dt>down 解析不了链接，密钥像是凭空消失了。</dt><dd><pre><code>echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
-# relayium down https://relayium.com/d/7fK2p</code></pre><p>在大多数 shell 里，没加引号的 # 会开启注释，于是从 #k= 起的部分根本没进到命令里——echo 会原样告诉你活下来的是哪一截。把整条链接用单引号括起来，那个片段（也就是解密密钥）就能完整送达。</p></dd><dt>链接比你要的 --ttl 更早失效。</dt><dd><pre><code>relayium up ./report.pdf --ttl 7d
-# note: your plan caps retention, so this link is kept 1d, not the 7d you asked for</code></pre><p>超过套餐上限的请求，服务器会静默地按上限处理——Free 1 天、Plus 3 天、Pro 7 天、Max 14 天——随后 up 会打印这行提示，告诉你实际拿到了多久。此外 --burn 和 --max-downloads 也会让链接提前作废。想要新的就重新上传一次。</p></dd><dt>明明登录了，up 却说你登录在别处。</dt><dd><pre><code>relayium whoami
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>up 直接拒绝并提示 “run relayium login first”。</dt><dd><pre tabindex="0"><code>relayium whoami
+# not logged in (run `relayium login`)</code></pre><p>上传是把文件存到你的账号名下，所以这台机器需要凭据。运行 relayium login，在浏览器的 relayium.com/device 上批准；之后 whoami 就会打印出你的账号和它绑定的服务器。</p></dd><dt>down 解析不了链接，密钥像是凭空消失了。</dt><dd><pre tabindex="0"><code>echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
+# relayium down https://relayium.com/d/7fK2p</code></pre><p>在大多数 shell 里，没加引号的 # 会开启注释，于是从 #k= 起的部分根本没进到命令里——echo 会原样告诉你活下来的是哪一截。把整条链接用单引号括起来，那个片段（也就是解密密钥）就能完整送达。</p></dd><dt>链接比你要的 --ttl 更早失效。</dt><dd><pre tabindex="0"><code>relayium up ./report.pdf --ttl 7d
+# note: your plan caps retention, so this link is kept 1d, not the 7d you asked for</code></pre><p>超过套餐上限的请求，服务器会静默地按上限处理——Free 1 天、Plus 3 天、Pro 7 天、Max 14 天——随后 up 会打印这行提示，告诉你实际拿到了多久。此外 --burn 和 --max-downloads 也会让链接提前作废。想要新的就重新上传一次。</p></dd><dt>明明登录了，up 却说你登录在别处。</dt><dd><pre tabindex="0"><code>relayium whoami
 # you@example.com (https://relayium.com)</code></pre><p>不是签发你令牌的那个 --server，会被拒绝而不是把凭据发过去——发过去既会泄露它，在那边也根本认证不了。要么去掉 --server，让它用 whoami 刚打印出来的那个绑定服务器；要么先对另一台主机执行 relayium login。</p></dd></dl></div>
       <h2>常见问题</h2>
       <h3>我需要账号吗？</h3>

@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/fr/how-to/send-files-between-two-computers-over-the-internet/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Envoyer des fichiers entre deux ordinateurs par Internet" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Envoyer des fichiers entre deux ordinateurs par Internet","description":"Un guide pas à pas pour transférer des fichiers de navigateur à navigateur : liaison directe sur le même LAN, ou relais TURN chiffré de bout en bout entre réseaux, sans cloud ni installation.","inLanguage":"fr","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/fr/how-to/send-files-between-two-computers-over-the-internet/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/fr/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/fr/guides/"},{"@type":"ListItem","position":3,"name":"Envoyer des fichiers entre deux ordinateurs par Internet"}]},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Est-ce vraiment du pair-à-pair, ou le fichier passe-t-il par un serveur ?","acceptedAnswer":{"@type":"Answer","text":"C'est du pair-à-pair au sens qui compte : le fichier transite d'un navigateur à l'autre et n'est jamais stocké sur un serveur. Sur le même LAN, les navigateurs se connectent directement ; entre réseaux, le code d'appairage utilise TURN par conception. Le relais ne transmet que du texte chiffré de bout en bout, ne peut ni lire ni déchiffrer le fichier, et ne conserve ni copie côté serveur ni historique temps réel."}},{"@type":"Question","name":"Les deux personnes ont-elles besoin d'un compte ?","acceptedAnswer":{"@type":"Answer","text":"Non. Sur le même réseau, aucun des deux côtés n'a besoin de compte. Entre réseaux différents, la personne qui envoie se connecte pour créer le code d'appairage — c'est ce qui permet à Relayium de générer et de gérer ce code — mais la personne qui reçoit n'a jamais besoin de compte, qu'elle saisisse le code ou ouvre simplement le lien."}},{"@type":"Question","name":"Est-ce que cela marche entre réseaux et pays différents ?","acceptedAnswer":{"@type":"Answer","text":"Oui. Le code d'appairage existe précisément pour ce cas : deux ordinateurs qui ne sont pas sur le même réseau local, où qu'ils se trouvent dans le monde. Cette voie emprunte un relais TURN chiffré plutôt qu'une liaison directe, et c'est délibéré — Relayium prend le relais pour que la traversée des NAT et des pare-feux ne dépende jamais de l'existence d'un chemin direct."}},{"@type":"Question","name":"Y a-t-il une limite de taille de fichier ou de nombre de fichiers ?","acceptedAnswer":{"@type":"Answer","text":"Vous pouvez envoyer jusqu'à 1 000 fichiers en un seul lot. Aucun serveur Relayium n'impose de limite de taille, et les limites qui restent sont pratiques : Chrome ou Edge sur ordinateur écrit le lot en flux directement sur le disque, et ce qui le borne là, c'est le navigateur, le système d'exploitation, la place libre sur ce disque et la durée pendant laquelle la session en direct tient, tandis que Firefox et Safari gardent le lot en mémoire, où Relayium prévient au-delà d'environ 256 Mo. Ce seuil est une estimation prudente, pas un plafond ferme ; le vrai dépend de la machine."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/fr/guides/" aria-current="true">Guides</a><a href="/fr/apps/">Applis</a><a href="/pricing">Tarifs</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Envoyer des fichiers entre deux ordinateurs par Internet</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -111,14 +168,14 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>Étape par étape : envoyer un fichier par Internet</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Avant de commencer</p><ul><li>Un compte connecté sur le seul ordinateur qui envoie. Créer un code d&#39;appairage en exige un, tandis que l&#39;ordinateur qui rejoint par code ou par lien ne se connecte jamais.</li><li>Une adresse e-mail vérifiée sur ce compte. Le relais d&#39;une session entre réseaux n&#39;est délivré qu&#39;aux comptes vérifiés, et la carte d&#39;appairage le dit clairement lorsqu&#39;elle refuse.</li><li>Vous deux devant vos ordinateurs en même temps. Un code d&#39;appairage vit cinq minutes, et il s&#39;agit d&#39;une session en direct, pas d&#39;un envoi que quelqu&#39;un récupère plus tard.</li><li>Un moyen de transmettre six chiffres ou un lien par un autre canal — un appel, une fenêtre de discussion, un SMS.</li></ul></div>
       <p>Voici le déroulé complet pour deux ordinateurs sur des réseaux différents :</p>
-      <ol class="steps" data-block="steps"><li><p>Sur l&#39;ordinateur qui envoie, ouvrez la page de transfert en temps réel et connectez-vous.</p><pre><code>https://relayium.com/cross-network</code></pre></li><li><p>Choisissez les fichiers ou le dossier à envoyer, puis créez le code d&#39;appairage. La carte affiche alors les six chiffres, un bouton pour copier le lien, un code QR et un décompte.</p><pre><code>Votre code d&#39;appairage — communiquez-le à l&#39;autre personne
+      <ol class="steps" data-block="steps"><li><p>Sur l&#39;ordinateur qui envoie, ouvrez la page de transfert en temps réel et connectez-vous.</p><pre tabindex="0"><code>https://relayium.com/cross-network</code></pre></li><li><p>Choisissez les fichiers ou le dossier à envoyer, puis créez le code d&#39;appairage. La carte affiche alors les six chiffres, un bouton pour copier le lien, un code QR et un décompte.</p><pre tabindex="0"><code>Votre code d&#39;appairage — communiquez-le à l&#39;autre personne
 483920
-le code d&#39;appairage expire dans 4:52</code></pre></li><li><p>Transmettez ce code ou ce lien à l&#39;autre personne comme cela vous arrange. Le lien porte le même code dans son fragment, partager l&#39;un ou l&#39;autre revient donc exactement au même.</p><pre><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>Sur l&#39;ordinateur qui reçoit, ouvrez ce lien, ou ouvrez la même page, saisissez les six chiffres et appuyez sur « Connecter ». Aucune connexion de ce côté.</p><pre><code>https://relayium.com/cross-network</code></pre></li><li><p>Le transfert démarre dès que l&#39;autre appareil rejoint la session. Laissez les deux onglets ouverts jusqu&#39;à la fin du compteur : le décompte ne régit que les nouvelles arrivées, son expiration ne coupe donc pas un transfert déjà lancé. Activer « Vérification avancée » avant de commencer ajoute un code de vérification (SAS) à comparer, dont la concordance confirme que les clés n&#39;ont pas été substituées et que les deux ordinateurs ont rejoint la même session chiffrée de bout en bout, sans prouver le chemin réseau suivi par le texte chiffré. Jusqu&#39;à 1 000 fichiers par lot.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">À quoi ressemble un transfert qui marche</p><p>La ligne « En attente de l&#39;autre appareil… » de l&#39;expéditeur cède la place à la carte connectée, et le badge de chemin qui s&#39;y trouve indique « Relais ». C&#39;est ici la valeur attendue et non une panne, car une session de navigateur entre réseaux passe délibérément par le relais TURN chiffré, et « LAN direct » n&#39;apparaîtrait que si les deux ordinateurs partageaient finalement un réseau.</p><p>Le compteur de fichiers va ensuite jusqu&#39;au dernier fichier du lot sur les deux écrans, et le fichier lui-même se trouve là où la ligne sous la demande annonçait que le navigateur récepteur le déposerait.</p><pre><code>Relais
+le code d&#39;appairage expire dans 4:52</code></pre></li><li><p>Transmettez ce code ou ce lien à l&#39;autre personne comme cela vous arrange. Le lien porte le même code dans son fragment, partager l&#39;un ou l&#39;autre revient donc exactement au même.</p><pre tabindex="0"><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>Sur l&#39;ordinateur qui reçoit, ouvrez ce lien, ou ouvrez la même page, saisissez les six chiffres et appuyez sur « Connecter ». Aucune connexion de ce côté.</p><pre tabindex="0"><code>https://relayium.com/cross-network</code></pre></li><li><p>Le transfert démarre dès que l&#39;autre appareil rejoint la session. Laissez les deux onglets ouverts jusqu&#39;à la fin du compteur : le décompte ne régit que les nouvelles arrivées, son expiration ne coupe donc pas un transfert déjà lancé. Activer « Vérification avancée » avant de commencer ajoute un code de vérification (SAS) à comparer, dont la concordance confirme que les clés n&#39;ont pas été substituées et que les deux ordinateurs ont rejoint la même session chiffrée de bout en bout, sans prouver le chemin réseau suivi par le texte chiffré. Jusqu&#39;à 1 000 fichiers par lot.</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">À quoi ressemble un transfert qui marche</p><p>La ligne « En attente de l&#39;autre appareil… » de l&#39;expéditeur cède la place à la carte connectée, et le badge de chemin qui s&#39;y trouve indique « Relais ». C&#39;est ici la valeur attendue et non une panne, car une session de navigateur entre réseaux passe délibérément par le relais TURN chiffré, et « LAN direct » n&#39;apparaîtrait que si les deux ordinateurs partageaient finalement un réseau.</p><p>Le compteur de fichiers va ensuite jusqu&#39;au dernier fichier du lot sur les deux écrans, et le fichier lui-même se trouve là où la ligne sous la demande annonçait que le navigateur récepteur le déposerait.</p><pre tabindex="0"><code>Relais
 Fichier 1/1</code></pre></div>
       <h2>Quand le code est refusé, ou que le transfert s&#39;arrête</h2>
       <p>Un transfert entre réseaux comporte plus de pièces mobiles qu&#39;un transfert sur le même réseau — un code avec une durée de vie, un compte, une allocation de relais — et chacune se nomme sur la carte d&#39;appairage au lieu d&#39;échouer en silence. La règle est donc simple : lisez cette carte avant tout le reste.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptôme, vérification, correction</p><dl><dt>L&#39;ordinateur qui reçoit saisit le code et obtient « Code d&#39;appairage invalide ou expiré ».</dt><dd><pre><code>https://relayium.com/cross-network   # la carte de l&#39;expéditeur affiche le décompte en direct</code></pre><p>Cinq minutes se sont écoulées depuis sa création, ou un chiffre a été mal saisi. Créez un nouveau code sur l&#39;ordinateur qui envoie et faites-le saisir tout de suite, ou envoyez plutôt le lien de participation, qui évite toute saisie.</p></dd><dt>La carte indique que le relais n&#39;est délivré qu&#39;aux comptes vérifiés.</dt><dd><pre><code>https://relayium.com/cross-network   # la carte d&#39;appairage nomme la raison du refus</code></pre><p>L&#39;adresse e-mail de l&#39;expéditeur n&#39;est pas encore vérifiée. Ouvrez le panneau du compte, vérifiez l&#39;adresse via le message envoyé par Relayium, puis créez un nouveau code d&#39;appairage, car l&#39;ancien ne récupérera pas un relais qui lui a déjà été refusé. Les transferts sur le même réseau et la CLI n&#39;en dépendent pas.</p></dd><dt>La carte indique que le trafic de relais du mois est épuisé.</dt><dd><pre><code>https://relayium.com/me   # l&#39;utilisation du mois montre ce qu&#39;il reste de l&#39;allocation</code></pre><p>Les sessions de navigateur entre réseaux ne peuvent ni démarrer ni continuer jusqu&#39;à la remise à zéro le mois prochain. Pour envoyer maintenant, déposez les fichiers en lien de téléchargement sur https://relayium.com/offline-transfer, changez d&#39;offre, ou faites tourner votre propre nœud. Les transferts sur le même réseau continuent dans tous les cas.</p></dd><dt>Le transfert s&#39;interrompt à mi-parcours et ne repart pas.</dt><dd><pre><code>https://relayium.com/cross-network   # les deux onglets doivent être restés sur cette page</code></pre><p>C&#39;est une session en direct, donc une coupure réseau passagère peut reprendre là où elle s&#39;était arrêtée, mais fermer l&#39;onglet ou recharger la page y met fin et aucune copie côté serveur ne prend le relais. Recommencez avec un nouveau code, et si l&#39;autre personne ne peut pas rester en ligne, utilisez le lien de téléchargement sur https://relayium.com/offline-transfer.</p></dd><dt>Le transfert fonctionne, mais bien plus lentement que les mêmes fichiers sur un seul réseau.</dt><dd><pre><code>https://relayium.com/cross-network   # le badge de chemin de la carte connectée indique Relais</code></pre><p>Une session relayée est bornée par les deux connexions internet plus le saut du relais, elle est donc réellement plus lente qu&#39;un transfert LAN, et aucun réglage n&#39;y change rien. Pour un très gros lot, le lien de téléchargement sur https://relayium.com/offline-transfer est la voie plus tranquille, car il n&#39;exige pas que les deux côtés soient en ligne en même temps.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptôme, vérification, correction</p><dl><dt>L&#39;ordinateur qui reçoit saisit le code et obtient « Code d&#39;appairage invalide ou expiré ».</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # la carte de l&#39;expéditeur affiche le décompte en direct</code></pre><p>Cinq minutes se sont écoulées depuis sa création, ou un chiffre a été mal saisi. Créez un nouveau code sur l&#39;ordinateur qui envoie et faites-le saisir tout de suite, ou envoyez plutôt le lien de participation, qui évite toute saisie.</p></dd><dt>La carte indique que le relais n&#39;est délivré qu&#39;aux comptes vérifiés.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # la carte d&#39;appairage nomme la raison du refus</code></pre><p>L&#39;adresse e-mail de l&#39;expéditeur n&#39;est pas encore vérifiée. Ouvrez le panneau du compte, vérifiez l&#39;adresse via le message envoyé par Relayium, puis créez un nouveau code d&#39;appairage, car l&#39;ancien ne récupérera pas un relais qui lui a déjà été refusé. Les transferts sur le même réseau et la CLI n&#39;en dépendent pas.</p></dd><dt>La carte indique que le trafic de relais du mois est épuisé.</dt><dd><pre tabindex="0"><code>https://relayium.com/me   # l&#39;utilisation du mois montre ce qu&#39;il reste de l&#39;allocation</code></pre><p>Les sessions de navigateur entre réseaux ne peuvent ni démarrer ni continuer jusqu&#39;à la remise à zéro le mois prochain. Pour envoyer maintenant, déposez les fichiers en lien de téléchargement sur https://relayium.com/offline-transfer, changez d&#39;offre, ou faites tourner votre propre nœud. Les transferts sur le même réseau continuent dans tous les cas.</p></dd><dt>Le transfert s&#39;interrompt à mi-parcours et ne repart pas.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # les deux onglets doivent être restés sur cette page</code></pre><p>C&#39;est une session en direct, donc une coupure réseau passagère peut reprendre là où elle s&#39;était arrêtée, mais fermer l&#39;onglet ou recharger la page y met fin et aucune copie côté serveur ne prend le relais. Recommencez avec un nouveau code, et si l&#39;autre personne ne peut pas rester en ligne, utilisez le lien de téléchargement sur https://relayium.com/offline-transfer.</p></dd><dt>Le transfert fonctionne, mais bien plus lentement que les mêmes fichiers sur un seul réseau.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # le badge de chemin de la carte connectée indique Relais</code></pre><p>Une session relayée est bornée par les deux connexions internet plus le saut du relais, elle est donc réellement plus lente qu&#39;un transfert LAN, et aucun réglage n&#39;y change rien. Pour un très gros lot, le lien de téléchargement sur https://relayium.com/offline-transfer est la voie plus tranquille, car il n&#39;exige pas que les deux côtés soient en ligne en même temps.</p></dd></dl></div>
       <h2>Entre réseaux : le relais chiffré</h2>
       <p>Deux navigateurs sur le même réseau se connectent directement l&#39;un à l&#39;autre. Entre réseaux — où les pare-feux d&#39;entreprise et les NAT stricts bloquent régulièrement tout chemin direct —, Relayium achemine le flux chiffré via un relais TURN, pour que la connexion aboutisse de façon fiable.</p>
       <p>Le relais ne voit jamais que du texte chiffré : le fichier est déjà chiffré de bout en bout (échange de clés X25519 plus AES-256-GCM) avant même de quitter le navigateur expéditeur, si bien que le relais ne peut pas le lire, pas plus qu&#39;un ordinateur quelconque sur Internet. Si la connexion se coupe en cours de route, le transfert reprend au lieu de tout recommencer.</p>

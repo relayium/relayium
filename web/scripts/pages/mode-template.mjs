@@ -28,6 +28,7 @@ import {
   ARCHIVE_STYLE,
 } from "./shared.mjs";
 import { STYLE } from "./landing-template.mjs";
+import { siteHeader, THEME_HEAD } from "./page-chrome.mjs";
 
 // The maintained cluster only — en (the SPA route), zh, x-default at en.
 // Archived mode pages emit none; see article-template.mjs's alternates() for the
@@ -157,8 +158,7 @@ export function renderModePage({ slug, lang, doc, updated, articleLinks = [] }) 
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${canonical}" />${archived ? "" : "\n    " + alternates(slug)}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    ${THEME_HEAD}
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="${SITE.name}" />
     <meta property="og:title" content="${headTitle}" />
@@ -176,7 +176,7 @@ export function renderModePage({ slug, lang, doc, updated, articleLinks = [] }) 
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="${ctaHref(lang)}">Relayium</a></header>
+      ${siteHeader({ lang, home: ctaHref(lang), self: urlPath(slug, lang) })}
       <main>${body(slug, lang, doc, articleLinks, notice)}</main>
       <footer>
         <a href="${ctaHref(lang)}">← ${esc(SITE.name)}</a>

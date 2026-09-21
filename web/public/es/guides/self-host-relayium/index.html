@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/es/guides/self-host-relayium/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Aloja Relayium por tu cuenta: ejecuta tu servidor de transferencia de archivos y texto" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Aloja Relayium por tu cuenta: ejecuta tu servidor de transferencia de archivos y texto","description":"Ejecuta toda la pila de Relayium por tu cuenta con un solo comando de Docker — tu propio dominio, tus propios datos, sin cuenta de terceros. Cubre el emparejamiento de archivos y texto efímero, las claves de entorno, el retransmisor TURN opcional del navegador y cómo apuntar la CLI hacia él.","inLanguage":"es","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/es/guides/self-host-relayium/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/es/"},{"@type":"ListItem","position":2,"name":"Guías","item":"https://relayium.com/es/guides/"},{"@type":"ListItem","position":3,"name":"Aloja Relayium por tu cuenta: ejecuta tu servidor de transferencia de archivos y texto"}]},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿Necesito configurar TURN?","acceptedAnswer":{"@type":"Answer","text":"Solo si quieres que las transferencias en tiempo real entre redes funcionen a través de NAT estrictos. Las transferencias en la misma red, el push/pull basado en SSH y el daemon directo funcionan todos sin él — TURN sirve puramente para el recorrido de NAT en la ruta del código de emparejamiento entre redes."}},{"@type":"Question","name":"¿La CLI sigue siendo gratis si me autoalojo?","acceptedAnswer":{"@type":"Answer","text":"Sí. La CLI sigue siendo gratis con relayium.com o con tu servidor. send o text sin código necesitan una cuenta en el servidor de destino para generar uno, y up la necesita para guardar un archivo. receive, down y text con el código impreso no requieren iniciar sesión."}},{"@type":"Question","name":"¿Puedo usar mi propio dominio y certificado TLS?","acceptedAnswer":{"@type":"Answer","text":"Sí. La imagen de Docker escucha en HTTP simple en :8080; pon nginx o Caddy delante con tu propio dominio y certificado (por ejemplo, vía certbot/Let's Encrypt). docs/self-hosting.md cubre qué hay que redirigir; la configuración nginx de producción propia de Relayium no está publicada, así que tendrás que escribir la tuya."}},{"@type":"Question","name":"¿Qué datos almacena mi servidor autoalojado?","acceptedAnswer":{"@type":"Answer","text":"Una base de datos SQLite (cuentas, sesiones) en RELAYIUM_DB y, para las transferencias almacenadas/basadas en enlace, blobs cifrados en RELAYIUM_BLOB_DIR que el propio servidor no puede descifrar. El servidor no guarda archivos en tiempo real ni cuerpos de mensajes y solo retransmite el handshake de señalización; los dispositivos receptores sí pueden conservar archivos o texto."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/es/guides/" aria-current="true">Guías</a><a href="/es/apps/">Apps</a><a href="/pricing">Precios</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/es/">Relayium</a> <span aria-hidden="true">›</span> <a href="/es/guides/">Guías</a> <span aria-hidden="true">›</span> <span aria-current="page">Aloja Relayium por tu cuenta: ejecuta tu servidor de transferencia de archivos y texto</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -108,8 +165,8 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>Inicio rápido con Docker</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Lo que necesitas antes del paso 1</p><ul><li>Un host con Docker Engine y el plugin de Compose. docker compose version imprime una cadena de versión; si sale «docker: &#39;compose&#39; is not a docker command», falta el plugin.</li><li>Un clon del repositorio. El archivo compose construye la imagen a partir de este árbol de fuentes, así que necesita el Dockerfile y web/ a su lado: no hay ninguna imagen precompilada que descargar.</li><li>Espacio en disco para el volumen con nombre relayium-data: la base de datos SQLite más el cifrado de las transferencias almacenadas que conserves.</li><li>Un dominio y un proxy inverso que termine TLS si va a usarlo alguien más aparte de ti. El contenedor solo habla HTTP en claro y por omisión publica únicamente en la interfaz de bucle local.</li><li>Nada más. Ni base de datos externa, ni bucket de almacenamiento de objetos, ni cuenta de terceros.</li></ul></div>
       <p>La raíz del repositorio incluye un Dockerfile y un docker-compose.yml que construyen una única imagen autocontenida — un binario Go estático que sirve la aplicación web precompilada, así que no hace falta un Node, una cadena de herramientas Go ni nginx aparte solo para ejecutarlo.</p>
-      <ol class="steps" data-block="steps"><li><p>Clona el repositorio y entra en él.</p><pre><code>git clone https://github.com/relayium/relayium.git</code></pre><pre><code>cd relayium</code></pre></li><li><p>Constrúyelo y arráncalo. El secreto de relleno es obligatorio aunque el retransmisor esté apagado: Compose valida la variable requerida del servicio coturn desactivado por perfil al analizar el archivo, de modo que un docker compose up a secas se niega a arrancar.</p><pre><code>RELAYIUM_TURN_SECRET=placeholder docker compose up -d --build</code></pre></li><li><p>Comprueba que el contenedor se ha quedado arriba en vez de reiniciarse en bucle.</p><pre><code>docker compose ps</code></pre></li><li><p>Pregúntale a la instancia si de verdad puede servir. Usa /readyz, no /healthz: la diferencia entre ambos es todo el sentido de esta comprobación, y el recuadro de resultado esperado de abajo explica por qué.</p><pre><code>curl -s http://127.0.0.1:8080/readyz</code></pre></li><li><p>Copia la plantilla de configuración y pon tu URL pública. RELAYIUM_BASE_URL construye los enlaces del correo saliente y decide si las cookies de sesión llevan el atributo Secure, así que tiene que ser tu dirección https:// real.</p><pre><code>cp server/.env.example server/.env</code></pre><pre><code>chmod 600 server/.env</code></pre></li><li><p>Pon nginx o Caddy delante, terminando TLS para tu dominio y pasando todo — /, /api, /ws, /admin — al puerto 8080. Después reinicia para que server/.env surta efecto.</p><pre><code>docker compose up -d</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">Qué aspecto tiene una instancia que funciona</p><p>El contenedor informa Up y ambos extremos responden. El que importa es ready: /healthz devuelve ok sin condiciones, antes de que se abra nada, así que también pasa en una instancia cuya base de datos o directorio de blobs es inservible. /readyz hace ping a la base de datos SQLite y al directorio de blobs, y responde 503 en cuanto uno de los dos falla.</p><pre><code>$ docker compose ps
+      <ol class="steps" data-block="steps"><li><p>Clona el repositorio y entra en él.</p><pre tabindex="0"><code>git clone https://github.com/relayium/relayium.git</code></pre><pre tabindex="0"><code>cd relayium</code></pre></li><li><p>Constrúyelo y arráncalo. El secreto de relleno es obligatorio aunque el retransmisor esté apagado: Compose valida la variable requerida del servicio coturn desactivado por perfil al analizar el archivo, de modo que un docker compose up a secas se niega a arrancar.</p><pre tabindex="0"><code>RELAYIUM_TURN_SECRET=placeholder docker compose up -d --build</code></pre></li><li><p>Comprueba que el contenedor se ha quedado arriba en vez de reiniciarse en bucle.</p><pre tabindex="0"><code>docker compose ps</code></pre></li><li><p>Pregúntale a la instancia si de verdad puede servir. Usa /readyz, no /healthz: la diferencia entre ambos es todo el sentido de esta comprobación, y el recuadro de resultado esperado de abajo explica por qué.</p><pre tabindex="0"><code>curl -s http://127.0.0.1:8080/readyz</code></pre></li><li><p>Copia la plantilla de configuración y pon tu URL pública. RELAYIUM_BASE_URL construye los enlaces del correo saliente y decide si las cookies de sesión llevan el atributo Secure, así que tiene que ser tu dirección https:// real.</p><pre tabindex="0"><code>cp server/.env.example server/.env</code></pre><pre tabindex="0"><code>chmod 600 server/.env</code></pre></li><li><p>Pon nginx o Caddy delante, terminando TLS para tu dominio y pasando todo — /, /api, /ws, /admin — al puerto 8080. Después reinicia para que server/.env surta efecto.</p><pre tabindex="0"><code>docker compose up -d</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">Qué aspecto tiene una instancia que funciona</p><p>El contenedor informa Up y ambos extremos responden. El que importa es ready: /healthz devuelve ok sin condiciones, antes de que se abra nada, así que también pasa en una instancia cuya base de datos o directorio de blobs es inservible. /readyz hace ping a la base de datos SQLite y al directorio de blobs, y responde 503 en cuanto uno de los dos falla.</p><pre tabindex="0"><code>$ docker compose ps
 NAME                IMAGE                     STATUS          PORTS
 relayium-server-1   relayium/relayium:local   Up 12 seconds   127.0.0.1:8080-&gt;8080/tcp
 
@@ -122,20 +179,20 @@ ready</code></pre></div>
       <p>Las transferencias en la misma red (red local) y el push/pull basado en SSH funcionan sin nada extra. Las transferencias en tiempo real entre redes (dos dispositivos tras NAT distintos) a veces necesitan un retransmisor TURN para establecer una ruta — el retransmisor solo ve texto cifrado, nunca el contenido de tus archivos.</p>
       <p>docker-compose.yml tiene un perfil relay opcional que arranca coturn (el servidor TURN) y una pequeña instancia de Redis para la medición de bytes retransmitidos, junto al servidor principal:</p>
       <p>El secreto tiene que llegar a dos sitios distintos, y equivocarse falla en silencio. coturn lo recibe por la sustitución de variables de Compose, que solo se resuelve desde el shell o desde un .env en la raíz del proyecto. El servidor lo lee de su propio entorno — es decir, de server/.env — y un secreto vacío desactiva TURN por completo. Si solo pones uno de los dos, acabas con un coturn en marcha para el que el servidor nunca emite credenciales: todos los contenedores se declaran sanos, no se registra nada, y las transferencias a través de NAT estrictos siguen fallando exactamente igual que antes.</p>
-      <ol class="steps" data-block="steps"><li><p>Genera un único secreto aleatorio largo. Abajo se usa siempre el mismo valor.</p><pre><code>openssl rand -hex 32</code></pre></li><li><p>Pon ese secreto, junto con las direcciones de retransmisión a las que apunta tu dominio, en server/.env: es lo que hace que el servidor active TURN.</p><pre><code>RELAYIUM_TURN_SECRET=&lt;the value from step 1&gt;
-RELAYIUM_TURN_URLS=turn:example.com:3478,turns:example.com:5349</code></pre></li><li><p>Exporta ese mismo archivo al shell para que la sustitución de Compose pueda entregarle a coturn un secreto idéntico. Hacerle source mantiene una única fuente y deja el secreto fuera de la línea de órdenes, donde ps lo expondría.</p><pre><code>set -a; . ./server/.env; set +a</code></pre></li><li><p>Arranca la pila con el perfil relay.</p><pre><code>docker compose --profile relay up -d --build</code></pre></li><li><p>Abre los puertos de retransmisión en el cortafuegos del host. coturn se ejecuta con la red del host, así que son reglas del host y no de Docker: UDP 3478 y 49152-65535, TCP 3478 y 5349.</p></li><li><p>Comprueba que el servidor — y no solo coturn — ha arrancado con el secreto. Esta es la comprobación que caza el caso silencioso.</p><pre><code>docker compose exec server env | grep RELAYIUM_TURN</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">Qué aspecto tiene un retransmisor que funciona</p><p>Ambas claves vuelven no vacías desde dentro del contenedor del servidor. Que coturn esté en marcha no demuestra nada por sí solo: el navegador solo recibe credenciales de retransmisión emitidas por el servidor.</p><pre><code>$ docker compose exec server env | grep RELAYIUM_TURN
+      <ol class="steps" data-block="steps"><li><p>Genera un único secreto aleatorio largo. Abajo se usa siempre el mismo valor.</p><pre tabindex="0"><code>openssl rand -hex 32</code></pre></li><li><p>Pon ese secreto, junto con las direcciones de retransmisión a las que apunta tu dominio, en server/.env: es lo que hace que el servidor active TURN.</p><pre tabindex="0"><code>RELAYIUM_TURN_SECRET=&lt;the value from step 1&gt;
+RELAYIUM_TURN_URLS=turn:example.com:3478,turns:example.com:5349</code></pre></li><li><p>Exporta ese mismo archivo al shell para que la sustitución de Compose pueda entregarle a coturn un secreto idéntico. Hacerle source mantiene una única fuente y deja el secreto fuera de la línea de órdenes, donde ps lo expondría.</p><pre tabindex="0"><code>set -a; . ./server/.env; set +a</code></pre></li><li><p>Arranca la pila con el perfil relay.</p><pre tabindex="0"><code>docker compose --profile relay up -d --build</code></pre></li><li><p>Abre los puertos de retransmisión en el cortafuegos del host. coturn se ejecuta con la red del host, así que son reglas del host y no de Docker: UDP 3478 y 49152-65535, TCP 3478 y 5349.</p></li><li><p>Comprueba que el servidor — y no solo coturn — ha arrancado con el secreto. Esta es la comprobación que caza el caso silencioso.</p><pre tabindex="0"><code>docker compose exec server env | grep RELAYIUM_TURN</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">Qué aspecto tiene un retransmisor que funciona</p><p>Ambas claves vuelven no vacías desde dentro del contenedor del servidor. Que coturn esté en marcha no demuestra nada por sí solo: el navegador solo recibe credenciales de retransmisión emitidas por el servidor.</p><pre tabindex="0"><code>$ docker compose exec server env | grep RELAYIUM_TURN
 RELAYIUM_TURN_SECRET=3f7a…
 RELAYIUM_TURN_URLS=turn:example.com:3478,turns:example.com:5349</code></pre></div>
       <ul><li>coturn necesita la IP pública real del host y un rango de puertos UDP abierto para funcionar — docs/self-hosting.md cubre cómo levantarlo con el perfil relay de Docker; la configuración coturn de producción propia de Relayium (incluido su script de instalación) no está publicada.</li><li>Sin --profile relay ni RELAYIUM_TURN_SECRET, el servidor igual funciona bien — las transferencias entre redes simplemente recurren a solo STUN, que funciona para los tipos de NAT más fáciles pero no para los más estrictos.</li></ul>
       <h2>Instala la CLI en tu máquina</h2>
       <p>Este último paso ejecuta la CLI de relayium en tu propio ordenador (no en el servidor), así que instálala ahí si aún no la tienes. En macOS o Linux:</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>relayium.com/cli lista todas las opciones de instalación — un binario de Windows, la página de releases, o go build si tienes Go.</li><li>relayium --version lo confirma. Sin la CLI, el comando de abajo imprime « command not found ».</li></ul>
       <h2>Apunta la CLI hacia tu servidor</h2>
       <p>La CLI de Relayium usa por defecto el servidor de punto de encuentro de relayium.com para send/receive y text entre redes. Pasa --server para usar el tuyo en su lugar:</p>
-      <ol class="steps" data-block="steps"><li><p>En una máquina que ya tenga la CLI de la sección anterior, inicia sesión contra tu servidor en vez de contra relayium.com. Imprime una URL y un código; apruébalo en un navegador con sesión iniciada en tu instancia.</p><pre><code>relayium login --server https://your-domain</code></pre></li><li><p>Comprueba a qué servidor están vinculadas las credenciales guardadas. whoami no acepta opciones: informa de lo que el inicio de sesión escribió de verdad, y eso es justo lo que hace que merezca la pena ejecutarlo.</p><pre><code>relayium whoami</code></pre></li><li><p>Pasa el mismo --server al enviar. Sin él, la CLI acuña el código de emparejamiento en relayium.com y el otro extremo no lo encontrará jamás en tu instancia.</p><pre><code>relayium send ./report.pdf --server https://your-domain</code></pre></li><li><p>Recibe en la otra máquina con el código impreso y el mismo --server. Las sesiones de texto funcionan igual.</p><pre><code>relayium receive 483920 --server https://your-domain</code></pre><pre><code>relayium text --server https://your-domain</code></pre><pre><code>relayium text 483920 --server https://your-domain</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">Cómo sabes que está hablando con tu instancia</p><p>whoami imprime la cuenta y, entre paréntesis, el servidor al que está vinculada. Que ahí aparezca tu propio dominio y no relayium.com es la confirmación.</p><pre><code>$ relayium login --server https://your-domain
+      <ol class="steps" data-block="steps"><li><p>En una máquina que ya tenga la CLI de la sección anterior, inicia sesión contra tu servidor en vez de contra relayium.com. Imprime una URL y un código; apruébalo en un navegador con sesión iniciada en tu instancia.</p><pre tabindex="0"><code>relayium login --server https://your-domain</code></pre></li><li><p>Comprueba a qué servidor están vinculadas las credenciales guardadas. whoami no acepta opciones: informa de lo que el inicio de sesión escribió de verdad, y eso es justo lo que hace que merezca la pena ejecutarlo.</p><pre tabindex="0"><code>relayium whoami</code></pre></li><li><p>Pasa el mismo --server al enviar. Sin él, la CLI acuña el código de emparejamiento en relayium.com y el otro extremo no lo encontrará jamás en tu instancia.</p><pre tabindex="0"><code>relayium send ./report.pdf --server https://your-domain</code></pre></li><li><p>Recibe en la otra máquina con el código impreso y el mismo --server. Las sesiones de texto funcionan igual.</p><pre tabindex="0"><code>relayium receive 483920 --server https://your-domain</code></pre><pre tabindex="0"><code>relayium text --server https://your-domain</code></pre><pre tabindex="0"><code>relayium text 483920 --server https://your-domain</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">Cómo sabes que está hablando con tu instancia</p><p>whoami imprime la cuenta y, entre paréntesis, el servidor al que está vinculada. Que ahí aparezca tu propio dominio y no relayium.com es la confirmación.</p><pre tabindex="0"><code>$ relayium login --server https://your-domain
 Open https://your-domain/device and enter code: WDJB-MJHT
 logged in as you@example.com
 
@@ -144,11 +201,11 @@ you@example.com (https://your-domain)</code></pre></div>
       <ul><li>La CLI es gratis en cualquier caso — --server solo cambia el servidor de punto de encuentro. send o text sin código generan uno allí, y up guarda bajo una cuenta en ese servidor, así que inicia sesión primero con relayium login --server https://your-domain. receive, down y text con el código impreso no necesitan iniciar sesión.</li><li>Ambos extremos de text deben permanecer en línea. Los mensajes usan su propia sesión P2P directa cifrada de extremo a extremo. text en la CLI es solo directo y no usa el relé TURN de la app web. Ni Relayium ni tu servidor autoalojado guardan el cuerpo de los mensajes ni un historial del servidor, pero cualquiera de los terminales o el destinatario puede copiar o conservar el texto después de recibirlo.</li><li>push/pull (por tu propio SSH) y serve + el push daemon directo relayium://host no tocan relayium.com en absoluto, te autoalojes o no — se conectan directamente al remoto que indiques.</li></ul>
       <h2>Cuando no funciona</h2>
       <p>Cinco fallos cubren casi todo autoalojamiento fallido. Cada uno tiene una línea que leer o una orden que ejecutar que lo zanja, y tres de los cinco parecen un éxito hasta que ejecutas la comprobación.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Síntoma, comprobación, solución</p><dl><dt>docker compose up se niega a arrancar siquiera, antes de construir nada.</dt><dd><pre><code>docker compose up -d --build
-# required variable RELAYIUM_TURN_SECRET is missing a value</code></pre><p>Compose sustituye las variables de todo el archivo antes de filtrar por perfiles, así que valida la variable requerida del servicio coturn desactivado incluso con el retransmisor apagado. Antepón cualquier valor de relleno — RELAYIUM_TURN_SECRET=placeholder docker compose up -d --build — y sustitúyelo por un secreto real solo cuando actives de verdad el perfil relay.</p></dd><dt>El contenedor está Up, pero un navegador de otra máquina no llega a él.</dt><dd><pre><code>docker compose ps
-# PORTS  127.0.0.1:8080-&gt;8080/tcp</code></pre><p>Esa vinculación al bucle local es el comportamiento por omisión, para que un host público no exponga HTTP en claro a internet. En producción déjala así y termina TLS en un proxy inverso del mismo host. Para una máquina solo de LAN sin proxy, publícalo más ampliamente con RELAYIUM_BIND=0.0.0.0 docker compose up -d: esa variable la lee compose, no el servidor.</p></dd><dt>/healthz dice ok, pero el registro falla y los enlaces almacenados no aparecen nunca.</dt><dd><pre><code>curl -s -o /dev/null -w &#39;%{http_code}\n&#39; http://127.0.0.1:8080/readyz
-# 503</code></pre><p>/healthz devuelve ok sin condiciones y solo demuestra que el proceso está escuchando. /readyz hace ping a la base de datos SQLite y al directorio de blobs, así que un 503 significa que uno de los dos es inservible: comprueba que el volumen relayium-data está montado y que RELAYIUM_DB y RELAYIUM_BLOB_DIR apuntan dentro de él.</p></dd><dt>relayium login imprime una URL de verificación en localhost que no puedes abrir.</dt><dd><pre><code>relayium login --server https://your-domain
-# Open http://localhost:8080/device and enter code: WDJB-MJHT</code></pre><p>El servidor construye esa URL a partir de RELAYIUM_BASE_URL, cuyo valor por omisión es http://localhost:8080. Ponlo en server/.env con tu dirección https:// real y reinicia. También decide si las cookies de sesión llevan el atributo Secure, así que dejarlo mal no es solo cuestión de estética.</p></dd><dt>coturn está en marcha, pero las transferencias entre redes a través de NAT estricto siguen fallando, y sin nada en los registros.</dt><dd><pre><code>docker compose exec server env | grep RELAYIUM_TURN
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Síntoma, comprobación, solución</p><dl><dt>docker compose up se niega a arrancar siquiera, antes de construir nada.</dt><dd><pre tabindex="0"><code>docker compose up -d --build
+# required variable RELAYIUM_TURN_SECRET is missing a value</code></pre><p>Compose sustituye las variables de todo el archivo antes de filtrar por perfiles, así que valida la variable requerida del servicio coturn desactivado incluso con el retransmisor apagado. Antepón cualquier valor de relleno — RELAYIUM_TURN_SECRET=placeholder docker compose up -d --build — y sustitúyelo por un secreto real solo cuando actives de verdad el perfil relay.</p></dd><dt>El contenedor está Up, pero un navegador de otra máquina no llega a él.</dt><dd><pre tabindex="0"><code>docker compose ps
+# PORTS  127.0.0.1:8080-&gt;8080/tcp</code></pre><p>Esa vinculación al bucle local es el comportamiento por omisión, para que un host público no exponga HTTP en claro a internet. En producción déjala así y termina TLS en un proxy inverso del mismo host. Para una máquina solo de LAN sin proxy, publícalo más ampliamente con RELAYIUM_BIND=0.0.0.0 docker compose up -d: esa variable la lee compose, no el servidor.</p></dd><dt>/healthz dice ok, pero el registro falla y los enlaces almacenados no aparecen nunca.</dt><dd><pre tabindex="0"><code>curl -s -o /dev/null -w &#39;%{http_code}\n&#39; http://127.0.0.1:8080/readyz
+# 503</code></pre><p>/healthz devuelve ok sin condiciones y solo demuestra que el proceso está escuchando. /readyz hace ping a la base de datos SQLite y al directorio de blobs, así que un 503 significa que uno de los dos es inservible: comprueba que el volumen relayium-data está montado y que RELAYIUM_DB y RELAYIUM_BLOB_DIR apuntan dentro de él.</p></dd><dt>relayium login imprime una URL de verificación en localhost que no puedes abrir.</dt><dd><pre tabindex="0"><code>relayium login --server https://your-domain
+# Open http://localhost:8080/device and enter code: WDJB-MJHT</code></pre><p>El servidor construye esa URL a partir de RELAYIUM_BASE_URL, cuyo valor por omisión es http://localhost:8080. Ponlo en server/.env con tu dirección https:// real y reinicia. También decide si las cookies de sesión llevan el atributo Secure, así que dejarlo mal no es solo cuestión de estética.</p></dd><dt>coturn está en marcha, pero las transferencias entre redes a través de NAT estricto siguen fallando, y sin nada en los registros.</dt><dd><pre tabindex="0"><code>docker compose exec server env | grep RELAYIUM_TURN
 # sin salida</code></pre><p>El secreto llegó a coturn por la sustitución de Compose pero nunca llegó al servidor, cuyo secreto vacío desactiva TURN por completo. Pon RELAYIUM_TURN_SECRET y RELAYIUM_TURN_URLS en server/.env, hazle source con set -a; . ./server/.env; set +a para que la sustitución vea el mismo valor, y reinicia el perfil relay. Ambas claves tienen que volver no vacías en esa comprobación.</p></dd></dl></div>
       <h2>Preguntas frecuentes</h2>
       <h3>¿Necesito configurar TURN?</h3>

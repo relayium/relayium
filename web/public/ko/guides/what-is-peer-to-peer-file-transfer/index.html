@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ko/guides/what-is-peer-to-peer-file-transfer/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="P2P(피어투피어) 파일 전송이란?" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"P2P(피어투피어) 파일 전송이란?","description":"P2P 파일 전송을 쉽게 설명합니다. 서버 업로드 방식과 무엇이 다른지, WebRTC가 직접 연결을 찾는 방법, 왜 사적이고 빠른지까지.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/what-is-peer-to-peer-file-transfer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"P2P(피어투피어) 파일 전송이란?"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"P2P와 종단간 암호화는 같은 것인가요?","acceptedAnswer":{"@type":"Answer","text":"관련은 있지만 같지는 않습니다. P2P는 끝점 간 통신을 뜻하며 모든 네트워크 홉이 직접이라는 보장은 없습니다. TURN이 트래픽을 운반할 수도 있습니다. 암호화는 중간자가 읽을 수 있는지를 뜻합니다. Relayium은 같은 LAN에서 WebRTC로 직접 연결하고, 네트워크를 넘을 때는 종단간 암호화 TURN을 사용하며 릴레이는 읽거나 복호화할 수 없습니다."}},{"@type":"Question","name":"P2P 전송이 애초에 서버를 거치기는 하나요?","acceptedAnswer":{"@type":"Answer","text":"작은 시그널링 서버가 두 기기가 서로의 주소를 찾도록 돕지만, 그것이 보는 것은 연결 설정 정보뿐이며 파일 바이트는 전혀 보지 않습니다. 브라우저에서 네트워크를 넘을 때는 설계상 TURN 릴레이가 암호화된 파일 데이터를 전달하지만, 그때조차 다루는 것은 복호화할 수 없는 암호문뿐입니다."}},{"@type":"Question","name":"직접 연결은 애초에 왜 실패할 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"일부 네트워크는 외부 정보만으로는 도달 가능한 주소를 발견할 수 없도록 구성되어 있습니다. 엄격한 기업 방화벽이나 일부 이동통신사 NAT에서 흔한 일입니다. 전송할 때마다 20초 남짓을 들여 그것을 확인하는 대신, Relayium의 브라우저 앱은 네트워크 간 전송을 처음부터 모두 릴레이로 보냅니다. 그것들을 나르는 것은 실패한 직접 연결 시도가 아니라 릴레이입니다."}},{"@type":"Question","name":"릴레이를 거치면 P2P 전송이 느려지나요?","acceptedAnswer":{"@type":"Answer","text":"릴레이는 데이터가 통과하는 추가적인 한 단계이고 전용 서버가 아닌 공유 서버이므로 약간의 지연이 더해질 수 있습니다. 그래도 파일이 서버에 완전히 도착할 때까지 기다리지 않고 다운로드 측이 시작할 수 있으므로, 업로드 후 다운로드하는 방식보다는 대체로 더 빠릅니다."}},{"@type":"Question","name":"P2P 전송에는 양쪽 모두 계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"같은 네트워크에 있는 두 기기는 계정이 전혀 필요 없습니다. 페어링 코드로 다른 네트워크 간에 보낼 때는 발신자의 로그인이 필요하지만, 어느 경로든 수신자는 계정이 필요 없습니다."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ko/guides/" aria-current="true">가이드</a><a href="/ko/apps/">앱</a><a href="/pricing">요금제</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">P2P(피어투피어) 파일 전송이란?</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -121,11 +178,11 @@ ol.steps>li>pre{margin:8px 0 0}
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">직접 확인하려면 필요한 것</p><ul><li>동시에 화면을 볼 수 있는 기기 두 대 — 노트북과 휴대폰 조합이 가장 좋습니다.</li><li>작은 파일 하나. 여기서 보는 것은 연결이 어느 경로를 탔는지이지 속도가 아닙니다.</li><li>두 대가 같은 Wi-Fi에 있는 시간과, 서로 다른 네트워크에 있는 시간. 휴대폰 Wi-Fi를 끄고 모바일 데이터로 바꾸면 충분합니다.</li></ul></div>
       <p>같은 네트워크에 있는 두 기기에서 relayium.com을 열면 보통 자동으로 서로를 찾습니다. 계정도, 코드도 필요 없고, 설치할 것도 없습니다. 이것이 LAN 상황이며, 많은 경우 STUN조차 필요하지 않습니다. 다른 네트워크에 있는 사람에게 인터넷 너머로 보낼 때는 페어링 코드를 사용합니다. 발신자가 로그인해서 코드를 생성하면(또는 스캔할 수 있는 QR 코드 옵션과 함께 링크를 공유하면), 상대방이 참여하는 순간 전송은 암호화된 TURN 릴레이를 통해 이뤄집니다. 이는 예측하기 어려운 NAT을 넘는 가장 확실한 경로이며, 릴레이는 암호문만 나릅니다. 수신자는 여전히 계정이 필요 없습니다.</p>
       <p>실시간 경로가 열리면 최대 1,000개 파일이 선택된 경로를 따라 계속 흐르고 각 파일을 SHA-256으로 검증합니다. Relayium은 서버 측 실시간 내용 복사본이나 전송 기록을 보관하지 않습니다. 상대가 오프라인이면 영지식 저장 링크라는 별도 모드를 사용합니다.</p>
-      <ol class="steps" data-block="steps"><li><p>두 기기를 같은 Wi-Fi에 둔 상태로 각각 Relayium을 열고 파일을 보냅니다.</p><pre><code>https://relayium.com/</code></pre></li><li><p>앱이 연결에 붙인 라벨을 읽으세요. 같은 네트워크라면 「LAN 직접」이라고 나옵니다.</p></li><li><p>이제 두 기기를 서로 다른 네트워크에 두고, 이번에는 페어링 코드로 다시 보냅니다.</p><pre><code>https://relayium.com/cross-network</code></pre></li><li><p>라벨을 다시 읽으세요. 「P2P 직접」은 인터넷을 가로질러 직접 경로를 찾았다는 뜻이고, 「릴레이」는 찾지 못해 암호화된 릴레이가 바이트를 날랐다는 뜻입니다.</p></li><li><p>어느 쪽이 나왔는지, 그리고 그때 어떤 네트워크 조합이었는지 적어 두세요. 그것이 이 글이 처음에 던진 질문에 대한, 우리가 아닌 스스로의 답입니다.</p></li></ol>
+      <ol class="steps" data-block="steps"><li><p>두 기기를 같은 Wi-Fi에 둔 상태로 각각 Relayium을 열고 파일을 보냅니다.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>앱이 연결에 붙인 라벨을 읽으세요. 같은 네트워크라면 「LAN 직접」이라고 나옵니다.</p></li><li><p>이제 두 기기를 서로 다른 네트워크에 두고, 이번에는 페어링 코드로 다시 보냅니다.</p><pre tabindex="0"><code>https://relayium.com/cross-network</code></pre></li><li><p>라벨을 다시 읽으세요. 「P2P 직접」은 인터넷을 가로질러 직접 경로를 찾았다는 뜻이고, 「릴레이」는 찾지 못해 암호화된 릴레이가 바이트를 날랐다는 뜻입니다.</p></li><li><p>어느 쪽이 나왔는지, 그리고 그때 어떤 네트워크 조합이었는지 적어 두세요. 그것이 이 글이 처음에 던진 질문에 대한, 우리가 아닌 스스로의 답입니다.</p></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">라벨이 알려 주는 것</p><p>같은 네트워크에서는 「LAN 직접」이 나옵니다. 네트워크를 넘어가면 「P2P 직접」이나 「릴레이」 중 하나가 되고, 어느 쪽인지는 설정한 무엇이 아니라 그 두 네트워크에 달려 있습니다.</p><p>「릴레이」는 실패가 아닙니다. 대비책이 존재하고 제 일을 하고 있다는 뜻이며, 릴레이는 시종일관 암호문만 나릅니다 — 이 글의 TURN 절이 설명하는 상황을 안쪽에서 본 것입니다.</p></div>
       <h2>라벨이 예상과 다를 때</h2>
       <p>처음 들여다보면 대개 세 가지에 놀랍니다. 어느 것도 고쳐야 할 결함은 아니지만, 각각 이름을 댈 수 있으면 좋습니다.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">보이는 것, 확인할 것, 그 의미</p><dl><dt>네트워크를 넘어가면 항상 「릴레이」이고 「P2P 직접」이 되지 않습니다.</dt><dd><pre><code>https://relayium.com/cross-network   # the path label reads the same on both ends</code></pre><p>양쪽이 모두 모바일 데이터이거나 통신사 등급 NAT 뒤에 있는지 확인하세요. 직접 경로가 없는 가장 흔한 이유입니다. 고칠 것은 없습니다. 설계된 대비책이고, 릴레이는 암호문만 나르며, 같은 두 기기라도 같은 네트워크에서는 여전히 직접 연결되고 무료입니다.</p></dd><dt>같은 Wi-Fi인데 「LAN 직접」이 나오지 않습니다.</dt><dd><pre><code>https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct</code></pre><p>그 네트워크가 클라이언트를 서로 격리하는지 확인하세요. 게스트 Wi-Fi와 많은 호텔·사무실 네트워크는 기기 간 통신을 아예 막습니다. 거기서는 두 기기가 서로를 전혀 찾지 못하므로, 로컬 도달성에 기대지 않는 네트워크 간 페어링 코드 방식을 쓰세요.</p></dd><dt>경로 라벨이 아예 없습니다.</dt><dd><pre><code>https://relayium.com/   # there is no path label until the two ends have connected</code></pre><p>이 라벨은 연결에 이름을 붙이는 것이라 연결이 생긴 뒤에야 나타납니다. 양쪽이 서로를 찾기 전에는 이름 붙일 대상이 없고, 「아예 시작되지 않는 전송」은 「예상 밖의 경로를 탄 전송」과는 다른 문제입니다.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">보이는 것, 확인할 것, 그 의미</p><dl><dt>네트워크를 넘어가면 항상 「릴레이」이고 「P2P 직접」이 되지 않습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # the path label reads the same on both ends</code></pre><p>양쪽이 모두 모바일 데이터이거나 통신사 등급 NAT 뒤에 있는지 확인하세요. 직접 경로가 없는 가장 흔한 이유입니다. 고칠 것은 없습니다. 설계된 대비책이고, 릴레이는 암호문만 나르며, 같은 두 기기라도 같은 네트워크에서는 여전히 직접 연결되고 무료입니다.</p></dd><dt>같은 Wi-Fi인데 「LAN 직접」이 나오지 않습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct</code></pre><p>그 네트워크가 클라이언트를 서로 격리하는지 확인하세요. 게스트 Wi-Fi와 많은 호텔·사무실 네트워크는 기기 간 통신을 아예 막습니다. 거기서는 두 기기가 서로를 전혀 찾지 못하므로, 로컬 도달성에 기대지 않는 네트워크 간 페어링 코드 방식을 쓰세요.</p></dd><dt>경로 라벨이 아예 없습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # there is no path label until the two ends have connected</code></pre><p>이 라벨은 연결에 이름을 붙이는 것이라 연결이 생긴 뒤에야 나타납니다. 양쪽이 서로를 찾기 전에는 이름 붙일 대상이 없고, 「아예 시작되지 않는 전송」은 「예상 밖의 경로를 탄 전송」과는 다른 문제입니다.</p></dd></dl></div>
       <h2>자주 묻는 질문</h2>
       <h3>P2P와 종단간 암호화는 같은 것인가요?</h3>
       <p>관련은 있지만 같지는 않습니다. P2P는 끝점 간 통신을 뜻하며 모든 네트워크 홉이 직접이라는 보장은 없습니다. TURN이 트래픽을 운반할 수도 있습니다. 암호화는 중간자가 읽을 수 있는지를 뜻합니다. Relayium은 같은 LAN에서 WebRTC로 직접 연결하고, 네트워크를 넘을 때는 종단간 암호화 TURN을 사용하며 릴레이는 읽거나 복호화할 수 없습니다.</p>

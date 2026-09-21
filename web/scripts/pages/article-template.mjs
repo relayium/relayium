@@ -1,7 +1,10 @@
 // web/scripts/pages/article-template.mjs — renders one article (one language) to a
-// self-contained static HTML string. No JS, no external CSS: styles are inlined so
-// the page is independent of the Vite asset graph and crawlable with JS disabled.
+// self-contained static HTML string. No external CSS: styles are inlined so the
+// page is independent of the Vite asset graph and crawlable with JS disabled. The
+// only scripts are the pre-paint theme snippet every page in this tree carries
+// and, on the handful of pages with a command builder, BUILDER_SCRIPT.
 import { MAINTAINED_LANGS, DEFAULT_LANG, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, ctaHref, landingUrl, dirAttr, RTL_LANGS, rtlHead, isFrozen, archiveNotice, ARCHIVE_STYLE } from "./shared.mjs";
+import { pageStyle, siteHeader, THEME_HEAD } from "./page-chrome.mjs";
 
 // Footer link label; matches content/landing.mjs footer.privacy per language.
 const PRIVACY_LABELS = {
@@ -10,35 +13,22 @@ const PRIVACY_LABELS = {
   ar: "الخصوصية", es: "Privacidad", pt: "Privacidade",
 };
 
-const STYLE = `
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+// What this one template owns. Everything else — tokens, reading typography,
+// the header band, the footer, `.cta`, `.langbar`, `.crumbs`, `pre`/`code` —
+// comes from page-chrome.mjs, which all six templates share.
+const STYLE = pageStyle(`
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
-footer a{color:var(--text-h);text-decoration:none}
-`;
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
+`);
 
 /**
  * The language bar, on the maintained pages only.
@@ -108,8 +98,16 @@ function alternates(slug) {
 // CommandBlock.svelte pins its own <pre> unconditionally because the SPA renders
 // one document whose direction changes at runtime with the locale switch; here
 // the direction is known at generation time, per file.
+//
+// `tabindex="0"` for the same reason CommandBlock.svelte carries it: `overflow-x`
+// makes the block a scrollable region, and a region that only a mouse wheel or a
+// trackpad swipe can move is a command a keyboard reader cannot finish reading
+// (WCAG 2.1.1; axe's scrollable-region-focusable). It bites hardest on a phone,
+// where almost every command is wider than the column — which is why the 390px
+// dark a11y target added on 2026-09-21 is what finally reported it. The block
+// scrolls at every width, so the attribute is unconditional.
 const codeBlockHtml = (text, rtl, attrs = "") =>
-  `<pre${rtl ? ' dir="ltr"' : ""}><code${attrs}>${esc(text)}</code></pre>`;
+  `<pre tabindex="0"${rtl ? ' dir="ltr"' : ""}><code${attrs}>${esc(text)}</code></pre>`;
 
 // widgetHtml renders an interactive command builder that degrades gracefully:
 // with JS off it's a plain <pre> showing the command template (real,
@@ -249,11 +247,12 @@ function sectionHtml(s, rtl) {
 // property, so an RTL page picks up right alignment from <html dir="rtl"> with
 // no direction-specific rule anywhere.
 const TABLE_STYLE = `<style>
-.tw{overflow-x:auto;margin:16px 0}
-.tw table{border-collapse:collapse;width:100%;font-size:15px}
-.tw th,.tw td{border:1px solid var(--border);padding:8px 11px;text-align:start;vertical-align:top}
-.tw th{color:var(--text-h);background:var(--card);font-weight:600}
-.tw code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;color:var(--text-h)}
+.tw{overflow-x:auto;margin:16px 0;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.tw table{border-collapse:collapse;inline-size:100%;font-size:var(--fs-sm)}
+.tw th,.tw td{border-block-end:1px solid var(--sep);padding:10px 14px;text-align:start;vertical-align:top}
+.tw tr:last-child td{border-block-end:0}
+.tw th{color:var(--text-h);background:var(--row-hover);font-weight:600}
+.tw code{font-size:13px;color:var(--text-h)}
 </style>`;
 
 // Styles for the four tutorial blocks, emitted only on pages that use one —
@@ -268,8 +267,8 @@ const TABLE_STYLE = `<style>
 // Colours are the existing tokens, which already have a dark-scheme value, so
 // the blocks follow the page into dark mode without a second media query.
 const BLOCK_STYLE = `<style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -288,14 +287,14 @@ ol.steps>li>pre{margin:8px 0 0}
 // Styles for widgetHtml, emitted only on pages that use a builder so every
 // other article stays byte-for-byte free of it (mirrors BUILDER_SCRIPT gating).
 const BUILDER_STYLE = `<style>
-.builder{margin:16px 0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+.builder{margin:16px 0;padding:18px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .builder .bf{display:block;margin:0 0 12px}
-.builder .bf span{display:block;font-size:14px;color:var(--text);margin:0 0 5px}
-.builder .bf input{width:100%;font:15px ui-monospace,SFMono-Regular,Menlo,monospace;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h)}
+.builder .bf span{display:block;font-size:var(--fs-sm);color:var(--text-h);font-weight:600;margin:0 0 5px}
+.builder .bf input{inline-size:100%;min-block-size:44px;font:15px ui-monospace,SFMono-Regular,Menlo,monospace;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text-h)}
 .builder .bcmd{margin:14px 0 0}
 .builder .bcmd pre{margin:0}
-.builder .bcopy{margin:10px 0 0;padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h);font:inherit;font-size:14px;cursor:pointer}
-.builder .bcopy:hover{border-color:var(--accent)}
+.builder .bcopy{margin:10px 0 0;min-block-size:44px;padding:8px 16px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text-h);font:inherit;font-size:var(--fs-sm);cursor:pointer}
+.builder .bcopy:hover{border-color:var(--accent-border)}
 </style>`;
 
 // Progressive enhancement for widgetHtml. Kept dependency-free and tiny; only
@@ -442,8 +441,7 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${canonical}" />${archived ? "" : "\n    " + alternates(slug)}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    ${THEME_HEAD}
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="${SITE.name}" />
     <meta property="og:title" content="${headTitle}" />
@@ -461,7 +459,7 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="${ctaHref(lang)}">Relayium</a></header>
+      ${siteHeader({ lang, home: ctaHref(lang), section: "guides" })}
       <nav class="crumbs" aria-label="Breadcrumb"><a href="${landingUrl(lang)}">${esc(SITE.name)}</a> <span aria-hidden="true">›</span> <a href="${urlPath("guides", lang)}">${esc(GUIDES_LABELS[lang])}</a> <span aria-hidden="true">›</span> <span aria-current="page">${esc(doc.title)}</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.

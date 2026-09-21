@@ -8,30 +8,19 @@
 // second near-identical template would have meant maintaining this file's head,
 // bidi handling and inlined stylesheet twice.
 import { MAINTAINED_LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, RELEASES_LABELS, BCP47, OG_LOCALE, OG_IMAGE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, dirAttr, rtlHead, isFrozen, archiveNotice, ARCHIVE_STYLE } from "./shared.mjs";
+import { pageStyle, siteHeader, THEME_HEAD } from "./page-chrome.mjs";
 
-const STYLE = `
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:21px;margin:34px 0 10px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
-footer a{color:var(--text-h);text-decoration:none}
-.releases{list-style:none;margin:16px 0 0;padding:0}
-.releases li{display:flex;gap:16px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--border)}
-.releases li:last-child{border-bottom:0}
-.releases a{color:var(--accent-fg);text-decoration:none;font-weight:600;min-width:72px}
-.releases .date{font-size:14px;font-variant-numeric:tabular-nums}
-`;
+// What the legal/releases template owns; the rest is page-chrome.mjs.
+const STYLE = pageStyle(`
+/* The release list is the app's settings-row shape: 1px separators inside one
+   card, no line under the last row (设计规范 §4). */
+.releases{list-style:none;margin:18px 0 0;padding:0;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);overflow:clip}
+.releases li{display:flex;gap:16px;align-items:baseline;margin:0;padding:11px 16px;border-block-end:1px solid var(--sep)}
+.releases li:last-child{border-block-end:0}
+.releases a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px;font-weight:600;min-inline-size:72px}
+.releases a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.releases .date{font-size:var(--fs-sm);font-variant-numeric:tabular-nums}
+`);
 
 // Maintained pages get the two-language selector; archived ones get the notice
 // in the same slot. See article-template.mjs for why they are the same slot.
@@ -128,8 +117,7 @@ export function renderLegalPage({ slug, lang, doc, releases = [] }) {
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${canonical}" />${archived ? "" : "\n    " + alternates(slug)}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    ${THEME_HEAD}
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="${SITE.name}" />
     <meta property="og:title" content="${headTitle}" />
@@ -147,7 +135,7 @@ export function renderLegalPage({ slug, lang, doc, releases = [] }) {
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      ${siteHeader({ lang, home: "/" })}
       <!-- The legal text is the main landmark. The site header and footer are
            outside it; the language bar is inside, after the h1, matching its
            visual position — it is a labelled <nav> landmark either way. On an

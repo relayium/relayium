@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/fr/how-to/send-a-folder/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Envoyer un dossier entier, pas seulement des fichiers" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Envoyer un dossier entier, pas seulement des fichiers","description":"Choisissez un dossier entier dans le navigateur et envoyez-le en un lot — chemins relatifs conservés, jusqu'à 1 000 fichiers, chacun vérifié par SHA-256. Pas besoin de zipper au préalable.","inLanguage":"fr","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/fr/how-to/send-a-folder/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/fr/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/fr/guides/"},{"@type":"ListItem","position":3,"name":"Envoyer un dossier entier, pas seulement des fichiers"}]},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Puis-je envoyer un dossier depuis un iPhone ou un iPad ?","acceptedAnswer":{"@type":"Answer","text":"Pas en tant qu'expéditeur — Safari sous iOS n'a pas de sélecteur de dossier, seulement des fichiers individuels, donc l'envoi de dossier fonctionne aujourd'hui depuis Chrome, Edge ou Firefox de bureau. Un iPhone ou un iPad peut tout à fait recevoir un dossier, sous forme de .zip."}},{"@type":"Question","name":"Les sous-dossiers et la structure des fichiers sont-ils conservés ?","acceptedAnswer":{"@type":"Answer","text":"Sur un envoi en temps réel, oui : Relayium conserve le chemin relatif de chaque fichier, y compris les sous-dossiers imbriqués, de sorte que le dossier reçu a la même disposition que celui que vous avez choisi. Un lien de téléchargement stocké est différent, car il envoie une liste de fichiers à plat et jette les chemins, alors archivez le dossier vous-même et envoyez l'archive quand la structure doit survivre."}},{"@type":"Question","name":"Combien de fichiers un envoi de dossier peut-il contenir ?","acceptedAnswer":{"@type":"Answer","text":"Jusqu'à 1 000 fichiers dans un seul lot, chacun vérifié individuellement par une empreinte SHA-256 à son arrivée."}},{"@type":"Question","name":"Le destinataire reçoit-il un vrai dossier ou un .zip ?","acceptedAnswer":{"@type":"Answer","text":"Cela dépend de son navigateur. Chrome et Edge écrivent les fichiers directement dans un répertoire qu'il choisit. Firefox et Safari reçoivent une seule archive .zip non compressée (moins de 4 Gio) qui, une fois décompressée, redonne la même structure de dossier."}},{"@type":"Question","name":"Ai-je besoin d'un compte pour envoyer un dossier ?","acceptedAnswer":{"@type":"Answer","text":"Pas sur le même réseau. Envoyer entre réseaux différents avec un code d'appairage exige que l'expéditeur se connecte, mais le destinataire n'a jamais besoin de compte, dans un cas comme dans l'autre."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/fr/guides/" aria-current="true">Guides</a><a href="/fr/apps/">Applis</a><a href="/pricing">Tarifs</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Envoyer un dossier entier, pas seulement des fichiers</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -106,13 +163,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Ce qu&#39;il vous faut</p><ul><li>Un navigateur de bureau du côté qui envoie — Chrome, Edge ou Firefox. Le sélecteur de fichiers de Safari sur iPhone et iPad ne permet pas de choisir un dossier du tout, seulement des fichiers isolés, donc un envoi de dossier part d&#39;un ordinateur.</li><li>Une décision sur le navigateur qui reçoit, car c&#39;est lui qui détermine la forme de ce qui arrive : Chrome ou Edge écrit l&#39;arborescence dans un dossier choisi par le destinataire, et tout autre navigateur produit une archive .zip à la place.</li><li>Les deux côtés en ligne ensemble pour un envoi en temps réel, ou — quand l&#39;autre personne n&#39;est pas là — un expéditeur connecté et une archive que vous avez faite vous-même, car un lien stocké envoie une liste de fichiers à plat et ne transporte aucune arborescence.</li><li>Une arborescence limitée par lot et non par session, donc une arborescence plus grande passe en plusieurs envois, sans reconnexion. Jusqu&#39;à 1 000 fichiers dans un seul lot.</li></ul></div>
       <p>Plutôt que de sélectionner les fichiers un par un, choisissez le dossier lui-même. Relayium parcourt l&#39;arborescence dans le navigateur et conserve le chemin relatif de chaque fichier — sous-dossiers, sous-dossiers imbriqués, tout — de sorte que ce qui arrive de l&#39;autre côté a la même disposition que ce que vous avez envoyé.</p>
       <p>Cela fonctionne aujourd&#39;hui sur Chrome, Edge et Firefox de bureau. Ça ne fonctionne pas sous iOS : le sélecteur de fichiers de Safari sur iPhone et iPad ne permet pas de choisir un dossier, seulement des fichiers individuels, donc l&#39;envoi de dossier reste pour l&#39;instant une fonctionnalité de bureau.</p>
-      <ol class="steps" data-block="steps"><li><p>Ouvrez la page de transfert sur l&#39;ordinateur qui envoie — celle du même réseau si vous y êtes tous les deux, celle du temps réel s&#39;il faut un code d&#39;appairage.</p><pre><code>https://relayium.com/</code></pre></li><li><p>Glissez le dossier sur la page, ou utilisez le bouton de sélection de dossier. Relayium parcourt l&#39;arborescence dans le navigateur et conserve le chemin relatif de chaque fichier, il n&#39;y a donc rien à zipper au préalable.</p></li><li><p>Sur le même réseau, trouvez le destinataire sous « Appareils à proximité », appuyez sur « Ouvrir l’espace de travail » sur sa carte, puis utilisez la pièce jointe « Envoyer un dossier » dans cet espace de travail. Entre réseaux, c&#39;est la même action unique : rejoignez la salle par code d&#39;appairage et appuyez là aussi sur « Ouvrir l’espace de travail » sur la carte du pair. Dans les deux cas, la demande qui arrive de l&#39;autre côté indique le nombre de fichiers et la taille totale de toute l&#39;arborescence, pas celle d&#39;un seul fichier.</p></li><li><p>Du côté qui reçoit, lisez la ligne sous la demande avant d&#39;accepter : dans Chrome ou Edge, elle annonce que le navigateur demandera où enregistrer, et c&#39;est cette voie qui reconstitue le dossier sur le disque. Appuyez ensuite sur « Accepter ».</p></li><li><p>Regardez le compteur de fichiers grimper à travers l&#39;arborescence sur les deux écrans. Il compte des fichiers, donc un dossier de 300 fichiers atteint « Fichier 300/300 » au lieu d&#39;afficher une seule barre pour le lot.</p><pre><code>Fichier 300/300</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">À quoi ressemble un envoi de dossier terminé</p><p>Le compteur s&#39;arrête sur le dernier fichier du lot, et chaque fichier est arrivé avec sa propre empreinte SHA-256 vérifiée de bout en bout, donc ce qui a atterri correspond octet pour octet à ce que vous avez envoyé.</p><p>Regardez ensuite le résultat plutôt que la page, car il diffère selon le navigateur : dans Chrome ou Edge, l&#39;arborescence est dans le dossier que vous avez choisi, sous-dossiers compris, et dans Firefox ou Safari, une seule archive .zip figure dans la liste des téléchargements et se décompresse dans la même structure.</p><pre><code>LAN direct
+      <ol class="steps" data-block="steps"><li><p>Ouvrez la page de transfert sur l&#39;ordinateur qui envoie — celle du même réseau si vous y êtes tous les deux, celle du temps réel s&#39;il faut un code d&#39;appairage.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>Glissez le dossier sur la page, ou utilisez le bouton de sélection de dossier. Relayium parcourt l&#39;arborescence dans le navigateur et conserve le chemin relatif de chaque fichier, il n&#39;y a donc rien à zipper au préalable.</p></li><li><p>Sur le même réseau, trouvez le destinataire sous « Appareils à proximité », appuyez sur « Ouvrir l’espace de travail » sur sa carte, puis utilisez la pièce jointe « Envoyer un dossier » dans cet espace de travail. Entre réseaux, c&#39;est la même action unique : rejoignez la salle par code d&#39;appairage et appuyez là aussi sur « Ouvrir l’espace de travail » sur la carte du pair. Dans les deux cas, la demande qui arrive de l&#39;autre côté indique le nombre de fichiers et la taille totale de toute l&#39;arborescence, pas celle d&#39;un seul fichier.</p></li><li><p>Du côté qui reçoit, lisez la ligne sous la demande avant d&#39;accepter : dans Chrome ou Edge, elle annonce que le navigateur demandera où enregistrer, et c&#39;est cette voie qui reconstitue le dossier sur le disque. Appuyez ensuite sur « Accepter ».</p></li><li><p>Regardez le compteur de fichiers grimper à travers l&#39;arborescence sur les deux écrans. Il compte des fichiers, donc un dossier de 300 fichiers atteint « Fichier 300/300 » au lieu d&#39;afficher une seule barre pour le lot.</p><pre tabindex="0"><code>Fichier 300/300</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">À quoi ressemble un envoi de dossier terminé</p><p>Le compteur s&#39;arrête sur le dernier fichier du lot, et chaque fichier est arrivé avec sa propre empreinte SHA-256 vérifiée de bout en bout, donc ce qui a atterri correspond octet pour octet à ce que vous avez envoyé.</p><p>Regardez ensuite le résultat plutôt que la page, car il diffère selon le navigateur : dans Chrome ou Edge, l&#39;arborescence est dans le dossier que vous avez choisi, sous-dossiers compris, et dans Firefox ou Safari, une seule archive .zip figure dans la liste des téléchargements et se décompresse dans la même structure.</p><pre tabindex="0"><code>LAN direct
 Fichier 300/300</code></pre></div>
       <h2>Ce que l&#39;autre personne reçoit</h2>
       <p>La façon dont le dossier arrive dépend du navigateur de réception. Chrome et Edge peuvent écrire les fichiers directement dans un répertoire choisi par le destinataire, si bien que le dossier apparaît sur le disque exactement tel qu&#39;il est parti — sans étape supplémentaire.</p>
       <p>Firefox et Safari n&#39;ont pas cette capacité ; ils reçoivent à la place une seule archive .zip non compressée (mode stockage) qui, une fois décompressée, redonne exactement la même structure de dossier. Elle reste sous 4 Gio (pas de ZIP64), ce qui couvre la grande majorité des dossiers de projet et des ensembles de photos ou documents — au-delà, répartissez l&#39;envoi en deux.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptôme, vérification, correction</p><dl><dt>Il n&#39;y a aucun moyen de choisir un dossier sur l&#39;appareil qui envoie.</dt><dd><pre><code>https://relayium.com/   # le sélecteur ne propose un dossier que là où le navigateur le permet</code></pre><p>Vous êtes presque certainement sur iPhone ou iPad, où le sélecteur de Safari n&#39;expose que des fichiers isolés. Lancez l&#39;envoi de dossier depuis un Chrome, Edge ou Firefox de bureau, et servez-vous du téléphone comme côté récepteur.</p></dd><dt>L&#39;archive .zip arrivée est corrompue, ou le téléchargement s&#39;arrête près de 4 Gio.</dt><dd><pre><code>chrome://downloads   # comparez la taille de l&#39;archive au dossier envoyé</code></pre><p>La voie de l&#39;archive ignore ZIP64, donc une entrée seule comme l&#39;archive entière doivent rester sous 4 Gio. Répartissez l&#39;arborescence en deux envois, ou faites recevoir la personne dans Chrome ou Edge, qui écrit les fichiers dans un dossier choisi et ne construit aucune archive.</p></dd><dt>L&#39;archive .zip fait la même taille que le dossier, sans aucune compression.</dt><dd><pre><code>chrome://downloads   # la taille de l&#39;entrée égale le total du dossier, pas moins</code></pre><p>C&#39;est le comportement attendu : l&#39;archive est en mode stockage, elle emballe l&#39;arborescence sans la compresser et reste octet pour octet identique à ce que vous avez envoyé. Compressez le dossier vous-même avant l&#39;envoi si la taille sur le réseau compte plus qu&#39;une copie exacte.</p></dd><dt>Les fichiers sont arrivés mais tous à plat dans un dossier, les sous-dossiers ont disparu.</dt><dd><pre><code>chrome://downloads   # un navigateur sans sélecteur de répertoire remet une seule archive .zip</code></pre><p>Les chemins relatifs survivent à un envoi en temps réel, c&#39;est donc l&#39;allure d&#39;une archive .zip avant décompression et non un transfert aplati. Décompressez l&#39;archive et les sous-dossiers sont là. Pour faire atterrir l&#39;arborescence directement sur le disque, recevez-la dans Chrome ou Edge et choisissez un dossier de destination à la demande. La seule voie réellement à plat est le lien de téléchargement stocké, qui envoie une simple liste de fichiers et jette les chemins, et c&#39;est pourquoi un dossier destiné à un lien doit être archivé d&#39;abord.</p></dd><dt>Un dossier de quelques centaines de fichiers s&#39;arrête en route, un fichier manque.</dt><dd><pre><code>https://relayium.com/   # le compteur nomme le fichier sur lequel il s&#39;est arrêté</code></pre><p>Un envoi en temps réel est une session en direct, et une coupure passagère peut repartir du dernier point de reprise durable tant que les deux pages restent ouvertes. Fermer ou recharger l&#39;une des deux met fin à la session, et il ne reste alors plus rien à reprendre. Laissez les deux onglets ouverts et accordez-lui un instant avant de toucher à quoi que ce soit ; ce n&#39;est qu&#39;une fois la session vraiment perdue qu&#39;il faut renvoyer le lot à partir du fichier nommé par le compteur. Pour une livraison sans personne en face, zippez le dossier vous-même puis envoyez cette archive unique comme lien stocké, car un envoi stocké reçoit une liste de fichiers à plat.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptôme, vérification, correction</p><dl><dt>Il n&#39;y a aucun moyen de choisir un dossier sur l&#39;appareil qui envoie.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # le sélecteur ne propose un dossier que là où le navigateur le permet</code></pre><p>Vous êtes presque certainement sur iPhone ou iPad, où le sélecteur de Safari n&#39;expose que des fichiers isolés. Lancez l&#39;envoi de dossier depuis un Chrome, Edge ou Firefox de bureau, et servez-vous du téléphone comme côté récepteur.</p></dd><dt>L&#39;archive .zip arrivée est corrompue, ou le téléchargement s&#39;arrête près de 4 Gio.</dt><dd><pre tabindex="0"><code>chrome://downloads   # comparez la taille de l&#39;archive au dossier envoyé</code></pre><p>La voie de l&#39;archive ignore ZIP64, donc une entrée seule comme l&#39;archive entière doivent rester sous 4 Gio. Répartissez l&#39;arborescence en deux envois, ou faites recevoir la personne dans Chrome ou Edge, qui écrit les fichiers dans un dossier choisi et ne construit aucune archive.</p></dd><dt>L&#39;archive .zip fait la même taille que le dossier, sans aucune compression.</dt><dd><pre tabindex="0"><code>chrome://downloads   # la taille de l&#39;entrée égale le total du dossier, pas moins</code></pre><p>C&#39;est le comportement attendu : l&#39;archive est en mode stockage, elle emballe l&#39;arborescence sans la compresser et reste octet pour octet identique à ce que vous avez envoyé. Compressez le dossier vous-même avant l&#39;envoi si la taille sur le réseau compte plus qu&#39;une copie exacte.</p></dd><dt>Les fichiers sont arrivés mais tous à plat dans un dossier, les sous-dossiers ont disparu.</dt><dd><pre tabindex="0"><code>chrome://downloads   # un navigateur sans sélecteur de répertoire remet une seule archive .zip</code></pre><p>Les chemins relatifs survivent à un envoi en temps réel, c&#39;est donc l&#39;allure d&#39;une archive .zip avant décompression et non un transfert aplati. Décompressez l&#39;archive et les sous-dossiers sont là. Pour faire atterrir l&#39;arborescence directement sur le disque, recevez-la dans Chrome ou Edge et choisissez un dossier de destination à la demande. La seule voie réellement à plat est le lien de téléchargement stocké, qui envoie une simple liste de fichiers et jette les chemins, et c&#39;est pourquoi un dossier destiné à un lien doit être archivé d&#39;abord.</p></dd><dt>Un dossier de quelques centaines de fichiers s&#39;arrête en route, un fichier manque.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # le compteur nomme le fichier sur lequel il s&#39;est arrêté</code></pre><p>Un envoi en temps réel est une session en direct, et une coupure passagère peut repartir du dernier point de reprise durable tant que les deux pages restent ouvertes. Fermer ou recharger l&#39;une des deux met fin à la session, et il ne reste alors plus rien à reprendre. Laissez les deux onglets ouverts et accordez-lui un instant avant de toucher à quoi que ce soit ; ce n&#39;est qu&#39;une fois la session vraiment perdue qu&#39;il faut renvoyer le lot à partir du fichier nommé par le compteur. Pour une livraison sans personne en face, zippez le dossier vous-même puis envoyez cette archive unique comme lien stocké, car un envoi stocké reçoit une liste de fichiers à plat.</p></dd></dl></div>
       <h2>En temps réel maintenant, ou un lien pour plus tard</h2>
       <p>Si vous êtes en ligne en même temps, envoyez le dossier en temps réel. Sur le même LAN, WebRTC se connecte directement ; entre réseaux, les navigateurs utilisent TURN par conception pour transporter un texte chiffré de bout en bout que le relais ne peut ni lire ni déchiffrer. Relayium ne conserve aucune copie côté serveur ni aucun historique temps réel. Aucun compte n&#39;est requis sur le même réseau ; entre réseaux, la personne qui crée le code se connecte, celle qui rejoint n&#39;en a jamais besoin.</p>
       <p>Si l&#39;autre personne n&#39;est pas disponible maintenant, créez plutôt un lien stocké — mais archivez le dossier vous-même d&#39;abord. Un envoi stocké reçoit une liste de fichiers à plat, les chemins relatifs sont jetés, si bien qu&#39;une arborescence envoyée telle quelle arrive en fichiers épars, et deux fichiers de même nom venus de sous-dossiers différents entrent en collision. Faites une archive .zip ordinaire et envoyez ce fichier unique, et la structure voyage à l&#39;intérieur de l&#39;archive. Votre navigateur chiffre ce que vous envoyez avec une clé AES-256-GCM aléatoire qui ne vit que dans le lien lui-même, de sorte que le serveur conserve un texte chiffré qu&#39;il ne peut pas lire. Créer un lien exige que l&#39;expéditeur se connecte ; réglez son expiration à 1 heure, 1 jour, 3 jours, 7 jours ou jusqu&#39;à 14 jours selon votre offre, ou faites-le s&#39;autodétruire après le premier téléchargement.</p>

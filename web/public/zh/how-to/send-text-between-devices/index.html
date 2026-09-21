@@ -11,8 +11,14 @@
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-text-between-devices/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-text-between-devices/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="在设备之间发送文本、链接和命令" />
@@ -30,37 +36,88 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"在设备之间发送文本、链接和命令","description":"用 Relayium 在设备之间传递文本、链接、命令和多行代码——端到端加密、仅限双方在线；Relayium 服务器不保存消息正文或服务端历史，但任一端都可留存收到的文本。","inLanguage":"zh-Hans","datePublished":"2026-07-30","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"在设备之间发送文本、链接和命令"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Relayium 能读取或恢复我的消息吗？","acceptedAnswer":{"@type":"Answer","text":"不能。消息内容在两台设备之间端到端加密，Relayium 服务器不保存消息正文或服务端历史。任一端都可复制或留存收到的文本；实时会话结束后，Relayium 没有可恢复的服务器副本。"}},{"@type":"Question","name":"一端用浏览器、另一端用 CLI 可以吗？","acceptedAnswer":{"@type":"Answer","text":"不可以。浏览器与 CLI 使用不同的传输和配对握手。请使用两台浏览器，或两端都使用 CLI。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -78,7 +135,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">在设备之间发送文本、链接和命令</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -103,16 +160,16 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>浏览器：给在线设备发送消息</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">开始之前</p><ul><li>两台设备同时在线，并且都在浏览器里打开着页面。这里没有收件箱：消息只存在于双方都保持打开的那个会话里。</li><li>两端选定同一种传输方式。同一网络下什么都不用准备；不同网络需要一个浏览器配对码，由创建方登录生成，有效期 5 分钟。</li><li>内容要装进一条消息：65,536 个 UTF-8 字节。输入时计数会往上走，超出后会提示你改用文件发送。</li><li>准备好安放收到的内容。收到的消息留在打开的会话里，所以想保留什么，请在会话结束或页面刷新之前先复制走。</li></ul></div>
       <p>在两台设备上打开 relayium.com。两条路径只有「怎么遇上」不同：同一网络下，对方会自己出现在「附近的设备」里；跨网络则在跨网络页面创建浏览器配对码，再让另一台浏览器加入。遇上之后两边得到的东西是一样的——对端卡片只提供一个动作「打开工作区」，输入框就在那个工作区里，和文件、文件夹附件并排，共用同一条加密连接。跨网络时这条连接由加密的 TURN 中继承载，中继只转发密文；它还有一个时限，工作区会在到点之前提醒你。唯一的例外是不够新的对端——旧版浏览器、原生应用、CLI：它们保留更早的那套流程，文件和消息只能一次用一样。</p>
-      <ol class="steps" data-block="steps"><li><p>在两台设备上打开传输页面——同一网络的页面会自动帮你找到对方，而配对码要用在实时传输页面上（两端不在同一网络时）。</p><pre><code>https://relayium.com/</code></pre></li><li><p>在对方设备的卡片上按「打开工作区」，然后在工作区给出的输入框里打字。两条路径是同一个动作：同一网络在「附近的设备」里，跨网络在配对码房间的对端卡片上。默认情况下会话会直接在两端打开输入框——无论是否核对校验码，连接都是加密的。</p></li><li><p>输入或粘贴文本。输入框下方的计数显示你已经用掉了单条消息预算的多少，单位是字节而不是字符，因为一个 emoji 或一个汉字要占好几个字节。</p><pre><code>1,024 / 65,536 字节</code></pre></li><li><p>用 ⌘/Ctrl+回车发送——单按回车是换行，正是这一点让多行片段可以一次粘贴、一次发出。输入框下方的提示就写着这套按键。</p><pre><code>回车换行 · ⌘/Ctrl+回车发送</code></pre></li><li><p>会话保持打开时，双方都能连续发送多条消息，想留下的内容就点「复制」。如果希望先核对校验码（SAS），请在打开会话之前先打开「高级验证」：它增加的是校验码和一步明确接受，而不是加密。</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">会话正常时是什么样</p><p>两端都显示会话已建立，你的消息出现在对方设备的记录里，字节计数也为下一条清零。</p><p>这份记录是 Relayium 唯一参与的副本：它只存在于两个打开的页面里，刷新或结束会话就没了；而「复制」会把文本放进那台设备的剪贴板，其他 App 也能读到。</p><pre><code>会话已建立
+      <ol class="steps" data-block="steps"><li><p>在两台设备上打开传输页面——同一网络的页面会自动帮你找到对方，而配对码要用在实时传输页面上（两端不在同一网络时）。</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>在对方设备的卡片上按「打开工作区」，然后在工作区给出的输入框里打字。两条路径是同一个动作：同一网络在「附近的设备」里，跨网络在配对码房间的对端卡片上。默认情况下会话会直接在两端打开输入框——无论是否核对校验码，连接都是加密的。</p></li><li><p>输入或粘贴文本。输入框下方的计数显示你已经用掉了单条消息预算的多少，单位是字节而不是字符，因为一个 emoji 或一个汉字要占好几个字节。</p><pre tabindex="0"><code>1,024 / 65,536 字节</code></pre></li><li><p>用 ⌘/Ctrl+回车发送——单按回车是换行，正是这一点让多行片段可以一次粘贴、一次发出。输入框下方的提示就写着这套按键。</p><pre tabindex="0"><code>回车换行 · ⌘/Ctrl+回车发送</code></pre></li><li><p>会话保持打开时，双方都能连续发送多条消息，想留下的内容就点「复制」。如果希望先核对校验码（SAS），请在打开会话之前先打开「高级验证」：它增加的是校验码和一步明确接受，而不是加密。</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">会话正常时是什么样</p><p>两端都显示会话已建立，你的消息出现在对方设备的记录里，字节计数也为下一条清零。</p><p>这份记录是 Relayium 唯一参与的副本：它只存在于两个打开的页面里，刷新或结束会话就没了；而「复制」会把文本放进那台设备的剪贴板，其他 App 也能读到。</p><pre tabindex="0"><code>会话已建立
 1,024 / 65,536 字节</code></pre></div>
       <h2>消息发不出去时</h2>
       <p>文本和文件传输走同一条连接，所以大多数失败其实是连接的问题，而不是消息的问题。只有两种例外很具体，而且都会在屏幕上说明：一条超过大小上限的消息，以及因为一次发得太多而被关闭的会话。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>对方设备一直不出现，也就没有卡片可以开消息会话。</dt><dd><pre><code>https://relayium.com/   # 对比两台设备上状态条里的公网 IP</code></pre><p>同网络发现是按连接过来的公网 IP 分组的，所以两个不同地址就是两个房间——断开 VPN 或 iCloud 专用代理，或者连到同一个 Wi-Fi。如果两端确实不在同一网络，就改用 https://relayium.com/cross-network 上的配对码。</p></dd><dt>输入框拒收这段文本，提示消息太长。</dt><dd><pre><code>1,024 / 65,536 字节   # 计数是 UTF-8 字节，不是字符</code></pre><p>一条消息装 65,536 个 UTF-8 字节，而非拉丁文字每个字符要花 2 到 4 个字节，所以一段很长的中文或大量 emoji 会远在字符数看起来还很宽裕的时候就撞上这个字节上限。请拆开发送，或者作为文件发送——输入框本来就给了这个提示。</p></dd><dt>会话自己关掉了，并归因于消息发得太多。</dt><dd><pre><code>https://relayium.com/   # 会话那行会显示它是结束，而不是失败</code></pre><p>当一侧发送的消息数量远超人手打字的量时，防洪机制会关闭会话——脚本或卡住的按键都会造成这种情况。用你当初打开它的方式重新打开会话——在对方卡片上按「打开工作区」，同一网络和配对码房间都是这一个动作——再把剩下的内容合并成更少、更长的几条发出去。</p></dd><dt>本来一切正常，刷新之后对话是空的。</dt><dd><pre><code>https://relayium.com/   # 刷新这个页面就是开一个没有记录的新会话</code></pre><p>这是设计而不是缺陷：Relayium 不保存服务端历史，所以没有可恢复的东西，也没有可供调取的服务器副本。离开会话之前，请把重要内容复制到备忘录里——这份记录的寿命只等于那个页面开着的时间。</p></dd><dt>浏览器和 CLI 无法加入彼此的配对码。</dt><dd><pre><code>relayium text 483920   # CLI 的配对码只能 CLI 对 CLI</code></pre><p>浏览器与 CLI 的文本会话使用不同的传输和配对握手，所以一端生成的 6 位码对另一端毫无意义。请用两个浏览器，或者两端都用 CLI——relayium text 会打印出第二台机器该运行的完整命令。</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>对方设备一直不出现，也就没有卡片可以开消息会话。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 对比两台设备上状态条里的公网 IP</code></pre><p>同网络发现是按连接过来的公网 IP 分组的，所以两个不同地址就是两个房间——断开 VPN 或 iCloud 专用代理，或者连到同一个 Wi-Fi。如果两端确实不在同一网络，就改用 https://relayium.com/cross-network 上的配对码。</p></dd><dt>输入框拒收这段文本，提示消息太长。</dt><dd><pre tabindex="0"><code>1,024 / 65,536 字节   # 计数是 UTF-8 字节，不是字符</code></pre><p>一条消息装 65,536 个 UTF-8 字节，而非拉丁文字每个字符要花 2 到 4 个字节，所以一段很长的中文或大量 emoji 会远在字符数看起来还很宽裕的时候就撞上这个字节上限。请拆开发送，或者作为文件发送——输入框本来就给了这个提示。</p></dd><dt>会话自己关掉了，并归因于消息发得太多。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 会话那行会显示它是结束，而不是失败</code></pre><p>当一侧发送的消息数量远超人手打字的量时，防洪机制会关闭会话——脚本或卡住的按键都会造成这种情况。用你当初打开它的方式重新打开会话——在对方卡片上按「打开工作区」，同一网络和配对码房间都是这一个动作——再把剩下的内容合并成更少、更长的几条发出去。</p></dd><dt>本来一切正常，刷新之后对话是空的。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 刷新这个页面就是开一个没有记录的新会话</code></pre><p>这是设计而不是缺陷：Relayium 不保存服务端历史，所以没有可恢复的东西，也没有可供调取的服务器副本。离开会话之前，请把重要内容复制到备忘录里——这份记录的寿命只等于那个页面开着的时间。</p></dd><dt>浏览器和 CLI 无法加入彼此的配对码。</dt><dd><pre tabindex="0"><code>relayium text 483920   # CLI 的配对码只能 CLI 对 CLI</code></pre><p>浏览器与 CLI 的文本会话使用不同的传输和配对握手，所以一端生成的 6 位码对另一端毫无意义。请用两个浏览器，或者两端都用 CLI——relayium text 会打印出第二台机器该运行的完整命令。</p></dd></dl></div>
       <h2>CLI：一台机器生成配对码，另一台加入</h2>
       <p>在其中一台机器上直接运行 relayium text，不带配对码。它会用你的账号生成一个 6 位数字配对码，打印出另一台机器该运行的完整命令，并留在会话里等待对方加入。不需要临时文件，也不需要另外停掉任何进程。</p>
       <p>另一台机器用该码运行 relayium text。交互模式每行是一条消息，除非你主动要求，否则不会停下来核对校验码；多行或要求逐字节保真的内容请通过管道作为一条消息发送，管道方式不需要额外加任何参数。</p>
-      <pre><code># One machine mints the code and waits (relayium login is required once)
+      <pre tabindex="0"><code># One machine mints the code and waits (relayium login is required once)
 relayium text
 # Code: 483920   (valid 5 minutes)
 # On the other machine:  relayium text 483920

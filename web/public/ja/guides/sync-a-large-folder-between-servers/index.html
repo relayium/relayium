@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/guides/sync-a-large-folder-between-servers/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）","description":"relayium sync で大きなディレクトリを一方のサーバーからもう一方へミラーリング。増分転送、接続が切れても再開可能、無人での実行も安全です。tmux 内のリトライループで、ターミナルに張り付かずに数十 GB を運べます。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/sync-a-large-folder-between-servers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"転送が途中で中断されたらどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"何も失われません。relayium sync を再実行してください。受信側にすでにあるファイルはスキップし、半分送ったファイルはディスク上のバイトオフセットから再開します。本ガイドの until ループが、フォルダー全体がミラーされるまでこれを自動で行います。"}},{"@type":"Question","name":"これは rsync と何が違いますか？","acceptedAnswer":{"@type":"Answer","text":"どちらも増分の一方向ミラーですが、relayium sync は証明書ピンニング付き TLS 接続で動作し、SSH アカウントを必要とせず（デーモン直結）、証明書のフィンガープリントで2台を認証し、転送する各ファイルを SHA-256 で検証します。rsync の既定と同じく、受信側でサイズと mtime がすでに一致するファイルはハッシュを取り直さずスキップされます。relayium の他モードと同じ転送エンジンです。"}},{"@type":"Question","name":"ソースから削除したファイルを、sync は受信側でも削除しますか？","acceptedAnswer":{"@type":"Answer","text":"求めたときだけです。既定では sync は追加と更新だけを行います。削除をミラーするには --delete を渡し、それが有効になるには受信側が --allow-delete で serve を実行している必要があります。さもなければ削除は無視され、報告されます。"}},{"@type":"Question","name":"2つのフォルダーを継続的に同期し続けられますか？","acceptedAnswer":{"@type":"Answer","text":"はい。--watch を付けると sync は動き続け、ソース配下の変更のたびに再ミラーします。大きなフォルダーの一度きりの移動には不要です。リトライループと素の sync で十分です。"}},{"@type":"Question","name":"ポートを開ける必要がありますか？","acceptedAnswer":{"@type":"Answer","text":"デーモン直結ならはい。リスナーのポート（既定 9031）が送信側から到達可能である必要があります。ポートを開けたくなく、サーバー間にすでに SSH があるなら、sync は SSH 経由でも動きます：relayium sync /path user@host:/path（リモートに relayium が必要）。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ja/guides/" aria-current="true">ガイド</a><a href="/ja/apps/">アプリ</a><a href="/pricing">料金</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -108,53 +165,53 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>前提条件</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">必要なもの</p><ul><li>本ガイドはデーモン直結(relayium://)を使うため、2台のサーバー間に SSH アクセスは不要です。</li><li>受信側のファイアウォールまたはセキュリティグループで、リスナーのポート（既定 9031）を送信側に開放してください。</li><li>受信側にフォルダー全体が入る空き容量。数時間かかる転送を始める前に、送信側の du -sh /root/workspace と受信側の df -h /root を突き合わせてください。</li></ul></div>
       <p>両方のサーバーに relayium をインストールします（sync はネイティブプロトコルを話すため、各端に必要です）：</p>
-      <pre><code># 両方のサーバーで
+      <pre tabindex="0"><code># 両方のサーバーで
 curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <h2>送信側を一度だけ承認する（受信側）</h2>
       <p>受信側は送信側のマシンを一度だけ承認します。承認はディスクに書き込まれ、再起動をまたいでも有効なので繰り返す必要はありません。まずターミナルでリスナーをフォアグラウンド起動し、--dir を親ディレクトリに向けます。relayium sync /root/workspace は受信側で workspace/... を再現するので、--dir /root ならファイルは /root/workspace/ に着地します。</p>
       <p>送信側の初回接続時（次節）、serve はそのアドレスとフィンガープリントを表示して承認を求めます。y と答えれば永続的に記憶されます：</p>
-      <pre><code># 受信側で（フォアグラウンド、対話的に承認するため）
+      <pre tabindex="0"><code># 受信側で（フォアグラウンド、対話的に承認するため）
 relayium serve --dir /root --port 9031</code></pre>
-      <pre><code># 受信側で、初回接続時:
+      <pre tabindex="0"><code># 受信側で、初回接続時:
 Incoming push from 203.0.113.9:52140
   fingerprint: 9f2c41ab…
 Accept and remember this peer? [y/N] y</code></pre>
       <ul><li>完全に無人にするならプロンプトを省けます：送信側で relayium id を実行してフィンガープリントを表示し、受信側で relayium authorize &lt;フィンガープリント&gt; を実行します。</li><li>--dir は同期するフォルダーの親であって、フォルダー自体ではありません。さもないとファイルが1階層深く着地します（例：/root/workspace/workspace）。</li></ul>
       <h2>リスナーをバックグラウンドで動かす（受信側）</h2>
       <p>フィンガープリントを承認したら、フォアグラウンドの serve を止め(Ctrl-C)、ログアウト後も生き残るようデタッチして再起動します。保存済みのフィンガープリントを読み込み、送信側を確認なしで受け入れます。今回はプロンプトは出ません。同じ行が新しいプロセスの PID を ~/relayium-serve.pid に記録し、本ガイドの最後の手順はそれを使って、自分が起動したリスナーを止めます。relayium という文字列を含むコマンドを片端から止めるわけではありません：</p>
-      <pre><code># 受信側で
+      <pre tabindex="0"><code># 受信側で
 nohup relayium serve --dir /root --port 9031 &gt; ~/relayium-serve.log 2&gt;&amp;1 &amp; echo $! &gt; ~/relayium-serve.pid</code></pre>
       <ul><li>serve は接続を1つずつ処理して動き続けるため、下のリトライループの再接続のたびに受信の準備ができています。</li><li>常時稼働の受信箱にするなら、代わりに systemd で動かします（Restart=always、--config-dir /etc/relayium）。</li></ul>
       <h2>tmux 内のリトライループで sync を回す（送信側）</h2>
       <p>長い転送は中断されます。セッション切断、不安定なネットワーク、再起動。解決策は高級なツールではなく、sync を成功するまで再実行するループと、ログアウト後も生き残らせる端末マルチプレクサです。ここでは tmux のほうが nohup より扱いやすいです：間違えやすい出力リダイレクトがなく、再接続して進捗を見られます。</p>
       <p>tmux セッションを開始し、until ループでミラーを実行します。10秒ごとに再試行し、sync が成功を返したら自分で終了します：</p>
-      <ol class="steps" data-block="steps"><li><p>ループを起動元の ssh セッションより長生きさせるため、送信側で tmux セッションを開きます。</p><pre><code># 送信側で
-tmux new -s xfer      # tmux が無ければ apt install -y tmux</code></pre></li><li><p>until ループの中でミラーを回します。10秒ごとに再試行し、sync が成功を返したところで自分から終了します。</p><pre><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre></li><li><p>Ctrl-b の次に d でデタッチします。ループはそのまま動き続けるので、見たくなったらいつでも再接続してください。</p><pre><code>tmux attach -t xfer</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">成功した一巡の表示</p><p>一巡ごとに、実際に送ったファイルの数だけ行が表示され、続いて今回送った数と受信側にすでにあった数の要約が出ます。ループは sync が最初に成功を返した時点で終わり、その要約がミラーの状態です。</p><pre><code>relayium sync /root/workspace relayium://203.0.113.43:9031
+      <ol class="steps" data-block="steps"><li><p>ループを起動元の ssh セッションより長生きさせるため、送信側で tmux セッションを開きます。</p><pre tabindex="0"><code># 送信側で
+tmux new -s xfer      # tmux が無ければ apt install -y tmux</code></pre></li><li><p>until ループの中でミラーを回します。10秒ごとに再試行し、sync が成功を返したところで自分から終了します。</p><pre tabindex="0"><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre></li><li><p>Ctrl-b の次に d でデタッチします。ループはそのまま動き続けるので、見たくなったらいつでも再接続してください。</p><pre tabindex="0"><code>tmux attach -t xfer</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">成功した一巡の表示</p><p>一巡ごとに、実際に送ったファイルの数だけ行が表示され、続いて今回送った数と受信側にすでにあった数の要約が出ます。ループは sync が最初に成功を返した時点で終わり、その要約がミラーの状態です。</p><pre tabindex="0"><code>relayium sync /root/workspace relayium://203.0.113.43:9031
   workspace/data/part-004.bin (1073741824 bytes)
 synced: 1 sent, 812 unchanged</code></pre></div>
       <ul><li>再試行のたびに作業は減ります：転送済みのファイルはスキップされ、半分送ったファイルは再開されます。だからループは収束して終わります。</li><li>進捗はファイルが1つ完了するごとに1行表示されるので、大きなファイルは完了まで静かに転送されます。無音は停止ではありません（トラブルシューティング参照）。</li></ul>
       <h2>検証と仕上げ</h2>
       <p>until ループが終わり、通常のシェルプロンプトに戻ったら転送は完了です。両側が一致することを確認してから、リスナーを停止します：</p>
-      <ol class="steps" data-block="steps"><li><p>until ループが自分から終わるのを待ちます。通常のシェルプロンプトに戻っているのは、転送が終わったということであって、途中で中断されたということではありません。</p></li><li><p>両方のサーバーで合計を比較します。</p><pre><code># 両方のサーバーで合計を比較
-du -sh /root/workspace</code></pre></li><li><p>合計が一致したら受信側のリスナーを止めます。マシン上の relayium コマンドを文字列で総なめにするのではなく、起動時に記録した PID にシグナルを送り、PID ファイルはシグナルが成功したときにだけ削除されます。前回の実行が残した PID ファイルは、システムが再利用した別の PID を指していることがあります。そのファイルがまだ自分のものか確信が持てないときは、まずその PID のコマンドラインを表示し、serve が返ってきた場合にだけ kill してください。</p><pre><code># 受信側で、確認できたら
+      <ol class="steps" data-block="steps"><li><p>until ループが自分から終わるのを待ちます。通常のシェルプロンプトに戻っているのは、転送が終わったということであって、途中で中断されたということではありません。</p></li><li><p>両方のサーバーで合計を比較します。</p><pre tabindex="0"><code># 両方のサーバーで合計を比較
+du -sh /root/workspace</code></pre></li><li><p>合計が一致したら受信側のリスナーを止めます。マシン上の relayium コマンドを文字列で総なめにするのではなく、起動時に記録した PID にシグナルを送り、PID ファイルはシグナルが成功したときにだけ削除されます。前回の実行が残した PID ファイルは、システムが再利用した別の PID を指していることがあります。そのファイルがまだ自分のものか確信が持てないときは、まずその PID のコマンドラインを表示し、serve が返ってきた場合にだけ kill してください。</p><pre tabindex="0"><code># 受信側で、確認できたら
 ps -p &quot;$(cat ~/relayium-serve.pid)&quot; -o command=
 kill &quot;$(cat ~/relayium-serve.pid)&quot; &amp;&amp; rm ~/relayium-serve.pid</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">ミラーが完了したときの表示</p><p>両方のサーバーで du -sh が同じ合計を報告し、until ループは再試行に戻らず、通常のシェルプロンプトへ戻っています。合計の一致は大まかな完了確認であって、内容が同一であることの証明ではありません。sync はサイズと mtime でどのファイルを送らないかを決めているため、スキップしたファイルの中身について合計は何も語りません。</p><pre><code># the same total, on BOTH servers
+      <div class="cbox ok" data-block="success"><p class="cbox-t">ミラーが完了したときの表示</p><p>両方のサーバーで du -sh が同じ合計を報告し、until ループは再試行に戻らず、通常のシェルプロンプトへ戻っています。合計の一致は大まかな完了確認であって、内容が同一であることの証明ではありません。sync はサイズと mtime でどのファイルを送らないかを決めているため、スキップしたファイルの中身について合計は何も語りません。</p><pre tabindex="0"><code># the same total, on BOTH servers
 46G	/root/workspace</code></pre></div>
       <ul><li>sync が送ったものは検証済みです。転送した各ファイルは到着時に SHA-256 で検査され、クリーンな終了はその検査が一つも失敗しなかったことを意味します。スキップした分はサイズと mtime を照合しただけなので、du -sh の合計が一致することは完了の目安であって、スキップしたファイルの中身が今も同じだという証明ではありません。その証明が要るなら、両方のサーバーでファイルごとのチェックサムを突き合わせてください。</li></ul>
       <h2>トラブルシューティング</h2>
       <p>数時間かかるミラーでは6つのことが起こります。うち3つは失敗に見えて失敗ではなく、残り3つは本当の問題です。どれについても、いま自分が見ているのがどれかを教えてくれるコマンドがあります。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>長いあいだ何も表示されず、転送が止まったように見える。</dt><dd><pre><code># 送信側で、数秒あけて2回
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>長いあいだ何も表示されず、転送が止まったように見える。</dt><dd><pre tabindex="0"><code># 送信側で、数秒あけて2回
 ss -tinp dst :9031
 # ESTAB    リスナーに届いたことを示すだけで、バイトが動いている証拠ではない
-# SYN-SENT リスナーに届いていない</code></pre><p>進捗はファイルが1つ完了したときにしか表示されないので、大きなファイル1つはまったくの無音で転送されます。ESTAB が示すのは到達できたことだけで、確立済みのソケットが無通信のまま止まっていることもあり、それだけでは前進の証拠になりません。このチェックを数秒あけて2回実行し、-i がそのソケットについて表示する bytes_acked カウンターを比べてください。増えていれば転送は動いており、変わらなければ本当に止まっています。</p></dd><dt>ソケットが SYN-SENT のままで、転送がまったく始まらない。</dt><dd><pre><code># 受信側で
+# SYN-SENT リスナーに届いていない</code></pre><p>進捗はファイルが1つ完了したときにしか表示されないので、大きなファイル1つはまったくの無音で転送されます。ESTAB が示すのは到達できたことだけで、確立済みのソケットが無通信のまま止まっていることもあり、それだけでは前進の証拠になりません。このチェックを数秒あけて2回実行し、-i がそのソケットについて表示する bytes_acked カウンターを比べてください。増えていれば転送は動いており、変わらなければ本当に止まっています。</p></dd><dt>ソケットが SYN-SENT のままで、転送がまったく始まらない。</dt><dd><pre tabindex="0"><code># 受信側で
 sudo ufw allow from 203.0.113.9 to any port 9031 proto tcp
-ss -tlnp | grep 9031</code></pre><p>ポートが遮断されています。9031/TCP は送信側にだけ開けてください。203.0.113.9 は送信側自身のアドレス、グローバル IP か、2台が同じネットワークにいるならプライベート IP に置き換えます。クラウドのセキュリティグループも同じ送信元に絞ったうえで、serve が本当に待ち受けているかを確かめてください。転送が始まらない原因として最も多いものです。</p></dd><dt>バックグラウンド用のコマンドを貼ると、シェルが &gt; の継続プロンプトで止まる。</dt><dd><pre><code>tmux new -s xfer
-until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre><p>引用符と &gt; リダイレクトを含む複数行の nohup コマンドは、貼り付け時にリダイレクトのところで壊れがちです。代わりに tmux とこの1行ループを使ってください。書き間違えるリダイレクトが無く、再接続して様子も見られます。</p></dd><dt>後片付けのつもりが、殺すつもりのないものまで殺してしまった。</dt><dd><pre><code>pgrep -af relayium
+ss -tlnp | grep 9031</code></pre><p>ポートが遮断されています。9031/TCP は送信側にだけ開けてください。203.0.113.9 は送信側自身のアドレス、グローバル IP か、2台が同じネットワークにいるならプライベート IP に置き換えます。クラウドのセキュリティグループも同じ送信元に絞ったうえで、serve が本当に待ち受けているかを確かめてください。転送が始まらない原因として最も多いものです。</p></dd><dt>バックグラウンド用のコマンドを貼ると、シェルが &gt; の継続プロンプトで止まる。</dt><dd><pre tabindex="0"><code>tmux new -s xfer
+until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre><p>引用符と &gt; リダイレクトを含む複数行の nohup コマンドは、貼り付け時にリダイレクトのところで壊れがちです。代わりに tmux とこの1行ループを使ってください。書き間違えるリダイレクトが無く、再接続して様子も見られます。</p></dd><dt>後片付けのつもりが、殺すつもりのないものまで殺してしまった。</dt><dd><pre tabindex="0"><code>pgrep -af relayium
 ps -p &quot;$(cat ~/relayium-serve.pid)&quot; -o command=
 tmux kill-session -t xfer
-kill &quot;$(cat ~/relayium-serve.pid)&quot; &amp;&amp; rm ~/relayium-serve.pid</code></pre><p>コマンドラインのパターンで殺すやり方は、その文字列を含むプロセスすべてにシグナルを送るので、転送が複数動いているマシンでは狙った相手とは限りません。しかもミラーは止まりません。sync を所有しているのは until ループなので、子プロセスを殺しても10秒後にまた起動されます。まず pgrep -af で確認し、このガイドが実際に所有しているものを終わらせてください。tmux kill-session -t xfer でループを終了し、~/relayium-serve.pid にある PID を kill して、自分で起動したリスナーを止めます。その PID ファイルが前回の実行から残っているなら、シグナルを送る前にコマンドラインを表示してください。システムが再利用した PID は、まったく別のプロセスのものです。</p></dd><dt>あるサブディレクトリだけ除きたいのに、exclude のフラグが無い。</dt><dd><pre><code>relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031</code></pre><p>sync が取るのは -i と -p、--delete、--watch、--config-dir だけで、木の途中でパスを除外する仕組みはありません。代わりに欲しいサブディレクトリを列挙してください。各ソースは受信側の --dir の下に自分の名前で届くので、serve --dir /root/workspace に対してこのコマンドを実行すると /root/workspace/src と /root/workspace/data が再現され、作り直せる venv は一度も走査されません。</p></dd><dt>ミラーされるはずのソースが、中身のない状態で届く。</dt><dd><pre><code>relayium sync ./links relayium://203.0.113.43:9031
+kill &quot;$(cat ~/relayium-serve.pid)&quot; &amp;&amp; rm ~/relayium-serve.pid</code></pre><p>コマンドラインのパターンで殺すやり方は、その文字列を含むプロセスすべてにシグナルを送るので、転送が複数動いているマシンでは狙った相手とは限りません。しかもミラーは止まりません。sync を所有しているのは until ループなので、子プロセスを殺しても10秒後にまた起動されます。まず pgrep -af で確認し、このガイドが実際に所有しているものを終わらせてください。tmux kill-session -t xfer でループを終了し、~/relayium-serve.pid にある PID を kill して、自分で起動したリスナーを止めます。その PID ファイルが前回の実行から残っているなら、シグナルを送る前にコマンドラインを表示してください。システムが再利用した PID は、まったく別のプロセスのものです。</p></dd><dt>あるサブディレクトリだけ除きたいのに、exclude のフラグが無い。</dt><dd><pre tabindex="0"><code>relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031</code></pre><p>sync が取るのは -i と -p、--delete、--watch、--config-dir だけで、木の途中でパスを除外する仕組みはありません。代わりに欲しいサブディレクトリを列挙してください。各ソースは受信側の --dir の下に自分の名前で届くので、serve --dir /root/workspace に対してこのコマンドを実行すると /root/workspace/src と /root/workspace/data が再現され、作り直せる venv は一度も走査されません。</p></dd><dt>ミラーされるはずのソースが、中身のない状態で届く。</dt><dd><pre tabindex="0"><code>relayium sync ./links relayium://203.0.113.43:9031
 # warning: no regular files to send (symlinks and special files are skipped)</code></pre><p>sync が転送するのは通常ファイルだけで、この警告はまさに「シンボリックリンクしか無い木」の姿です。リンクが指している実体のディレクトリを sync に渡し、受信側で必要なシンボリックリンクは別途用意してください。</p></dd></dl></div>
       <h2>よくある質問</h2>
       <h3>転送が途中で中断されたらどうなりますか？</h3>

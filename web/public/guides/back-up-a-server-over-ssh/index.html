@@ -11,8 +11,14 @@
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/back-up-a-server-over-ssh/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/back-up-a-server-over-ssh/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Keep an off-host copy on your own server over SSH with the Relayium CLI" />
@@ -30,37 +36,88 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Keep an off-host copy on your own server over SSH with the Relayium CLI","description":"Use relayium push, pull and sync to copy a directory to a server you already SSH into — integrity-checked when relayium is on both ends, and free. Bytes travel over your own SSH connection and never touch Relayium's servers. This makes an off-host copy, not a versioned backup.","inLanguage":"en","datePublished":"2026-07-08","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/guides/back-up-a-server-over-ssh/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/guides/"},{"@type":"ListItem","position":3,"name":"Keep an off-host copy on your own server over SSH with the Relayium CLI"}]},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Do the files go through Relayium's servers?","acceptedAnswer":{"@type":"Answer","text":"No. push and pull run entirely over your own SSH connection. Relayium's servers are never involved and you need no account."}},{"@type":"Question","name":"Does the server need relayium installed?","acceptedAnswer":{"@type":"Answer","text":"It depends on the direction. For push, it's optional: with relayium on the remote you get the native protocol — an up-front collision check and a per-file SHA-256 on everything it transfers — and without it, push falls back to a plain tar stream over SSH, which still works but verifies nothing per file. For pull, it's required: pull always needs relayium on the remote (it has no tar fallback), so install it there first. sync needs it too, for the same reason."}},{"@type":"Question","name":"How does it choose which SSH key and port to use?","acceptedAnswer":{"@type":"Answer","text":"It reads your ~/.ssh/config like ssh does, so host aliases, keys and ports are picked up automatically. You can also override them per command with -i for the identity file and -p for the port."}},{"@type":"Question","name":"Is this faster than rsync?","acceptedAnswer":{"@type":"Answer","text":"For pushing to your own server it's in the same ballpark as rsync over SSH; the point isn't to beat rsync but to give you one tool that also does cross-network and server-to-server transfers with the same per-file integrity check. On the history question the two are alike: neither rsync nor relayium sync keeps an earlier version of a file, so both are a copy rather than a backup."}},{"@type":"Question","name":"Is this a backup?","acceptedAnswer":{"@type":"Answer","text":"It is an off-host copy, which is one part of a backup and not the whole of it. push writes the files as they are now, and a scheduled sync keeps that copy current — which also means it carries over a deletion or an in-place corruption at the source on its next run, and --delete makes the deletion half explicit. Nothing here retains an earlier version, so if you need to recover a file as it was last week, keep snapshots on the destination or use a tool that versions."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -78,7 +135,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/guides/" aria-current="true">Guides</a><a href="/apps">Apps</a><a href="/pricing">Pricing</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Relayium</a> <span aria-hidden="true">›</span> <a href="/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Keep an off-host copy on your own server over SSH with the Relayium CLI</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -103,13 +160,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <p class="lead">This guide covers pushing and pulling directories, what the integrity check does and does not cover, why push refuses to run twice into the same destination, and how to keep the copy current on a schedule with cron.</p>
       <h2>Before you start</h2>
       <p>Everything below is the relayium CLI, so install it first if you haven&#39;t. On macOS or Linux, one command drops a prebuilt binary on your PATH:</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build -o relayium ./cmd/relayium if you have Go).</li><li>relayium --version confirms it&#39;s installed. Skip this and the commands below just print &#39;command not found&#39;.</li></ul>
       <h2>Push a directory to your server</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">What you need</p><ul><li>SSH access you already use. ssh user@your-server true must return silently — push reuses that exact connection and configures nothing of its own.</li><li>A writable destination on the server. The parent of the destination path has to exist and be writable by that SSH user.</li><li>Optionally relayium on the server, which is what buys the up-front collision check and per-file SHA-256. Without it push still works, over a plain tar stream that verifies nothing.</li><li>No Relayium account and no daemon on either end. Nothing here talks to Relayium&#39;s servers.</li></ul></div>
       <p>push takes one or more sources and an scp-style destination. Relayium connects over SSH using your usual keys and config, then streams the files to the destination directory:</p>
-      <ol class="steps" data-block="steps"><li><p>Confirm the SSH access push will reuse. A silent return means your keys, host alias and port are already right.</p><pre><code>ssh user@your-server true</code></pre></li><li><p>Find out which protocol you will get. A path means the native protocol — an up-front collision check and per-file SHA-256; no output means the tar-stream fallback, which checks nothing per file.</p><pre><code>ssh user@your-server command -v relayium</code></pre></li><li><p>Push the directory. The destination is scp-style, and the trailing slash means &quot;into this directory&quot;.</p><pre><code>relayium push ./photos user@your-server:backups/</code></pre></li><li><p>Override the key or the port for this one command if your ssh config doesn&#39;t already cover the host.</p><pre><code>relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</code></pre></li><li><p>Confirm what landed. push ./photos reproduces photos/ under the destination, so the folder name travels with it.</p><pre><code>ssh user@your-server ls backups/photos</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">What a successful run looks like</p><p>On the native protocol, push prints one line per completed file and exits 0. Against a bare server it prints a single summary line instead — that is the tar fallback, and it is also success.</p><pre><code>relayium push ./photos user@your-server:backups/
+      <ol class="steps" data-block="steps"><li><p>Confirm the SSH access push will reuse. A silent return means your keys, host alias and port are already right.</p><pre tabindex="0"><code>ssh user@your-server true</code></pre></li><li><p>Find out which protocol you will get. A path means the native protocol — an up-front collision check and per-file SHA-256; no output means the tar-stream fallback, which checks nothing per file.</p><pre tabindex="0"><code>ssh user@your-server command -v relayium</code></pre></li><li><p>Push the directory. The destination is scp-style, and the trailing slash means &quot;into this directory&quot;.</p><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/</code></pre></li><li><p>Override the key or the port for this one command if your ssh config doesn&#39;t already cover the host.</p><pre tabindex="0"><code>relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</code></pre></li><li><p>Confirm what landed. push ./photos reproduces photos/ under the destination, so the folder name travels with it.</p><pre tabindex="0"><code>ssh user@your-server ls backups/photos</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">What a successful run looks like</p><p>On the native protocol, push prints one line per completed file and exits 0. Against a bare server it prints a single summary line instead — that is the tar fallback, and it is also success.</p><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/
   photos/IMG_0413.jpg (2314518 bytes)
   photos/IMG_0414.jpg (1998233 bytes)
 
@@ -118,7 +175,7 @@ sent 2 file(s) (zero-dependency mode)</code></pre></div>
       <ul><li>It reuses your ~/.ssh/config, so host aliases, keys and ports you already set up just work.</li><li>If relayium is installed on the server, it uses the native protocol: the whole batch is checked for collisions before any bytes are sent, and each file it transfers is verified by SHA-256 and staged before it is installed.</li><li>If not, it falls back to piping a tar stream into the remote&#39;s own tar -x -k, so a bare server with no relayium still works — but that path verifies nothing per file and can leave a batch partly applied.</li></ul>
       <h2>Pull files back</h2>
       <p>Restoring is the same command in reverse: give a remote source and a local destination directory. This is how you recover a backup, or sync a server&#39;s output down to your laptop:</p>
-      <pre><code>relayium pull user@your-server:backups/ ./restore</code></pre>
+      <pre tabindex="0"><code>relayium pull user@your-server:backups/ ./restore</code></pre>
       <ul><li>Unlike push, pull always needs relayium already installed on the remote — it has no tar fallback, so install it there first if it&#39;s missing.</li></ul>
       <h2>Integrity is built in — resume is not</h2>
       <p>With relayium on both ends, each file push transfers is verified end to end with a SHA-256 hash and staged before it is installed, so what lands on the server is byte-for-byte what you sent. That much is real, and it is the reason to install relayium on the destination.</p>
@@ -128,15 +185,15 @@ sent 2 file(s) (zero-dependency mode)</code></pre></div>
       <h2>Keep the copy current on a schedule with cron</h2>
       <p>Schedule sync, not push. push refuses a destination that already exists, so a nightly push into the same directory succeeds once and is refused every night after that. sync is the mode built for a repeated run: it skips files whose size and modification time are unchanged, sends only what changed, and continues a partial file left by an interrupted run.</p>
       <p>It is a single non-interactive command that uses your SSH keys, so it drops straight into cron. Point it at a key with no passphrase (or an agent), and log the output so you can see failures:</p>
-      <pre><code># back up every night at 2am — add to your crontab (crontab -e)
+      <pre tabindex="0"><code># back up every night at 2am — add to your crontab (crontab -e)
 0 2 * * * relayium sync -i ~/.ssh/backup_key ~/documents user@your-server:backups/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1</code></pre>
       <ul><li>A nightly sync that gets interrupted continues the next night: what already matches is skipped, and a partial file is carried on rather than restarted.</li><li>sync has no tar fallback, so relayium must be installed on the server. That is a loud failure rather than a silent downgrade.</li><li>The command exits non-zero if any file fails its integrity check, so cron&#39;s mail-on-failure catches problems.</li><li>This keeps the copy current; it keeps no history. Add --delete only if you want a deletion at the source to remove the file on the server too — which is a mirror, and the opposite of what you want if you might delete something by mistake.</li></ul>
       <h2>When a scheduled copy doesn&#39;t land</h2>
       <p>A scheduled job fails quietly by nature — nobody is watching the terminal. These four are the ones that actually happen, and each is decided by a command you can run right now. They are not the only ways a run can fail: the destination can be out of space, or unwritable by that SSH user.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, check, fix</p><dl><dt>The cron job hangs, or the log ends at a password prompt.</dt><dd><pre><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@your-server true
-# Permission denied (publickey).</code></pre><p>BatchMode=yes refuses to prompt, which turns a silent hang into this line. Add that key&#39;s public half to the server&#39;s ~/.ssh/authorized_keys, or point the job at a key an agent already holds.</p></dd><dt>The crontab line runs but the log stays empty.</dt><dd><pre><code>command -v relayium
-# /usr/local/bin/relayium</code></pre><p>cron runs with a minimal PATH that usually has no /usr/local/bin, so the line fails before relayium starts. Write the absolute path the check just printed into the crontab entry, and keep the &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1 redirect so the next failure is visible.</p></dd><dt>The job reports success every night, but nothing was ever verified.</dt><dd><pre><code>ssh user@your-server command -v relayium
-# (prints nothing)</code></pre><p>No relayium on the remote means push took the tar-stream fallback, which hashes nothing per file and can leave a batch partly applied when a name collides mid-extraction. Install the CLI on the server to get the up-front collision check and per-file SHA-256 back. It also lets you switch the job to relayium sync, which has no fallback at all and fails loudly instead of downgrading silently.</p></dd><dt>&quot;N file(s) failed integrity check&quot; and a non-zero exit.</dt><dd><pre><code>relayium push ./photos user@your-server:backups/
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, check, fix</p><dl><dt>The cron job hangs, or the log ends at a password prompt.</dt><dd><pre tabindex="0"><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@your-server true
+# Permission denied (publickey).</code></pre><p>BatchMode=yes refuses to prompt, which turns a silent hang into this line. Add that key&#39;s public half to the server&#39;s ~/.ssh/authorized_keys, or point the job at a key an agent already holds.</p></dd><dt>The crontab line runs but the log stays empty.</dt><dd><pre tabindex="0"><code>command -v relayium
+# /usr/local/bin/relayium</code></pre><p>cron runs with a minimal PATH that usually has no /usr/local/bin, so the line fails before relayium starts. Write the absolute path the check just printed into the crontab entry, and keep the &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1 redirect so the next failure is visible.</p></dd><dt>The job reports success every night, but nothing was ever verified.</dt><dd><pre tabindex="0"><code>ssh user@your-server command -v relayium
+# (prints nothing)</code></pre><p>No relayium on the remote means push took the tar-stream fallback, which hashes nothing per file and can leave a batch partly applied when a name collides mid-extraction. Install the CLI on the server to get the up-front collision check and per-file SHA-256 back. It also lets you switch the job to relayium sync, which has no fallback at all and fails loudly instead of downgrading silently.</p></dd><dt>&quot;N file(s) failed integrity check&quot; and a non-zero exit.</dt><dd><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/
 # 1 file(s) failed integrity check: [photos/IMG_0413.jpg]
 echo $?
 # 1</code></pre><p>The SHA-256 computed on arrival did not match the one sent, and the native protocol stages each file and installs it only once the hash matches — so that path was never written to the server, and there is nothing to remove there. Re-running the whole batch is still refused by the collision check, because the other files from that batch already landed, so push that one path on its own. If it fails again it is not a one-off transit error: look at the source file (something writing to it while it is read) and at the storage on either end.</p></dd></dl></div>

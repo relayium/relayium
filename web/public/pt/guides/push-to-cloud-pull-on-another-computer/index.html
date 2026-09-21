@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/pt/guides/push-to-cloud-pull-on-another-computer/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Suba arquivos para a nuvem e os pegue em outro computador" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Suba arquivos para a nuvem e os pegue em outro computador","description":"Transferência de arquivos assíncrona pela sua conta do Relayium: envie de uma máquina com relayium up e baixe em outra com relayium down quando for conveniente — com criptografia de ponta a ponta, e só o envio precisa de conta.","inLanguage":"pt","datePublished":"2026-07-12","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/pt/guides/push-to-cloud-pull-on-another-computer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/pt/"},{"@type":"ListItem","position":2,"name":"Guias","item":"https://relayium.com/pt/guides/"},{"@type":"ListItem","position":3,"name":"Suba arquivos para a nuvem e os pegue em outro computador"}]},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"Preciso de uma conta?","acceptedAnswer":{"@type":"Answer","text":"Para enviar para a nuvem, e para o send quando um código precisa ser gerado. O relayium up sempre exige relayium login, para que o arquivo fique guardado sob a sua conta. O relayium send só exige quando o servidor precisa gerar um novo código de emparelhamento para você — se você executar send com um código que alguém lhe passou, nada é gerado, então nenhum login é necessário. O relayium down e o relayium receive não precisam de conta, e push/pull, daemon direto e sync funcionam sem uma."}},{"@type":"Question","name":"Meu arquivo é criptografado?","acceptedAnswer":{"@type":"Answer","text":"Sim, de ponta a ponta. Ele é criptografado na sua máquina antes do envio; a chave vive apenas no fragmento #k= do link e nunca é enviada ao servidor. O Relayium armazena texto cifrado que não consegue ler, incluindo os nomes dos arquivos."}},{"@type":"Question","name":"E se eu perder o link?","acceptedAnswer":{"@type":"Answer","text":"O link carrega a única cópia da chave de descriptografia, então um link perdido significa um arquivo irrecuperável — não há nada no servidor que possa recuperá-lo."}},{"@type":"Question","name":"Posso limitar quem baixa?","acceptedAnswer":{"@type":"Answer","text":"Qualquer pessoa com o link pode baixar, então compartilhe-o de forma privada. Use --burn para permitir um único download, ou --max-downloads \u003cn> para limitar o número, e --ttl \u003cduração> para expirá-lo após um tempo definido."}},{"@type":"Question","name":"Funciona com o site?","acceptedAnswer":{"@type":"Answer","text":"Sim. Um link do relayium up abre em um navegador, e um link de compartilhamento criado no relayium.com pode ser buscado com relayium down em outra máquina."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -78,19 +135,19 @@ ol.steps>li>pre{margin:8px 0 0}
 .fix dd>pre{margin:6px 0}
 </style>
     <style>
-.builder{margin:16px 0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+.builder{margin:16px 0;padding:18px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .builder .bf{display:block;margin:0 0 12px}
-.builder .bf span{display:block;font-size:14px;color:var(--text);margin:0 0 5px}
-.builder .bf input{width:100%;font:15px ui-monospace,SFMono-Regular,Menlo,monospace;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h)}
+.builder .bf span{display:block;font-size:var(--fs-sm);color:var(--text-h);font-weight:600;margin:0 0 5px}
+.builder .bf input{inline-size:100%;min-block-size:44px;font:15px ui-monospace,SFMono-Regular,Menlo,monospace;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text-h)}
 .builder .bcmd{margin:14px 0 0}
 .builder .bcmd pre{margin:0}
-.builder .bcopy{margin:10px 0 0;padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-h);font:inherit;font-size:14px;cursor:pointer}
-.builder .bcopy:hover{border-color:var(--accent)}
+.builder .bcopy{margin:10px 0 0;min-block-size:44px;padding:8px 16px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text-h);font:inherit;font-size:var(--fs-sm);cursor:pointer}
+.builder .bcopy:hover{border-color:var(--accent-border)}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/pt/guides/" aria-current="true">Guias</a><a href="/pt/apps/">Apps</a><a href="/pricing">Preços</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/pt/">Relayium</a> <span aria-hidden="true">›</span> <a href="/pt/guides/">Guias</a> <span aria-hidden="true">›</span> <span aria-current="page">Suba arquivos para a nuvem e os pegue em outro computador</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -118,26 +175,26 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>Antes de começar</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">O que você precisa</p><ul><li>Instale a CLI para que o comando relayium exista. A linha abaixo coloca um binário pré-compilado no seu PATH (macOS e Linux; no Windows, pegue o .zip na página de releases); relayium --version confirma, e relayium.com/cli lista todas as opções de instalação. Pule isso e o relayium login só imprimirá “command not found”.</li><li>Tenha uma conta gratuita do Relayium. O passo do navegador aprova o login contra a sua conta, então você precisa de uma antes de poder aprovar — faça login em relayium.com primeiro, ou crie uma lá se ainda não tiver. Só o envio precisa da conta; baixar nunca.</li><li>Um jeito de levar um link até a outra máquina: um app de notas, uma janela de chat, um gerenciador de senhas. Qualquer um com o link consegue baixar o arquivo, então trate-o como uma senha.</li></ul></div>
       <p>Duas coisas para fazer uma vez só antes do seu primeiro up — instalar a CLI e ter uma conta. Já tem as duas? Pule adiante.</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <h2>Vincule esta máquina à sua conta (uma vez)</h2>
       <p>O up precisa saber sob qual conta armazenar, então faça login uma vez por máquina. É um login de dispositivo aprovado no navegador — nada é digitado no terminal além do código que você confirma:</p>
-      <pre><code>relayium login</code></pre>
+      <pre tabindex="0"><code>relayium login</code></pre>
       <ul><li>A CLI imprime um código curto e uma URL (relayium.com/device). Abra-a no navegador em que você está logado no relayium.com (faça login lá primeiro se não estiver), digite o código e aprove — esta máquina está agora vinculada.</li><li>O login é salvo em ~/.config/relayium/, então você só faz isso uma vez por máquina. relayium whoami mostra a quem você está vinculado; relayium logout o apaga.</li><li>Para revogar uma máquina mais tarde, exclua o dispositivo dela na página de dispositivos da sua conta no navegador.</li></ul>
       <h2>Envie a partir do primeiro computador</h2>
       <p>O up percorre os arquivos que você passa, criptografa-os localmente, envia o texto cifrado e imprime um link de retirada:</p>
-      <ol class="steps" data-block="steps"><li><p>Confirme que esta máquina continua vinculada à sua conta. Ela imprime a conta e o servidor a que está vinculada; se disser que você não está logado, faça antes o passo de login acima.</p><pre><code>relayium whoami</code></pre></li><li><p>Envie o arquivo. O up o criptografa localmente, manda só texto cifrado e imprime o link de retirada na saída padrão.</p><pre><code>relayium up ./report.pdf</code></pre></li><li><p>Acrescente uma opção de retenção se o padrão de 24 horas não servir. O seu plano limita quanto tempo o servidor de fato vai guardar.</p><pre><code># escolha quanto tempo ele vive (padrão: 24 horas):
+      <ol class="steps" data-block="steps"><li><p>Confirme que esta máquina continua vinculada à sua conta. Ela imprime a conta e o servidor a que está vinculada; se disser que você não está logado, faça antes o passo de login acima.</p><pre tabindex="0"><code>relayium whoami</code></pre></li><li><p>Envie o arquivo. O up o criptografa localmente, manda só texto cifrado e imprime o link de retirada na saída padrão.</p><pre tabindex="0"><code>relayium up ./report.pdf</code></pre></li><li><p>Acrescente uma opção de retenção se o padrão de 24 horas não servir. O seu plano limita quanto tempo o servidor de fato vai guardar.</p><pre tabindex="0"><code># escolha quanto tempo ele vive (padrão: 24 horas):
 relayium up ./report.pdf --burn              # apagado após um download
 relayium up ./report.pdf --ttl 7d            # guardado por 7 dias (seu plano define o teto)
-relayium up ./report.pdf --max-downloads 5   # 5 downloads permitidos, depois some</code></pre></li><li><p>Leve o link para onde a segunda máquina consiga lê-lo. Só o link vai para a saída padrão, então um pipe fica limpo.</p><pre><code>relayium up ./report.pdf | pbcopy</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">Como é um envio bem-sucedido</p><p>Durante o envio corre uma barra de progresso na saída de erro, que depois some. O link aparece sozinho na saída padrão, e a dica para humanos — mais qualquer aviso de retenção — vem em seguida na saída de erro.</p><pre><code>relayium up ./report.pdf
+relayium up ./report.pdf --max-downloads 5   # 5 downloads permitidos, depois some</code></pre></li><li><p>Leve o link para onde a segunda máquina consiga lê-lo. Só o link vai para a saída padrão, então um pipe fica limpo.</p><pre tabindex="0"><code>relayium up ./report.pdf | pbcopy</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">Como é um envio bem-sucedido</p><p>Durante o envio corre uma barra de progresso na saída de erro, que depois some. O link aparece sozinho na saída padrão, e a dica para humanos — mais qualquer aviso de retenção — vem em seguida na saída de erro.</p><pre tabindex="0"><code>relayium up ./report.pdf
 https://relayium.com/d/7fK2p…#k=Xr8s…
 opens in a browser, or fetch it with `relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39;`</code></pre></div>
       <ul><li>Retenção: --burn remove o arquivo após um único download; --ttl &lt;duração&gt; o mantém por um tempo fixo; --max-downloads &lt;n&gt; permite um número fixo de downloads. Não informe nenhum dos três e o link vive 24 horas — o padrão quando --ttl está ausente.</li><li>O --ttl aceita uma duração com unidade — 30m, 12h, 7d, 2w — ou um simples número de segundos, então --ttl 3600 e --ttl 1h são o mesmo pedido. O seu plano define o teto: 1 dia no Free, 3 dias no Plus, 7 dias no Pro, 14 dias no Max. Peça mais do que o seu teto e o servidor o guarda em silêncio apenas até o teto — o up imprime depois um aviso dizendo por quanto tempo ele realmente ficou guardado.</li></ul>
       <h2>Baixe no segundo computador</h2>
       <p>Na outra máquina, passe o link para o down. Sem login, sem configuração — a chave que descriptografa o arquivo está dentro do link, então o down não precisa de nada da sua conta:</p>
-      <div class="builder" data-download-builder><label class="bf"><span>Seu link de compartilhamento</span><input data-link type="text" placeholder="https://relayium.com/d/…#k=…" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" data-token="seu link" /></label><label class="bf"><span>Salvar em (cole a saída do seu pwd)</span><input data-dest type="text" placeholder="/home/you/downloads" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" /></label><div class="bcmd"><pre><code data-cmd>relayium down &#39;&lt;seu link&gt;&#39; &lt;diretório de destino&gt;</code></pre><button type="button" class="bcopy" data-copy data-copied="Copiado" hidden>Copiar comando</button></div></div>
-      <ol class="steps" data-block="steps"><li><p>Leve o link até a segunda máquina do jeito que preferir. Ali não é preciso instalar nem logar em nada além da própria CLI.</p></li><li><p>Passe-o para o down entre aspas simples, junto com o diretório onde os arquivos devem chegar.</p><pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads</code></pre></li><li><p>Omita o diretório para cair no atual.</p><pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39;</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">Como é um download bem-sucedido</p><p>Cada arquivo escrito é listado na saída padrão, um por linha, e a contagem e o destino são confirmados na saída de erro.</p><pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads
+      <div class="builder" data-download-builder><label class="bf"><span>Seu link de compartilhamento</span><input data-link type="text" placeholder="https://relayium.com/d/…#k=…" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" data-token="seu link" /></label><label class="bf"><span>Salvar em (cole a saída do seu pwd)</span><input data-dest type="text" placeholder="/home/you/downloads" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" /></label><div class="bcmd"><pre tabindex="0"><code data-cmd>relayium down &#39;&lt;seu link&gt;&#39; &lt;diretório de destino&gt;</code></pre><button type="button" class="bcopy" data-copy data-copied="Copiado" hidden>Copiar comando</button></div></div>
+      <ol class="steps" data-block="steps"><li><p>Leve o link até a segunda máquina do jeito que preferir. Ali não é preciso instalar nem logar em nada além da própria CLI.</p></li><li><p>Passe-o para o down entre aspas simples, junto com o diretório onde os arquivos devem chegar.</p><pre tabindex="0"><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads</code></pre></li><li><p>Omita o diretório para cair no atual.</p><pre tabindex="0"><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39;</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">Como é um download bem-sucedido</p><p>Cada arquivo escrito é listado na saída padrão, um por linha, e a contagem e o destino são confirmados na saída de erro.</p><pre tabindex="0"><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads
 downloads/report.pdf
 ✓ downloaded 1 file(s) to ./downloads</code></pre></div>
       <ul><li>Se o arquivo foi definido para queima, atingiu seu limite de downloads ou expirou, o link está esgotado e o down informa que ele não existe mais.</li></ul>
@@ -149,10 +206,10 @@ downloads/report.pdf
       <ul><li>Seu arquivo é criptografado na sua máquina antes de ser enviado. A chave de descriptografia vive apenas no fragmento #k= do link e nunca é enviada ao servidor — o Relayium armazena texto cifrado que não consegue ler, incluindo os nomes dos arquivos.</li><li>Isso também significa que o link é o único caminho de volta ao arquivo: perca-o e o arquivo fica irrecuperável, por você ou por nós.</li></ul>
       <h2>Quando um link não funciona</h2>
       <p>Quatro falhas cobrem quase todo up ou down malsucedido, e nenhuma exige adivinhação: o estado que decide é impresso por um comando ou está visível no comando que você digitou.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Sintoma, verificação, correção</p><dl><dt>O up recusa com “run relayium login first”.</dt><dd><pre><code>relayium whoami
-# not logged in (run `relayium login`)</code></pre><p>Enviar guarda o arquivo sob a sua conta, então esta máquina precisa de credenciais. Rode relayium login e aprove no navegador em relayium.com/device; depois disso o whoami imprime sua conta e o servidor a que está vinculada.</p></dd><dt>O down não consegue ler o link, e a chave parece ter sumido.</dt><dd><pre><code>echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
-# relayium down https://relayium.com/d/7fK2p</code></pre><p>Um # sem aspas começa um comentário na maioria dos shells, então tudo a partir de #k= nunca chegou ao comando; o echo mostra exatamente o que sobrou. Coloque o link inteiro entre aspas simples e o fragmento, que é a chave de descriptografia, chega intacto.</p></dd><dt>O link morre antes do --ttl que você pediu.</dt><dd><pre><code>relayium up ./report.pdf --ttl 7d
-# note: your plan caps retention, so this link is kept 1d, not the 7d you asked for</code></pre><p>O servidor corta em silêncio um pedido acima do teto do seu plano — 1 dia no Free, 3 no Plus, 7 no Pro, 14 no Max — e o up imprime depois esse aviso para dizer o que você realmente conseguiu. --burn e --max-downloads também encerram um link mais cedo. Envie de novo para obter um link novo.</p></dd><dt>Você está logado, mas o up diz que você está logado em outro lugar.</dt><dd><pre><code>relayium whoami
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Sintoma, verificação, correção</p><dl><dt>O up recusa com “run relayium login first”.</dt><dd><pre tabindex="0"><code>relayium whoami
+# not logged in (run `relayium login`)</code></pre><p>Enviar guarda o arquivo sob a sua conta, então esta máquina precisa de credenciais. Rode relayium login e aprove no navegador em relayium.com/device; depois disso o whoami imprime sua conta e o servidor a que está vinculada.</p></dd><dt>O down não consegue ler o link, e a chave parece ter sumido.</dt><dd><pre tabindex="0"><code>echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
+# relayium down https://relayium.com/d/7fK2p</code></pre><p>Um # sem aspas começa um comentário na maioria dos shells, então tudo a partir de #k= nunca chegou ao comando; o echo mostra exatamente o que sobrou. Coloque o link inteiro entre aspas simples e o fragmento, que é a chave de descriptografia, chega intacto.</p></dd><dt>O link morre antes do --ttl que você pediu.</dt><dd><pre tabindex="0"><code>relayium up ./report.pdf --ttl 7d
+# note: your plan caps retention, so this link is kept 1d, not the 7d you asked for</code></pre><p>O servidor corta em silêncio um pedido acima do teto do seu plano — 1 dia no Free, 3 no Plus, 7 no Pro, 14 no Max — e o up imprime depois esse aviso para dizer o que você realmente conseguiu. --burn e --max-downloads também encerram um link mais cedo. Envie de novo para obter um link novo.</p></dd><dt>Você está logado, mas o up diz que você está logado em outro lugar.</dt><dd><pre tabindex="0"><code>relayium whoami
 # you@example.com (https://relayium.com)</code></pre><p>Um --server que não emitiu o seu token é recusado em vez de receber suas credenciais, o que as vazaria e nem autenticaria ali. Ou você tira o --server para usar o servidor vinculado que o whoami acabou de imprimir, ou roda antes relayium login contra o outro host.</p></dd></dl></div>
       <h2>Perguntas frequentes</h2>
       <h3>Preciso de uma conta?</h3>

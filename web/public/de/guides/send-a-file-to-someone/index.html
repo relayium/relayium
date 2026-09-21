@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/de/guides/send-a-file-to-someone/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Mit der Relayium CLI eine Datei über Netzwerke hinweg an jemanden senden" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Mit der Relayium CLI eine Datei über Netzwerke hinweg an jemanden senden","description":"Nutze relayium send und receive, um eine Datei mithilfe eines kurzen Pairing-Codes direkt zwischen zwei Personen in unterschiedlichen Netzwerken zu bewegen. Ende-zu-Ende verschlüsselt, mit einem optionalen SAS-Code zum Vergleichen und kostenlos — die Datei geht direkt zwischen euch hin und her, nie über unsere Server.","inLanguage":"de","datePublished":"2026-07-08","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/de/guides/send-a-file-to-someone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/de/"},{"@type":"ListItem","position":2,"name":"Anleitungen","item":"https://relayium.com/de/guides/"},{"@type":"ListItem","position":3,"name":"Mit der Relayium CLI eine Datei über Netzwerke hinweg an jemanden senden"}]},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Woher kommt der Pairing-Code?","acceptedAnswer":{"@type":"Answer","text":"Relayium erzeugt ihn. Führe relayium send ./release.zip aus (nach relayium login), und die CLI gibt einen Code aus 6 Ziffern aus, der fünf Minuten gilt, dazu den genauen Befehl für die andere Seite. Selbst wählen kannst du ihn nicht — der Server akzeptiert nur Codes, die er selbst ausgegeben hat."}},{"@type":"Question","name":"Wird die Datei irgendwohin hochgeladen?","acceptedAnswer":{"@type":"Answer","text":"Nein. Die Datei fließt direkt zwischen euch beiden, Ende-zu-Ende verschlüsselt. Nur ein kleiner Rendezvous-Handshake läuft über Relayium, um die Enden einander vorzustellen — die Datei nie."}},{"@type":"Question","name":"Was, wenn wir keine Verbindung herstellen können?","acceptedAnswer":{"@type":"Answer","text":"Stehen beide Enden hinter strengem NAT ohne erreichbare Adresse, kann die direkte Verbindung nicht hergestellt werden und die Übertragung schlägt fehl — die CLI hat absichtlich kein Relay-Fallback. Nutzt daemon-direct zwischen zwei erreichbaren Servern oder push über SSH, wenn kein direkter Pfad verfügbar ist."}},{"@type":"Question","name":"Woher weiß ich, dass wirklich die richtige Person am anderen Ende ist?","acceptedAnswer":{"@type":"Answer","text":"Beide Terminals geben einen identischen 6-stelligen SAS-Code aus den angehefteten TLS-Zertifikatsfingerabdrücken aus. Vergleicht ihn außerhalb des Kanals; eine Übereinstimmung bestätigt, dass die Fingerabdrücke nicht ausgetauscht wurden und der Rendezvous-Dienst keinen Endpunkt imitiert hat. Er authentifiziert die Endpunkte, nicht jeden Netzwerk-Hop. Fügt --verify hinzu, um diese Bestätigung zu verlangen, bevor Bytes bewegt werden."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/de/guides/" aria-current="true">Anleitungen</a><a href="/de/apps/">Apps</a><a href="/pricing">Preise</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/de/">Relayium</a> <span aria-hidden="true">›</span> <a href="/de/guides/">Anleitungen</a> <span aria-hidden="true">›</span> <span aria-current="page">Mit der Relayium CLI eine Datei über Netzwerke hinweg an jemanden senden</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -104,13 +161,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <p class="lead">Die Verbindung ist Peer-to-Peer und Ende-zu-Ende verschlüsselt. Nur ein winziger Rendezvous-Handshake läuft über Relayium, um die beiden Enden einander vorzustellen; die Dateibytes nie.</p>
       <h2>Bevor du loslegst</h2>
       <p>Alles unten ist die relayium-CLI, installiere sie also zuerst, falls noch nicht geschehen. Unter macOS oder Linux legt ein Befehl ein vorgebautes Binary in deinen PATH:</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>Willst du die Datei lieber selbst wählen, oder unter Windows? Hol dir ein Binary von der Releases-Seite — relayium.com/cli listet alle Installationswege (mit Go auch go build -o relayium ./cmd/relayium).</li><li>relayium --version bestätigt die Installation. Ohne das geben die Befehle unten nur „command not found“ aus.</li></ul>
       <h2>Erst senden, dann den ausgegebenen Code weitergeben</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Was du brauchst</p><ul><li>Die CLI auf beiden Rechnern. relayium version gibt auf jedem eine Versionsnummer aus; antwortet die Shell mit „command not found“, ist sie dort noch nicht installiert.</li><li>Einen angemeldeten Absender. relayium whoami gibt die Konto-E-Mail aus; das Erzeugen eines Pairing-Codes setzt relayium login voraus. Der empfangende Rechner meldet sich nie an.</li><li>Euch beide gleichzeitig am Terminal. Der Code lebt fünf Minuten, stimmt den Moment also ab, bevor du einen erzeugst.</li><li>Einen Weg, sechs Ziffern außerhalb des Kanals zu übermitteln — ein Anruf, ein Chatfenster, oder der Raum, in dem ihr beide sitzt.</li></ul></div>
       <p>Melde dich einmalig mit relayium login an, danach sendest du einfach. Die CLI erzeugt einen Pairing-Code, gibt ihn zusammen mit dem Befehl aus, den die andere Seite ausführt, und wartet. Gib diesen Code außerhalb des Kanals weiter — sag ihn am Telefon, schreib ihn in einen Chat:</p>
-      <ol class="steps" data-block="steps"><li><p>Melde dich auf dem sendenden Rechner einmal an. Überspring das, wenn relayium whoami schon deine Konto-E-Mail ausgibt.</p><pre><code>relayium login</code></pre></li><li><p>Starte das Senden aus dem Verzeichnis, in dem die Datei liegt. Die CLI erzeugt den Code, gibt den Befehl für die Gegenseite aus und wartet dann.</p><pre><code>relayium send ./release.zip</code></pre></li><li><p>Gib die ausgegebenen sechs Ziffern außerhalb des Kanals weiter. Fünf Minuten nach dem Erzeugen funktionieren sie nicht mehr.</p></li><li><p>Führ auf dem empfangenden Rechner, im Verzeichnis, in dem die Dateien landen sollen, den Befehl aus, den der Absender angezeigt bekam. Ein Verzeichnis dahinter schickt sie woandershin.</p><pre><code>relayium receive 483920</code></pre><pre><code>relayium receive 483920 ./downloads</code></pre></li><li><p>Lass beide Terminals laufen, bis die empfangende Shell zu ihrem Prompt zurückkehrt. Das ist eine einzige Live-Sitzung: Schließt du eine Seite, endet die Übertragung.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">So sieht ein erfolgreicher Lauf aus</p><p>Der Absender gibt erst den Übergabeblock aus und wartet, dann einen Verifizierungscode und den Pfad, den er bekommen hat. Beide Terminals zeigen denselben Verifizierungscode, und beide enden mit 0.</p><pre><code># auf dem ABSENDER
+      <ol class="steps" data-block="steps"><li><p>Melde dich auf dem sendenden Rechner einmal an. Überspring das, wenn relayium whoami schon deine Konto-E-Mail ausgibt.</p><pre tabindex="0"><code>relayium login</code></pre></li><li><p>Starte das Senden aus dem Verzeichnis, in dem die Datei liegt. Die CLI erzeugt den Code, gibt den Befehl für die Gegenseite aus und wartet dann.</p><pre tabindex="0"><code>relayium send ./release.zip</code></pre></li><li><p>Gib die ausgegebenen sechs Ziffern außerhalb des Kanals weiter. Fünf Minuten nach dem Erzeugen funktionieren sie nicht mehr.</p></li><li><p>Führ auf dem empfangenden Rechner, im Verzeichnis, in dem die Dateien landen sollen, den Befehl aus, den der Absender angezeigt bekam. Ein Verzeichnis dahinter schickt sie woandershin.</p><pre tabindex="0"><code>relayium receive 483920</code></pre><pre tabindex="0"><code>relayium receive 483920 ./downloads</code></pre></li><li><p>Lass beide Terminals laufen, bis die empfangende Shell zu ihrem Prompt zurückkehrt. Das ist eine einzige Live-Sitzung: Schließt du eine Seite, endet die Übertragung.</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">So sieht ein erfolgreicher Lauf aus</p><p>Der Absender gibt erst den Übergabeblock aus und wartet, dann einen Verifizierungscode und den Pfad, den er bekommen hat. Beide Terminals zeigen denselben Verifizierungscode, und beide enden mit 0.</p><pre tabindex="0"><code># auf dem ABSENDER
 Code: 483920   (valid 5 minutes)
 On the other machine:  relayium receive 483920
   not installed there?  curl -fsSL https://relayium.com/install.sh | sh
@@ -121,7 +178,7 @@ path: direct</code></pre></div>
       <h2>Mit dem SAS-Code verifizieren</h2>
       <p>Sobald sich die beiden Enden verbinden, geben beide Terminals denselben 6-stelligen SAS (Short Authentication String) aus, der aus den angehefteten TLS-Zertifikatsfingerabdrücken abgeleitet ist. Vergleicht ihn außerhalb des Kanals — lest ihn beim Telefonat laut vor —, um zu bestätigen, dass die Fingerabdrücke nicht ausgetauscht wurden und der Rendezvous-Dienst keinen Endpunkt imitiert hat. Der SAS authentifiziert die Endpunkte; er beweist nicht jeden Netzwerk-Hop.</p>
       <p>Für den stärksten Schutz fügt --verify hinzu: Die Übertragung wartet dann, bis ihr bestätigt, dass die Codes übereinstimmen, bevor auch nur ein einziges Byte bewegt wird.</p>
-      <pre><code>relayium send --verify ./release.zip</code></pre>
+      <pre tabindex="0"><code>relayium send --verify ./release.zip</code></pre>
       <h2>Nur direkt — kostenlos, sonst schlägt es fehl</h2>
       <p>Die Übertragung versucht, eine direkte Verbindung zwischen den beiden Enden herzustellen. Gelingt das — der übliche Fall, wenn wenigstens eine Seite eine erreichbare Adresse hat —, fließt die Datei verschlüsselt direkt hindurch, mit voller Geschwindigkeit und ohne Kosten.</p>
       <p>Relayium CLI send/receive und text sind direct-only P2P: Datei- oder Nachrichtenbytes werden weder über TURN noch über einen anderen Relayium-Server weitergeleitet. Können die beiden Endpunkte keine direkte Verbindung herstellen, schlägt die Sitzung fehl, statt auf ein Relay auszuweichen.</p>
@@ -129,10 +186,10 @@ path: direct</code></pre></div>
       <ul><li>Direkte Verbindung gelingt → kostenlos, volle Geschwindigkeit, Ende-zu-Ende verschlüsselt.</li><li>Beide Enden können geografisch überall sein — der Absender führt einfach send aus, der Empfänger receive mit dem Code, den es ausgegeben hat.</li></ul>
       <h2>Wenn es nicht klappt</h2>
       <p>Vier Fehler machen fast jeden misslungenen Versuch aus. Zu jedem gibt es eine Zeile zum Lesen oder einen Befehl zum Ausführen, der ihn entscheidet — du musst nie raten, welche Seite schuld ist.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, Prüfung, Lösung</p><dl><dt>Der Absender startet gar nicht: „minting a pairing code needs an account“.</dt><dd><pre><code>relayium whoami
-# not logged in (run `relayium login`)</code></pre><p>Auf diesem Rechner liegen keine Zugangsdaten. Führ relayium login aus und bestätige im Browser; danach gibt whoami die Konto-E-Mail aus und das Senden läuft durch. Es wurde nichts erzeugt, also ist auch kein Code verbraucht.</p></dd><dt>Der Empfänger tippt den Code ein und das Rendezvous lehnt ihn ab.</dt><dd><pre><code># auf dem ABSENDER — der Übergabeblock nennt die genaue Lebensdauer
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, Prüfung, Lösung</p><dl><dt>Der Absender startet gar nicht: „minting a pairing code needs an account“.</dt><dd><pre tabindex="0"><code>relayium whoami
+# not logged in (run `relayium login`)</code></pre><p>Auf diesem Rechner liegen keine Zugangsdaten. Führ relayium login aus und bestätige im Browser; danach gibt whoami die Konto-E-Mail aus und das Senden läuft durch. Es wurde nichts erzeugt, also ist auch kein Code verbraucht.</p></dd><dt>Der Empfänger tippt den Code ein und das Rendezvous lehnt ihn ab.</dt><dd><pre tabindex="0"><code># auf dem ABSENDER — der Übergabeblock nennt die genaue Lebensdauer
 relayium send ./release.zip
-Code: 483920   (valid 5 minutes)</code></pre><p>Der Code ist abgelaufen. Drück auf dem Absender Ctrl-C, führ relayium send ./release.zip erneut aus und gib die frischen sechs Ziffern innerhalb der fünf Minuten weiter, die der neue Übergabeblock nennt.</p></dd><dt>Die beiden Terminals zeigen unterschiedliche Verifizierungscodes.</dt><dd><pre><code>relayium send --verify ./release.zip</code></pre><p>Halt an und schick die Datei nicht. Unterschiedliche Codes heißen, dass die angehefteten Zertifikatsfingerabdrücke der beiden Enden nicht übereinstimmen — die Gegenseite ist also nicht der Rechner, für den du sie hältst. Führ es mit --verify erneut aus, das die Übertragung an genau diesem Vergleich anhält, und klär mit der anderen Person, an welchem Rechner sie sitzt.</p></dd><dt>„no direct connection to the peer (both ends behind strict NAT?)“.</dt><dd><pre><code>relayium send ./release.zip
+Code: 483920   (valid 5 minutes)</code></pre><p>Der Code ist abgelaufen. Drück auf dem Absender Ctrl-C, führ relayium send ./release.zip erneut aus und gib die frischen sechs Ziffern innerhalb der fünf Minuten weiter, die der neue Übergabeblock nennt.</p></dd><dt>Die beiden Terminals zeigen unterschiedliche Verifizierungscodes.</dt><dd><pre tabindex="0"><code>relayium send --verify ./release.zip</code></pre><p>Halt an und schick die Datei nicht. Unterschiedliche Codes heißen, dass die angehefteten Zertifikatsfingerabdrücke der beiden Enden nicht übereinstimmen — die Gegenseite ist also nicht der Rechner, für den du sie hältst. Führ es mit --verify erneut aus, das die Übertragung an genau diesem Vergleich anhält, und klär mit der anderen Person, an welchem Rechner sie sitzt.</p></dd><dt>„no direct connection to the peer (both ends behind strict NAT?)“.</dt><dd><pre tabindex="0"><code>relayium send ./release.zip
 # no direct connection to the peer (both ends behind strict NAT?): …</code></pre><p>Keine der beiden Seiten hat die andere erreicht, und die CLI hat von Grund auf keinen Relay-Weg für Dateibytes. Bring ein Ende in ein Netz mit erreichbarer Adresse — einen Server oder einen Handy-Hotspot — oder lade die Datei mit relayium up hoch und gib stattdessen den Download-Link weiter.</p></dd></dl></div>
       <h2>Häufige Fragen</h2>
       <h3>Woher kommt der Pairing-Code?</h3>

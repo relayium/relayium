@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/pt/how-to/send-a-folder/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Como enviar uma pasta inteira, não só arquivos" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Como enviar uma pasta inteira, não só arquivos","description":"Escolha uma pasta inteira no navegador e envie de uma vez — caminhos relativos preservados, até 1.000 arquivos, cada um verificado com SHA-256. Sem precisar compactar antes.","inLanguage":"pt","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/pt/how-to/send-a-folder/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/pt/"},{"@type":"ListItem","position":2,"name":"Guias","item":"https://relayium.com/pt/guides/"},{"@type":"ListItem","position":3,"name":"Como enviar uma pasta inteira, não só arquivos"}]},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"Posso enviar uma pasta de um iPhone ou iPad?","acceptedAnswer":{"@type":"Answer","text":"Não como remetente — o Safari do iOS não tem seletor de pastas, apenas arquivos individuais, então o envio de pastas funciona atualmente a partir do Chrome, Edge ou Firefox de desktop. Um iPhone ou iPad ainda pode receber uma pasta numa boa, como um .zip."}},{"@type":"Question","name":"As subpastas e a estrutura de arquivos são preservadas?","acceptedAnswer":{"@type":"Answer","text":"Em um envio em tempo real, sim: o Relayium mantém o caminho relativo de cada arquivo, incluindo subpastas aninhadas, então a pasta que chega tem o mesmo layout da que você escolheu. Um link de download armazenado é diferente — ele envia uma lista plana de arquivos e descarta os caminhos — então compacte a pasta você mesmo e envie o compactado quando a estrutura precisar sobreviver."}},{"@type":"Question","name":"Quantos arquivos um envio de pasta pode conter?","acceptedAnswer":{"@type":"Answer","text":"Até 1.000 arquivos em um único lote, cada um verificado individualmente com um hash SHA-256 na chegada."}},{"@type":"Question","name":"O destinatário recebe uma pasta de verdade ou um .zip?","acceptedAnswer":{"@type":"Answer","text":"Depende do navegador dele. Chrome e Edge gravam os arquivos direto em um diretório que ele escolhe. Firefox e Safari recebem um único .zip sem compressão (abaixo de 4 GiB) que, ao ser descompactado, resulta na mesma estrutura de pasta."}},{"@type":"Question","name":"Preciso de uma conta para enviar uma pasta?","acceptedAnswer":{"@type":"Answer","text":"Não na mesma rede. Enviar entre redes com um código de emparelhamento exige que o remetente faça login, mas quem recebe nunca precisa de conta em nenhum dos casos."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/pt/guides/" aria-current="true">Guias</a><a href="/pt/apps/">Apps</a><a href="/pricing">Preços</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/pt/">Relayium</a> <span aria-hidden="true">›</span> <a href="/pt/guides/">Guias</a> <span aria-hidden="true">›</span> <span aria-current="page">Como enviar uma pasta inteira, não só arquivos</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -106,13 +163,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">O que você precisa</p><ul><li>Um navegador de computador no lado que envia — Chrome, Edge ou Firefox. O seletor de arquivos do Safari no iPhone e no iPad não consegue escolher uma pasta de jeito nenhum, só arquivos avulsos, então um envio de pasta começa num computador.</li><li>Uma árvore com no máximo 1.000 arquivos. Esse teto é por lote, não por sessão, então uma árvore maior passa em vários envios sem reconectar.</li><li>Uma decisão sobre o navegador que recebe, porque é ele que determina a forma do que chega: Chrome ou Edge grava a árvore em uma pasta escolhida por quem recebe, e qualquer outro navegador produz um .zip em vez disso.</li><li>Os dois lados online ao mesmo tempo para um envio em tempo real, ou — quando a outra pessoa não está por perto — um remetente logado mais um arquivo compactado feito por você, porque um link armazenado envia uma lista plana de arquivos e não leva árvore de diretórios nenhuma.</li></ul></div>
       <p>Em vez de selecionar os arquivos um a um, escolha a própria pasta. O Relayium percorre a árvore de diretórios no navegador e mantém o caminho relativo de cada arquivo — subpastas, subpastas aninhadas, tudo — para que o que chega do outro lado tenha o mesmo layout com que você começou.</p>
       <p>Isso funciona hoje no Chrome, Edge e Firefox de desktop. Não funciona no iOS: o seletor de arquivos do Safari no iPhone e no iPad não tem como selecionar uma pasta, apenas arquivos individuais, então o envio de pastas é, por enquanto, um recurso de desktop.</p>
-      <ol class="steps" data-block="steps"><li><p>Abra a página de transferência no computador que envia — a da mesma rede se os dois estiverem em uma só, a de tempo real se for preciso um código de emparelhamento.</p><pre><code>https://relayium.com/</code></pre></li><li><p>Arraste a pasta para a página, ou use o botão de seleção de pasta. O Relayium percorre a árvore no navegador e mantém o caminho relativo de cada arquivo, então nada precisa ser compactado antes.</p></li><li><p>Na mesma rede, ache quem recebe em “Dispositivos próximos”, aperte “Abrir área de trabalho” no cartão dele e depois use o anexo “Enviar uma pasta” dentro dessa área de trabalho. Entre redes é a mesma ação única: entre na sala de código de emparelhamento e aperte “Abrir área de trabalho” no cartão do par ali também. De um jeito ou de outro, o pedido que chega do outro lado informa a quantidade de arquivos e o tamanho total da árvore inteira, não de um arquivo.</p></li><li><p>No lado que recebe, leia a linha abaixo do pedido antes de aceitar: no Chrome ou no Edge ela diz que o navegador vai perguntar onde salvar, e é esse caminho que reproduz a pasta no disco. Depois clique em “Aceitar”.</p></li><li><p>Acompanhe o contador de arquivos subir pela árvore nas duas telas. Ele conta arquivos, então uma pasta de 300 arquivos chega a “Arquivo 300/300” em vez de mostrar uma única barra para o lote.</p><pre><code>Arquivo 300/300</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">Como é um envio de pasta concluído</p><p>O contador termina no último arquivo do lote, e cada arquivo chegou com o seu próprio hash SHA-256 verificado de ponta a ponta, então o que caiu corresponde byte a byte ao que você enviou.</p><p>Depois olhe o resultado, não a página, porque ele difere por navegador: no Chrome ou no Edge a árvore está dentro da pasta que você escolheu, com subpastas e tudo, e no Firefox ou no Safari há um único .zip na lista de downloads que se descompacta na mesma estrutura.</p><pre><code>LAN direto
+      <ol class="steps" data-block="steps"><li><p>Abra a página de transferência no computador que envia — a da mesma rede se os dois estiverem em uma só, a de tempo real se for preciso um código de emparelhamento.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>Arraste a pasta para a página, ou use o botão de seleção de pasta. O Relayium percorre a árvore no navegador e mantém o caminho relativo de cada arquivo, então nada precisa ser compactado antes.</p></li><li><p>Na mesma rede, ache quem recebe em “Dispositivos próximos”, aperte “Abrir área de trabalho” no cartão dele e depois use o anexo “Enviar uma pasta” dentro dessa área de trabalho. Entre redes é a mesma ação única: entre na sala de código de emparelhamento e aperte “Abrir área de trabalho” no cartão do par ali também. De um jeito ou de outro, o pedido que chega do outro lado informa a quantidade de arquivos e o tamanho total da árvore inteira, não de um arquivo.</p></li><li><p>No lado que recebe, leia a linha abaixo do pedido antes de aceitar: no Chrome ou no Edge ela diz que o navegador vai perguntar onde salvar, e é esse caminho que reproduz a pasta no disco. Depois clique em “Aceitar”.</p></li><li><p>Acompanhe o contador de arquivos subir pela árvore nas duas telas. Ele conta arquivos, então uma pasta de 300 arquivos chega a “Arquivo 300/300” em vez de mostrar uma única barra para o lote.</p><pre tabindex="0"><code>Arquivo 300/300</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">Como é um envio de pasta concluído</p><p>O contador termina no último arquivo do lote, e cada arquivo chegou com o seu próprio hash SHA-256 verificado de ponta a ponta, então o que caiu corresponde byte a byte ao que você enviou.</p><p>Depois olhe o resultado, não a página, porque ele difere por navegador: no Chrome ou no Edge a árvore está dentro da pasta que você escolheu, com subpastas e tudo, e no Firefox ou no Safari há um único .zip na lista de downloads que se descompacta na mesma estrutura.</p><pre tabindex="0"><code>LAN direto
 Arquivo 300/300</code></pre></div>
       <h2>O que a outra pessoa recebe</h2>
       <p>Como a pasta chega depende do navegador que recebe. Chrome e Edge podem gravar os arquivos direto em um diretório que o destinatário escolhe, então a pasta aparece no disco exatamente como saiu — sem passo extra.</p>
       <p>Firefox e Safari não têm essa capacidade, então recebem em vez disso um único arquivo .zip sem compressão (modo armazenamento) que, ao ser descompactado, resulta na mesma estrutura de pasta exata. Ele fica abaixo de 4 GiB (sem suporte a ZIP64), o que cobre a grande maioria das pastas de projeto e conjuntos de fotos ou documentos — para algo maior, divida em dois envios.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Sintoma, verificação, correção</p><dl><dt>Não existe jeito nenhum de escolher uma pasta no dispositivo que envia.</dt><dd><pre><code>https://relayium.com/   # o seletor oferece pasta só onde o navegador consegue</code></pre><p>Você está quase certamente em iPhone ou iPad, onde o seletor do Safari só expõe arquivos avulsos. Comece o envio de pasta num Chrome, Edge ou Firefox de computador e use o celular como lado que recebe.</p></dd><dt>O .zip que chegou está corrompido, ou o download parou perto de 4 GiB.</dt><dd><pre><code>chrome://downloads   # compare o tamanho do .zip com a pasta que você enviou</code></pre><p>O caminho do arquivo compactado não tem ZIP64, então tanto uma entrada isolada quanto o arquivo inteiro precisam ficar abaixo de 4 GiB. Divida a árvore em dois envios, ou peça para receber no Chrome ou no Edge, que grava os arquivos numa pasta escolhida e não constrói arquivo nenhum.</p></dd><dt>O .zip tem o mesmo tamanho da pasta, sem compressão alguma.</dt><dd><pre><code>chrome://downloads   # o tamanho da entrada iguala o total da pasta, não menos</code></pre><p>É o esperado: o arquivo vai em modo armazenamento, então empacota a árvore sem comprimir e permanece idêntico byte a byte ao que você enviou. Compacte a pasta você mesmo antes de enviar se o tamanho na rede importa mais do que uma cópia exata.</p></dd><dt>Os arquivos chegaram mas todos soltos em uma pasta, sem as subpastas.</dt><dd><pre><code>chrome://downloads   # um navegador sem seletor de diretório entrega um único .zip</code></pre><p>Os caminhos relativos sobrevivem em um envio em tempo real, então isto é a cara de um .zip antes de ser aberto, e não uma transferência achatada. Descompacte e as subpastas estão lá; para a árvore cair direto no disco, receba no Chrome ou no Edge e escolha uma pasta de destino quando ele perguntar. O único caminho realmente plano é o link de download armazenado, que envia uma lista simples de arquivos e descarta os caminhos, e é por isso que uma pasta destinada a um link precisa ser compactada antes.</p></dd><dt>Uma pasta de algumas centenas de arquivos para no meio e falta um arquivo.</dt><dd><pre><code>https://relayium.com/   # o contador informa o arquivo em que parou</code></pre><p>Um envio em tempo real é uma sessão ao vivo, e uma queda passageira pode retomar do último ponto de verificação durável enquanto as duas páginas continuarem abertas. Fechar ou recarregar qualquer uma delas encerra a sessão, e aí não sobra nada para retomar. Deixe as duas abas abertas e dê um momento antes de mexer em qualquer coisa; só se a sessão tiver mesmo acabado, reenvie o lote a partir do arquivo que o contador informou. Para uma entrega sem ninguém do outro lado, compacte a pasta você mesmo em um zip e envie esse arquivo único como link armazenado, porque um upload armazenado recebe uma lista plana de arquivos.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Sintoma, verificação, correção</p><dl><dt>Não existe jeito nenhum de escolher uma pasta no dispositivo que envia.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # o seletor oferece pasta só onde o navegador consegue</code></pre><p>Você está quase certamente em iPhone ou iPad, onde o seletor do Safari só expõe arquivos avulsos. Comece o envio de pasta num Chrome, Edge ou Firefox de computador e use o celular como lado que recebe.</p></dd><dt>O .zip que chegou está corrompido, ou o download parou perto de 4 GiB.</dt><dd><pre tabindex="0"><code>chrome://downloads   # compare o tamanho do .zip com a pasta que você enviou</code></pre><p>O caminho do arquivo compactado não tem ZIP64, então tanto uma entrada isolada quanto o arquivo inteiro precisam ficar abaixo de 4 GiB. Divida a árvore em dois envios, ou peça para receber no Chrome ou no Edge, que grava os arquivos numa pasta escolhida e não constrói arquivo nenhum.</p></dd><dt>O .zip tem o mesmo tamanho da pasta, sem compressão alguma.</dt><dd><pre tabindex="0"><code>chrome://downloads   # o tamanho da entrada iguala o total da pasta, não menos</code></pre><p>É o esperado: o arquivo vai em modo armazenamento, então empacota a árvore sem comprimir e permanece idêntico byte a byte ao que você enviou. Compacte a pasta você mesmo antes de enviar se o tamanho na rede importa mais do que uma cópia exata.</p></dd><dt>Os arquivos chegaram mas todos soltos em uma pasta, sem as subpastas.</dt><dd><pre tabindex="0"><code>chrome://downloads   # um navegador sem seletor de diretório entrega um único .zip</code></pre><p>Os caminhos relativos sobrevivem em um envio em tempo real, então isto é a cara de um .zip antes de ser aberto, e não uma transferência achatada. Descompacte e as subpastas estão lá; para a árvore cair direto no disco, receba no Chrome ou no Edge e escolha uma pasta de destino quando ele perguntar. O único caminho realmente plano é o link de download armazenado, que envia uma lista simples de arquivos e descarta os caminhos, e é por isso que uma pasta destinada a um link precisa ser compactada antes.</p></dd><dt>Uma pasta de algumas centenas de arquivos para no meio e falta um arquivo.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # o contador informa o arquivo em que parou</code></pre><p>Um envio em tempo real é uma sessão ao vivo, e uma queda passageira pode retomar do último ponto de verificação durável enquanto as duas páginas continuarem abertas. Fechar ou recarregar qualquer uma delas encerra a sessão, e aí não sobra nada para retomar. Deixe as duas abas abertas e dê um momento antes de mexer em qualquer coisa; só se a sessão tiver mesmo acabado, reenvie o lote a partir do arquivo que o contador informou. Para uma entrega sem ninguém do outro lado, compacte a pasta você mesmo em um zip e envie esse arquivo único como link armazenado, porque um upload armazenado recebe uma lista plana de arquivos.</p></dd></dl></div>
       <h2>Em tempo real, ou um link para depois</h2>
       <p>Se as duas partes estiverem online, envie a pasta em tempo real. Na mesma LAN, o WebRTC conecta diretamente; entre redes, os navegadores usam TURN por design para transportar texto cifrado de ponta a ponta que o retransmissor não consegue ler nem descriptografar. O Relayium não mantém cópia no servidor nem histórico em tempo real. Na mesma rede não é preciso conta; entre redes entra quem cria o código e quem participa nunca precisa de uma.</p>
       <p>Se a outra pessoa não estiver por perto agora, crie um link armazenado em vez disso — mas compacte a pasta você mesmo antes. Um upload armazenado recebe uma lista plana de arquivos: os caminhos relativos são descartados, então uma árvore enviada direto chega como arquivos soltos, e dois arquivos de mesmo nome em subpastas diferentes colidem. Faça um .zip comum e envie esse arquivo único, e a estrutura viaja dentro do compactado. Seu navegador criptografa o que você envia com uma chave AES-256-GCM aleatória que só existe no próprio link, de modo que o servidor guarda texto cifrado que não consegue ler. Criar um link exige que o remetente faça login; defina para expirar em 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano, ou faça-o se autodestruir após o primeiro download.</p>

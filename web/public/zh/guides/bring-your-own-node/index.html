@@ -11,8 +11,14 @@
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/bring-your-own-node/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/bring-your-own-node/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="自建节点：免费使用 Relayium 的中继与存储" />
@@ -30,44 +36,96 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"自建节点：免费使用 Relayium 的中继与存储","description":"用一条命令把你自己的中继/存储节点绑定到 Relayium 账号。之后你的传输全部走你自己的节点、不经过我们的计量服务器——因此免费，数据也留在你自己掌控的硬件上。","inLanguage":"zh-Hans","datePublished":"2026-07-10","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/bring-your-own-node/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"自建节点：免费使用 Relayium 的中继与存储"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"我遇到「relayium-node: command not found」，哪里错了？","acceptedAnswer":{"@type":"Answer","text":"你在安装之前就运行了 relayium-node 二进制。请用账号页给的那条一行安装命令（curl … | sudo … sh 形式）：它会下载二进制、放到 PATH 上，并作为服务启动。你从不需要单独安装 relayium-node。"}},{"@type":"Question","name":"重启之后节点还会在线吗？","acceptedAnswer":{"@type":"Answer","text":"会。安装脚本注册了一个 systemd 服务，开机自启且设为 Restart=always，所以重启后会自动回来，崩溃也会自愈。无需额外操作。"}},{"@type":"Question","name":"这跟自托管 Relayium 有什么区别？","acceptedAnswer":{"@type":"Answer","text":"自建节点保留你平常的 relayium.com 账号和客户端，只是多接一个你自己的节点来承载流量。自托管则是在你自己的域名上运行整套服务端（账号、Web 应用、信令）——那个见「自托管 Relayium」指南。"}},{"@type":"Question","name":"别人能用我的节点或看到我的数据吗？","acceptedAnswer":{"@type":"Answer","text":"不能。节点通过令牌绑定到你的账号，只承载你账号的流量。实时传输端到端加密，存储的数据块是你的节点也读不了的密文。你的数据和节点配置只为你自己所用。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 </style>
     <style>
-.tw{overflow-x:auto;margin:16px 0}
-.tw table{border-collapse:collapse;width:100%;font-size:15px}
-.tw th,.tw td{border:1px solid var(--border);padding:8px 11px;text-align:start;vertical-align:top}
-.tw th{color:var(--text-h);background:var(--card);font-weight:600}
-.tw code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;color:var(--text-h)}
+.tw{overflow-x:auto;margin:16px 0;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.tw table{border-collapse:collapse;inline-size:100%;font-size:var(--fs-sm)}
+.tw th,.tw td{border-block-end:1px solid var(--sep);padding:10px 14px;text-align:start;vertical-align:top}
+.tw tr:last-child td{border-block-end:0}
+.tw th{color:var(--text-h);background:var(--row-hover);font-weight:600}
+.tw code{font-size:13px;color:var(--text-h)}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -85,7 +143,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">自建节点：免费使用 Relayium 的中继与存储</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -113,10 +171,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>安装节点并让它上线</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">开始之前你需要什么</p><ul><li>一台能从公网访问到的 Linux 服务器——便宜的 VPS 或家里常开的机器都行。amd64 和 arm64 都支持。</li><li>那台服务器的 root 权限，或者 sudo。安装时需要一次；节点本身从不以 root 运行。</li><li>放通入站端口的能力——主机防火墙上要放，云 VPS 还要在服务商的安全组里放。</li><li>一个已登录的 relayium.com 账号。安装命令是在账号页现生成的，里面带着一次性令牌。</li><li>磁盘空间，仅当你希望节点在中继之外还负责存储时才需要。纯中继节点不需要——把 RELAYIUM_NODE_STORAGE_DIR 去掉即可。</li></ul></div>
       <p>按顺序做四件事：生成命令、跑它、放通端口、确认节点上线。全新机器上大约五分钟。</p>
-      <ol class="steps" data-block="steps"><li><p>在 relayium.com 登录，打开账号页 /me。</p></li><li><p>滚动到「我的节点」，点「添加节点」。立刻复制那条安装命令——里面的令牌只显示这一次，之后再也拿不到。</p></li><li><p>把它粘到你的服务器上执行。它会下载 relayium-node 二进制、校验校验和、安装到 /usr/local/bin、写好 systemd 服务并启动。</p><pre><code>curl -fsSL https://relayium.com/install-node.sh | sudo RELAYIUM_CENTRAL_URL=https://relayium.com RELAYIUM_NODE_TOKEN=&lt;your-token&gt; RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh</code></pre></li><li><p>确认服务已经起来，并且重启后还会回来。两个答案都重要：active 说明它现在在跑，enabled 才是重启后还在的那个。</p><pre><code>systemctl is-active relayium-node</code></pre><pre><code>systemctl is-enabled relayium-node</code></pre></li><li><p>在主机防火墙上放通入站端口。显示「在线」只需要出站访问，但对端要中继和存储，走的是这几个端口。</p><pre><code>sudo ufw allow 3478/udp        # TURN
+      <ol class="steps" data-block="steps"><li><p>在 relayium.com 登录，打开账号页 /me。</p></li><li><p>滚动到「我的节点」，点「添加节点」。立刻复制那条安装命令——里面的令牌只显示这一次，之后再也拿不到。</p></li><li><p>把它粘到你的服务器上执行。它会下载 relayium-node 二进制、校验校验和、安装到 /usr/local/bin、写好 systemd 服务并启动。</p><pre tabindex="0"><code>curl -fsSL https://relayium.com/install-node.sh | sudo RELAYIUM_CENTRAL_URL=https://relayium.com RELAYIUM_NODE_TOKEN=&lt;your-token&gt; RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh</code></pre></li><li><p>确认服务已经起来，并且重启后还会回来。两个答案都重要：active 说明它现在在跑，enabled 才是重启后还在的那个。</p><pre tabindex="0"><code>systemctl is-active relayium-node</code></pre><pre tabindex="0"><code>systemctl is-enabled relayium-node</code></pre></li><li><p>在主机防火墙上放通入站端口。显示「在线」只需要出站访问，但对端要中继和存储，走的是这几个端口。</p><pre tabindex="0"><code>sudo ufw allow 3478/udp        # TURN
 sudo ufw allow 8081/tcp        # storage
 sudo ufw allow 49152:65535/udp # relay</code></pre></li><li><p>如果是云 VPS，还要在服务商的安全组里放通同样的端口。只配 ufw 的话它们在上游依然是封的，而节点全程看着都很健康。</p></li><li><p>回到 /me，看着节点变成「在线」——通常 30 秒左右。从此你账号的传输会自动优先走它。</p></li><li><p>可选：打开「只使用我自己的节点做中继/存储」，这样传输会直接失败，而不是悄悄退回我们的共享设施。</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">一个正常节点长什么样</p><p>systemd 报告服务同时是 active 和 enabled，并且节点在「我的节点」下显示为在线。光有 active 不够——没有 enabled 的节点下次重启就消失了。</p><pre><code>$ systemctl is-active relayium-node
+      <div class="cbox ok" data-block="success"><p class="cbox-t">一个正常节点长什么样</p><p>systemd 报告服务同时是 active 和 enabled，并且节点在「我的节点」下显示为在线。光有 active 不够——没有 enabled 的节点下次重启就消失了。</p><pre tabindex="0"><code>$ systemctl is-active relayium-node
 active
 $ systemctl is-enabled relayium-node
 enabled</code></pre></div>
@@ -137,14 +195,14 @@ enabled</code></pre></div>
       <p>卸载只有一个脚本，无论这台节点只做中继还是也存文件，用的都是它。它会删掉 unit、二进制、配置和那个服务账号，并尽力（best-effort）通知 relayium.com 这台节点已经下线。这次调用失败的话，终端上只多一行提示，不是卸载出了问题——它会打印节点 ID，方便手工标记为已移除。</p>
       <p>先下载、检查，再执行。直接管道给 sh 的话，一旦 404 或网络抖动，整条命令会什么都不打印、退出码却是 0，看起来和卸载成功一模一样。</p>
       <p>它只删自己认得的东西：状态目录或存储目录里出现的意外文件会被保留并报告，而不是一并扫掉。</p>
-      <pre><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; \
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; \
   [ -s uninstall-node.sh ] &amp;&amp; sudo sh uninstall-node.sh</code></pre>
       <ul><li>只要存储目录里还有它认不出的文件，它就拒绝卸载——包括清理还没轮到的过期 blob——因为每个存储文件只存在于唯一一台节点上，没有副本。等这个数变成 0 再跑，或者加 RELAYIUM_NODE_FORCE=1 表示你接受那些文件从此不可达。</li><li>如果它判断不出你的 blob 在哪，它会停下来而不是猜。RELAYIUM_NODE_ASSUME_NO_STORAGE=1 是唯一的放行开关，而且它照样不会删任何认不出的东西。</li><li>存储目录本身会被保留，除非你另外加 RELAYIUM_NODE_PURGE_STORAGE=1。环境变量过不了 | sudo sh，要写成 sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh。</li><li>卸完之后，systemctl status relayium-node 应该是 not-found，也不该再列出 relayium-node 的 timer。以后重装的话，你账号里得到的会是一台新节点：卸载把节点的身份文件删掉了，所以重装是注册一台全新节点，而不是把旧的那台救回来。</li></ul>
       <h2>出问题时怎么办</h2>
       <p>几乎所有起不来的节点都逃不出这五种，其中三种从服务器上看一切正常：服务在跑，只有账号页或者一个监听端口会告诉你不对。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>shell 回答「relayium-node: command not found」。</dt><dd><pre><code>command -v relayium-node
-# 什么都没打印</code></pre><p>二进制根本没装。你从来不需要单独安装 relayium-node——账号页那条一行命令才是负责下载它、放进 PATH 并作为服务启动的东西。改跑那条命令。</p></dd><dt>服务是 active，但节点在账号页上始终不变成在线。</dt><dd><pre><code>journalctl -u relayium-node -n 50 --no-pager</code></pre><p>在线与否是由出站心跳决定的，所以这里很少是防火墙的问题，而是注册失败。令牌是一次性的，已经用过的命令、或上一次尝试留下的旧命令都会失败。再点一次「添加节点」拿一条新命令重跑。</p></dd><dt>节点显示在线，但传输还是走我们的共享设施。</dt><dd><pre><code>sudo ss -lunp | grep 3478</code></pre><p>在线只证明了出站心跳。对端需要的是入站端口：先确认节点确实在监听，然后在主机防火墙和云安全组里放通 3478/udp、8081/tcp 和 49152-65535/udp。想彻底排除悄悄回退，就打开「只使用我自己的节点」那个开关。</p></dd><dt>卸载命令什么都没打印、退出码 0，服务却还在。</dt><dd><pre><code>systemctl status relayium-node
-# active (running)</code></pre><p>这正是把一次失败的下载管道给 sh 之后的样子：404 或网络抖动会什么都不打印、退出码 0，读起来和成功一模一样。先下载脚本、确认它非空、再执行——这也是本文那条命令写成三段而不是一条管道的原因。</p></dd><dt>存储目录里还有文件，卸载因此拒绝执行。</dt><dd><pre><code>sudo ls /var/lib/relayium-node/blobs | wc -l</code></pre><p>这是刻意的。每个已存储的文件只存在于唯一一个节点上，没有副本，所以移除节点会让这些文件永远取不回来。要么等这些数据块过期、数量归零，要么用 RELAYIUM_NODE_FORCE=1 接受这个损失。环境变量无法穿过管道传给 sudo sh，所以要写成 sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh。</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>shell 回答「relayium-node: command not found」。</dt><dd><pre tabindex="0"><code>command -v relayium-node
+# 什么都没打印</code></pre><p>二进制根本没装。你从来不需要单独安装 relayium-node——账号页那条一行命令才是负责下载它、放进 PATH 并作为服务启动的东西。改跑那条命令。</p></dd><dt>服务是 active，但节点在账号页上始终不变成在线。</dt><dd><pre tabindex="0"><code>journalctl -u relayium-node -n 50 --no-pager</code></pre><p>在线与否是由出站心跳决定的，所以这里很少是防火墙的问题，而是注册失败。令牌是一次性的，已经用过的命令、或上一次尝试留下的旧命令都会失败。再点一次「添加节点」拿一条新命令重跑。</p></dd><dt>节点显示在线，但传输还是走我们的共享设施。</dt><dd><pre tabindex="0"><code>sudo ss -lunp | grep 3478</code></pre><p>在线只证明了出站心跳。对端需要的是入站端口：先确认节点确实在监听，然后在主机防火墙和云安全组里放通 3478/udp、8081/tcp 和 49152-65535/udp。想彻底排除悄悄回退，就打开「只使用我自己的节点」那个开关。</p></dd><dt>卸载命令什么都没打印、退出码 0，服务却还在。</dt><dd><pre tabindex="0"><code>systemctl status relayium-node
+# active (running)</code></pre><p>这正是把一次失败的下载管道给 sh 之后的样子：404 或网络抖动会什么都不打印、退出码 0，读起来和成功一模一样。先下载脚本、确认它非空、再执行——这也是本文那条命令写成三段而不是一条管道的原因。</p></dd><dt>存储目录里还有文件，卸载因此拒绝执行。</dt><dd><pre tabindex="0"><code>sudo ls /var/lib/relayium-node/blobs | wc -l</code></pre><p>这是刻意的。每个已存储的文件只存在于唯一一个节点上，没有副本，所以移除节点会让这些文件永远取不回来。要么等这些数据块过期、数量归零，要么用 RELAYIUM_NODE_FORCE=1 接受这个损失。环境变量无法穿过管道传给 sudo sh，所以要写成 sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh。</p></dd></dl></div>
       <h2>常见问题</h2>
       <h3>我遇到「relayium-node: command not found」，哪里错了？</h3>
       <p>你在安装之前就运行了 relayium-node 二进制。请用账号页给的那条一行安装命令（curl … | sudo … sh 形式）：它会下载二进制、放到 PATH 上，并作为服务启动。你从不需要单独安装 relayium-node。</p>

@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/how-to/send-files-pc-to-phone-wirelessly/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="PC からスマホへ無線でファイル転送：ケーブルもアプリも不要" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"PC からスマホへ無線でファイル転送：ケーブルもアプリも不要","description":"パソコンとスマホの間で Wi-Fi 経由でファイルを送る手順ガイド。ドラッグ＆ドロップだけ、USB ケーブル不要、クラウドのアカウント不要、しかも全行程がエンドツーエンド暗号化。","inLanguage":"ja","datePublished":"2026-07-03","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/send-files-pc-to-phone-wirelessly/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"PC からスマホへ無線でファイル転送：ケーブルもアプリも不要"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"Windows と iPhone だけでなく、Mac や Android でも使えますか？","acceptedAnswer":{"@type":"Answer","text":"はい。Relayium は Windows、macOS、Linux、Android、iOS のブラウザで動作するので、どの組み合わせでも使えます。Windows から Android、Mac から iPhone、Linux からスマホ、その逆も同様です。どちらの端末にもインストールするものはありません。"}},{"@type":"Question","name":"転送はどのくらい速いですか？","acceptedAnswer":{"@type":"Answer","text":"同じ Wi-Fi では2台が直接つながるため、速度はサーバーではなくローカルネットワークで決まり、たいてい Wi-Fi の許す限りの速さです。ネットワークをまたぐ場合、転送は設計上つねに暗号化 TURN リレー経由となるため、双方の回線とそのひと跳び分に左右されます。その代わり、接続の成立は、途中の NAT やファイアウォールを越える直接の経路を見つけられるかどうかに左右されません。NAT やファイアウォールが直接の経路を塞ぐこともあります。"}},{"@type":"Question","name":"この方法でファイルを送っても安全ですか？","acceptedAnswer":{"@type":"Answer","text":"はい。ブラウザの転送暗号化に加えて、Relayium は独自の層を重ねます。X25519 の鍵交換で導出した鍵をチャンクごとの AES-256-GCM に使い、その鍵はサーバーに触れません。両端末の6桁のコード（SAS）が一致すれば、鍵が差し替えられておらず、サーバーやリレーがどちらかの端末になりすましたり、アプリケーション層のエンドツーエンド暗号化を終端したりしていないことを確認できます。ネットワークをまたぐ場合、TURN リレーは引き続き転送経路上にありますが、復号できない暗号文だけを転送します。各ファイルは SHA-256 ハッシュでもエンドツーエンドに検証されます。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ja/guides/" aria-current="true">ガイド</a><a href="/ja/apps/">アプリ</a><a href="/pricing">料金</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -105,13 +162,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>同じ Wi-Fi で PC からスマホへ送る</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">始める前に</p><ul><li>パソコンとスマホが同じ Wi-Fi にあり、ルーターがクライアント同士を隔てていないこと。設定名は端末一覧の下のヒントに書かれています：「AP 分離 / クライアント分離」。</li><li>両方にブラウザがあり、ページを https://relayium.com/ で開いていること。暗号化転送には HTTPS が必要で、素の http:// で開くと端末を一覧せずにその旨を表示します。</li><li>転送中はスマホのタブを前面に置いたままにすること。ブラウザが対応していれば Relayium は画面のウェイクロックを要求し、画面が消えるのは防げます。ただし他のアプリへの切り替えは防げず、スマホのブラウザはバックグラウンドに回ったタブを絞ったり停止させたりすることがあります。</li><li>同一ネットワークの転送では、どちらの端末にもアカウントは不要です。サインインが必要になるのは送信側だけで、しかも両者が別のネットワークにあってペアリングコードを発行する場合だけです。</li></ul></div>
       <p>これが最速の方法です。2台が同じネットワークにあるので直接つながり、転送速度は Wi-Fi だけに左右されます。必要なのは各端末のブラウザだけです。</p>
-      <ol class="steps" data-block="steps"><li><p>パソコンで、任意の最新ブラウザ（Chrome、Edge、Firefox、Safari）で転送ページを開きます。</p><pre><code>https://relayium.com/</code></pre></li><li><p>スマホでも同じページを開き、両方の画面のステータス表示にあるグローバル IP を比べます。同じアドレスであることが 2 台を同じルームに入れる条件です。気づかないうちにモバイル通信のままだったスマホは、別のアドレスを表示します。</p><pre><code>接続済み · このデバイス Pixel · グローバル IP 203.0.113.9</code></pre></li><li><p>パソコンで「近くのデバイス」からスマホを見つけ、そのカードをクリックして「ワークスペースを開く」を押します。最新のブラウザではカードが提供する動作はこれ 1 つだけです。というのも、以降はファイルもフォルダもメッセージも、そこで開かれる 1 本の暗号化接続を通るからです。ファイルをそのカードへ直接ドラッグすれば、この手順を経ずに送ることもできます。</p></li><li><p>ワークスペースがそのカードに取って代わります。送信はヘッダーの下のコントロールで行います：1 バッチ最大 1,000 ファイルなら「ファイルを送信」、ブラウザがフォルダ選択に対応していればツリーごと「フォルダを送信」、あるいはメッセージ欄に入力して——「Enter で改行 · ⌘/Ctrl+Enter で送信」——「送信」を押します。</p></li><li><p>スマホでは、受け入れる前にリクエストの下の行を読んでください。ブラウザが保存先を尋ねるのか、ダウンロード先へ直接書き込むのかが書かれています。読んだうえで「受信」を押し、ファイルカウンターがそのバッチの最後のファイルに達するまでそのタブを前面に置いたままにします。1 バイトも動く前に検証コード（SAS）を照合したい場合は、開始前に両方の端末で「高度な検証」をオンにしてください。既定はオフで、増えるのは照合と承認の一手間であって暗号化ではありません。</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">転送が終わったときの画面</p><p>この時点でスマホのカードはもうありません——ワークスペースが取って代わったからです。状態はワークスペースのヘッダーから読みます：接続先のデバイス、「接続済み」というリンク状態、そして唯一の経路バッジ「LAN直結」。両方の画面のファイルカウンターはそのバッチの最後のファイルで止まります。</p><p>その次に確かめるのはページではなくファイルです。どこに置かれるかはスマホのブラウザが決めます：Android の Chrome と Firefox はブラウザ自身のダウンロード一覧（それぞれ chrome://downloads と about:downloads）に入れ、iOS の Safari は「ファイル」アプリで開けるダウンロードフォルダに入れます。</p><pre><code>Pixel に接続済み · 接続済み · LAN直結
+      <ol class="steps" data-block="steps"><li><p>パソコンで、任意の最新ブラウザ（Chrome、Edge、Firefox、Safari）で転送ページを開きます。</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>スマホでも同じページを開き、両方の画面のステータス表示にあるグローバル IP を比べます。同じアドレスであることが 2 台を同じルームに入れる条件です。気づかないうちにモバイル通信のままだったスマホは、別のアドレスを表示します。</p><pre tabindex="0"><code>接続済み · このデバイス Pixel · グローバル IP 203.0.113.9</code></pre></li><li><p>パソコンで「近くのデバイス」からスマホを見つけ、そのカードをクリックして「ワークスペースを開く」を押します。最新のブラウザではカードが提供する動作はこれ 1 つだけです。というのも、以降はファイルもフォルダもメッセージも、そこで開かれる 1 本の暗号化接続を通るからです。ファイルをそのカードへ直接ドラッグすれば、この手順を経ずに送ることもできます。</p></li><li><p>ワークスペースがそのカードに取って代わります。送信はヘッダーの下のコントロールで行います：1 バッチ最大 1,000 ファイルなら「ファイルを送信」、ブラウザがフォルダ選択に対応していればツリーごと「フォルダを送信」、あるいはメッセージ欄に入力して——「Enter で改行 · ⌘/Ctrl+Enter で送信」——「送信」を押します。</p></li><li><p>スマホでは、受け入れる前にリクエストの下の行を読んでください。ブラウザが保存先を尋ねるのか、ダウンロード先へ直接書き込むのかが書かれています。読んだうえで「受信」を押し、ファイルカウンターがそのバッチの最後のファイルに達するまでそのタブを前面に置いたままにします。1 バイトも動く前に検証コード（SAS）を照合したい場合は、開始前に両方の端末で「高度な検証」をオンにしてください。既定はオフで、増えるのは照合と承認の一手間であって暗号化ではありません。</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">転送が終わったときの画面</p><p>この時点でスマホのカードはもうありません——ワークスペースが取って代わったからです。状態はワークスペースのヘッダーから読みます：接続先のデバイス、「接続済み」というリンク状態、そして唯一の経路バッジ「LAN直結」。両方の画面のファイルカウンターはそのバッチの最後のファイルで止まります。</p><p>その次に確かめるのはページではなくファイルです。どこに置かれるかはスマホのブラウザが決めます：Android の Chrome と Firefox はブラウザ自身のダウンロード一覧（それぞれ chrome://downloads と about:downloads）に入れ、iOS の Safari は「ファイル」アプリで開けるダウンロードフォルダに入れます。</p><pre tabindex="0"><code>Pixel に接続済み · 接続済み · LAN直結
 ファイル 1/1</code></pre></div>
       <ul><li>同一ネットワークのルームはそのネットワークからページを開いた端末をすべて収めるので、スマホの隣にタブレットや 2 台目のノート PC が現れるのは正常です。</li><li>1,000 ファイルの上限はセッションごとではなくバッチごとなので、非常に大きなツリーは接続し直さずに何回かのドロップで送れます。</li></ul>
       <h2>スマホが現れない、または転送が止まるとき</h2>
       <p>理由を明かすのはたいていスマホ側です。思っていたのとは別のネットワークにいる、タブがバックグラウンドに回った、あるいはブラウザが求められた量を抱えきれない。これらは網羅した一覧ではなく、まず当たるべき定番の確認事項で、どれも推測ではなく画面上にあるものだけで判断できます。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>パソコンの「近くのデバイス」にスマホがいつまでも現れない。</dt><dd><pre><code>https://relayium.com/   # 両方の画面のステータス表示にあるグローバル IP を比べる</code></pre><p>グローバル IP が 2 つ違えばルームも 2 つです。気づかないうちにモバイル通信のままだったのはよくある原因の 1 つ、iCloud プライベートリレーや VPN が別アドレスから出しているのはもう 1 つで、どちらも唯一の原因ではありません。設定を変えてよいなら：Wi-Fi に参加する、VPN を切る、あるいはその 1 つのネットワークだけプライベートリレーをオフにする、のどれかを行い、スマホで https://relayium.com/ を再読み込みしてください。そのままにしておきたい場合は、https://relayium.com/cross-network のペアリングコードならどちらの設定にも触れずにそのスマホへ届き、エンドツーエンド暗号化も同じです。</p></dd><dt>両方の端末が同じグローバル IP を表示しているのに、カードが現れない。</dt><dd><pre><code>https://relayium.com/   # 端末一覧の下のヒントに、変更すべきルーター設定名がある</code></pre><p>ルーターが自分のクライアントを隔てています。ゲスト用やホテルの Wi-Fi では既定でそうなっていることが多いです。「AP 分離 / クライアント分離」をオフにするか、ルーターを変更できない場合は https://relayium.com/cross-network のペアリングコードを使ってください。</p></dd><dt>転送が始まったあと、スマホで他のアプリに切り替えると止まる、または失敗する。</dt><dd><pre><code>https://relayium.com/   # スマホでは Relayium のタブが前面にある必要がある</code></pre><p>スマホのブラウザはバックグラウンドのタブを絞ったり停止させたりすることがあり、そうしている間はバイトが動きません。Relayium の停滞監視はページが前面に戻ったあと即座に失敗させず 1 回分の猶予を与えますが、対処はタブを前面に置いたままにすることです。Relayium が要求するウェイクロックは画面が消えるのを防ぐだけでバックグラウンド実行までは得られず、古い Safari と Android には要求できるウェイクロックそのものがありません。</p></dd><dt>受け入れる前に、スマホがバッチ全体をメモリに保持しなければならないと警告する。</dt><dd><pre><code>chrome://downloads   # Chrome 用 / Edge は edge://downloads / Firefox は about:downloads</code></pre><p>スマホのブラウザには File System Access API がないため、バッチはメモリ上で組み立てられ、おおよそ 256 MiB を超えると Relayium が警告します。この数値は硬い上限ではなく慎重な警告線です。一度に送るファイルを減らすか、大きいものは向きを変えて、ディスクへ直接書き出せる PC の Chrome か Edge へ送ってください。何が実際に届いたかは、受信側のブラウザ自身のダウンロード一覧——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)——で確認します。</p></dd><dt>ネットワークをまたぐ場合、スマホが入力したペアリングコードが拒否される。</dt><dd><pre><code>https://relayium.com/cross-network   # ペアリングカードにカウントダウンとリレー拒否の理由が出る</code></pre><p>ペアリングコードの有効期限は5分で、アカウントが必要なのは発行した端末だけです。新しいコードを発行し、すぐに入力してください。カードにリレーは確認済みアカウントにのみ発行されると出る場合は、まずアカウントパネルで送信側のメールアドレスを確認してください。上の同一ネットワークの手順はその影響を受けません。</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>パソコンの「近くのデバイス」にスマホがいつまでも現れない。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 両方の画面のステータス表示にあるグローバル IP を比べる</code></pre><p>グローバル IP が 2 つ違えばルームも 2 つです。気づかないうちにモバイル通信のままだったのはよくある原因の 1 つ、iCloud プライベートリレーや VPN が別アドレスから出しているのはもう 1 つで、どちらも唯一の原因ではありません。設定を変えてよいなら：Wi-Fi に参加する、VPN を切る、あるいはその 1 つのネットワークだけプライベートリレーをオフにする、のどれかを行い、スマホで https://relayium.com/ を再読み込みしてください。そのままにしておきたい場合は、https://relayium.com/cross-network のペアリングコードならどちらの設定にも触れずにそのスマホへ届き、エンドツーエンド暗号化も同じです。</p></dd><dt>両方の端末が同じグローバル IP を表示しているのに、カードが現れない。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 端末一覧の下のヒントに、変更すべきルーター設定名がある</code></pre><p>ルーターが自分のクライアントを隔てています。ゲスト用やホテルの Wi-Fi では既定でそうなっていることが多いです。「AP 分離 / クライアント分離」をオフにするか、ルーターを変更できない場合は https://relayium.com/cross-network のペアリングコードを使ってください。</p></dd><dt>転送が始まったあと、スマホで他のアプリに切り替えると止まる、または失敗する。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # スマホでは Relayium のタブが前面にある必要がある</code></pre><p>スマホのブラウザはバックグラウンドのタブを絞ったり停止させたりすることがあり、そうしている間はバイトが動きません。Relayium の停滞監視はページが前面に戻ったあと即座に失敗させず 1 回分の猶予を与えますが、対処はタブを前面に置いたままにすることです。Relayium が要求するウェイクロックは画面が消えるのを防ぐだけでバックグラウンド実行までは得られず、古い Safari と Android には要求できるウェイクロックそのものがありません。</p></dd><dt>受け入れる前に、スマホがバッチ全体をメモリに保持しなければならないと警告する。</dt><dd><pre tabindex="0"><code>chrome://downloads   # Chrome 用 / Edge は edge://downloads / Firefox は about:downloads</code></pre><p>スマホのブラウザには File System Access API がないため、バッチはメモリ上で組み立てられ、おおよそ 256 MiB を超えると Relayium が警告します。この数値は硬い上限ではなく慎重な警告線です。一度に送るファイルを減らすか、大きいものは向きを変えて、ディスクへ直接書き出せる PC の Chrome か Edge へ送ってください。何が実際に届いたかは、受信側のブラウザ自身のダウンロード一覧——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)——で確認します。</p></dd><dt>ネットワークをまたぐ場合、スマホが入力したペアリングコードが拒否される。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # ペアリングカードにカウントダウンとリレー拒否の理由が出る</code></pre><p>ペアリングコードの有効期限は5分で、アカウントが必要なのは発行した端末だけです。新しいコードを発行し、すぐに入力してください。カードにリレーは確認済みアカウントにのみ発行されると出る場合は、まずアカウントパネルで送信側のメールアドレスを確認してください。上の同一ネットワークの手順はその影響を受けません。</p></dd></dl></div>
       <h2>別のネットワーク：ペアリングとリレー</h2>
       <p>ペアリングコードはサーバーが生成する6桁の10進数字です（0〜9、先頭の0も有効）。送信側はコード作成時にサインインしますが、コード、リンク、QRから参加する側にアカウントは不要です。新しく参加できるのは5分間で、すでに接続済みの転送はカウントダウン終了で切断されません。</p>
       <p>ネットワークをまたぐ場合、ブラウザは先に直接経路を試すのではなく、設計どおり暗号化された TURN リレーを使います。鍵は2台の端末に留まるため、リレーが転送するのはエンドツーエンド暗号化された暗号文だけで、ファイルを読めず、リアルタイム内容のコピーや履歴も保持しません。</p>

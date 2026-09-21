@@ -67,7 +67,11 @@ describe("buildLandingPages", () => {
   });
 
   it("footer order: Relayium link, then Guides, then Privacy", () => {
-    const zh = pages.find((p) => p.path === "zh/index.html").html;
+    // Sliced to the footer, not searched across the page: the site header now
+    // links the Guides hub too, and a bare indexOf would answer with that one
+    // and report the FOOTER as out of order.
+    const page = pages.find((p) => p.path === "zh/index.html").html;
+    const zh = page.slice(page.lastIndexOf("<footer>"));
     const relayiumIdx = zh.indexOf(">← Relayium<");
     const guidesIdx = zh.indexOf('href="/zh/guides/">使用指南<');
     const privacyIdx = zh.indexOf('href="/zh/privacy/">隐私政策<');

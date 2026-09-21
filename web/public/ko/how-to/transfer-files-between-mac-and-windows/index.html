@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ko/how-to/transfer-files-between-mac-and-windows/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Mac과 Windows PC 사이에서 파일 전송하는 방법" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Mac과 Windows PC 사이에서 파일 전송하는 방법","description":"USB 드라이브도, 공유 폴더도, 클라우드 업로드도 없이 macOS와 Windows 사이에서 파일을 보내는 방법. 같은 네트워크에서도 인터넷 너머로도 가능하며, 두 운영체제 모두 설치할 것이 없습니다.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/how-to/transfer-files-between-mac-and-windows/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Mac과 Windows PC 사이에서 파일 전송하는 방법"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"Mac이나 Windows PC에 뭔가 설치해야 하나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. Relayium은 macOS와 Windows 모두에서 전적으로 브라우저에서 동작합니다. 각 기기에서 relayium.com을 열면 준비 끝입니다 — 어느 쪽이든 다운로드는 필요 없습니다. 같은 네트워크에서는 전송에 계정이 전혀 필요 없고, 인터넷 너머 페어링도 보내는 쪽이 로그인만 하면 됩니다."}},{"@type":"Question","name":"두 컴퓨터가 반드시 같은 네트워크에 있어야 하나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 같은 네트워크는 두 기기가 자동으로 서로를 찾기 때문에 가장 빠르지만, 페어링 코드는 서로 다른 도시에 있는 Mac과 Windows PC도 인터넷 너머로 똑같이 연결해 줍니다. 어느 쪽이든 전송은 종단간 암호화를 유지합니다. 네트워크를 넘는 경로는 보내는 쪽이 먼저 로그인하기만 하면 되고, 받는 쪽은 계정이 필요 없습니다."}},{"@type":"Question","name":"개별 파일뿐 아니라 폴더 전체를 보낼 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"네. 폴더를 끌어다 놓으면 Relayium이 배치당 최대 1,000개 파일을 폴더 구조를 유지하며 보냅니다. Windows의 Chrome과 Edge는 선택한 디렉터리에 곧바로 기록합니다. 받는 쪽 브라우저가 폴더를 직접 기록하지 못하면, 같은 구조의 단일 .zip으로 도착합니다."}},{"@type":"Question","name":"Mac에서 Windows로 넘어갈 때 파일 권한, 줄바꿈, 파일명이 망가지나요?","acceptedAnswer":{"@type":"Answer","text":"바이트와 폴더 안의 상대 경로는 그대로이고 SHA-256 해시로 종단간 검증되므로 줄바꿈이나 인코딩은 건드리지 않습니다 — 애플리케이션 수준의 변환이 필요할 만한 것(텍스트 파일의 CRLF와 LF 차이 등)도 파일 자체가 변경되지 않으므로 영향받지 않습니다. 다만 정말로 넘어가지 않는 것이 두 가지 있습니다. Windows가 금지하는 문자가 들어간 이름은 PC에서 아예 만들어지지 못하고, POSIX 권한과 소유권, macOS 확장 속성은 전송되지 않습니다 — 받는 쪽 브라우저가 NTFS 자체 모델을 따르는 보통 파일을 쓰기 때문입니다."}},{"@type":"Question","name":"크기 제한이 있나요?","acceptedAnswer":{"@type":"Answer","text":"배치당 최대 1,000개 파일입니다. 서버 측 크기 제한은 아예 없습니다 — 데스크톱 Chrome과 Edge는 곧바로 디스크로 스트리밍합니다. Firefox와 Safari에는 File System Access API가 없어 그쪽에서 받은 묶음은 메모리에 담기며, 대략 256MB를 넘으면 Relayium이 경고합니다. 이는 고정된 한계가 아니라 보수적으로 잡은 추정치로, 실제 상한은 그 컴퓨터의 메모리와 함께 돌아가는 다른 작업에 달려 있습니다."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ko/guides/" aria-current="true">가이드</a><a href="/ko/apps/">앱</a><a href="/pricing">요금제</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">Mac과 Windows PC 사이에서 파일 전송하는 방법</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -107,12 +164,12 @@ ol.steps>li>pre{margin:8px 0 0}
       <p>Mac이나 PC 어느 쪽에도 설치할 것이 없습니다. 같은 네트워크에서는 가입할 것도 없습니다 — 브라우저가 모든 걸 처리합니다.</p>
       <h2>Mac과 PC가 같은 네트워크에 있을 때</h2>
       <p>두 컴퓨터가 같은 사무실이나 가정 네트워크에 있다면, 이것이 파일을 옮기는 가장 빠른 방법입니다 — 공유 드라이브를 마운트할 필요도, 권한과 씨름할 필요도 없습니다.</p>
-      <ol class="steps" data-block="steps"><li><p>Mac에서 브라우저로 전송 페이지를 엽니다. Windows PC에서도 같은 주소를 엽니다.</p><pre><code>https://relayium.com/</code></pre></li><li><p>두 기기의 상태 표시에 있는 공인 IP를 비교합니다. 주소를 하나 공유하는 것이 둘을 같은 방에 넣는 조건입니다. 같은 사무실 네트워크의 두 기기가 서로 다른 주소를 보인다면 보통 업무용 노트북에 켜진 회사 VPN 때문입니다.</p><pre><code>연결됨 · 내 기기 MacBook · 공인 IP 203.0.113.9</code></pre></li><li><p>이제 두 기기가 “주변 기기”에서 서로 나타납니다 — Windows 작업 그룹 설정도, macOS 파일 공유 활성화도 필요 없습니다. 보내는 컴퓨터에서 다른 쪽을 누르고 “작업 공간 열기”를 누르세요. 최신 브라우저에서 카드가 제공하는 동작은 이 하나뿐입니다 — 이후 파일과 폴더와 메시지가 모두 그때 열리는 암호화된 연결 하나를 지나기 때문입니다.</p></li><li><p>작업 공간이 그 카드를 대신합니다. 보내기는 헤더 아래의 컨트롤로 합니다: 한 배치에 최대 1,000개라면 “파일 보내기”, 디렉터리 전체라면 “폴더 보내기”, 또는 메시지 상자에 입력하고 — “Enter 로 줄바꿈 · ⌘/Ctrl+Enter 로 전송” — “보내기”를 누릅니다. 받는 쪽에서는 요청 아래 줄을 읽으세요. Chrome이나 Edge라면 브라우저가 저장 위치를 묻는다고, 즉 폴더를 직접 고른다고 적혀 있고, Safari나 Firefox라면 파일이 브라우저 자체 다운로드 폴더로 간다고 적혀 있습니다. 그다음 “받기”를 누릅니다.</p></li><li><p>두 화면에서 파일 카운터가 마지막 파일까지 가는 것을 지켜보세요. 한 바이트도 움직이기 전에 검증 코드(SAS)를 대조하려면 먼저 두 기기에서 “고급 검증”을 켜세요. 일치한다는 것은 둘이 같은 종단간 암호화 세션에 참여했음을 확인할 뿐, 암호문이 어떤 네트워크 경로로 이동하는지는 증명하지 않습니다. 꺼 두어도 세션은 여전히 암호화되며, 대조할 코드가 없을 뿐입니다.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">전송이 잘될 때의 화면</p><p>그때쯤 상대 카드는 사라져 있습니다 — 작업 공간이 그 자리를 차지했으니까요 — 그래서 상태는 작업 공간 헤더에서 읽습니다: 연결된 기기, “연결됨”이라는 링크 상태, 그리고 하나뿐인 경로 배지 “LAN 직접”. 카운터는 그 배치의 마지막 파일에서 멈춥니다.</p><p>고른 폴더에는 트리가 상대 경로를 그대로 유지한 채 도착합니다. 그 대상 디렉터리에 이미 같은 이름이 있어도 덮어쓰지 않습니다. report.pdf는 그 옆에 report (1).pdf로 내려앉습니다. 이 이름 변경은 Relayium 자신이 하는 것이며, 브라우저가 쓸 디렉터리를 넘겨준 경우 — 폴더 선택기가 있는 Chrome이나 Edge — 에만 적용됩니다. 선택기가 없으면 이름 짓기는 그 브라우저의 다운로드 관리자 몫이고, 결과는 그 브라우저 자체 목록에서 확인합니다: chrome://downloads (Chrome), edge://downloads (Edge), about:downloads (Firefox).</p><pre><code>ThinkPad 에 연결됨 · 연결됨 · LAN 직접
+      <ol class="steps" data-block="steps"><li><p>Mac에서 브라우저로 전송 페이지를 엽니다. Windows PC에서도 같은 주소를 엽니다.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>두 기기의 상태 표시에 있는 공인 IP를 비교합니다. 주소를 하나 공유하는 것이 둘을 같은 방에 넣는 조건입니다. 같은 사무실 네트워크의 두 기기가 서로 다른 주소를 보인다면 보통 업무용 노트북에 켜진 회사 VPN 때문입니다.</p><pre tabindex="0"><code>연결됨 · 내 기기 MacBook · 공인 IP 203.0.113.9</code></pre></li><li><p>이제 두 기기가 “주변 기기”에서 서로 나타납니다 — Windows 작업 그룹 설정도, macOS 파일 공유 활성화도 필요 없습니다. 보내는 컴퓨터에서 다른 쪽을 누르고 “작업 공간 열기”를 누르세요. 최신 브라우저에서 카드가 제공하는 동작은 이 하나뿐입니다 — 이후 파일과 폴더와 메시지가 모두 그때 열리는 암호화된 연결 하나를 지나기 때문입니다.</p></li><li><p>작업 공간이 그 카드를 대신합니다. 보내기는 헤더 아래의 컨트롤로 합니다: 한 배치에 최대 1,000개라면 “파일 보내기”, 디렉터리 전체라면 “폴더 보내기”, 또는 메시지 상자에 입력하고 — “Enter 로 줄바꿈 · ⌘/Ctrl+Enter 로 전송” — “보내기”를 누릅니다. 받는 쪽에서는 요청 아래 줄을 읽으세요. Chrome이나 Edge라면 브라우저가 저장 위치를 묻는다고, 즉 폴더를 직접 고른다고 적혀 있고, Safari나 Firefox라면 파일이 브라우저 자체 다운로드 폴더로 간다고 적혀 있습니다. 그다음 “받기”를 누릅니다.</p></li><li><p>두 화면에서 파일 카운터가 마지막 파일까지 가는 것을 지켜보세요. 한 바이트도 움직이기 전에 검증 코드(SAS)를 대조하려면 먼저 두 기기에서 “고급 검증”을 켜세요. 일치한다는 것은 둘이 같은 종단간 암호화 세션에 참여했음을 확인할 뿐, 암호문이 어떤 네트워크 경로로 이동하는지는 증명하지 않습니다. 꺼 두어도 세션은 여전히 암호화되며, 대조할 코드가 없을 뿐입니다.</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">전송이 잘될 때의 화면</p><p>그때쯤 상대 카드는 사라져 있습니다 — 작업 공간이 그 자리를 차지했으니까요 — 그래서 상태는 작업 공간 헤더에서 읽습니다: 연결된 기기, “연결됨”이라는 링크 상태, 그리고 하나뿐인 경로 배지 “LAN 직접”. 카운터는 그 배치의 마지막 파일에서 멈춥니다.</p><p>고른 폴더에는 트리가 상대 경로를 그대로 유지한 채 도착합니다. 그 대상 디렉터리에 이미 같은 이름이 있어도 덮어쓰지 않습니다. report.pdf는 그 옆에 report (1).pdf로 내려앉습니다. 이 이름 변경은 Relayium 자신이 하는 것이며, 브라우저가 쓸 디렉터리를 넘겨준 경우 — 폴더 선택기가 있는 Chrome이나 Edge — 에만 적용됩니다. 선택기가 없으면 이름 짓기는 그 브라우저의 다운로드 관리자 몫이고, 결과는 그 브라우저 자체 목록에서 확인합니다: chrome://downloads (Chrome), edge://downloads (Edge), about:downloads (Firefox).</p><pre tabindex="0"><code>ThinkPad 에 연결됨 · 연결됨 · LAN 직접
 파일 12/12</code></pre></div>
       <h2>한쪽 기기가 다른 쪽을 못 볼 때</h2>
       <p>이 조합에서는 업무용 VPN과 관리되는 사무실 네트워크가 먼저 확인할 만한 두 가지입니다. 전부를 담은 목록이 아니라 흔한 1차 점검이며, 아래는 모두 문의가 아니라 이미 화면에 있는 것으로 판단됩니다.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 조치</p><dl><dt>둘 다 사무실 Wi-Fi에 있는데도 “주변 기기”에 어느 쪽도 나타나지 않습니다.</dt><dd><pre><code>https://relayium.com/   # 두 기기의 상태 표시에 있는 공인 IP를 비교한다</code></pre><p>공인 IP가 다르면 방도 둘이고, 회사 VPN은 흔한 원인 하나입니다. 한 기기는 회사 출구 주소로 나가고 다른 기기는 사무실 공유기로 나가기 때문입니다. 다른 출구로 나가는 게스트 SSID가 또 하나이며, 이 둘만 있는 것은 아닙니다. 바꿔도 괜찮다면 그 기기에서 VPN을 끊거나 게스트 SSID에서 빠져나온 뒤 거기서 https://relayium.com/ 을 다시 불러오세요. VPN을 계속 켜 두어야 한다면 https://relayium.com/cross-network 의 페어링 코드가 VPN을 끊지 않고 상대 기기에 닿습니다.</p></dd><dt>두 기기가 같은 공인 IP를 보여주는데도 어느 카드도 나타나지 않습니다.</dt><dd><pre><code>https://relayium.com/   # 기기 목록 아래 안내에 바꿔야 할 공유기 설정 이름이 있다</code></pre><p>네트워크가 자기 클라이언트를 갈라놓고 있습니다. 내 공유기라면 ‘AP 격리 / 클라이언트 격리’를 끄고, 손댈 수 없는 관리형 사무실 네트워크라면 https://relayium.com/cross-network 의 코드로 두 기기를 페어링하세요.</p></dd><dt>받기를 누르기 전에, Mac이 배치 전체를 메모리에 담아야 한다고 경고합니다.</dt><dd><pre><code>https://relayium.com/   # 요청 아래 줄에 이 브라우저가 어떻게 저장할지 적혀 있다</code></pre><p>Safari에는 File System Access API가 없어 내보내는 대신 배치를 안고 있으며, 대략 256 MiB를 넘으면 Relayium이 경고합니다. 그 Mac에서 Chrome이나 Edge로 받으세요. 파일마다 디스크로 바로 스트리밍하고 대상 폴더를 먼저 물어봅니다.</p></dd><dt>폴더 전송에서 나머지는 도착했는데 한 파일만 Windows 쪽에서 실패합니다.</dt><dd><pre><code>https://relayium.com/   # 멈춘 시점에 카운터가 어느 파일인지 보여준다</code></pre><p>Windows는 파일 이름에 \ / : * ? &quot; &lt; &gt; | 를 허용하지 않고 macOS는 허용하므로, Mac에서 적법한 이름이 PC에서는 만들어질 수 없습니다. Mac에서 그 파일 이름을 바꾸고 다시 보내세요 — 2026:08:05 같은 날짜의 콜론이 가장 흔한 원인입니다.</p></dd><dt>전송은 되지만 배지가 “LAN 직접”이 아니라 “P2P 직접”으로 나옵니다.</dt><dd><pre><code>https://relayium.com/   # 작업 공간 헤더의 경로 배지를 읽는다</code></pre><p>두 기기가 공인 IP는 공유하지만 로컬 홉은 공유하지 않습니다. 사무실 회선 하나 아래의 두 VLAN이 바로 그런 모습입니다. 전송은 여전히 직접이고 여전히 종단간 암호화입니다. 경로를 브라우저가 찾은 길이 아니라 LAN으로 만들고 싶다면 둘을 같은 서브넷에 두세요.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 조치</p><dl><dt>둘 다 사무실 Wi-Fi에 있는데도 “주변 기기”에 어느 쪽도 나타나지 않습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 두 기기의 상태 표시에 있는 공인 IP를 비교한다</code></pre><p>공인 IP가 다르면 방도 둘이고, 회사 VPN은 흔한 원인 하나입니다. 한 기기는 회사 출구 주소로 나가고 다른 기기는 사무실 공유기로 나가기 때문입니다. 다른 출구로 나가는 게스트 SSID가 또 하나이며, 이 둘만 있는 것은 아닙니다. 바꿔도 괜찮다면 그 기기에서 VPN을 끊거나 게스트 SSID에서 빠져나온 뒤 거기서 https://relayium.com/ 을 다시 불러오세요. VPN을 계속 켜 두어야 한다면 https://relayium.com/cross-network 의 페어링 코드가 VPN을 끊지 않고 상대 기기에 닿습니다.</p></dd><dt>두 기기가 같은 공인 IP를 보여주는데도 어느 카드도 나타나지 않습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 기기 목록 아래 안내에 바꿔야 할 공유기 설정 이름이 있다</code></pre><p>네트워크가 자기 클라이언트를 갈라놓고 있습니다. 내 공유기라면 ‘AP 격리 / 클라이언트 격리’를 끄고, 손댈 수 없는 관리형 사무실 네트워크라면 https://relayium.com/cross-network 의 코드로 두 기기를 페어링하세요.</p></dd><dt>받기를 누르기 전에, Mac이 배치 전체를 메모리에 담아야 한다고 경고합니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 요청 아래 줄에 이 브라우저가 어떻게 저장할지 적혀 있다</code></pre><p>Safari에는 File System Access API가 없어 내보내는 대신 배치를 안고 있으며, 대략 256 MiB를 넘으면 Relayium이 경고합니다. 그 Mac에서 Chrome이나 Edge로 받으세요. 파일마다 디스크로 바로 스트리밍하고 대상 폴더를 먼저 물어봅니다.</p></dd><dt>폴더 전송에서 나머지는 도착했는데 한 파일만 Windows 쪽에서 실패합니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 멈춘 시점에 카운터가 어느 파일인지 보여준다</code></pre><p>Windows는 파일 이름에 \ / : * ? &quot; &lt; &gt; | 를 허용하지 않고 macOS는 허용하므로, Mac에서 적법한 이름이 PC에서는 만들어질 수 없습니다. Mac에서 그 파일 이름을 바꾸고 다시 보내세요 — 2026:08:05 같은 날짜의 콜론이 가장 흔한 원인입니다.</p></dd><dt>전송은 되지만 배지가 “LAN 직접”이 아니라 “P2P 직접”으로 나옵니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 작업 공간 헤더의 경로 배지를 읽는다</code></pre><p>두 기기가 공인 IP는 공유하지만 로컬 홉은 공유하지 않습니다. 사무실 회선 하나 아래의 두 VLAN이 바로 그런 모습입니다. 전송은 여전히 직접이고 여전히 종단간 암호화입니다. 경로를 브라우저가 찾은 길이 아니라 LAN으로 만들고 싶다면 둘을 같은 서브넷에 두세요.</p></dd></dl></div>
       <h2>다른 네트워크: 페어링과 릴레이</h2>
       <p>페어링 코드는 서버가 생성하는 정확히 6자리 십진수입니다(0–9, 맨 앞의 0도 유효). 보내는 쪽은 코드를 만들 때 로그인하지만 코드·링크·QR로 참가하는 쪽은 계정이 필요 없습니다. 새 기기가 참가할 수 있는 시간은 5분이며, 이미 연결된 전송은 카운트다운이 끝나도 끊기지 않습니다.</p>
       <p>네트워크가 다르면 브라우저는 직접 경로를 먼저 시도하지 않고 설계상 암호화된 TURN 릴레이를 사용합니다. 키는 두 기기에만 남으므로 릴레이는 종단 간 암호화된 암호문만 전달하고 파일을 읽을 수 없으며 실시간 콘텐츠 사본이나 기록도 보관하지 않습니다.</p>

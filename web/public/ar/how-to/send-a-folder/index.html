@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ar/how-to/send-a-folder/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="كيفية إرسال مجلد كامل، لا ملفات فقط" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"كيفية إرسال مجلد كامل، لا ملفات فقط","description":"اختر مجلدًا كاملًا في المتصفح وأرسِله دفعةً واحدة — مع الحفاظ على المسارات النسبية، حتى 1,000 ملف، كل منها مُتحقَّق منه بـ SHA-256. لا حاجة إلى الضغط مسبقًا.","inLanguage":"ar","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/how-to/send-a-folder/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"كيفية إرسال مجلد كامل، لا ملفات فقط"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل يمكنني إرسال مجلد من iPhone أو iPad؟","acceptedAnswer":{"@type":"Answer","text":"ليس كمُرسِل — فـ Safari على iOS لا يملك منتقي مجلدات، بل ملفات فردية فقط، فإرسال المجلدات يعمل حاليًا من Chrome أو Edge أو Firefox على سطح المكتب. لكن iPhone أو iPad يستطيع مع ذلك استقبال مجلد بلا مشكلة، على هيئة .zip."}},{"@type":"Question","name":"هل تُحفَظ المجلدات الفرعية وبنية الملفات؟","acceptedAnswer":{"@type":"Answer","text":"في الإرسال الفوري نعم: يُبقي Relayium المسار النسبي لكل ملف، بما في ذلك المجلدات الفرعية المتداخلة، فيكون للمجلد الواصل نفس تخطيط الذي اخترته. أما رابط التنزيل المُخزَّن فمختلف — إذ يرفع قائمة ملفات مسطّحة ويُسقط المسارات — فاحزم المجلد بنفسك وارفع الأرشيف عندما يلزم بقاء البنية."}},{"@type":"Question","name":"كم عدد الملفات التي يمكن أن يحملها إرسال مجلد؟","acceptedAnswer":{"@type":"Answer","text":"حتى 1,000 ملف في دفعة واحدة، كل منها مُتحقَّق منه على حدة بتجزئة SHA-256 عند الوصول."}},{"@type":"Question","name":"هل يستلم المُستقبِل مجلدًا فعليًا أم ملف .zip؟","acceptedAnswer":{"@type":"Answer","text":"يعتمد ذلك على متصفحه. يكتب Chrome وEdge الملفات مباشرةً في دليل يختاره. أما Firefox وSafari فيستلمان ملف .zip واحدًا بوضع التخزين فقط (دون 4 GiB) يُفكّ إلى نفس بنية المجلد."}},{"@type":"Question","name":"هل أحتاج إلى حساب لإرسال مجلد؟","acceptedAnswer":{"@type":"Answer","text":"ليس على نفس الشبكة. الإرسال عبر الشبكات برمز اقتران يتطلب أن يسجّل المُرسِل الدخول، لكن المُستقبِل لا يحتاج أبدًا إلى حساب في كلتا الحالتين."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ar/guides/" aria-current="true">الأدلة</a><a href="/ar/apps/">التطبيقات</a><a href="/pricing">الأسعار</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ar/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ar/guides/">الأدلة</a> <span aria-hidden="true">›</span> <span aria-current="page">كيفية إرسال مجلد كامل، لا ملفات فقط</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -106,13 +163,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">ما تحتاج إليه</p><ul><li>متصفح على حاسوب مكتبي في جهة الإرسال — Chrome أو Edge أو Firefox. فمنتقي الملفات في Safari على iPhone وiPad لا يستطيع اختيار مجلد إطلاقًا، بل ملفات مفردة فقط، لذا يبدأ إرسال المجلد من حاسوب.</li><li>شجرة لا تزيد على 1,000 ملف. وهذا الحد يخص الدفعة لا الجلسة، فالشجرة الأكبر تنتقل على عدة إرساليات دون إعادة الاتصال.</li><li>قرار بشأن المتصفح المستقبِل، فهو الذي يحدّد شكل ما يصل: يكتب Chrome أو Edge الشجرة في مجلد يختاره المُستقبِل، أما أي متصفح آخر فيُنتج ملف ‎.zip‎ واحدًا بدلًا من ذلك.</li><li>أن يكون الطرفان متصلين معًا للإرسال الفوري، أو — إن لم يكن الطرف الآخر حاضرًا — أن يكون المُرسِل مسجَّل الدخول ومعه أرشيف حزمته بنفسك، لأن الرابط المُخزَّن يرفع قائمة ملفات مسطّحة ولا يحمل أي شجرة أدلة.</li></ul></div>
       <p>بدلًا من اختيار الملفات واحدًا تلو الآخر، اختر المجلد نفسه. يجتاز Relayium شجرة الدليل في المتصفح ويُبقي المسار النسبي لكل ملف — المجلدات الفرعية، والمجلدات الفرعية المتداخلة، كلها — بحيث يكون لما يصل إلى الجانب الآخر نفس التخطيط الذي بدأت به.</p>
       <p>يعمل هذا اليوم في Chrome وEdge وFirefox على سطح المكتب. ولا يعمل على iOS: فمُنتقي الملفات في Safari على iPhone وiPad لا يملك طريقة لاختيار مجلد، بل ملفات فردية فقط، فإرسال المجلدات ميزة سطح مكتب في الوقت الحالي.</p>
-      <ol class="steps" data-block="steps"><li><p>افتح صفحة النقل على حاسوب الإرسال — صفحة نفس الشبكة إن كنتما على شبكة واحدة، وصفحة النقل الفوري إن احتجت إلى رمز اقتران.</p><pre dir="ltr"><code>https://relayium.com/</code></pre></li><li><p>اسحب المجلد إلى الصفحة، أو استخدم زر منتقي المجلدات. يتجول Relayium في الشجرة داخل المتصفح ويحافظ على المسار النسبي لكل ملف، فلا حاجة إلى ضغط أي شيء أولًا.</p></li><li><p>على الشبكة نفسها، جِد المُستقبِل تحت «الأجهزة القريبة»، واضغط «فتح مساحة العمل» على بطاقته، ثم استخدم مرفق «إرسال مجلد» داخل مساحة العمل. وعبر الشبكات هو الإجراء نفسه: انضمّ إلى غرفة رمز الاقتران واضغط «فتح مساحة العمل» على بطاقة الطرف الآخر هناك أيضًا. وفي الحالتين، الطلب الذي يصل إلى الطرف الآخر يذكر عدد الملفات والحجم الإجمالي للشجرة كلها، لا حجم ملف واحد.</p></li><li><p>على الطرف المستقبِل، اقرأ السطر أسفل الطلب قبل القبول: في Chrome أو Edge يقول إن المتصفح سيسأل عن مكان الحفظ، وهذا هو المسار الذي يعيد تكوين المجلد على القرص. ثم اضغط «قبول».</p></li><li><p>راقب عدّاد الملفات وهو يتقدّم في الشجرة على الشاشتين. إنه يعدّ الملفات، فمجلد فيه 300 ملف يبلغ «الملف 300/300» بدل أن يعرض شريط تقدّم واحدًا للدفعة كلها.</p><pre dir="ltr"><code>الملف 300/300</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">كيف يبدو إرسال مجلد مكتمل</p><p>يتوقف العدّاد عند آخر ملف في الدفعة، ووصل كل ملف وقد جرى التحقّق منه من الطرف إلى الطرف بتجزئة SHA-256 خاصة به، فما حلّ يطابق ما أرسلته بايتًا ببايت.</p><p>ثم انظر إلى النتيجة لا إلى الصفحة، فهي تختلف بحسب المتصفح: في Chrome أو Edge تكون الشجرة داخل المجلد الذي اخترته بمجلداتها الفرعية كلها، وفي Firefox أو Safari يوجد ملف ‎.zip‎ واحد في قائمة التنزيلات يُفكّ إلى البنية نفسها.</p><pre dir="ltr"><code>مباشر عبر LAN
+      <ol class="steps" data-block="steps"><li><p>افتح صفحة النقل على حاسوب الإرسال — صفحة نفس الشبكة إن كنتما على شبكة واحدة، وصفحة النقل الفوري إن احتجت إلى رمز اقتران.</p><pre tabindex="0" dir="ltr"><code>https://relayium.com/</code></pre></li><li><p>اسحب المجلد إلى الصفحة، أو استخدم زر منتقي المجلدات. يتجول Relayium في الشجرة داخل المتصفح ويحافظ على المسار النسبي لكل ملف، فلا حاجة إلى ضغط أي شيء أولًا.</p></li><li><p>على الشبكة نفسها، جِد المُستقبِل تحت «الأجهزة القريبة»، واضغط «فتح مساحة العمل» على بطاقته، ثم استخدم مرفق «إرسال مجلد» داخل مساحة العمل. وعبر الشبكات هو الإجراء نفسه: انضمّ إلى غرفة رمز الاقتران واضغط «فتح مساحة العمل» على بطاقة الطرف الآخر هناك أيضًا. وفي الحالتين، الطلب الذي يصل إلى الطرف الآخر يذكر عدد الملفات والحجم الإجمالي للشجرة كلها، لا حجم ملف واحد.</p></li><li><p>على الطرف المستقبِل، اقرأ السطر أسفل الطلب قبل القبول: في Chrome أو Edge يقول إن المتصفح سيسأل عن مكان الحفظ، وهذا هو المسار الذي يعيد تكوين المجلد على القرص. ثم اضغط «قبول».</p></li><li><p>راقب عدّاد الملفات وهو يتقدّم في الشجرة على الشاشتين. إنه يعدّ الملفات، فمجلد فيه 300 ملف يبلغ «الملف 300/300» بدل أن يعرض شريط تقدّم واحدًا للدفعة كلها.</p><pre tabindex="0" dir="ltr"><code>الملف 300/300</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">كيف يبدو إرسال مجلد مكتمل</p><p>يتوقف العدّاد عند آخر ملف في الدفعة، ووصل كل ملف وقد جرى التحقّق منه من الطرف إلى الطرف بتجزئة SHA-256 خاصة به، فما حلّ يطابق ما أرسلته بايتًا ببايت.</p><p>ثم انظر إلى النتيجة لا إلى الصفحة، فهي تختلف بحسب المتصفح: في Chrome أو Edge تكون الشجرة داخل المجلد الذي اخترته بمجلداتها الفرعية كلها، وفي Firefox أو Safari يوجد ملف ‎.zip‎ واحد في قائمة التنزيلات يُفكّ إلى البنية نفسها.</p><pre tabindex="0" dir="ltr"><code>مباشر عبر LAN
 الملف 300/300</code></pre></div>
       <h2>ماذا يستلم الشخص الآخر</h2>
       <p>تعتمد كيفية وصول المجلد على المتصفح المستقبِل. يستطيع Chrome وEdge كتابة الملفات مباشرةً في دليل يختاره المُستقبِل، فيظهر المجلد على القرص تمامًا كما غادر — دون خطوة إضافية.</p>
       <p>لا يملك Firefox وSafari هذه القدرة، فيستلمان بدلًا من ذلك أرشيف .zip واحدًا بوضع التخزين فقط (دون ضغط) يُفكّ إلى نفس بنية المجلد بالضبط. ويبقى دون 4 GiB (لا دعم لـ ZIP64)، وهو ما يغطّي الغالبية العظمى من مجلدات المشاريع ومجموعات الصور أو المستندات — ولأي شيء أكبر، قسّمه إلى إرسالين.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">العَرَض والفحص والحل</p><dl><dt>لا توجد أي طريقة لاختيار مجلد على جهاز الإرسال.</dt><dd><pre dir="ltr"><code>https://relayium.com/   # لا يعرض المنتقي مجلدًا إلا حيث يدعم المتصفح ذلك</code></pre><p>أنت على iPhone أو iPad على الأرجح، وهناك لا يعرض منتقي Safari سوى ملفات مفردة. ابدأ إرسال المجلد من Chrome أو Edge أو Firefox على حاسوب، واستخدم الهاتف طرفًا مستقبِلًا بدلًا من ذلك.</p></dd><dt>الأرشيف ‎.zip‎ الذي وصل تالف، أو توقّف التنزيل قرب 4 GiB.</dt><dd><pre dir="ltr"><code>chrome://downloads   # قارن حجم الأرشيف بالمجلد الذي أرسلته</code></pre><p>مسار الأرشيف لا يدعم ZIP64، فيجب أن يبقى كل من المُدخَل الواحد والأرشيف كله دون 4 GiB. قسّم الشجرة إلى إرسالين، أو اطلب من المُستقبِل استخدام Chrome أو Edge، فذاك يكتب الملفات في مجلد مختار ولا يبني أرشيفًا إطلاقًا.</p></dd><dt>حجم الأرشيف ‎.zip‎ مساوٍ للمجلد، بلا أي ضغط.</dt><dd><pre dir="ltr"><code>chrome://downloads   # حجم المُدخَل يساوي إجمالي المجلد لا أقل</code></pre><p>هذا هو المتوقَّع: الأرشيف بوضع التخزين فقط، فهو يحزم الشجرة دون ضغطها ويبقى مطابقًا بايتًا ببايت لما أرسلته. اضغط المجلد بنفسك قبل الإرسال إن كان الحجم على الشبكة أهمّ لديك من نسخة مطابقة تمامًا.</p></dd><dt>وصلت الملفات لكنها كلها مسطّحة في مجلد واحد، والمجلدات الفرعية غائبة.</dt><dd><pre dir="ltr"><code>chrome://downloads   # المتصفح الذي لا منتقي مجلدات لديه يسلّم ملف ‎.zip‎ واحدًا</code></pre><p>المسارات النسبية تصمد في الإرسال الفوري، فهذا هو شكل ملف ‎.zip‎ قبل فكّه لا نقلًا سطّح البنية. فُكّ الأرشيف فتجد المجلدات الفرعية داخله؛ ولإحلال الشجرة على القرص مباشرةً، استقبلها في Chrome أو Edge واختر مجلد الوجهة عند السؤال. والمسار الوحيد المسطّح فعلًا هو رابط التنزيل المُخزَّن: فهو يرفع قائمة ملفات مسطّحة ويُسقط المسارات، ولهذا يجب حزم المجلد المخصَّص لرابط قبل رفعه.</p></dd><dt>مجلد فيه بضع مئات من الملفات يتوقّف في منتصفه وينقص ملف واحد.</dt><dd><pre dir="ltr"><code>https://relayium.com/   # يذكر العدّاد الملف الذي توقّف عنده</code></pre><p>الإرسال الفوري جلسة حيّة، والانقطاع المؤقت يستطيع أن يستأنف من آخر نقطة تفتيش دائمة ما دامت الصفحتان مفتوحتين. أما إغلاق إحداهما أو إعادة تحميلها فينهي الجلسة، ولا يبقى عندها ما يُستأنف. أبقِ التبويبين مفتوحين وامهله لحظة قبل أن تلمس شيئًا؛ وإذا انتهت الجلسة فعلًا، أعِد إرسال الدفعة بدءًا من الملف الذي ذكره العدّاد. وللتسليم بلا أحد على الطرف الآخر، احزم المجلد بنفسك في ملف zip وارفع ذلك الأرشيف الواحد كرابط مُخزَّن، لأن الرفع المُخزَّن يستقبل قائمة ملفات مسطّحة.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">العَرَض والفحص والحل</p><dl><dt>لا توجد أي طريقة لاختيار مجلد على جهاز الإرسال.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/   # لا يعرض المنتقي مجلدًا إلا حيث يدعم المتصفح ذلك</code></pre><p>أنت على iPhone أو iPad على الأرجح، وهناك لا يعرض منتقي Safari سوى ملفات مفردة. ابدأ إرسال المجلد من Chrome أو Edge أو Firefox على حاسوب، واستخدم الهاتف طرفًا مستقبِلًا بدلًا من ذلك.</p></dd><dt>الأرشيف ‎.zip‎ الذي وصل تالف، أو توقّف التنزيل قرب 4 GiB.</dt><dd><pre tabindex="0" dir="ltr"><code>chrome://downloads   # قارن حجم الأرشيف بالمجلد الذي أرسلته</code></pre><p>مسار الأرشيف لا يدعم ZIP64، فيجب أن يبقى كل من المُدخَل الواحد والأرشيف كله دون 4 GiB. قسّم الشجرة إلى إرسالين، أو اطلب من المُستقبِل استخدام Chrome أو Edge، فذاك يكتب الملفات في مجلد مختار ولا يبني أرشيفًا إطلاقًا.</p></dd><dt>حجم الأرشيف ‎.zip‎ مساوٍ للمجلد، بلا أي ضغط.</dt><dd><pre tabindex="0" dir="ltr"><code>chrome://downloads   # حجم المُدخَل يساوي إجمالي المجلد لا أقل</code></pre><p>هذا هو المتوقَّع: الأرشيف بوضع التخزين فقط، فهو يحزم الشجرة دون ضغطها ويبقى مطابقًا بايتًا ببايت لما أرسلته. اضغط المجلد بنفسك قبل الإرسال إن كان الحجم على الشبكة أهمّ لديك من نسخة مطابقة تمامًا.</p></dd><dt>وصلت الملفات لكنها كلها مسطّحة في مجلد واحد، والمجلدات الفرعية غائبة.</dt><dd><pre tabindex="0" dir="ltr"><code>chrome://downloads   # المتصفح الذي لا منتقي مجلدات لديه يسلّم ملف ‎.zip‎ واحدًا</code></pre><p>المسارات النسبية تصمد في الإرسال الفوري، فهذا هو شكل ملف ‎.zip‎ قبل فكّه لا نقلًا سطّح البنية. فُكّ الأرشيف فتجد المجلدات الفرعية داخله؛ ولإحلال الشجرة على القرص مباشرةً، استقبلها في Chrome أو Edge واختر مجلد الوجهة عند السؤال. والمسار الوحيد المسطّح فعلًا هو رابط التنزيل المُخزَّن: فهو يرفع قائمة ملفات مسطّحة ويُسقط المسارات، ولهذا يجب حزم المجلد المخصَّص لرابط قبل رفعه.</p></dd><dt>مجلد فيه بضع مئات من الملفات يتوقّف في منتصفه وينقص ملف واحد.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/   # يذكر العدّاد الملف الذي توقّف عنده</code></pre><p>الإرسال الفوري جلسة حيّة، والانقطاع المؤقت يستطيع أن يستأنف من آخر نقطة تفتيش دائمة ما دامت الصفحتان مفتوحتين. أما إغلاق إحداهما أو إعادة تحميلها فينهي الجلسة، ولا يبقى عندها ما يُستأنف. أبقِ التبويبين مفتوحين وامهله لحظة قبل أن تلمس شيئًا؛ وإذا انتهت الجلسة فعلًا، أعِد إرسال الدفعة بدءًا من الملف الذي ذكره العدّاد. وللتسليم بلا أحد على الطرف الآخر، احزم المجلد بنفسك في ملف zip وارفع ذلك الأرشيف الواحد كرابط مُخزَّن، لأن الرفع المُخزَّن يستقبل قائمة ملفات مسطّحة.</p></dd></dl></div>
       <h2>فوريًا، أو رابط لوقت لاحق</h2>
       <p>إن كنتما متصلين في الوقت نفسه، فأرسل المجلد فوريًا. داخل شبكة LAN نفسها يتصل WebRTC مباشرةً؛ وعبر الشبكات تستخدم المتصفحات TURN حسب التصميم لنقل نص مشفّر من الطرف إلى الطرف لا يستطيع المُرحِّل قراءته أو فك تشفيره. لا يحتفظ Relayium بنسخة فورية أو سجل نقل على الخادم. لا يلزم حساب داخل الشبكة نفسها؛ وعبر الشبكات يسجل منشئ رمز الاقتران الدخول ولا يحتاج المنضم إلى حساب.</p>
       <p>إن لم يكن الشخص الآخر متاحًا الآن، فأنشئ رابطًا مُخزَّنًا بدلًا من ذلك — لكن احزم المجلد بنفسك أولًا. فالرفع المُخزَّن يستقبل قائمة ملفات مسطّحة: تُسقَط المسارات النسبية، فتصل الشجرة المرفوعة مباشرةً ملفاتٍ متناثرة، ويتصادم ملفان بالاسم نفسه من مجلدين فرعيين مختلفين. أنشئ ملف ‎.zip‎ عاديًا وارفع ذلك الملف الواحد، فتسافر البنية داخل الأرشيف. ويشفّر متصفحك ما ترفعه قبل الرفع بمفتاح AES-256-GCM عشوائي لا يعيش إلا في الرابط نفسه، فيحمل الخادم نصًا مُشفَّرًا لا يستطيع قراءته. يتطلب إنشاء رابط أن يسجّل المُرسِل الدخول؛ اضبطه لينتهي بعد ساعة واحدة، أو يوم واحد، أو 3 أيام، أو 7 أيام، أو حتى 14 يومًا حسب خطتك، أو اجعله يحترق بعد أول تنزيل.</p>

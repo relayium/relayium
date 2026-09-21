@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/de/how-to/airdrop-for-windows-and-android/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="AirDrop-Alternative für Windows, Linux, Android" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"AirDrop-Alternative für Windows, Linux, Android","description":"Es gibt kein offizielles AirDrop für Windows, Linux oder Android — hier die nächste Alternative: sofortiges Teilen im selben WLAN im Browser, ohne Konto, ohne Installation, plus eine Möglichkeit übers Internet, die AirDrop nicht kann.","inLanguage":"de","datePublished":"2026-07-09","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/de/how-to/airdrop-for-windows-and-android/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/de/"},{"@type":"ListItem","position":2,"name":"Anleitungen","item":"https://relayium.com/de/guides/"},{"@type":"ListItem","position":3,"name":"AirDrop-Alternative für Windows, Linux, Android"}]},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Gibt es eine offizielle AirDrop-App für Windows oder Android?","acceptedAnswer":{"@type":"Answer","text":"Nein — AirDrop ist Apple-Geräten vorbehalten, und Apple hat nie einen Windows- oder Android-Client herausgebracht. Relayium ist eine browserbasierte Alternative: Öffne relayium.com auf beiden Geräten, und es funktioniert unabhängig von der Plattform gleich, auch bei gemischten Apple-/Nicht-Apple-Paaren."}},{"@type":"Question","name":"Brauche ich ein Konto?","acceptedAnswer":{"@type":"Answer","text":"Für den Ablauf im selben WLAN nicht — öffne die Seite auf beiden Geräten, und sie erkennen sich, ganz ohne Anmeldung. Das Senden über verschiedene Netzwerke mit einem Pairing-Code erfordert die Anmeldung des Absenders; der Empfänger braucht in keinem der beiden Netzwerkmodi je ein Konto."}},{"@type":"Question","name":"Muss ich etwas installieren?","acceptedAnswer":{"@type":"Answer","text":"Nein. Es ist auf jeder Plattform eine Webseite — Windows, Linux, macOS, Android und iOS —, es gibt also nichts aus einem Store herunterzuladen und nichts aktuell zu halten."}},{"@type":"Question","name":"Wie unterscheidet sich das vom Vergleich Relayium vs. AirDrop?","acceptedAnswer":{"@type":"Answer","text":"Jener Artikel ist ein direkter Vergleich, wo AirDrop wirklich besser ist (reine Apple-Haushalte) und wo es an Grenzen stößt. Diese Anleitung ist die Schritt-für-Schritt-Version, um tatsächlich das AirDrop-ähnliche Erlebnis zu bekommen, wenn mindestens ein Gerät kein Apple-Gerät ist."}},{"@type":"Question","name":"Kann ich, wie bei AirDrop, an mehrere gleichzeitig senden?","acceptedAnswer":{"@type":"Answer","text":"Nicht in einem Zug. Der lokale Raum ist nicht auf zwei Geräte begrenzt, jedes Gerät, das die Seite aus diesem Netz geöffnet hat, steht also gleichzeitig in der Liste — eine Übertragung ist aber eins zu eins: Du öffnest einen Arbeitsbereich mit einem Empfänger, und dorthin gehen diese Dateien. Denselben Stapel an mehrere im Raum zu geben heißt, mit jedem der Reihe nach einen Arbeitsbereich zu öffnen. Der Pairing-Code-Modus fürs Senden übers Internet verbindet genau zwei Geräte, und zwar über ein verschlüsseltes Relay."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/de/guides/" aria-current="true">Anleitungen</a><a href="/de/apps/">Apps</a><a href="/pricing">Preise</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/de/">Relayium</a> <span aria-hidden="true">›</span> <a href="/de/guides/">Anleitungen</a> <span aria-hidden="true">›</span> <span aria-current="page">AirDrop-Alternative für Windows, Linux, Android</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -105,12 +162,12 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>Der AirDrop-ähnliche Ablauf: selbes WLAN, im Browser</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Was du brauchst</p><ul><li>Einen aktuellen Browser auf jedem Gerät — Chrome oder Edge unter Windows, Firefox oder Chrome unter Linux, Chrome unter Android. Nichts aus einem Store, nichts zu installieren.</li><li>Beide Geräte im selben WLAN. Anders als bei AirDrop ist Nähe nicht das Kriterium: Die Erkennung gruppiert Geräte nach der öffentlichen IP, über die sie sich verbinden, ein Handy im Mobilfunknetz erscheint also selbst auf demselben Schreibtisch nicht.</li><li>Auf beiden funktionierendes Internet, mit der Seite über https://relayium.com/ geöffnet. AirDrop braucht überhaupt kein Internet; diese beiden Browser müssen dagegen das Rendezvous erreichen, um sich zu finden — in einem abgeschotteten LAN gehört deshalb eine selbst gehostete Instanz hin.</li><li>Für den Fall im selben Netz kein Konto und kein Pairing-Code — genau darin gleicht dieser Ablauf AirDrop.</li></ul></div>
       <p>Das ist der Alltagsfall, für den AirDrop gebaut ist, und Relayium erreicht dasselbe ohne App aus irgendeinem Store.</p>
-      <ol class="steps" data-block="steps"><li><p>Öffne auf jedem Gerät die Übertragungsseite im Browser.</p><pre><code>https://relayium.com/</code></pre></li><li><p>Vergleiche die öffentliche IP in der Statuszeile auf beiden. Eine gemeinsame Adresse ist es, die die zwei Geräte füreinander sichtbar macht, und sie enttarnt am schnellsten das Handy, das nie aus dem Mobilfunknetz gewechselt ist.</p><pre><code>Verbunden · dieses Gerät ThinkPad · öffentliche IP 203.0.113.9</code></pre></li><li><p>Suche auf dem sendenden Gerät das andere unter „Geräte in der Nähe“, wähle seine Karte und drücke „Arbeitsbereich öffnen“. In einem aktuellen Browser ist das die einzige Aktion, die eine Karte anbietet, denn Dateien, Ordner und Nachrichten laufen danach alle über die eine verschlüsselte Verbindung, die sie öffnet. Ein Raum kann mehrere Geräte auflisten; einen Arbeitsbereich zu öffnen ist die Art, wie du den einen Empfänger dieser Übertragung auswählst, und für die nächste Person öffnest du einen weiteren.</p></li><li><p>Der Arbeitsbereich tritt an die Stelle dieser Karte. Gesendet wird mit den Bedienelementen unter seiner Kopfzeile: „Dateien senden“ für einen Stapel von bis zu 1.000 Dateien, „Ordner senden“ für einen ganzen Baum, wo der Browser die Ordnerauswahl anbietet, oder tippe ins Nachrichtenfeld — „Enter für neue Zeile · ⌘/Ctrl+Enter zum Senden“ — und drücke „Senden“. Lies auf dem empfangenden Gerät die Zeile unter der Anfrage, bevor du annimmst — sie sagt, ob der Browser nach dem Speicherort fragt oder in seine eigenen Downloads schreibt — und drücke dann „Annehmen“. Wer zuerst einen Verifizierungscode (SAS) vergleichen will, schaltet vor dem Start auf beiden Geräten „Erweiterte Verifizierung“ ein.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">So sieht eine funktionierende Übertragung aus</p><p>Die Karte des anderen Geräts ist dann verschwunden — der Arbeitsbereich hat ihren Platz übernommen —, also liest du den Zustand an der Kopfzeile des Arbeitsbereichs ab: das verbundene Gerät, ein Verbindungszustand „Verbunden“ und ein einziges Pfad-Abzeichen mit „LAN direkt“. Der Dateizähler läuft auf beiden Bildschirmen bis zur letzten Datei des Stapels.</p><p>Wie ein Ordner ankommt, hängt vom empfangenden Browser ab — prüfe das Ergebnis, statt es anzunehmen: Chrome und Edge am Computer schreiben den Baum in das gewählte Verzeichnis, Firefox, Safari und jeder Handy-Browser geben dir eine .zip, die sich zur selben Struktur entpackt. Nachsehen kannst du das in der Download-Liste dieses Browsers — chrome://downloads in Chrome, edge://downloads in Edge, about:downloads in Firefox.</p><pre><code>Verbunden mit Pixel · Verbunden · LAN direkt
+      <ol class="steps" data-block="steps"><li><p>Öffne auf jedem Gerät die Übertragungsseite im Browser.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>Vergleiche die öffentliche IP in der Statuszeile auf beiden. Eine gemeinsame Adresse ist es, die die zwei Geräte füreinander sichtbar macht, und sie enttarnt am schnellsten das Handy, das nie aus dem Mobilfunknetz gewechselt ist.</p><pre tabindex="0"><code>Verbunden · dieses Gerät ThinkPad · öffentliche IP 203.0.113.9</code></pre></li><li><p>Suche auf dem sendenden Gerät das andere unter „Geräte in der Nähe“, wähle seine Karte und drücke „Arbeitsbereich öffnen“. In einem aktuellen Browser ist das die einzige Aktion, die eine Karte anbietet, denn Dateien, Ordner und Nachrichten laufen danach alle über die eine verschlüsselte Verbindung, die sie öffnet. Ein Raum kann mehrere Geräte auflisten; einen Arbeitsbereich zu öffnen ist die Art, wie du den einen Empfänger dieser Übertragung auswählst, und für die nächste Person öffnest du einen weiteren.</p></li><li><p>Der Arbeitsbereich tritt an die Stelle dieser Karte. Gesendet wird mit den Bedienelementen unter seiner Kopfzeile: „Dateien senden“ für einen Stapel von bis zu 1.000 Dateien, „Ordner senden“ für einen ganzen Baum, wo der Browser die Ordnerauswahl anbietet, oder tippe ins Nachrichtenfeld — „Enter für neue Zeile · ⌘/Ctrl+Enter zum Senden“ — und drücke „Senden“. Lies auf dem empfangenden Gerät die Zeile unter der Anfrage, bevor du annimmst — sie sagt, ob der Browser nach dem Speicherort fragt oder in seine eigenen Downloads schreibt — und drücke dann „Annehmen“. Wer zuerst einen Verifizierungscode (SAS) vergleichen will, schaltet vor dem Start auf beiden Geräten „Erweiterte Verifizierung“ ein.</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">So sieht eine funktionierende Übertragung aus</p><p>Die Karte des anderen Geräts ist dann verschwunden — der Arbeitsbereich hat ihren Platz übernommen —, also liest du den Zustand an der Kopfzeile des Arbeitsbereichs ab: das verbundene Gerät, ein Verbindungszustand „Verbunden“ und ein einziges Pfad-Abzeichen mit „LAN direkt“. Der Dateizähler läuft auf beiden Bildschirmen bis zur letzten Datei des Stapels.</p><p>Wie ein Ordner ankommt, hängt vom empfangenden Browser ab — prüfe das Ergebnis, statt es anzunehmen: Chrome und Edge am Computer schreiben den Baum in das gewählte Verzeichnis, Firefox, Safari und jeder Handy-Browser geben dir eine .zip, die sich zur selben Struktur entpackt. Nachsehen kannst du das in der Download-Liste dieses Browsers — chrome://downloads in Chrome, edge://downloads in Edge, about:downloads in Firefox.</p><pre tabindex="0"><code>Verbunden mit Pixel · Verbunden · LAN direkt
 Datei 8/8</code></pre></div>
       <h2>Wenn das andere Gerät nicht auftaucht</h2>
       <p>Fang dort an, wo sich dieser Ablauf von AirDrop unterscheidet: Sichtbar füreinander macht die beiden Geräte das Netz, aus dem sie sich verbinden, nicht ihre Nähe. Die Prüfungen unten sind die üblichen ersten und keine vollständige Liste, und jede liest ihre Antwort von der Seite ab, statt zu raten.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, Prüfung, Lösung</p><dl><dt>Das andere Gerät liegt direkt daneben und erscheint trotzdem nicht unter „Geräte in der Nähe“.</dt><dd><pre><code>https://relayium.com/   # die öffentliche IP in der Statuszeile auf beiden Geräten vergleichen</code></pre><p>Zwei verschiedene öffentliche IP-Adressen bedeuten zwei Räume, und Nähe hilft dagegen nicht. Bring zuerst beide Geräte ins selbe WLAN und schalte am Handy die mobilen Daten aus. Ein VPN oder iCloud Private Relay auf einer der beiden Seiten ist ein weiterer häufiger Grund für zwei Adressen; wenn du sie ändern willst, trenne das VPN oder schalte Private Relay für dieses eine Netz ab und lade dort https://relayium.com/ neu. Willst du sie lieber anlassen, erreicht ein Pairing-Code auf https://relayium.com/cross-network das andere Gerät, ohne eine der beiden Einstellungen anzutasten.</p></dd><dt>Beide Geräte zeigen dieselbe öffentliche IP, und keine Karte erscheint.</dt><dd><pre><code>https://relayium.com/   # der Hinweis unter der Geräteliste nennt die Router-Einstellung</code></pre><p>Der Router trennt seine eigenen Clients. Schalte „AP-Isolierung / Client-Isolierung“ in seinen WLAN-Einstellungen aus, oder nimm einen Pairing-Code auf https://relayium.com/cross-network, wenn der Router nicht dir gehört.</p></dd><dt>In einem Netz ohne Internetzugang lädt die Seite selbst nicht.</dt><dd><pre><code>https://relayium.com/   # lädt das nie, hat das Netz keine Route zum Rendezvous</code></pre><p>Das ist die echte Lücke gegenüber AirDrop, das ganz ohne Internet auskommt. Zwei Browser müssen das Rendezvous erreichen, um einander vorgestellt zu werden — betreibe in einem abgeschotteten LAN also eine eigene Instanz in diesem Netz (Relayium steht unter AGPL-3.0 auf github.com/relayium/relayium) oder greif zum USB-Stick.</p></dd><dt>Vor dem Annehmen warnt die empfangende Seite, der Stapel müsse im Speicher gehalten werden.</dt><dd><pre><code>chrome://downloads   # in Chrome; Edge hat edge://downloads und Firefox about:downloads</code></pre><p>Firefox, Safari und jeder Handy-Browser haben keine File System Access API, setzen den Stapel also im Speicher zusammen, und ab etwa 256 MiB warnt Relayium. Empfange ihn in Chrome oder Edge am Computer, oder schicke weniger Dateien auf einmal, und kontrolliere jede Ankunft in der Download-Liste dieses Browsers, statt das Speichern anzunehmen — chrome://downloads in Chrome, edge://downloads in Edge, about:downloads in Firefox.</p></dd><dt>Ein Ordner kam als einzelne .zip an statt als Ordner.</dt><dd><pre><code>chrome://downloads   # in Chrome; ohne Verzeichnisauswahl steht dort ein einziger .zip-Eintrag</code></pre><p>In einem Browser ohne Verzeichnisauswahl ist das das erwartete Ergebnis, und das Archiv entpackt sich mit erhaltenen relativen Pfaden zur selben Struktur. Entpacke es, oder empfange denselben Ordner in Chrome oder Edge am Computer: Die fragen nach einem Zielverzeichnis und schreiben den Baum direkt hinein.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, Prüfung, Lösung</p><dl><dt>Das andere Gerät liegt direkt daneben und erscheint trotzdem nicht unter „Geräte in der Nähe“.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # die öffentliche IP in der Statuszeile auf beiden Geräten vergleichen</code></pre><p>Zwei verschiedene öffentliche IP-Adressen bedeuten zwei Räume, und Nähe hilft dagegen nicht. Bring zuerst beide Geräte ins selbe WLAN und schalte am Handy die mobilen Daten aus. Ein VPN oder iCloud Private Relay auf einer der beiden Seiten ist ein weiterer häufiger Grund für zwei Adressen; wenn du sie ändern willst, trenne das VPN oder schalte Private Relay für dieses eine Netz ab und lade dort https://relayium.com/ neu. Willst du sie lieber anlassen, erreicht ein Pairing-Code auf https://relayium.com/cross-network das andere Gerät, ohne eine der beiden Einstellungen anzutasten.</p></dd><dt>Beide Geräte zeigen dieselbe öffentliche IP, und keine Karte erscheint.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # der Hinweis unter der Geräteliste nennt die Router-Einstellung</code></pre><p>Der Router trennt seine eigenen Clients. Schalte „AP-Isolierung / Client-Isolierung“ in seinen WLAN-Einstellungen aus, oder nimm einen Pairing-Code auf https://relayium.com/cross-network, wenn der Router nicht dir gehört.</p></dd><dt>In einem Netz ohne Internetzugang lädt die Seite selbst nicht.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # lädt das nie, hat das Netz keine Route zum Rendezvous</code></pre><p>Das ist die echte Lücke gegenüber AirDrop, das ganz ohne Internet auskommt. Zwei Browser müssen das Rendezvous erreichen, um einander vorgestellt zu werden — betreibe in einem abgeschotteten LAN also eine eigene Instanz in diesem Netz (Relayium steht unter AGPL-3.0 auf github.com/relayium/relayium) oder greif zum USB-Stick.</p></dd><dt>Vor dem Annehmen warnt die empfangende Seite, der Stapel müsse im Speicher gehalten werden.</dt><dd><pre tabindex="0"><code>chrome://downloads   # in Chrome; Edge hat edge://downloads und Firefox about:downloads</code></pre><p>Firefox, Safari und jeder Handy-Browser haben keine File System Access API, setzen den Stapel also im Speicher zusammen, und ab etwa 256 MiB warnt Relayium. Empfange ihn in Chrome oder Edge am Computer, oder schicke weniger Dateien auf einmal, und kontrolliere jede Ankunft in der Download-Liste dieses Browsers, statt das Speichern anzunehmen — chrome://downloads in Chrome, edge://downloads in Edge, about:downloads in Firefox.</p></dd><dt>Ein Ordner kam als einzelne .zip an statt als Ordner.</dt><dd><pre tabindex="0"><code>chrome://downloads   # in Chrome; ohne Verzeichnisauswahl steht dort ein einziger .zip-Eintrag</code></pre><p>In einem Browser ohne Verzeichnisauswahl ist das das erwartete Ergebnis, und das Archiv entpackt sich mit erhaltenen relativen Pfaden zur selben Struktur. Entpacke es, oder empfange denselben Ordner in Chrome oder Edge am Computer: Die fragen nach einem Zielverzeichnis und schreiben den Baum direkt hinein.</p></dd></dl></div>
       <h2>Über verschiedene Netze: Pairing und Relay</h2>
       <p>Der Server erzeugt genau sechs Dezimalziffern (0–9, auch mit führender Null). Der Absender meldet sich an, um den Code zu erstellen; wer per Code, Link oder QR beitritt, braucht kein Konto. Neue Beitritte sind fünf Minuten lang möglich; eine bereits verbundene Übertragung endet nicht mit dem Countdown.</p>
       <p>Über Netzwerkgrenzen hinweg nutzen Browser planmäßig ein verschlüsseltes TURN-Relay, statt zuerst einen direkten Weg zu versuchen. Der Schlüssel bleibt auf den beiden Geräten; das Relay leitet daher nur Ende-zu-Ende-verschlüsselten Chiffretext weiter, kann die Dateien nicht lesen und behält weder eine Echtzeit-Inhaltskopie noch einen Verlauf.</p>

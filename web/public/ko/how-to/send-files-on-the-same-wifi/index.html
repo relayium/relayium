@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ko/how-to/send-files-on-the-same-wifi/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="같은 Wi-Fi에 있는 기기끼리 파일 보내기" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"같은 Wi-Fi에 있는 기기끼리 파일 보내기","description":"같은 Wi-Fi나 로컬 네트워크에 있는 어떤 기기끼리도 파일을 보내는 방법 — 계정도, 페어링 코드도 필요 없이 양쪽에서 relayium.com만 열면 직접 전송되며 종단간 암호화됩니다.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/how-to/send-files-on-the-same-wifi/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"같은 Wi-Fi에 있는 기기끼리 파일 보내기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"같은 Wi-Fi에서 파일을 보내려면 계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 같은 네트워크에서의 전송은 양쪽 다 계정도, 페어링 코드도 필요 없습니다 — 각 기기에서 relayium.com만 열면 됩니다."}},{"@type":"Question","name":"Relayium은 어떤 기기가 내 네트워크에 있는지 어떻게 아나요?","acceptedAnswer":{"@type":"Answer","text":"같은 네트워크에 있는 기기는 보통 같은 공인 IP 주소를 공유하며, Relayium은 공인 IP가 일치하는 기기를 자동으로 같은 방에 묶습니다. 코드는 필요 없습니다."}},{"@type":"Question","name":"두 대보다 많은 기기가 동시에 서로를 볼 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"네. 그 네트워크에서 relayium.com을 연 기기는 모두 방에 나열되어 휴대폰과 노트북, 데스크톱이 나란히 보입니다. 다만 전송 자체는 1대 1입니다. 나열된 기기 중 하나와 작업 공간을 열고, 파일은 그 상대에게 갑니다. 같은 방의 여러 사람과 나누려면 각자와 차례로 작업 공간을 열면 됩니다."}},{"@type":"Question","name":"전송이 내 네트워크를 벗어나지 않아도 여전히 암호화되나요?","acceptedAnswer":{"@type":"Answer","text":"네. 같은 네트워크 전송도 네트워크를 넘는 전송과 동일한 X25519 키 교환과 AES-256-GCM 암호화를 사용하며, 직접 확인할 수 있는 검증 코드와 파일별 SHA-256 무결성 검사가 있습니다."}},{"@type":"Question","name":"한쪽은 Wi-Fi, 다른 쪽은 모바일 데이터라면 어떻게 하나요?","acceptedAnswer":{"@type":"Answer","text":"그러면 같은 네트워크가 아니므로 자동 탐색으로는 연결되지 않습니다. 대신 페어링 코드를 사용하세요 — 보내는 쪽이 로그인해 코드를 만들고, 받는 쪽은 계정이 필요 없습니다. 네트워크를 넘나드는 전송은 직접 연결이 아니라 암호화된 TURN 릴레이를 거치지만, 처음부터 끝까지 종단간 암호화가 유지됩니다. 릴레이는 암호문만 전달할 뿐 파일 내용을 읽을 수 없습니다."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ko/guides/" aria-current="true">가이드</a><a href="/ko/apps/">앱</a><a href="/pricing">요금제</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">같은 Wi-Fi에 있는 기기끼리 파일 보내기</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -108,13 +165,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>단계별 안내</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">시작하기 전에</p><ul><li>모든 기기가 같은 Wi-Fi 또는 로컬 네트워크에 있고, 공유기가 클라이언트끼리를 갈라놓지 않아야 합니다. 찾아야 할 설정 이름은 기기 목록 아래에 있는 Relayium 자체 안내에 적혀 있습니다: ‘AP 격리 / 클라이언트 격리’.</li><li>각 기기에 최신 브라우저(Chrome, Edge, Firefox 또는 Safari)가 있고, 페이지를 https://relayium.com/ 으로 열어야 합니다. 암호화 전송에는 HTTPS가 필요하며, 평범한 http:// 로 열면 기기 목록 대신 바로 그 사실이 표시됩니다.</li><li>계정도 페어링 코드도 필요 없습니다. 같은 네트워크 탐색은 양쪽 모두에 그것을 요구하지 않으므로, 첫 전송 전에 설정할 것이 하나도 없습니다.</li><li>받는 기기에 파일이 놓일 자리가 있어야 합니다. 어디에 놓일지는 Relayium이 아니라 받는 쪽 브라우저와 운영체제가 정합니다: 컴퓨터의 Chrome과 Edge는 저장 위치를 물어볼 수 있고, 다른 브라우저는 자체 다운로드 폴더에 씁니다. 실제로 어디에 떨어졌는지는 그 브라우저 자체의 다운로드 목록 — chrome://downloads (Chrome), edge://downloads (Edge), about:downloads (Firefox) — 에서 확인합니다.</li></ul></div>
       <p>전 과정이 브라우저 안에서 이루어집니다 — 어느 기기에도 설치할 앱이 없습니다.</p>
-      <ol class="steps" data-block="steps"><li><p>사용하려는 모든 기기를 같은 Wi-Fi 또는 로컬 네트워크에 연결한 다음, 각 기기에서 전송 페이지를 엽니다.</p><pre><code>https://relayium.com/</code></pre></li><li><p>두 기기에서 제목 아래 상태 표시를 읽고 거기 있는 공인 IP를 비교합니다. 주소가 같아야 두 기기가 같은 방에 들어가고, 주소가 다르면 Wi-Fi 이름이 무엇이든 서로 다른 네트워크입니다.</p><pre><code>연결됨 · 내 기기 MacBook · 공인 IP 203.0.113.9</code></pre></li><li><p>“주변 기기” 칸을 봅니다. 그 네트워크에서 페이지를 연 기기는 모두 자기 이름이 적힌 카드로 나열됩니다. 입력할 것도, 확인할 것도 없습니다.</p></li><li><p>보내는 기기에서 상대 카드를 누르고 “작업 공간 열기”를 누릅니다. 최신 브라우저에서 주변 기기 카드가 내놓는 동작은 이것 하나뿐입니다. 파일도 폴더도 메시지도 모두 그것이 여는 하나의 암호화된 연결을 지나갑니다. 방에는 여러 기기가 나열될 수 있는데, 작업 공간을 여는 행위가 이번에 보낼 상대를 한 대로 고르는 행위입니다. 다음 사람에게 보낼 때는 작업 공간을 다시 엽니다.</p></li><li><p>작업 공간이 그 카드를 대신합니다. 이제부터 연결 상태는 작업 공간 위쪽 헤더에서 읽습니다 — 어느 기기에 연결되었는지, 링크 상태, 그리고 단 하나의 경로 배지. 보내기는 그 아래 컨트롤로 합니다: 묶음은 “파일 보내기”, 디렉터리 전체는 브라우저가 폴더 선택을 지원할 때 “폴더 보내기”, 아니면 메시지 칸에 입력하고 “보내기”를 누릅니다. 한 배치는 최대 1,000개입니다.</p></li><li><p>받는 기기에는 파일 개수와 총 크기가 붙은 요청이 도착하고, 그 아래 줄에 “받기”를 누르면 무슨 일이 생기는지 적혀 있습니다. 브라우저가 저장 위치를 묻거나, 파일이 다운로드 폴더로 들어가거나 둘 중 하나입니다. “받기”를 누르면 시작됩니다.</p></li><li><p>두 화면에서 파일 카운터가 마지막 파일에 닿을 때까지 지켜봅니다. 한 바이트도 움직이기 전에 검증 코드(SAS)를 대조하고 싶다면 두 기기에서 먼저 “고급 검증”을 켜세요. 기본값은 꺼짐이며, 켜서 늘어나는 것은 대조와 승인 한 단계일 뿐 암호화가 아닙니다. 켜든 끄든 전송은 암호화됩니다.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">전송이 잘될 때의 화면</p><p>그때쯤이면 상대 카드는 사라져 있습니다 — 작업 공간이 그 자리를 차지했기 때문입니다. 상태는 작업 공간 헤더에서 읽습니다: 어느 기기에 연결되었는지, 링크 상태는 “연결됨”, 그리고 단 하나의 경로 배지가 “LAN 직접”. 내 네트워크 안의 호스트 대 호스트 한 홉이라는 뜻입니다. “P2P 직접”은 또 하나의 정직한 결과입니다: 두 기기가 정말 같은 공인 IP를 공유했지만, 브라우저가 정착한 홉은 로컬이 아니었다는 뜻입니다.</p><p>받는 쪽에서는 카운터가 마지막 파일에서 멈추고, 파일 자체는 저장 안내가 말한 곳에 있습니다. 그것을 확인하는 자리는 이 페이지가 아니라 받는 쪽 브라우저 자체의 다운로드 목록입니다 — chrome://downloads (Chrome), edge://downloads (Edge), about:downloads (Firefox).</p><pre><code>MacBook 에 연결됨 · 연결됨 · LAN 직접
+      <ol class="steps" data-block="steps"><li><p>사용하려는 모든 기기를 같은 Wi-Fi 또는 로컬 네트워크에 연결한 다음, 각 기기에서 전송 페이지를 엽니다.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>두 기기에서 제목 아래 상태 표시를 읽고 거기 있는 공인 IP를 비교합니다. 주소가 같아야 두 기기가 같은 방에 들어가고, 주소가 다르면 Wi-Fi 이름이 무엇이든 서로 다른 네트워크입니다.</p><pre tabindex="0"><code>연결됨 · 내 기기 MacBook · 공인 IP 203.0.113.9</code></pre></li><li><p>“주변 기기” 칸을 봅니다. 그 네트워크에서 페이지를 연 기기는 모두 자기 이름이 적힌 카드로 나열됩니다. 입력할 것도, 확인할 것도 없습니다.</p></li><li><p>보내는 기기에서 상대 카드를 누르고 “작업 공간 열기”를 누릅니다. 최신 브라우저에서 주변 기기 카드가 내놓는 동작은 이것 하나뿐입니다. 파일도 폴더도 메시지도 모두 그것이 여는 하나의 암호화된 연결을 지나갑니다. 방에는 여러 기기가 나열될 수 있는데, 작업 공간을 여는 행위가 이번에 보낼 상대를 한 대로 고르는 행위입니다. 다음 사람에게 보낼 때는 작업 공간을 다시 엽니다.</p></li><li><p>작업 공간이 그 카드를 대신합니다. 이제부터 연결 상태는 작업 공간 위쪽 헤더에서 읽습니다 — 어느 기기에 연결되었는지, 링크 상태, 그리고 단 하나의 경로 배지. 보내기는 그 아래 컨트롤로 합니다: 묶음은 “파일 보내기”, 디렉터리 전체는 브라우저가 폴더 선택을 지원할 때 “폴더 보내기”, 아니면 메시지 칸에 입력하고 “보내기”를 누릅니다. 한 배치는 최대 1,000개입니다.</p></li><li><p>받는 기기에는 파일 개수와 총 크기가 붙은 요청이 도착하고, 그 아래 줄에 “받기”를 누르면 무슨 일이 생기는지 적혀 있습니다. 브라우저가 저장 위치를 묻거나, 파일이 다운로드 폴더로 들어가거나 둘 중 하나입니다. “받기”를 누르면 시작됩니다.</p></li><li><p>두 화면에서 파일 카운터가 마지막 파일에 닿을 때까지 지켜봅니다. 한 바이트도 움직이기 전에 검증 코드(SAS)를 대조하고 싶다면 두 기기에서 먼저 “고급 검증”을 켜세요. 기본값은 꺼짐이며, 켜서 늘어나는 것은 대조와 승인 한 단계일 뿐 암호화가 아닙니다. 켜든 끄든 전송은 암호화됩니다.</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">전송이 잘될 때의 화면</p><p>그때쯤이면 상대 카드는 사라져 있습니다 — 작업 공간이 그 자리를 차지했기 때문입니다. 상태는 작업 공간 헤더에서 읽습니다: 어느 기기에 연결되었는지, 링크 상태는 “연결됨”, 그리고 단 하나의 경로 배지가 “LAN 직접”. 내 네트워크 안의 호스트 대 호스트 한 홉이라는 뜻입니다. “P2P 직접”은 또 하나의 정직한 결과입니다: 두 기기가 정말 같은 공인 IP를 공유했지만, 브라우저가 정착한 홉은 로컬이 아니었다는 뜻입니다.</p><p>받는 쪽에서는 카운터가 마지막 파일에서 멈추고, 파일 자체는 저장 안내가 말한 곳에 있습니다. 그것을 확인하는 자리는 이 페이지가 아니라 받는 쪽 브라우저 자체의 다운로드 목록입니다 — chrome://downloads (Chrome), edge://downloads (Edge), about:downloads (Firefox).</p><pre tabindex="0"><code>MacBook 에 연결됨 · 연결됨 · LAN 직접
 파일 3/3</code></pre></div>
       <ul><li>같은 네트워크 방은 두 대로 제한되지 않으므로, 방에 있는 휴대폰과 노트북 수만큼 카드가 늘어서는 것은 정상이며 고장이 아닙니다.</li><li>여기에는 먼저 올리고 나중에 받는 단계가 없습니다. 나중에 가져올 서버 사본이 존재하지 않으니, 카운터가 끝날 때까지 두 기기 모두 페이지에 머물러야 합니다.</li></ul>
       <h2>기기가 서로 보이지 않을 때</h2>
       <p>같은 네트워크 탐색은 브라우저가 어느 네트워크에서 접속하는지를 기준으로 삼으니, 먼저 그쪽부터 봅니다. 두 기기가 실은 같은 네트워크가 아니거나, 공유기가 클라이언트를 갈라놓았거나, 페이지를 HTTPS로 열지 않았거나, 받는 브라우저가 감당하지 못할 양을 요구받은 경우입니다. 이것들은 원인의 전부가 아니라 흔한 첫 확인 항목이며, 모두 화면에 판단 근거가 있습니다.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 조치</p><dl><dt>“주변 기기”가 계속 비어 있거나, 지금 보고 있는 기기만 나옵니다.</dt><dd><pre><code>https://relayium.com/   # 두 기기에서 열고 상태 표시의 공인 IP를 비교한다</code></pre><p>공인 IP가 다르면 방도 다릅니다. VPN, iCloud 비공개 릴레이, 클라이언트를 다른 주소로 내보내는 게스트 SSID는 흔한 원인이지만 그것만은 아닙니다. 설정을 바꿔도 괜찮다면 VPN을 끄거나, 그 Wi-Fi에 한해 비공개 릴레이를 끄거나, 두 기기를 주 네트워크로 옮긴 뒤 각 기기에서 https://relayium.com/ 을 다시 불러오세요. 그대로 두고 싶다면 https://relayium.com/cross-network 의 페어링 코드가 두 설정을 건드리지 않고 상대에게 닿으며, 마찬가지로 종단간 암호화입니다.</p></dd><dt>두 기기가 같은 공인 IP를 보여주는데도 카드가 하나도 나타나지 않습니다.</dt><dd><pre><code>https://relayium.com/   # 기기 목록 아래 안내에 바꿔야 할 공유기 설정 이름이 있다</code></pre><p>공유기가 자기 클라이언트를 갈라놓고 있습니다. Wi-Fi 설정에서 ‘AP 격리 / 클라이언트 격리’를 끄고 — 메시 장비, 호텔과 게스트 네트워크는 기본으로 켜둔 경우가 많습니다 — 두 기기에서 페이지를 다시 불러오세요. 공유기를 관리할 수 없다면 https://relayium.com/cross-network 의 페어링 코드가 대신 쓸 길입니다.</p></dd><dt>암호화 전송에 HTTPS가 필요하다고만 나오고 기기 목록이 전혀 보이지 않습니다.</dt><dd><pre><code>https://relayium.com/   # 주소창이 http가 아니라 https여야 한다</code></pre><p>페이지가 http:// 또는 맨 IP 주소로 열려서, 브라우저가 암호화 전송에 필요한 API를 내주지 않습니다. relayium.com 자체는 HTTPS로 넘겨주므로 이는 보통 http:// 로 접근하는 자체 호스팅 인스턴스를 뜻합니다. https://relayium.com/ 으로 열거나, 자기 인스턴스에 인증서를 붙이세요.</p></dd><dt>받기를 누르기 전에, 받는 기기가 배치 전체를 메모리에 담아야 한다고 경고합니다.</dt><dd><pre><code>chrome://downloads   # Chrome용 / Edge는 edge://downloads / Firefox는 about:downloads</code></pre><p>그 브라우저는 다운로드를 디스크로 바로 스트리밍하지 못해 배치 전체를 안고 있으며, 크면 탭이 죽으며 끝날 수 있습니다. 컴퓨터의 Chrome이나 Edge로 받거나 한 번에 보내는 파일 수를 줄이고, 저장되었다고 단정하지 말고 받는 쪽 브라우저 자체의 다운로드 목록 — chrome://downloads (Chrome), edge://downloads (Edge), about:downloads (Firefox) — 에서 하나씩 확인하세요.</p></dd><dt>전송은 되지만 배지가 “LAN 직접”이 아니라 “P2P 직접”으로 나옵니다.</dt><dd><pre><code>https://relayium.com/   # 작업 공간 헤더의 경로 배지를 읽는다</code></pre><p>두 기기가 공인 IP는 공유하지만 로컬 홉은 공유하지 않습니다. 통신사급 NAT, 한 회선 아래 두 VLAN, 클라이언트 모드로 동작하는 확장기가 모두 이렇게 됩니다. 전송은 여전히 직접이고 여전히 종단간 암호화입니다. 경로를 브라우저가 찾은 길이 아니라 LAN으로 만들고 싶다면 두 기기를 같은 액세스 포인트에 연결하세요.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 조치</p><dl><dt>“주변 기기”가 계속 비어 있거나, 지금 보고 있는 기기만 나옵니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 두 기기에서 열고 상태 표시의 공인 IP를 비교한다</code></pre><p>공인 IP가 다르면 방도 다릅니다. VPN, iCloud 비공개 릴레이, 클라이언트를 다른 주소로 내보내는 게스트 SSID는 흔한 원인이지만 그것만은 아닙니다. 설정을 바꿔도 괜찮다면 VPN을 끄거나, 그 Wi-Fi에 한해 비공개 릴레이를 끄거나, 두 기기를 주 네트워크로 옮긴 뒤 각 기기에서 https://relayium.com/ 을 다시 불러오세요. 그대로 두고 싶다면 https://relayium.com/cross-network 의 페어링 코드가 두 설정을 건드리지 않고 상대에게 닿으며, 마찬가지로 종단간 암호화입니다.</p></dd><dt>두 기기가 같은 공인 IP를 보여주는데도 카드가 하나도 나타나지 않습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 기기 목록 아래 안내에 바꿔야 할 공유기 설정 이름이 있다</code></pre><p>공유기가 자기 클라이언트를 갈라놓고 있습니다. Wi-Fi 설정에서 ‘AP 격리 / 클라이언트 격리’를 끄고 — 메시 장비, 호텔과 게스트 네트워크는 기본으로 켜둔 경우가 많습니다 — 두 기기에서 페이지를 다시 불러오세요. 공유기를 관리할 수 없다면 https://relayium.com/cross-network 의 페어링 코드가 대신 쓸 길입니다.</p></dd><dt>암호화 전송에 HTTPS가 필요하다고만 나오고 기기 목록이 전혀 보이지 않습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 주소창이 http가 아니라 https여야 한다</code></pre><p>페이지가 http:// 또는 맨 IP 주소로 열려서, 브라우저가 암호화 전송에 필요한 API를 내주지 않습니다. relayium.com 자체는 HTTPS로 넘겨주므로 이는 보통 http:// 로 접근하는 자체 호스팅 인스턴스를 뜻합니다. https://relayium.com/ 으로 열거나, 자기 인스턴스에 인증서를 붙이세요.</p></dd><dt>받기를 누르기 전에, 받는 기기가 배치 전체를 메모리에 담아야 한다고 경고합니다.</dt><dd><pre tabindex="0"><code>chrome://downloads   # Chrome용 / Edge는 edge://downloads / Firefox는 about:downloads</code></pre><p>그 브라우저는 다운로드를 디스크로 바로 스트리밍하지 못해 배치 전체를 안고 있으며, 크면 탭이 죽으며 끝날 수 있습니다. 컴퓨터의 Chrome이나 Edge로 받거나 한 번에 보내는 파일 수를 줄이고, 저장되었다고 단정하지 말고 받는 쪽 브라우저 자체의 다운로드 목록 — chrome://downloads (Chrome), edge://downloads (Edge), about:downloads (Firefox) — 에서 하나씩 확인하세요.</p></dd><dt>전송은 되지만 배지가 “LAN 직접”이 아니라 “P2P 직접”으로 나옵니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 작업 공간 헤더의 경로 배지를 읽는다</code></pre><p>두 기기가 공인 IP는 공유하지만 로컬 홉은 공유하지 않습니다. 통신사급 NAT, 한 회선 아래 두 VLAN, 클라이언트 모드로 동작하는 확장기가 모두 이렇게 됩니다. 전송은 여전히 직접이고 여전히 종단간 암호화입니다. 경로를 브라우저가 찾은 길이 아니라 LAN으로 만들고 싶다면 두 기기를 같은 액세스 포인트에 연결하세요.</p></dd></dl></div>
       <h2>왜 빠른가: 중간에 서버가 없다</h2>
       <p>두 기기가 같은 네트워크에서 접속하므로 Relayium은 둘을 P2P로 직접 잇습니다. 바이트는 한 기기에서 다른 기기로 곧장 건너가며 Relayium 서버를 왕복하지 않고, 먼저 올릴 것도 나중에 받기를 기다릴 것도 없습니다. 얼마나 빠른지는 두 브라우저가 실제로 정착한 홉에 달렸고, 그것을 이름 붙이는 것이 경로 배지입니다. “LAN 직접”은 로컬 홉이라, 데이터가 내 네트워크 밖으로 나가지 않고 인터넷 회선이 아니라 랜의 속도로 흐릅니다. “P2P 직접”도 마찬가지로 직접이고 중간에 서버가 없지만, 브라우저가 찾아낸 경로가 로컬 구간을 벗어났으므로 실제로 지나는 회선의 속도에 묶입니다. 공인 IP가 같다는 것은 두 기기를 같은 방에 넣어줄 뿐, 그 자체로 둘 사이의 홉이 로컬이라는 보장은 아닙니다.</p>
       <p>이것이 양쪽 다 계정이 필요 없는 이유이기도 합니다. 모두가 이미 같은 신뢰할 수 있는 네트워크에 있으니, 누가 누구에게 연결해도 되는지 알기 위해 로그인이 필요하지 않습니다.</p>

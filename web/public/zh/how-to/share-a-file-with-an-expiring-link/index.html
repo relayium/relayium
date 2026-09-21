@@ -11,8 +11,14 @@
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/share-a-file-with-an-expiring-link/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/share-a-file-with-an-expiring-link/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="用会过期的安全链接分享文件" />
@@ -30,37 +36,88 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用会过期的安全链接分享文件","description":"在浏览器里加密文件，生成一个连服务器都解不开的链接。可选 1 小时、1 天、3 天、7 天、最长 14 天有效期（上限取决于套餐），也可以设为阅后即焚——你准备好了再发出去。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/share-a-file-with-an-expiring-link/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"用会过期的安全链接分享文件"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"我发链接给的那个人需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。任何拿到完整链接的人——包括 # 后面那部分——都能打开并下载文件。只有发送方在创建链接时需要登录。"}},{"@type":"Question","name":"Relayium 能看到我的文件内容吗？","acceptedAnswer":{"@type":"Answer","text":"不能。你的浏览器会在上传前用一把随机生成的 AES-256-GCM 密钥加密文件，这把密钥只随 URL 片段传递，永远不会到达服务器；上传时用的那个浏览器还会在本地留一份，好让「我的文件」以后能重建出链接。服务器保存的是它无法解密的密文——这就是零知识设计。"}},{"@type":"Question","name":"链接能保留多久？","acceptedAnswer":{"@type":"Answer","text":"由你在创建时选择：1 小时、1 天、3 天、7 天或最长 14 天（可选范围取决于套餐）；也可以不设固定时长，改成首次下载即焚——名额在字节开始下发时就被用掉，所以中途断掉的下载同样算数。过了这个点，链接就不再有效。"}},{"@type":"Question","name":"开了阅后即焚，文件真的会消失吗？","acceptedAnswer":{"@type":"Answer","text":"阅后即焚就是为「只下载一次」设计的：只要那次下载开始下发真正的密文，名额就被用掉了，之后任何人再打开这个链接都不会生效——哪怕那次下载中途断了、根本没下完。只有一个字节都没传成的尝试才会被还回来。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -78,7 +135,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">用会过期的安全链接分享文件</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -106,11 +163,11 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>如何创建链接</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">你需要准备</p><ul><li>只有发送这一侧需要已登录的账号——收件人始终不需要，也不会看到任何登录提示。</li><li>文件要同时装进两条独立的上限：选择器旁边印出的单文件上限，以及你套餐的存储额度。这两个都从页面上读，不要凭猜。</li><li>一个你套餐允许的留存时长。列表只会给出你套餐支持的时长，服务端也会对收到的请求同样地把这个上限兜底执行一遍。</li><li>重要内容自己也留一份。页面在选项下面就写着：这是临时投递，不是备份。</li></ul></div>
       <p>创建链接只需要在浏览器里走几步：</p>
-      <ol class="steps" data-block="steps"><li><p>打开「分享链接」页面并登录。只有发送方需要账号，收件人始终不需要。</p><pre><code>https://relayium.com/offline-transfer</code></pre></li><li><p>选择一个或多个文件，或者直接拖进去。选择器旁边那个数字就是你账号当下的单文件上限。</p><pre><code>选择文件上传
-最大 512 MiB</code></pre></li><li><p>设置「有效期」，或者打开「阅后即焚（首次下载后删除）」。它们下面那句提醒——临时投递，并非备份——就是页面在告诉你自己也留一份。</p><pre><code>有效期
-1 天</code></pre></li><li><p>等浏览器先加密、再上传，两个阶段都会实时显示。上传完成之前让页面保持打开，完成之后链接就不再依赖它了。</p></li><li><p>复制链接，或者让对方扫旁边的二维码，然后用你喜欢的方式发出去。整串都重要：#k= 之后的部分是解密密钥，它从不上传到服务器。</p><pre><code>链接已生成，发给对方即可下载：
+      <ol class="steps" data-block="steps"><li><p>打开「分享链接」页面并登录。只有发送方需要账号，收件人始终不需要。</p><pre tabindex="0"><code>https://relayium.com/offline-transfer</code></pre></li><li><p>选择一个或多个文件，或者直接拖进去。选择器旁边那个数字就是你账号当下的单文件上限。</p><pre tabindex="0"><code>选择文件上传
+最大 512 MiB</code></pre></li><li><p>设置「有效期」，或者打开「阅后即焚（首次下载后删除）」。它们下面那句提醒——临时投递，并非备份——就是页面在告诉你自己也留一份。</p><pre tabindex="0"><code>有效期
+1 天</code></pre></li><li><p>等浏览器先加密、再上传，两个阶段都会实时显示。上传完成之前让页面保持打开，完成之后链接就不再依赖它了。</p></li><li><p>复制链接，或者让对方扫旁边的二维码，然后用你喜欢的方式发出去。整串都重要：#k= 之后的部分是解密密钥，它从不上传到服务器。</p><pre tabindex="0"><code>链接已生成，发给对方即可下载：
 https://relayium.com/d/8f3c2a1b#k=hQ2r…</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">链接创建成功时是什么样</p><p>页面会用链接、它的到期日期和一个复制按钮取代原来的选择器——旁边还有同一条链接的二维码，下面则是从终端取回它的命令生成器。</p><p>自己把链接打开一次才是诚实的确认方式：下载页面会显示加密下载链接的标题、文件数量与总大小，以及剩余时间的倒计时。它不会显示的，是任何能让我们读到文件的入口，因为密钥留在你复制的那个片段里。</p><pre><code>链接已生成，发给对方即可下载：
+      <div class="cbox ok" data-block="success"><p class="cbox-t">链接创建成功时是什么样</p><p>页面会用链接、它的到期日期和一个复制按钮取代原来的选择器——旁边还有同一条链接的二维码，下面则是从终端取回它的命令生成器。</p><p>自己把链接打开一次才是诚实的确认方式：下载页面会显示加密下载链接的标题、文件数量与总大小，以及剩余时间的倒计时。它不会显示的，是任何能让我们读到文件的入口，因为密钥留在你复制的那个片段里。</p><pre tabindex="0"><code>链接已生成，发给对方即可下载：
 https://relayium.com/d/8f3c2a1b#k=hQ2r…</code></pre></div>
       <h2>有效期与阅后即焚</h2>
       <p>每个链接都需要一个存续期限——让它永久有效，就违背了一次性传输的初衷。创建链接时，你可以选择它保持有效多久，也可以设置成用过一次就立刻消失。</p>
@@ -119,7 +176,7 @@ https://relayium.com/d/8f3c2a1b#k=hQ2r…</code></pre></div>
       <h2>零知识保证，以及它的边界</h2>
       <p>创建链接时实际发生的是这样的：你的浏览器会生成一把随机的 AES-256-GCM 密钥——这跟 Relayium 实时模式的机制不一样，实时模式要通过 X25519 在两台设备之间协商密钥，而存储链接的密钥是在本地直接生成的，没有什么可协商。这把密钥会在文件离开你的设备之前，把文件本身和文件名列表一并加密，然后被附加到下载链接的 # 之后——这是浏览器永远不会发给任何服务器的那部分 URL。服务器只保存它收到的密文，而且只有密文；它没有办法解密，因为它从未拿到过密钥。</p>
       <p>这个设计有几个值得了解的真实取舍。密钥从不上传到服务器，所以我们没有「找回密码」可以提供。不过它也不是只存在于链接里：上传时用的那个浏览器会在本地留一份，在同一个浏览器里打开账户页的「我的文件」，就能重建并复制出那条链接。真正让文件无法找回的，是这两份都丢了——完整链接，以及那个浏览器里的本地副本（换一台设备打开账户页，或者清掉这个浏览器的站点数据，就等于丢了它）。到那一步，服务器上的密文就永久不可读了，对你对我们都一样。创建链接需要发送方处于登录状态，而且每个链接在被删除或过期之前，都会占用你账号的存储配额。这里的「零知识」也有必要说清楚：密文确实在创建到下载之间存放在 Relayium 的服务器上——只是少了那把从未离开过你浏览器的密钥，谁都读不懂它。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>对方打开链接，页面提示缺少解密密钥。</dt><dd><pre><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # #k= 之后的全部内容就是密钥</code></pre><p>片段在路上丢了——可能是聊天预览、短链接服务，或者复制时停在了 # 那里。请把链接以纯文本再发一次，并让对方自己粘进地址栏，中间就没有人再改写它；只有 id 的话，谁都解不开，包括我们。</p></dd><dt>整条链接都到了，解密还是失败。</dt><dd><pre><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # 一个 id 只对应一把密钥</code></pre><p>id 和密钥来自两条不同的链接——一次坐下来上传两回时很容易这样。请从生成它的那个页面上把最新的链接整条复制下来，或者在同一个浏览器里打开账户页的「我的文件」，从对应的那一条复制链接——密钥只存在于这两个地方：链接的 #k= 片段，以及那个浏览器里的本地副本，因为它从未到达服务器。</p></dd><dt>链接提示无效、已过期，或者已经被下载并删除。</dt><dd><pre><code>https://relayium.com/offline-transfer   # 重新生成一条，并且不要开启即焚</code></pre><p>这三种说法是同一种状态：已经没有东西可取了。开启「阅后即焚」时，第一次真正开始下发密文的下载就用掉了唯一的名额——无论它下完了还是中途断了；所以当文件需要给多个人、或者可能要重试时，请重新上传并关掉这个开关。</p></dd><dt>下载页面提示请求太多，或者发送方本月的流量已用完。</dt><dd><pre><code>https://relayium.com/me   # 「本月用量」既包含存储也包含流量</code></pre><p>文件是完好的，这只是计量。限流几分钟后自行解除；月流量额度用尽则要等到下个月、升级套餐，或者用自己的节点。之后再打开链接依然有效，因为什么都没有被消耗掉。</p></dd><dt>你需要把文件取回，但链接已经不在了。</dt><dd><pre><code>https://relayium.com/me   # 「我的文件」能在当初上传的那个浏览器里重建链接</code></pre><p>先试唯一存在的那条找回路径：上传时用的那个浏览器把密钥留在了本地，所以请在同一个浏览器里打开账户页，在「我的文件」里找到那一条，用它的复制链接按钮。换成任何别的设备，或者那个浏览器的站点数据被清掉之后，密钥就没了，服务器上的密文对任何人都不可读，包括我们——那就从你自己的副本重新上传一次，这正是页面提醒你留一份的原因。</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>对方打开链接，页面提示缺少解密密钥。</dt><dd><pre tabindex="0"><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # #k= 之后的全部内容就是密钥</code></pre><p>片段在路上丢了——可能是聊天预览、短链接服务，或者复制时停在了 # 那里。请把链接以纯文本再发一次，并让对方自己粘进地址栏，中间就没有人再改写它；只有 id 的话，谁都解不开，包括我们。</p></dd><dt>整条链接都到了，解密还是失败。</dt><dd><pre tabindex="0"><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # 一个 id 只对应一把密钥</code></pre><p>id 和密钥来自两条不同的链接——一次坐下来上传两回时很容易这样。请从生成它的那个页面上把最新的链接整条复制下来，或者在同一个浏览器里打开账户页的「我的文件」，从对应的那一条复制链接——密钥只存在于这两个地方：链接的 #k= 片段，以及那个浏览器里的本地副本，因为它从未到达服务器。</p></dd><dt>链接提示无效、已过期，或者已经被下载并删除。</dt><dd><pre tabindex="0"><code>https://relayium.com/offline-transfer   # 重新生成一条，并且不要开启即焚</code></pre><p>这三种说法是同一种状态：已经没有东西可取了。开启「阅后即焚」时，第一次真正开始下发密文的下载就用掉了唯一的名额——无论它下完了还是中途断了；所以当文件需要给多个人、或者可能要重试时，请重新上传并关掉这个开关。</p></dd><dt>下载页面提示请求太多，或者发送方本月的流量已用完。</dt><dd><pre tabindex="0"><code>https://relayium.com/me   # 「本月用量」既包含存储也包含流量</code></pre><p>文件是完好的，这只是计量。限流几分钟后自行解除；月流量额度用尽则要等到下个月、升级套餐，或者用自己的节点。之后再打开链接依然有效，因为什么都没有被消耗掉。</p></dd><dt>你需要把文件取回，但链接已经不在了。</dt><dd><pre tabindex="0"><code>https://relayium.com/me   # 「我的文件」能在当初上传的那个浏览器里重建链接</code></pre><p>先试唯一存在的那条找回路径：上传时用的那个浏览器把密钥留在了本地，所以请在同一个浏览器里打开账户页，在「我的文件」里找到那一条，用它的复制链接按钮。换成任何别的设备，或者那个浏览器的站点数据被清掉之后，密钥就没了，服务器上的密文对任何人都不可读，包括我们——那就从你自己的副本重新上传一次，这正是页面提醒你留一份的原因。</p></dd></dl></div>
       <h2>常见问题</h2>
       <h3>我发链接给的那个人需要账号吗？</h3>
       <p>不需要。任何拿到完整链接的人——包括 # 后面那部分——都能打开并下载文件。只有发送方在创建链接时需要登录。</p>

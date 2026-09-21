@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ar/how-to/send-text-between-devices/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="إرسال النصوص والروابط والأوامر بين الأجهزة" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"إرسال النصوص والروابط والأوامر بين الأجهزة","description":"انقل النصوص والروابط والأوامر والشيفرة متعددة الأسطر عبر Relayium — بتشفير من الطرف إلى الطرف وأثناء اتصال الجهازين فقط؛ لا تحتفظ خوادم Relayium بمتون الرسائل أو سجل على الخادم، لكن يمكن لأي طرف الاحتفاظ بالنص المستلم.","inLanguage":"ar","datePublished":"2026-07-30","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"إرسال النصوص والروابط والأوامر بين الأجهزة"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل يستطيع Relayium قراءة رسائلي أو استعادتها؟","acceptedAnswer":{"@type":"Answer","text":"لا. المحتوى مشفّر بين الجهازين، ولا تحتفظ خوادم Relayium بمتون الرسائل أو سجل على الخادم. يمكن لأي طرف الاحتفاظ بالنص المستلم، لكن بعد انتهاء الجلسة لا تملك Relayium نسخة خادم لاستعادتها."}},{"@type":"Question","name":"هل يمكن استخدام المتصفح في طرف وCLI في الآخر؟","acceptedAnswer":{"@type":"Answer","text":"لا. النقل والاقتران مختلفان. استخدم متصفحين أو عميلَي CLI."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ar/guides/" aria-current="true">الأدلة</a><a href="/ar/apps/">التطبيقات</a><a href="/pricing">الأسعار</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ar/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ar/guides/">الأدلة</a> <span aria-hidden="true">›</span> <span aria-current="page">إرسال النصوص والروابط والأوامر بين الأجهزة</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -105,16 +162,16 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>المتصفح: إرسال رسالة إلى جهاز متصل</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">قبل أن تبدأ</p><ul><li>أن يكون الجهازان متصلين في الوقت نفسه، والصفحة مفتوحة في متصفح على كليهما. لا يوجد صندوق وارد: فالرسالة لا توجد إلا داخل جلسة يُبقيها الطرفان مفتوحة.</li><li>وسيلة نقل واحدة يختارها الطرفان معًا. على نفس الشبكة لا يلزم شيء؛ وبين شبكتين مختلفتين يلزم رمز اقتران للمتصفح، يسجّل الطرف المُنشِئ الدخول لأجله، وعمره خمس دقائق.</li><li>نص يتّسع لرسالة واحدة، أي 65,536 بايت UTF-8. يتزايد العدّاد وأنت تكتب، ويُنبّهك إلى إرساله كملف عند تجاوز ذلك.</li><li>مكان لما يصل. تبقى الرسالة المستلمة في الجلسة المفتوحة، فانسخ ما تريد الاحتفاظ به قبل انتهاء الجلسة أو إعادة تحميل الصفحة.</li></ul></div>
       <p>افتح relayium.com على الجهازين. ما يختلف هو طريقة التعارف فقط: على الشبكة نفسها يظهر الجهاز الآخر وحده تحت «الأجهزة القريبة»، أما عبر شبكتين فتُنشئ رمز اقتران للمتصفح من صفحة النقل بين الشبكات وتنضم إليه من المتصفح الآخر. أما ما يحصل عليه الطرفان بعد ذلك فهو نفسه: لا تعرض بطاقة الطرف الآخر سوى إجراء واحد، «فتح مساحة العمل»، ومربع الكتابة داخل مساحة العمل تلك، إلى جانب مرفقات الملفات والمجلدات، على الاتصال المشفَّر الواحد نفسه. وعبر الشبكات يحمل هذا الاتصالَ مُرحِّلُ TURN مشفَّرٌ لا يمرّر سوى النص المشفَّر، وله كذلك حدٌّ زمني تنبّه إليه مساحة العمل قبل بلوغه. والاستثناء الوحيد طرفٌ ليس متصفحًا حديثًا — متصفح أقدم أو تطبيق أصلي أو CLI: فيبقى لديه المسار السابق حيث تُستخدم الملفات والرسائل واحدة تلو الأخرى.</p>
-      <ol class="steps" data-block="steps"><li><p>افتح صفحة النقل على الجهازين — صفحة نفس الشبكة تجد أحدهما الآخر تلقائيًا، أما صفحة النقل الفوري فهي موضع رمز الاقتران عندما يكونان على شبكتين مختلفتين.</p><pre dir="ltr"><code>https://relayium.com/</code></pre></li><li><p>اضغط «فتح مساحة العمل» على بطاقة الجهاز الآخر، ثم اكتب في مربع الكتابة الذي تعرضه مساحة العمل. وهو الإجراء الواحد نفسه في الحالتين: تحت «الأجهزة القريبة» على الشبكة نفسها، وعلى بطاقة الطرف الآخر داخل غرفة رمز الاقتران عبر الشبكات. افتراضيًا تُفتح الجلسة مباشرةً على مربع الكتابة في الطرفين، والاتصال مُشفَّر في الحالتين.</p></li><li><p>اكتب النص أو الصقه. يبيّن العدّاد أسفل المربع ما استُهلك من ميزانية الرسالة الواحدة، بالبايت لا بالحروف، لأن الرمز التعبيري أو الحرف الصيني يستهلك عدة بايتات.</p><pre dir="ltr"><code>1,024 / 65,536 بايت</code></pre></li><li><p>أرسِل باستخدام ⌘/Ctrl+Enter — فـ Enter وحده يُنشئ سطرًا جديدًا، وهذا بالضبط ما يجعل مقتطفًا متعدد الأسطر يُلصق ويُرسَل في خطوة واحدة. والتلميح أسفل المربع يذكر هذا التوزيع.</p><pre dir="ltr"><code>Enter لسطر جديد · ⌘/Ctrl+Enter للإرسال</code></pre></li><li><p>أبقِ الجلسة مفتوحة لإرسال عدة رسائل في الاتجاهين، واضغط «نسخ» على كل ما تريد الاحتفاظ به. وإن أردت مقارنة رمز التحقق (SAS) أولًا، فعّل «التحقّق المتقدّم» قبل فتح الجلسة: فهو يضيف الرمز وخطوة قبول صريحة، لا التشفير.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">كيف تبدو جلسة ناجحة</p><p>يعرض الطرفان أن الجلسة مفتوحة، وتظهر رسالتك في سجل الجهاز الآخر، ويعود عدّاد البايتات إلى الصفر للرسالة التالية.</p><p>وهذا السجل هو النسخة الوحيدة التي لـ Relayium علاقة بها: فهو يعيش في الصفحتين المفتوحتين، ويزول عند إعادة التحميل أو انتهاء الجلسة، و«نسخ» يضع النص في حافظة ذلك الجهاز حيث تستطيع تطبيقات أخرى قراءته.</p><pre dir="ltr"><code>الجلسة مفتوحة
+      <ol class="steps" data-block="steps"><li><p>افتح صفحة النقل على الجهازين — صفحة نفس الشبكة تجد أحدهما الآخر تلقائيًا، أما صفحة النقل الفوري فهي موضع رمز الاقتران عندما يكونان على شبكتين مختلفتين.</p><pre tabindex="0" dir="ltr"><code>https://relayium.com/</code></pre></li><li><p>اضغط «فتح مساحة العمل» على بطاقة الجهاز الآخر، ثم اكتب في مربع الكتابة الذي تعرضه مساحة العمل. وهو الإجراء الواحد نفسه في الحالتين: تحت «الأجهزة القريبة» على الشبكة نفسها، وعلى بطاقة الطرف الآخر داخل غرفة رمز الاقتران عبر الشبكات. افتراضيًا تُفتح الجلسة مباشرةً على مربع الكتابة في الطرفين، والاتصال مُشفَّر في الحالتين.</p></li><li><p>اكتب النص أو الصقه. يبيّن العدّاد أسفل المربع ما استُهلك من ميزانية الرسالة الواحدة، بالبايت لا بالحروف، لأن الرمز التعبيري أو الحرف الصيني يستهلك عدة بايتات.</p><pre tabindex="0" dir="ltr"><code>1,024 / 65,536 بايت</code></pre></li><li><p>أرسِل باستخدام ⌘/Ctrl+Enter — فـ Enter وحده يُنشئ سطرًا جديدًا، وهذا بالضبط ما يجعل مقتطفًا متعدد الأسطر يُلصق ويُرسَل في خطوة واحدة. والتلميح أسفل المربع يذكر هذا التوزيع.</p><pre tabindex="0" dir="ltr"><code>Enter لسطر جديد · ⌘/Ctrl+Enter للإرسال</code></pre></li><li><p>أبقِ الجلسة مفتوحة لإرسال عدة رسائل في الاتجاهين، واضغط «نسخ» على كل ما تريد الاحتفاظ به. وإن أردت مقارنة رمز التحقق (SAS) أولًا، فعّل «التحقّق المتقدّم» قبل فتح الجلسة: فهو يضيف الرمز وخطوة قبول صريحة، لا التشفير.</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">كيف تبدو جلسة ناجحة</p><p>يعرض الطرفان أن الجلسة مفتوحة، وتظهر رسالتك في سجل الجهاز الآخر، ويعود عدّاد البايتات إلى الصفر للرسالة التالية.</p><p>وهذا السجل هو النسخة الوحيدة التي لـ Relayium علاقة بها: فهو يعيش في الصفحتين المفتوحتين، ويزول عند إعادة التحميل أو انتهاء الجلسة، و«نسخ» يضع النص في حافظة ذلك الجهاز حيث تستطيع تطبيقات أخرى قراءته.</p><pre tabindex="0" dir="ltr"><code>الجلسة مفتوحة
 1,024 / 65,536 بايت</code></pre></div>
       <h2>عندما لا تنفذ الرسالة</h2>
       <p>يستخدم النص الاتصال نفسه الذي يستخدمه نقل الملفات، فمعظم الإخفاقات تتعلق بالاتصال لا بالرسالة. والاستثناءان محدَّدان ويظهر كلاهما على الشاشة: رسالة تتجاوز حدّ الحجم، وجلسة أُغلقت لأن الرسائل أُرسلت بكثافة مفرطة.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">العَرَض والفحص والحل</p><dl><dt>لا يظهر الجهاز الآخر أبدًا، فلا توجد بطاقة تُفتح منها جلسة رسائل.</dt><dd><pre dir="ltr"><code>https://relayium.com/   # قارن عنوان IP العام في شريط الحالة على الجهازين</code></pre><p>يجمع اكتشاف نفس الشبكة الأجهزة بحسب عنوان IP العام الذي تتصل منه، فعنوانان مختلفان يعنيان غرفتين — اقطع VPN أو الترحيل الخاص في iCloud، أو انضم إلى شبكة Wi-Fi نفسها. وإن كانا فعلًا على شبكتين مختلفتين، فاستخدم رمز اقتران على https://relayium.com/cross-network.</p></dd><dt>يرفض مربع الكتابة النص ويقول إن الرسالة طويلة جدًا.</dt><dd><pre dir="ltr"><code>1,024 / 65,536 بايت   # العدّاد يحسب بايتات UTF-8 لا الحروف</code></pre><p>تتّسع الرسالة الواحدة لـ 65,536 بايت UTF-8، والنص غير اللاتيني يستهلك من بايتين إلى أربعة لكل حرف، فاللصق العربي الطويل أو المزدحم بالرموز التعبيرية يصل إلى حدّ البايتات قبل ما يوحي به عدد الحروف بمسافة كبيرة. جزّئه، أو أرسِله كملف — وهو ما يعرضه مربع الكتابة تمامًا.</p></dd><dt>أغلقت الجلسة نفسها وعزت ذلك إلى كثرة الرسائل.</dt><dd><pre dir="ltr"><code>https://relayium.com/   # سطر الجلسة يذكر أنها انتهت لا أنها فشلت</code></pre><p>تُغلق حمايةُ الطوفان الجلسةَ عندما يرسل أحد الطرفين رسائل تتجاوز بكثير ما يكتبه إنسان، وهو ما يفعله نص برمجي أو مفتاح ملتصق. أعِد فتح الجلسة بالطريقة نفسها التي فتحتها بها — «فتح مساحة العمل» على بطاقة الجهاز الآخر، على الشبكة نفسها كما في غرفة رمز الاقتران — وأرسِل ما بقي في رسائل أقل وأطول.</p></dd><dt>كان كل شيء يعمل، وبعد إعادة التحميل صار الحوار فارغًا.</dt><dd><pre dir="ltr"><code>https://relayium.com/   # إعادة تحميل هذه الصفحة تبدأ جلسة جديدة بلا سجل</code></pre><p>هذا تصميم لا خلل: لا يحفظ Relayium سجلًا على الخادم، فلا شيء يُستعاد ولا نسخة خادم تُطلَب. انسخ ما يهمّك إلى ملاحظة قبل مغادرة الجلسة — فعمر السجل لا يزيد على عمر الصفحة المفتوحة.</p></dd><dt>لا يستطيع المتصفح وسطر الأوامر الانضمام برمز أحدهما الآخر.</dt><dd><pre dir="ltr"><code>relayium text 483920   # رمز CLI يقرن CLI بـ CLI فقط</code></pre><p>تستخدم جلسات النص في المتصفح وسطر الأوامر وسائل نقل ومصافحات اقتران مختلفة، فرمزٌ من ست خانات يصدره أحدهما لا معنى له عند الآخر. استخدم متصفحين، أو سطر الأوامر في الطرفين — فـ relayium text يطبع الأمر الذي ينبغي أن يشغّله الجهاز الثاني تمامًا.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">العَرَض والفحص والحل</p><dl><dt>لا يظهر الجهاز الآخر أبدًا، فلا توجد بطاقة تُفتح منها جلسة رسائل.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/   # قارن عنوان IP العام في شريط الحالة على الجهازين</code></pre><p>يجمع اكتشاف نفس الشبكة الأجهزة بحسب عنوان IP العام الذي تتصل منه، فعنوانان مختلفان يعنيان غرفتين — اقطع VPN أو الترحيل الخاص في iCloud، أو انضم إلى شبكة Wi-Fi نفسها. وإن كانا فعلًا على شبكتين مختلفتين، فاستخدم رمز اقتران على https://relayium.com/cross-network.</p></dd><dt>يرفض مربع الكتابة النص ويقول إن الرسالة طويلة جدًا.</dt><dd><pre tabindex="0" dir="ltr"><code>1,024 / 65,536 بايت   # العدّاد يحسب بايتات UTF-8 لا الحروف</code></pre><p>تتّسع الرسالة الواحدة لـ 65,536 بايت UTF-8، والنص غير اللاتيني يستهلك من بايتين إلى أربعة لكل حرف، فاللصق العربي الطويل أو المزدحم بالرموز التعبيرية يصل إلى حدّ البايتات قبل ما يوحي به عدد الحروف بمسافة كبيرة. جزّئه، أو أرسِله كملف — وهو ما يعرضه مربع الكتابة تمامًا.</p></dd><dt>أغلقت الجلسة نفسها وعزت ذلك إلى كثرة الرسائل.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/   # سطر الجلسة يذكر أنها انتهت لا أنها فشلت</code></pre><p>تُغلق حمايةُ الطوفان الجلسةَ عندما يرسل أحد الطرفين رسائل تتجاوز بكثير ما يكتبه إنسان، وهو ما يفعله نص برمجي أو مفتاح ملتصق. أعِد فتح الجلسة بالطريقة نفسها التي فتحتها بها — «فتح مساحة العمل» على بطاقة الجهاز الآخر، على الشبكة نفسها كما في غرفة رمز الاقتران — وأرسِل ما بقي في رسائل أقل وأطول.</p></dd><dt>كان كل شيء يعمل، وبعد إعادة التحميل صار الحوار فارغًا.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/   # إعادة تحميل هذه الصفحة تبدأ جلسة جديدة بلا سجل</code></pre><p>هذا تصميم لا خلل: لا يحفظ Relayium سجلًا على الخادم، فلا شيء يُستعاد ولا نسخة خادم تُطلَب. انسخ ما يهمّك إلى ملاحظة قبل مغادرة الجلسة — فعمر السجل لا يزيد على عمر الصفحة المفتوحة.</p></dd><dt>لا يستطيع المتصفح وسطر الأوامر الانضمام برمز أحدهما الآخر.</dt><dd><pre tabindex="0" dir="ltr"><code>relayium text 483920   # رمز CLI يقرن CLI بـ CLI فقط</code></pre><p>تستخدم جلسات النص في المتصفح وسطر الأوامر وسائل نقل ومصافحات اقتران مختلفة، فرمزٌ من ست خانات يصدره أحدهما لا معنى له عند الآخر. استخدم متصفحين، أو سطر الأوامر في الطرفين — فـ relayium text يطبع الأمر الذي ينبغي أن يشغّله الجهاز الثاني تمامًا.</p></dd></dl></div>
       <h2>سطر الأوامر: أصدر الرمز على جهاز وانضم إليه من الآخر</h2>
       <p>شغّل relayium text بلا رمز على أحد الجهازين. سيصدر رمزًا من ستة أرقام باستخدام حسابك، ويطبع الأمر الذي يشغّله الجهاز الآخر تمامًا، ثم يبقى في الجلسة بانتظاره. لا ملف مؤقت ولا عملية إضافية يجب إيقافها.</p>
       <p>شغّل relayium text بذلك الرمز على الجهاز الآخر. في الوضع التفاعلي كل سطر رسالة، ولا يتوقّف التشغيل لمقارنة أي رمز ما لم تطلب ذلك. أرسل النص متعدد الأسطر أو الدقيق عبر pipe كرسالة واحدة؛ ولا يحتاج ذلك إلى أي خيار إضافي.</p>
-      <pre dir="ltr"><code># One machine mints the code and waits (relayium login is required once)
+      <pre tabindex="0" dir="ltr"><code># One machine mints the code and waits (relayium login is required once)
 relayium text
 # Code: 483920   (valid 5 minutes)
 # On the other machine:  relayium text 483920

@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/guides/transfer-files-from-terminal/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Relayium CLI でターミナルからファイルとテキストを転送する" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI でターミナルからファイルとテキストを転送する","description":"無料でエンドツーエンド暗号化された Relayium CLI で、SSH・ペアリングコード・デーモン直結によるファイル転送と、両方の端末がオンライン時の一時テキスト送信を始めましょう。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/transfer-files-from-terminal/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium CLI でターミナルからファイルとテキストを転送する"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"CLI に料金はかかりますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。CLI は完全に無料です。直接転送されるファイルとテキストのバイトは Relayium のリレーを通らないため、計測するものも支払うものもありません。"}},{"@type":"Question","name":"Relayium アカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"send または text でペアリングコードを発行するときと、クラウドの up で必要です。push / pull とデーモン直結には不要です。サーバーはログイン済みアカウントにだけコードを発行するため、作成側は一度 relayium login を実行します。渡されたコードで参加する側はログイン不要で、receive 側もサインインしません。"}},{"@type":"Question","name":"どのオペレーティングシステムに対応していますか？","acceptedAnswer":{"@type":"Answer","text":"macOS、Linux、Windows 向けに、x86-64 と arm64 の両方でビルド済みバイナリが公開されています。インストールスクリプトは macOS と Linux に対応しています。Windows では、リリースページから .zip をダウンロードしてください。"}},{"@type":"Question","name":"自分のファイルは Relayium のサーバーを通過しますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。どのモードでも、ファイルのバイトは両端の間を直接移動します。当社のサーバーに一切触れるのは send / receive だけで、それも小さなランデブーハンドシェイクのためだけです。ファイルの中身は決して含まれません。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ja/guides/" aria-current="true">ガイド</a><a href="/ja/apps/">アプリ</a><a href="/pricing">料金</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium CLI でターミナルからファイルとテキストを転送する</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -105,20 +162,20 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>1コマンドでインストール</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">必要なもの</p><ul><li>端末のある macOS、Linux、Windows のいずれかのマシン。ビルド済みバイナリは3つとも x86-64 と arm64 を用意しています。</li><li>macOS と Linux の1行インストールに使う curl。curl --version がバージョンを表示します。Windows ではリリースページから .zip をダウンロードしてください。</li><li>書き込めるインストール先ディレクトリ。スクリプトは書き込める場合は /usr/local/bin を、そうでなければ ~/.local/bin を使い、最後の数行でどちらを選んだかを表示します。</li><li>push、pull、デーモン直結にはこれ以外は不要です。無料の Relayium アカウントが要るのは、send や text でペアリングコードを発行するときと、up でアップロードするときだけです。</li></ul></div>
       <p>macOS または Linux では、1つのコマンドでお使いの OS 向けのビルド済みバイナリをダウンロードし、PATH に配置できます：</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>自分でファイルを選びたい場合は、リリースページからバイナリをダウンロードしてください。</li><li>Go がインストール済みなら、リポジトリを clone して次を実行します：go build -o relayium ./cmd/relayium（server ディレクトリから）。</li><li>その後 relayium --help を実行するとすべてのコマンドを確認でき、relayium version でビルドを確認できます。</li></ul>
       <h2>ファイルを移動する3つの方法</h2>
       <p>Relayium には3つの転送方法があります。3つの異なるツールを覚える必要はなく、相手先の場所に応じて選ぶだけです。いずれも同じ転送エンジンを共有し、運ぶ各ファイルを SHA-256 ハッシュで検証します。共有していないのは再開です。半端なファイルを次回の実行で続けるのは sync で、push、pull、send、receive はまったく再開しません。</p>
       <ul><li>push / pull：すでに SSH でログインできるサーバーへ。バイトは SSH 接続上を流れます。Relayium アカウントは不要です。</li><li>send / receive：送信側の CLI が発行する短いペアリングコードを使って、ネットワークをまたいで他の人へ（relayium login で一度サインインするだけ。受信側は不要です）。発行したコードの有効期限は5分なので、その間に受信側のマシンでコマンドを実行してください。</li><li>Relayium CLI の send/receive と text は P2P 直接接続専用です。ファイルやメッセージのバイトを TURN やその他の Relayium サーバーで中継することはありません。2 つの端末が直接接続を確立できなければ、リレーへフォールバックせずにセッションは失敗します。</li><li>serve + push relayium://（デーモン直結）：自分が所有する2台のサーバー間で、証明書ピンニング付き TLS 上を直接。リレーなし、SSH なし、コードなし。</li></ul>
       <h2>一時テキストを送る</h2>
       <p>一方で relayium text を実行してペアリングコードを発行し、もう一方は表示されたコードで参加します：</p>
-      <pre><code>relayium text</code></pre>
-      <pre><code>relayium text 483920</code></pre>
+      <pre tabindex="0"><code>relayium text</code></pre>
+      <pre tabindex="0"><code>relayium text 483920</code></pre>
       <ul><li>コードの発行には relayium login が必要ですが、コードでの参加にはログイン不要です。</li><li>両方の端末がオンラインである必要があります。メッセージはエンドツーエンドで暗号化され、Relayium サーバーは本文を保存しません。</li><li>Relayium CLI の send/receive と text は P2P 直接接続専用です。ファイルやメッセージのバイトを TURN やその他の Relayium サーバーで中継することはありません。2 つの端末が直接接続を確立できなければ、リレーへフォールバックせずにセッションは失敗します。</li><li>各端末は受信したテキストをコピーまたは保持できます。</li><li>1メッセージは最大 65,536 UTF-8 バイトです。それより大きい内容には relayium send を使ってください。</li></ul>
       <h2>最初の転送</h2>
       <p>最も手早く試せるのは、SSH でログインできるサーバーへフォルダをコピーすることです。Relayium は既存の SSH アクセスを使うので、リモート側で設定することは何もなく、アカウント作成も不要です：</p>
-      <ol class="steps" data-block="steps"><li><p>CLI が PATH にあることを確認します。「command not found」ではなくバージョン文字列が表示されます。</p><pre><code>relayium version</code></pre></li><li><p>普段どおりの方法でそのサーバーに届くことを確認します。push はまさにそのアクセスを再利用するので、ssh が通れば接続と認証という前提条件は満たせます。ただし転送そのものの成功を約束するものではなく、push には user@your-server:backups/ への書き込み権限と空き容量も必要です。</p><pre><code>ssh user@your-server true</code></pre></li><li><p>フォルダーを push します。最後の引数は host:path で、リモートだと示すのはコロンです。末尾のスラッシュは「このディレクトリの中へ」を意味します。</p><pre><code>relayium push ./photos user@your-server:backups/</code></pre></li><li><p>思ったところにファイルが届いたか確認します。push ./photos は宛先の下に photos/ を再現するので、フォルダー名もそのまま付いてきます。</p><pre><code>ssh user@your-server ls backups/photos</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">成功したときの表示</p><p>相手側に relayium があれば、push は完了したファイルごとに1行を表示して終了コード 0 で終わります。素のサーバー相手なら代わりに tar ストリームの要約行が出ます。どちらも成功です。</p><pre><code>relayium push ./photos user@your-server:backups/
+      <ol class="steps" data-block="steps"><li><p>CLI が PATH にあることを確認します。「command not found」ではなくバージョン文字列が表示されます。</p><pre tabindex="0"><code>relayium version</code></pre></li><li><p>普段どおりの方法でそのサーバーに届くことを確認します。push はまさにそのアクセスを再利用するので、ssh が通れば接続と認証という前提条件は満たせます。ただし転送そのものの成功を約束するものではなく、push には user@your-server:backups/ への書き込み権限と空き容量も必要です。</p><pre tabindex="0"><code>ssh user@your-server true</code></pre></li><li><p>フォルダーを push します。最後の引数は host:path で、リモートだと示すのはコロンです。末尾のスラッシュは「このディレクトリの中へ」を意味します。</p><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/</code></pre></li><li><p>思ったところにファイルが届いたか確認します。push ./photos は宛先の下に photos/ を再現するので、フォルダー名もそのまま付いてきます。</p><pre tabindex="0"><code>ssh user@your-server ls backups/photos</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">成功したときの表示</p><p>相手側に relayium があれば、push は完了したファイルごとに1行を表示して終了コード 0 で終わります。素のサーバー相手なら代わりに tar ストリームの要約行が出ます。どちらも成功です。</p><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/
   photos/IMG_0413.jpg (2314518 bytes)
   photos/IMG_0414.jpg (1998233 bytes)
 echo $?
@@ -126,10 +183,10 @@ echo $?
       <ul><li>リモートにも relayium がインストールされていれば、push はネイティブプロトコルを使います。送信前にバッチ全体の衝突チェックを行い、各ファイルを SHA-256 で検証して暫定領域に置いてから設置します。それでも再開はしません。中断後にやり直すと、すでに届いたファイルが存在するため拒否されます。再開が必要なら relayium sync を使ってください。</li><li>リモートに relayium がなければ、push は単純な tar ストリームにフォールバックするため、relayium が入っていない素の状態のサーバーでも動作します。このフォールバックは push だけの機能です。</li><li>同じファイルを次のコマンドで取り戻せます：relayium pull user@your-server:backups/ ./restore。pull は常にリモートの relayium を必要とし（tar フォールバックはありません）、先にリモートへインストールしておいてください。</li></ul>
       <h2>最初のコマンドが通らないとき</h2>
       <p>初回に起きる不具合は、次の4つで他のすべてを合わせたより多くを占めます。どれも当て推量は要りません。出力で判定できるコマンドがそれぞれにあります。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>インストールスクリプトは成功と言ったのに「relayium: command not found」と出る。</dt><dd><pre><code>command -v relayium
-# （何も表示されない）</code></pre><p>バイナリは入っていますが、その置き場所が PATH にありません。スクリプトの最後の数行が使ったディレクトリを示し、追加すべき export PATH の行をそのまま表示します。それを実行し、新しいシェルを開いて relayium version をもう一度試してください。</p></dd><dt>push が即座に「push destination must be remote (host:path)」で終了する。</dt><dd><pre><code>relayium push ./photos user@your-server backups/
-# push destination must be remote (host:path)</code></pre><p>宛先からコロンが落ちたため、relayium がローカルパスとして読みました。scp と同じ書き方で、ホストとパスの間に空白を入れずに書いてください：user@your-server:backups/</p></dd><dt>push は通るサーバーで pull だけ失敗する。</dt><dd><pre><code>ssh user@your-server command -v relayium
-# （何も表示されない）</code></pre><p>pull に tar フォールバックはありません。この向きではリモートが送信側になるため、あちらに relayium が必要です。同じ1行のコマンドでサーバーに入れてから pull をやり直してください。</p></dd><dt>同じコードに2台が参加し、片方が「the other side is running `relayium text`, not `relayium send`/`relayium receive`」と表示する。</dt><dd><pre><code># メッセージセッション：両端とも text を実行する
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>インストールスクリプトは成功と言ったのに「relayium: command not found」と出る。</dt><dd><pre tabindex="0"><code>command -v relayium
+# （何も表示されない）</code></pre><p>バイナリは入っていますが、その置き場所が PATH にありません。スクリプトの最後の数行が使ったディレクトリを示し、追加すべき export PATH の行をそのまま表示します。それを実行し、新しいシェルを開いて relayium version をもう一度試してください。</p></dd><dt>push が即座に「push destination must be remote (host:path)」で終了する。</dt><dd><pre tabindex="0"><code>relayium push ./photos user@your-server backups/
+# push destination must be remote (host:path)</code></pre><p>宛先からコロンが落ちたため、relayium がローカルパスとして読みました。scp と同じ書き方で、ホストとパスの間に空白を入れずに書いてください：user@your-server:backups/</p></dd><dt>push は通るサーバーで pull だけ失敗する。</dt><dd><pre tabindex="0"><code>ssh user@your-server command -v relayium
+# （何も表示されない）</code></pre><p>pull に tar フォールバックはありません。この向きではリモートが送信側になるため、あちらに relayium が必要です。同じ1行のコマンドでサーバーに入れてから pull をやり直してください。</p></dd><dt>同じコードに2台が参加し、片方が「the other side is running `relayium text`, not `relayium send`/`relayium receive`」と表示する。</dt><dd><pre tabindex="0"><code># メッセージセッション：両端とも text を実行する
 relayium text
 relayium text 483920</code></pre><p>両端が別のコマンドを実行しています。メッセージなら2台とも relayium text、ファイルなら片方が relayium send でもう片方が relayium receive です。この食い違いはダイヤルする前に拒否されるので、何も送られていません。</p></dd></dl></div>
       <h2>無料、そして設計上プライベート</h2>

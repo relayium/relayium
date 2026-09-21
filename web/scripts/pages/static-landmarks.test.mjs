@@ -9,11 +9,10 @@
 // passes a glance and fails WCAG AA on every link in the language bar, the
 // breadcrumb, the related list and the guides index.
 //
-// This runs against the REAL builders and REAL content, not fixtures, so it fails
-// for the pages that actually ship.
+// This runs against the REAL builders and REAL content, not fixtures, and every
+// assertion reads the RENDERED page — so it fails for the pages that actually
+// ship, and keeps failing however the six templates are refactored underneath.
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import landing from "./content/landing.mjs";
 import guidesIndex from "./content/guides-index.mjs";
 import crossNetwork from "./content/cross-network.mjs";
@@ -43,6 +42,8 @@ const PAGES = {
 };
 
 const count = (html, needle) => html.split(needle).length - 1;
+/** Every <style> block a page emits, concatenated — the CSS a browser applies. */
+const styleOf = (html) => [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join("");
 
 describe("static templates expose one main landmark", () => {
   it.each(Object.keys(PAGES))("%s renders exactly one <main>", (name) => {
@@ -61,39 +62,62 @@ describe("static templates expose one main landmark", () => {
     expect(inside, `${name}: <h1> belongs inside <main>`).toContain("<h1>");
     // Site chrome is not page content; keeping it out is the whole point of the
     // landmark. (The language bar is allowed inside — it is a labelled <nav>
-    // landmark of its own either way.)
-    expect(inside, `${name}: the site header must stay outside <main>`).not.toContain("<header>");
-    expect(inside, `${name}: the footer must stay outside <main>`).not.toContain("<footer>");
-    expect(html.indexOf("<footer>"), `${name}: <main> must close before the footer`).toBeGreaterThan(close);
+    // landmark of its own either way.) Matched on the OPENING angle bracket plus
+    // the tag name, not on the complete `<header>`: an attribute on either
+    // element would have made both "must not contain" assertions vacuously true
+    // and the third one search for a string that is not there.
+    expect(inside, `${name}: the site header must stay outside <main>`).not.toMatch(/<header[\s>]/);
+    expect(inside, `${name}: the footer must stay outside <main>`).not.toMatch(/<footer[\s>]/);
+    expect(html.search(/<footer[\s>]/), `${name}: <main> must close before the footer`).toBeGreaterThan(close);
   });
 });
 
-describe("static templates use the readable accent for link text", () => {
-  const TEMPLATES = ["landing-template.mjs", "article-template.mjs", "guides-index-template.mjs", "legal-template.mjs"];
+describe("static pages paint link text with the readable accent, never the decorative one", () => {
+  // Asserted on the RENDERED page rather than on template source. The six
+  // templates now compose one shared stylesheet (page-chrome.mjs), so a source
+  // grep would report "the token is not in this file" for every one of them
+  // while the pages themselves were perfect — or, worse, keep passing on a
+  // template that had stopped emitting the stylesheet at all. What ships is
+  // what is checked.
 
-  it.each(TEMPLATES)("%s declares --accent-fg in both colour schemes", (file) => {
-    const src = readFileSync(resolve(process.cwd(), "scripts/pages", file), "utf8");
-    // Light and dark each define it: the dark block is a separate :root, and a
-    // token declared only in light silently falls back to the light value.
-    expect(src.match(/--accent-fg:/g) ?? [], `${file} must set --accent-fg for light AND dark`).toHaveLength(2);
+  it.each(Object.keys(PAGES))("%s declares --accent-fg for light AND dark", (name) => {
+    const css = styleOf(PAGES[name]);
+    // Three, not two: the light value, the `prefers-color-scheme` block, and
+    // the `[data-theme="dark"]` block the pre-paint snippet drives. A theme a
+    // reader chose explicitly cannot be expressed by a media query, so the
+    // attribute selector is not a duplicate of it.
+    expect(css.match(/--accent-fg:/g) ?? [], `${name} must set --accent-fg in all three theme selectors`)
+      .toHaveLength(3);
   });
 
-  it.each(TEMPLATES)("%s paints no text with the decorative --accent", (file) => {
-    const src = readFileSync(resolve(process.cwd(), "scripts/pages", file), "utf8");
+  it.each(Object.keys(PAGES))("%s paints no text with the decorative --accent", (name) => {
     // `color:` only — `border-color:`/`background:` are exactly what the
     // decorative token is for, and must stay on it.
-    const offenders = [...src.matchAll(/(^|[;{\s])color:var\(--accent\)/g)];
-    expect(offenders.map((m) => m[0]), `${file} paints text with the decorative accent`).toEqual([]);
+    const offenders = [...styleOf(PAGES[name]).matchAll(/(^|[;{\s])color:var\(--accent\)/g)];
+    expect(offenders.map((m) => m[0]), `${name} paints text with the decorative accent`).toEqual([]);
+  });
+
+  it.each(Object.keys(PAGES))("%s keeps a forced-light reader in light", (name) => {
+    // The dark palette is applied by the media query ONLY when the reader has
+    // not forced light. Without the guard, choosing Light in the app and then
+    // opening a guide on a dark OS lands on a dark page — the exact mismatch
+    // the snippet was added to remove, reintroduced by the stylesheet.
+    expect(styleOf(PAGES[name]), `${name} must guard its dark media block`)
+      .toContain('@media(prefers-color-scheme:dark){:root:not([data-theme="light"])');
   });
 });
 
-describe("static CTAs use the white-text-safe action gradient", () => {
-  // mode and 404 reuse landing's STYLE, so these are the two unique .cta rule
-  // owners. axe cannot calculate contrast over a gradient; this source contract
-  // prevents a decorative-gradient regression from being reported as incomplete
-  // instead of failing.
-  it.each(["landing-template.mjs", "article-template.mjs"])("%s uses both action stops", (file) => {
-    const src = readFileSync(resolve(process.cwd(), "scripts/pages", file), "utf8");
-    expect(src).toMatch(/\.cta\{[^}]*color:#fff[^}]*background:linear-gradient\(135deg,var\(--accent-action\),var\(--accent-action-deep\)\)/);
+describe("static CTAs carry white text on a measurable fill", () => {
+  // `--accent-action` is a FLAT colour, not the two-stop ramp this used to pin.
+  // Two reasons, both load-bearing: the owner reference (`Relayium 设计规范` §3)
+  // has no gradient anywhere and `src/app.css` follows it, and axe cannot
+  // compute contrast over a gradient — it reports "incomplete", which is how an
+  // unreadable button passes a scan. Flat, white on it measures 6.10:1 in light
+  // and 5.53:1 in dark, and the scanner can say so.
+  it.each(Object.keys(PAGES))("%s fills .cta with the action colour and white text", (name) => {
+    const css = styleOf(PAGES[name]);
+    expect(css).toMatch(/\.cta\{[^}]*color:#fff[^}]*background:var\(--accent-action\)/);
+    expect(css, `${name} must not reintroduce a gradient under white text`)
+      .not.toMatch(/\.cta\{[^}]*linear-gradient/);
   });
 });

@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/fr/guides/receive-files-from-the-command-line/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Recevoir des fichiers depuis la ligne de commande" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Recevoir des fichiers depuis la ligne de commande","description":"Trois façons de recevoir un fichier avec la CLI Relayium : receive pour un envoi par code d'appairage entre réseaux, serve comme boîte de réception à l'écoute des envois en daemon direct, ou pull depuis un serveur où vous pouvez déjà vous connecter en SSH. Gratuit, sans compte.","inLanguage":"fr","datePublished":"2026-07-09","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/fr/guides/receive-files-from-the-command-line/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/fr/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/fr/guides/"},{"@type":"ListItem","position":3,"name":"Recevoir des fichiers depuis la ligne de commande"}]},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Ai-je besoin d'un compte pour recevoir des fichiers ?","acceptedAnswer":{"@type":"Answer","text":"Non. Les trois méthodes — receive, serve et pull — sont entièrement gratuites et ne nécessitent aucun compte Relayium de votre côté. La seule connexion où que ce soit est celle de l'expéditeur en mode receive, pour que sa CLI puisse générer le code d'appairage."}},{"@type":"Question","name":"relayium receive est-il interopérable avec le code d'appairage du navigateur ?","acceptedAnswer":{"@type":"Answer","text":"Non. Le protocole de code d'appairage de la CLI est distinct du flux de lien de participation et de QR code du navigateur sur relayium.com — ils utilisent des poignées de main différentes et ne communiquent pas entre eux aujourd'hui, donc un code CLI ne s'appaire qu'avec une autre CLI. C'est sur la feuille de route, mais ce n'est pas encore quelque chose sur quoi compter. En attendant, un destinataire sur navigateur veut un lien relayium up plutôt qu'un code."}},{"@type":"Question","name":"Que se passe-t-il si une machine inconnue envoie vers mon processus serve à l'écoute ?","acceptedAnswer":{"@type":"Answer","text":"Dans un terminal, on vous demande de l'approuver par son adresse et son empreinte lors de son premier envoi, et l'approbation est mémorisée. Sans terminal — un service systemd, une tâche cron — il n'y a personne à qui demander, donc un émetteur inconnu est rejeté ; autorisez-le d'abord avec relayium authorize \u003cfingerprint>."}},{"@type":"Question","name":"Puis-je faire un pull depuis un serveur où relayium n'est pas installé ?","acceptedAnswer":{"@type":"Answer","text":"Non. pull a toujours besoin de relayium côté distant ; il n'y a pas de repli tar comme pour push. Installez d'abord relayium là-bas."}},{"@type":"Question","name":"Où relayium conserve-t-il mon identité et les pairs de confiance ?","acceptedAnswer":{"@type":"Answer","text":"Par défaut dans ~/.config/relayium — surchargez cet emplacement avec --config-dir sur toute commande touchant à l'identité ou à la confiance."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/fr/guides/" aria-current="true">Guides</a><a href="/fr/apps/">Applis</a><a href="/pricing">Tarifs</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Recevoir des fichiers depuis la ligne de commande</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -108,38 +165,38 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>receive : quelqu&#39;un vous envoie un fichier à travers les réseaux</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Ce qu&#39;il vous faut avant l&#39;étape 1</p><ul><li>La CLI sur cette machine. relayium version affiche un numéro de version ; si le shell répond command not found, elle n&#39;y est pas encore installée.</li><li>Un expéditeur connecté et devant son terminal maintenant. Lui seul a besoin d&#39;un compte — vous ne vous connectez jamais pour recevoir.</li><li>Les six chiffres, transmis hors bande. Ils vivent cinq minutes à partir du moment où sa CLI les a générés, alors convenez d&#39;abord du moment.</li><li>Un moyen de lui relire six autres chiffres ensuite : le SAS se compare à voix haute, pas à l&#39;écran.</li><li>L&#39;autre extrémité doit être la CLI. Un navigateur ne peut pas rejoindre un code d&#39;appairage CLI — si c&#39;est tout ce que vous avez, demandez plutôt un lien relayium up.</li></ul></div>
       <p>C&#39;est le pendant côté réception de relayium send. L&#39;autre personne exécute relayium send &lt;path&gt; de son côté (après relayium login) ; sa CLI génère un code de 6 chiffres, valable 5 minutes, et l&#39;affiche. Elle vous le communique par un canal auquel vous faites tous deux confiance — un appel, un message. Vous exécutez receive avec ce code :</p>
-      <pre><code>relayium receive 483920
+      <pre tabindex="0"><code>relayium receive 483920
 
 # ou vers un répertoire précis
 relayium receive 483920 ./downloads</code></pre>
-      <ol class="steps" data-block="steps"><li><p>Convenez avec l&#39;expéditeur du moment où il lancera send. Le code commence à expirer dès sa génération, pas dès que vous le recevez.</p></li><li><p>Récupérez les six chiffres par un canal auquel vous faites confiance tous les deux — un appel, une fenêtre de discussion, la pièce où vous êtes.</p></li><li><p>Lancez receive depuis le répertoire où les fichiers doivent atterrir, ou indiquez-en un explicitement.</p><pre><code>relayium receive 483920</code></pre><pre><code>relayium receive 483920 ./downloads</code></pre></li><li><p>Quand les deux terminaux affichent un code de vérification, lisez le vôtre à voix haute et vérifiez qu&#39;il correspond au sien. Ce n&#39;est pas le code d&#39;appairage, et c&#39;est la seule chose qui écarte une extrémité substituée.</p></li><li><p>Ne touchez plus au terminal jusqu&#39;à ce qu&#39;il revienne à l&#39;invite. C&#39;est une session en direct : fermer l&#39;une des extrémités arrête le transfert.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">À quoi ressemble une réception réussie</p><p>La connexion est annoncée comme direct, et les deux terminaux affichent le même code de vérification. Des codes différents sont le seul résultat que vous ne devez pas accepter — arrêtez-vous et vérifiez avec l&#39;expéditeur sur quelle machine il se trouve.</p><pre><code>$ relayium receive 483920
+      <ol class="steps" data-block="steps"><li><p>Convenez avec l&#39;expéditeur du moment où il lancera send. Le code commence à expirer dès sa génération, pas dès que vous le recevez.</p></li><li><p>Récupérez les six chiffres par un canal auquel vous faites confiance tous les deux — un appel, une fenêtre de discussion, la pièce où vous êtes.</p></li><li><p>Lancez receive depuis le répertoire où les fichiers doivent atterrir, ou indiquez-en un explicitement.</p><pre tabindex="0"><code>relayium receive 483920</code></pre><pre tabindex="0"><code>relayium receive 483920 ./downloads</code></pre></li><li><p>Quand les deux terminaux affichent un code de vérification, lisez le vôtre à voix haute et vérifiez qu&#39;il correspond au sien. Ce n&#39;est pas le code d&#39;appairage, et c&#39;est la seule chose qui écarte une extrémité substituée.</p></li><li><p>Ne touchez plus au terminal jusqu&#39;à ce qu&#39;il revienne à l&#39;invite. C&#39;est une session en direct : fermer l&#39;une des extrémités arrête le transfert.</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">À quoi ressemble une réception réussie</p><p>La connexion est annoncée comme direct, et les deux terminaux affichent le même code de vérification. Des codes différents sont le seul résultat que vous ne devez pas accepter — arrêtez-vous et vérifiez avec l&#39;expéditeur sur quelle machine il se trouve.</p><pre tabindex="0"><code>$ relayium receive 483920
 verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
 path: direct</code></pre></div>
       <ul><li>La connexion est directe, pair-à-pair et chiffrée de bout en bout ; une fois connectés, les deux terminaux affichent le même SAS (short authentication string). Comparez-le hors bande avec l&#39;expéditeur pour confirmer que les empreintes des certificats TLS épinglés n&#39;ont pas été substituées et que le service de rendez-vous n&#39;a usurpé aucune extrémité. Le SAS authentifie les extrémités ; il ne prouve pas chaque saut réseau.</li><li>Sans destination indiquée, les fichiers atterrissent dans le répertoire courant.</li><li>Même règle de connexion directe uniquement que pour send : si aucun chemin direct n&#39;est trouvé entre les deux réseaux, le transfert échoue plutôt que de transiter par un relais.</li><li>C&#39;est le protocole de code d&#39;appairage propre à la CLI — un code CLI ne s&#39;appaire qu&#39;avec une autre CLI. Il n&#39;est pas interopérable aujourd&#39;hui avec le code d&#39;appairage ou le flux QR du navigateur sur relayium.com ; c&#39;est un ajout possible à l&#39;avenir, pas encore quelque chose sur quoi compter. Si vous n&#39;avez qu&#39;un navigateur, demandez plutôt à l&#39;expéditeur un lien de téléchargement relayium up.</li><li>Le destinataire n&#39;a jamais besoin de compte, quel que soit le réseau. Seul l&#39;expéditeur se connecte, pour que sa CLI puisse générer le code.</li></ul>
       <h2>serve : transformer cette machine en boîte de réception à l&#39;écoute</h2>
       <p>serve fonctionne dans l&#39;autre sens : au lieu que vous alliez chercher, d&#39;autres machines vous envoient directement via relayium:// — conçu pour des machines en qui vous avez déjà confiance, comme votre propre ordinateur portable qui envoie vers un NAS, ou un serveur de build qui dépose des artefacts sur une machine qui vous appartient — via une connexion TLS 1.3 avec épinglage, sans SSH, sans rendez-vous.</p>
-      <pre><code>relayium serve
+      <pre tabindex="0"><code>relayium serve
 
 # un répertoire et un port précis, en autorisant les requêtes de suppression
 relayium serve --dir ~/incoming --port 9031 --allow-delete</code></pre>
-      <ol class="steps" data-block="steps"><li><p>Démarrez l&#39;écouteur en nommant le répertoire où les envois doivent atterrir.</p><pre><code>relayium serve --dir ~/incoming</code></pre></li><li><p>Au premier envoi d&#39;une machine inconnue, serve affiche son adresse et son empreinte et vous demande confirmation. Une fois approuvée, les envois suivants de cette empreinte passent sans rien dire.</p></li><li><p>Si cet écouteur doit tourner sans terminal, ne comptez pas sur cette demande — personne n&#39;est là pour y répondre, et un expéditeur non reconnu est refusé d&#39;emblée. Utilisez plutôt l&#39;autorisation préalable décrite à la section suivante.</p></li></ol>
+      <ol class="steps" data-block="steps"><li><p>Démarrez l&#39;écouteur en nommant le répertoire où les envois doivent atterrir.</p><pre tabindex="0"><code>relayium serve --dir ~/incoming</code></pre></li><li><p>Au premier envoi d&#39;une machine inconnue, serve affiche son adresse et son empreinte et vous demande confirmation. Une fois approuvée, les envois suivants de cette empreinte passent sans rien dire.</p></li><li><p>Si cet écouteur doit tourner sans terminal, ne comptez pas sur cette demande — personne n&#39;est là pour y répondre, et un expéditeur non reconnu est refusé d&#39;emblée. Utilisez plutôt l&#39;autorisation préalable décrite à la section suivante.</p></li></ol>
       <ul><li>La première fois qu&#39;une nouvelle machine vous envoie quelque chose, serve (exécuté dans un terminal) affiche son adresse et son empreinte et vous demande de l&#39;approuver une fois ; ensuite, les envois de la même empreinte passent silencieusement.</li><li>Sans terminal — un service systemd, un script sans TTY — il n&#39;y a personne à qui demander, donc un émetteur inconnu est rejeté d&#39;emblée. Autorisez-le plutôt à l&#39;avance, en utilisant l&#39;empreinte que l&#39;émetteur affiche avec relayium id :</li></ul>
       <h2>Autoriser à l&#39;avance pour un serve sans surveillance</h2>
       <p>Pour un serve qui tourne sans surveillance (systemd, un script en arrière-plan), demandez à l&#39;émetteur d&#39;exécuter relayium id pour afficher son empreinte, puis approuvez-la à l&#39;avance côté récepteur :</p>
-      <pre><code>relayium authorize &lt;fingerprint&gt;</code></pre>
+      <pre tabindex="0"><code>relayium authorize &lt;fingerprint&gt;</code></pre>
       <ul><li>--dir définit où les fichiers atterrissent (par défaut le répertoire courant) ; --once accepte un seul transfert puis s&#39;arrête ; --allow-delete permet à une requête --delete (miroir) entrante de réellement supprimer des fichiers ici, et est désactivé par défaut.</li><li>--config-dir (par défaut ~/.config/relayium) est l&#39;endroit où se trouvent l&#39;identité de cet hôte et sa liste d&#39;empreintes autorisées — surchargez-le si vous exécutez serve comme service dédié.</li></ul>
       <h2>pull : aller chercher sur un serveur où vous pouvez déjà vous connecter en SSH</h2>
       <p>pull est le miroir de push : au lieu d&#39;attendre que quelqu&#39;un vous envoie quelque chose, vous allez chercher via votre accès SSH existant et récupérez des fichiers.</p>
-      <pre><code>relayium pull user@host:/path/to/files ./local-dest</code></pre>
-      <ol class="steps" data-block="steps"><li><p>Vérifiez que la machine distante a bien la CLI. pull exécute relayium à l&#39;autre bout et, contrairement à push, il n&#39;existe aucun repli sur tar : un binaire manquant fait échouer toute la commande.</p><pre><code>ssh user@host command -v relayium</code></pre></li><li><p>S&#39;il manque, installez-le d&#39;abord là-bas.</p><pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre></li><li><p>Rapatriez les fichiers via votre accès SSH existant. -i et -p se comportent comme ceux de ssh.</p><pre><code>relayium pull user@host:/path/to/files ./local-dest</code></pre></li></ol>
+      <pre tabindex="0"><code>relayium pull user@host:/path/to/files ./local-dest</code></pre>
+      <ol class="steps" data-block="steps"><li><p>Vérifiez que la machine distante a bien la CLI. pull exécute relayium à l&#39;autre bout et, contrairement à push, il n&#39;existe aucun repli sur tar : un binaire manquant fait échouer toute la commande.</p><pre tabindex="0"><code>ssh user@host command -v relayium</code></pre></li><li><p>S&#39;il manque, installez-le d&#39;abord là-bas.</p><pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre></li><li><p>Rapatriez les fichiers via votre accès SSH existant. -i et -p se comportent comme ceux de ssh.</p><pre tabindex="0"><code>relayium pull user@host:/path/to/files ./local-dest</code></pre></li></ol>
       <ul><li>Contrairement à push, pull a toujours besoin de relayium déjà installé sur la machine distante — il n&#39;y a pas de repli tar pour un pull depuis un serveur nu. Si relayium n&#39;y est pas encore, installez-le d&#39;abord avec curl -fsSL https://relayium.com/install.sh | sh.</li><li>Chaque fichier est vérifié par un contrôle SHA-256 par fichier. pull ne reprend pas : il refuse une destination qui existe déjà, en amont et avant de récupérer quoi que ce soit. Un pull interrompu se termine en récupérant les chemins manquants, ou avec relayium sync dans le même sens. --no-resume est accepté ici et n&#39;y fait rien.</li><li>-i et -p se comportent comme les -i/-p de ssh lui-même, pour un fichier d&#39;identité ou un port spécifique.</li></ul>
       <h2>Quand ça ne marche pas</h2>
       <p>Cinq pannes couvrent presque toutes les réceptions ratées. La commande que vous exécutiez détermine laquelle s&#39;applique, et chacune se tranche par une ligne à lire ou une commande à exécuter.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptôme, vérification, correction</p><dl><dt>Vous saisissez le code et le rendez-vous le refuse.</dt><dd><pre><code>relayium receive 483920
-# the rendezvous refuses the code</code></pre><p>Presque toujours les cinq minutes sont écoulées — le code expire à partir de sa génération par la CLI de l&#39;expéditeur, pas à partir du moment où on vous l&#39;a donné. Demandez-lui de relancer send et de vous lire les chiffres frais dans la foulée. Un chiffre mal tapé est indiscernable d&#39;ici, alors relisez-le-lui avant de conclure à l&#39;expiration.</p></dd><dt>Le transfert se termine mais vous ne trouvez pas les fichiers.</dt><dd><pre><code>relayium receive 483920 ./downloads</code></pre><p>Sans destination, receive écrit dans le répertoire depuis lequel vous l&#39;avez lancé, rarement celui où vous cherchiez. Indiquez-en un explicitement, ou lancez pwd d&#39;abord.</p></dd><dt>Il échoue avec « no direct connection to the peer (both ends behind strict NAT?) ».</dt><dd><pre><code>relayium receive 483920
-# no direct connection to the peer (both ends behind strict NAT?): …</code></pre><p>Le chemin d&#39;appairage de la CLI est délibérément direct uniquement : faute de route directe, il échoue plutôt que de faire transiter votre fichier par un relais. Rien de votre côté n&#39;y changera quoi que ce soit. Demandez plutôt à l&#39;expéditeur un lien de téléchargement relayium up, ou, entre machines que vous contrôlez tous les deux, passez par le daemon direct ou par push via SSH.</p></dd><dt>pull échoue immédiatement en signalant que relayium est introuvable.</dt><dd><pre><code>ssh user@host command -v relayium
-# (no output)</code></pre><p>pull exécute relayium sur la machine distante — c&#39;est elle l&#39;expéditeur dans cet échange — et il n&#39;y a pas de repli sur tar comme pour push. Installez d&#39;abord la CLI là-bas, puis relancez le pull.</p></dd><dt>Une machine pousse vers votre écouteur serve et se fait refuser sans qu&#39;on vous ait jamais demandé quoi que ce soit.</dt><dd><pre><code>relayium serve --dir ~/incoming</code></pre><p>Cette demande n&#39;existe que si serve dispose d&#39;un terminal. Sous systemd, dans un script ou derrière un tube, il n&#39;y a personne à qui demander, donc une empreinte inconnue est refusée d&#39;emblée. Faites exécuter relayium id à l&#39;expéditeur et autorisez-la ici avec relayium authorize &lt;empreinte&gt;, sous le même --config-dir que l&#39;écouteur.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptôme, vérification, correction</p><dl><dt>Vous saisissez le code et le rendez-vous le refuse.</dt><dd><pre tabindex="0"><code>relayium receive 483920
+# the rendezvous refuses the code</code></pre><p>Presque toujours les cinq minutes sont écoulées — le code expire à partir de sa génération par la CLI de l&#39;expéditeur, pas à partir du moment où on vous l&#39;a donné. Demandez-lui de relancer send et de vous lire les chiffres frais dans la foulée. Un chiffre mal tapé est indiscernable d&#39;ici, alors relisez-le-lui avant de conclure à l&#39;expiration.</p></dd><dt>Le transfert se termine mais vous ne trouvez pas les fichiers.</dt><dd><pre tabindex="0"><code>relayium receive 483920 ./downloads</code></pre><p>Sans destination, receive écrit dans le répertoire depuis lequel vous l&#39;avez lancé, rarement celui où vous cherchiez. Indiquez-en un explicitement, ou lancez pwd d&#39;abord.</p></dd><dt>Il échoue avec « no direct connection to the peer (both ends behind strict NAT?) ».</dt><dd><pre tabindex="0"><code>relayium receive 483920
+# no direct connection to the peer (both ends behind strict NAT?): …</code></pre><p>Le chemin d&#39;appairage de la CLI est délibérément direct uniquement : faute de route directe, il échoue plutôt que de faire transiter votre fichier par un relais. Rien de votre côté n&#39;y changera quoi que ce soit. Demandez plutôt à l&#39;expéditeur un lien de téléchargement relayium up, ou, entre machines que vous contrôlez tous les deux, passez par le daemon direct ou par push via SSH.</p></dd><dt>pull échoue immédiatement en signalant que relayium est introuvable.</dt><dd><pre tabindex="0"><code>ssh user@host command -v relayium
+# (no output)</code></pre><p>pull exécute relayium sur la machine distante — c&#39;est elle l&#39;expéditeur dans cet échange — et il n&#39;y a pas de repli sur tar comme pour push. Installez d&#39;abord la CLI là-bas, puis relancez le pull.</p></dd><dt>Une machine pousse vers votre écouteur serve et se fait refuser sans qu&#39;on vous ait jamais demandé quoi que ce soit.</dt><dd><pre tabindex="0"><code>relayium serve --dir ~/incoming</code></pre><p>Cette demande n&#39;existe que si serve dispose d&#39;un terminal. Sous systemd, dans un script ou derrière un tube, il n&#39;y a personne à qui demander, donc une empreinte inconnue est refusée d&#39;emblée. Faites exécuter relayium id à l&#39;expéditeur et autorisez-la ici avec relayium authorize &lt;empreinte&gt;, sous le même --config-dir que l&#39;écouteur.</p></dd></dl></div>
       <h2>Questions fréquentes</h2>
       <h3>Ai-je besoin d&#39;un compte pour recevoir des fichiers ?</h3>
       <p>Non. Les trois méthodes — receive, serve et pull — sont entièrement gratuites et ne nécessitent aucun compte Relayium de votre côté. La seule connexion où que ce soit est celle de l&#39;expéditeur en mode receive, pour que sa CLI puisse générer le code d&#39;appairage.</p>

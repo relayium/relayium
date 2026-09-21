@@ -11,8 +11,14 @@
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/transfer-files-from-terminal/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/transfer-files-from-terminal/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Transfer files and text from the terminal with the Relayium CLI" />
@@ -30,37 +36,88 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Transfer files and text from the terminal with the Relayium CLI","description":"Install the free, end-to-end-encrypted Relayium CLI to move files over SSH, pairing codes, or daemon-direct — and send ephemeral text while both machines are online.","inLanguage":"en","datePublished":"2026-07-08","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/guides/transfer-files-from-terminal/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/guides/"},{"@type":"ListItem","position":3,"name":"Transfer files and text from the terminal with the Relayium CLI"}]},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Does the CLI cost anything?","acceptedAnswer":{"@type":"Answer","text":"The CLI itself is free and open source, and the direct modes — push, pull, daemon direct and send / receive — cost nothing to use: those file and text bytes never pass through a Relayium relay, so there is nothing to meter. The commands that draw on your plan are up and down, which write and read an encrypted copy held under your account. up counts against four separate limits — your monthly traffic allowance, the cap on how much you keep stored at once, your plan's retention ceiling, and a rolling daily upload quota — and down counts against the traffic allowance as it reads the copy back. Paid plans raise all of them."}},{"@type":"Question","name":"Do I need a Relayium account?","acceptedAnswer":{"@type":"Answer","text":"To mint a pairing code with send or text, and for cloud up. push / pull uses your own SSH and daemon direct uses public-key trust, so neither needs an account. A server mints pairing codes only for a signed-in account, so the creator runs relayium login once; joining with a code you were handed needs no login. A receive user never signs in."}},{"@type":"Question","name":"Which operating systems are supported?","acceptedAnswer":{"@type":"Answer","text":"Prebuilt binaries are published for macOS, Linux and Windows on both x86-64 and arm64. The install script covers macOS and Linux; on Windows, download the .zip from the releases page."}},{"@type":"Question","name":"Do my files pass through Relayium's servers?","acceptedAnswer":{"@type":"Answer","text":"Not with the direct modes. With push, pull, daemon direct and send / receive the file bytes travel directly between the two ends, and only send / receive contacts our servers at all — for a small rendezvous handshake, never the file contents. up is the deliberate exception: it uploads an encrypted copy to your account's storage, which the server holds but cannot read."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -78,7 +135,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/guides/" aria-current="true">Guides</a><a href="/apps">Apps</a><a href="/pricing">Pricing</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Relayium</a> <span aria-hidden="true">›</span> <a href="/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Transfer files and text from the terminal with the Relayium CLI</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -103,20 +160,20 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>Install in one command</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">What you need</p><ul><li>A macOS, Linux or Windows machine with a terminal. Prebuilt binaries cover x86-64 and arm64 on all three.</li><li>curl, for the one-line install on macOS and Linux — curl --version prints a version. On Windows, download the .zip from the releases page instead.</li><li>A writable install directory. The script uses /usr/local/bin when it can write there and ~/.local/bin otherwise, and its last lines name the one it chose.</li><li>Nothing else for push, pull or daemon direct. Only minting a pairing code with send or text, and uploading with up, need a free Relayium account.</li></ul></div>
       <p>On macOS or Linux, one command downloads a prebuilt binary for your OS and puts it on your PATH:</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>Prefer to pick the file yourself? Download a binary from the releases page.</li><li>Have Go installed? Clone the repo and run: go build -o relayium ./cmd/relayium (from the server directory).</li><li>Then run relayium --help to see every command, and relayium version to check the build.</li></ul>
       <h2>The seven ways it moves files and text</h2>
       <p>Two questions decide which one you want: can the machine on the other end be offline right now, and is it a machine you administer? Nothing below is a blanket promise — each mode states the account it needs, whether the far end can be offline, where the bytes go, and what it actually verifies.</p>
       <ul><li>relayium up / relayium down (Cloud) — the far end can be offline. up encrypts on this machine, uploads only the ciphertext and prints a link; down fetches and decrypts it on any other machine, with no account. Uploading needs relayium login and draws on your plan&#39;s monthly traffic, storage cap, retention ceiling and daily upload quota, and the key rides only in the link&#39;s #k= fragment, which never reaches Relayium: the encrypted copy stays stored until its retention expires, but losing the link loses the only key that can decrypt it.</li><li>Device Inbox — the far end can be offline, and in the CLI this is the RECEIVE side only: a browser or a native app sends into a folder on a machine you own, and there is no CLI command that sends into an inbox. Both ends sign in to the same account, and someone at the receiving machine has to choose a folder and turn receiving on there. To move files between two of your own servers, use serve with push or sync instead.</li><li>relayium text — ephemeral encrypted messages between two terminals that are both online at the same time. Minting the code needs relayium login; joining with a code someone handed you needs no account, and Relayium servers keep no message bodies.</li><li>relayium send / relayium receive — to another person across networks, using a short pairing code the sender&#39;s CLI mints (sign in once with relayium login; the receiver never does). A minted code is good for five minutes, so start the receiving machine&#39;s command within that window. Relayium CLI send/receive and text are direct-only P2P: they never relay file or message bytes through TURN or any other Relayium server. If the two ends cannot establish a direct connection, the session fails rather than falling back to a relay.</li><li>relayium push / relayium pull — to a machine you can already ssh into. The bytes travel over your own SSH connection and never reach Relayium&#39;s servers, and neither side needs a Relayium account. Neither push nor pull resumes: a destination that already exists is refused before any bytes are sent, so reach for relayium sync when a run may be interrupted.</li><li>relayium serve + relayium push relayium:// (daemon direct) — straight between two machines you own, over pinned TLS 1.3. No relay, no SSH, no pairing code. The receiving host&#39;s authorized_fingerprints file is the whole trust decision, and being signed in to a Relayium account grants no one filesystem access.</li><li>relayium sync — one-way incremental mirroring over the same transports as push: files whose size and modification time are unchanged are skipped. It is the mode that continues a partial file at the destination on a later run, and it verifies the files it does transfer — but a one-way mirror is a copy of the current state, not a versioned backup.</li></ul>
       <h2>Send ephemeral text</h2>
       <p>Run relayium text on one machine to mint a pairing code and wait, then join from the other machine with the printed code:</p>
-      <pre><code>relayium text</code></pre>
-      <pre><code>relayium text 483920</code></pre>
+      <pre tabindex="0"><code>relayium text</code></pre>
+      <pre tabindex="0"><code>relayium text 483920</code></pre>
       <ul><li>Minting the code needs relayium login; joining with a code needs no login.</li><li>Both machines must stay online. Messages are end-to-end encrypted, and Relayium servers never store their bodies.</li><li>Relayium CLI send/receive and text are direct-only P2P: they never relay file or message bytes through TURN or any other Relayium server. If the two ends cannot establish a direct connection, the session fails rather than falling back to a relay.</li><li>Either endpoint can still copy or retain received text.</li><li>Each message can be at most 65,536 UTF-8 bytes. Use relayium send for anything larger.</li></ul>
       <h2>Your first transfer</h2>
       <p>The quickest thing to try is copying a folder to a server you can SSH into. Relayium uses your existing SSH access, so there is nothing to configure on the remote and no account to create:</p>
-      <ol class="steps" data-block="steps"><li><p>Check the CLI is on your PATH. It prints a version string, not &quot;command not found&quot;.</p><pre><code>relayium version</code></pre></li><li><p>Check you can already reach the server the ordinary way. push reuses exactly this access, so an ssh that works settles the connection and authentication prerequisite — it does not promise the transfer itself, which still needs write permission and free space at user@your-server:backups/.</p><pre><code>ssh user@your-server true</code></pre></li><li><p>Push the folder. The last argument is host:path — the colon is what marks it remote, and a trailing slash means &quot;into this directory&quot;.</p><pre><code>relayium push ./photos user@your-server:backups/</code></pre></li><li><p>Confirm the files arrived where you expected. push ./photos reproduces photos/ under the destination, so the folder name comes along.</p><pre><code>ssh user@your-server ls backups/photos</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">What a successful run looks like</p><p>With relayium on the far end, push prints one line per completed file and exits 0. Against a bare server it prints the tar-stream summary instead — both are success.</p><pre><code>relayium push ./photos user@your-server:backups/
+      <ol class="steps" data-block="steps"><li><p>Check the CLI is on your PATH. It prints a version string, not &quot;command not found&quot;.</p><pre tabindex="0"><code>relayium version</code></pre></li><li><p>Check you can already reach the server the ordinary way. push reuses exactly this access, so an ssh that works settles the connection and authentication prerequisite — it does not promise the transfer itself, which still needs write permission and free space at user@your-server:backups/.</p><pre tabindex="0"><code>ssh user@your-server true</code></pre></li><li><p>Push the folder. The last argument is host:path — the colon is what marks it remote, and a trailing slash means &quot;into this directory&quot;.</p><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/</code></pre></li><li><p>Confirm the files arrived where you expected. push ./photos reproduces photos/ under the destination, so the folder name comes along.</p><pre tabindex="0"><code>ssh user@your-server ls backups/photos</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">What a successful run looks like</p><p>With relayium on the far end, push prints one line per completed file and exits 0. Against a bare server it prints the tar-stream summary instead — both are success.</p><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/
   photos/IMG_0413.jpg (2314518 bytes)
   photos/IMG_0414.jpg (1998233 bytes)
 echo $?
@@ -124,10 +181,10 @@ echo $?
       <ul><li>If relayium is installed on the remote too, push uses the native protocol: the batch is checked for collisions before any bytes are sent, and each file is verified by SHA-256 and staged before it is installed. It still does not resume — a re-run after an interrupted push is refused, because the files that landed now exist. Use relayium sync where you need that.</li><li>push falls back to a plain tar stream when relayium isn&#39;t on the remote, so it works even against a bare server — that fallback is push-only.</li><li>Pull the same files back with: relayium pull user@your-server:backups/ ./restore — pull always needs relayium on the remote (it has no tar fallback), so install it there first.</li></ul>
       <h2>When the first command doesn&#39;t work</h2>
       <p>Four things go wrong on a first run more often than everything else put together. None of them needs guesswork — each has a command whose output decides it.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, check, fix</p><dl><dt>&quot;relayium: command not found&quot;, right after the install script said it succeeded.</dt><dd><pre><code>command -v relayium
-# (prints nothing)</code></pre><p>The binary is installed, but its directory isn&#39;t on your PATH. The script&#39;s last lines name the directory it used and print the exact export PATH line to add; run them, then open a new shell and try relayium version again.</p></dd><dt>push exits immediately with &quot;push destination must be remote (host:path)&quot;.</dt><dd><pre><code>relayium push ./photos user@your-server backups/
-# push destination must be remote (host:path)</code></pre><p>The destination lost its colon, so relayium read it as a local path. Write it scp-style, with no space between the host and the path: user@your-server:backups/</p></dd><dt>pull fails against a server that push worked fine against.</dt><dd><pre><code>ssh user@your-server command -v relayium
-# (prints nothing)</code></pre><p>pull has no tar fallback, because the remote is the sender in that direction — it needs relayium installed there. Install it on the server with the same one-line command and run the pull again.</p></dd><dt>Two machines join the same code and one prints &quot;the other side is running `relayium text`, not `relayium send`/`relayium receive`&quot;.</dt><dd><pre><code># a message session: BOTH ends run text
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, check, fix</p><dl><dt>&quot;relayium: command not found&quot;, right after the install script said it succeeded.</dt><dd><pre tabindex="0"><code>command -v relayium
+# (prints nothing)</code></pre><p>The binary is installed, but its directory isn&#39;t on your PATH. The script&#39;s last lines name the directory it used and print the exact export PATH line to add; run them, then open a new shell and try relayium version again.</p></dd><dt>push exits immediately with &quot;push destination must be remote (host:path)&quot;.</dt><dd><pre tabindex="0"><code>relayium push ./photos user@your-server backups/
+# push destination must be remote (host:path)</code></pre><p>The destination lost its colon, so relayium read it as a local path. Write it scp-style, with no space between the host and the path: user@your-server:backups/</p></dd><dt>pull fails against a server that push worked fine against.</dt><dd><pre tabindex="0"><code>ssh user@your-server command -v relayium
+# (prints nothing)</code></pre><p>pull has no tar fallback, because the remote is the sender in that direction — it needs relayium installed there. Install it on the server with the same one-line command and run the pull again.</p></dd><dt>Two machines join the same code and one prints &quot;the other side is running `relayium text`, not `relayium send`/`relayium receive`&quot;.</dt><dd><pre tabindex="0"><code># a message session: BOTH ends run text
 relayium text
 relayium text 483920</code></pre><p>The two ends ran different commands. Use relayium text on both machines for messages, and relayium send on one with relayium receive on the other for files; the mismatch is refused before anything is dialed, so nothing was sent.</p></dd></dl></div>
       <h2>Free, and private by design</h2>

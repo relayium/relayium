@@ -11,8 +11,14 @@
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/server-to-server-transfers/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/server-to-server-transfers/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Server-to-server transfers with the Relayium CLI (daemon direct)" />
@@ -30,37 +36,88 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Server-to-server transfers with the Relayium CLI (daemon direct)","description":"Move files straight between two servers you control with relayium serve and push relayium:// — over pinned TLS, no relay, no SSH, no pairing code. Approve a new pusher once on its first push, then automate it or run it under systemd.","inLanguage":"en","datePublished":"2026-07-08","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/guides/server-to-server-transfers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/guides/"},{"@type":"ListItem","position":3,"name":"Server-to-server transfers with the Relayium CLI (daemon direct)"}]},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"How is daemon direct different from push over SSH?","acceptedAnswer":{"@type":"Answer","text":"push over SSH tunnels the transfer through your SSH connection and needs an SSH account on the remote. Daemon direct needs no SSH and no account — the two servers authenticate each other by certificate fingerprint over pinned TLS, which is lighter when both machines are yours."}},{"@type":"Question","name":"Do I have to copy fingerprints around by hand?","acceptedAnswer":{"@type":"Answer","text":"No. In a terminal, serve prompts you to approve each new pusher on its first push — showing its address and fingerprint — and remembers it, so later pushes are silent. You only reach for relayium id or relayium authorize for non-interactive setups like a systemd service, where there's no one to answer the prompt."}},{"@type":"Question","name":"Where are the identity and trust files?","acceptedAnswer":{"@type":"Answer","text":"In ~/.config/relayium/ by default (override with --config-dir). id.key / id.crt are this host's persistent identity, known_hosts holds fingerprints of listeners you've pushed to, and authorized_fingerprints is the listener's allow-list of pushers."}},{"@type":"Question","name":"What happens if a fingerprint changes?","acceptedAnswer":{"@type":"Answer","text":"The push refuses and warns. The listener's key is pinned in known_hosts on first use, so a later change — a re-keyed host, or a man-in-the-middle — is rejected rather than silently accepted. Remove the known_hosts line only if you intentionally rotated the key."}},{"@type":"Question","name":"Is there any relay fallback?","acceptedAnswer":{"@type":"Answer","text":"No. Daemon direct assumes a reachable listener address; if the connection can't be made, it fails. Nothing is ever proxied through Relayium — that's the point of this mode."}},{"@type":"Question","name":"Do I need a Relayium account, and does logging in give another machine access?","acceptedAnswer":{"@type":"Answer","text":"No, and no. Daemon direct never contacts Relayium, so no account is involved on either side. Logging in also grants nobody filesystem access: a listener accepts a pusher only when that pusher's fingerprint is in its own authorized_fingerprints file. Account login and listener authorization are separate decisions, and neither implies the other."}},{"@type":"Question","name":"Should I use Device Inbox for this instead?","acceptedAnswer":{"@type":"Answer","text":"No — the CLI's Inbox is the receiving side only. It accepts files your account sends to that machine, and there is no CLI command that sends into an inbox; you send to one from the Web app or a native app. To move files between two servers you control, serve plus push or sync is the direct path, and it needs no account at all."}},{"@type":"Question","name":"Can a push delete files on the receiver?","acceptedAnswer":{"@type":"Answer","text":"A plain push never deletes and never overwrites — a collision is refused with the offending path named. sync --delete can remove files, but only if the listener was started with --allow-delete, and only inside the top-level directories that transfer actually sends. Anything else under the receiver's --dir is out of scope, and an empty or unresolvable source refuses the delete outright."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -78,7 +135,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/guides/" aria-current="true">Guides</a><a href="/apps">Apps</a><a href="/pricing">Pricing</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Relayium</a> <span aria-hidden="true">›</span> <a href="/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Server-to-server transfers with the Relayium CLI (daemon direct)</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -102,20 +159,20 @@ ol.steps>li>pre{margin:8px 0 0}
       <p class="lead">This guide covers starting the listener, pushing to it, approving a new pusher on first contact, automating it, and running the listener as a systemd service.</p>
       <h2>Before you start</h2>
       <p>Everything below is the relayium CLI, so install it first if you haven&#39;t. On macOS or Linux, one command drops a prebuilt binary on your PATH:</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build -o relayium ./cmd/relayium if you have Go).</li><li>relayium --version confirms it&#39;s installed. Skip this and the commands below just print &#39;command not found&#39;.</li></ul>
       <h2>Start the listener (on the receiver)</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">What you need</p><ul><li>Two machines you control, with the receiver&#39;s address reachable from the sender. A hostname or a bare IP both work.</li><li>relayium on both ends. Daemon direct speaks the native protocol only, so there is no tar fallback to rescue a missing install here.</li><li>The listener&#39;s port open to the sender — 9031/TCP unless you change it — in the host firewall and in any cloud security group.</li><li>A terminal on the receiver for the first push, so you can answer the approval prompt. With no terminal, pre-authorize the sender instead (see below).</li></ul></div>
       <p>On the receiving server, serve listens for pushes and writes them into a directory. It&#39;s long-running by default; add --once to accept a single transfer and exit. You don&#39;t pre-share anything — no fingerprints to copy up front:</p>
-      <ol class="steps" data-block="steps"><li><p>Create the directory pushes should land in.</p><pre><code>mkdir -p ~/inbox</code></pre></li><li><p>Open the listener&#39;s port to the sender only. Substitute the sender&#39;s own address for 203.0.113.7 — its public IP, or its private one when the two servers share a network — and scope the cloud security group to that same source rather than to the whole internet.</p><pre><code>sudo ufw allow from 203.0.113.7 to any port 9031 proto tcp</code></pre></li><li><p>Start the listener in a terminal, so there is someone to answer the approval prompt on the first push. Add --once to take a single transfer and exit, or --port to move off 9031.</p><pre><code>relayium serve --dir ~/inbox</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">What a running listener looks like</p><p>serve names the address it bound, the directory it writes into, and this host&#39;s own fingerprint. With no approved peers yet, it also says it will ask about each new one.</p><pre><code>relayium serve --dir ~/inbox
+      <ol class="steps" data-block="steps"><li><p>Create the directory pushes should land in.</p><pre tabindex="0"><code>mkdir -p ~/inbox</code></pre></li><li><p>Open the listener&#39;s port to the sender only. Substitute the sender&#39;s own address for 203.0.113.7 — its public IP, or its private one when the two servers share a network — and scope the cloud security group to that same source rather than to the whole internet.</p><pre tabindex="0"><code>sudo ufw allow from 203.0.113.7 to any port 9031 proto tcp</code></pre></li><li><p>Start the listener in a terminal, so there is someone to answer the approval prompt on the first push. Add --once to take a single transfer and exit, or --port to move off 9031.</p><pre tabindex="0"><code>relayium serve --dir ~/inbox</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">What a running listener looks like</p><p>serve names the address it bound, the directory it writes into, and this host&#39;s own fingerprint. With no approved peers yet, it also says it will ask about each new one.</p><pre tabindex="0"><code>relayium serve --dir ~/inbox
 no authorized peers yet — you&#39;ll be asked to approve each new peer on its first push.
 relayium serve: listening on [::]:9031, receiving into /home/you/inbox (fingerprint 5c1d9f04…)</code></pre></div>
       <ul><li>serve handles connections concurrently, up to 64 at once, and lands files under --dir.</li><li>--dir must already exist and be writable by the user serve runs as. serve checks that before it binds the port, so a mistyped path fails immediately instead of becoming a listener that cannot write.</li><li>The default port is 9031; change it with --port and open it on your firewall.</li><li>With no --bind, serve listens on every interface, including public ones, and relies on your firewall. Pass --bind 10.0.0.5 (or --bind 127.0.0.1 behind a tunnel) to limit the listener itself.</li><li>Being logged in to a Relayium account has nothing to do with this. An account grants no one filesystem access to this host: a push is accepted only when the pusher&#39;s fingerprint is in this listener&#39;s own authorized_fingerprints.</li></ul>
       <h2>Push to it (on the sender)</h2>
       <p>From the sending server, push to the receiver&#39;s relayium:// address. The first connection pins the receiver&#39;s fingerprint; every connection after that verifies it, and a changed fingerprint is refused rather than silently accepted — so a swapped key or a man-in-the-middle is caught, not trusted. On the very first push, the sender waits a moment while the receiver approves it (next step).</p>
-      <ol class="steps" data-block="steps"><li><p>Run the push from the sending server. On the very first connection it stops right here, while the receiver approves it.</p><pre><code>relayium push ./build.tar.zst relayium://receiver.example.com</code></pre></li><li><p>Answer the prompt on the receiver — that is the next section. The push then finishes on its own, and later pushes never stop here again.</p></li><li><p>Append a port when the listener isn&#39;t on 9031.</p><pre><code>relayium push ./build.tar.zst relayium://receiver.example.com:9040</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">What a successful push looks like</p><p>On first contact the sender learns and pins the listener&#39;s fingerprint, then transfers. The receiver records the pusher&#39;s fingerprint and reports the file and byte count.</p><pre><code># on the SENDER, first contact
+      <ol class="steps" data-block="steps"><li><p>Run the push from the sending server. On the very first connection it stops right here, while the receiver approves it.</p><pre tabindex="0"><code>relayium push ./build.tar.zst relayium://receiver.example.com</code></pre></li><li><p>Answer the prompt on the receiver — that is the next section. The push then finishes on its own, and later pushes never stop here again.</p></li><li><p>Append a port when the listener isn&#39;t on 9031.</p><pre tabindex="0"><code>relayium push ./build.tar.zst relayium://receiver.example.com:9040</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">What a successful push looks like</p><p>On first contact the sender learns and pins the listener&#39;s fingerprint, then transfers. The receiver records the pusher&#39;s fingerprint and reports the file and byte count.</p><pre tabindex="0"><code># on the SENDER, first contact
 learned receiver.example.com:9031 5c1d9f04… (added to known_hosts)
   build.tar.zst (48213004 bytes)
 
@@ -125,19 +182,19 @@ received 1 file(s), 48213004 bytes from 74318e3b…</code></pre></div>
       <ul><li>No relay and no fallback: if the listener isn&#39;t reachable, the push fails — file bytes never route through anyone else.</li><li>The same transfer engine as the other modes: each file is checked with a per-file SHA-256 and staged before it is installed. push does not resume, here or over SSH — it refuses a destination that already exists, so an interrupted run is finished by pushing the missing paths, or by relayium sync, which continues a partial file and which this listener honours unless it was started with --no-resume.</li></ul>
       <h2>Approve the sender on first push (on the receiver)</h2>
       <p>The first time a new machine pushes to your listener, serve (in a terminal) shows you where it&#39;s from and its fingerprint and asks you to approve it — like SSH&#39;s first-connect prompt, but on the receiving side:</p>
-      <pre><code># on the RECEIVER, when a new sender pushes:
+      <pre tabindex="0"><code># on the RECEIVER, when a new sender pushes:
 Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
 Accept and remember this peer? [y/N] y</code></pre>
       <ul><li>Answer y and that fingerprint is remembered in authorized_fingerprints; every later push from the same machine then goes through silently.</li><li>The fingerprint is a machine&#39;s stable identity (it survives restarts and IP changes), so approving is a one-time step per pusher.</li><li>The pusher, in turn, learns the listener&#39;s key on first connect (trust on first use) and pins it in known_hosts.</li></ul>
       <h2>Automate it (or run without a terminal)</h2>
       <p>Because an approved fingerprint is remembered, later pushes need no prompt — so relayium push drops straight into a deploy script or CI for encrypted, integrity-checked server-to-server delivery. For a job that runs on a schedule into the same directory, use relayium sync instead: push refuses a destination that already exists, so a repeated push into one fixed path succeeds once and is refused after that. When serve runs without a terminal (a systemd service, a pipe) it can&#39;t prompt, so it rejects unknown pushers; pre-authorize them instead. Get the fingerprint from the pusher&#39;s relayium id, or copy it from the &quot;rejected unauthorized peer …&quot; line in the serve log, then:</p>
-      <pre><code># on the RECEIVER: pre-authorize a sender without a prompt
+      <pre tabindex="0"><code># on the RECEIVER: pre-authorize a sender without a prompt
 relayium authorize --config-dir /etc/relayium 74318e3b...</code></pre>
       <ul><li>Identity and trust files live in ~/.config/relayium/ (override with --config-dir, e.g. /etc/relayium for a service).</li><li>Give authorize the same --config-dir the listener runs with, or it writes a file the listener never reads. A service started with --config-dir /etc/relayium is served by relayium authorize --config-dir /etc/relayium &lt;fingerprint&gt;; a bare authorize would write ~/.config/relayium/authorized_fingerprints instead, and the push would keep being rejected.</li><li>A running listener picks up a newly authorized fingerprint on its next connection — you do not restart it. Revocation is not symmetric: to withdraw access, remove the line and restart the listener.</li><li>authorize is idempotent — running it again for the same fingerprint is a no-op.</li><li>To mirror a folder rather than copy into it, use relayium sync with the same relayium:// destination. push never overwrites — a name that already exists on the receiver is refused, and the refusal names the path — while sync sends only what changed and can mirror deletions.</li><li>sync --delete removes files the source dropped, but only when the listener was started with --allow-delete; otherwise nothing is deleted and the sender is told so. Deletion is confined to the top-level directories that transfer actually sends: mirroring ./site touches only site/ under the receiver&#39;s --dir, a sibling folder or unrelated file is never removed, empty directories are pruned only inside those same roots, and two sources mirrored at once cannot delete each other&#39;s files. A single-file source scopes only that file, so it deletes nothing; an empty or unresolvable source refuses the delete outright on both ends, because it would otherwise mean &quot;delete everything&quot;.</li></ul>
       <h2>Run the listener under systemd</h2>
       <p>For an always-on inbox, run serve as a systemd service. Point --config-dir at a fixed location like /etc/relayium so the identity is stable across restarts, and let systemd keep it alive:</p>
-      <pre><code># /etc/systemd/system/relayium-serve.service
+      <pre tabindex="0"><code># /etc/systemd/system/relayium-serve.service
 [Unit]
 Description=Relayium daemon-direct listener
 After=network-online.target
@@ -152,15 +209,15 @@ WantedBy=multi-user.target</code></pre>
       <ul><li>systemctl enable --now relayium-serve to start it and bring it up on boot.</li><li>Create /srv/inbox first and make it writable by the service user. serve validates the directory before it binds, so the unit fails at startup with a clear message rather than accepting a transfer it cannot land.</li><li>Authorize new pushers against the SAME directory: relayium authorize --config-dir /etc/relayium &lt;fingerprint&gt;. No systemctl restart is needed — the running listener reads the file again on the next unknown fingerprint.</li><li>Keep /etc/relayium/id.key readable only by the service user — relayium refuses to load a key with loose permissions.</li><li>Add --bind to the ExecStart line if the unit should listen on one address only.</li></ul>
       <h2>When a push doesn&#39;t get through</h2>
       <p>Reachability and trust are the first two things to check: ss -tinp on the sender says whether the listener was reached at all, and relayium authorize on the receiver grants the trust a rejected pusher is missing. They are not the only ways a push can fail — a receiver out of disk space, an inbox its user cannot write into, or a transferred file whose integrity check fails all report themselves — so read the error in front of you rather than assuming it is one of the four below.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, check, fix</p><dl><dt>The push sits there, then fails with a connection error.</dt><dd><pre><code># on the SENDER, while the push is running — run it twice, a few seconds apart
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, check, fix</p><dl><dt>The push sits there, then fails with a connection error.</dt><dd><pre tabindex="0"><code># on the SENDER, while the push is running — run it twice, a few seconds apart
 ss -tinp dst :9031
 # ESTAB    the listener was reached; says nothing about progress
-# SYN-SENT nothing answered on that port</code></pre><p>SYN-SENT means the packets never reached a listening socket. Confirm serve is up on the receiver with ss -tlnp | grep 9031, then open 9031/TCP to the sender in the host firewall and the cloud security group. ESTAB proves reachability only — an established socket can sit idle or stall — so to separate a live transfer from a stalled one, run the check twice a few seconds apart and compare the bytes_acked counter that -i prints for that socket. There is no relay path here, so an unreachable listener is a hard failure rather than a slow one.</p></dd><dt>The serve log says &quot;rejected unauthorized peer …&quot; and the push fails.</dt><dd><pre><code># on the SENDER
+# SYN-SENT nothing answered on that port</code></pre><p>SYN-SENT means the packets never reached a listening socket. Confirm serve is up on the receiver with ss -tlnp | grep 9031, then open 9031/TCP to the sender in the host firewall and the cloud security group. ESTAB proves reachability only — an established socket can sit idle or stall — so to separate a live transfer from a stalled one, run the check twice a few seconds apart and compare the bytes_acked counter that -i prints for that socket. There is no relay path here, so an unreachable listener is a hard failure rather than a slow one.</p></dd><dt>The serve log says &quot;rejected unauthorized peer …&quot; and the push fails.</dt><dd><pre tabindex="0"><code># on the SENDER
 relayium id
 # 74318e3b…
 
 # on the RECEIVER
-relayium authorize --config-dir /etc/relayium 74318e3b…</code></pre><p>serve had no terminal to ask on — a systemd unit or a pipe — so an unknown fingerprint is refused rather than trusted. Pre-authorize it and push again: the listener re-reads its allow-list whenever it meets a fingerprint it does not know, so this takes effect on the next connection, with no restart. The fingerprint in the rejection line is exactly the one relayium id prints on the sender, and authorize is idempotent. If it still fails, add the listener&#39;s own --config-dir to the authorize command — writing the fingerprint into a different directory than the one serve reads is the usual cause.</p></dd><dt>&quot;fingerprint mismatch for receiver.example.com:9031&quot;.</dt><dd><pre><code>grep receiver.example.com ~/.config/relayium/known_hosts</code></pre><p>The listener presented a different key than the one pinned on first contact. If you rotated that key on purpose, delete the matching known_hosts line and push again. If you did not, leave the line alone and find out why the key changed before sending anything.</p></dd><dt>The systemd unit dies at startup with an insecure-permissions error.</dt><dd><pre><code>systemctl status relayium-serve
+relayium authorize --config-dir /etc/relayium 74318e3b…</code></pre><p>serve had no terminal to ask on — a systemd unit or a pipe — so an unknown fingerprint is refused rather than trusted. Pre-authorize it and push again: the listener re-reads its allow-list whenever it meets a fingerprint it does not know, so this takes effect on the next connection, with no restart. The fingerprint in the rejection line is exactly the one relayium id prints on the sender, and authorize is idempotent. If it still fails, add the listener&#39;s own --config-dir to the authorize command — writing the fingerprint into a different directory than the one serve reads is the usual cause.</p></dd><dt>&quot;fingerprint mismatch for receiver.example.com:9031&quot;.</dt><dd><pre tabindex="0"><code>grep receiver.example.com ~/.config/relayium/known_hosts</code></pre><p>The listener presented a different key than the one pinned on first contact. If you rotated that key on purpose, delete the matching known_hosts line and push again. If you did not, leave the line alone and find out why the key changed before sending anything.</p></dd><dt>The systemd unit dies at startup with an insecure-permissions error.</dt><dd><pre tabindex="0"><code>systemctl status relayium-serve
 # secure: /etc/relayium/id.key has insecure permissions 0644; run: chmod 600 /etc/relayium/id.key
 ls -l /etc/relayium/id.key</code></pre><p>relayium refuses to load a private key that anyone but its owner can read, the same rule ssh applies. Run chmod 600 on the path the error names, make sure it is owned by the service user, and restart the unit.</p></dd></dl></div>
       <h2>Frequently asked questions</h2>

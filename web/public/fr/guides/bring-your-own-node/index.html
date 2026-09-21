@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/fr/guides/bring-your-own-node/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Apportez votre propre nœud : utilisez gratuitement le relais et le stockage de Relayium" />
@@ -27,49 +33,101 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Apportez votre propre nœud : utilisez gratuitement le relais et le stockage de Relayium","description":"Rattachez votre propre nœud de relais/stockage à votre compte Relayium en une seule commande. Vos transferts passent alors par votre nœud — et non par nos serveurs facturés à l'usage —, ils sont donc gratuits, et les données restent sur du matériel que vous contrôlez.","inLanguage":"fr","datePublished":"2026-07-10","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/fr/guides/bring-your-own-node/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/fr/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/fr/guides/"},{"@type":"ListItem","position":3,"name":"Apportez votre propre nœud : utilisez gratuitement le relais et le stockage de Relayium"}]},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"J'ai obtenu « relayium-node: command not found » — qu'est-ce qui a mal tourné ?","acceptedAnswer":{"@type":"Answer","text":"Vous avez exécuté le binaire relayium-node avant de l'installer. Utilisez la commande d'installation en une ligne de la page du compte (de la forme curl … | sudo … sh) : elle télécharge le binaire, le place dans votre PATH et le démarre en tant que service. Vous n'installez jamais relayium-node séparément."}},{"@type":"Question","name":"Le nœud reste-t-il en ligne après un redémarrage ?","acceptedAnswer":{"@type":"Answer","text":"Oui. L'installateur enregistre un service systemd qui est activé au démarrage et réglé sur Restart=always, si bien qu'il revient après un redémarrage et se relance de lui-même en cas de plantage. Rien de plus à exécuter."}},{"@type":"Question","name":"En quoi est-ce différent d'auto-héberger Relayium ?","acceptedAnswer":{"@type":"Answer","text":"Bring-your-own-node conserve votre compte relayium.com et vos applications habituels et ajoute simplement un nœud qui vous appartient pour acheminer votre trafic. L'auto-hébergement fait tourner toute la pile serveur (comptes, application web, signalisation) sur votre propre domaine — voyez le guide « Auto-héberger Relayium » pour cela."}},{"@type":"Question","name":"Quelqu'un d'autre peut-il utiliser mon nœud ou voir mes données ?","acceptedAnswer":{"@type":"Answer","text":"Non. Un nœud est rattaché à votre compte par son jeton et n'achemine que le trafic de votre compte. Les transferts en temps réel sont chiffrés de bout en bout et les blobs stockés sont du texte chiffré que votre nœud ne peut pas lire. Vos données et la configuration de votre nœud ne sont utilisables que par vous."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.tw{overflow-x:auto;margin:16px 0}
-.tw table{border-collapse:collapse;width:100%;font-size:15px}
-.tw th,.tw td{border:1px solid var(--border);padding:8px 11px;text-align:start;vertical-align:top}
-.tw th{color:var(--text-h);background:var(--card);font-weight:600}
-.tw code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;color:var(--text-h)}
+.tw{overflow-x:auto;margin:16px 0;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.tw table{border-collapse:collapse;inline-size:100%;font-size:var(--fs-sm)}
+.tw th,.tw td{border-block-end:1px solid var(--sep);padding:10px 14px;text-align:start;vertical-align:top}
+.tw tr:last-child td{border-block-end:0}
+.tw th{color:var(--text-h);background:var(--row-hover);font-weight:600}
+.tw code{font-size:13px;color:var(--text-h)}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -87,7 +145,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/fr/guides/" aria-current="true">Guides</a><a href="/fr/apps/">Applis</a><a href="/pricing">Tarifs</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Apportez votre propre nœud : utilisez gratuitement le relais et le stockage de Relayium</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -115,10 +173,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>Installer le nœud et le mettre en ligne</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Ce qu&#39;il vous faut avant l&#39;étape 1</p><ul><li>Un serveur Linux joignable depuis Internet — un VPS bon marché ou une machine allumée en permanence chez vous font l&#39;affaire. amd64 et arm64 sont pris en charge.</li><li>root sur ce serveur, ou sudo. L&#39;installation en a besoin une fois ; le nœud lui-même ne tourne jamais en root.</li><li>La possibilité d&#39;ouvrir des ports entrants — dans le pare-feu de l&#39;hôte et, sur un VPS cloud, dans le groupe de sécurité du fournisseur.</li><li>Un compte relayium.com auquel vous êtes connecté. La commande d&#39;installation est générée sur la page de compte et contient un jeton à usage unique.</li><li>De l&#39;espace disque, uniquement si le nœud doit aussi stocker et pas seulement relayer. Un nœud relais seul n&#39;en a pas besoin — omettez alors RELAYIUM_NODE_STORAGE_DIR.</li></ul></div>
       <p>Quatre choses dans l&#39;ordre : générer la commande, l&#39;exécuter, ouvrir les ports et confirmer que le nœud est passé en ligne. Environ cinq minutes sur une machine neuve.</p>
-      <ol class="steps" data-block="steps"><li><p>Connectez-vous sur relayium.com et ouvrez votre page de compte, /me.</p></li><li><p>Descendez jusqu&#39;à Mes nœuds et cliquez sur Ajouter un nœud. Copiez tout de suite la commande d&#39;installation — le jeton qu&#39;elle contient n&#39;est affiché qu&#39;une fois et ne peut pas être réaffiché.</p></li><li><p>Collez-la sur votre serveur. Elle télécharge le binaire relayium-node, en vérifie la somme de contrôle, l&#39;installe dans /usr/local/bin, écrit un service systemd et le démarre.</p><pre><code>curl -fsSL https://relayium.com/install-node.sh | sudo RELAYIUM_CENTRAL_URL=https://relayium.com RELAYIUM_NODE_TOKEN=&lt;your-token&gt; RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh</code></pre></li><li><p>Vérifiez que le service tourne et qu&#39;il reviendra après un redémarrage. Les deux réponses comptent : active dit qu&#39;il tourne maintenant, enabled est ce qui survit à un redémarrage.</p><pre><code>systemctl is-active relayium-node</code></pre><pre><code>systemctl is-enabled relayium-node</code></pre></li><li><p>Ouvrez les ports entrants dans le pare-feu de l&#39;hôte. L&#39;état En ligne ne demande qu&#39;un accès sortant, mais c&#39;est par ces ports que les pairs relaient et stockent.</p><pre><code>sudo ufw allow 3478/udp        # TURN
+      <ol class="steps" data-block="steps"><li><p>Connectez-vous sur relayium.com et ouvrez votre page de compte, /me.</p></li><li><p>Descendez jusqu&#39;à Mes nœuds et cliquez sur Ajouter un nœud. Copiez tout de suite la commande d&#39;installation — le jeton qu&#39;elle contient n&#39;est affiché qu&#39;une fois et ne peut pas être réaffiché.</p></li><li><p>Collez-la sur votre serveur. Elle télécharge le binaire relayium-node, en vérifie la somme de contrôle, l&#39;installe dans /usr/local/bin, écrit un service systemd et le démarre.</p><pre tabindex="0"><code>curl -fsSL https://relayium.com/install-node.sh | sudo RELAYIUM_CENTRAL_URL=https://relayium.com RELAYIUM_NODE_TOKEN=&lt;your-token&gt; RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh</code></pre></li><li><p>Vérifiez que le service tourne et qu&#39;il reviendra après un redémarrage. Les deux réponses comptent : active dit qu&#39;il tourne maintenant, enabled est ce qui survit à un redémarrage.</p><pre tabindex="0"><code>systemctl is-active relayium-node</code></pre><pre tabindex="0"><code>systemctl is-enabled relayium-node</code></pre></li><li><p>Ouvrez les ports entrants dans le pare-feu de l&#39;hôte. L&#39;état En ligne ne demande qu&#39;un accès sortant, mais c&#39;est par ces ports que les pairs relaient et stockent.</p><pre tabindex="0"><code>sudo ufw allow 3478/udp        # TURN
 sudo ufw allow 8081/tcp        # storage
 sudo ufw allow 49152:65535/udp # relay</code></pre></li><li><p>Sur un VPS cloud, autorisez aussi les mêmes ports dans le groupe de sécurité du fournisseur. Avec ufw seul ils restent bloqués en amont, et le nœud a l&#39;air parfaitement sain pendant tout ce temps.</p></li><li><p>De retour sur /me, regardez le nœud passer En ligne — en général en une trentaine de secondes. À partir de là, les transferts de votre compte le préfèrent automatiquement.</p></li><li><p>Facultatif : activez « N&#39;utiliser que mes propres nœuds pour le relais et le stockage » pour qu&#39;un transfert échoue au lieu de revenir discrètement sur notre infrastructure partagée.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">À quoi ressemble un nœud qui fonctionne</p><p>systemd signale le service à la fois active et enabled, et le nœud apparaît En ligne sous Mes nœuds. active seul ne suffit pas — un nœud qui n&#39;est pas enabled disparaît au redémarrage suivant.</p><pre><code>$ systemctl is-active relayium-node
+      <div class="cbox ok" data-block="success"><p class="cbox-t">À quoi ressemble un nœud qui fonctionne</p><p>systemd signale le service à la fois active et enabled, et le nœud apparaît En ligne sous Mes nœuds. active seul ne suffit pas — un nœud qui n&#39;est pas enabled disparaît au redémarrage suivant.</p><pre tabindex="0"><code>$ systemctl is-active relayium-node
 active
 $ systemctl is-enabled relayium-node
 enabled</code></pre></div>
@@ -139,14 +197,14 @@ enabled</code></pre></div>
       <p>La désinstallation tient en un seul script, le même que votre nœud stocke des fichiers ou se contente de relayer. Il retire les unités, le binaire, la configuration et le compte de service, et signale à relayium.com, sans garantie, que le nœud a disparu. Si cet appel échoue, c&#39;est une ligne sur votre terminal et non une désinstallation cassée — l&#39;identifiant du nœud s&#39;affiche pour qu&#39;on puisse le marquer retiré à la main.</p>
       <p>Téléchargez-le, vérifiez-le, puis exécutez-le. Le faire passer directement dans sh signifie qu&#39;une 404 ou un accroc réseau fait que toute la commande n&#39;affiche rien et se termine avec le code 0 — ce qui ressemble à une désinstallation réussie.</p>
       <p>Il ne retire que ce qu&#39;il reconnaît : tout élément inattendu dans le répertoire d&#39;état ou de stockage est conservé et signalé plutôt que balayé.</p>
-      <pre><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; \
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; \
   [ -s uninstall-node.sh ] &amp;&amp; sudo sh uninstall-node.sh</code></pre>
       <ul><li>Il refuse tant que le répertoire de stockage contient un fichier qu&#39;il ne reconnaît pas — y compris un blob expiré que le nettoyage n&#39;a pas encore atteint — car chaque fichier stocké vit sur un seul nœud et il n&#39;y a pas de réplique. Attendez que ce décompte tombe à zéro, ou passez RELAYIUM_NODE_FORCE=1 en acceptant que ces fichiers deviennent inaccessibles.</li><li>S&#39;il n&#39;arrive pas à déterminer où vivent vos blobs, il s&#39;arrête au lieu de deviner. RELAYIUM_NODE_ASSUME_NO_STORAGE=1 est le seul moyen de passer outre, et il ne supprime toujours rien qu&#39;il ne reconnaisse pas.</li><li>Le répertoire de stockage lui-même est conservé sauf si vous passez aussi RELAYIUM_NODE_PURGE_STORAGE=1. Les variables d&#39;environnement ne survivent pas à | sudo sh — passez-les via sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh.</li><li>Ensuite, systemctl status relayium-node doit répondre not-found et aucun minuteur relayium-node ne doit être listé. Si vous réinstallez plus tard, votre compte obtient un nœud entièrement nouveau : la désinstallation supprime le fichier d&#39;identité, donc une nouvelle installation enregistre un nœud neuf au lieu de ressusciter l&#39;ancien.</li></ul>
       <h2>Quand ça ne marche pas</h2>
       <p>Cinq pannes couvrent presque tous les nœuds qui ne démarrent pas, et trois d&#39;entre elles paraissent saines depuis le serveur : le service tourne, et seuls la page de compte ou une socket en écoute disent le contraire.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptôme, vérification, correction</p><dl><dt>Le shell répond « relayium-node: command not found ».</dt><dd><pre><code>command -v relayium-node
-# aucune sortie</code></pre><p>Le binaire n&#39;est pas installé. On n&#39;installe jamais relayium-node séparément — c&#39;est la commande d&#39;une ligne de la page de compte qui le télécharge, le place dans votre PATH et le démarre comme service. Exécutez plutôt celle-là.</p></dd><dt>Le service est active, mais le nœud ne passe jamais En ligne sur la page de compte.</dt><dd><pre><code>journalctl -u relayium-node -n 50 --no-pager</code></pre><p>L&#39;état En ligne dépend d&#39;un battement sortant, un pare-feu en est donc rarement la cause ici — c&#39;est l&#39;enregistrement. Le jeton est à usage unique, une commande déjà exécutée ou une ancienne restée d&#39;un essai précédent échoue donc. Cliquez de nouveau sur Ajouter un nœud et relancez la commande fraîche.</p></dd><dt>Le nœud est En ligne, mais les transferts passent toujours par notre infrastructure partagée.</dt><dd><pre><code>sudo ss -lunp | grep 3478</code></pre><p>En ligne ne prouve que le battement sortant. Ce dont les pairs ont besoin, ce sont les ports entrants : vérifiez que le nœud écoute, puis ouvrez 3478/udp, 8081/tcp et 49152-65535/udp dans le pare-feu de l&#39;hôte ET dans le groupe de sécurité du cloud. Pour exclure tout repli silencieux, activez le réglage qui n&#39;utilise que vos propres nœuds.</p></dd><dt>La désinstallation n&#39;a rien affiché, s&#39;est terminée avec 0, et le service est toujours là.</dt><dd><pre><code>systemctl status relayium-node
-# active (running)</code></pre><p>C&#39;est exactement l&#39;allure d&#39;un téléchargement raté envoyé dans sh : une 404 ou un accroc réseau n&#39;affiche rien et se termine avec 0, ce qui se lit comme une réussite. Téléchargez le script, vérifiez qu&#39;il n&#39;est pas vide, puis exécutez-le — c&#39;est pourquoi la commande de ce guide est écrite en trois parties plutôt qu&#39;en un seul tube.</p></dd><dt>La désinstallation refuse tant que le répertoire de stockage contient encore des fichiers.</dt><dd><pre><code>sudo ls /var/lib/relayium-node/blobs | wc -l</code></pre><p>C&#39;est délibéré. Chaque fichier stocké vit sur un seul nœud et il n&#39;existe aucune réplique, retirer le nœud les rend donc inatteignables. Attendez que le compte tombe à zéro à mesure que les blobs expirent, ou acceptez la perte avec RELAYIUM_NODE_FORCE=1. Les variables d&#39;environnement ne survivent pas à un tube vers sudo sh, passez-les donc sous la forme sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptôme, vérification, correction</p><dl><dt>Le shell répond « relayium-node: command not found ».</dt><dd><pre tabindex="0"><code>command -v relayium-node
+# aucune sortie</code></pre><p>Le binaire n&#39;est pas installé. On n&#39;installe jamais relayium-node séparément — c&#39;est la commande d&#39;une ligne de la page de compte qui le télécharge, le place dans votre PATH et le démarre comme service. Exécutez plutôt celle-là.</p></dd><dt>Le service est active, mais le nœud ne passe jamais En ligne sur la page de compte.</dt><dd><pre tabindex="0"><code>journalctl -u relayium-node -n 50 --no-pager</code></pre><p>L&#39;état En ligne dépend d&#39;un battement sortant, un pare-feu en est donc rarement la cause ici — c&#39;est l&#39;enregistrement. Le jeton est à usage unique, une commande déjà exécutée ou une ancienne restée d&#39;un essai précédent échoue donc. Cliquez de nouveau sur Ajouter un nœud et relancez la commande fraîche.</p></dd><dt>Le nœud est En ligne, mais les transferts passent toujours par notre infrastructure partagée.</dt><dd><pre tabindex="0"><code>sudo ss -lunp | grep 3478</code></pre><p>En ligne ne prouve que le battement sortant. Ce dont les pairs ont besoin, ce sont les ports entrants : vérifiez que le nœud écoute, puis ouvrez 3478/udp, 8081/tcp et 49152-65535/udp dans le pare-feu de l&#39;hôte ET dans le groupe de sécurité du cloud. Pour exclure tout repli silencieux, activez le réglage qui n&#39;utilise que vos propres nœuds.</p></dd><dt>La désinstallation n&#39;a rien affiché, s&#39;est terminée avec 0, et le service est toujours là.</dt><dd><pre tabindex="0"><code>systemctl status relayium-node
+# active (running)</code></pre><p>C&#39;est exactement l&#39;allure d&#39;un téléchargement raté envoyé dans sh : une 404 ou un accroc réseau n&#39;affiche rien et se termine avec 0, ce qui se lit comme une réussite. Téléchargez le script, vérifiez qu&#39;il n&#39;est pas vide, puis exécutez-le — c&#39;est pourquoi la commande de ce guide est écrite en trois parties plutôt qu&#39;en un seul tube.</p></dd><dt>La désinstallation refuse tant que le répertoire de stockage contient encore des fichiers.</dt><dd><pre tabindex="0"><code>sudo ls /var/lib/relayium-node/blobs | wc -l</code></pre><p>C&#39;est délibéré. Chaque fichier stocké vit sur un seul nœud et il n&#39;existe aucune réplique, retirer le nœud les rend donc inatteignables. Attendez que le compte tombe à zéro à mesure que les blobs expirent, ou acceptez la perte avec RELAYIUM_NODE_FORCE=1. Les variables d&#39;environnement ne survivent pas à un tube vers sudo sh, passez-les donc sous la forme sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh.</p></dd></dl></div>
       <h2>Questions fréquentes</h2>
       <h3>J&#39;ai obtenu « relayium-node: command not found » — qu&#39;est-ce qui a mal tourné ?</h3>
       <p>Vous avez exécuté le binaire relayium-node avant de l&#39;installer. Utilisez la commande d&#39;installation en une ligne de la page du compte (de la forme curl … | sudo … sh) : elle télécharge le binaire, le place dans votre PATH et le démarre en tant que service. Vous n&#39;installez jamais relayium-node séparément.</p>

@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/es/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Relayium — Transferencia P2P de archivos y texto cifrada de extremo a extremo" />
@@ -27,40 +33,95 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":["WebApplication","SoftwareApplication"],"name":"Relayium","url":"https://relayium.com/es/","description":"Relayium es una herramienta de código abierto, sin instalación, para transferir archivos y texto con cifrado de extremo a extremo. En la misma red, los archivos van directos. Entre redes, el navegador usa TURN por diseño y el retransmisor solo ve datos cifrados de extremo a extremo. El texto efímero exige ambos dispositivos conectados. Los servidores de Relayium no guardan cuerpos ni historial, pero el navegador o destinatario puede copiar o conservar el texto. En la misma red no hace falta cuenta; crear un código entre redes exige iniciar sesión, unirse con él no.","applicationCategory":"UtilitiesApplication","operatingSystem":"Web","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"inLanguage":"es"},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿Es gratis?","acceptedAnswer":{"@type":"Answer","text":"Sí. Relayium es de código abierto bajo licencia AGPL-3.0 y se usa sin coste alguno. En la misma red, las transferencias en tiempo real no requieren iniciar sesión; para emparejar entre redes distintas solo el remitente debe iniciar sesión — el destinatario nunca necesita cuenta."}},{"@type":"Question","name":"¿Se suben mis archivos a un servidor?","acceptedAnswer":{"@type":"Answer","text":"En la misma red, los archivos de la transferencia directa en tiempo real nunca pasan por el servidor; entre redes distintas van por un retransmisor cifrado que, también él, solo ve texto cifrado. Solo si usas el enlace de descarga opcional, el navegador los cifra antes de subirlos y el servidor conserva únicamente texto cifrado que no puede descifrar — la clave queda en el enlace."}},{"@type":"Question","name":"¿Es cifrado de extremo a extremo?","acceptedAnswer":{"@type":"Answer","text":"Sí. Usa intercambio de claves X25519 y cifrado AES-256-GCM por bloque; las claves se negocian únicamente entre los dos dispositivos, de modo que el servidor no puede descifrar nada."}},{"@type":"Question","name":"¿Se puede transferir entre sistemas distintos?","acceptedAnswer":{"@type":"Answer","text":"Sí. Con un navegador moderno puedes transferir entre Windows, macOS, Linux, Android e iOS, sin instalar ninguna aplicación."}},{"@type":"Question","name":"¿Hay un límite de tamaño?","acceptedAnswer":{"@type":"Answer","text":"La transferencia en tiempo real envía los datos en flujo, así que Relayium no impone ningún límite estricto de tamaño (Chrome y Edge de escritorio escriben directamente en el disco; Firefox, Safari y todos los navegadores móviles ensamblan el archivo en memoria, por lo que se avisa a partir de unos 256 MB — una estimación deliberadamente conservadora, no un límite medido). Hasta 1.000 archivos por lote."}},{"@type":"Question","name":"¿Puedo enviar texto y no solo archivos?","acceptedAnswer":{"@type":"Answer","text":"Con ambos dispositivos conectados, envía enlaces, comandos y código multilínea, hasta 65.536 bytes (UTF-8) por mensaje. Los servidores de Relayium no guardan cuerpos ni historial, pero el navegador o destinatario puede copiar o conservar el texto. No hay entrega sin conexión; lo más grande va como archivo."}},{"@type":"Question","name":"¿En qué se diferencia de Snapdrop?","acceptedAnswer":{"@type":"Answer","text":"Relayium añade cifrado de extremo a extremo a nivel de aplicación y un código de verificación SAS. Comparado por un canal independiente, el SAS detecta la sustitución de claves públicas X25519 de los extremos, o que un servidor de señalización comprometido suplante un extremo y termine el cifrado de la aplicación. No demuestra que no haya servidores o relés TURN en la ruta de red. Relayium también admite transferencias entre redes y enlaces de descarga opcionales de conocimiento cero."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:820px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:38px;letter-spacing:-.5px;margin:40px 0 12px}
-h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.pitch{font-size:20px;margin:0 0 24px;max-width:42em}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:8px 0}
-ol.shots{display:grid;gap:18px;margin:22px 0 4px}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
+footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.pitch{font-size:calc(var(--fs-body) + 3px);line-height:1.6;margin:0 0 22px;max-inline-size:42em}
+h1{font-size:var(--fs-hero)}
+.shots{display:grid;gap:18px;margin:22px 0 4px}
 .shots figure{margin:0}
-.shots img{display:block;width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:#fff}
-.shots figcaption{margin-top:8px;font-size:14.5px;color:var(--muted);line-height:1.5}
-@media(min-width:820px){.shots{grid-template-columns:repeat(3,1fr);align-items:start}}
-.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
-.cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.why li b,.compare h3{color:var(--text-h)}
-.learn-groups{display:grid;gap:22px;margin-top:14px}
-@media(min-width:820px){.learn-groups{grid-template-columns:repeat(3,1fr)}}
-.learn-groups h3{margin:0 0 6px;font-size:16px}
+.shots img{display:block;inline-size:100%;block-size:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.shots figcaption{margin-block-start:8px;font-size:var(--fs-sm);line-height:1.5}
+@media(min-width:760px){.shots{grid-template-columns:repeat(3,1fr);align-items:start}}
+ol.steps{margin:14px 0;padding-inline-start:24px}
+ol.steps>li{margin:10px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+.learn-groups{display:grid;gap:20px;margin-block-start:14px}
+@media(min-width:760px){.learn-groups{grid-template-columns:repeat(3,1fr)}}
+.learn-groups h3{margin:0 0 8px;font-size:15px}
+/* A list of destinations, so heading-coloured rather than accent-coloured —
+   the same rank the footer and the guides hub use. */
+.learn{list-style:none;padding:0;margin:0;display:grid;gap:6px}
+.learn li{margin:0}
+.learn a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px;font-size:var(--fs-sm)}
+.learn a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
 .learn-all{margin:16px 0 0}
 .close-cta{margin:26px 0 0}
-.learn{list-style:none;padding:0}.learn a{color:var(--accent-fg);text-decoration:none}
-footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
-footer a{color:var(--text-h);text-decoration:none}
-header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
-.cta{transition:transform .18s ease,filter .18s ease}.cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
-/* Pure-CSS staggered entrance — keeps these pages JS-free and crawlable while
+/* Pure-CSS staggered entrance — keeps these pages JS-free for the crawler while
    still giving the content a little life on load. animation fill-mode:both ends
    fully visible, so nothing is ever stuck hidden (no-JS, old browsers, or IO
    quirks all resolve to visible). */
@@ -71,9 +132,9 @@ section.reveal:nth-of-type(3){animation-delay:.18s}
 section.reveal:nth-of-type(4){animation-delay:.25s}
 section.reveal:nth-of-type(5){animation-delay:.32s}
 @keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
-@media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
+@media(prefers-reduced-motion:reduce){.reveal{animation:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
@@ -81,7 +142,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/es/guides/">Guías</a><a href="/es/apps/">Apps</a><a href="/pricing">Precios</a></nav></header>
       <aside class="archived" aria-label="Traducción archivada"><p class="archived-label">Traducción archivada</p><p>Esta página es una traducción al español archivada. El producto Relayium y su documentación actual se mantienen en inglés y en chino simplificado; la propia aplicación ya no ofrece español. Por eso las pantallas y los detalles descritos aquí pueden diferir del comportamiento actual.</p><p class="archived-links archived-pricing">Los planes y los límites de uso mencionados aquí pueden estar desactualizados; los actuales están en la página <a href="/pricing">Precios</a>.</p><p class="archived-links">Versión actual: <a href="/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <!-- The language bar and the footer are navigation, so the main landmark
            starts after them: a screen-reader user jumping to the main content

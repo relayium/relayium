@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/es/guides/sync-a-large-folder-between-servers/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Sincronizar una carpeta grande entre dos servidores (reanudable, en segundo plano)" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Sincronizar una carpeta grande entre dos servidores (reanudable, en segundo plano)","description":"Replica un directorio grande de un servidor a otro con relayium sync — incremental, reanudable tras una caída de conexión y seguro para ejecutar sin supervisión. Un bucle de reintentos bajo tmux mueve gigabytes sin tener que vigilar una terminal.","inLanguage":"es","datePublished":"2026-07-08","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/es/guides/sync-a-large-folder-between-servers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/es/"},{"@type":"ListItem","position":2,"name":"Guías","item":"https://relayium.com/es/guides/"},{"@type":"ListItem","position":3,"name":"Sincronizar una carpeta grande entre dos servidores (reanudable, en segundo plano)"}]},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿Qué pasa si la transferencia se interrumpe a mitad de camino?","acceptedAnswer":{"@type":"Answer","text":"No se pierde nada. Vuelve a ejecutar relayium sync: se salta los archivos que ya están en el receptor y reanuda un archivo enviado a medias desde el desplazamiento de bytes que ya está en disco. El bucle until de esta guía lo hace automáticamente hasta que toda la carpeta queda replicada."}},{"@type":"Question","name":"¿En qué se diferencia esto de rsync?","acceptedAnswer":{"@type":"Answer","text":"Ambos hacen replicación incremental unidireccional, pero relayium sync se ejecuta sobre una conexión TLS fijada sin necesidad de cuenta SSH (daemon directo), autentica las dos máquinas por huella de certificado y verifica con SHA-256 cada archivo que transfiere. Igual que rsync por defecto, un archivo cuyo tamaño y mtime ya coinciden en el receptor se omite en lugar de volver a hashearse. Es el mismo motor de transferencia que los otros modos de relayium."}},{"@type":"Question","name":"¿sync elimina en el receptor los archivos que quité del origen?","acceptedAnswer":{"@type":"Answer","text":"Solo si lo pides. Por defecto sync solo añade y actualiza. Pasa --delete para replicar las eliminaciones, y el receptor debe ejecutar serve con --allow-delete para que se respeten; de lo contrario la eliminación se ignora y se informa de vuelta."}},{"@type":"Question","name":"¿Puedo mantener dos carpetas sincronizadas de forma continua?","acceptedAnswer":{"@type":"Answer","text":"Sí. Añade --watch y sync se mantiene en ejecución, volviendo a replicar ante cualquier cambio bajo el origen. Para un traslado puntual de una carpeta grande no lo necesitas: el bucle de reintentos más un sync normal bastan."}},{"@type":"Question","name":"¿Tengo que abrir un puerto?","acceptedAnswer":{"@type":"Answer","text":"Para daemon directo, sí: el puerto del proceso a la escucha (9031 por defecto) debe ser alcanzable desde el emisor. Si prefieres no abrir un puerto y ya tienes SSH entre los servidores, sync también funciona sobre SSH: relayium sync /path user@host:/path (relayium debe estar instalado en el remoto)."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/es/guides/" aria-current="true">Guías</a><a href="/es/apps/">Apps</a><a href="/pricing">Precios</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/es/">Relayium</a> <span aria-hidden="true">›</span> <a href="/es/guides/">Guías</a> <span aria-hidden="true">›</span> <span aria-current="page">Sincronizar una carpeta grande entre dos servidores (reanudable, en segundo plano)</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -108,53 +165,53 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>Requisitos previos</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Lo que necesitas</p><ul><li>Esta guía usa daemon directo (relayium://), así que los dos servidores no necesitan acceso SSH entre sí.</li><li>Abre el puerto del proceso a la escucha (9031 por defecto) al emisor en el cortafuegos o grupo de seguridad del receptor.</li><li>Sitio para toda la carpeta en el receptor. Compara du -sh /root/workspace en el emisor con df -h /root en el receptor antes de lanzar una transferencia de varias horas.</li></ul></div>
       <p>Instala relayium en ambos servidores (sync habla el protocolo nativo, así que debe estar presente en cada extremo):</p>
-      <pre><code># en AMBOS servidores
+      <pre tabindex="0"><code># en AMBOS servidores
 curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <h2>Autorizar al emisor una vez (en el receptor)</h2>
       <p>El receptor aprueba la máquina emisora una vez; la aprobación se escribe en disco y sigue siendo válida entre reinicios, así que nunca la repites. Inicia el proceso a la escucha en una terminal y apunta --dir al directorio padre — relayium sync /root/workspace reproduce workspace/... en el receptor, así que --dir /root deposita los archivos en /root/workspace/.</p>
       <p>En la primera conexión del emisor (siguiente sección), serve muestra su dirección y su huella y te pide que lo apruebes; responde y y se recuerda para siempre:</p>
-      <pre><code># en el RECEPTOR (en primer plano, para aprobar de forma interactiva)
+      <pre tabindex="0"><code># en el RECEPTOR (en primer plano, para aprobar de forma interactiva)
 relayium serve --dir /root --port 9031</code></pre>
-      <pre><code># en el RECEPTOR, en la primera conexión:
+      <pre tabindex="0"><code># en el RECEPTOR, en la primera conexión:
 Incoming push from 203.0.113.9:52140
   fingerprint: 9f2c41ab…
 Accept and remember this peer? [y/N] y</code></pre>
       <ul><li>Para una configuración totalmente sin supervisión, sáltate el aviso: ejecuta relayium id en el emisor para imprimir su huella, y luego relayium authorize &lt;huella&gt; en el receptor.</li><li>--dir es el padre de la carpeta que sincronizas, no la carpeta en sí; de lo contrario los archivos llegan un nivel demasiado profundo (p. ej. /root/workspace/workspace).</li></ul>
       <h2>Ejecutar el proceso a la escucha en segundo plano (en el receptor)</h2>
       <p>Una vez autorizada la huella, detén el serve en primer plano (Ctrl-C) y relánzalo desacoplado para que sobreviva a tu cierre de sesión. Carga la huella guardada y acepta al emisor en silencio: esta vez no hay aviso. La misma línea anota el PID del nuevo proceso en ~/relayium-serve.pid, y así es como el último paso de esta guía detiene el proceso a la escucha que lanzó, en vez de todo comando relayium de la máquina:</p>
-      <pre><code># en el RECEPTOR
+      <pre tabindex="0"><code># en el RECEPTOR
 nohup relayium serve --dir /root --port 9031 &gt; ~/relayium-serve.log 2&gt;&amp;1 &amp; echo $! &gt; ~/relayium-serve.pid</code></pre>
       <ul><li>serve maneja las conexiones de una en una y sigue ejecutándose, así que está listo para cada reconexión del bucle de reintentos de abajo.</li><li>Para una bandeja de entrada siempre activa, ejecútalo bajo systemd en su lugar (Restart=always, --config-dir /etc/relayium).</li></ul>
       <h2>Ejecutar el sync en un bucle de reintentos bajo tmux (en el emisor)</h2>
       <p>Las transferencias largas se interrumpen: una sesión caída, una red inestable, un reinicio. La solución no es una herramienta sofisticada; es un bucle que vuelve a ejecutar sync hasta que tiene éxito, más un multiplexor de terminal para que sobreviva a tu cierre de sesión. Aquí tmux es más limpio que nohup: no hay redirección de salida que puedas equivocar, y puedes volver a conectarte para ver el progreso.</p>
       <p>Inicia una sesión de tmux, luego ejecuta el espejo en un bucle until: reintenta cada 10 segundos hasta que sync devuelve éxito, y luego sale por sí solo:</p>
-      <ol class="steps" data-block="steps"><li><p>Abre una sesión de tmux en el emisor, para que el bucle sobreviva a la sesión ssh desde la que lo lanzaste.</p><pre><code># en el EMISOR
-tmux new -s xfer      # apt install -y tmux si falta</code></pre></li><li><p>Ejecuta el espejo dentro de un bucle until. Reintenta cada 10 segundos hasta que sync devuelva éxito, y entonces sale por su cuenta.</p><pre><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre></li><li><p>Desconéctate con Ctrl-b y luego d. El bucle sigue en marcha; vuelve a conectarte cuando quieras mirarlo.</p><pre><code>tmux attach -t xfer</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">Cómo se ve una pasada correcta</p><p>Cada pasada imprime una línea por cada archivo que realmente envió, y luego un resumen que enfrenta lo enviado con lo que el receptor ya tenía. El bucle acaba la primera vez que sync devuelve éxito, y ese resumen es el estado del espejo.</p><pre><code>relayium sync /root/workspace relayium://203.0.113.43:9031
+      <ol class="steps" data-block="steps"><li><p>Abre una sesión de tmux en el emisor, para que el bucle sobreviva a la sesión ssh desde la que lo lanzaste.</p><pre tabindex="0"><code># en el EMISOR
+tmux new -s xfer      # apt install -y tmux si falta</code></pre></li><li><p>Ejecuta el espejo dentro de un bucle until. Reintenta cada 10 segundos hasta que sync devuelva éxito, y entonces sale por su cuenta.</p><pre tabindex="0"><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre></li><li><p>Desconéctate con Ctrl-b y luego d. El bucle sigue en marcha; vuelve a conectarte cuando quieras mirarlo.</p><pre tabindex="0"><code>tmux attach -t xfer</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">Cómo se ve una pasada correcta</p><p>Cada pasada imprime una línea por cada archivo que realmente envió, y luego un resumen que enfrenta lo enviado con lo que el receptor ya tenía. El bucle acaba la primera vez que sync devuelve éxito, y ese resumen es el estado del espejo.</p><pre tabindex="0"><code>relayium sync /root/workspace relayium://203.0.113.43:9031
   workspace/data/part-004.bin (1073741824 bytes)
 synced: 1 sent, 812 unchanged</code></pre></div>
       <ul><li>Cada reintento hace menos: los archivos ya transferidos se saltan, un archivo enviado a medias se reanuda; así el bucle converge y termina.</li><li>El progreso imprime una línea por archivo completado, así que un archivo grande se transfiere en silencio hasta que termina. El silencio no es un atasco (ver resolución de problemas).</li></ul>
       <h2>Verificar y terminar</h2>
       <p>La transferencia está completa cuando el bucle until termina y vuelves a un prompt de shell normal. Confirma que ambos lados coinciden, y luego detén el proceso a la escucha:</p>
-      <ol class="steps" data-block="steps"><li><p>Espera a que el bucle until termine por su cuenta. Volver a un prompt de shell normal significa que la transferencia acabó, no que la interrumpiste.</p></li><li><p>Compara los totales en los dos servidores.</p><pre><code># compara los totales en AMBOS servidores
-du -sh /root/workspace</code></pre></li><li><p>Detén el proceso a la escucha en el receptor cuando los totales coincidan. La señal va al PID que anotaste al lanzarlo, y no a todo comando relayium de la máquina por coincidencia de texto, y el archivo de PID se borra solo si esa señal tuvo éxito. Un archivo de PID que quedó de una ejecución anterior puede nombrar un PID que el sistema ya reutilizó, así que si no tienes la certeza de que siga siendo el tuyo, imprime primero la línea de comandos de ese PID y mátalo solo si aparece serve.</p><pre><code># en el RECEPTOR, una vez verificado
+      <ol class="steps" data-block="steps"><li><p>Espera a que el bucle until termine por su cuenta. Volver a un prompt de shell normal significa que la transferencia acabó, no que la interrumpiste.</p></li><li><p>Compara los totales en los dos servidores.</p><pre tabindex="0"><code># compara los totales en AMBOS servidores
+du -sh /root/workspace</code></pre></li><li><p>Detén el proceso a la escucha en el receptor cuando los totales coincidan. La señal va al PID que anotaste al lanzarlo, y no a todo comando relayium de la máquina por coincidencia de texto, y el archivo de PID se borra solo si esa señal tuvo éxito. Un archivo de PID que quedó de una ejecución anterior puede nombrar un PID que el sistema ya reutilizó, así que si no tienes la certeza de que siga siendo el tuyo, imprime primero la línea de comandos de ese PID y mátalo solo si aparece serve.</p><pre tabindex="0"><code># en el RECEPTOR, una vez verificado
 ps -p &quot;$(cat ~/relayium-serve.pid)&quot; -o command=
 kill &quot;$(cat ~/relayium-serve.pid)&quot; &amp;&amp; rm ~/relayium-serve.pid</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">Cómo se ve un espejo terminado</p><p>du -sh informa del mismo total en los dos servidores, y el bucle until te ha devuelto a un prompt de shell normal en lugar de reintentar otra vez. Que los totales coincidan es una comprobación gruesa de completitud, no una prueba de integridad: sync decidió por tamaño y mtime qué archivos no enviar, así que el total no dice nada del contenido de los archivos que omitió.</p><pre><code># the same total, on BOTH servers
+      <div class="cbox ok" data-block="success"><p class="cbox-t">Cómo se ve un espejo terminado</p><p>du -sh informa del mismo total en los dos servidores, y el bucle until te ha devuelto a un prompt de shell normal en lugar de reintentar otra vez. Que los totales coincidan es una comprobación gruesa de completitud, no una prueba de integridad: sync decidió por tamaño y mtime qué archivos no enviar, así que el total no dice nada del contenido de los archivos que omitió.</p><pre tabindex="0"><code># the same total, on BOTH servers
 46G	/root/workspace</code></pre></div>
       <ul><li>Lo que sync envió está verificado: cada archivo transferido se comprobó con SHA-256 al llegar, y una salida limpia significa que ninguna de esas comprobaciones falló. Lo que omitió solo se cotejó por tamaño y mtime, así que unos totales de du -sh iguales son una comprobación de sensatez sobre la completitud, no una prueba de que el contenido omitido siga coincidiendo. Si necesitas esa prueba, compara las sumas de verificación archivo por archivo en los dos servidores.</li></ul>
       <h2>Resolución de problemas</h2>
       <p>En un espejo de varias horas aparecen seis cosas. Tres parecen fallos y no lo son; las otras tres sí, y cada una tiene un comando que dice cuál tienes delante.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Síntoma, comprobación, solución</p><dl><dt>Hace mucho que no se imprime nada y la transferencia parece atascada.</dt><dd><pre><code># en el EMISOR, dos veces, con unos segundos de diferencia
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Síntoma, comprobación, solución</p><dl><dt>Hace mucho que no se imprime nada y la transferencia parece atascada.</dt><dd><pre tabindex="0"><code># en el EMISOR, dos veces, con unos segundos de diferencia
 ss -tinp dst :9031
 # ESTAB    se alcanzó el proceso a la escucha; no prueba que los bytes se muevan
-# SYN-SENT no alcanza al proceso a la escucha</code></pre><p>El progreso solo se imprime cuando termina un archivo, así que un único archivo grande se transfiere en completo silencio. ESTAB solo demuestra alcanzabilidad — un socket establecido puede quedarse inactivo o atascado — y por sí solo nunca es prueba de avance. Ejecuta la comprobación dos veces con unos segundos de diferencia y compara el contador bytes_acked que -i imprime para ese socket: si sube, la transferencia avanza; si no cambia, es un atasco real.</p></dd><dt>El socket se queda en SYN-SENT y la transferencia no arranca en absoluto.</dt><dd><pre><code># en el RECEPTOR
+# SYN-SENT no alcanza al proceso a la escucha</code></pre><p>El progreso solo se imprime cuando termina un archivo, así que un único archivo grande se transfiere en completo silencio. ESTAB solo demuestra alcanzabilidad — un socket establecido puede quedarse inactivo o atascado — y por sí solo nunca es prueba de avance. Ejecuta la comprobación dos veces con unos segundos de diferencia y compara el contador bytes_acked que -i imprime para ese socket: si sube, la transferencia avanza; si no cambia, es un atasco real.</p></dd><dt>El socket se queda en SYN-SENT y la transferencia no arranca en absoluto.</dt><dd><pre tabindex="0"><code># en el RECEPTOR
 sudo ufw allow from 203.0.113.9 to any port 9031 proto tcp
-ss -tlnp | grep 9031</code></pre><p>El puerto está bloqueado. Abre 9031/TCP solo al emisor — sustituye 203.0.113.9 por la dirección del propio emisor, su IP pública o la privada si los dos servidores comparten red — acota el grupo de seguridad en la nube a esa misma fuente y luego comprueba que serve está realmente a la escucha. Es la causa más frecuente de una transferencia que nunca empieza.</p></dd><dt>Pegar el comando de segundo plano deja la shell en un prompt de continuación &gt;.</dt><dd><pre><code>tmux new -s xfer
-until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre><p>Un comando nohup de varias líneas con comillas y una redirección &gt; suele romperse en la redirección al pegarlo. Usa en su lugar tmux con este bucle de una sola línea: no hay redirección que equivocar, y puedes volver a conectarte para mirarlo.</p></dd><dt>La limpieza mató algo que no querías matar.</dt><dd><pre><code>pgrep -af relayium
+ss -tlnp | grep 9031</code></pre><p>El puerto está bloqueado. Abre 9031/TCP solo al emisor — sustituye 203.0.113.9 por la dirección del propio emisor, su IP pública o la privada si los dos servidores comparten red — acota el grupo de seguridad en la nube a esa misma fuente y luego comprueba que serve está realmente a la escucha. Es la causa más frecuente de una transferencia que nunca empieza.</p></dd><dt>Pegar el comando de segundo plano deja la shell en un prompt de continuación &gt;.</dt><dd><pre tabindex="0"><code>tmux new -s xfer
+until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre><p>Un comando nohup de varias líneas con comillas y una redirección &gt; suele romperse en la redirección al pegarlo. Usa en su lugar tmux con este bucle de una sola línea: no hay redirección que equivocar, y puedes volver a conectarte para mirarlo.</p></dd><dt>La limpieza mató algo que no querías matar.</dt><dd><pre tabindex="0"><code>pgrep -af relayium
 ps -p &quot;$(cat ~/relayium-serve.pid)&quot; -o command=
 tmux kill-session -t xfer
-kill &quot;$(cat ~/relayium-serve.pid)&quot; &amp;&amp; rm ~/relayium-serve.pid</code></pre><p>Matar por patrón de línea de comandos envía la señal a todo proceso cuya línea de comandos contenga ese texto, que en una máquina con más de una transferencia en marcha no es el que querías. Tampoco detiene el espejo: el bucle until es el dueño del sync, así que un hijo muerto vuelve a arrancar diez segundos después. Mira con pgrep -af y luego termina lo que esta guía realmente posee: tmux kill-session -t xfer acaba con el bucle, y un kill al PID que hay en ~/relayium-serve.pid detiene el proceso a la escucha que lanzaste. Si el archivo de PID lleva ahí desde una ejecución anterior, imprime su línea de comandos antes de señalarlo, porque un PID que el sistema ha reutilizado pertenece a algo completamente distinto.</p></dd><dt>Quieres dejar fuera un subdirectorio y no existe ninguna opción de exclusión.</dt><dd><pre><code>relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031</code></pre><p>sync acepta -i y -p, --delete, --watch y --config-dir; nada que filtre una ruta en medio del árbol. Nombra en su lugar los subdirectorios que sí quieres: cada fuente llega bajo el --dir del receptor con su propio nombre, así que frente a serve --dir /root/workspace este comando reconstruye /root/workspace/src y /root/workspace/data y nunca recorre un venv regenerable.</p></dd><dt>Una fuente que esperabas duplicar llega vacía.</dt><dd><pre><code>relayium sync ./links relayium://203.0.113.43:9031
+kill &quot;$(cat ~/relayium-serve.pid)&quot; &amp;&amp; rm ~/relayium-serve.pid</code></pre><p>Matar por patrón de línea de comandos envía la señal a todo proceso cuya línea de comandos contenga ese texto, que en una máquina con más de una transferencia en marcha no es el que querías. Tampoco detiene el espejo: el bucle until es el dueño del sync, así que un hijo muerto vuelve a arrancar diez segundos después. Mira con pgrep -af y luego termina lo que esta guía realmente posee: tmux kill-session -t xfer acaba con el bucle, y un kill al PID que hay en ~/relayium-serve.pid detiene el proceso a la escucha que lanzaste. Si el archivo de PID lleva ahí desde una ejecución anterior, imprime su línea de comandos antes de señalarlo, porque un PID que el sistema ha reutilizado pertenece a algo completamente distinto.</p></dd><dt>Quieres dejar fuera un subdirectorio y no existe ninguna opción de exclusión.</dt><dd><pre tabindex="0"><code>relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031</code></pre><p>sync acepta -i y -p, --delete, --watch y --config-dir; nada que filtre una ruta en medio del árbol. Nombra en su lugar los subdirectorios que sí quieres: cada fuente llega bajo el --dir del receptor con su propio nombre, así que frente a serve --dir /root/workspace este comando reconstruye /root/workspace/src y /root/workspace/data y nunca recorre un venv regenerable.</p></dd><dt>Una fuente que esperabas duplicar llega vacía.</dt><dd><pre tabindex="0"><code>relayium sync ./links relayium://203.0.113.43:9031
 # warning: no regular files to send (symlinks and special files are skipped)</code></pre><p>sync solo transfiere archivos regulares, y ese aviso es exactamente el aspecto de un árbol hecho únicamente de enlaces simbólicos. Apunta sync a los directorios a los que apuntan los enlaces, y crea aparte en el receptor los enlaces que necesites.</p></dd></dl></div>
       <h2>Preguntas frecuentes</h2>
       <h3>¿Qué pasa si la transferencia se interrumpe a mitad de camino?</h3>

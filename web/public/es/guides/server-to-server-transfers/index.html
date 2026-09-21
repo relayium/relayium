@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/es/guides/server-to-server-transfers/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Transferencias de servidor a servidor con la CLI de Relayium (daemon directo)" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Transferencias de servidor a servidor con la CLI de Relayium (daemon directo)","description":"Mueve archivos directamente entre dos servidores que controlas con relayium serve y push relayium:// — sobre TLS con anclaje, sin retransmisor, sin SSH, sin código de emparejamiento. Aprueba un nuevo emisor una vez en su primer push, y luego automatízalo o ejecútalo bajo systemd.","inLanguage":"es","datePublished":"2026-07-08","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/es/guides/server-to-server-transfers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/es/"},{"@type":"ListItem","position":2,"name":"Guías","item":"https://relayium.com/es/guides/"},{"@type":"ListItem","position":3,"name":"Transferencias de servidor a servidor con la CLI de Relayium (daemon directo)"}]},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿En qué se diferencia daemon directo de push por SSH?","acceptedAnswer":{"@type":"Answer","text":"push por SSH tuneliza la transferencia a través de tu conexión SSH y necesita una cuenta SSH en el remoto. daemon directo no necesita SSH ni cuenta: los dos servidores se autentican mutuamente por huella de certificado sobre TLS con anclaje, lo cual es más ligero cuando ambas máquinas son tuyas."}},{"@type":"Question","name":"¿Tengo que copiar huellas a mano de un lado a otro?","acceptedAnswer":{"@type":"Answer","text":"No. En una terminal, serve te pide aprobar a cada nuevo emisor en su primer push —mostrando su dirección y su huella— y lo recuerda, así que los push posteriores son silenciosos. Solo recurres a relayium id o relayium authorize en configuraciones no interactivas como un servicio de systemd, donde no hay nadie para responder al aviso."}},{"@type":"Question","name":"¿Dónde están los archivos de identidad y confianza?","acceptedAnswer":{"@type":"Answer","text":"En ~/.config/relayium/ por defecto (se anula con --config-dir). id.key / id.crt son la identidad persistente de este host, known_hosts guarda las huellas de los procesos a la escucha a los que has hecho push, y authorized_fingerprints es la lista de permitidos de emisores del proceso a la escucha."}},{"@type":"Question","name":"¿Qué pasa si una huella cambia?","acceptedAnswer":{"@type":"Answer","text":"El push se rechaza y avisa. La clave del proceso a la escucha se fija en known_hosts en el primer uso, así que un cambio posterior —un host con clave regenerada o un ataque de intermediario— se rechaza en lugar de aceptarse en silencio. Elimina la línea de known_hosts solo si rotaste la clave a propósito."}},{"@type":"Question","name":"¿Hay algún respaldo por retransmisor?","acceptedAnswer":{"@type":"Answer","text":"No. daemon directo asume una dirección de proceso a la escucha alcanzable; si no se puede establecer la conexión, falla. Nada se enruta nunca a través de Relayium como proxy: ese es el sentido de este modo."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/es/guides/" aria-current="true">Guías</a><a href="/es/apps/">Apps</a><a href="/pricing">Precios</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/es/">Relayium</a> <span aria-hidden="true">›</span> <a href="/es/guides/">Guías</a> <span aria-hidden="true">›</span> <span aria-current="page">Transferencias de servidor a servidor con la CLI de Relayium (daemon directo)</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -104,20 +161,20 @@ ol.steps>li>pre{margin:8px 0 0}
       <p class="lead">Esta guía cubre iniciar el proceso a la escucha, hacerle push, aprobar un nuevo emisor en el primer contacto, automatizarlo y ejecutar el proceso a la escucha como servicio de systemd.</p>
       <h2>Antes de empezar</h2>
       <p>Todo lo de abajo es la CLI de relayium, así que instálala primero si aún no la tienes. En macOS o Linux, un solo comando deja un binario precompilado en tu PATH:</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>¿Prefieres elegir el archivo tú mismo, o estás en Windows? Coge un binario de la página de releases — relayium.com/cli lista todas las opciones de instalación (o go build -o relayium ./cmd/relayium si tienes Go).</li><li>relayium --version confirma que está instalada. Sáltate esto y los comandos de abajo solo imprimirán « command not found ».</li></ul>
       <h2>Iniciar el proceso a la escucha (en el receptor)</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Lo que necesitas</p><ul><li>Dos máquinas bajo tu control, con la dirección del receptor alcanzable desde el emisor. Vale un nombre de host o una IP pelada.</li><li>relayium en los dos extremos. El daemon directo solo habla el protocolo nativo, así que aquí no hay ninguna alternativa con tar que rescate una instalación ausente.</li><li>El puerto del proceso a la escucha abierto al emisor —9031/TCP mientras no lo cambies— tanto en el cortafuegos del host como en cualquier grupo de seguridad en la nube.</li><li>Un terminal en el receptor para el primer push, para poder responder a la petición de aprobación. Sin terminal, autoriza al emisor de antemano (más abajo).</li></ul></div>
       <p>En el servidor receptor, serve escucha los push y los escribe en un directorio. Se ejecuta de forma continua por defecto; añade --once para aceptar una sola transferencia y salir. No compartes nada de antemano: no hay huellas que copiar por adelantado:</p>
-      <ol class="steps" data-block="steps"><li><p>Crea el directorio donde deben aterrizar los envíos.</p><pre><code>mkdir -p ~/inbox</code></pre></li><li><p>Abre el puerto del proceso a la escucha solo al emisor. Sustituye 203.0.113.7 por la dirección del propio emisor — su IP pública, o la privada si los dos servidores comparten red — y acota el grupo de seguridad en la nube a esa misma fuente en vez de a todo internet.</p><pre><code>sudo ufw allow from 203.0.113.7 to any port 9031 proto tcp</code></pre></li><li><p>Arranca el proceso a la escucha en un terminal, para que haya alguien que responda a la petición de aprobación en el primer push. Con --once acepta una sola transferencia y sale; con --port lo mueves fuera de 9031.</p><pre><code>relayium serve --dir ~/inbox</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">Cómo se ve un proceso a la escucha en marcha</p><p>serve indica la dirección a la que se ha enlazado, el directorio en el que escribe y la huella propia de este host. Mientras no haya pares aprobados, avisa además de que preguntará por cada uno nuevo.</p><pre><code>relayium serve --dir ~/inbox
+      <ol class="steps" data-block="steps"><li><p>Crea el directorio donde deben aterrizar los envíos.</p><pre tabindex="0"><code>mkdir -p ~/inbox</code></pre></li><li><p>Abre el puerto del proceso a la escucha solo al emisor. Sustituye 203.0.113.7 por la dirección del propio emisor — su IP pública, o la privada si los dos servidores comparten red — y acota el grupo de seguridad en la nube a esa misma fuente en vez de a todo internet.</p><pre tabindex="0"><code>sudo ufw allow from 203.0.113.7 to any port 9031 proto tcp</code></pre></li><li><p>Arranca el proceso a la escucha en un terminal, para que haya alguien que responda a la petición de aprobación en el primer push. Con --once acepta una sola transferencia y sale; con --port lo mueves fuera de 9031.</p><pre tabindex="0"><code>relayium serve --dir ~/inbox</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">Cómo se ve un proceso a la escucha en marcha</p><p>serve indica la dirección a la que se ha enlazado, el directorio en el que escribe y la huella propia de este host. Mientras no haya pares aprobados, avisa además de que preguntará por cada uno nuevo.</p><pre tabindex="0"><code>relayium serve --dir ~/inbox
 no authorized peers yet — you&#39;ll be asked to approve each new peer on its first push.
 relayium serve: listening on [::]:9031, receiving into /home/you/inbox (fingerprint 5c1d9f04…)</code></pre></div>
       <ul><li>El proceso a la escucha procesa las conexiones de una en una y deposita los archivos bajo --dir.</li><li>El puerto por defecto es 9031; cámbialo con --port y ábrelo en tu cortafuegos.</li></ul>
       <h2>Hacerle push (en el emisor)</h2>
       <p>Desde el servidor emisor, haz push a la dirección relayium:// del receptor. La primera conexión fija la huella del receptor; cada conexión posterior la verifica, y una huella cambiada se rechaza en lugar de aceptarse en silencio, de modo que una clave sustituida o un ataque de intermediario se detecta, no se confía en él. En el primer push, el emisor espera un momento mientras el receptor lo aprueba (siguiente paso).</p>
-      <ol class="steps" data-block="steps"><li><p>Lanza el push desde el servidor emisor. En la primerísima conexión se detiene justo aquí mientras el receptor lo aprueba.</p><pre><code>relayium push ./build.tar.zst relayium://receiver.example.com</code></pre></li><li><p>Responde a la petición en el receptor: es la sección siguiente. Después el push termina solo, y los push posteriores ya no se detienen nunca aquí.</p></li><li><p>Añade un puerto cuando el proceso a la escucha no esté en 9031.</p><pre><code>relayium push ./build.tar.zst relayium://receiver.example.com:9040</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">Cómo se ve un push correcto</p><p>En el primer contacto el emisor aprende y fija la huella del proceso a la escucha, y luego transfiere. El receptor anota la huella de quien empuja e informa del número de archivos y de bytes.</p><pre><code># on the SENDER, first contact
+      <ol class="steps" data-block="steps"><li><p>Lanza el push desde el servidor emisor. En la primerísima conexión se detiene justo aquí mientras el receptor lo aprueba.</p><pre tabindex="0"><code>relayium push ./build.tar.zst relayium://receiver.example.com</code></pre></li><li><p>Responde a la petición en el receptor: es la sección siguiente. Después el push termina solo, y los push posteriores ya no se detienen nunca aquí.</p></li><li><p>Añade un puerto cuando el proceso a la escucha no esté en 9031.</p><pre tabindex="0"><code>relayium push ./build.tar.zst relayium://receiver.example.com:9040</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">Cómo se ve un push correcto</p><p>En el primer contacto el emisor aprende y fija la huella del proceso a la escucha, y luego transfiere. El receptor anota la huella de quien empuja e informa del número de archivos y de bytes.</p><pre tabindex="0"><code># on the SENDER, first contact
 learned receiver.example.com:9031 5c1d9f04… (added to known_hosts)
   build.tar.zst (48213004 bytes)
 
@@ -127,19 +184,19 @@ received 1 file(s), 48213004 bytes from 74318e3b…</code></pre></div>
       <ul><li>Sin retransmisor y sin respaldo: si no se puede alcanzar el proceso a la escucha, el push falla; los bytes del archivo nunca se enrutan a través de nadie más.</li><li>El mismo motor de transferencia que los otros modos: cada archivo se comprueba con un SHA-256 por archivo y se coloca en un área temporal antes de instalarlo. push no reanuda, ni aquí ni por SSH: rechaza un destino que ya existe. Una ejecución interrumpida se termina enviando las rutas que faltan, o con relayium sync, que continúa un archivo parcial y que este proceso a la escucha respeta salvo que se haya arrancado con --no-resume.</li></ul>
       <h2>Aprobar al emisor en el primer push (en el receptor)</h2>
       <p>La primera vez que una máquina nueva hace push a tu proceso a la escucha, serve (en una terminal) te muestra de dónde viene y su huella y te pide que la apruebes, como el aviso de primera conexión de SSH, pero en el lado receptor:</p>
-      <pre><code># en el RECEPTOR, cuando una máquina nueva hace push:
+      <pre tabindex="0"><code># en el RECEPTOR, cuando una máquina nueva hace push:
 Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
 Accept and remember this peer? [y/N] y</code></pre>
       <ul><li>Responde y y esa huella se recuerda en authorized_fingerprints; cada push posterior desde la misma máquina pasa entonces en silencio.</li><li>La huella es la identidad estable de una máquina (sobrevive a reinicios y cambios de IP), así que aprobar es un paso único por emisor.</li><li>El emisor, a su vez, aprende la clave del proceso a la escucha en la primera conexión (confianza en el primer uso) y la fija en known_hosts.</li></ul>
       <h2>Automatizarlo (o ejecutarlo sin terminal)</h2>
       <p>Como una huella aprobada se recuerda, los push posteriores no necesitan aviso, así que relayium push encaja directamente en un script de despliegue o CI para una entrega de servidor a servidor cifrada y con integridad comprobada. Para un trabajo programado que escribe en el mismo directorio, usa relayium sync en su lugar: push rechaza un destino que ya existe, así que un push repetido hacia una ruta fija tiene éxito una vez y se rechaza después. Cuando serve se ejecuta sin terminal (un servicio de systemd, una tubería) no puede preguntar, así que rechaza a los emisores desconocidos; autorízalos de antemano en su lugar. Obtén la huella con relayium id en el emisor, o cópiala de la línea « rejected unauthorized peer … » del registro de serve, y luego:</p>
-      <pre><code># en el RECEPTOR: autoriza a un emisor de antemano, sin aviso
+      <pre tabindex="0"><code># en el RECEPTOR: autoriza a un emisor de antemano, sin aviso
 relayium authorize --config-dir /etc/relayium 74318e3b...</code></pre>
       <ul><li>Los archivos de identidad y confianza viven en ~/.config/relayium/ (se anulan con --config-dir, p. ej. /etc/relayium para un servicio).</li><li>authorize es idempotente: ejecutarlo de nuevo para la misma huella no hace nada.</li></ul>
       <h2>Ejecutar el proceso a la escucha bajo systemd</h2>
       <p>Para una bandeja de entrada siempre activa, ejecuta serve como servicio de systemd. Apunta --config-dir a una ubicación fija como /etc/relayium para que la identidad sea estable entre reinicios, y deja que systemd la mantenga viva:</p>
-      <pre><code># /etc/systemd/system/relayium-serve.service
+      <pre tabindex="0"><code># /etc/systemd/system/relayium-serve.service
 [Unit]
 Description=Relayium daemon-direct listener
 After=network-online.target
@@ -154,15 +211,15 @@ WantedBy=multi-user.target</code></pre>
       <ul><li>systemctl enable --now relayium-serve para iniciarlo y levantarlo al arrancar.</li><li>Mantén /etc/relayium/id.key legible solo para el usuario del servicio: relayium se niega a cargar una clave con permisos laxos.</li></ul>
       <h2>Cuando un push no llega</h2>
       <p>La accesibilidad y la confianza son lo primero que hay que comprobar: ss -tinp en el emisor dice si el proceso a la escucha llegó siquiera a ser alcanzado, y relayium authorize en el receptor le da a un emisor rechazado la confianza que le falta. No son las únicas formas en que un push puede fallar: un receptor sin espacio en disco, un directorio de entrada en el que su usuario no puede escribir o un archivo transferido que no supera su comprobación de integridad se anuncian todos por su cuenta, así que lee el error que tienes delante en vez de dar por hecho que es uno de los cuatro de abajo.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Síntoma, comprobación, solución</p><dl><dt>El push se queda quieto y luego falla con un error de conexión.</dt><dd><pre><code># en el EMISOR, mientras el push está en marcha — ejecútalo dos veces, con unos segundos de diferencia
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Síntoma, comprobación, solución</p><dl><dt>El push se queda quieto y luego falla con un error de conexión.</dt><dd><pre tabindex="0"><code># en el EMISOR, mientras el push está en marcha — ejecútalo dos veces, con unos segundos de diferencia
 ss -tinp dst :9031
 # ESTAB    se alcanzó el proceso a la escucha; no dice nada del progreso
-# SYN-SENT nada respondió en ese puerto</code></pre><p>SYN-SENT significa que los paquetes nunca llegaron a un socket a la escucha. Comprueba en el receptor que serve está en marcha con ss -tlnp | grep 9031, y luego abre 9031/TCP al emisor en el cortafuegos del host y en el grupo de seguridad de la nube. ESTAB solo demuestra alcanzabilidad — un socket establecido puede quedarse inactivo o atascado —, así que para distinguir lo que avanza de lo que está parado ejecuta la comprobación dos veces con unos segundos de diferencia y compara el contador bytes_acked que -i imprime para ese socket. Aquí no hay ninguna vía de retransmisor, así que un proceso a la escucha inalcanzable es un fallo rotundo, no una lentitud.</p></dd><dt>El registro de serve dice «rejected unauthorized peer …» y el push falla.</dt><dd><pre><code># en el EMISOR
+# SYN-SENT nada respondió en ese puerto</code></pre><p>SYN-SENT significa que los paquetes nunca llegaron a un socket a la escucha. Comprueba en el receptor que serve está en marcha con ss -tlnp | grep 9031, y luego abre 9031/TCP al emisor en el cortafuegos del host y en el grupo de seguridad de la nube. ESTAB solo demuestra alcanzabilidad — un socket establecido puede quedarse inactivo o atascado —, así que para distinguir lo que avanza de lo que está parado ejecuta la comprobación dos veces con unos segundos de diferencia y compara el contador bytes_acked que -i imprime para ese socket. Aquí no hay ninguna vía de retransmisor, así que un proceso a la escucha inalcanzable es un fallo rotundo, no una lentitud.</p></dd><dt>El registro de serve dice «rejected unauthorized peer …» y el push falla.</dt><dd><pre tabindex="0"><code># en el EMISOR
 relayium id
 # 74318e3b…
 
 # en el RECEPTOR
-relayium authorize --config-dir /etc/relayium 74318e3b…</code></pre><p>serve no tenía ningún terminal al que preguntar —una unidad de systemd, una tubería—, así que una huella desconocida se rechaza en lugar de aceptarse. Autorízala de antemano: la huella de la línea de rechazo es exactamente la que imprime relayium id en el emisor, y authorize es idempotente.</p></dd><dt>«fingerprint mismatch for receiver.example.com:9031».</dt><dd><pre><code>grep receiver.example.com ~/.config/relayium/known_hosts</code></pre><p>El proceso a la escucha presentó una clave distinta de la fijada en el primer contacto. Si rotaste esa clave a propósito, borra la línea correspondiente de known_hosts y vuelve a hacer push. Si no fuiste tú, deja la línea en paz y averigua por qué cambió la clave antes de enviar nada.</p></dd><dt>La unidad de systemd muere al arrancar con un error de permisos inseguros.</dt><dd><pre><code>systemctl status relayium-serve
+relayium authorize --config-dir /etc/relayium 74318e3b…</code></pre><p>serve no tenía ningún terminal al que preguntar —una unidad de systemd, una tubería—, así que una huella desconocida se rechaza en lugar de aceptarse. Autorízala de antemano: la huella de la línea de rechazo es exactamente la que imprime relayium id en el emisor, y authorize es idempotente.</p></dd><dt>«fingerprint mismatch for receiver.example.com:9031».</dt><dd><pre tabindex="0"><code>grep receiver.example.com ~/.config/relayium/known_hosts</code></pre><p>El proceso a la escucha presentó una clave distinta de la fijada en el primer contacto. Si rotaste esa clave a propósito, borra la línea correspondiente de known_hosts y vuelve a hacer push. Si no fuiste tú, deja la línea en paz y averigua por qué cambió la clave antes de enviar nada.</p></dd><dt>La unidad de systemd muere al arrancar con un error de permisos inseguros.</dt><dd><pre tabindex="0"><code>systemctl status relayium-serve
 # secure: /etc/relayium/id.key has insecure permissions 0644; run: chmod 600 /etc/relayium/id.key
 ls -l /etc/relayium/id.key</code></pre><p>relayium se niega a cargar una clave privada que pueda leer alguien más que su propietario, la misma regla que aplica ssh. Ejecuta chmod 600 sobre la ruta que nombra el error, asegúrate de que pertenece al usuario del servicio y reinicia la unidad.</p></dd></dl></div>
       <h2>Preguntas frecuentes</h2>

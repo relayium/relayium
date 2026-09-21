@@ -11,8 +11,14 @@
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/transfer-files-by-scanning-a-qr-code/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/transfer-files-by-scanning-a-qr-code/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="扫描二维码传输文件" />
@@ -30,37 +36,88 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"扫描二维码传输文件","description":"如何用 Relayium 扫二维码传文件：先创建配对码，再扫描出现的二维码，传输全程端到端加密——扫码那一方不用装 App，也不用账号。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/transfer-files-by-scanning-a-qr-code/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"扫描二维码传输文件"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"扫二维码的一方需要 Relayium 账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。只有创建配对码和它二维码的那一侧需要登录——异步下载链接也是同样的要求。扫码的一方只是加入一个已经建好的房间：不用账号，不用注册，也没有任何东西要安装。"}},{"@type":"Question","name":"二维码里到底存的是什么？","acceptedAnswer":{"@type":"Answer","text":"和「复制链接」按钮复制出来的那条加入链接一模一样——一个内嵌了配对码的 relayium.com 网址。扫一下，就是在浏览器里打开那条链接，然后自动加入房间。到这里就结束了：它不会替你挑文件，也不会发送任何东西；之后发过去的内容，仍然要在接收设备上确认接收。"}},{"@type":"Question","name":"扫二维码和手动输码一样安全吗？","acceptedAnswer":{"@type":"Answer","text":"一样，两种方式建立的是完全相同的连接。都会协商 X25519 密钥交换、用 AES-256-GCM 加密，并在打开高级验证时显示一致的 SAS 校验码，供你确认后再信任传输。二维码只改变了你进入房间的方式，不改变传输的安全机制。"}},{"@type":"Question","name":"如果二维码扫不出来怎么办？","acceptedAnswer":{"@type":"Answer","text":"不会有任何损失——同一张配对卡片上也有原始配对码和可复制的链接，支持的设备上还有系统分享按钮。用哪一个都能进到二维码指向的同一个房间。"}},{"@type":"Question","name":"跨网络也能用吗，比如手机用移动数据、电脑连家里 Wi-Fi？","acceptedAnswer":{"@type":"Answer","text":"可以。这本来就是跨网络配对流程，所以无论两台设备是否同一网络都能用。配对码总是通过加密的 TURN 中继把两端连起来——这条路不依赖在两个网络之间的 NAT 和防火墙里找出一条通路，而它们可能挡住直连——而中继只经手密文。真正直连的是同一网络下无需配对码、自动发现彼此的那种情况。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -78,7 +135,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">扫描二维码传输文件</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -107,11 +164,11 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>扫一下——不用装 App，不用账号</h2>
       <p>在另一台设备上打开相机 App（或任何二维码扫描工具），对准屏幕。点一下弹出的通知，会在浏览器里打开那条链接，并自动加入房间——扫码那一方不用打字，不用注册 relayium.com 账号，也没有任何东西要安装。扫码只做「加入」这一件事，它不会搬动任何文件：送过来的一批文件仍然会停在接收端的屏幕上，等人按下「接收」。</p>
       <p>如果手边没有摄像头，同一条链接粘贴到任意浏览器里也能用，那六位数字的配对码打进 relayium.com 的「输入配对码」框里也一样能用。二维码只是叠加在两者之上的一层便利，不是另一套机制——哪个方便用哪个。</p>
-      <ol class="steps" data-block="steps"><li><p>在发送方设备上打开实时传输页面并登录。</p><pre><code>https://relayium.com/cross-network</code></pre></li><li><p>生成配对码。卡片上会显示这六位数字、下方的二维码方块，以及一个倒计时。</p><pre><code>你的配对码 —— 念给对方
+      <ol class="steps" data-block="steps"><li><p>在发送方设备上打开实时传输页面并登录。</p><pre tabindex="0"><code>https://relayium.com/cross-network</code></pre></li><li><p>生成配对码。卡片上会显示这六位数字、下方的二维码方块，以及一个倒计时。</p><pre tabindex="0"><code>你的配对码 —— 念给对方
 483920
 或让对方扫码 / 打开链接加入
-配对码 4:52 后失效</code></pre></li><li><p>在另一台设备上打开相机 App 或任意二维码扫描工具，对准那个方块，点一下它给出的链接通知。</p></li><li><p>链接会在浏览器里打开并自动加入房间——不用打字，这一侧也不需要账号。它和「复制链接」按钮放进剪贴板的是同一个地址。</p><pre><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>回到发送方设备：如果创建配对码之前还没排上文件，现在选好要发送的文件。在接收方按下「接收」之前什么都不会开始，所以请在那一侧回应这个提示，然后让两个标签页都开着，直到文件计数走完。</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">扫码成功时是什么样</p><p>发送方设备上，二维码和那行「等待对方加入…」会让位给已连接的卡片，卡片上的路径标签显示「中继」——这正是配对码会话的预期值，它刻意走加密的 TURN 中继。</p><p>随后两块屏幕上的文件计数都会走到最后一个文件。传输本身和手工输码没有任何差别：扫码只是决定了第二台设备用什么方式进的房间。</p><pre><code>中继
+配对码 4:52 后失效</code></pre></li><li><p>在另一台设备上打开相机 App 或任意二维码扫描工具，对准那个方块，点一下它给出的链接通知。</p></li><li><p>链接会在浏览器里打开并自动加入房间——不用打字，这一侧也不需要账号。它和「复制链接」按钮放进剪贴板的是同一个地址。</p><pre tabindex="0"><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>回到发送方设备：如果创建配对码之前还没排上文件，现在选好要发送的文件。在接收方按下「接收」之前什么都不会开始，所以请在那一侧回应这个提示，然后让两个标签页都开着，直到文件计数走完。</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">扫码成功时是什么样</p><p>发送方设备上，二维码和那行「等待对方加入…」会让位给已连接的卡片，卡片上的路径标签显示「中继」——这正是配对码会话的预期值，它刻意走加密的 TURN 中继。</p><p>随后两块屏幕上的文件计数都会走到最后一个文件。传输本身和手工输码没有任何差别：扫码只是决定了第二台设备用什么方式进的房间。</p><pre tabindex="0"><code>中继
 文件 1/1</code></pre></div>
       <h2>扫码之后发生了什么</h2>
       <p>扫码只是让两台设备进到同一个房间；传输本身和其他任何配对码会话完全一样。创建配对码的一方拥有这个房间，扫码的一方加入进来——但这说的是「谁加入谁」，不是方向：两台都进来之后，哪一侧都可以当发送方，而每一批送过来的文件仍然要在接收端按「接收」才会开始。配对码把你们放进一个单独的两台设备房间，而不是同网络的设备列表；但房间里的界面就是两个够新的浏览器在哪里都会打开的那个共享工作区：对端卡片上一个动作，然后一条加密连接同时承载文件和消息。配对码真正改变的是路径——它按设计只走中继，而这条中继链路有一个有限的存活期，工作区会在到点之前提醒你。两边浏览器用 X25519 密钥交换协商出共享密钥，用 AES-256-GCM 对每个数据块加密，再把这些数据块通过架在 TURN 中继上的 WebRTC 通道发出去。</p>
@@ -119,7 +176,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>扫码失败怎么办</h2>
       <p>摄像头没对好焦、光线不好，或者某台设备手边没有摄像头——这些都不该挡住传输。发送端的配对卡片同时也提供原始配对码和链接的复制按钮（支持的设备上还有系统分享按钮），以及配对码的失效倒计时。</p>
       <p>重新输一遍码、粘贴链接，或者用系统分享把它发到别的地方（聊天软件、隔空传送，怎么快怎么来）——每条路径都会进到同一个房间，得到同样加密的连接。二维码只是众多入口之一，从来不是必需品。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>扫码打开了页面，但提示配对码无效或已过期。</dt><dd><pre><code>https://relayium.com/cross-network   # 发送方卡片上有实时倒计时</code></pre><p>5 分钟已经走完了，而一个失效配对码的二维码扫多少次都还是失效的链接。请在发送方设备上重新生成一个配对码——卡片会随之画出新的二维码——然后立刻扫这一个。</p></dd><dt>相机认出了那个方块，却始终不给出任何可以打开的东西。</dt><dd><pre><code>https://relayium.com/cross-network   # 「输入配对码」框接受这六位数字</code></pre><p>有些扫描工具只把文本复制下来，而不会交给浏览器。把它复制到的内容粘贴进地址栏；或者干脆不用二维码：在接收方设备上打开页面，把六位数字打进「输入配对码」框，然后按「连接」。</p></dd><dt>两个人都在找二维码想扫，可是两块屏幕上都没有。</dt><dd><pre><code>https://relayium.com/cross-network   # 只有生成配对码的那张卡片才会画二维码</code></pre><p>二维码属于创建配对码的那台设备，所以必须有一方先创建、另一方来扫。先定好哪一侧创建——两台都进房间之后，谁都可以发送——在那台设备上按「生成配对码」，再把另一台设备的摄像头对准那块屏幕。</p></dd><dt>链接经过聊天软件转发后，打开的页面里没有配对码。</dt><dd><pre><code>https://relayium.com/cross-network#c=483920   # #c= 之后的部分就是配对码</code></pre><p>配对码是放在 URL 片段里传的，而链接改写器或预览服务可能会把 # 之后的部分整个丢掉。请改成把六位数字念给对方，或者自己把链接粘进地址栏，这样中间就没有人再改写它。</p></dd><dt>扫码已经进了房间，随后卡片提示中继只发给已验证的账号。</dt><dd><pre><code>https://relayium.com/cross-network   # 配对卡片会写明被拒的原因</code></pre><p>发送账号的邮箱地址还没有验证，而这项检查发生在会话申请中继时，而不是生成配对码时。请在账户面板里完成邮箱验证，然后重新生成配对码并扫它的二维码——同网络传输不受此影响。</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>扫码打开了页面，但提示配对码无效或已过期。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # 发送方卡片上有实时倒计时</code></pre><p>5 分钟已经走完了，而一个失效配对码的二维码扫多少次都还是失效的链接。请在发送方设备上重新生成一个配对码——卡片会随之画出新的二维码——然后立刻扫这一个。</p></dd><dt>相机认出了那个方块，却始终不给出任何可以打开的东西。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # 「输入配对码」框接受这六位数字</code></pre><p>有些扫描工具只把文本复制下来，而不会交给浏览器。把它复制到的内容粘贴进地址栏；或者干脆不用二维码：在接收方设备上打开页面，把六位数字打进「输入配对码」框，然后按「连接」。</p></dd><dt>两个人都在找二维码想扫，可是两块屏幕上都没有。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # 只有生成配对码的那张卡片才会画二维码</code></pre><p>二维码属于创建配对码的那台设备，所以必须有一方先创建、另一方来扫。先定好哪一侧创建——两台都进房间之后，谁都可以发送——在那台设备上按「生成配对码」，再把另一台设备的摄像头对准那块屏幕。</p></dd><dt>链接经过聊天软件转发后，打开的页面里没有配对码。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network#c=483920   # #c= 之后的部分就是配对码</code></pre><p>配对码是放在 URL 片段里传的，而链接改写器或预览服务可能会把 # 之后的部分整个丢掉。请改成把六位数字念给对方，或者自己把链接粘进地址栏，这样中间就没有人再改写它。</p></dd><dt>扫码已经进了房间，随后卡片提示中继只发给已验证的账号。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # 配对卡片会写明被拒的原因</code></pre><p>发送账号的邮箱地址还没有验证，而这项检查发生在会话申请中继时，而不是生成配对码时。请在账户面板里完成邮箱验证，然后重新生成配对码并扫它的二维码——同网络传输不受此影响。</p></dd></dl></div>
       <h2>常见问题</h2>
       <h3>扫二维码的一方需要 Relayium 账号吗？</h3>
       <p>不需要。只有创建配对码和它二维码的那一侧需要登录——异步下载链接也是同样的要求。扫码的一方只是加入一个已经建好的房间：不用账号，不用注册，也没有任何东西要安装。</p>

@@ -46,6 +46,21 @@ export const TARGETS = [
   { id: "static/guides-index/en", url: "/guides/", ready: "footer", viewport: DESKTOP, scheme: "light" },
   { id: "static/legal/en", url: "/privacy/", ready: "footer", viewport: DESKTOP, scheme: "light" },
   { id: "static/notfound/en", url: "/404.html", ready: "h1", viewport: DESKTOP, scheme: "light" },
+  // 静态树自 2026-09-21 起有了自己的深色 token（scripts/pages/page-chrome.mjs）。
+  // 上面七格全是 light：深色那一套的对比度是另一回事，没有这两格就等于没扫过。
+  // 选这两个模板是因为它们之间覆盖了全部图元——卡片网格与页头页脚在 guides hub，
+  // 正文、教程块、代码块、面包屑与 CTA 在 article，而 article 走 390px，顺带把窄屏
+  // 的单列布局也扫了。
+  { id: "static/guides-index/dark", url: "/guides/", ready: "footer", viewport: DESKTOP, scheme: "dark",
+    note: "静态树的深色 token：卡片网格、页头导航、页脚" },
+  { id: "static/article/dark", url: "/how-to/send-a-folder/", ready: "footer", viewport: MOBILE, scheme: "dark",
+    note: "同一套深色 token 下的正文、.cbox、pre、.crumbs 与 .cta，外加 390px 单列" },
+  // 带对比表格的文章，390px。`.tw` 是 overflow-x 的可滚动区：2026-09-21 实测它在
+  // 390px 下**没有**溢出（scrollWidth === clientWidth），所以今天这一格是绿的。
+  // 留着是因为"没溢出"是当前表格宽度的性质，不是模板的性质——哪天有一列长到真的
+  // 横滚，scrollable-region-focusable 就会在这里报出来，而 1440px 的两格永远看不见。
+  { id: "static/article-table/narrow", url: "/compare/dropbox/", ready: "footer", viewport: MOBILE, scheme: "light",
+    note: "article 模板的对比表格 .tw 在窄屏是否开始横向滚动" },
 
   // ── SPA：必须等真组件挂上来 ────────────────────────────────────────────
   // 首页折叠线以下的内容是一个动态 import。等首屏 .lan-workspace 只在本地快磁盘上

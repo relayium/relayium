@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/de/how-to/send-files-pc-to-phone-wirelessly/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Dateien vom PC drahtlos aufs Handy senden — ohne Kabel, ohne App" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Dateien vom PC drahtlos aufs Handy senden — ohne Kabel, ohne App","description":"Eine Schritt-für-Schritt-Anleitung, um Dateien per WLAN zwischen Computer und Handy zu bewegen — per Drag-and-drop, ohne USB-Kabel, ohne Cloud-Konto und durchgehend Ende-zu-Ende-verschlüsselt.","inLanguage":"de","datePublished":"2026-07-03","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/de/how-to/send-files-pc-to-phone-wirelessly/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/de/"},{"@type":"ListItem","position":2,"name":"Anleitungen","item":"https://relayium.com/de/guides/"},{"@type":"ListItem","position":3,"name":"Dateien vom PC drahtlos aufs Handy senden — ohne Kabel, ohne App"}]},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Funktioniert das auch mit Mac und Android, nicht nur Windows und iPhone?","acceptedAnswer":{"@type":"Answer","text":"Ja. Relayium läuft im Browser unter Windows, macOS, Linux, Android und iOS, jede Kombination funktioniert also — Windows zu Android, Mac zu iPhone, Linux zu einem Handy und umgekehrt. Auf keinem Gerät muss etwas installiert werden."}},{"@type":"Question","name":"Wie schnell ist die Übertragung?","acceptedAnswer":{"@type":"Answer","text":"Im selben WLAN verbinden sich die beiden Geräte direkt, die Geschwindigkeit hängt also von deinem lokalen Netz ab und nicht von einem Server — meist so schnell, wie dein WLAN es erlaubt. Netzwerkübergreifend läuft die Übertragung von vornherein über ein verschlüsseltes TURN-Relay, hängt also von beiden Internetverbindungen plus diesem zusätzlichen Sprung ab; dafür hängt die Verbindung nicht davon ab, einen direkten Pfad durch die NATs und Firewalls dazwischen zu finden — die einen solchen Pfad verhindern können."}},{"@type":"Question","name":"Ist es sicher, Dateien so zu senden?","acceptedAnswer":{"@type":"Answer","text":"Ja. Zusätzlich zur Transportverschlüsselung des Browsers legt Relayium eine eigene Schicht darüber: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, und dieser Schlüssel erreicht nie einen Server. Stimmen die sechsstelligen Codes (SAS) beider Geräte überein, bestätigt das, dass die Schlüssel nicht ausgetauscht wurden: Ein Server oder Relay hat sich weder als einer der Endpunkte ausgegeben noch die Ende-zu-Ende-Verschlüsselung der Anwendungsschicht beendet. Netzwerkübergreifend bleibt das TURN-Relay im Übertragungspfad, leitet aber nur Chiffretext weiter, den es nicht entschlüsseln kann. Jede Datei wird außerdem per SHA-256-Hash Ende-zu-Ende geprüft."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/de/guides/" aria-current="true">Anleitungen</a><a href="/de/apps/">Apps</a><a href="/pricing">Preise</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/de/">Relayium</a> <span aria-hidden="true">›</span> <a href="/de/guides/">Anleitungen</a> <span aria-hidden="true">›</span> <span aria-current="page">Dateien vom PC drahtlos aufs Handy senden — ohne Kabel, ohne App</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -105,13 +162,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>Im selben WLAN vom PC aufs Handy senden</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Bevor du anfängst</p><ul><li>Computer und Handy im selben WLAN, und der Router trennt seine Clients nicht voneinander. Wie die Einstellung heißt, steht im Hinweis unter der Geräteliste: „AP-Isolierung / Client-Isolierung“.</li><li>Auf beiden ein Browser, mit der Seite über https://relayium.com/ geöffnet. Verschlüsselte Übertragung braucht HTTPS, und über einfaches http:// sagt die Seite das, statt Geräte aufzulisten.</li><li>Der Tab auf dem Handy bleibt während der ganzen Übertragung vorn. Relayium fordert eine Bildschirm-Wake-Lock an, wo der Browser eine anbietet — das deckt den abschaltenden Bildschirm ab, nicht den Wechsel in eine andere App, und ein Handy-Browser kann einen Tab im Hintergrund ausbremsen oder einfrieren.</li><li>Für eine Übertragung im selben Netz braucht keines der Geräte ein Konto. Anmelden muss sich nur die sendende Seite, und nur wenn beide in verschiedenen Netzen sind und ein Pairing-Code erzeugt werden muss.</li></ul></div>
       <p>Das ist der schnellste Weg: Beide Geräte sind im selben Netz, verbinden sich also direkt, und die Übertragung ist nur durch dein WLAN begrenzt. Du brauchst nichts außer einem Browser auf jedem Gerät.</p>
-      <ol class="steps" data-block="steps"><li><p>Öffne am Computer die Übertragungsseite in einem beliebigen modernen Browser (Chrome, Edge, Firefox oder Safari).</p><pre><code>https://relayium.com/</code></pre></li><li><p>Öffne dieselbe Seite auf dem Handy und vergleiche dann die öffentliche IP in der Statuszeile auf beiden Bildschirmen. Eine übereinstimmende Adresse steckt die beiden Geräte in einen Raum — ein Handy, das still auf Mobilfunk geblieben ist, zeigt eine andere.</p><pre><code>Verbunden · dieses Gerät Pixel · öffentliche IP 203.0.113.9</code></pre></li><li><p>Suche am Computer das Handy unter „Geräte in der Nähe“, klicke seine Karte an und drücke „Arbeitsbereich öffnen“. In einem aktuellen Browser ist das die einzige Aktion, die die Karte anbietet, denn Dateien, Ordner und Nachrichten laufen danach alle über die eine verschlüsselte Verbindung, die sie öffnet. Dateien direkt auf diese Karte zu ziehen sendet sie auch ohne diesen Schritt.</p></li><li><p>Der Arbeitsbereich tritt an die Stelle der Karte. Gesendet wird mit den Bedienelementen unter seiner Kopfzeile: „Dateien senden“ für einen Stapel von bis zu 1.000 Dateien, „Ordner senden“ für einen ganzen Baum, wo der Browser die Ordnerauswahl anbietet, oder tippe ins Nachrichtenfeld — „Enter für neue Zeile · ⌘/Ctrl+Enter zum Senden“ — und drücke „Senden“.</p></li><li><p>Lies auf dem Handy die Zeile unter der Anfrage, bevor du annimmst — sie sagt, ob der Browser nach dem Speicherort fragt oder direkt in seinen Download-Ordner schreibt —, drücke dann „Annehmen“ und lass diesen Tab vorn, bis der Dateizähler die letzte Datei des Stapels erreicht. Wer vor dem ersten Byte einen Verifizierungscode (SAS) vergleichen will, schaltet vor dem Start auf beiden Geräten „Erweiterte Verifizierung“ ein — standardmäßig aus, und hinzu kommt ein Vergleich samt Zustimmungsschritt, nicht die Verschlüsselung.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">So sieht eine fertige Übertragung aus</p><p>Die Karte des Handys ist dann verschwunden — der Arbeitsbereich hat ihren Platz übernommen —, also liest du den Zustand an der Kopfzeile des Arbeitsbereichs ab: das verbundene Gerät, ein Verbindungszustand „Verbunden“ und ein einziges Pfad-Abzeichen mit „LAN direkt“. Der Dateizähler endet auf beiden Bildschirmen bei der letzten Datei des Stapels.</p><p>Danach prüfst du die Datei, nicht die Seite. Wo sie landet, entscheidet der Browser des Handys: Chrome und Firefox unter Android legen sie in ihre eigene Download-Liste — chrome://downloads beziehungsweise about:downloads —, Safari unter iOS in den Download-Ordner, den du in der Dateien-App öffnen kannst.</p><pre><code>Verbunden mit Pixel · Verbunden · LAN direkt
+      <ol class="steps" data-block="steps"><li><p>Öffne am Computer die Übertragungsseite in einem beliebigen modernen Browser (Chrome, Edge, Firefox oder Safari).</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>Öffne dieselbe Seite auf dem Handy und vergleiche dann die öffentliche IP in der Statuszeile auf beiden Bildschirmen. Eine übereinstimmende Adresse steckt die beiden Geräte in einen Raum — ein Handy, das still auf Mobilfunk geblieben ist, zeigt eine andere.</p><pre tabindex="0"><code>Verbunden · dieses Gerät Pixel · öffentliche IP 203.0.113.9</code></pre></li><li><p>Suche am Computer das Handy unter „Geräte in der Nähe“, klicke seine Karte an und drücke „Arbeitsbereich öffnen“. In einem aktuellen Browser ist das die einzige Aktion, die die Karte anbietet, denn Dateien, Ordner und Nachrichten laufen danach alle über die eine verschlüsselte Verbindung, die sie öffnet. Dateien direkt auf diese Karte zu ziehen sendet sie auch ohne diesen Schritt.</p></li><li><p>Der Arbeitsbereich tritt an die Stelle der Karte. Gesendet wird mit den Bedienelementen unter seiner Kopfzeile: „Dateien senden“ für einen Stapel von bis zu 1.000 Dateien, „Ordner senden“ für einen ganzen Baum, wo der Browser die Ordnerauswahl anbietet, oder tippe ins Nachrichtenfeld — „Enter für neue Zeile · ⌘/Ctrl+Enter zum Senden“ — und drücke „Senden“.</p></li><li><p>Lies auf dem Handy die Zeile unter der Anfrage, bevor du annimmst — sie sagt, ob der Browser nach dem Speicherort fragt oder direkt in seinen Download-Ordner schreibt —, drücke dann „Annehmen“ und lass diesen Tab vorn, bis der Dateizähler die letzte Datei des Stapels erreicht. Wer vor dem ersten Byte einen Verifizierungscode (SAS) vergleichen will, schaltet vor dem Start auf beiden Geräten „Erweiterte Verifizierung“ ein — standardmäßig aus, und hinzu kommt ein Vergleich samt Zustimmungsschritt, nicht die Verschlüsselung.</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">So sieht eine fertige Übertragung aus</p><p>Die Karte des Handys ist dann verschwunden — der Arbeitsbereich hat ihren Platz übernommen —, also liest du den Zustand an der Kopfzeile des Arbeitsbereichs ab: das verbundene Gerät, ein Verbindungszustand „Verbunden“ und ein einziges Pfad-Abzeichen mit „LAN direkt“. Der Dateizähler endet auf beiden Bildschirmen bei der letzten Datei des Stapels.</p><p>Danach prüfst du die Datei, nicht die Seite. Wo sie landet, entscheidet der Browser des Handys: Chrome und Firefox unter Android legen sie in ihre eigene Download-Liste — chrome://downloads beziehungsweise about:downloads —, Safari unter iOS in den Download-Ordner, den du in der Dateien-App öffnen kannst.</p><pre tabindex="0"><code>Verbunden mit Pixel · Verbunden · LAN direkt
 Datei 1/1</code></pre></div>
       <ul><li>Ein Raum im selben Netz fasst jedes Gerät, das die Seite aus diesem Netz geöffnet hat — ein Tablet oder ein zweiter Laptop neben dem Handy ist also normal.</li><li>Die Grenze von 1.000 Dateien gilt pro Stapel, nicht pro Sitzung: ein sehr großer Baum geht in mehreren Ablagen hinüber, ohne die Verbindung neu aufzubauen.</li></ul>
       <h2>Wenn das Handy nicht auftaucht oder die Übertragung stehen bleibt</h2>
       <p>Meist ist es das Handy, das sich erklärt: Es ist in einem anderen Netz als gedacht, sein Tab ist in den Hintergrund gerutscht, oder sein Browser kann nicht halten, was von ihm verlangt wird. Das sind die üblichen ersten Prüfungen und nicht die ganze Liste, und für jede gibt es etwas auf dem Bildschirm, das sie entscheidet, statt etwas zu raten.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, Prüfung, Lösung</p><dl><dt>Das Handy erscheint am Computer nie unter „Geräte in der Nähe“.</dt><dd><pre><code>https://relayium.com/   # die öffentliche IP in der Statuszeile auf beiden Bildschirmen vergleichen</code></pre><p>Zwei verschiedene öffentliche IP-Adressen bedeuten zwei Räume. Ein Handy, das still auf Mobilfunk geblieben ist, ist ein häufiger Grund; ein VPN oder iCloud Private Relay, das es über eine andere Adresse hinausschickt, ein weiterer — und sie sind nicht die einzigen. Wenn du sie ändern willst: ins WLAN wechseln, das VPN trennen oder Private Relay für dieses eine Netz ausschalten, dann https://relayium.com/ auf dem Handy neu laden. Willst du sie lieber anlassen, erreicht ein Pairing-Code auf https://relayium.com/cross-network das Handy, ohne eine der beiden Einstellungen anzutasten, und ist genauso Ende-zu-Ende verschlüsselt.</p></dd><dt>Beide Geräte zeigen dieselbe öffentliche IP, und die Karten erscheinen trotzdem nicht.</dt><dd><pre><code>https://relayium.com/   # der Hinweis unter der Geräteliste nennt die Router-Einstellung</code></pre><p>Der Router trennt seine eigenen Clients, was Gast- und Hotel-WLANs oft von Haus aus tun. Schalte „AP-Isolierung / Client-Isolierung“ aus, oder nimm einen Pairing-Code auf https://relayium.com/cross-network, wenn der Router nicht dir gehört.</p></dd><dt>Die Übertragung startet und bleibt dann stehen oder scheitert, nachdem du auf dem Handy die App gewechselt hast.</dt><dd><pre><code>https://relayium.com/   # auf dem Handy muss der Relayium-Tab der vorderste sein</code></pre><p>Ein Handy-Browser kann einen Tab im Hintergrund ausbremsen oder einfrieren, und solange er das tut, bewegt sich kein Byte. Relayiums Stillstandswächter gewährt nach der Rückkehr in den Vordergrund ein frisches Zeitfenster statt sofort abzubrechen, aber die Lösung ist, den Tab vorn zu lassen — die Wake-Lock, die Relayium anfordert, deckt nur den abschaltenden Bildschirm ab und verschafft keine Ausführung im Hintergrund, und ältere Safari- und Android-Versionen bieten überhaupt keine an.</p></dd><dt>Vor dem Annehmen warnt das Handy, es müsse den ganzen Stapel im Speicher halten.</dt><dd><pre><code>chrome://downloads   # in Chrome; Edge hat edge://downloads und Firefox about:downloads</code></pre><p>Handy-Browser haben keine File System Access API, der Stapel wird dort also im Speicher zusammengesetzt, und ab etwa 256 MiB warnt Relayium. Diese Zahl ist eine vorsichtige Warnschwelle und keine harte Grenze: schicke weniger Dateien auf einmal, oder schicke die große Datei in die andere Richtung, in ein Chrome oder Edge am Computer, das sie direkt auf die Platte streamt. Was tatsächlich ankam, prüfst du in der Download-Liste des empfangenden Browsers — chrome://downloads in Chrome, edge://downloads in Edge, about:downloads in Firefox.</p></dd><dt>Über Netzwerkgrenzen hinweg wird der Pairing-Code abgelehnt, den das Handy eintippt.</dt><dd><pre><code>https://relayium.com/cross-network   # die Pairing-Karte zeigt den Countdown und eine Relay-Absage</code></pre><p>Ein Pairing-Code lebt fünf Minuten, und ein Konto braucht nur das Gerät, das ihn erzeugt hat. Erzeuge einen frischen und tippe ihn gleich ein. Steht auf der Karte, dass ein Relay nur an verifizierte Konten geht, dann bestätige zuerst im Kontobereich die E-Mail-Adresse der sendenden Seite — der Ablauf im selben Netz weiter oben ist davon unberührt.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, Prüfung, Lösung</p><dl><dt>Das Handy erscheint am Computer nie unter „Geräte in der Nähe“.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # die öffentliche IP in der Statuszeile auf beiden Bildschirmen vergleichen</code></pre><p>Zwei verschiedene öffentliche IP-Adressen bedeuten zwei Räume. Ein Handy, das still auf Mobilfunk geblieben ist, ist ein häufiger Grund; ein VPN oder iCloud Private Relay, das es über eine andere Adresse hinausschickt, ein weiterer — und sie sind nicht die einzigen. Wenn du sie ändern willst: ins WLAN wechseln, das VPN trennen oder Private Relay für dieses eine Netz ausschalten, dann https://relayium.com/ auf dem Handy neu laden. Willst du sie lieber anlassen, erreicht ein Pairing-Code auf https://relayium.com/cross-network das Handy, ohne eine der beiden Einstellungen anzutasten, und ist genauso Ende-zu-Ende verschlüsselt.</p></dd><dt>Beide Geräte zeigen dieselbe öffentliche IP, und die Karten erscheinen trotzdem nicht.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # der Hinweis unter der Geräteliste nennt die Router-Einstellung</code></pre><p>Der Router trennt seine eigenen Clients, was Gast- und Hotel-WLANs oft von Haus aus tun. Schalte „AP-Isolierung / Client-Isolierung“ aus, oder nimm einen Pairing-Code auf https://relayium.com/cross-network, wenn der Router nicht dir gehört.</p></dd><dt>Die Übertragung startet und bleibt dann stehen oder scheitert, nachdem du auf dem Handy die App gewechselt hast.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # auf dem Handy muss der Relayium-Tab der vorderste sein</code></pre><p>Ein Handy-Browser kann einen Tab im Hintergrund ausbremsen oder einfrieren, und solange er das tut, bewegt sich kein Byte. Relayiums Stillstandswächter gewährt nach der Rückkehr in den Vordergrund ein frisches Zeitfenster statt sofort abzubrechen, aber die Lösung ist, den Tab vorn zu lassen — die Wake-Lock, die Relayium anfordert, deckt nur den abschaltenden Bildschirm ab und verschafft keine Ausführung im Hintergrund, und ältere Safari- und Android-Versionen bieten überhaupt keine an.</p></dd><dt>Vor dem Annehmen warnt das Handy, es müsse den ganzen Stapel im Speicher halten.</dt><dd><pre tabindex="0"><code>chrome://downloads   # in Chrome; Edge hat edge://downloads und Firefox about:downloads</code></pre><p>Handy-Browser haben keine File System Access API, der Stapel wird dort also im Speicher zusammengesetzt, und ab etwa 256 MiB warnt Relayium. Diese Zahl ist eine vorsichtige Warnschwelle und keine harte Grenze: schicke weniger Dateien auf einmal, oder schicke die große Datei in die andere Richtung, in ein Chrome oder Edge am Computer, das sie direkt auf die Platte streamt. Was tatsächlich ankam, prüfst du in der Download-Liste des empfangenden Browsers — chrome://downloads in Chrome, edge://downloads in Edge, about:downloads in Firefox.</p></dd><dt>Über Netzwerkgrenzen hinweg wird der Pairing-Code abgelehnt, den das Handy eintippt.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # die Pairing-Karte zeigt den Countdown und eine Relay-Absage</code></pre><p>Ein Pairing-Code lebt fünf Minuten, und ein Konto braucht nur das Gerät, das ihn erzeugt hat. Erzeuge einen frischen und tippe ihn gleich ein. Steht auf der Karte, dass ein Relay nur an verifizierte Konten geht, dann bestätige zuerst im Kontobereich die E-Mail-Adresse der sendenden Seite — der Ablauf im selben Netz weiter oben ist davon unberührt.</p></dd></dl></div>
       <h2>Über verschiedene Netze: Pairing und Relay</h2>
       <p>Der Server erzeugt genau sechs Dezimalziffern (0–9, auch mit führender Null). Der Absender meldet sich an, um den Code zu erstellen; wer per Code, Link oder QR beitritt, braucht kein Konto. Neue Beitritte sind fünf Minuten lang möglich; eine bereits verbundene Übertragung endet nicht mit dem Countdown.</p>
       <p>Über Netzwerkgrenzen hinweg nutzen Browser planmäßig ein verschlüsseltes TURN-Relay, statt zuerst einen direkten Weg zu versuchen. Der Schlüssel bleibt auf den beiden Geräten; das Relay leitet daher nur Ende-zu-Ende-verschlüsselten Chiffretext weiter, kann die Dateien nicht lesen und behält weder eine Echtzeit-Inhaltskopie noch einen Verlauf.</p>

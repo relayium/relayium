@@ -23,10 +23,17 @@
 //
 // The invariant is "a command block never inherits RTL", not "every command
 // block carries an attribute". On an LTR document `direction:ltr` is already
-// what a <pre> computes, so the attribute is emitted only where it changes
-// something — and the LTR pages, which are the overwhelming majority of the
-// generated tree, keep their previous bare <pre> markup. Both halves are pinned
-// below: the RTL page must declare it, the LTR page must not need it.
+// what a <pre> computes, so the DIRECTION attribute is emitted only where it
+// changes something — the LTR pages, which are the overwhelming majority of the
+// generated tree, carry no `dir` at all. Both halves are pinned below: the RTL
+// page must declare it, the LTR page must not need it.
+//
+// Since 2026-09-21 every <pre> also carries `tabindex="0"`, on both directions,
+// because the block scrolls sideways and a scrollable region has to be reachable
+// from a keyboard (WCAG 2.1.1). That is a separate, unconditional invariant and
+// it is spelled into the expected open tags below rather than tolerated by a
+// loose regex — a `<pre>` that lost it would still be a defect, and a matcher
+// that shrugged at attributes would also shrug at a stray `dir`.
 //
 // The synthetic document below is deliberately exhaustive rather than realistic:
 // it renders every surface the template can emit in one page, so a NEW command
@@ -100,7 +107,7 @@ describe("command blocks are LTR on an RTL page", () => {
   it("declares dir=ltr on every <pre> the template emits", () => {
     const opens = ar.match(/<pre[^>]*>/g) || [];
     expect(opens.length).toBe(EXPECTED_COMMANDS.length);
-    expect([...new Set(opens)]).toEqual(['<pre dir="ltr">']);
+    expect([...new Set(opens)]).toEqual(['<pre tabindex="0" dir="ltr">']);
   });
 
   it("covers all six command surfaces, not just the easy ones", () => {
@@ -110,7 +117,7 @@ describe("command blocks are LTR on an RTL page", () => {
     }
     // The builder's fallback keeps its hook, so the progressive-enhancement
     // script still finds the element it rewrites.
-    expect(ar).toContain('<pre dir="ltr"><code data-cmd>');
+    expect(ar).toContain('<pre tabindex="0" dir="ltr"><code data-cmd>');
   });
 
   it("puts the direction on the scroll box, not on the inner <code>", () => {
@@ -139,16 +146,17 @@ describe("command blocks are LTR on an RTL page", () => {
     // correct: <pre> already computes direction:ltr by inheritance and already
     // starts its overflow at the left edge. Emitting it anyway would rewrite
     // every command block in the generated tree to state what the browser does
-    // on its own, so an English page keeps exactly the markup it had before the
-    // RTL fix — same commands, same count, no dir attribute anywhere.
+    // on its own, so an English page carries no dir attribute anywhere — same
+    // commands, same count. `tabindex` is not direction-conditional and is
+    // present on both.
     const en = render("en");
     expect(en).toContain('<html lang="en">');
     expect(en).not.toContain('dir="rtl"');
     const opens = en.match(/<pre[^>]*>/g) || [];
     expect(opens.length).toBe(EXPECTED_COMMANDS.length);
-    expect([...new Set(opens)]).toEqual(["<pre>"]);
+    expect([...new Set(opens)]).toEqual(['<pre tabindex="0">']);
     for (const cmd of EXPECTED_COMMANDS) expect(en).toContain(`>${cmd}</code></pre>`);
-    expect(en).toContain("<pre><code data-cmd>");
+    expect(en).toContain('<pre tabindex="0"><code data-cmd>');
     // The one thing that is NOT direction-conditional: a firstColCode cell is
     // pinned on every page and predates this fix. It stays that way, so the
     // refactor cannot be mistaken for permission to unpin it.
@@ -185,7 +193,7 @@ describe("the generated corpus", () => {
     for (const page of arPages) {
       if (!page.html.includes('dir="rtl"')) bad.push(`${page.path}: page is not dir="rtl"`);
       for (const open of page.html.match(/<pre[^>]*>/g) || []) {
-        if (open !== '<pre dir="ltr">') bad.push(`${page.path}: ${open}`);
+        if (open !== '<pre tabindex="0" dir="ltr">') bad.push(`${page.path}: ${open}`);
       }
     }
     expect(bad).toEqual([]);
@@ -200,7 +208,7 @@ describe("the generated corpus", () => {
     for (const page of ltrPages) {
       if (page.html.includes('dir="rtl"')) bad.push(`${page.path}: an LTR page must not be dir="rtl"`);
       for (const open of page.html.match(/<pre[^>]*>/g) || []) {
-        if (open !== "<pre>") bad.push(`${page.path}: ${open}`);
+        if (open !== '<pre tabindex="0">') bad.push(`${page.path}: ${open}`);
       }
     }
     expect(bad).toEqual([]);

@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/pt/how-to/transfer-files-by-scanning-a-qr-code/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Transferir arquivos escaneando um código QR" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Transferir arquivos escaneando um código QR","description":"Envie arquivos escaneando um código QR de uma sessão de emparelhamento — a transferência é criptografada de ponta a ponta o caminho todo. Sem app nem conta para quem escaneia.","inLanguage":"pt","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/pt/how-to/transfer-files-by-scanning-a-qr-code/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/pt/"},{"@type":"ListItem","position":2,"name":"Guias","item":"https://relayium.com/pt/guides/"},{"@type":"ListItem","position":3,"name":"Transferir arquivos escaneando um código QR"}]},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"Quem escaneia o QR precisa de uma conta Relayium?","acceptedAnswer":{"@type":"Answer","text":"Não. Só faz login o lado que cria o código de emparelhamento e o seu QR — a mesma exigência que um link de download assíncrono carrega. Quem escaneia apenas entra na sala que já foi criada: sem conta, sem cadastro, nada para instalar."}},{"@type":"Question","name":"O que o código QR contém de fato?","acceptedAnswer":{"@type":"Answer","text":"O mesmo link de entrada que o botão “copiar link” copia — uma URL relayium.com com o código de emparelhamento embutido. Escaneá-lo apenas abre esse link no navegador, que entra na sala automaticamente. E para por aí: nenhum arquivo é escolhido nem enviado, e o que for enviado depois ainda precisa ser aceito no dispositivo que recebe."}},{"@type":"Question","name":"Escanear o QR é tão seguro quanto digitar o código?","acceptedAnswer":{"@type":"Answer","text":"Sim, é a conexão idêntica de qualquer jeito. Os dois dispositivos ainda negociam uma troca de chaves X25519, criptografam com AES-256-GCM e, se a verificação avançada estiver ativada, mostram um código de verificação SAS coincidente que você pode conferir antes de confiar na transferência. O QR só muda como você entra na sala, não como a transferência é protegida."}},{"@type":"Question","name":"E se o QR não escanear?","acceptedAnswer":{"@type":"Answer","text":"Nada se perde — o mesmo cartão de emparelhamento mostra o código bruto e um link copiável, e um botão de compartilhamento nos dispositivos compatíveis. Qualquer um deles abre a mesma sala que o QR."}},{"@type":"Question","name":"Isso funciona entre redes diferentes, como dados do celular e o Wi-Fi de casa?","acceptedAnswer":{"@type":"Answer","text":"Sim. Este é o fluxo de emparelhamento entre redes, então funciona tanto se os dois dispositivos compartilharem uma rede como se não. Um código de emparelhamento sempre liga os dois por um retransmissor TURN criptografado — o caminho que não depende de encontrar uma passagem através dos NATs e firewalls que existem entre as redes, que podem impedir uma conexão direta — e esse retransmissor só carrega texto cifrado. Quem conecta diretamente são os dispositivos de uma mesma rede que se encontram sem código."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/pt/guides/" aria-current="true">Guias</a><a href="/pt/apps/">Apps</a><a href="/pricing">Preços</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/pt/">Relayium</a> <span aria-hidden="true">›</span> <a href="/pt/guides/">Guias</a> <span aria-hidden="true">›</span> <span aria-current="page">Transferir arquivos escaneando um código QR</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -109,11 +166,11 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>Escaneie — sem app, sem conta</h2>
       <p>No outro dispositivo, abra o app da câmera (ou qualquer leitor de QR) e aponte para a tela. Tocar na notificação que aparece abre o link em um navegador, que entra na sala automaticamente — sem digitar nada, sem conta relayium.com para quem escaneia, e nada para instalar. Escanear só faz entrar; não move arquivo nenhum. Um lote que chega continua esperando na tela de quem recebe até alguém apertar “Aceitar”.</p>
       <p>Se não houver uma câmera à mão, o mesmo link funciona colado em qualquer navegador, e o código de seis dígitos funciona digitado na caixa “inserir código” de relayium.com. O QR é uma comodidade sobreposta aos dois, não um mecanismo separado — escolha o que for mais fácil no momento.</p>
-      <ol class="steps" data-block="steps"><li><p>No dispositivo que envia, abra a página de transferência em tempo real e faça login.</p><pre><code>https://relayium.com/cross-network</code></pre></li><li><p>Crie o código de emparelhamento. O cartão então mostra os seis dígitos, o quadrado do QR abaixo deles e uma contagem regressiva.</p><pre><code>Seu código de emparelhamento — leia-o para a outra pessoa
+      <ol class="steps" data-block="steps"><li><p>No dispositivo que envia, abra a página de transferência em tempo real e faça login.</p><pre tabindex="0"><code>https://relayium.com/cross-network</code></pre></li><li><p>Crie o código de emparelhamento. O cartão então mostra os seis dígitos, o quadrado do QR abaixo deles e uma contagem regressiva.</p><pre tabindex="0"><code>Seu código de emparelhamento — leia-o para a outra pessoa
 483920
 ou peça que escaneie / abra o link para entrar
-o código de emparelhamento expira em 4:52</code></pre></li><li><p>No outro dispositivo, abra o app da câmera ou qualquer leitor de QR, aponte para esse quadrado e toque na notificação de link que ele oferecer.</p></li><li><p>O link abre em um navegador e entra na sala por conta própria, sem digitar nada e sem conta deste lado. É o mesmo endereço que o botão “Copiar link” coloca na área de transferência.</p><pre><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>De volta ao dispositivo que envia, escolha os arquivos se você não tinha colocado nenhum na fila antes de criar o código. Nada se move até o lado que recebe apertar “Aceitar”, então responda a esse aviso lá e depois deixe as duas abas abertas até o contador de arquivos terminar.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">Como é um escaneamento bem-sucedido</p><p>No dispositivo que envia, o QR e a linha “Aguardando o outro dispositivo entrar…” dão lugar ao cartão conectado, e o selo de caminho nele indica “Retransmitido” — o valor esperado em uma sessão por código de emparelhamento, que passa pelo retransmissor TURN criptografado por decisão de projeto.</p><p>O contador de arquivos vai então até o último arquivo nas duas telas. Nada da transferência muda em relação a um código digitado: o escaneamento só decidiu como o segundo dispositivo entrou na sala.</p><pre><code>Retransmitido
+o código de emparelhamento expira em 4:52</code></pre></li><li><p>No outro dispositivo, abra o app da câmera ou qualquer leitor de QR, aponte para esse quadrado e toque na notificação de link que ele oferecer.</p></li><li><p>O link abre em um navegador e entra na sala por conta própria, sem digitar nada e sem conta deste lado. É o mesmo endereço que o botão “Copiar link” coloca na área de transferência.</p><pre tabindex="0"><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>De volta ao dispositivo que envia, escolha os arquivos se você não tinha colocado nenhum na fila antes de criar o código. Nada se move até o lado que recebe apertar “Aceitar”, então responda a esse aviso lá e depois deixe as duas abas abertas até o contador de arquivos terminar.</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">Como é um escaneamento bem-sucedido</p><p>No dispositivo que envia, o QR e a linha “Aguardando o outro dispositivo entrar…” dão lugar ao cartão conectado, e o selo de caminho nele indica “Retransmitido” — o valor esperado em uma sessão por código de emparelhamento, que passa pelo retransmissor TURN criptografado por decisão de projeto.</p><p>O contador de arquivos vai então até o último arquivo nas duas telas. Nada da transferência muda em relação a um código digitado: o escaneamento só decidiu como o segundo dispositivo entrou na sala.</p><pre tabindex="0"><code>Retransmitido
 Arquivo 1/1</code></pre></div>
       <h2>O que acontece depois do escaneamento</h2>
       <p>Escanear apenas coloca os dois dispositivos na mesma sala; a transferência em si não muda em relação a qualquer outra sessão com código de emparelhamento. Quem criou o código é dono da sala e quem escaneou entrou nela, mas isso fala do encontro, não do sentido: com os dois lá dentro, qualquer um dos lados pode ser o que envia, e todo lote que chega continua passando pelo “Aceitar” na tela de quem recebe. Um código de emparelhamento coloca os dois dispositivos numa sala separada em vez da lista de dispositivos da mesma rede, mas a superfície dentro dessa sala é a mesma área de trabalho compartilhada que dois navegadores atualizados abrem em qualquer lugar: uma ação no cartão do par e depois uma conexão criptografada que leva juntos os arquivos e as mensagens. O que o código de fato muda é o caminho: ela vai só por retransmissor por decisão de projeto, e esse enlace retransmitido tem uma vida limitada que a área de trabalho avisa antes de ser atingida. Os dois navegadores derivam uma chave compartilhada com uma troca de chaves X25519, criptografam cada bloco com AES-256-GCM e o enviam por um canal WebRTC apoiado em um retransmissor TURN.</p>
@@ -121,7 +178,7 @@ Arquivo 1/1</code></pre></div>
       <h2>Se o escaneamento não funcionar</h2>
       <p>As câmeras falham, a iluminação está ruim, ou um dispositivo simplesmente não tem uma câmera à mão — nada disso deveria bloquear a transferência. O cartão de emparelhamento no dispositivo que envia também mostra botões para copiar o código bruto e o link (e um botão de compartilhamento nos dispositivos que o suportam), além de uma contagem regressiva até o código expirar.</p>
       <p>Digite o código de novo, cole o link, ou use o menu de compartilhamento para enviá-lo de outra forma (chat, AirDrop, o que for mais rápido) — cada caminho chega à mesma sala e obtém a mesma conexão criptografada. O QR é um entre vários pontos de entrada, nunca uma exigência.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Sintoma, verificação, correção</p><dl><dt>O escaneamento abre a página e ela diz que o código de emparelhamento é inválido ou expirou.</dt><dd><pre><code>https://relayium.com/cross-network   # o cartão de quem envia mostra a contagem ao vivo</code></pre><p>Os cinco minutos acabaram, e o QR de um código morto continua sendo um link morto por mais vezes que seja escaneado. Crie um código novo no dispositivo que envia — o cartão desenha um QR novo junto — e escaneie esse na hora.</p></dd><dt>A câmera reconhece o quadrado mas nunca oferece abrir nada.</dt><dd><pre><code>https://relayium.com/cross-network   # a caixa “Inserir um código de emparelhamento” aceita os seis dígitos</code></pre><p>Alguns leitores apenas copiam o texto em vez de entregá-lo a um navegador. Cole o que ele copiou na barra de endereços, ou dispense o QR: abra a página no dispositivo que recebe, digite os seis dígitos na caixa “Inserir um código de emparelhamento” e clique em “Conectar”.</p></dd><dt>Os dois estão procurando um QR para escanear e nenhuma tela mostra um.</dt><dd><pre><code>https://relayium.com/cross-network   # só o cartão que criou o código desenha um QR</code></pre><p>O QR pertence ao dispositivo que criou o código, então um precisa criar primeiro e o outro escanear. Decidam qual lado cria — enviar, depois que os dois estiverem na sala, pode ser qualquer um —, cliquem em “Criar um código de emparelhamento” nesse dispositivo e aponte a câmera do outro para aquela tela.</p></dd><dt>O link foi repassado por um app de chat e a página abre sem código nenhum.</dt><dd><pre><code>https://relayium.com/cross-network#c=483920   # tudo depois de #c= é o código</code></pre><p>O código viaja no fragmento da URL, e um reescritor de links ou serviço de prévia pode descartar tudo depois do #. Leia os seis dígitos em voz alta, ou cole você mesmo o link na barra de endereços para que nada o reescreva entre você e o navegador.</p></dd><dt>O escaneamento entra na sala e depois o cartão diz que o retransmissor só é entregue a contas verificadas.</dt><dd><pre><code>https://relayium.com/cross-network   # o cartão de emparelhamento nomeia o motivo da recusa</code></pre><p>O e-mail da conta que envia ainda não foi verificado, e isso é checado quando a sessão pede um retransmissor, não na criação do código. Verifique o endereço no painel da conta, crie então um código novo e escaneie o QR dele; transferências na mesma rede não dependem disso.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Sintoma, verificação, correção</p><dl><dt>O escaneamento abre a página e ela diz que o código de emparelhamento é inválido ou expirou.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # o cartão de quem envia mostra a contagem ao vivo</code></pre><p>Os cinco minutos acabaram, e o QR de um código morto continua sendo um link morto por mais vezes que seja escaneado. Crie um código novo no dispositivo que envia — o cartão desenha um QR novo junto — e escaneie esse na hora.</p></dd><dt>A câmera reconhece o quadrado mas nunca oferece abrir nada.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # a caixa “Inserir um código de emparelhamento” aceita os seis dígitos</code></pre><p>Alguns leitores apenas copiam o texto em vez de entregá-lo a um navegador. Cole o que ele copiou na barra de endereços, ou dispense o QR: abra a página no dispositivo que recebe, digite os seis dígitos na caixa “Inserir um código de emparelhamento” e clique em “Conectar”.</p></dd><dt>Os dois estão procurando um QR para escanear e nenhuma tela mostra um.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # só o cartão que criou o código desenha um QR</code></pre><p>O QR pertence ao dispositivo que criou o código, então um precisa criar primeiro e o outro escanear. Decidam qual lado cria — enviar, depois que os dois estiverem na sala, pode ser qualquer um —, cliquem em “Criar um código de emparelhamento” nesse dispositivo e aponte a câmera do outro para aquela tela.</p></dd><dt>O link foi repassado por um app de chat e a página abre sem código nenhum.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network#c=483920   # tudo depois de #c= é o código</code></pre><p>O código viaja no fragmento da URL, e um reescritor de links ou serviço de prévia pode descartar tudo depois do #. Leia os seis dígitos em voz alta, ou cole você mesmo o link na barra de endereços para que nada o reescreva entre você e o navegador.</p></dd><dt>O escaneamento entra na sala e depois o cartão diz que o retransmissor só é entregue a contas verificadas.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # o cartão de emparelhamento nomeia o motivo da recusa</code></pre><p>O e-mail da conta que envia ainda não foi verificado, e isso é checado quando a sessão pede um retransmissor, não na criação do código. Verifique o endereço no painel da conta, crie então um código novo e escaneie o QR dele; transferências na mesma rede não dependem disso.</p></dd></dl></div>
       <h2>Perguntas frequentes</h2>
       <h3>Quem escaneia o QR precisa de uma conta Relayium?</h3>
       <p>Não. Só faz login o lado que cria o código de emparelhamento e o seu QR — a mesma exigência que um link de download assíncrono carrega. Quem escaneia apenas entra na sala que já foi criada: sem conta, sem cadastro, nada para instalar.</p>

@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/how-to/transfer-files-by-scanning-a-qr-code/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="QR コードをスキャンしてファイルを転送する" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"QR コードをスキャンしてファイルを転送する","description":"Relayium で QR コードをスキャンしてファイルを送る方法。ペアリングコードを作成し、表示された QR をスキャンするだけで、全区間エンドツーエンド暗号化された転送が始まります。スキャンする側はアプリもアカウントも不要です。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/transfer-files-by-scanning-a-qr-code/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"QR コードをスキャンしてファイルを転送する"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"QR コードをスキャンする側にも Relayium のアカウントが必要ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。サインインが必要なのはペアリングコードとその QR コードを作成する側だけで、非同期のダウンロードリンクにも同じ条件が付きます。スキャンする側はすでに作られたルームに参加するだけで、アカウントもサインアップも、インストールするものも何もありません。"}},{"@type":"Question","name":"QR コードには実際には何が入っていますか？","acceptedAnswer":{"@type":"Answer","text":"「リンクをコピー」ボタンでコピーされるのと同じ参加リンクです。ペアリングコードが埋め込まれた relayium.com の URL です。スキャンするとブラウザでそのリンクが開き、自動的にルームに参加します。参加はそこで終わりで、ファイルが選ばれることも送られることもありません。そのあとに送られるものも、受信側の端末で承認される必要があります。"}},{"@type":"Question","name":"QR コードのスキャンはコードを入力するのと同じくらい安全ですか？","acceptedAnswer":{"@type":"Answer","text":"はい、どちらの方法でも接続はまったく同一です。両端末は依然として X25519 鍵交換をネゴシエートし、AES-256-GCM で暗号化し、高度な検証がオンなら、転送を信頼する前に確認できる一致した SAS 検証コードも表示します。QR コードが変えるのはルームへの入り方だけで、転送の安全性は変わりません。"}},{"@type":"Question","name":"QR コードがスキャンできない場合は？","acceptedAnswer":{"@type":"Answer","text":"何も失われません。同じペアリングカードに生のコードとコピー可能なリンクが表示され、対応端末では共有シートのボタンもあります。どれを使っても QR コードと同じルームに入れます。"}},{"@type":"Question","name":"スマホがモバイル通信、PC が自宅 Wi-Fi のように、異なるネットワーク間でも使えますか？","acceptedAnswer":{"@type":"Answer","text":"はい。これはもともとネットワークをまたぐペアリング方式なので、2台が同じネットワークであってもなくても動作します。ペアリングコードでの接続は常に暗号化された TURN リレーを経由します。ネットワークの間にある NAT やファイアウォールを越える通り道を見つけられるかどうかに左右されない経路で（NAT やファイアウォールが直接接続を塞ぐこともあります）、リレーが運ぶのは暗号文だけです。直接つながるのは、コードなしで互いを見つけ合う同一ネットワークの場合です。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ja/guides/" aria-current="true">ガイド</a><a href="/ja/apps/">アプリ</a><a href="/pricing">料金</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">QR コードをスキャンしてファイルを転送する</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -109,11 +166,11 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>スキャンするだけ、アプリもアカウントも不要</h2>
       <p>もう一方の端末でカメラアプリ（または任意の QR スキャナー）を開き、画面に向けます。表示された通知をタップするとブラウザでリンクが開き、自動的にルームに参加します。スキャンする側は入力も relayium.com のアカウントも不要で、インストールするものも何もありません。スキャンがするのは参加だけで、ファイルは動きません。届いたファイルの一式は、受信側の画面で誰かが「受信」を押すまで待ったままです。</p>
       <p>カメラが使えない場合も、同じリンクを任意のブラウザに貼り付ければ使えますし、6 桁の数字コードを relayium.com の「コードを入力」欄に打ち込んでも同様に使えます。QR コードはこの両方の上に重ねられた利便性にすぎず、別の仕組みではありません。その場でやりやすい方を選んでください。</p>
-      <ol class="steps" data-block="steps"><li><p>送信側の端末でリアルタイム転送のページを開き、サインインします。</p><pre><code>https://relayium.com/cross-network</code></pre></li><li><p>ペアリングコードを作成します。カードには 6 桁の数字、その下の QR の四角、そしてカウントダウンが表示されます。</p><pre><code>ペアリングコード — 相手に伝えてください
+      <ol class="steps" data-block="steps"><li><p>送信側の端末でリアルタイム転送のページを開き、サインインします。</p><pre tabindex="0"><code>https://relayium.com/cross-network</code></pre></li><li><p>ペアリングコードを作成します。カードには 6 桁の数字、その下の QR の四角、そしてカウントダウンが表示されます。</p><pre tabindex="0"><code>ペアリングコード — 相手に伝えてください
 483920
 または相手にQRを読み取ってもらう / リンクを開いて参加
-ペアリングコードは 4:52 で失効</code></pre></li><li><p>もう一方の端末でカメラアプリか任意の QR スキャナーを開き、その四角に向けて、表示されたリンクの通知をタップします。</p></li><li><p>リンクがブラウザで開き、そのままルームに参加します。入力は不要で、こちら側にアカウントもいりません。これは「リンクをコピー」ボタンがクリップボードに入れるのと同じアドレスです。</p><pre><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>送信側の端末に戻り、コード作成前にファイルを積んでいなければここで送るファイルを選びます。受信側が「受信」を押すまで何も動かないので、その端末でその案内に応えてから、ファイルカウンターが終わるまで両方のタブを開いたままにします。</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">スキャンが成功したときの画面</p><p>送信側の端末では、QR と「相手の参加を待っています…」の行が接続済みのカードに置き換わり、その経路バッジは「中継」と表示されます。これは暗号化された TURN リレーを設計上通るペアリングコードのセッションにとって期待どおりの値です。</p><p>その後、両方の画面でファイルカウンターが最後のファイルまで進みます。転送そのものは手入力のコードと何も変わりません。スキャンが決めたのは、2台目がどうやってルームに入ったかだけです。</p><pre><code>中継
+ペアリングコードは 4:52 で失効</code></pre></li><li><p>もう一方の端末でカメラアプリか任意の QR スキャナーを開き、その四角に向けて、表示されたリンクの通知をタップします。</p></li><li><p>リンクがブラウザで開き、そのままルームに参加します。入力は不要で、こちら側にアカウントもいりません。これは「リンクをコピー」ボタンがクリップボードに入れるのと同じアドレスです。</p><pre tabindex="0"><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>送信側の端末に戻り、コード作成前にファイルを積んでいなければここで送るファイルを選びます。受信側が「受信」を押すまで何も動かないので、その端末でその案内に応えてから、ファイルカウンターが終わるまで両方のタブを開いたままにします。</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">スキャンが成功したときの画面</p><p>送信側の端末では、QR と「相手の参加を待っています…」の行が接続済みのカードに置き換わり、その経路バッジは「中継」と表示されます。これは暗号化された TURN リレーを設計上通るペアリングコードのセッションにとって期待どおりの値です。</p><p>その後、両方の画面でファイルカウンターが最後のファイルまで進みます。転送そのものは手入力のコードと何も変わりません。スキャンが決めたのは、2台目がどうやってルームに入ったかだけです。</p><pre tabindex="0"><code>中継
 ファイル 1/1</code></pre></div>
       <h2>スキャン後に起きること</h2>
       <p>スキャンは2台の端末を同じルームに入れるだけで、転送そのものは他のペアリングコードのセッションと変わりません。コードを作った側がルームの持ち主で、スキャンした側が参加者ですが、それは待ち合わせの話であって向きの話ではありません。2台が入ってしまえば送る側はどちらでもよく、届くファイルの一式は受信側の画面の「受信」で必ずゲートされます。ペアリングコードが入れてくれるのは、同一ネットワークの端末一覧ではなく2台だけの別のルームです。ただしそのルームの中身は、十分に新しいブラウザ同士がどこでも開くのと同じ共有ワークスペースで、相手のカードの操作は一つ、そのあとは1本の暗号化接続がファイルとメッセージをまとめて運びます。ペアリングコードが実際に変えるのは経路です。設計上リレー経由のみで、そのリレー接続には有限の寿命があり、ワークスペースは到達前に知らせます。両端末は X25519 鍵交換で共有鍵を導出し、各チャンクを AES-256-GCM で暗号化したうえで、TURN リレー上に張られた WebRTC チャネルで送り出します。</p>
@@ -121,7 +178,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>スキャンできないときは</h2>
       <p>カメラのピントが合わない、照明が悪い、あるいは片方の端末にそもそもカメラがない。そうした事情で転送が止まる必要はありません。送信側のペアリングカードには、生のコードとリンクをコピーするボタン（対応端末では共有シートのボタンも）に加えて、コードの失効までのカウントダウンも表示されます。</p>
       <p>コードを打ち直す、リンクを貼り付ける、あるいは共有シートで別の方法（チャットや AirDrop など、いちばん速いもの）で送る。どの経路をたどっても同じルームに入り、同じ暗号化された接続が得られます。QR コードは複数ある入口の一つにすぎず、必須ではありません。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>スキャンでページは開くが、ペアリングコードが無効か期限切れだと出る。</dt><dd><pre><code>https://relayium.com/cross-network   # 送信側のカードに実時間のカウントダウンが出る</code></pre><p>5分が過ぎており、失効したコードの QR は何度読み取っても失効したリンクのままです。送信側の端末で新しいコードを作成すると、カードはそれに合わせて新しい QR を描画します。その QR をすぐに読み取ってください。</p></dd><dt>カメラは四角を認識するのに、開くものを何も提示してこない。</dt><dd><pre><code>https://relayium.com/cross-network   # 「ペアリングコードを入力」欄が 6 桁の数字を受け付ける</code></pre><p>スキャナーによってはテキストをコピーするだけで、ブラウザに渡しません。コピーされた内容をアドレス欄に貼り付けるか、QR を使わずに済ませてください。受信側の端末でページを開き、6 桁の数字を「ペアリングコードを入力」欄に打ち込んで「接続」を押します。</p></dd><dt>2人とも読み取る QR を探しているのに、どちらの画面にもない。</dt><dd><pre><code>https://relayium.com/cross-network   # QR を描画するのはコードを発行したカードだけ</code></pre><p>QR はコードを作成した端末のものなので、片方が先に作成し、もう片方が読み取る必要があります。どちらが作成するかを決め（2台がルームに入れば、送るのはどちらでもかまいません）、その端末で「ペアリングコードを生成」を押し、もう一方の端末のカメラをその画面に向けてください。</p></dd><dt>チャットアプリ経由で転送されたリンクを開くと、ページにコードが入っていない。</dt><dd><pre><code>https://relayium.com/cross-network#c=483920   # #c= の後ろがコードそのもの</code></pre><p>コードは URL のフラグメントで運ばれるため、リンク書き換えやプレビューのサービスが # 以降をまるごと落とすことがあります。代わりに 6 桁の数字を読み上げるか、リンクを自分でアドレス欄に貼り付けて、途中で書き換えられないようにしてください。</p></dd><dt>スキャンでルームには入れたのに、リレーは確認済みアカウントにのみ発行されるとカードに出る。</dt><dd><pre><code>https://relayium.com/cross-network   # ペアリングカードが拒否の理由を示す</code></pre><p>送信側アカウントのメールアドレスがまだ確認されていません。これはコード発行時ではなく、セッションがリレーを要求する時点で確認されます。アカウントパネルでアドレスを確認し、新しいペアリングコードを作成してその QR を読み取ってください。同一ネットワークの転送はこの影響を受けません。</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>スキャンでページは開くが、ペアリングコードが無効か期限切れだと出る。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # 送信側のカードに実時間のカウントダウンが出る</code></pre><p>5分が過ぎており、失効したコードの QR は何度読み取っても失効したリンクのままです。送信側の端末で新しいコードを作成すると、カードはそれに合わせて新しい QR を描画します。その QR をすぐに読み取ってください。</p></dd><dt>カメラは四角を認識するのに、開くものを何も提示してこない。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # 「ペアリングコードを入力」欄が 6 桁の数字を受け付ける</code></pre><p>スキャナーによってはテキストをコピーするだけで、ブラウザに渡しません。コピーされた内容をアドレス欄に貼り付けるか、QR を使わずに済ませてください。受信側の端末でページを開き、6 桁の数字を「ペアリングコードを入力」欄に打ち込んで「接続」を押します。</p></dd><dt>2人とも読み取る QR を探しているのに、どちらの画面にもない。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # QR を描画するのはコードを発行したカードだけ</code></pre><p>QR はコードを作成した端末のものなので、片方が先に作成し、もう片方が読み取る必要があります。どちらが作成するかを決め（2台がルームに入れば、送るのはどちらでもかまいません）、その端末で「ペアリングコードを生成」を押し、もう一方の端末のカメラをその画面に向けてください。</p></dd><dt>チャットアプリ経由で転送されたリンクを開くと、ページにコードが入っていない。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network#c=483920   # #c= の後ろがコードそのもの</code></pre><p>コードは URL のフラグメントで運ばれるため、リンク書き換えやプレビューのサービスが # 以降をまるごと落とすことがあります。代わりに 6 桁の数字を読み上げるか、リンクを自分でアドレス欄に貼り付けて、途中で書き換えられないようにしてください。</p></dd><dt>スキャンでルームには入れたのに、リレーは確認済みアカウントにのみ発行されるとカードに出る。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # ペアリングカードが拒否の理由を示す</code></pre><p>送信側アカウントのメールアドレスがまだ確認されていません。これはコード発行時ではなく、セッションがリレーを要求する時点で確認されます。アカウントパネルでアドレスを確認し、新しいペアリングコードを作成してその QR を読み取ってください。同一ネットワークの転送はこの影響を受けません。</p></dd></dl></div>
       <h2>よくある質問</h2>
       <h3>QR コードをスキャンする側にも Relayium のアカウントが必要ですか？</h3>
       <p>いいえ。サインインが必要なのはペアリングコードとその QR コードを作成する側だけで、非同期のダウンロードリンクにも同じ条件が付きます。スキャンする側はすでに作られたルームに参加するだけで、アカウントもサインアップも、インストールするものも何もありません。</p>

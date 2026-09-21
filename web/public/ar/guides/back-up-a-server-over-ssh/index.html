@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ar/guides/back-up-a-server-over-ssh/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="انسخ الملفات احتياطيًا إلى خادمك عبر SSH باستخدام Relayium CLI" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"انسخ الملفات احتياطيًا إلى خادمك عبر SSH باستخدام Relayium CLI","description":"استخدم relayium push وpull لنسخ المجلدات أو مزامنتها إلى خادم تدخل إليه بالفعل عبر ssh — مع تحقق من السلامة لكل ملف حين يكون relayium على الطرفين، ومجاني. تنتقل البايتات عبر اتصال SSH لديك ولا تلمس خوادم Relayium أبدًا.","inLanguage":"ar","datePublished":"2026-07-08","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/guides/back-up-a-server-over-ssh/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"انسخ الملفات احتياطيًا إلى خادمك عبر SSH باستخدام Relayium CLI"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل تمر الملفات عبر خوادم Relayium؟","acceptedAnswer":{"@type":"Answer","text":"لا. يجري push وpull بالكامل عبر اتصال SSH لديك. خوادم Relayium لا تشارك أبدًا ولا تحتاج إلى حساب."}},{"@type":"Question","name":"هل يحتاج الخادم إلى تثبيت relayium؟","acceptedAnswer":{"@type":"Answer","text":"يعتمد ذلك على الاتجاه. بالنسبة لـ push فهو اختياري: مع relayium على الطرف البعيد تحصل على البروتوكول الأصلي — فحص تعارض مسبق وتحقق SHA-256 لكل ملف يَنقله — وبدونه يتراجع push إلى بث tar بسيط عبر SSH، وهو يعمل مع ذلك لكنه لا يتحقق من شيء لكل ملف. أما بالنسبة لـ pull فهو مطلوب: يحتاج pull دائمًا إلى relayium على الطرف البعيد (لا يملك تراجع tar)، فثبّته هناك أولًا."}},{"@type":"Question","name":"كيف يختار أي مفتاح SSH وأي منفذ يستخدم؟","acceptedAnswer":{"@type":"Answer","text":"يقرأ ملف ~/.ssh/config لديك كما يفعل ssh، فتُلتقط أسماء المضيفين المستعارة والمفاتيح والمنافذ تلقائيًا. يمكنك أيضًا تجاوزها لكل أمر بـ -i لملف الهوية و -p للمنفذ."}},{"@type":"Question","name":"هل هذا أسرع من rsync؟","acceptedAnswer":{"@type":"Answer","text":"للدفع إلى خادمك الخاص فهو في المستوى نفسه تقريبًا لـ rsync عبر SSH؛ الهدف ليس التفوّق على rsync بل أن نمنحك أداة واحدة تنفّذ أيضًا عمليات النقل عبر الشبكات ومن خادم إلى خادم بنفس تحقق السلامة لكل ملف."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ar/guides/" aria-current="true">الأدلة</a><a href="/ar/apps/">التطبيقات</a><a href="/pricing">الأسعار</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ar/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ar/guides/">الأدلة</a> <span aria-hidden="true">›</span> <span aria-current="page">انسخ الملفات احتياطيًا إلى خادمك عبر SSH باستخدام Relayium CLI</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -104,13 +161,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <p class="lead">يغطّي هذا الدليل دفع المجلدات وسحبها، وما يغطّيه التحقق من السلامة وما لا يغطّيه، ولماذا يرفض push العمل مرتين إلى الوجهة نفسها، وكيفية تشغيله وفق جدول باستخدام cron.</p>
       <h2>قبل أن تبدأ</h2>
       <p>كل ما يلي هو relayium CLI، فثبّته أولًا إن لم تكن قد فعلت. على macOS وLinux، يُسقط أمر واحد ملفًا ثنائيًا مُسبق البناء في PATH الخاص بك:</p>
-      <pre dir="ltr"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0" dir="ltr"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>تفضّل اختيار الملف بنفسك، أو تعمل على Windows؟ احصل على ملف ثنائي من صفحة الإصدارات — يسرد relayium.com/cli كل خيارات التثبيت (أو go build -o relayium ./cmd/relayium إن كان لديك Go).</li><li>يؤكّد relayium --version أنه مثبَّت. تخطَّ هذا وستطبع الأوامر أدناه ‘command not found’ لا غير.</li></ul>
       <h2>ادفع مجلدًا إلى خادمك</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">ما تحتاج إليه</p><ul><li>وصول SSH الذي تستخدمه أصلًا. لا بد أن يعود ssh user@your-server true بصمت، فـpush يعيد استخدام هذا الاتصال نفسه ولا يهيّئ شيئًا خاصًا به.</li><li>وجهة قابلة للكتابة على الخادم. يجب أن يكون المجلد الأب لمسار الوجهة موجودًا وقابلًا للكتابة من قِبَل مستخدم SSH ذاك.</li><li>اختياريًا relayium على الخادم، فهو ما يمنحك فحص التعارض المسبق وتحقق SHA-256 لكل ملف. وبدونه يظل push يعمل عبر بث tar بسيط، لكنه لا يتحقق من شيء.</li><li>لا حساب على Relayium ولا خدمة تعمل في الخلفية على أي من الطرفين. لا شيء هنا يتحدث إلى خوادم Relayium.</li></ul></div>
       <p>يأخذ push مصدرًا واحدًا أو أكثر ووجهة بأسلوب scp. يتصل Relayium عبر SSH باستخدام مفاتيحك وإعداداتك المعتادة، ثم يبثّ الملفات إلى مجلد الوجهة:</p>
-      <ol class="steps" data-block="steps"><li><p>تأكّد من وصول SSH الذي سيعيد push استخدامه. عودته بصمت تعني أن مفاتيحك واسم المضيف المستعار والمنفذ صحيحة أصلًا.</p><pre dir="ltr"><code>ssh user@your-server true</code></pre></li><li><p>اعرف أي بروتوكول ستحصل عليه. ظهور مسار يعني البروتوكول الأصلي، أي فحص التعارض المسبق وتحقق SHA-256 لكل ملف؛ وغياب أي مخرجات يعني بث tar الذي لا يتحقق من شيء لكل ملف.</p><pre dir="ltr"><code>ssh user@your-server command -v relayium</code></pre></li><li><p>ادفع المجلد. الوجهة مكتوبة بأسلوب scp، والشرطة المائلة في نهايتها تعني «إلى داخل هذا المجلد».</p><pre dir="ltr"><code>relayium push ./photos user@your-server:backups/</code></pre></li><li><p>حدّد المفتاح أو المنفذ لهذا الأمر وحده إن كان إعداد ssh لديك لا يغطي هذا المضيف بعد.</p><pre dir="ltr"><code>relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</code></pre></li><li><p>تأكّد مما وصل. يعيد push ./photos بناء المجلد photos تحت الوجهة، فيأتي اسم المجلد معه.</p><pre dir="ltr"><code>ssh user@your-server ls backups/photos</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">كيف يبدو التشغيل الناجح</p><p>على البروتوكول الأصلي، يطبع push سطرًا لكل ملف اكتمل وينتهي بالرمز 0. وأمام خادم عارٍ يطبع سطر ملخّص واحدًا فقط، وهذا هو مسار tar، وهو نجاح أيضًا.</p><pre dir="ltr"><code>relayium push ./photos user@your-server:backups/
+      <ol class="steps" data-block="steps"><li><p>تأكّد من وصول SSH الذي سيعيد push استخدامه. عودته بصمت تعني أن مفاتيحك واسم المضيف المستعار والمنفذ صحيحة أصلًا.</p><pre tabindex="0" dir="ltr"><code>ssh user@your-server true</code></pre></li><li><p>اعرف أي بروتوكول ستحصل عليه. ظهور مسار يعني البروتوكول الأصلي، أي فحص التعارض المسبق وتحقق SHA-256 لكل ملف؛ وغياب أي مخرجات يعني بث tar الذي لا يتحقق من شيء لكل ملف.</p><pre tabindex="0" dir="ltr"><code>ssh user@your-server command -v relayium</code></pre></li><li><p>ادفع المجلد. الوجهة مكتوبة بأسلوب scp، والشرطة المائلة في نهايتها تعني «إلى داخل هذا المجلد».</p><pre tabindex="0" dir="ltr"><code>relayium push ./photos user@your-server:backups/</code></pre></li><li><p>حدّد المفتاح أو المنفذ لهذا الأمر وحده إن كان إعداد ssh لديك لا يغطي هذا المضيف بعد.</p><pre tabindex="0" dir="ltr"><code>relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</code></pre></li><li><p>تأكّد مما وصل. يعيد push ./photos بناء المجلد photos تحت الوجهة، فيأتي اسم المجلد معه.</p><pre tabindex="0" dir="ltr"><code>ssh user@your-server ls backups/photos</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">كيف يبدو التشغيل الناجح</p><p>على البروتوكول الأصلي، يطبع push سطرًا لكل ملف اكتمل وينتهي بالرمز 0. وأمام خادم عارٍ يطبع سطر ملخّص واحدًا فقط، وهذا هو مسار tar، وهو نجاح أيضًا.</p><pre tabindex="0" dir="ltr"><code>relayium push ./photos user@your-server:backups/
   photos/IMG_0413.jpg (2314518 bytes)
   photos/IMG_0414.jpg (1998233 bytes)
 
@@ -119,7 +176,7 @@ sent 2 file(s) (zero-dependency mode)</code></pre></div>
       <ul><li>يعيد استخدام ملف ~/.ssh/config لديك، فأسماء المضيفين المستعارة والمفاتيح والمنافذ التي أعددتها من قبل تعمل مباشرة.</li><li>إذا كان relayium مثبّتًا على الخادم، يستخدم البروتوكول الأصلي: تُفحَص الدفعة كلها بحثًا عن التعارضات قبل إرسال أي بايت، ويُتحقَّق من كل ملف يَنقله بـ SHA-256 ويوضع في منطقة مؤقتة قبل تثبيته.</li><li>إن لم يكن، يتراجع إلى تمرير بث tar عبر أنبوب إلى الطرف البعيد، فيعمل حتى خادم عارٍ لا يملك relayium.</li></ul>
       <h2>اسحب الملفات مرة أخرى</h2>
       <p>الاسترجاع هو الأمر نفسه بالاتجاه المعاكس: أعطِ مصدرًا بعيدًا ومجلد وجهة محليًا. هكذا تستعيد نسخة احتياطية، أو تزامن مخرجات خادم نزولًا إلى حاسوبك المحمول:</p>
-      <pre dir="ltr"><code>relayium pull user@your-server:backups/ ./restore</code></pre>
+      <pre tabindex="0" dir="ltr"><code>relayium pull user@your-server:backups/ ./restore</code></pre>
       <ul><li>على عكس push، يحتاج pull دائمًا إلى relayium مثبّتًا مسبقًا على الطرف البعيد — فهو لا يملك تراجع tar، لذا ثبّته هناك أولًا إن كان ناقصًا.</li></ul>
       <h2>السلامة مدمجة — أما الاستئناف فلا</h2>
       <p>عندما يكون relayium على الطرفين، يُتحقَّق من كل ملف يَنقله push من الطرف إلى الطرف بتجزئة SHA-256 ويوضع في منطقة مؤقتة قبل تثبيته — فما يصل إلى الخادم مطابق بايتًا ببايت لما أرسلته. هذا القدر حقيقي، وهو سبب تثبيت relayium على الوجهة.</p>
@@ -128,15 +185,15 @@ sent 2 file(s) (zero-dependency mode)</code></pre></div>
       <ul><li>لا يستأنف push ولا pull، في أي من البروتوكولين. استخدم sync لمجلد تتوقّع انقطاعه؛ أما تراجع tar فلا يستأنف ولا يتحقق من شيء لكل ملف.</li><li>يعمل تحقق SHA-256 تلقائيًا؛ ويُبلَّغ عن أي عدم تطابق ويُوسَم ذلك الملف بالفشل.</li></ul>
       <h2>شغّله وفق جدول باستخدام cron</h2>
       <p>جدوِل sync لا push. يرفض push وجهة موجودة سلفًا، فالدفع الليلي إلى المجلد نفسه ينجح مرة واحدة ويُرفَض كل ليلة بعدها. أما sync فهو الوضع المبني للتشغيل المتكرر: يتخطى الملفات التي لم يتغيّر حجمها ولا وقت تعديلها، ويرسل ما تغيّر فقط، ويُكمل ملفًا جزئيًا خلّفه تشغيل منقطع. وهو أمر واحد غير تفاعلي يستخدم مفاتيح SSH لديك، فيندرج مباشرة في cron. وجّهه إلى مفتاح بلا عبارة مرور (أو إلى agent)، وسجّل المخرجات كي ترى حالات الفشل:</p>
-      <pre dir="ltr"><code># انسخ احتياطيًا كل ليلة عند الساعة 2 — أضِف هذا إلى crontab لديك (crontab -e)
+      <pre tabindex="0" dir="ltr"><code># انسخ احتياطيًا كل ليلة عند الساعة 2 — أضِف هذا إلى crontab لديك (crontab -e)
 0 2 * * * relayium sync -i ~/.ssh/backup_key ~/documents user@your-server:backups/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1</code></pre>
       <ul><li>‏sync ليلي ينقطع يُكمل ببساطة في الليلة التالية: يُتخطّى ما يطابق سلفًا، ويُكمَل الملف الجزئي بدل إعادته من البداية.</li><li>يخرج الأمر بحالة غير صفرية إذا فشل أي ملف في تحقق سلامته، فيلتقط بريد cron عند الفشل المشكلات.</li></ul>
       <h2>حين لا تصل النسخة الاحتياطية</h2>
       <p>النسخ الاحتياطي المجدول يفشل بصمت بطبيعته، إذ لا أحد يراقب الطرفية. تغطي الحالات الأربع التالية معظمه، ولكل واحدة أمر يمكنك تشغيله الآن ليحسمها.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">العَرَض، الفحص، الإصلاح</p><dl><dt>تتوقف مهمة cron معلّقة، أو ينتهي السجل عند طلب كلمة مرور.</dt><dd><pre dir="ltr"><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@your-server true
-# Permission denied (publickey).</code></pre><p>الخيار BatchMode=yes يرفض السؤال ويفشل، فيحوّل التعليق الصامت إلى هذا السطر. أضِف الشقّ العام من ذلك المفتاح إلى ملف ~/.ssh/authorized_keys على الخادم، أو وجّه المهمة إلى مفتاح يحمله الوكيل أصلًا.</p></dd><dt>يعمل سطر crontab لكن السجل يبقى فارغًا.</dt><dd><pre dir="ltr"><code>command -v relayium
-# /usr/local/bin/relayium</code></pre><p>يعمل cron بمسار PATH مختصر لا يتضمن /usr/local/bin عادةً، فيفشل السطر قبل أن يبدأ relayium أصلًا. اكتب المسار المطلق الذي طبعه الفحص للتو داخل مُدخَل crontab، وأبقِ إعادة التوجيه &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1 كي يظهر العطل التالي.</p></dd><dt>يبدأ sync الليلي المنقطع من الصفر في التشغيل التالي.</dt><dd><pre dir="ltr"><code>ssh user@your-server command -v relayium
-# (لا يطبع شيئًا)</code></pre><p>‏relayium غائب عن الطرف البعيد. لا يملك sync أي تراجع فلا يعمل أصلًا، ويهبط push إلى مسار بث tar الذي لا يتحقق من شيء ويعيد إرسال كل ملف كاملًا في كل مرة. ثبّته على الخادم. وحده sync يُكمل ملفًا جزئيًا في التشغيل التالي؛ فلا push ولا pull يستأنف في أي من البروتوكولين. وإن كنت تستخدم sync أصلًا، فتأكّد أيضًا من أنك لا تمرّر --no-resume الذي يعطّل ذلك الاستئناف على المُستمِع عمدًا.</p></dd><dt>تظهر «N file(s) failed integrity check» مع رمز خروج غير صفري.</dt><dd><pre dir="ltr"><code>relayium push ./photos user@your-server:backups/
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">العَرَض، الفحص، الإصلاح</p><dl><dt>تتوقف مهمة cron معلّقة، أو ينتهي السجل عند طلب كلمة مرور.</dt><dd><pre tabindex="0" dir="ltr"><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@your-server true
+# Permission denied (publickey).</code></pre><p>الخيار BatchMode=yes يرفض السؤال ويفشل، فيحوّل التعليق الصامت إلى هذا السطر. أضِف الشقّ العام من ذلك المفتاح إلى ملف ~/.ssh/authorized_keys على الخادم، أو وجّه المهمة إلى مفتاح يحمله الوكيل أصلًا.</p></dd><dt>يعمل سطر crontab لكن السجل يبقى فارغًا.</dt><dd><pre tabindex="0" dir="ltr"><code>command -v relayium
+# /usr/local/bin/relayium</code></pre><p>يعمل cron بمسار PATH مختصر لا يتضمن /usr/local/bin عادةً، فيفشل السطر قبل أن يبدأ relayium أصلًا. اكتب المسار المطلق الذي طبعه الفحص للتو داخل مُدخَل crontab، وأبقِ إعادة التوجيه &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1 كي يظهر العطل التالي.</p></dd><dt>يبدأ sync الليلي المنقطع من الصفر في التشغيل التالي.</dt><dd><pre tabindex="0" dir="ltr"><code>ssh user@your-server command -v relayium
+# (لا يطبع شيئًا)</code></pre><p>‏relayium غائب عن الطرف البعيد. لا يملك sync أي تراجع فلا يعمل أصلًا، ويهبط push إلى مسار بث tar الذي لا يتحقق من شيء ويعيد إرسال كل ملف كاملًا في كل مرة. ثبّته على الخادم. وحده sync يُكمل ملفًا جزئيًا في التشغيل التالي؛ فلا push ولا pull يستأنف في أي من البروتوكولين. وإن كنت تستخدم sync أصلًا، فتأكّد أيضًا من أنك لا تمرّر --no-resume الذي يعطّل ذلك الاستئناف على المُستمِع عمدًا.</p></dd><dt>تظهر «N file(s) failed integrity check» مع رمز خروج غير صفري.</dt><dd><pre tabindex="0" dir="ltr"><code>relayium push ./photos user@your-server:backups/
 # 1 file(s) failed integrity check: [photos/IMG_0413.jpg]
 echo $?
 # 1</code></pre><p>قيمة SHA-256 المحسوبة عند الوصول لم تطابق المُرسَلة، والبروتوكول الأصلي يضع كل ملف في منطقة مؤقتة ولا يثبّته إلا عند تطابق البصمة — لذلك لم يُكتب ذلك المسار على الخادم أصلًا، ولا شيء هناك يحتاج إلى حذف. وإعادة تشغيل الدفعة كاملة سيظل فحص التعارض يرفضها، لأن بقية ملفات تلك الدفعة قد استقرت بالفعل، فأعد push لذلك المسار وحده. وإن فشل مجددًا فهو ليس خطأ نقل عابرًا: افحص الملف المصدر (هل يكتب فيه شيء أثناء قراءته) والتخزين على الطرفين.</p></dd></dl></div>

@@ -11,8 +11,14 @@
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/scp/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/scp/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Relayium 对比 scp：更简单的 SSH 文件传输" />
@@ -30,38 +36,89 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 scp：更简单的 SSH 文件传输","description":"scp 通用且预装在几乎所有系统上。Relayium 的 push/pull 走同一条 SSH，但增加了断点续传、SHA-256 校验、进度显示，以及针对裸机服务器的兜底方案。一次客观的对比。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/compare/scp/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"Relayium 对比 scp：更简单的 SSH 文件传输"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Relayium 的 CLI 需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"push/pull 不需要——它使用你自己的 SSH 访问权限，方式和 scp 完全一样，不需要 Relayium 账号，也不需要登录；daemon 直连和 sync 同样如此。send 和云端 up 是例外：send 需要账号，好让服务器签发配对码（如果用的是别人给你的码则不需要），up 需要账号来存文件。接收则从不需要。"}},{"@type":"Question","name":"如果远程服务器没装 Relayium，push 还能用吗？","acceptedAnswer":{"@type":"Answer","text":"可以。push 会先检测，如果 relayium 不在，就会退化为通过同一条 SSH 连接传输一段普通的 tar 流，因此在裸机服务器上依然可用。这个兜底只属于 push——pull 始终需要远程已经装好 relayium，因为在 pull 里远程要充当发送方。"}},{"@type":"Question","name":"用起来真的和 scp 一样简单吗？","acceptedAnswer":{"@type":"Answer","text":"命令形式很相近：relayium push src user@host:dest，对应 scp -r src user@host:dest。区别只会在出问题时体现出来——连接掉线时会续传而不是重来，且每个文件到达后都会做校验和验证。"}},{"@type":"Question","name":"什么时候该直接用 scp？","acceptedAnswer":{"@type":"Answer","text":"对于真正的一次性拷贝——不需要续传，不需要校验，也不想引入额外的二进制——scp 本来就在那里，是更简单的选择。它也是快速脚本里更稳妥的默认项，不想引入新依赖时尤其如此。"}},{"@type":"Question","name":"Relayium 的 CLI 免费吗？","acceptedAnswer":{"@type":"Answer","text":"CLI 采用 AGPL-3.0 许可并开源，本文对比涉及的 push、pull 与 daemon 直连都是两端直接连接，不计量，也不收费。唯一会用到 Relayium 套餐的是 up：它把加密副本存入托管存储；scp 没有对应功能。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium 对比 scp：更简单的 SSH 文件传输</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -88,23 +145,23 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>它已经装好了——不用下载任何二进制，不用做任何配置，几乎你会 SSH 进去的每台服务器上都有。</li><li>它久经考验。几十年的使用积累、行为清晰可预期，每个系统管理员都已经熟悉它的参数。</li><li>对于真正的一次性任务——现在就复制这一个文件——直接敲 scp file.txt user@host:path，比安装任何东西都省事。</li><li>对于不想引入 OpenSSH 之外任何依赖的快速、一次性脚本，它是理想之选。</li></ul>
       <h2>开始之前</h2>
       <p>下面用到的都是 relayium CLI，所以没装的话先装上。在 macOS 或 Linux 上，一条命令就能把预编译二进制放进你的 PATH：</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul>
       <h2>push / pull：同一条 SSH，加上断点续传、校验和进度</h2>
       <p>relayium push 和 relayium pull 走的是与 scp 完全相同的 SSH 访问——同一台主机、同一把密钥、同一个端口。区别在于连接建立之后发生了什么。</p>
       <p>每个文件到达后都会用 SHA-256 哈希做端到端校验，因此一个看起来完成了的传输，其内容确实和发出的一字不差。如果传输被打断——连接掉线、笔记本合上盖子——重新运行同一条命令会从中断处接着传，而不是全部重传，全程还能看到逐文件的真实进度，而不是悄无声息地拷贝。</p>
       <p>实际使用上最大的差别，是远程没装 relayium 时会发生什么。push 会自动检测，如果没装，就退化为通过同一条 SSH 连接把一个普通的 tar 归档流传到对端并执行 tar -x——因此 push 在完全裸机的服务器上依然可用，事先无需安装任何东西。这个兜底只属于 push：pull 始终需要远程已经装好 relayium，因为在 pull 里，远程机器才是充当发送方的一端。</p>
-      <pre><code>relayium push ./photos user@your-server:backups/</code></pre>
-      <pre><code>relayium pull user@your-server:backups/ ./restore</code></pre>
+      <pre tabindex="0"><code>relayium push ./photos user@your-server:backups/</code></pre>
+      <pre tabindex="0"><code>relayium pull user@your-server:backups/ ./restore</code></pre>
       <h2>超越 SSH：daemon 直连与跨网络配对</h2>
       <p>scp 只能在你拥有 SSH 访问权限的地方使用。Relayium 的 CLI 又加了两种 scp 没有对应能力的传输方式。</p>
       <p>relayium serve 能把你拥有的一台机器变成一个 daemon 直连目标，通过证书固定的 TLS 1.3 访问——无需 SSH、无需 22 端口，信任建立在第一次连接时（可交互批准，或用 relayium authorize 提前授权以支持无人值守），此后一直固定。用 relayium:// 地址直接向它 push。</p>
       <p>如果要发给一个你完全没有 SSH 访问权限、身处互联网另一端的人，relayium send / receive 则改用一个简短代码来配对两台电脑——直连点对点，并在两端都打印一段验证码（SAS），传输开始前双方核对确认。这种场景 scp 完全无解，你首先得有 SSH 访问权限才行。</p>
-      <pre><code>relayium push ./build relayium://your-server</code></pre>
-      <pre><code>relayium send ./report.pdf</code></pre>
+      <pre tabindex="0"><code>relayium push ./build relayium://your-server</code></pre>
+      <pre tabindex="0"><code>relayium send ./report.pdf</code></pre>
       <h2>文件夹镜像：sync 对比反复运行 scp -r</h2>
       <p>反复用 scp -r 拷贝整个目录，意味着每次都要重传所有内容，也没有「发生了什么变化」或「该删除什么」的概念。relayium sync 在 push/pull 或 daemon 直连之上构建增量单向镜像：只传发生变化的文件；--delete 会删除目标端上源端已经消失的文件；--watch 会在本地文件变化时实时持续重新同步——不需要额外的定时任务。</p>
-      <pre><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
+      <pre tabindex="0"><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
       <h2>功能一览对比</h2>
       <p>把最关键的差别并排列出：</p>
       <ul><li>可用性：scp 几乎预装在所有服务器上；Relayium 的 CLI 是单一二进制，一条命令安装一次即可。</li><li>断点续传：scp 中断的传输要从头开始；push/pull 会从中断处继续。</li><li>完整性：scp 事后不会校验内容；Relayium 的每次传输都会做逐文件的 SHA-256 校验。</li><li>裸机服务器：scp 不需要任何额外东西；远程未装 relayium 时，push 通过 tar 兜底同样能用（pull 需要远程装有 relayium，没有兜底）。</li><li>超越 SSH：scp 只能走 SSH；Relayium 还提供 daemon 直连（证书固定 TLS，无需 SSH）以及完全不需要 SSH 访问权限的跨网络配对码传输（send/receive）。</li><li>文件夹镜像：scp -r 每次都重传所有内容；relayium sync 支持 --delete 与 --watch 的增量镜像。</li><li>费用与许可：两者都免费；scp 随 OpenSSH 一起提供，Relayium 的 CLI 采用 AGPL-3.0 许可并开源。</li></ul>

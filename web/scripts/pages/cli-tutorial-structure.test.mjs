@@ -42,6 +42,7 @@ import compareSnapdrop from "./content/articles/compare-snapdrop.mjs";
 import { buildArticlePages } from "./build-pages.mjs";
 import { renderArticlePage } from "./article-template.mjs";
 import { LANGS } from "./shared.mjs";
+import { THEME_SCRIPT } from "./page-chrome.mjs";
 
 // The exact six this batch covers. Named rather than globbed: `cli-*` would also
 // sweep in a future file that is deliberately not a tutorial, and the point of
@@ -940,7 +941,7 @@ describe("the tutorial blocks reach the page with the right semantics", () => {
       // every locale — but the attribute that says so is emitted only where it
       // corrects something, i.e. on the RTL translations. An LTR page inherits
       // it and keeps a bare <pre>. See article-command-direction.test.mjs.
-      const pre = page.path.startsWith("ar/") ? '<pre dir="ltr"><code>' : "<pre><code>";
+      const pre = page.path.startsWith("ar/") ? '<pre tabindex="0" dir="ltr"><code>' : '<pre tabindex="0"><code>';
       expect(dl, `${page.path}: every check needs a <pre>`).toContain(pre);
     }
   });
@@ -1008,7 +1009,13 @@ describe("article-template renders tutorial blocks safely", () => {
   const html = renderArticlePage({ slug: "guides/fixture", lang: "ar", doc, updated: "2026-08-05" });
 
   it("escapes every hostile string in every block", () => {
-    expect(html).not.toContain("<script>");
+    // The page carries exactly one bare <script>: the pre-paint theme snippet
+  // every page in this tree emits (page-chrome.mjs, byte-identical to
+  // web/index.html's — see theme-snippet-parity.test.mjs). Removing that known
+  // one first keeps the rule this assertion exists for unchanged: no hostile
+  // string may open a script element.
+  const scriptFree = html.replace(THEME_SCRIPT, "");
+  expect(scriptFree).not.toContain("<script>");
     expect(html).not.toContain('alert("x")');
     // One occurrence per field that carried the fixture string: 1 prereq label
     // + 1 prereq item + 1 step + 1 step code + 1 success label + 1 success body

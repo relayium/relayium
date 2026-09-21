@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ko/how-to/automate-server-backups/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="cron 작업으로 암호화된 서버 백업 자동화하기" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"cron 작업으로 암호화된 서버 백업 자동화하기","description":"cron에서 relayium push나 sync를 예약 실행해 디렉터리를 다른 서버로 자동 복사하세요 — 전송 중 암호화되고, 파일별로 SHA-256 검증이 되며, 무료입니다.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/how-to/automate-server-backups/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"cron 작업으로 암호화된 서버 백업 자동화하기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"백업 서버에 relayium이 설치되어 있어야 하나요?","acceptedAnswer":{"@type":"Answer","text":"명령에 따라 다릅니다. push는 어느 쪽이든 동작합니다: relayium이 설치되어 있으면 네이티브 프로토콜(보내기 전 충돌 검사 + 파일별 SHA-256 검사)을 사용하고, 없으면 push는 SSH를 통한 일반 tar 스트림으로 대체되어 순수한 서버에서도 동작합니다. sync는 항상 원격지에 relayium의 네이티브 프로토콜이 필요합니다 — sync에는 tar 대체 방식이 없으므로 먼저 그곳에 설치하세요."}},{"@type":"Question","name":"백업이 암호화되고 검증되나요?","acceptedAnswer":{"@type":"Answer","text":"네. 모든 파일은 종단간 SHA-256 해시로 검사되며, SSH나 daemon-direct로 푸시할 때 바이트는 이미 해당 연결 자체의 암호화로 보호됩니다 — 추가로 설정할 것이 없습니다."}},{"@type":"Question","name":"cron 작업이 중간에 중단되면 어떻게 되나요?","acceptedAnswer":{"@type":"Answer","text":"어떤 명령을 예약했느냐에 따라 다릅니다. sync는 이어집니다: 다음 실행이 이미 일치하는 것은 건너뛰고 부분 파일을 이어서 보내며, --no-resume이 그것을 끕니다. push는 어느 프로토콜에서든 재개하지 않습니다 — 이미 존재하는 목적지를 거부하며, 위의 push 줄이 날짜별 디렉터리에 쓰는 이유가 바로 그것입니다. 덕분에 다음 날 밤은 거부가 아니라 새로운 전체 복사가 됩니다. --no-resume은 push에서도 받아들여지지만 아무 일도 하지 않습니다."}},{"@type":"Question","name":"--delete가 실수로 대상을 지워버릴 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"소스 디렉터리에 파일이 하나도 없으면 sync는 --delete 실행 자체를 거부합니다. 또한 삭제가 실제로 적용되려면 수신 측이 serve --allow-delete로 시작되어 있어야 합니다 — 그렇지 않으면 건너뛰어지고 결과로 보고됩니다."}},{"@type":"Question","name":"계정이 필요한가요, 비용이 드나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. CLI는 무료이며 push, pull, sync 모두 계정이 필요 없습니다. 전송은 본인의 SSH 연결이나 직접적인 daemon 연결을 통해 이루어지며, Relayium의 서버를 거치지 않습니다."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ko/guides/" aria-current="true">가이드</a><a href="/ko/apps/">앱</a><a href="/pricing">요금제</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">cron 작업으로 암호화된 서버 백업 자동화하기</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -108,11 +165,11 @@ ol.steps>li>pre{margin:8px 0 0}
       <ul><li>relayium이 설치되어 있지 않을 수도 있는 서버로의 단순한 예약 복사에는 push를 사용하세요.</li><li>크거나 자주 변하는 디렉터리에서 매일 밤 전체를 다시 보내는 것이 낭비라면 sync를 사용하세요.</li><li>둘 다 네이티브 프로토콜에서는 전송하는 것을 파일별 SHA-256으로 검증합니다. push도 pull도 재개하지 않습니다. 셋 중 부분 파일을 이어가는 것은 sync뿐이며, tar 대체 방식은 검증도 재개도 하지 않습니다.</li></ul>
       <h2>시작하기 전에</h2>
       <p>아래는 모두 relayium CLI이므로, 설치하지 않았다면 먼저 설치하세요. macOS나 Linux에서는 명령어 하나로 사전 빌드된 바이너리가 PATH에 등록됩니다:</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>직접 파일을 고르고 싶거나 Windows인가요? 릴리스 페이지에서 바이너리를 받으세요 — relayium.com/cli 에 모든 설치 방법이 있습니다(Go가 있으면 go build -o relayium ./cmd/relayium 도 가능).</li><li>relayium --version 으로 설치를 확인할 수 있습니다. 이 단계를 건너뛰면 아래 명령은 “command not found”만 출력합니다.</li></ul>
       <h2>두 가지 전송 방식: SSH 또는 daemon-direct</h2>
       <p>두 명령 모두 SSH 대상(scp 형식, 기존 ~/.ssh/config 사용)을 지정할 수도 있고, 상대 머신에서 relayium serve가 실행 중이라면 SSH 없이 daemon-direct 프로토콜로 곧장 연결할 수도 있습니다.</p>
-      <pre><code># SSH 대상: 기존 SSH 키와 설정을 그대로 사용합니다
+      <pre tabindex="0"><code># SSH 대상: 기존 SSH 키와 설정을 그대로 사용합니다
 relayium push ./data user@backup-server:/srv/backups/
 
 # daemon-direct: 대상에서 &quot;relayium serve&quot;가 실행 중이면 SSH가 필요 없습니다
@@ -121,13 +178,13 @@ relayium push ./data relayium://backup-server:9031</code></pre>
       <h2>cron으로 예약 실행하기</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">1단계 전에 필요한 것</p><ul><li>이 기기의 CLI. sync를 쓸 생각이라면 목적지에도 필요합니다. sync에는 tar 대체 경로가 없습니다.</li><li>암호가 없는 SSH 키, 또는 relayium serve를 돌리는 목적지. cron에는 에이전트도 터미널도 없어 암호 입력에 답할 수 없습니다.</li><li>cron이 실행되는 시점에 실제로 존재하는 원본 디렉터리. 로그인해 있을 때만 붙는 네트워크 마운트는 곤란합니다.</li><li>로그를 남길 곳. 출력이 아무 데도 가지 않는 cron 작업은, 정작 필요할 때에야 문제를 알게 되는 백업입니다.</li></ul></div>
       <p>push와 sync는 둘 다 단일 비대화형 명령이므로, 그대로 crontab에 넣을 수 있습니다. 암호 없는 키(또는 agent)를 지정하고, 출력을 로그로 남겨 실패를 확인할 수 있게 하세요:</p>
-      <pre><code># 매일 밤 2시 전체 복사: crontab에 추가하세요 (crontab -e)
+      <pre tabindex="0"><code># 매일 밤 2시 전체 복사: crontab에 추가하세요 (crontab -e)
 0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/$(date +\%F)/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1
 
 # 대신 15분마다 증분 미러링
 */15 * * * * relayium sync -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ &gt;&gt; ~/relayium-sync.log 2&gt;&amp;1</code></pre>
-      <ol class="steps" data-block="steps"><li><p>relayium이 실제로 어디에 있는지 확인하세요. cron은 셸의 PATH를 쓰지 않고, install.sh는 /usr/local/bin에 쓸 수 없으면 ~/.local/bin에 둡니다 — 바로 cron이 보지 못하는 자리입니다.</p><pre><code>command -v relayium</code></pre></li><li><p>아무도 키보드 앞에 없어도 키가 동작하는지 확인하세요. BatchMode=yes는 묻지 않고 실패하므로 cron과 같은 조건입니다.</p><pre><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true</code></pre></li><li><p>먼저 손으로 한 번, cron이 실행할 것과 똑같은 형태로 절대 경로까지 포함해 통째로 실행해 보세요.</p><pre><code>/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/</code></pre></li><li><p>그다음에야 스케줄을 추가합니다. 절대 경로와 리다이렉트는 그대로 두세요.</p><pre><code>crontab -e</code></pre></li><li><p>첫 예약 실행 뒤에는 넘겨짚지 말고 로그를 읽으세요. 사람들이 건너뛰는 단계이자, 문제를 미리 알려 주었을 단계입니다.</p><pre><code>tail -n 20 ~/relayium-backup.log</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">제대로 설정된 백업의 모습</p><p>relayium이 crontab에 그대로 붙여 넣을 수 있는 절대 경로로 확인되고, BatchMode를 붙인 ssh 검사가 아무것도 출력하지 않고 아무것도 묻지 않은 채 0으로 끝납니다. 대화형 셸에서만 되는 백업은 아직 예약된 것이 아닙니다.</p><pre><code>$ command -v relayium
+      <ol class="steps" data-block="steps"><li><p>relayium이 실제로 어디에 있는지 확인하세요. cron은 셸의 PATH를 쓰지 않고, install.sh는 /usr/local/bin에 쓸 수 없으면 ~/.local/bin에 둡니다 — 바로 cron이 보지 못하는 자리입니다.</p><pre tabindex="0"><code>command -v relayium</code></pre></li><li><p>아무도 키보드 앞에 없어도 키가 동작하는지 확인하세요. BatchMode=yes는 묻지 않고 실패하므로 cron과 같은 조건입니다.</p><pre tabindex="0"><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true</code></pre></li><li><p>먼저 손으로 한 번, cron이 실행할 것과 똑같은 형태로 절대 경로까지 포함해 통째로 실행해 보세요.</p><pre tabindex="0"><code>/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/</code></pre></li><li><p>그다음에야 스케줄을 추가합니다. 절대 경로와 리다이렉트는 그대로 두세요.</p><pre tabindex="0"><code>crontab -e</code></pre></li><li><p>첫 예약 실행 뒤에는 넘겨짚지 말고 로그를 읽으세요. 사람들이 건너뛰는 단계이자, 문제를 미리 알려 주었을 단계입니다.</p><pre tabindex="0"><code>tail -n 20 ~/relayium-backup.log</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">제대로 설정된 백업의 모습</p><p>relayium이 crontab에 그대로 붙여 넣을 수 있는 절대 경로로 확인되고, BatchMode를 붙인 ssh 검사가 아무것도 출력하지 않고 아무것도 묻지 않은 채 0으로 끝납니다. 대화형 셸에서만 되는 백업은 아직 예약된 것이 아닙니다.</p><pre tabindex="0"><code>$ command -v relayium
 /usr/local/bin/relayium
 $ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
 $ echo $?
@@ -139,10 +196,10 @@ $ echo $?
       <ul><li>relayium sync ./data user@backup-server:/srv/backups/ --delete는 삭제도 미러링합니다(수신 측에 serve --allow-delete 필요).</li><li>relayium sync ./data user@backup-server:/srv/backups/ --watch는 계속 실행되며 변경 시마다 동기화합니다. cron의 단발 실행 대신 사용할 수 있습니다.</li></ul>
       <h2>잘 안 될 때</h2>
       <p>여기 있는 것들은 로그를 보기 전까지 전부 보이지 않습니다. 로그 리다이렉트가 선택이 아니라 crontab 줄에 처음부터 들어 있는 이유입니다. 다섯 번째는 보이지 않는 것보다 나쁩니다 — 성공처럼 보입니다.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 해결</p><dl><dt>로그에 relayium: command not found가 찍히는데 같은 명령이 셸에서는 됩니다.</dt><dd><pre><code>tail -n 5 ~/relayium-backup.log
-# /bin/sh: relayium: command not found</code></pre><p>cron은 최소한의 PATH, 보통 /usr/bin:/bin만으로 돕니다. install.sh가 /usr/local/bin에 쓰지 못했다면 바이너리는 ~/.local/bin에 있고, cron은 그곳을 결코 찾지 않습니다. command -v가 알려 준 절대 경로를 crontab 줄에 쓰거나, crontab 맨 위에 PATH= 줄을 넣으세요.</p></dd><dt>로그에 ssh 연결이 거부되었다고 나오거나, 첫 실행 이후로 아무것도 없습니다.</dt><dd><pre><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-# Permission denied (publickey).</code></pre><p>cron에는 ssh-agent도 터미널도 없어서 암호가 걸린 키는 멈추거나 실패할 수밖에 없습니다. -i로 백업 전용의 암호 없는 키를 지정하고 BatchMode=yes로 확인하세요. 그 옵션은 거기 없는 사람을 기다리는 대신 아예 묻기를 거부합니다.</p></dd><dt>sync는 깔끔하게 도는데 원본에서 지운 파일이 목적지에 그대로 있습니다.</dt><dd><pre><code>grep -i deni ~/relayium-sync.log</code></pre><p>삭제는 수신 측이 켜야 하는 옵션입니다. 상대편에 serve --allow-delete가 없으면 삭제는 건너뛰어지고 denied로 보고됩니다. 답이 종료 코드가 아니라 로그에 있는 이유입니다. 수신 측 리스너를 --allow-delete와 함께 재시작하세요.</p></dd><dt>sync가 --delete를 아예 거부합니다.</dt><dd><pre><code>relayium sync ~/documents user@backup-server:/srv/backups/ --delete
-# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).</code></pre><p>원본에서 파일이 하나도 잡히지 않아, 그대로 두면 미러가 목적지를 비워 버리는 상태입니다. 이 거부는 의도된 것입니다. 경로 오타를 확인하고, 거기 붙어야 할 것이 로그인 중일 때뿐 아니라 cron이 도는 시점에도 실제로 마운트되어 있는지 확인하세요.</p></dd><dt>백업이 돌고 0으로 끝나는데, 내용이 생각한 그것이 아닙니다.</dt><dd><pre><code>ssh user@backup-server command -v relayium</code></pre><p>원격에 relayium이 없으면 push는 SSH 위의 평범한 tar 스트림으로 물러납니다. 파일은 도착하니 아무도 불평하지 않지만, 그 경로에는 파일별 SHA-256 검증도, 보내기 전 충돌 검사도 없습니다 — scp 대신 이걸 예약하는 두 가지 이유가 바로 그것입니다. 목적지에 CLI를 설치하면 되돌아옵니다. sync에는 이런 실패가 없습니다. 대체 경로가 아예 없어서 대신 요란하게 실패합니다.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 해결</p><dl><dt>로그에 relayium: command not found가 찍히는데 같은 명령이 셸에서는 됩니다.</dt><dd><pre tabindex="0"><code>tail -n 5 ~/relayium-backup.log
+# /bin/sh: relayium: command not found</code></pre><p>cron은 최소한의 PATH, 보통 /usr/bin:/bin만으로 돕니다. install.sh가 /usr/local/bin에 쓰지 못했다면 바이너리는 ~/.local/bin에 있고, cron은 그곳을 결코 찾지 않습니다. command -v가 알려 준 절대 경로를 crontab 줄에 쓰거나, crontab 맨 위에 PATH= 줄을 넣으세요.</p></dd><dt>로그에 ssh 연결이 거부되었다고 나오거나, 첫 실행 이후로 아무것도 없습니다.</dt><dd><pre tabindex="0"><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+# Permission denied (publickey).</code></pre><p>cron에는 ssh-agent도 터미널도 없어서 암호가 걸린 키는 멈추거나 실패할 수밖에 없습니다. -i로 백업 전용의 암호 없는 키를 지정하고 BatchMode=yes로 확인하세요. 그 옵션은 거기 없는 사람을 기다리는 대신 아예 묻기를 거부합니다.</p></dd><dt>sync는 깔끔하게 도는데 원본에서 지운 파일이 목적지에 그대로 있습니다.</dt><dd><pre tabindex="0"><code>grep -i deni ~/relayium-sync.log</code></pre><p>삭제는 수신 측이 켜야 하는 옵션입니다. 상대편에 serve --allow-delete가 없으면 삭제는 건너뛰어지고 denied로 보고됩니다. 답이 종료 코드가 아니라 로그에 있는 이유입니다. 수신 측 리스너를 --allow-delete와 함께 재시작하세요.</p></dd><dt>sync가 --delete를 아예 거부합니다.</dt><dd><pre tabindex="0"><code>relayium sync ~/documents user@backup-server:/srv/backups/ --delete
+# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).</code></pre><p>원본에서 파일이 하나도 잡히지 않아, 그대로 두면 미러가 목적지를 비워 버리는 상태입니다. 이 거부는 의도된 것입니다. 경로 오타를 확인하고, 거기 붙어야 할 것이 로그인 중일 때뿐 아니라 cron이 도는 시점에도 실제로 마운트되어 있는지 확인하세요.</p></dd><dt>백업이 돌고 0으로 끝나는데, 내용이 생각한 그것이 아닙니다.</dt><dd><pre tabindex="0"><code>ssh user@backup-server command -v relayium</code></pre><p>원격에 relayium이 없으면 push는 SSH 위의 평범한 tar 스트림으로 물러납니다. 파일은 도착하니 아무도 불평하지 않지만, 그 경로에는 파일별 SHA-256 검증도, 보내기 전 충돌 검사도 없습니다 — scp 대신 이걸 예약하는 두 가지 이유가 바로 그것입니다. 목적지에 CLI를 설치하면 되돌아옵니다. sync에는 이런 실패가 없습니다. 대체 경로가 아예 없어서 대신 요란하게 실패합니다.</p></dd></dl></div>
       <h2>자주 묻는 질문</h2>
       <h3>백업 서버에 relayium이 설치되어 있어야 하나요?</h3>
       <p>명령에 따라 다릅니다. push는 어느 쪽이든 동작합니다: relayium이 설치되어 있으면 네이티브 프로토콜(보내기 전 충돌 검사 + 파일별 SHA-256 검사)을 사용하고, 없으면 push는 SSH를 통한 일반 tar 스트림으로 대체되어 순수한 서버에서도 동작합니다. sync는 항상 원격지에 relayium의 네이티브 프로토콜이 필요합니다 — sync에는 tar 대체 방식이 없으므로 먼저 그곳에 설치하세요.</p>

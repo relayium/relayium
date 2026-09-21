@@ -11,8 +11,14 @@
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/transfer-files-between-mac-and-windows/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/transfer-files-between-mac-and-windows/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="如何在 Mac 和 Windows 电脑之间传输文件" />
@@ -30,37 +36,88 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"如何在 Mac 和 Windows 电脑之间传输文件","description":"在 macOS 和 Windows 之间传文件，不用 U 盘、不用共享文件夹、不用上传网盘。同一网络和跨互联网都能用——两台电脑都无需安装任何东西。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/transfer-files-between-mac-and-windows/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"如何在 Mac 和 Windows 电脑之间传输文件"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Mac 或 Windows PC 上需要安装什么吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。Relayium 在 macOS 和 Windows 上都完全运行于浏览器中。在每台机器上打开 relayium.com 就绪了——无论哪种方式都不用下载。同一网络下传输完全无需账号；跨互联网配对只需发送方登录一下。"}},{"@type":"Question","name":"两台电脑必须在同一网络吗？","acceptedAnswer":{"@type":"Answer","text":"不必。同一网络是最快的方式，因为两台机器会自动互相发现；但配对码同样能让 Mac 和 Windows PC 跨越互联网连接——即使身处不同城市。无论哪种方式传输都保持端到端加密；跨网络路径只是需要发送方先登录，接收方始终无需账号。"}},{"@type":"Question","name":"能发送整个文件夹，而不只是单个文件吗？","acceptedAnswer":{"@type":"Answer","text":"可以。把文件夹拖进去，Relayium 会以一批最多 1,000 个文件发送，并保持文件夹结构。Windows 上的 Chrome 和 Edge 会直接写入你选择的目录；如果接收方浏览器不支持直接写入文件夹，会以单个 .zip 到达，结构相同。"}},{"@type":"Question","name":"从 Mac 传到 Windows，文件权限、换行符或文件名会被弄乱吗？","acceptedAnswer":{"@type":"Answer","text":"字节和文件夹内的相对路径不变，并用 SHA-256 哈希做端到端校验，所以换行符和编码都不会被触碰——任何需要应用层转换处理的东西（比如文本文件里 CRLF 和 LF 的区别）都不受影响，因为文件本身没有被改动。但确实有两样东西过不去：名字里带有 Windows 禁止字符的文件在 PC 上根本无法创建；POSIX 权限、所属关系和 macOS 扩展属性也不会被传输，因为接收端浏览器写出的是遵循 NTFS 自身模型的普通文件。"}},{"@type":"Question","name":"有大小限制吗？","acceptedAnswer":{"@type":"Answer","text":"每批最多 1,000 个文件。服务器端完全没有大小上限——桌面版 Chrome 和 Edge 会直接流式写入磁盘。Firefox 和 Safari 没有 File System Access API，在它们那边接收的整批文件只能先放在内存里，因此超过约 256 MB 时 Relayium 会先提示你——这是个保守估计而非硬上限，真正的天花板取决于这台机器的内存以及还跑着什么。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -78,7 +135,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">如何在 Mac 和 Windows 电脑之间传输文件</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -105,12 +162,12 @@ ol.steps>li>pre{margin:8px 0 0}
       <p>Mac 和 PC 都不用安装。同一网络下也不用注册——浏览器搞定一切。</p>
       <h2>Mac 和 PC 在同一网络下</h2>
       <p>如果两台电脑在同一个办公室或家庭网络中，这是移动文件最快的方式——不用挂载共享盘，也不用跟权限较劲。</p>
-      <ol class="steps" data-block="steps"><li><p>在 Mac 上用浏览器打开传输页面；在 Windows PC 上打开同一个地址。</p><pre><code>https://relayium.com/</code></pre></li><li><p>对比两台机器上状态条里的公网 IP。共享同一个地址才会把它们放进同一个房间——同一个办公网络里的两台机器却报出不同地址，通常是工作笔记本上开着公司 VPN。</p><pre><code>已连接 · 本机 MacBook · 公网 IP 203.0.113.9</code></pre></li><li><p>现在两台机器会在「附近的设备」里互相出现——不用设置 Windows 工作组，也不用开启 macOS 文件共享。在发送方电脑上点击另一台，然后按「打开工作区」。在当前浏览器上，这是卡片提供的唯一一个动作——因为接下来文件、文件夹和消息都走它打开的那一条加密连接。</p></li><li><p>工作区会取代那张卡片。发送用它标题栏下面的控件：「发送文件」发一批（最多 1,000 个），整个目录树用「发送文件夹」，或者直接在消息框里打字——「回车换行 · ⌘/Ctrl+回车发送」——然后按「发送」。在接收方读一下请求下面那行：用 Chrome 或 Edge 时它会说浏览器要问你存到哪，也就是由你自己挑文件夹；用 Safari 或 Firefox 时它会说文件进入浏览器自己的下载目录。然后按「接收」。</p></li><li><p>看着两块屏幕上的文件计数走到最后一个文件。如果想在任何字节移动之前核对校验码（SAS），先在两台机器上打开「高级验证」：一致说明双方加入了同一个端到端加密会话，并不证明密文采用了哪条网络路径。不打开它，会话依然是加密的，只是没有可核对的码。</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">传输成功时是什么样</p><p>这时对方的卡片已经不在了——工作区取代了它——所以状态要从工作区标题栏上读：你连到了哪台机器、连接状态是「已连接」，以及唯一一个路径标签显示「局域网直连」。计数停在这一批的最后一个文件。</p><p>在你挑好的文件夹里，目录树会保持相对路径地落地。目标目录里已经存在的同名文件不会被覆盖：report.pdf 会以 report (1).pdf 的名字落在它旁边。这个改名是 Relayium 自己做的，而且只在浏览器把一个目录交给我们写入时才生效——也就是带文件夹选择器的 Chrome 或 Edge。没有选择器时，命名归那个浏览器的下载管理器，结果要在它自己的列表里看：chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。</p><pre><code>已连接到 ThinkPad · 已连接 · 局域网直连
+      <ol class="steps" data-block="steps"><li><p>在 Mac 上用浏览器打开传输页面；在 Windows PC 上打开同一个地址。</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>对比两台机器上状态条里的公网 IP。共享同一个地址才会把它们放进同一个房间——同一个办公网络里的两台机器却报出不同地址，通常是工作笔记本上开着公司 VPN。</p><pre tabindex="0"><code>已连接 · 本机 MacBook · 公网 IP 203.0.113.9</code></pre></li><li><p>现在两台机器会在「附近的设备」里互相出现——不用设置 Windows 工作组，也不用开启 macOS 文件共享。在发送方电脑上点击另一台，然后按「打开工作区」。在当前浏览器上，这是卡片提供的唯一一个动作——因为接下来文件、文件夹和消息都走它打开的那一条加密连接。</p></li><li><p>工作区会取代那张卡片。发送用它标题栏下面的控件：「发送文件」发一批（最多 1,000 个），整个目录树用「发送文件夹」，或者直接在消息框里打字——「回车换行 · ⌘/Ctrl+回车发送」——然后按「发送」。在接收方读一下请求下面那行：用 Chrome 或 Edge 时它会说浏览器要问你存到哪，也就是由你自己挑文件夹；用 Safari 或 Firefox 时它会说文件进入浏览器自己的下载目录。然后按「接收」。</p></li><li><p>看着两块屏幕上的文件计数走到最后一个文件。如果想在任何字节移动之前核对校验码（SAS），先在两台机器上打开「高级验证」：一致说明双方加入了同一个端到端加密会话，并不证明密文采用了哪条网络路径。不打开它，会话依然是加密的，只是没有可核对的码。</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">传输成功时是什么样</p><p>这时对方的卡片已经不在了——工作区取代了它——所以状态要从工作区标题栏上读：你连到了哪台机器、连接状态是「已连接」，以及唯一一个路径标签显示「局域网直连」。计数停在这一批的最后一个文件。</p><p>在你挑好的文件夹里，目录树会保持相对路径地落地。目标目录里已经存在的同名文件不会被覆盖：report.pdf 会以 report (1).pdf 的名字落在它旁边。这个改名是 Relayium 自己做的，而且只在浏览器把一个目录交给我们写入时才生效——也就是带文件夹选择器的 Chrome 或 Edge。没有选择器时，命名归那个浏览器的下载管理器，结果要在它自己的列表里看：chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。</p><pre tabindex="0"><code>已连接到 ThinkPad · 已连接 · 局域网直连
 文件 12/12</code></pre></div>
       <h2>一台机器看不到另一台时</h2>
       <p>在这一对组合里，工作 VPN 和受管控的办公网络是最值得先查的两项。它们属于常见的首轮排查，而不是全部可能；下面每一种都能靠屏幕上已有的东西判定，不需要找客服。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>两台机器都连着办公 Wi-Fi，但「附近的设备」里谁也不出现。</dt><dd><pre><code>https://relayium.com/   # 对比两台机器上状态条里的公网 IP</code></pre><p>两个不同的公网 IP 就是两个房间，而公司 VPN 是常见原因之一：它把一台机器从公司的出口地址带出去，另一台却还从办公室路由器出去。从别处出网的访客 SSID 是另一种，两者都不是唯一可能。如果你愿意改：在那台机器上断开 VPN，或者离开访客 SSID，然后在那里重新加载 https://relayium.com/。如果 VPN 必须一直开着，用 https://relayium.com/cross-network 上的配对码也能连到另一台机器，不用断开它。</p></dd><dt>两台机器显示的公网 IP 相同，却都不出现卡片。</dt><dd><pre><code>https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关</code></pre><p>网络把自己的客户端隔开了。路由器如果是你自己的，就关闭「AP 隔离 / 客户端隔离」；如果是你无权改动的受管办公网络，就改用 https://relayium.com/cross-network 上的配对码让两台机器配对。</p></dd><dt>还没点接收，Mac 就警告说整批文件必须放在内存里。</dt><dd><pre><code>https://relayium.com/   # 请求下面那行写着这个浏览器会怎么保存</code></pre><p>Safari 没有 File System Access API，所以它会把整批缓存起来而不是直接写出去，超过大约 256 MiB 时 Relayium 就会警告。请在那台 Mac 上换用 Chrome 或 Edge 接收：它会把每个文件流式直接落盘，并且先问你要存到哪个目标文件夹。</p></dd><dt>文件夹传输里其余文件都到了，只有一个在 Windows 侧失败。</dt><dd><pre><code>https://relayium.com/   # 计数停下时会显示它当时正在处理哪个文件</code></pre><p>Windows 不允许文件名里出现 \ / : * ? &quot; &lt; &gt; |，而 macOS 允许，所以在 Mac 上合法的名字在 PC 上可能根本无法创建。请在 Mac 上给那个文件改名——像 2026:08:05 这样日期里的冒号是最常见的元凶——然后重新发送。</p></dd><dt>传输能跑，但标签显示的是「P2P 直连」而不是「局域网直连」。</dt><dd><pre><code>https://relayium.com/   # 看工作区标题栏里的路径标签</code></pre><p>两台机器共享同一个公网 IP，却没有共享本地的那一跳——同一条办公上行下的两个 VLAN 就是这个样子。传输仍然是直连，也仍然端到端加密；如果你要的是走局域网而不是浏览器找到的那条路径，就把两台放到同一个子网里。</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>两台机器都连着办公 Wi-Fi，但「附近的设备」里谁也不出现。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 对比两台机器上状态条里的公网 IP</code></pre><p>两个不同的公网 IP 就是两个房间，而公司 VPN 是常见原因之一：它把一台机器从公司的出口地址带出去，另一台却还从办公室路由器出去。从别处出网的访客 SSID 是另一种，两者都不是唯一可能。如果你愿意改：在那台机器上断开 VPN，或者离开访客 SSID，然后在那里重新加载 https://relayium.com/。如果 VPN 必须一直开着，用 https://relayium.com/cross-network 上的配对码也能连到另一台机器，不用断开它。</p></dd><dt>两台机器显示的公网 IP 相同，却都不出现卡片。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关</code></pre><p>网络把自己的客户端隔开了。路由器如果是你自己的，就关闭「AP 隔离 / 客户端隔离」；如果是你无权改动的受管办公网络，就改用 https://relayium.com/cross-network 上的配对码让两台机器配对。</p></dd><dt>还没点接收，Mac 就警告说整批文件必须放在内存里。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 请求下面那行写着这个浏览器会怎么保存</code></pre><p>Safari 没有 File System Access API，所以它会把整批缓存起来而不是直接写出去，超过大约 256 MiB 时 Relayium 就会警告。请在那台 Mac 上换用 Chrome 或 Edge 接收：它会把每个文件流式直接落盘，并且先问你要存到哪个目标文件夹。</p></dd><dt>文件夹传输里其余文件都到了，只有一个在 Windows 侧失败。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 计数停下时会显示它当时正在处理哪个文件</code></pre><p>Windows 不允许文件名里出现 \ / : * ? &quot; &lt; &gt; |，而 macOS 允许，所以在 Mac 上合法的名字在 PC 上可能根本无法创建。请在 Mac 上给那个文件改名——像 2026:08:05 这样日期里的冒号是最常见的元凶——然后重新发送。</p></dd><dt>传输能跑，但标签显示的是「P2P 直连」而不是「局域网直连」。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 看工作区标题栏里的路径标签</code></pre><p>两台机器共享同一个公网 IP，却没有共享本地的那一跳——同一条办公上行下的两个 VLAN 就是这个样子。传输仍然是直连，也仍然端到端加密；如果你要的是走局域网而不是浏览器找到的那条路径，就把两台放到同一个子网里。</p></dd></dl></div>
       <h2>跨网络：配对与中继</h2>
       <p>配对码由服务器生成，固定为 6 位十进制数字（0–9，可以 0 开头）。发送方登录后创建配对码；通过配对码、链接或二维码加入的人始终无需账号。它可在 5 分钟内用于新设备加入；倒计时结束不会中断已经连上的传输。</p>
       <p>跨网络时，浏览器按设计直接使用加密的 TURN 中继，不会先尝试直连。密钥始终留在两台设备上，因此中继只转发端到端加密后的密文，无法读取文件，也不保留实时内容副本或历史。</p>

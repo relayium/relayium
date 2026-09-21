@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/es/guides/is-it-safe-to-send-files-over-the-internet/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="¿Es seguro enviar archivos por internet?" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"¿Es seguro enviar archivos por internet?","description":"Qué sale mal en realidad con el correo electrónico, los enlaces en la nube y las memorias USB — qué significan de verdad «cifrado de extremo a extremo» y «conocimiento cero», y qué comprobar antes de confiar en una herramienta de transferencia.","inLanguage":"es","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/es/guides/is-it-safe-to-send-files-over-the-internet/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/es/"},{"@type":"ListItem","position":2,"name":"Guías","item":"https://relayium.com/es/guides/"},{"@type":"ListItem","position":3,"name":"¿Es seguro enviar archivos por internet?"}]},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿Es seguro enviar un archivo sensible por correo electrónico?","acceptedAnswer":{"@type":"Answer","text":"El correo electrónico no está diseñado para la transferencia confidencial de archivos — los servidores de correo de ambos extremos suelen retener, escanear y respaldar los adjuntos, y un mensaje reenviado puede poner el archivo delante de personas a las que nunca lo destinaste. Está bien para archivos de poca importancia; para cualquier cosa sensible, una herramienta con cifrado de extremo a extremo elimina esa exposición."}},{"@type":"Question","name":"¿Qué significa de verdad «conocimiento cero»?","acceptedAnswer":{"@type":"Answer","text":"Que a la parte que almacena tus datos nunca se le dio la clave para leerlos. El cifrado ocurre en tu dispositivo antes de que se suba nada, y la clave vive solo en algún sitio que el servidor nunca ve —como un fragmento de URL— así que lo que reside en el servidor es texto cifrado que, por su estructura, no puede descifrar, no solo datos que promete no mirar."}},{"@type":"Question","name":"¿Basta con un archivo zip protegido con contraseña?","acceptedAnswer":{"@type":"Answer","text":"Es mejor que nada, pero la contraseña a menudo viaja por el mismo camino que el archivo —en el mismo hilo de correo, por ejemplo— lo que anula la protección, y las implementaciones del cifrado zip varían mucho en solidez. Una herramienta construida en torno al cifrado de extremo a extremo elimina ese eslabón débil al no necesitar nunca una contraseña compartida."}},{"@type":"Question","name":"¿Guarda Relayium una copia de mis archivos?","acceptedAnswer":{"@type":"Answer","text":"En modo tiempo real, Relayium no conserva copia del lado del servidor ni historial de transferencia: en la misma LAN, WebRTC conecta directamente; entre redes, las sesiones del navegador usan TURN por diseño para transportar texto cifrado de extremo a extremo que el retransmisor no puede leer ni descifrar. Para un enlace almacenado, el servidor guarda solo texto cifrado que no puede leer, hasta que el enlace caduca o se descarga una vez si elegiste la destrucción tras la lectura."}},{"@type":"Question","name":"¿Necesito una cuenta para enviar o recibir un archivo?","acceptedAnswer":{"@type":"Answer","text":"En la misma red, ninguno de los dos lados necesita cuenta. Enviar entre redes mediante un código de emparejamiento, o crear un enlace almacenado, requiere que el remitente inicie sesión — pero quien recibe nunca necesita una cuenta, sea cual sea el modo que se use."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/es/guides/" aria-current="true">Guías</a><a href="/es/apps/">Apps</a><a href="/pricing">Precios</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/es/">Relayium</a> <span aria-hidden="true">›</span> <a href="/es/guides/">Guías</a> <span aria-hidden="true">›</span> <span aria-current="page">¿Es seguro enviar archivos por internet?</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -116,7 +173,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>Qué comprobar de verdad antes de confiar en una herramienta de transferencia</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Lo que necesitas para recorrer esta lista</p><ul><li>Diez minutos y un navegador. Los dos primeros puntos son leer, no auditar.</li><li>Dos dispositivos para los puntos en vivo. El tercero y el cuarto no se pueden hacer desde una página de marketing, que es justo lo que los hace valiosos.</li><li>Ninguna experiencia en seguridad. Cada punto de abajo es o algo que puedes leer o algo que puedes ver ocurrir.</li></ul></div>
       <p>El lenguaje de marketing de un sitio web vale menos que unas pocas preguntas concretas:</p>
-      <ol class="steps" data-block="steps"><li><p>Busca la respuesta del proveedor a &quot;¿podéis leer mis archivos?&quot; en su código fuente, no en su página de precios. Si no hay código fuente, eso ya es una respuesta.</p><pre><code>https://github.com/relayium/relayium</code></pre></li><li><p>Comprueba la licencia y si el repositorio se corresponde con lo que está realmente desplegado. Una afirmación que puedes inspeccionar es de otro tipo que una que se te pide aceptar.</p></li><li><p>En una transferencia en vivo, compara el código de verificación de las dos pantallas. Este es el paso que convierte &quot;cifrado de extremo a extremo&quot; de una frase en algo que se está aplicando entre estos dos extremos concretos.</p><pre><code>https://relayium.com/</code></pre></li><li><p>Mientras esa transferencia corre, abre las herramientas de desarrollo del navegador y mira el panel de red. Busca el contenido de tu archivo en lo que se está subiendo. No encontrarlo es el objetivo; encontrarlo sería el hallazgo.</p></li><li><p>Comprueba qué queda después: si un enlace caduca por sí solo, y si el servicio podría volver a producir el archivo más adelante si alguien se lo pidiera.</p></li></ol>
+      <ol class="steps" data-block="steps"><li><p>Busca la respuesta del proveedor a &quot;¿podéis leer mis archivos?&quot; en su código fuente, no en su página de precios. Si no hay código fuente, eso ya es una respuesta.</p><pre tabindex="0"><code>https://github.com/relayium/relayium</code></pre></li><li><p>Comprueba la licencia y si el repositorio se corresponde con lo que está realmente desplegado. Una afirmación que puedes inspeccionar es de otro tipo que una que se te pide aceptar.</p></li><li><p>En una transferencia en vivo, compara el código de verificación de las dos pantallas. Este es el paso que convierte &quot;cifrado de extremo a extremo&quot; de una frase en algo que se está aplicando entre estos dos extremos concretos.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>Mientras esa transferencia corre, abre las herramientas de desarrollo del navegador y mira el panel de red. Busca el contenido de tu archivo en lo que se está subiendo. No encontrarlo es el objetivo; encontrarlo sería el hallazgo.</p></li><li><p>Comprueba qué queda después: si un enlace caduca por sí solo, y si el servicio podría volver a producir el archivo más adelante si alguien se lo pidiera.</p></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">Qué te dice de verdad superar esta lista</p><p>Los dos primeros puntos son baratos y descartan la mayoría de las herramientas en minutos. Los tres últimos no los puede fingir ninguna página de aterrizaje, porque los ves ocurrir en tus propios dos dispositivos.</p><p>Nada de esto hace que una herramienta sea de fiar en abstracto. Hace comprobables afirmaciones concretas, que es lo máximo que cualquiera de nosotros puede hacer sin leer cada línea.</p></div>
       <ul><li>¿Dice «cifrado» (podría ser solo TLS) o específicamente «cifrado de extremo a extremo» (solo el remitente y el destinatario tienen la clave)?</li><li>¿Hay una forma de verificar que la conexión no fue manipulada — un código que comparas, no solo un icono de candado en el que tienes que confiar?</li><li>¿Se comprueba la integridad del archivo, para que un archivo corrupto o alterado no llegue silenciosamente mal?</li><li>¿Es el código abierto y auditable, o las afirmaciones son solo marketing que tienes que aceptar por fe?</li><li>¿Enviar o recibir exige entregar más identidad de la que la transferencia realmente necesita?</li><li>Si se almacena algo, ¿tiene una vida útil clara y finita —una caducidad o un borrado tras la descarga— en lugar de quedarse ahí indefinidamente?</li></ul>
       <h2>Cómo responde Relayium a cada una de estas</h2>
@@ -131,7 +188,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <p>Y ninguna herramienta de transferencia, por bien cifrada que esté, protege un archivo que ya está expuesto en un dispositivo comprometido — un buen cifrado da por supuesto que los dos extremos son de fiar. Nada de esto es motivo para volverse paranoico con el envío de archivos; solo vale la pena saber qué cubre el cifrado y qué no.</p>
       <h2>Cuando una comprobación no da una respuesta limpia</h2>
       <p>Tres sitios donde la gente se atasca. En los tres, la ambigüedad ya es informativa.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Con qué te encuentras, qué comprobar, qué significa</p><dl><dt>El panel de red muestra una subida grande y no puedes saber qué lleva dentro.</dt><dd><pre><code>https://relayium.com/   # developer tools, Network panel, during a transfer</code></pre><p>Ese es el resultado esperado, no un callejón sin salida. Lo que buscas es la ausencia de cualquier cosa reconocible de tu archivo: un nombre de archivo que elegiste tú, una cadena que sabes que está en el documento. Si puedes leer tu propio contenido en la carga, ese es el hallazgo, y es concluyente.</p></dd><dt>No hay código de verificación, así que el tercer punto no se puede hacer.</dt><dd><pre><code>https://relayium.com/   # a stored link has no second live endpoint to compare against</code></pre><p>Estás en una transferencia por enlace almacenado, no en una en vivo. No hay un segundo extremo conectado con el que comparar, así que la garantía tiene otra forma: la clave vive en el fragmento del enlace y nunca llega al servidor. Compara códigos en las transferencias en vivo y revisa la caducidad del enlace en las almacenadas.</p></dd><dt>El código es abierto pero no sabes leer el lenguaje en que está escrito.</dt><dd><pre><code>https://github.com/relayium/relayium   # is the claim falsifiable at all</code></pre><p>No hace falta. La pregunta que responde este punto es si la afirmación es siquiera refutable: ¿hay repositorio?, ¿se corresponde con lo desplegado?, ¿podría contradecirla alguien que sí lea ese lenguaje? Una afirmación que nadie está en condiciones de comprobar es, ella misma, el hallazgo.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Con qué te encuentras, qué comprobar, qué significa</p><dl><dt>El panel de red muestra una subida grande y no puedes saber qué lleva dentro.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # developer tools, Network panel, during a transfer</code></pre><p>Ese es el resultado esperado, no un callejón sin salida. Lo que buscas es la ausencia de cualquier cosa reconocible de tu archivo: un nombre de archivo que elegiste tú, una cadena que sabes que está en el documento. Si puedes leer tu propio contenido en la carga, ese es el hallazgo, y es concluyente.</p></dd><dt>No hay código de verificación, así que el tercer punto no se puede hacer.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # a stored link has no second live endpoint to compare against</code></pre><p>Estás en una transferencia por enlace almacenado, no en una en vivo. No hay un segundo extremo conectado con el que comparar, así que la garantía tiene otra forma: la clave vive en el fragmento del enlace y nunca llega al servidor. Compara códigos en las transferencias en vivo y revisa la caducidad del enlace en las almacenadas.</p></dd><dt>El código es abierto pero no sabes leer el lenguaje en que está escrito.</dt><dd><pre tabindex="0"><code>https://github.com/relayium/relayium   # is the claim falsifiable at all</code></pre><p>No hace falta. La pregunta que responde este punto es si la afirmación es siquiera refutable: ¿hay repositorio?, ¿se corresponde con lo desplegado?, ¿podría contradecirla alguien que sí lea ese lenguaje? Una afirmación que nadie está en condiciones de comprobar es, ella misma, el hallazgo.</p></dd></dl></div>
       <h2>Preguntas frecuentes</h2>
       <h3>¿Es seguro enviar un archivo sensible por correo electrónico?</h3>
       <p>El correo electrónico no está diseñado para la transferencia confidencial de archivos — los servidores de correo de ambos extremos suelen retener, escanear y respaldar los adjuntos, y un mensaje reenviado puede poner el archivo delante de personas a las que nunca lo destinaste. Está bien para archivos de poca importancia; para cualquier cosa sensible, una herramienta con cifrado de extremo a extremo elimina esa exposición.</p>

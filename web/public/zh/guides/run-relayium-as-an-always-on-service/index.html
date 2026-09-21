@@ -11,8 +11,14 @@
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/run-relayium-as-an-always-on-service/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/run-relayium-as-an-always-on-service/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="把 Relayium 变成常驻接收服务" />
@@ -30,37 +36,88 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"把 Relayium 变成常驻接收服务","description":"让 relayium serve 一直运行，这样任何对端都能随时向你推送——通过证书固定的 TLS 进行 daemon 直连。涵盖首次推送批准、预先授权指纹、在 systemd（Linux）或 launchd（macOS）下开机自启，以及 --allow-delete。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/run-relayium-as-an-always-on-service/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"把 Relayium 变成常驻接收服务"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"serve 默认监听哪个端口？","acceptedAnswer":{"@type":"Answer","text":"9031。可以用 --port 同时修改监听端（serve --port N）和推送方的目标地址（relayium://host:N）。"}},{"@type":"Question","name":"我必须手动批准每一次推送吗？","acceptedAnswer":{"@type":"Answer","text":"只需要批准某个指纹的第一次推送，而且仅当 serve 是在带终端的环境下运行时才会提示。此后它会被记住。如果 serve 以非交互方式运行（systemd、管道），就完全不会出现提示，而是直接拒绝未知对端——这时应改为用 relayium authorize 预先授权它们。"}},{"@type":"Question","name":"发送方可以删除我这台常驻接收机上的文件吗？","acceptedAnswer":{"@type":"Answer","text":"只有当你以 --allow-delete 启动了 serve，并且发送方在运行 sync --delete 时才可以。如果没有 --allow-delete，删除操作会被静默跳过，其余内容照常传输。"}},{"@type":"Question","name":"运行一个常驻接收服务是免费的吗？","acceptedAnswer":{"@type":"Answer","text":"是的。relayium serve 是免费、可自托管的 CLI 的一部分——连接的任何一方都不需要账号，也没有付费档位。"}},{"@type":"Question","name":"serve 把身份和对端列表存在哪里？","acceptedAnswer":{"@type":"Answer","text":"默认在 ~/.config/relayium 中（id.key/id.crt 是这台主机的身份，authorized_fingerprints 是允许列表）。对于 systemd 服务，可以把 --config-dir 指向一个固定位置，例如 /etc/relayium。"}},{"@type":"Question","name":"在 macOS 上怎么让 serve 开机自启？","acceptedAnswer":{"@type":"Answer","text":"macOS 没有 systemd——用 launchd。把 serve 装成 /Library/LaunchDaemons 里的 LaunchDaemon（开机启动；设置 UserName 以你的身份运行），或 ~/Library/LaunchAgents 里的 LaunchAgent（登录时启动）。本指南给了一份可直接改的 plist；没有 Homebrew 服务。由于 launchd 不给 serve 终端弹提示，请先用 relayium authorize 预先授权推送方。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -78,7 +135,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">把 Relayium 变成常驻接收服务</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -102,16 +159,16 @@ ol.steps>li>pre{margin:8px 0 0}
       <p class="lead">本指南涵盖启动一个长期运行的监听端、批准谁可以向它推送、为没有人守在终端前的场景预先授权对端、在 systemd 下运行它，以及让使用 sync --delete 的发送方镜像删除操作。</p>
       <h2>开始之前</h2>
       <p>下面用到的都是 relayium CLI，所以没装的话先装上。在 macOS 或 Linux 上，一条命令就能把预编译二进制放进你的 PATH：</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul>
       <h2>启动监听端</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">开始之前你需要什么</p><ul><li>两台机器上都装好 CLI。relayium version 会各自打印版本号；如果 shell 回答 command not found，说明那台还没装。</li><li>本机上一个用来接收文件的目录，以及装得下这些文件的磁盘空间。</li><li>一个发送方能访问到的地址，和一个放通的入站端口。不指定 --port 时 serve 监听 9031。</li><li>如果这台机器将来是没有终端运行的——那正是做成服务的意义——你需要事先拿到推送方的指纹。下面有专门一节讲这个，而它正是常驻接收端把一切都拒掉的最常见原因。</li></ul></div>
       <p>serve 通过证书固定的 TLS 1.3 连接监听 daemon 直连推送（relayium://host:port），并把收到的内容写入某个目录。启动它不需要预先共享任何东西——不用复制指纹，也不用注册服务器：</p>
-      <pre><code>relayium serve --dir ~/inbox
+      <pre tabindex="0"><code>relayium serve --dir ~/inbox
 relayium serve --dir /srv/drop --port 9040   # 非默认端口
 relayium serve --dir ~/inbox --allow-delete  # 允许使用 sync --delete 的发送方镜像删除操作</code></pre>
-      <ol class="steps" data-block="steps"><li><p>选好文件落地的位置，把监听器起起来。走到这一步不需要预先交换任何东西。</p><pre><code>relayium serve --dir ~/inbox</code></pre></li><li><p>在发送方机器上，按 relayium:// 地址往这台主机推一个文件。</p><pre><code>relayium push ./report.pdf relayium://drop.example.com:9031</code></pre></li><li><p>回到接收端，回答那个批准提示。按 y 会把该指纹写入 authorized_fingerprints，之后同一台机器再推就不会再问了。</p></li><li><p>确认文件真的落在了 --dir 里，而不是你启动 serve 时所在的那个目录。</p><pre><code>ls -l ~/inbox</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">一个正常的监听器长什么样</p><p>serve 一上来就会说明自己还没有已授权的对端，然后在新机器第一次推送时提示，此后每一次都安安静静。发送方退出码 0，文件出现在 --dir 里。</p><pre><code>$ relayium serve --dir ~/inbox
+      <ol class="steps" data-block="steps"><li><p>选好文件落地的位置，把监听器起起来。走到这一步不需要预先交换任何东西。</p><pre tabindex="0"><code>relayium serve --dir ~/inbox</code></pre></li><li><p>在发送方机器上，按 relayium:// 地址往这台主机推一个文件。</p><pre tabindex="0"><code>relayium push ./report.pdf relayium://drop.example.com:9031</code></pre></li><li><p>回到接收端，回答那个批准提示。按 y 会把该指纹写入 authorized_fingerprints，之后同一台机器再推就不会再问了。</p></li><li><p>确认文件真的落在了 --dir 里，而不是你启动 serve 时所在的那个目录。</p><pre tabindex="0"><code>ls -l ~/inbox</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">一个正常的监听器长什么样</p><p>serve 一上来就会说明自己还没有已授权的对端，然后在新机器第一次推送时提示，此后每一次都安安静静。发送方退出码 0，文件出现在 --dir 里。</p><pre tabindex="0"><code>$ relayium serve --dir ~/inbox
 no authorized peers yet — you&#39;ll be asked to approve each new peer on its first push.
 Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
@@ -119,22 +176,22 @@ Accept and remember this peer? [y/N] y</code></pre></div>
       <ul><li>--dir 设置文件落地的位置（默认是当前目录）。</li><li>--port 设置监听端口（默认是 9031）；如果发送方在别处，需要在防火墙上开放该端口。</li><li>不加 --once 时，serve 会持续运行并接受推送，直到你手动停止它，或者由进程管理器重启它——这正是它能成为常驻服务的原因。</li></ul>
       <h2>批准谁可以推送</h2>
       <p>当一个新的对端第一次推送时，如果 serve 运行在终端中，它会显示这次推送来自哪里、它的指纹，并请你批准——就像 SSH 首次连接未知主机时会询问一样：</p>
-      <pre><code>Incoming push from 203.0.113.7:54021
+      <pre tabindex="0"><code>Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
 Accept and remember this peer? [y/N] y</code></pre>
       <ul><li>回答一次 y，该指纹就会被写入 authorized_fingerprints；此后同一台机器的每次推送都会直接通过，不再提示。</li><li>指纹标识的是一台机器，而不是一个网络地址，因此即使发送方的 IP 变化，它依然有效。</li><li>这一步是交互式的，刻意如此——需要有人守在键盘前，而一旦 serve 迁移到 systemd（下一步），这就不成立了。</li></ul>
       <h2>为非交互式场景预先授权对端</h2>
       <p>当 serve 没有终端可以弹出提示时——作为 systemd 服务、后台进程，或通过管道运行——它无法询问，因此会拒绝任何它尚未识别的指纹。这时应该提前授权对端。在将要推送的那台机器上运行 relayium id 打印它的指纹；在接收方上，在第一次推送到达之前把它加进去：</p>
-      <pre><code># 在将要推送的那台机器上：打印它的指纹
+      <pre tabindex="0"><code># 在将要推送的那台机器上：打印它的指纹
 relayium id
 
 # 在这台常驻接收机上：预先授权它
 relayium authorize 74318e3b...</code></pre>
-      <ol class="steps" data-block="steps"><li><p>在将要推送的机器上打印它的指纹。它是 64 位十六进制，标识的是那台机器而不是它的地址。</p><pre><code>relayium id</code></pre></li><li><p>在这台接收端上授权它——要用服务将来运行时相同的 --config-dir。用错用户执行、或者这边用默认路径而 unit 里用的是另一个，指纹就会写进服务永远不会读的那个文件里。</p><pre><code>relayium authorize 74318e3b… --config-dir /etc/relayium</code></pre></li></ol>
+      <ol class="steps" data-block="steps"><li><p>在将要推送的机器上打印它的指纹。它是 64 位十六进制，标识的是那台机器而不是它的地址。</p><pre tabindex="0"><code>relayium id</code></pre></li><li><p>在这台接收端上授权它——要用服务将来运行时相同的 --config-dir。用错用户执行、或者这边用默认路径而 unit 里用的是另一个，指纹就会写进服务永远不会读的那个文件里。</p><pre tabindex="0"><code>relayium authorize 74318e3b… --config-dir /etc/relayium</code></pre></li></ol>
       <ul><li>authorize 是幂等的——对一个已经信任的指纹再次运行它不会有任何效果。</li><li>身份和信任文件存放在 --config-dir 指定的目录下，默认是 ~/.config/relayium（id.key/id.crt 是这台主机的身份，authorized_fingerprints 是对端允许列表）。</li></ul>
       <h2>在 systemd 下运行</h2>
       <p>如果希望服务能在重启和崩溃后依然存活，把 serve 交给 systemd。把 --config-dir 指向一个固定路径，让主机的身份和它的对端允许列表在重启之间保持不变：</p>
-      <pre><code># /etc/systemd/system/relayium-serve.service
+      <pre tabindex="0"><code># /etc/systemd/system/relayium-serve.service
 [Unit]
 Description=Relayium always-on receiver
 After=network-online.target
@@ -146,15 +203,15 @@ User=relayium
 
 [Install]
 WantedBy=multi-user.target</code></pre>
-      <ol class="steps" data-block="steps"><li><p>在服务存在之前，先授权每一个应该能推送的对端。服务无法弹提示，凡是不在信任列表里的一律拒绝。</p></li><li><p>把上面那份 unit 文件写到 /etc/systemd/system/relayium-serve.service，其中 --config-dir 要指向你刚才授权时用的那个固定路径。</p></li><li><p>重新加载 systemd 并启动服务，同时设为开机自启，这样重启后还会回来。</p><pre><code>sudo systemctl daemon-reload</code></pre><pre><code>sudo systemctl enable --now relayium-serve</code></pre></li><li><p>确认它在运行，并且日志里没有那条「全部拒绝」的警告。两者之中只有后一条是这个场景特有的。</p><pre><code>systemctl is-active relayium-serve</code></pre><pre><code>journalctl -u relayium-serve -n 20 --no-pager</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">一个正常的服务长什么样</p><p>is-active 回答 active，并且启动时那条「没有已授权对端」的警告不出现。这条警告是唯一一行能在任何发送方抱怨之前就告诉你：这个服务会拒掉每一次推送。</p><pre><code>$ systemctl is-active relayium-serve
+      <ol class="steps" data-block="steps"><li><p>在服务存在之前，先授权每一个应该能推送的对端。服务无法弹提示，凡是不在信任列表里的一律拒绝。</p></li><li><p>把上面那份 unit 文件写到 /etc/systemd/system/relayium-serve.service，其中 --config-dir 要指向你刚才授权时用的那个固定路径。</p></li><li><p>重新加载 systemd 并启动服务，同时设为开机自启，这样重启后还会回来。</p><pre tabindex="0"><code>sudo systemctl daemon-reload</code></pre><pre tabindex="0"><code>sudo systemctl enable --now relayium-serve</code></pre></li><li><p>确认它在运行，并且日志里没有那条「全部拒绝」的警告。两者之中只有后一条是这个场景特有的。</p><pre tabindex="0"><code>systemctl is-active relayium-serve</code></pre><pre tabindex="0"><code>journalctl -u relayium-serve -n 20 --no-pager</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">一个正常的服务长什么样</p><p>is-active 回答 active，并且启动时那条「没有已授权对端」的警告不出现。这条警告是唯一一行能在任何发送方抱怨之前就告诉你：这个服务会拒掉每一次推送。</p><pre tabindex="0"><code>$ systemctl is-active relayium-serve
 active
 $ journalctl -u relayium-serve -n 20 --no-pager | grep -c &#39;all pushes will be rejected&#39;
 0</code></pre></div>
       <ul><li>在启用该服务之前，先为每一个应该能够推送的对端运行 relayium authorize &lt;fingerprint&gt;——服务本身无法弹出提示。</li><li>systemctl enable --now relayium-serve 会启动它，并让它在每次开机时自动恢复运行。</li><li>/etc/relayium/id.key 的权限必须恰好是 0600，属主是 unit 里 User= 指定的用户。其他任何值 relayium 都拒绝加载——包括 0400，所以把它加固到比 0600 更严，和让它全局可读一样会让服务起不来。</li></ul>
       <h2>在 macOS 上开机自启（launchd）</h2>
       <p>macOS 没有 systemd——它的服务管理器是 launchd。要让 serve 在 Mac 上常驻（比如一台常开、当落地点用的 Mac mini），把它装成 LaunchDaemon，这样开机即启动、无需任何人登录。设置 UserName 让它以你自己的身份（而非 root）运行，并给 --dir 和 --config-dir 绝对路径，这样它的身份和信任文件仍留在你自己的 ~/.config/relayium 里：</p>
-      <pre><code>&lt;!-- /Library/LaunchDaemons/com.relayium.serve.plist  (replace YOU with your macOS username) --&gt;
+      <pre tabindex="0"><code>&lt;!-- /Library/LaunchDaemons/com.relayium.serve.plist  (replace YOU with your macOS username) --&gt;
 &lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot; &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;
 &lt;plist version=&quot;1.0&quot;&gt;
@@ -176,7 +233,7 @@ $ journalctl -u relayium-serve -n 20 --no-pager | grep -c &#39;all pushes will b
   &lt;key&gt;StandardErrorPath&lt;/key&gt;  &lt;string&gt;/Users/YOU/relayium-serve.log&lt;/string&gt;
 &lt;/dict&gt;
 &lt;/plist&gt;</code></pre>
-      <pre><code># 1) authorize each pusher first — launchd gives serve no terminal to prompt on:
+      <pre tabindex="0"><code># 1) authorize each pusher first — launchd gives serve no terminal to prompt on:
 relayium authorize &lt;fingerprint&gt;     # get the fingerprint from the pusher&#39;s  relayium id
 
 # 2) save the plist above to that path, then load it (root-owned, starts at boot):
@@ -190,14 +247,14 @@ sudo launchctl bootout system/com.relayium.serve</code></pre>
       <ul><li>launchd 不给 serve 终端，所以它无法弹出提示——请先为每个推送方运行 relayium authorize &lt;fingerprint&gt;，跟 systemd 一样。指纹来自那台机器的 relayium id。</li><li>KeepAlive 会在 serve 崩溃时把它重新拉起；RunAtLoad 加上放在 /Library/LaunchDaemons 的 LaunchDaemon，会在开机时（无需登录）启动它——正适合一台无人值守的 Mac mini。</li><li>想要登录级的服务？把同一份 plist（去掉 UserName 键）放到 ~/Library/LaunchAgents/，用 launchctl bootstrap gui/$(id -u) &lt;path&gt; 加载——它会在你登录时启动，而不是开机时。</li><li>如果开了 macOS 应用防火墙，请允许 relayium 的传入连接（系统设置 → 网络 → 防火墙），否则发往你端口的推送会被拦截。</li></ul>
       <h2>让 sync --delete 的发送方镜像删除操作</h2>
       <p>默认情况下，serve 只会新增或更新文件——即使发送方对它运行 sync --delete，新增和修改过的文件依然会被复制，但它请求的删除操作会被跳过，接收方会记录一条警告。用 --allow-delete 启动 serve 即可选择启用真正的镜像同步，让发送方那边删除的文件在这里也被删除：</p>
-      <pre><code>relayium serve --dir /srv/mirror --allow-delete</code></pre>
+      <pre tabindex="0"><code>relayium serve --dir /srv/mirror --allow-delete</code></pre>
       <ul><li>--allow-delete 是接收方一侧的选择性开关；发送方仍然需要用 sync --delete 主动请求删除。</li><li>如果不加这个选项，无论发送方请求什么，这台机器上都不会删除任何文件。</li></ul>
       <h2>出问题时怎么办</h2>
       <p>这五种里有四种会让服务照常运行、看着一切健康——一个把所有请求都拒掉的监听器，也仍然是个监听器。每一种都有一行可读的输出或一条可跑的命令来判定。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>服务起来了也一直在跑，但每一次推送都被拒绝。</dt><dd><pre><code>journalctl -u relayium-serve -n 20 --no-pager
-# warning: no authorized peers and no terminal to approve on; all pushes will be rejected.</code></pre><p>服务没有终端，所以它永远跑不了首次推送的批准提示，而它能看到的只有一个陌生指纹。请事先授权每个发送方：在发送方跑 relayium id，在这边跑 relayium authorize &lt;指纹&gt;——并且要用 unit 里那个 --config-dir。这条警告是启动时打印的，所以它从日志第一行起就在那里。</p></dd><dt>服务压根起不来，报 id.key 权限不安全。</dt><dd><pre><code>stat -c &#39;%a %U %n&#39; /etc/relayium/id.key
-# 400 relayium /etc/relayium/id.key</code></pre><p>私钥权限必须恰好是 0600。不能是 0644，而且——这一点最容易踩——也不能是 0400，所以把它「加固得更严」和「放得更松」一样会让服务起不来。给它 chmod 600，并确认属主是 unit 里 User= 指定的那个用户。</p></dd><dt>发送方报告连接被拒绝。</dt><dd><pre><code>relayium push ./build relayium://drop.example.com:9031
-# hint: if the peer refused the connection, it may not have authorized this host.</code></pre><p>接收端不认识这个发送方。在发送方跑 relayium id，把那个指纹在接收端 relayium authorize 一下。如果你已经做过了，那就检查是不是在 unit 的 --config-dir 下做的：信任文件是按目录存的，授权进 ~/.config/relayium 的指纹，对一个读 /etc/relayium 的服务来说根本不存在。</p></dd><dt>手动跑 serve 时推送正常，走服务就不行，或者换一台机器就不行。</dt><dd><pre><code>sudo ss -tlnp | grep 9031</code></pre><p>两个不同的原因，一条检查就能分开。如果根本没有监听，说明 unit 没有 enable——用 systemctl is-enabled relayium-serve 确认。如果在监听，那就是端口被挡了：在主机防火墙和云安全组里放通 9031。用了非默认 --port 的话，它必须和发送方 relayium://host:N 里的端口一致。</p></dd><dt>sync --delete 发送方要求的删除在这台机器上从不发生。</dt><dd><pre><code>journalctl -u relayium-serve | grep -i delete</code></pre><p>删除是接收端的显式选项，默认关闭：新增和变更的文件照常复制，每一次被跳过的删除都会在这边记一条警告。在 unit 的 ExecStart 上加 --allow-delete 再重启。光是发送方要求并不够，而这种不对称是刻意的——接收端不会因为别处敲了一个参数就丢文件。</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>服务起来了也一直在跑，但每一次推送都被拒绝。</dt><dd><pre tabindex="0"><code>journalctl -u relayium-serve -n 20 --no-pager
+# warning: no authorized peers and no terminal to approve on; all pushes will be rejected.</code></pre><p>服务没有终端，所以它永远跑不了首次推送的批准提示，而它能看到的只有一个陌生指纹。请事先授权每个发送方：在发送方跑 relayium id，在这边跑 relayium authorize &lt;指纹&gt;——并且要用 unit 里那个 --config-dir。这条警告是启动时打印的，所以它从日志第一行起就在那里。</p></dd><dt>服务压根起不来，报 id.key 权限不安全。</dt><dd><pre tabindex="0"><code>stat -c &#39;%a %U %n&#39; /etc/relayium/id.key
+# 400 relayium /etc/relayium/id.key</code></pre><p>私钥权限必须恰好是 0600。不能是 0644，而且——这一点最容易踩——也不能是 0400，所以把它「加固得更严」和「放得更松」一样会让服务起不来。给它 chmod 600，并确认属主是 unit 里 User= 指定的那个用户。</p></dd><dt>发送方报告连接被拒绝。</dt><dd><pre tabindex="0"><code>relayium push ./build relayium://drop.example.com:9031
+# hint: if the peer refused the connection, it may not have authorized this host.</code></pre><p>接收端不认识这个发送方。在发送方跑 relayium id，把那个指纹在接收端 relayium authorize 一下。如果你已经做过了，那就检查是不是在 unit 的 --config-dir 下做的：信任文件是按目录存的，授权进 ~/.config/relayium 的指纹，对一个读 /etc/relayium 的服务来说根本不存在。</p></dd><dt>手动跑 serve 时推送正常，走服务就不行，或者换一台机器就不行。</dt><dd><pre tabindex="0"><code>sudo ss -tlnp | grep 9031</code></pre><p>两个不同的原因，一条检查就能分开。如果根本没有监听，说明 unit 没有 enable——用 systemctl is-enabled relayium-serve 确认。如果在监听，那就是端口被挡了：在主机防火墙和云安全组里放通 9031。用了非默认 --port 的话，它必须和发送方 relayium://host:N 里的端口一致。</p></dd><dt>sync --delete 发送方要求的删除在这台机器上从不发生。</dt><dd><pre tabindex="0"><code>journalctl -u relayium-serve | grep -i delete</code></pre><p>删除是接收端的显式选项，默认关闭：新增和变更的文件照常复制，每一次被跳过的删除都会在这边记一条警告。在 unit 的 ExecStart 上加 --allow-delete 再重启。光是发送方要求并不够，而这种不对称是刻意的——接收端不会因为别处敲了一个参数就丢文件。</p></dd></dl></div>
       <h2>常见问题</h2>
       <h3>serve 默认监听哪个端口？</h3>
       <p>9031。可以用 --port 同时修改监听端（serve --port N）和推送方的目标地址（relayium://host:N）。</p>

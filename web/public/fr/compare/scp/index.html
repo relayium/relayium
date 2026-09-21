@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/fr/compare/scp/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Relayium vs scp : transfert plus simple par SSH" />
@@ -27,35 +33,86 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs scp : transfert plus simple par SSH","description":"scp est universel et préinstallé partout. Les commandes push/pull de Relayium utilisent le même SSH mais ajoutent la reprise, la vérification SHA-256, la progression et un repli pour les serveurs nus. Un comparatif honnête.","inLanguage":"fr","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/fr/compare/scp/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/fr/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/fr/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs scp : transfert plus simple par SSH"}]},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"La CLI Relayium a-t-elle besoin d'un compte ?","acceptedAnswer":{"@type":"Answer","text":"Pas pour push/pull — il utilise votre propre accès SSH exactement comme scp, sans compte Relayium ni connexion, et il en va de même pour daemon-direct et sync. send et le up cloud font exception : send a besoin d'un compte pour que le serveur génère son code d'appairage (pas s'il reçoit un code qu'on lui passe), et up d'un compte pour stocker le fichier. Recevoir n'en demande jamais."}},{"@type":"Question","name":"push fonctionne-t-il si le serveur distant n'a pas Relayium installé ?","acceptedAnswer":{"@type":"Answer","text":"Oui. push vérifie d'abord et, si relayium n'est pas présent, bascule sur un simple flux tar via la même connexion SSH, ce qui fonctionne donc même vers un serveur nu. Ce repli n'existe que pour push — pull a toujours besoin de relayium déjà installé côté distant, puisque la machine distante joue le rôle d'expéditeur dans un pull."}},{"@type":"Question","name":"Est-ce vraiment aussi simple à utiliser que scp ?","acceptedAnswer":{"@type":"Answer","text":"Les commandes se ressemblent : relayium push src user@host:dest au lieu de scp -r src user@host:dest. La différence n'apparaît que quand quelque chose tourne mal — une connexion coupée reprend au lieu de repartir de zéro, et chaque fichier est vérifié par somme de contrôle à l'arrivée."}},{"@type":"Question","name":"Quand devrais-je simplement utiliser scp ?","acceptedAnswer":{"@type":"Answer","text":"Pour une copie ponctuelle réelle, où rien n'a besoin de reprendre, rien n'a besoin d'être vérifié, et où vous ne voulez aucun binaire supplémentaire — scp est déjà là et reste le choix le plus simple. C'est aussi le choix par défaut le plus sûr dans des scripts rapides où vous ne voulez pas d'une nouvelle dépendance."}},{"@type":"Question","name":"La CLI Relayium est-elle gratuite ?","acceptedAnswer":{"@type":"Answer","text":"Oui, entièrement — aucun palier payant, sous licence AGPL-3.0 et open source, et chaque mode connecte directement les deux extrémités."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
@@ -63,7 +120,7 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/fr/guides/" aria-current="true">Guides</a><a href="/fr/apps/">Applis</a><a href="/pricing">Tarifs</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs scp : transfert plus simple par SSH</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -90,23 +147,23 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>Il est déjà installé — rien à télécharger, rien à configurer, sur pratiquement tous les serveurs sur lesquels vous vous connecterez un jour en SSH.</li><li>Il est éprouvé. Des décennies d&#39;usage, un comportement bien compris, et chaque administrateur système connaît déjà les options.</li><li>Pour un vrai cas ponctuel — copier ce seul fichier, tout de suite — taper scp fichier.txt user@host:chemin demande moins d&#39;efforts que d&#39;installer quoi que ce soit.</li><li>Idéal pour des scripts rapides et jetables où vous ne voulez aucune dépendance au-delà d&#39;OpenSSH.</li></ul>
       <h2>Avant de commencer</h2>
       <p>Tout ci-dessous passe par la CLI relayium, alors installez-la d&#39;abord si ce n&#39;est pas fait. Sous macOS ou Linux, une commande place un binaire précompilé dans votre PATH :</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>Vous préférez choisir le fichier vous-même, ou sous Windows ? Récupérez un binaire depuis la page des releases — relayium.com/cli liste toutes les options (avec Go, go build -o relayium ./cmd/relayium).</li><li>relayium --version confirme l&#39;installation. Sans cela, les commandes ci-dessous affichent seulement « command not found ».</li></ul>
       <h2>push / pull : le même SSH, avec reprise, sommes de contrôle et progression</h2>
       <p>relayium push et relayium pull se connectent via exactement le même accès SSH que celui utilisé par scp — même hôte, même clé, même port. La différence se joue dans ce qui se passe une fois la connexion ouverte.</p>
       <p>Chaque fichier est vérifié de bout en bout par une empreinte SHA-256 après son arrivée, si bien qu&#39;un transfert qui semble terminé correspond réellement, octet pour octet, à ce qui a été envoyé. Si un transfert est interrompu — connexion coupée, capot d&#39;ordinateur portable fermé — relancer la même commande reprend là où elle s&#39;était arrêtée au lieu de tout renvoyer, avec une vraie progression par fichier visible tout du long, et non une copie silencieuse.</p>
       <p>La plus grande différence pratique concerne ce qui se passe quand la machine distante n&#39;a pas Relayium installé. push le vérifie automatiquement et, si ce n&#39;est pas le cas, bascule sur un simple flux tar transmis via la même connexion SSH vers un tar -x côté distant — push fonctionne donc même vers un serveur totalement nu, sans rien à installer au préalable. Ce repli n&#39;existe que pour push : pull a toujours besoin de relayium déjà installé côté distant, car dans un pull, la machine distante joue le rôle d&#39;expéditeur.</p>
-      <pre><code>relayium push ./photos user@your-server:backups/</code></pre>
-      <pre><code>relayium pull user@your-server:backups/ ./restore</code></pre>
+      <pre tabindex="0"><code>relayium push ./photos user@your-server:backups/</code></pre>
+      <pre tabindex="0"><code>relayium pull user@your-server:backups/ ./restore</code></pre>
       <h2>Au-delà de SSH : daemon-direct et appairage entre réseaux</h2>
       <p>scp ne fonctionne que là où vous avez un accès SSH. La CLI Relayium ajoute deux autres façons de déplacer des fichiers pour lesquelles scp n&#39;a aucun équivalent.</p>
       <p>relayium serve transforme une machine que vous possédez en cible daemon-direct, accessible via TLS 1.3 avec épinglage — pas de SSH, pas de port 22, la confiance s&#39;établit à la première connexion (approuvée de façon interactive, ou pré-autorisée avec relayium authorize pour un usage sans surveillance) puis reste épinglée ensuite. Poussez directement vers elle avec une adresse relayium://.</p>
       <p>Pour envoyer à quelqu&#39;un sur Internet auprès de qui vous n&#39;avez aucun accès SSH, relayium send / receive appaire à la place deux ordinateurs avec un court code — pair-à-pair direct, avec un court code de vérification facultatif (SAS) que les deux parties peuvent comparer d&#39;abord — --verify s&#39;arrête pour cela. scp n&#39;a aucune réponse à ce cas de figure ; il vous faudrait d&#39;abord un accès SSH.</p>
-      <pre><code>relayium push ./build relayium://your-server</code></pre>
-      <pre><code>relayium send ./report.pdf</code></pre>
+      <pre tabindex="0"><code>relayium push ./build relayium://your-server</code></pre>
+      <pre tabindex="0"><code>relayium send ./report.pdf</code></pre>
       <h2>Miroir de dossiers : sync contre scp -r relancé sans cesse</h2>
       <p>Copier un dossier entier encore et encore avec scp -r signifie tout renvoyer à chaque fois, sans aucune notion de ce qui a changé ou de ce qui devrait être supprimé. relayium sync construit un miroir incrémental à sens unique par-dessus push/pull ou daemon-direct : seuls les fichiers modifiés se déplacent, --delete supprime sur la destination les fichiers disparus de la source, et --watch continue de resynchroniser en temps réel dès qu&#39;un fichier change localement — aucune tâche cron nécessaire.</p>
-      <pre><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
+      <pre tabindex="0"><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
       <h2>Comparatif des fonctions en un coup d&#39;œil</h2>
       <p>Les différences qui comptent le plus, côte à côte :</p>
       <ul><li>Disponibilité : scp est préinstallé sur pratiquement tous les serveurs ; la CLI Relayium est un binaire unique qui s&#39;installe une fois en une commande.</li><li>Reprise : scp relance une transmission interrompue depuis le début ; push/pull reprennent là où ils s&#39;étaient arrêtés.</li><li>Intégrité : scp ne vérifie pas le contenu après coup ; chaque transfert Relayium est vérifié par une empreinte SHA-256 par fichier.</li><li>Serveurs nus : scp n&#39;a besoin de rien de plus ; push fonctionne de la même façon via son repli tar quand relayium n&#39;est pas installé côté distant (pull a besoin de relayium côté distant, sans repli).</li><li>Au-delà de SSH : scp ne fonctionne que par SSH ; Relayium propose aussi le daemon-direct (TLS avec épinglage, sans SSH) et des transferts par code d&#39;appairage entre réseaux différents (send/receive) qui ne nécessitent aucun accès SSH.</li><li>Miroir de dossiers : scp -r renvoie tout à chaque fois ; relayium sync effectue un miroir incrémental avec --delete et --watch.</li><li>Coût et licence : les deux sont gratuits ; scp est fourni avec OpenSSH, la CLI Relayium est sous licence AGPL-3.0 et open source.</li></ul>

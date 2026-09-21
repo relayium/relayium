@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ar/guides/sync-a-large-folder-between-servers/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="مزامنة مجلد كبير بين خادمين (قابلة للاستئناف، في الخلفية)" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"مزامنة مجلد كبير بين خادمين (قابلة للاستئناف، في الخلفية)","description":"انسخ دليلًا كبيرًا من خادم إلى آخر بـ relayium sync — تزايدية، قابلة للاستئناف بعد انقطاع الاتصال، وآمنة للتشغيل دون إشراف. حلقة إعادة محاولة تحت tmux تنقل غيغابايتات دون ملازمة طرفية.","inLanguage":"ar","datePublished":"2026-07-08","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/guides/sync-a-large-folder-between-servers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"مزامنة مجلد كبير بين خادمين (قابلة للاستئناف، في الخلفية)"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"ماذا يحدث إذا انقطع النقل في منتصف الطريق؟","acceptedAnswer":{"@type":"Answer","text":"لا يُفقَد شيء. أعِد تشغيل relayium sync — يتخطى الملفات الموجودة سلفًا لدى المُستقبِل ويستأنف الملف المُرسَل نصفه من إزاحة البايت الموجودة سلفًا على القرص. حلقة until في هذا الدليل تفعل ذلك تلقائيًا حتى تُنسَخ صورة المجلد كاملة."}},{"@type":"Question","name":"بماذا يختلف هذا عن rsync؟","acceptedAnswer":{"@type":"Answer","text":"كلاهما يقوم بمرآة تزايدية أحادية الاتجاه، لكن relayium sync يعمل عبر اتصال TLS مُثبَّت دون الحاجة إلى حساب SSH (daemon direct)، ويصادق الجهازين ببصمة الشهادة، ويتحقق بـ SHA-256 من كل ملف يَنقُله. وكما في سلوك rsync الافتراضي، يُتخطّى الملف الذي يتطابق حجمه وmtime أصلًا على الطرف المستقبِل بدل إعادة حساب بصمته. إنه محرك النقل نفسه المُستخدَم في أوضاع relayium الأخرى."}},{"@type":"Question","name":"هل يحذف sync لدى المُستقبِل الملفات التي أزلتها من المصدر؟","acceptedAnswer":{"@type":"Answer","text":"فقط إن طلبت ذلك. افتراضيًا، يضيف sync ويحدّث فقط. مرِّر --delete لعكس عمليات الحذف، ويجب أن يشغّل المُستقبِل serve مع --allow-delete كي يُحترَم ذلك — وإلا يُتجاهَل الحذف ويُبلَّغ عنه."}},{"@type":"Question","name":"هل يمكنني إبقاء مجلدين متزامنين باستمرار؟","acceptedAnswer":{"@type":"Answer","text":"نعم. أضِف --watch فيبقى sync شغّالًا، مُعيدًا عكس الصورة عند أي تغيير تحت المصدر. لنقل مجلد كبير لمرة واحدة لا تحتاجه — تكفي حلقة إعادة المحاولة مع sync بسيط."}},{"@type":"Question","name":"هل عليّ فتح منفذ؟","acceptedAnswer":{"@type":"Answer","text":"لـ daemon direct، نعم — يجب أن يكون منفذ المُستمِع (9031 افتراضيًا) قابلًا للوصول من المُرسِل. إن كنت تفضّل عدم فتح منفذ ولديك SSH بين الخادمين سلفًا، فإن sync يعمل أيضًا عبر SSH: relayium sync /path user@host:/path (يجب تثبيت relayium على الطرف البعيد)."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ar/guides/" aria-current="true">الأدلة</a><a href="/ar/apps/">التطبيقات</a><a href="/pricing">الأسعار</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ar/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ar/guides/">الأدلة</a> <span aria-hidden="true">›</span> <span aria-current="page">مزامنة مجلد كبير بين خادمين (قابلة للاستئناف، في الخلفية)</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -108,53 +165,53 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>المتطلبات المسبقة</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">ما تحتاج إليه</p><ul><li>يستخدم هذا الدليل daemon direct (relayium://)، فلا يحتاج الخادمان إلى وصول SSH أحدهما للآخر.</li><li>افتح منفذ المُستمِع (9031 افتراضيًا) للمُرسِل على الجدار الناري أو مجموعة الأمان لدى المُستقبِل.</li><li>مساحة تكفي المجلد كاملًا على المُستقبِل. قارِن du -sh /root/workspace على المُرسِل بـ df -h /root على المُستقبِل قبل أن تبدأ نقلًا يستغرق ساعات.</li></ul></div>
       <p>ثبّت relayium على كلا الخادمين (sync يتحدث البروتوكول الأصلي، فيجب أن يكون حاضرًا على كل طرف):</p>
-      <pre dir="ltr"><code># على كلا الخادمين
+      <pre tabindex="0" dir="ltr"><code># على كلا الخادمين
 curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <h2>فوِّض المُرسِل مرةً واحدة (على المُستقبِل)</h2>
       <p>يعتمد المُستقبِل الجهاز المُرسِل مرةً واحدة؛ يُكتَب الاعتماد على القرص ويبقى صالحًا عبر إعادات التشغيل، فلا تكرره أبدًا. شغّل المُستمِع أولًا في طرفية في المقدمة، ووجِّه --dir إلى الدليل الأب — relayium sync /root/workspace يُعيد إنتاج workspace/... لدى المُستقبِل، فـ --dir /root يُنزِل الملفات في /root/workspace/.</p>
       <p>عند أول اتصال للمُرسِل (القسم التالي)، يُظهِر serve عنوانه وبصمته ويطلب منك اعتماده؛ أجِب بـ y فيُحفَظ إلى الأبد:</p>
-      <pre dir="ltr"><code># على المُستقبِل (في المقدمة، للاعتماد تفاعليًا)
+      <pre tabindex="0" dir="ltr"><code># على المُستقبِل (في المقدمة، للاعتماد تفاعليًا)
 relayium serve --dir /root --port 9031</code></pre>
-      <pre dir="ltr"><code># على المُستقبِل، عند أول اتصال:
+      <pre tabindex="0" dir="ltr"><code># على المُستقبِل، عند أول اتصال:
 Incoming push from 203.0.113.9:52140
   fingerprint: 9f2c41ab…
 Accept and remember this peer? [y/N] y</code></pre>
       <ul><li>لإعداد بلا إشراف تمامًا، تخطَّ المُطالبة: شغّل relayium id على المُرسِل لطباعة بصمته، ثم relayium authorize ‎&lt;البصمة&gt;‎ على المُستقبِل.</li><li>‏--dir هو أب المجلد الذي تزامنه، لا المجلد نفسه — وإلا نزلت الملفات مستوى أعمق مما ينبغي (مثلًا /root/workspace/workspace).</li></ul>
       <h2>شغّل المُستمِع في الخلفية (على المُستقبِل)</h2>
       <p>بمجرد اعتماد البصمة، أوقِف serve الذي في المقدمة (Ctrl-C) وأعِد تشغيله منفصلًا كي يصمد بعد خروجك من الجلسة. يحمّل البصمة المحفوظة ويقبل المُرسِل بصمت — لا مُطالبة هذه المرة. ويسجّل السطر نفسه مُعرّف العملية الجديدة (PID) في ~/relayium-serve.pid، وبه توقِف الخطوة الأخيرة من هذا الدليل المُستمِع الذي شغّلته هي، بدل مطابقة كل أمر relayium على الجهاز:</p>
-      <pre dir="ltr"><code># على المُستقبِل
+      <pre tabindex="0" dir="ltr"><code># على المُستقبِل
 nohup relayium serve --dir /root --port 9031 &gt; ~/relayium-serve.log 2&gt;&amp;1 &amp; echo $! &gt; ~/relayium-serve.pid</code></pre>
       <ul><li>يعالج serve الاتصالات واحدًا تلو الآخر ويبقى شغّالًا، فيكون جاهزًا لكل إعادة اتصال من حلقة إعادة المحاولة أدناه.</li><li>لصندوق وارد دائم التشغيل، شغّله تحت systemd بدلًا من ذلك (Restart=always، --config-dir /etc/relayium).</li></ul>
       <h2>شغّل sync في حلقة إعادة محاولة تحت tmux (على المُرسِل)</h2>
       <p>تُقطَع عمليات النقل الطويلة — جلسة تسقط، شبكة متذبذبة، إعادة إقلاع. الحل ليس أداة متطورة؛ بل حلقة تعيد تشغيل sync حتى ينجح، مع مُعدِّد طرفيات كي يصمد بعد خروجك. هنا tmux أنظف من nohup: لا إعادة توجيه مخرجات يمكن أن تُخطئ فيها، ويمكنك إعادة الوصل لمتابعة التقدم.</p>
       <p>ابدأ جلسة tmux، ثم شغّل المرآة في حلقة until — تعيد المحاولة كل 10 ثوانٍ حتى يُرجِع sync نجاحًا، ثم تخرج من تلقاء نفسها:</p>
-      <ol class="steps" data-block="steps"><li><p>افتح جلسة tmux على المُرسِل كي تعيش الحلقة أطول من جلسة ssh التي شغّلتها منها.</p><pre dir="ltr"><code># على المُرسِل
-tmux new -s xfer      # نفّذ apt install -y tmux إن لم يكن موجودًا</code></pre></li><li><p>شغّل المرآة داخل حلقة until. تعيد المحاولة كل 10 ثوانٍ حتى ينجح sync، ثم تنتهي من تلقاء نفسها.</p><pre dir="ltr"><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre></li><li><p>افصِل بـ Ctrl-b ثم d. تظل الحلقة تعمل، وأعِد الوصل متى شئت لتراقبها.</p><pre dir="ltr"><code>tmux attach -t xfer</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">كيف تبدو جولة ناجحة</p><p>تطبع كل جولة سطرًا لكل ملف أرسلته فعلًا، ثم سطر ملخّص يقابل ما أُرسِل بما كان لدى المُستقبِل سلفًا. وتنتهي الحلقة عند أول نجاح لـ sync، وذلك الملخّص هو حال المرآة.</p><pre dir="ltr"><code>relayium sync /root/workspace relayium://203.0.113.43:9031
+      <ol class="steps" data-block="steps"><li><p>افتح جلسة tmux على المُرسِل كي تعيش الحلقة أطول من جلسة ssh التي شغّلتها منها.</p><pre tabindex="0" dir="ltr"><code># على المُرسِل
+tmux new -s xfer      # نفّذ apt install -y tmux إن لم يكن موجودًا</code></pre></li><li><p>شغّل المرآة داخل حلقة until. تعيد المحاولة كل 10 ثوانٍ حتى ينجح sync، ثم تنتهي من تلقاء نفسها.</p><pre tabindex="0" dir="ltr"><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre></li><li><p>افصِل بـ Ctrl-b ثم d. تظل الحلقة تعمل، وأعِد الوصل متى شئت لتراقبها.</p><pre tabindex="0" dir="ltr"><code>tmux attach -t xfer</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">كيف تبدو جولة ناجحة</p><p>تطبع كل جولة سطرًا لكل ملف أرسلته فعلًا، ثم سطر ملخّص يقابل ما أُرسِل بما كان لدى المُستقبِل سلفًا. وتنتهي الحلقة عند أول نجاح لـ sync، وذلك الملخّص هو حال المرآة.</p><pre tabindex="0" dir="ltr"><code>relayium sync /root/workspace relayium://203.0.113.43:9031
   workspace/data/part-004.bin (1073741824 bytes)
 synced: 1 sent, 812 unchanged</code></pre></div>
       <ul><li>كل إعادة محاولة تنجز أقل: تُتخطى الملفات المنقولة سلفًا، ويُستأنف الملف المُرسَل نصفه — فتتقارب الحلقة وتنتهي.</li><li>يطبع التقدم سطرًا واحدًا لكل ملف مكتمل، فينتقل الملف الكبير بهدوء حتى يكتمل. الصمت ليس تعطّلًا (انظر استكشاف الأخطاء).</li></ul>
       <h2>التحقق والإنهاء</h2>
       <p>يكتمل النقل حين تنتهي حلقة until وتعود إلى مُطالبة صدفة عادية. تأكد من تطابق الطرفين، ثم أوقِف المُستمِع:</p>
-      <ol class="steps" data-block="steps"><li><p>انتظر حتى تنتهي حلقة until من تلقاء نفسها. عودتك إلى مِحَث صَدَفة عادي تعني أن النقل انتهى، لا أنك قطعته.</p></li><li><p>قارِن الإجماليات على كلا الخادمين.</p><pre dir="ltr"><code># قارِن الإجماليات على كلا الخادمين
-du -sh /root/workspace</code></pre></li><li><p>أوقِف المُستمِع على المُستقبِل بعد تطابق الإجماليات. تُرسَل الإشارة إلى مُعرّف العملية الذي دوّنته عند التشغيل، لا إلى كل أمر relayium على الجهاز بمطابقة نصية، ولا يُحذَف ملف الـPID إلا إذا نجحت تلك الإشارة. وقد يشير ملف PID بقي من تشغيل سابق إلى مُعرّف أعاد النظام استخدامه، فإن لم تكن واثقًا أنه ما زال ملفك، اعرض أولًا سطر أوامر ذلك المُعرّف ولا تقتله إلا إذا ظهر serve.</p><pre dir="ltr"><code># على المُستقبِل، بعد التحقق
+      <ol class="steps" data-block="steps"><li><p>انتظر حتى تنتهي حلقة until من تلقاء نفسها. عودتك إلى مِحَث صَدَفة عادي تعني أن النقل انتهى، لا أنك قطعته.</p></li><li><p>قارِن الإجماليات على كلا الخادمين.</p><pre tabindex="0" dir="ltr"><code># قارِن الإجماليات على كلا الخادمين
+du -sh /root/workspace</code></pre></li><li><p>أوقِف المُستمِع على المُستقبِل بعد تطابق الإجماليات. تُرسَل الإشارة إلى مُعرّف العملية الذي دوّنته عند التشغيل، لا إلى كل أمر relayium على الجهاز بمطابقة نصية، ولا يُحذَف ملف الـPID إلا إذا نجحت تلك الإشارة. وقد يشير ملف PID بقي من تشغيل سابق إلى مُعرّف أعاد النظام استخدامه، فإن لم تكن واثقًا أنه ما زال ملفك، اعرض أولًا سطر أوامر ذلك المُعرّف ولا تقتله إلا إذا ظهر serve.</p><pre tabindex="0" dir="ltr"><code># على المُستقبِل، بعد التحقق
 ps -p &quot;$(cat ~/relayium-serve.pid)&quot; -o command=
 kill &quot;$(cat ~/relayium-serve.pid)&quot; &amp;&amp; rm ~/relayium-serve.pid</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">كيف تبدو المرآة المكتملة</p><p>يُبلِغ du -sh بالمجموع نفسه على الخادمين، وقد أعادتك حلقة until إلى مِحَث صَدَفة عادي بدل أن تعيد المحاولة من جديد. وتطابُق المجموع فحصٌ خشِن للاكتمال لا برهانٌ على السلامة: فقد قرّر sync بالحجم وmtime أي الملفات لا تُرسَل، فلا يقول المجموع شيئًا عن محتوى الملفات المتخطّاة.</p><pre dir="ltr"><code># the same total, on BOTH servers
+      <div class="cbox ok" data-block="success"><p class="cbox-t">كيف تبدو المرآة المكتملة</p><p>يُبلِغ du -sh بالمجموع نفسه على الخادمين، وقد أعادتك حلقة until إلى مِحَث صَدَفة عادي بدل أن تعيد المحاولة من جديد. وتطابُق المجموع فحصٌ خشِن للاكتمال لا برهانٌ على السلامة: فقد قرّر sync بالحجم وmtime أي الملفات لا تُرسَل، فلا يقول المجموع شيئًا عن محتوى الملفات المتخطّاة.</p><pre tabindex="0" dir="ltr"><code># the same total, on BOTH servers
 46G	/root/workspace</code></pre></div>
       <ul><li>ما أرسله sync مُتحقَّق منه: كل ملف نُقِل فُحِص بـ SHA-256 عند وصوله، والخروج النظيف يعني أن أيًّا من تلك الفحوص لم يفشل. أما ما تخطّاه فقُورِن بالحجم وmtime فقط، فتطابُق مجاميع du -sh فحصُ معقولية للاكتمال لا برهانٌ على أن المحتوى المتخطّى ما زال مطابقًا. إن احتجت هذا البرهان فقارِن بصمات كل ملف على الخادمين بنفسك.</li></ul>
       <h2>استكشاف الأخطاء وإصلاحها</h2>
       <p>ستة أمور تظهر في مرآة تستغرق ساعات. ثلاثة منها تبدو أعطالًا وليست كذلك، والثلاثة الأخرى أعطال حقيقية، ولكل واحد أمر يخبرك أيَّها تنظر إليه.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">العَرَض، الفحص، الإصلاح</p><dl><dt>لم يُطبَع شيء منذ وقت طويل ويبدو النقل متوقفًا.</dt><dd><pre dir="ltr"><code># على المُرسِل، مرتين بفارق ثوانٍ قليلة
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">العَرَض، الفحص، الإصلاح</p><dl><dt>لم يُطبَع شيء منذ وقت طويل ويبدو النقل متوقفًا.</dt><dd><pre tabindex="0" dir="ltr"><code># على المُرسِل، مرتين بفارق ثوانٍ قليلة
 ss -tinp dst :9031
 # ESTAB    وصلت إلى المُستمِع، وليس دليلًا على أن البايتات تتحرك
-# SYN-SENT لا يصل إلى المُستمِع</code></pre><p>لا يُطبَع التقدم إلا عند اكتمال ملف، فينتقل ملف كبير واحد في صمت تام. ولا تثبت ESTAB إلا إمكانية الوصول، فالمقبس المُنشأ قد يبقى خاملًا أو متعطّلًا، وهي وحدها ليست دليلًا على التقدّم أبدًا. نفّذ الفحص مرتين بفارق ثوانٍ قليلة وقارِن عدّاد bytes_acked الذي يطبعه ‎-i‎ لذلك المقبس: تزايُده يعني نقلًا يتقدّم، وثباته يعني تعطّلًا حقيقيًا.</p></dd><dt>يبقى المقبس في حالة SYN-SENT ولا يبدأ النقل أصلًا.</dt><dd><pre dir="ltr"><code># على المُستقبِل
+# SYN-SENT لا يصل إلى المُستمِع</code></pre><p>لا يُطبَع التقدم إلا عند اكتمال ملف، فينتقل ملف كبير واحد في صمت تام. ولا تثبت ESTAB إلا إمكانية الوصول، فالمقبس المُنشأ قد يبقى خاملًا أو متعطّلًا، وهي وحدها ليست دليلًا على التقدّم أبدًا. نفّذ الفحص مرتين بفارق ثوانٍ قليلة وقارِن عدّاد bytes_acked الذي يطبعه ‎-i‎ لذلك المقبس: تزايُده يعني نقلًا يتقدّم، وثباته يعني تعطّلًا حقيقيًا.</p></dd><dt>يبقى المقبس في حالة SYN-SENT ولا يبدأ النقل أصلًا.</dt><dd><pre tabindex="0" dir="ltr"><code># على المُستقبِل
 sudo ufw allow from 203.0.113.9 to any port 9031 proto tcp
-ss -tlnp | grep 9031</code></pre><p>المنفذ محجوب. لا تفتح 9031/TCP إلا أمام المُرسِل — استبدِل 203.0.113.9 بعنوان المُرسِل نفسه، عنوانه العام أو الخاص إن كان الخادمان على الشبكة ذاتها — وضيِّق مجموعة الأمان السحابية على المصدر نفسه، ثم تأكّد من أن serve يستمع فعلًا. هذا أكثر أسباب النقل الذي لا يبدأ شيوعًا.</p></dd><dt>بعد لصق أمر التشغيل في الخلفية، تبقى الصَدَفة عند مِحَث المتابعة &lt;.</dt><dd><pre dir="ltr"><code>tmux new -s xfer
-until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre><p>أمر nohup متعدد الأسطر فيه علامات اقتباس وإعادة توجيه ينكسر عادةً عند إعادة التوجيه لحظة اللصق. استخدم tmux مع حلقة السطر الواحد هذه بدلًا من ذلك: لا إعادة توجيه لتخطئ فيها، ويمكنك إعادة الوصل لتراقب.</p></dd><dt>قتل التنظيف شيئًا لم تكن تقصده.</dt><dd><pre dir="ltr"><code>pgrep -af relayium
+ss -tlnp | grep 9031</code></pre><p>المنفذ محجوب. لا تفتح 9031/TCP إلا أمام المُرسِل — استبدِل 203.0.113.9 بعنوان المُرسِل نفسه، عنوانه العام أو الخاص إن كان الخادمان على الشبكة ذاتها — وضيِّق مجموعة الأمان السحابية على المصدر نفسه، ثم تأكّد من أن serve يستمع فعلًا. هذا أكثر أسباب النقل الذي لا يبدأ شيوعًا.</p></dd><dt>بعد لصق أمر التشغيل في الخلفية، تبقى الصَدَفة عند مِحَث المتابعة &lt;.</dt><dd><pre tabindex="0" dir="ltr"><code>tmux new -s xfer
+until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre><p>أمر nohup متعدد الأسطر فيه علامات اقتباس وإعادة توجيه ينكسر عادةً عند إعادة التوجيه لحظة اللصق. استخدم tmux مع حلقة السطر الواحد هذه بدلًا من ذلك: لا إعادة توجيه لتخطئ فيها، ويمكنك إعادة الوصل لتراقب.</p></dd><dt>قتل التنظيف شيئًا لم تكن تقصده.</dt><dd><pre tabindex="0" dir="ltr"><code>pgrep -af relayium
 ps -p &quot;$(cat ~/relayium-serve.pid)&quot; -o command=
 tmux kill-session -t xfer
-kill &quot;$(cat ~/relayium-serve.pid)&quot; &amp;&amp; rm ~/relayium-serve.pid</code></pre><p>القتل بمطابقة نمط في سطر الأوامر يُرسِل الإشارة إلى كل عملية يحتوي سطر أوامرها ذلك النص، وعلى جهاز يعمل عليه أكثر من نقل واحد لن تكون هي المقصودة. كما أنه لا يوقف المرآة: الحلقة until هي التي تملك sync، فالابن المقتول يُعاد تشغيله بعد عشر ثوانٍ. انظر أولًا بـ pgrep -af، ثم أنهِ ما يملكه هذا الدليل فعلًا — ينهي tmux kill-session -t xfer الحلقة، ويوقف kill على الـPID الموجود في ~/relayium-serve.pid المُستمِع الذي شغّلته. وإن كان ملف الـPID باقيًا من تشغيل سابق، فاعرض سطر أوامره قبل إرسال الإشارة، لأن مُعرّفًا أعاد النظام استخدامه يخص شيئًا آخر تمامًا.</p></dd><dt>تريد استثناء مجلد فرعي واحد ولا توجد راية استثناء.</dt><dd><pre dir="ltr"><code>relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031</code></pre><p>يقبل sync الرايتين -i و-p و--delete و--watch و--config-dir، ولا شيء فيها يرشّح مسارًا في وسط الشجرة. سمِّ المجلدات الفرعية التي تريدها بدلًا من ذلك: يصل كل مصدر تحت --dir لدى المُستقبِل باسمه هو، فمع serve --dir /root/workspace يعيد هذا الأمر بناء /root/workspace/src و/root/workspace/data ولا يمشي أبدًا في بيئة venv يمكن إعادة توليدها.</p></dd><dt>يصل مصدر كنت تتوقع نسخه فارغًا.</dt><dd><pre dir="ltr"><code>relayium sync ./links relayium://203.0.113.43:9031
+kill &quot;$(cat ~/relayium-serve.pid)&quot; &amp;&amp; rm ~/relayium-serve.pid</code></pre><p>القتل بمطابقة نمط في سطر الأوامر يُرسِل الإشارة إلى كل عملية يحتوي سطر أوامرها ذلك النص، وعلى جهاز يعمل عليه أكثر من نقل واحد لن تكون هي المقصودة. كما أنه لا يوقف المرآة: الحلقة until هي التي تملك sync، فالابن المقتول يُعاد تشغيله بعد عشر ثوانٍ. انظر أولًا بـ pgrep -af، ثم أنهِ ما يملكه هذا الدليل فعلًا — ينهي tmux kill-session -t xfer الحلقة، ويوقف kill على الـPID الموجود في ~/relayium-serve.pid المُستمِع الذي شغّلته. وإن كان ملف الـPID باقيًا من تشغيل سابق، فاعرض سطر أوامره قبل إرسال الإشارة، لأن مُعرّفًا أعاد النظام استخدامه يخص شيئًا آخر تمامًا.</p></dd><dt>تريد استثناء مجلد فرعي واحد ولا توجد راية استثناء.</dt><dd><pre tabindex="0" dir="ltr"><code>relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031</code></pre><p>يقبل sync الرايتين -i و-p و--delete و--watch و--config-dir، ولا شيء فيها يرشّح مسارًا في وسط الشجرة. سمِّ المجلدات الفرعية التي تريدها بدلًا من ذلك: يصل كل مصدر تحت --dir لدى المُستقبِل باسمه هو، فمع serve --dir /root/workspace يعيد هذا الأمر بناء /root/workspace/src و/root/workspace/data ولا يمشي أبدًا في بيئة venv يمكن إعادة توليدها.</p></dd><dt>يصل مصدر كنت تتوقع نسخه فارغًا.</dt><dd><pre tabindex="0" dir="ltr"><code>relayium sync ./links relayium://203.0.113.43:9031
 # warning: no regular files to send (symlinks and special files are skipped)</code></pre><p>لا ينقل sync إلا الملفات العادية، وهذا التحذير هو تمامًا شكل شجرة ليس فيها سوى روابط رمزية. وجّه sync إلى المجلدات التي تشير إليها الروابط، وأنشئ ما تحتاج إليه من روابط رمزية على المُستقبِل على حدة.</p></dd></dl></div>
       <h2>الأسئلة الشائعة</h2>
       <h3>ماذا يحدث إذا انقطع النقل في منتصف الطريق؟</h3>

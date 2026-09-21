@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/fr/how-to/send-text-between-devices/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Envoyer du texte, des liens et des commandes entre appareils" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Envoyer du texte, des liens et des commandes entre appareils","description":"Transférez texte, liens, commandes et code multiligne avec Relayium — chiffré de bout en bout et uniquement en ligne ; les serveurs Relayium ne gardent ni corps de message ni historique côté serveur, mais chaque extrémité peut conserver le texte reçu.","inLanguage":"fr","datePublished":"2026-07-30","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/fr/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/fr/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/fr/guides/"},{"@type":"ListItem","position":3,"name":"Envoyer du texte, des liens et des commandes entre appareils"}]},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Relayium peut-il lire ou récupérer mes messages ?","acceptedAnswer":{"@type":"Answer","text":"Non. Le contenu est chiffré de bout en bout entre les appareils, et les serveurs Relayium ne gardent ni corps de message ni historique côté serveur. Chaque extrémité peut conserver le texte reçu ; après la session, Relayium n'a aucune copie serveur à récupérer."}},{"@type":"Question","name":"Puis-je utiliser le navigateur d'un côté et la CLI de l'autre ?","acceptedAnswer":{"@type":"Answer","text":"Non. Les transports et associations diffèrent. Utilisez deux navigateurs ou deux clients CLI."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/fr/guides/" aria-current="true">Guides</a><a href="/fr/apps/">Applis</a><a href="/pricing">Tarifs</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Envoyer du texte, des liens et des commandes entre appareils</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -105,16 +162,16 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>Navigateur : envoyer un message à un appareil en ligne</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Avant de commencer</p><ul><li>Les deux appareils en ligne en même temps, avec la page ouverte dans un navigateur. Il n&#39;y a pas de boîte de réception : un message n&#39;existe que dans une session que les deux côtés maintiennent ouverte.</li><li>Un seul transport, choisi pour les deux extrémités. Sur le même réseau, rien à préparer, alors qu&#39;entre réseaux différents il faut un code d&#39;appairage navigateur, créé par une partie connectée et valable cinq minutes.</li><li>Un texte qui tient dans un message, soit 65 536 octets UTF-8. Le compteur sous la zone de saisie monte pendant que vous tapez et vous invite à l&#39;envoyer comme fichier au-delà.</li><li>Un endroit pour ce qui arrive. Le message reçu reste dans la session ouverte, donc copiez ce que vous voulez garder avant la fin de la session ou un rechargement de la page.</li></ul></div>
       <p>Ouvrez relayium.com sur les deux appareils. Seule la façon dont ils se trouvent change : sur le même réseau, l&#39;autre appareil apparaît tout seul sous « Appareils à proximité » ; entre réseaux, vous créez un code d&#39;appairage navigateur sur la page interréseau et vous le rejoignez depuis l&#39;autre navigateur. Ce que les deux obtiennent ensuite est identique : la carte du pair ne propose qu&#39;une action, « Ouvrir l’espace de travail », et la zone de saisie vit dans cet espace de travail, à côté des pièces jointes fichier et dossier, sur la même connexion chiffrée. Entre réseaux, cette connexion est portée par un relais TURN chiffré qui ne transmet que du texte chiffré, et elle est soumise à une limite de temps que l&#39;espace de travail signale avant qu&#39;elle ne soit atteinte. La seule exception est un pair qui n&#39;est pas un navigateur à jour — un ancien, une application native, le CLI : il conserve le flux antérieur, où fichiers et messages s&#39;utilisent l&#39;un après l&#39;autre.</p>
-      <ol class="steps" data-block="steps"><li><p>Ouvrez la page de transfert sur les deux appareils : celle du même réseau les trouve pour vous, et c&#39;est sur la page temps réel qu&#39;un code d&#39;appairage sert lorsqu&#39;ils sont sur des réseaux différents.</p><pre><code>https://relayium.com/</code></pre></li><li><p>Appuyez sur « Ouvrir l’espace de travail » sur la carte de l&#39;autre appareil, puis écrivez dans la zone de saisie que l&#39;espace de travail affiche. C&#39;est la même action unique dans les deux cas : sous « Appareils à proximité » sur le même réseau, et sur la carte du pair dans la salle par code d&#39;appairage entre réseaux. Par défaut, la session s&#39;ouvre directement sur la zone de saisie des deux côtés — la connexion est chiffrée dans tous les cas.</p></li><li><p>Saisissez ou collez le texte. Le compteur sous la zone indique la part du budget d&#39;un message déjà consommée, en octets plutôt qu&#39;en caractères, car un emoji ou un idéogramme en coûte plusieurs.</p><pre><code>1 024 / 65 536 octets</code></pre></li><li><p>Envoyez avec ⌘/Ctrl+Entrée : Entrée seule insère un retour à la ligne, ce qui permet de coller puis d&#39;envoyer un extrait multiligne d&#39;un seul geste. L&#39;indication sous la zone rappelle cette correspondance.</p><pre><code>Entrée pour une nouvelle ligne · ⌘/Ctrl+Entrée pour envoyer</code></pre></li><li><p>Laissez la session ouverte pour envoyer plusieurs messages dans les deux sens, et appuyez sur « Copier » sur tout ce que vous voulez garder. Pour comparer d&#39;abord un code de vérification (SAS), activez « Vérification avancée » avant d&#39;ouvrir la session : elle ajoute le code et une acceptation explicite, pas le chiffrement.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">À quoi ressemble une session qui marche</p><p>Les deux côtés indiquent la session comme ouverte, votre message apparaît dans l&#39;historique de l&#39;autre appareil, et le compteur d&#39;octets repart de zéro pour le suivant.</p><p>Cet historique est la seule copie à laquelle Relayium participe : il vit dans les deux pages ouvertes, disparaît donc au rechargement ou à la fin de la session, et « Copier » place le texte dans le presse-papiers de cet appareil, où d&#39;autres applications peuvent le lire.</p><pre><code>Session ouverte
+      <ol class="steps" data-block="steps"><li><p>Ouvrez la page de transfert sur les deux appareils : celle du même réseau les trouve pour vous, et c&#39;est sur la page temps réel qu&#39;un code d&#39;appairage sert lorsqu&#39;ils sont sur des réseaux différents.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>Appuyez sur « Ouvrir l’espace de travail » sur la carte de l&#39;autre appareil, puis écrivez dans la zone de saisie que l&#39;espace de travail affiche. C&#39;est la même action unique dans les deux cas : sous « Appareils à proximité » sur le même réseau, et sur la carte du pair dans la salle par code d&#39;appairage entre réseaux. Par défaut, la session s&#39;ouvre directement sur la zone de saisie des deux côtés — la connexion est chiffrée dans tous les cas.</p></li><li><p>Saisissez ou collez le texte. Le compteur sous la zone indique la part du budget d&#39;un message déjà consommée, en octets plutôt qu&#39;en caractères, car un emoji ou un idéogramme en coûte plusieurs.</p><pre tabindex="0"><code>1 024 / 65 536 octets</code></pre></li><li><p>Envoyez avec ⌘/Ctrl+Entrée : Entrée seule insère un retour à la ligne, ce qui permet de coller puis d&#39;envoyer un extrait multiligne d&#39;un seul geste. L&#39;indication sous la zone rappelle cette correspondance.</p><pre tabindex="0"><code>Entrée pour une nouvelle ligne · ⌘/Ctrl+Entrée pour envoyer</code></pre></li><li><p>Laissez la session ouverte pour envoyer plusieurs messages dans les deux sens, et appuyez sur « Copier » sur tout ce que vous voulez garder. Pour comparer d&#39;abord un code de vérification (SAS), activez « Vérification avancée » avant d&#39;ouvrir la session : elle ajoute le code et une acceptation explicite, pas le chiffrement.</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">À quoi ressemble une session qui marche</p><p>Les deux côtés indiquent la session comme ouverte, votre message apparaît dans l&#39;historique de l&#39;autre appareil, et le compteur d&#39;octets repart de zéro pour le suivant.</p><p>Cet historique est la seule copie à laquelle Relayium participe : il vit dans les deux pages ouvertes, disparaît donc au rechargement ou à la fin de la session, et « Copier » place le texte dans le presse-papiers de cet appareil, où d&#39;autres applications peuvent le lire.</p><pre tabindex="0"><code>Session ouverte
 1 024 / 65 536 octets</code></pre></div>
       <h2>Quand un message ne passe pas</h2>
       <p>Le texte emprunte la même connexion qu&#39;un transfert de fichiers, donc la plupart des échecs viennent de la connexion et non du message. Les deux exceptions sont précises et s&#39;affichent toutes les deux à l&#39;écran : un message au-delà de la limite de taille, et une session fermée pour en avoir envoyé trop d&#39;un coup.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptôme, vérification, correction</p><dl><dt>L&#39;autre appareil n&#39;apparaît jamais, il n&#39;y a donc aucune carte pour ouvrir une session de messages.</dt><dd><pre><code>https://relayium.com/   # comparez l&#39;IP publique de la ligne d&#39;état sur les deux appareils</code></pre><p>La détection sur le même réseau regroupe les appareils selon l&#39;IP publique par laquelle ils se connectent, donc deux adresses différentes signifient deux salles : coupez un VPN ou iCloud Private Relay, ou rejoignez le même Wi-Fi. S&#39;ils sont réellement sur des réseaux différents, passez par un code d&#39;appairage sur https://relayium.com/cross-network.</p></dd><dt>La zone de saisie refuse le texte et indique que le message est trop long.</dt><dd><pre><code>1 024 / 65 536 octets   # le compteur compte des octets UTF-8, pas des caractères</code></pre><p>Un message contient 65 536 octets UTF-8, et un texte non latin dépense de deux à quatre octets par caractère, donc un long collage en chinois ou riche en emojis atteint cette limite en octets bien avant ce que le nombre de caractères laisse croire. Découpez-le, ou envoyez-le comme fichier, ce que la zone de saisie propose justement.</p></dd><dt>La session s&#39;est fermée d&#39;elle-même en invoquant trop de messages.</dt><dd><pre><code>https://relayium.com/   # la ligne de session indique terminée plutôt qu&#39;échouée</code></pre><p>Une protection contre les envois en rafale ferme une session quand un côté envoie bien plus de messages qu&#39;une personne n&#39;en tape, ce qu&#39;un script ou une touche bloquée provoque. Rouvrez la session comme vous l&#39;aviez ouverte — « Ouvrir l’espace de travail » sur la carte de l&#39;autre appareil, sur le même réseau comme dans une salle par code d&#39;appairage — et envoyez le reste en moins de messages, plus longs.</p></dd><dt>Tout fonctionnait, et après un rechargement la conversation est vide.</dt><dd><pre><code>https://relayium.com/   # recharger cette page ouvre une nouvelle session sans historique</code></pre><p>C&#39;est le fonctionnement voulu et non une panne : Relayium ne garde aucun historique côté serveur, il n&#39;y a donc rien à restaurer et aucune copie serveur à réclamer. Copiez l&#39;essentiel dans une note avant de quitter la session, car l&#39;historique ne dure que le temps de la page ouverte.</p></dd><dt>Un navigateur et la CLI ne peuvent pas rejoindre le code de l&#39;autre.</dt><dd><pre><code>relayium text 483920   # un code CLI n&#39;appaire jamais que CLI avec CLI</code></pre><p>Les sessions de texte navigateur et CLI utilisent des transports et des appairages différents, donc un code à six chiffres créé par l&#39;un n&#39;a aucun sens pour l&#39;autre. Utilisez deux navigateurs, ou la CLI aux deux extrémités : relayium text affiche exactement la commande que la seconde machine doit exécuter.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptôme, vérification, correction</p><dl><dt>L&#39;autre appareil n&#39;apparaît jamais, il n&#39;y a donc aucune carte pour ouvrir une session de messages.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # comparez l&#39;IP publique de la ligne d&#39;état sur les deux appareils</code></pre><p>La détection sur le même réseau regroupe les appareils selon l&#39;IP publique par laquelle ils se connectent, donc deux adresses différentes signifient deux salles : coupez un VPN ou iCloud Private Relay, ou rejoignez le même Wi-Fi. S&#39;ils sont réellement sur des réseaux différents, passez par un code d&#39;appairage sur https://relayium.com/cross-network.</p></dd><dt>La zone de saisie refuse le texte et indique que le message est trop long.</dt><dd><pre tabindex="0"><code>1 024 / 65 536 octets   # le compteur compte des octets UTF-8, pas des caractères</code></pre><p>Un message contient 65 536 octets UTF-8, et un texte non latin dépense de deux à quatre octets par caractère, donc un long collage en chinois ou riche en emojis atteint cette limite en octets bien avant ce que le nombre de caractères laisse croire. Découpez-le, ou envoyez-le comme fichier, ce que la zone de saisie propose justement.</p></dd><dt>La session s&#39;est fermée d&#39;elle-même en invoquant trop de messages.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # la ligne de session indique terminée plutôt qu&#39;échouée</code></pre><p>Une protection contre les envois en rafale ferme une session quand un côté envoie bien plus de messages qu&#39;une personne n&#39;en tape, ce qu&#39;un script ou une touche bloquée provoque. Rouvrez la session comme vous l&#39;aviez ouverte — « Ouvrir l’espace de travail » sur la carte de l&#39;autre appareil, sur le même réseau comme dans une salle par code d&#39;appairage — et envoyez le reste en moins de messages, plus longs.</p></dd><dt>Tout fonctionnait, et après un rechargement la conversation est vide.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # recharger cette page ouvre une nouvelle session sans historique</code></pre><p>C&#39;est le fonctionnement voulu et non une panne : Relayium ne garde aucun historique côté serveur, il n&#39;y a donc rien à restaurer et aucune copie serveur à réclamer. Copiez l&#39;essentiel dans une note avant de quitter la session, car l&#39;historique ne dure que le temps de la page ouverte.</p></dd><dt>Un navigateur et la CLI ne peuvent pas rejoindre le code de l&#39;autre.</dt><dd><pre tabindex="0"><code>relayium text 483920   # un code CLI n&#39;appaire jamais que CLI avec CLI</code></pre><p>Les sessions de texte navigateur et CLI utilisent des transports et des appairages différents, donc un code à six chiffres créé par l&#39;un n&#39;a aucun sens pour l&#39;autre. Utilisez deux navigateurs, ou la CLI aux deux extrémités : relayium text affiche exactement la commande que la seconde machine doit exécuter.</p></dd></dl></div>
       <h2>CLI : créer un code sur une machine, le rejoindre sur l&#39;autre</h2>
       <p>Lancez relayium text sans code sur une machine. La commande crée un code d&#39;appairage à six chiffres avec votre compte, affiche exactement la commande que l&#39;autre machine doit exécuter, et reste dans la session à l&#39;attendre. Aucun fichier temporaire, aucun processus supplémentaire à arrêter.</p>
       <p>Lancez ensuite relayium text avec ce code sur l&#39;autre machine. En mode interactif, chaque ligne est un message et rien ne s&#39;arrête pour comparer un code tant que vous ne le demandez pas. Pour du texte multiligne ou exact, utilisez un pipe en un seul message : aucun indicateur supplémentaire n&#39;est requis.</p>
-      <pre><code># One machine mints the code and waits (relayium login is required once)
+      <pre tabindex="0"><code># One machine mints the code and waits (relayium login is required once)
 relayium text
 # Code: 483920   (valid 5 minutes)
 # On the other machine:  relayium text 483920

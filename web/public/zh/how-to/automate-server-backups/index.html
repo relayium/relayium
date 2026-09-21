@@ -11,8 +11,14 @@
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/automate-server-backups/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/automate-server-backups/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="用 cron 任务定时做异地服务器副本" />
@@ -30,37 +36,88 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 cron 任务定时做异地服务器副本","description":"在 cron 里定时运行 relayium push 或 sync，按计划自动把目录复制到另一台服务器——传输加密、逐文件 SHA-256 校验，而且想跑多频繁都免费。它产出的是一份异地副本，不是带版本历史的备份。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/automate-server-backups/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"用 cron 任务定时做异地服务器副本"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"备份服务器需要装 relayium 吗？","acceptedAnswer":{"@type":"Answer","text":"要看用哪条命令。push 不管远端装没装都能用：装了就走原生协议（发送前的冲突预检，外加对它传输的每个文件做 SHA-256 校验）；没装的话，push 会退回到通过 SSH 传输 tar 流，一台裸服务器也照样能收，只是逐文件什么都不校验。sync 则始终需要远端有 relayium 的原生协议——它没有 tar 兜底方案，请先在远端装好。"}},{"@type":"Question","name":"这份副本会加密并校验吗？","acceptedAnswer":{"@type":"Answer","text":"传输层是加密的；逐文件校验也有，但有一个值得知道的边界。通过 SSH 或 daemon 直连推送时，字节已经受该连接自身的加密保护，不需要额外配置什么。走原生协议时，这一次运行传输的每个文件都会做端到端的 SHA-256 校验——但 tar 兜底路径不做任何哈希，而 sync 是按大小和修改时间决定要不要发送的，被它跳过的文件根本不会被读取，也就不会被哈希。目录总大小对得上只是一个粗略的自检，不能证明被跳过的文件内容仍然一致。"}},{"@type":"Question","name":"如果 cron 任务执行到一半被中断会怎样？","acceptedAnswer":{"@type":"Answer","text":"看你排的是哪条命令。sync 会接着来：下一次运行跳过已匹配的文件，并把半截的文件接着传，--no-resume 可以关掉这一点。push 在两条协议下都不续传——它会拒绝已存在的目标，这正是上面那行 push 写进按日期命名目录的原因，好让第二晚是一次干净的完整复制而不是一次拒绝。--no-resume 在 push 上能被接受，但什么也不做。"}},{"@type":"Question","name":"--delete 会不会不小心清空我的目标目录？","acceptedAnswer":{"@type":"Answer","text":"如果源目录里一个文件都没有，sync 会直接拒绝执行 --delete；删除也只会发生在这一次运行真正发送的顶层目录内。至于谁需要同意，取决于目标：走 relayium:// 时接收端必须以 serve --allow-delete 启动，删除才会生效，否则会被跳过并报告给你；走 SSH 时没有独立的监听端可以拒绝，传了 --delete 就是真删。"}},{"@type":"Question","name":"需要账号吗，这个要收费吗？","acceptedAnswer":{"@type":"Answer","text":"都不需要。CLI 的 push、pull、sync 都不需要账号，也不收费——传输走的是你自己的 SSH 连接，或者一条daemon 直连，不经过 Relayium 的服务器。"}},{"@type":"Question","name":"这算备份吗？","acceptedAnswer":{"@type":"Answer","text":"它是备份里“异地副本”那一半。定时 sync 保持一份目录的最新状态，这也意味着它会在下一次运行时把源端的删除或原地损坏一起带过去；定时 push 写进按日期命名的目录确实会留下旧副本，但也只在你不清理这些目录的期间有效，而且这里没有任何东西会替你清理或校验它们。请把它当作一份放在你自己硬件上的副本，如果需要恢复到上周的样子，再配一层快照或会做版本管理的工具。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -78,7 +135,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">用 cron 任务定时做异地服务器副本</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -108,11 +165,11 @@ ol.steps>li>pre{margin:8px 0 0}
       <ul><li>希望每次运行各自独立、旧副本还能留着，就让 push 写进按日期命名的目标。</li><li>目录很大或者经常变动，只想保留一份持续更新的副本、每晚重发全部内容太浪费，就用 sync。</li><li>走原生协议时，两者都会对自己传输的文件做逐文件 SHA-256 校验。push 和 pull 都不续传；三者之中只有 sync 会接着传半截文件，而 tar 兜底路径既不校验也不续传。</li></ul>
       <h2>开始之前</h2>
       <p>下面用到的都是 relayium CLI，所以没装的话先装上。在 macOS 或 Linux 上，一条命令就能把预编译二进制放进你的 PATH：</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul>
       <h2>两种传输方式：SSH 或daemon 直连</h2>
       <p>两个命令都可以指向一个 SSH 目标（scp 风格，走你的 ~/.ssh/config）；如果对方机器正跑着 relayium serve，也可以用daemon 直连（daemon-direct）协议直接连过去——不需要 SSH。</p>
-      <pre><code># SSH 目标——使用你现有的 SSH 密钥和配置
+      <pre tabindex="0"><code># SSH 目标——使用你现有的 SSH 密钥和配置
 relayium push ./data user@backup-server:/srv/backups/
 
 # daemon 直连——目标机器运行着 &quot;relayium serve&quot;，无需 SSH
@@ -121,14 +178,14 @@ relayium push ./data relayium://backup-server:9031</code></pre>
       <h2>用 cron 定时运行</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">开始之前你需要什么</p><ul><li>本机装好 CLI；如果你打算用 sync，目标机器上也要装。sync 没有 tar 兜底。</li><li>一把没有口令的 SSH 密钥，或者一台在跑 relayium serve 的目标机。cron 既没有 agent 也没有终端，回答不了口令提示。</li><li>一个在 cron 触发的那一刻确实存在的源目录——不能是那种只有你登录时才挂上的网络挂载点。</li><li>一个写日志的地方。输出无处可去的 cron 任务，等于一份等你真正需要时才会发现问题的备份。</li></ul></div>
       <p>push 和 sync 都是单条非交互式命令，可以直接放进 crontab。给它指定一个没有口令的密钥（或者用 agent），并把输出记下来，好让失败能被看见。注意 push 那一行的目标里带了日期：因为 push 会拒绝已存在的目标。在 crontab 里 % 必须写成 \%，裸的 % 表示命令到此为止：</p>
-      <pre><code># 每晚 2 点做一次按日期归档的完整复制——每次都是全新的目标，
+      <pre tabindex="0"><code># 每晚 2 点做一次按日期归档的完整复制——每次都是全新的目标，
 # 所以冲突检查永远不会拒绝它——添加到你的 crontab（crontab -e）
 0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/$(date +\%F)/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1
 
 # 改为每 15 分钟做一次增量镜像
 */15 * * * * relayium sync -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ &gt;&gt; ~/relayium-sync.log 2&gt;&amp;1</code></pre>
-      <ol class="steps" data-block="steps"><li><p>先查清 relayium 到底在哪。cron 不用你 shell 的 PATH，而 install.sh 在 /usr/local/bin 不可写时会退到 ~/.local/bin——那正好是 cron 看不见的地方。</p><pre><code>command -v relayium</code></pre></li><li><p>确认这把密钥在没人守着键盘时也能用。BatchMode=yes 会直接失败而不是弹提示，这正是 cron 的处境。</p><pre><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true</code></pre></li><li><p>先手动完整跑一次，写法要和 cron 将要执行的一模一样，包括绝对路径。</p><pre><code>/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/</code></pre></li><li><p>确认之后再加计划任务。绝对路径和重定向都要保留。</p><pre><code>crontab -e</code></pre></li><li><p>第一次定时执行之后，去读日志，不要想当然。这一步是最容易被跳过的，也正是本可以提前告诉你问题的那一步。</p><pre><code>tail -n 20 ~/relayium-backup.log</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">一个配置正确的备份长什么样</p><p>relayium 解析出一个可以直接粘进 crontab 的绝对路径，并且那条 BatchMode 的 ssh 检查什么都不打印、什么都不问、退出码为 0。只在你的交互式 shell 里能跑通的备份，还不算配好了。</p><pre><code>$ command -v relayium
+      <ol class="steps" data-block="steps"><li><p>先查清 relayium 到底在哪。cron 不用你 shell 的 PATH，而 install.sh 在 /usr/local/bin 不可写时会退到 ~/.local/bin——那正好是 cron 看不见的地方。</p><pre tabindex="0"><code>command -v relayium</code></pre></li><li><p>确认这把密钥在没人守着键盘时也能用。BatchMode=yes 会直接失败而不是弹提示，这正是 cron 的处境。</p><pre tabindex="0"><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true</code></pre></li><li><p>先手动完整跑一次，写法要和 cron 将要执行的一模一样，包括绝对路径。</p><pre tabindex="0"><code>/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/</code></pre></li><li><p>确认之后再加计划任务。绝对路径和重定向都要保留。</p><pre tabindex="0"><code>crontab -e</code></pre></li><li><p>第一次定时执行之后，去读日志，不要想当然。这一步是最容易被跳过的，也正是本可以提前告诉你问题的那一步。</p><pre tabindex="0"><code>tail -n 20 ~/relayium-backup.log</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">一个配置正确的备份长什么样</p><p>relayium 解析出一个可以直接粘进 crontab 的绝对路径，并且那条 BatchMode 的 ssh 检查什么都不打印、什么都不问、退出码为 0。只在你的交互式 shell 里能跑通的备份，还不算配好了。</p><pre tabindex="0"><code>$ command -v relayium
 /usr/local/bin/relayium
 $ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
 $ echo $?
@@ -141,10 +198,10 @@ $ echo $?
       <ul><li>relayium sync ./data user@backup-server:/srv/backups/ --delete 会把删除也镜像过去，而走 SSH 时除了你自己没人需要同意。如果源端误删比目标端留个旧文件更糟，就别加 --delete。</li><li>relayium sync ./data relayium://backup-server:9031 --delete 只有在那个监听端以 serve --allow-delete 启动时才会真删；否则会回报为 denied。</li><li>relayium sync ./data user@backup-server:/srv/backups/ --watch 会常驻运行，一有变化就同步，而不是靠 cron 单次触发。</li></ul>
       <h2>出问题时怎么办</h2>
       <p>这里每一种在你去看日志之前都是不可见的，所以那条日志重定向写在 crontab 行里，而不是可选项。第五种比不可见更糟：它看起来像成功。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>日志里写 relayium: command not found，但同一条命令在你的 shell 里能跑。</dt><dd><pre><code>tail -n 5 ~/relayium-backup.log
-# /bin/sh: relayium: command not found</code></pre><p>cron 使用一个最小化的 PATH，通常只有 /usr/bin:/bin。如果 install.sh 当初写不进 /usr/local/bin，它会把二进制放在 ~/.local/bin，而 cron 永远找不到那里。把 command -v 给出的绝对路径写进 crontab 行，或者在 crontab 顶部单独加一行 PATH=。</p></dd><dt>日志显示 ssh 连接被拒绝，或者第一次运行之后就什么都没有了。</dt><dd><pre><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-# Permission denied (publickey).</code></pre><p>cron 既没有 ssh-agent 也没有终端，所以带口令的密钥只能卡住或失败。用 -i 指向一把专供备份、没有口令的密钥，并用 BatchMode=yes 确认——它宁可拒绝也不会去等一个根本不在场的人。</p></dd><dt>sync 跑得很干净，但源端已删除的文件在目标端还在。</dt><dd><pre><code>grep -i deni ~/relayium-sync.log</code></pre><p>走 relayium:// 目标时，删除是接收端的显式选项：对端没有 serve --allow-delete，这些删除就会被跳过并回报为 denied，所以答案在日志里而不在退出码里，给那个监听器加上 --allow-delete 重启即可。走 SSH 目标时根本没有监听端可问，所以被拒不是原因——去确认 crontab 那行上真的写了 --delete，因为不加它 sync 只会新增和更新。</p></dd><dt>sync 直接拒绝执行 --delete。</dt><dd><pre><code>relayium sync ~/documents user@backup-server:/srv/backups/ --delete
-# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).</code></pre><p>源端解析下来一个文件都没有，这时镜像会把目标端清空。这个拒绝是刻意的。检查路径是不是敲错了，也检查那里该挂载的东西在 cron 触发的时刻是否真的挂着，而不是只在你登录时才挂。</p></dd><dt>备份跑了，退出码 0，但它并不是你以为的那个东西。</dt><dd><pre><code>ssh user@backup-server command -v relayium</code></pre><p>远端没有 relayium 时，push 会退回到走 SSH 的普通 tar 流。文件确实到了，所以没有任何东西报警——但这条路径既没有逐文件 SHA-256 校验，也没有发送前的冲突预检，而这两点恰恰是你不用 scp 而设这个计划任务的理由，何况 tar -x -k 还可能让一批文件只装了一半。在目标机上装好 CLI 就能把它们拿回来。sync 不存在这种失败方式，因为它根本没有兜底：它会直接大声失败。</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>日志里写 relayium: command not found，但同一条命令在你的 shell 里能跑。</dt><dd><pre tabindex="0"><code>tail -n 5 ~/relayium-backup.log
+# /bin/sh: relayium: command not found</code></pre><p>cron 使用一个最小化的 PATH，通常只有 /usr/bin:/bin。如果 install.sh 当初写不进 /usr/local/bin，它会把二进制放在 ~/.local/bin，而 cron 永远找不到那里。把 command -v 给出的绝对路径写进 crontab 行，或者在 crontab 顶部单独加一行 PATH=。</p></dd><dt>日志显示 ssh 连接被拒绝，或者第一次运行之后就什么都没有了。</dt><dd><pre tabindex="0"><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+# Permission denied (publickey).</code></pre><p>cron 既没有 ssh-agent 也没有终端，所以带口令的密钥只能卡住或失败。用 -i 指向一把专供备份、没有口令的密钥，并用 BatchMode=yes 确认——它宁可拒绝也不会去等一个根本不在场的人。</p></dd><dt>sync 跑得很干净，但源端已删除的文件在目标端还在。</dt><dd><pre tabindex="0"><code>grep -i deni ~/relayium-sync.log</code></pre><p>走 relayium:// 目标时，删除是接收端的显式选项：对端没有 serve --allow-delete，这些删除就会被跳过并回报为 denied，所以答案在日志里而不在退出码里，给那个监听器加上 --allow-delete 重启即可。走 SSH 目标时根本没有监听端可问，所以被拒不是原因——去确认 crontab 那行上真的写了 --delete，因为不加它 sync 只会新增和更新。</p></dd><dt>sync 直接拒绝执行 --delete。</dt><dd><pre tabindex="0"><code>relayium sync ~/documents user@backup-server:/srv/backups/ --delete
+# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).</code></pre><p>源端解析下来一个文件都没有，这时镜像会把目标端清空。这个拒绝是刻意的。检查路径是不是敲错了，也检查那里该挂载的东西在 cron 触发的时刻是否真的挂着，而不是只在你登录时才挂。</p></dd><dt>备份跑了，退出码 0，但它并不是你以为的那个东西。</dt><dd><pre tabindex="0"><code>ssh user@backup-server command -v relayium</code></pre><p>远端没有 relayium 时，push 会退回到走 SSH 的普通 tar 流。文件确实到了，所以没有任何东西报警——但这条路径既没有逐文件 SHA-256 校验，也没有发送前的冲突预检，而这两点恰恰是你不用 scp 而设这个计划任务的理由，何况 tar -x -k 还可能让一批文件只装了一半。在目标机上装好 CLI 就能把它们拿回来。sync 不存在这种失败方式，因为它根本没有兜底：它会直接大声失败。</p></dd></dl></div>
       <h2>常见问题</h2>
       <h3>备份服务器需要装 relayium 吗？</h3>
       <p>要看用哪条命令。push 不管远端装没装都能用：装了就走原生协议（发送前的冲突预检，外加对它传输的每个文件做 SHA-256 校验）；没装的话，push 会退回到通过 SSH 传输 tar 流，一台裸服务器也照样能收，只是逐文件什么都不校验。sync 则始终需要远端有 relayium 的原生协议——它没有 tar 兜底方案，请先在远端装好。</p>

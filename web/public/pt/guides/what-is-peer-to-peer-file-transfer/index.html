@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/pt/guides/what-is-peer-to-peer-file-transfer/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="O que é transferência de arquivos ponto a ponto?" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"O que é transferência de arquivos ponto a ponto?","description":"Uma explicação em linguagem simples da transferência de arquivos P2P: como ela difere de enviar para um servidor, como uma conexão WebRTC direta é encontrada e por que é privada e rápida.","inLanguage":"pt","datePublished":"2026-07-09","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/pt/guides/what-is-peer-to-peer-file-transfer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/pt/"},{"@type":"ListItem","position":2,"name":"Guias","item":"https://relayium.com/pt/guides/"},{"@type":"ListItem","position":3,"name":"O que é transferência de arquivos ponto a ponto?"}]},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"Ponto a ponto é a mesma coisa que criptografia de ponta a ponta?","acceptedAnswer":{"@type":"Answer","text":"Estão relacionados, mas não são idênticos. P2P descreve a comunicação entre pontas sem garantir que cada salto de rede seja direto; o TURN pode transportar o tráfego. A criptografia determina se um intermediário consegue lê-lo. O Relayium usa WebRTC direto na mesma LAN e TURN criptografado de ponta a ponta entre redes, que o retransmissor não consegue ler nem descriptografar."}},{"@type":"Question","name":"Uma transferência P2P chega a tocar em algum servidor?","acceptedAnswer":{"@type":"Answer","text":"Um pequeno servidor de sinalização ajuda os dois dispositivos a encontrar o endereço um do outro — mas ele só vê informação de estabelecimento da conexão, nunca bytes do arquivo. Entre redes, no navegador, um retransmissor TURN encaminha por projeto os dados criptografados do arquivo, mas mesmo assim só lida com texto cifrado que não consegue descriptografar."}},{"@type":"Question","name":"Por que uma conexão direta falharia em primeiro lugar?","acceptedAnswer":{"@type":"Answer","text":"Algumas redes — muitas vezes firewalls corporativos rígidos ou certos NATs de operadoras móveis — são construídas de forma a tornar impossível descobrir um endereço alcançável apenas com a informação externa. Em vez de gastar uns vinte segundos descobrindo isso a cada transferência, o aplicativo web do Relayium envia de saída todas as transferências entre redes pelo retransmissor — o que as carrega é o retransmissor, não uma tentativa direta que falhou."}},{"@type":"Question","name":"A transferência P2P fica mais lenta quando passa por um retransmissor?","acceptedAnswer":{"@type":"Answer","text":"Pode acrescentar alguma latência, já que o retransmissor é um salto extra pelo qual os dados passam e é um servidor compartilhado em vez de dedicado. Mas ainda costuma ser mais rápido que um fluxo de upload e depois download, porque não é preciso esperar o arquivo aterrissar por completo em um servidor antes de o lado do download poder começar."}},{"@type":"Question","name":"As duas pessoas precisam de conta para uma transferência P2P?","acceptedAnswer":{"@type":"Answer","text":"Dois dispositivos na mesma rede não precisam de conta alguma. Enviar entre redes diferentes por código de emparelhamento exige que o remetente entre, mas a pessoa que recebe nunca precisa de conta, seja qual for o caminho."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/pt/guides/" aria-current="true">Guias</a><a href="/pt/apps/">Apps</a><a href="/pricing">Preços</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/pt/">Relayium</a> <span aria-hidden="true">›</span> <a href="/pt/guides/">Guias</a> <span aria-hidden="true">›</span> <span aria-current="page">O que é transferência de arquivos ponto a ponto?</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -121,11 +178,11 @@ ol.steps>li>pre{margin:8px 0 0}
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">O que você precisa para verificar por conta própria</p><ul><li>Dois aparelhos que dê para olhar ao mesmo tempo — um notebook e um celular são o ideal.</li><li>Um arquivo pequeno. O que importa aqui é o caminho que a conexão toma, não a velocidade.</li><li>Um momento com os dois no mesmo Wi-Fi e outro com cada um numa rede diferente — basta desligar o Wi-Fi do celular e passar para os dados móveis.</li></ul></div>
       <p>Abra relayium.com em dois dispositivos na mesma rede e normalmente eles se encontram automaticamente — sem conta, sem código, nada para instalar; esse é o caso da rede local, em que muitas vezes o STUN nem é necessário. Para enviar pela internet a alguém em outra rede, usa-se um código de emparelhamento: o remetente entra, gera um código (ou compartilha um link, com um código QR opcional para escanear) e, assim que a outra pessoa entra, a transferência corre por um retransmissor TURN criptografado: o caminho confiável através de NATs imprevisíveis, e ele só carrega texto cifrado; o destinatário continua sem precisar de conta.</p>
       <p>Uma vez aberto o caminho em tempo real, até 1.000 arquivos fluem continuamente pela rota escolhida e cada um é verificado com SHA-256. O Relayium não mantém cópia de conteúdo nem histórico em tempo real no servidor. Se a outra pessoa estiver offline, o link armazenado de conhecimento zero é um modo separado.</p>
-      <ol class="steps" data-block="steps"><li><p>Com os dois aparelhos no mesmo Wi-Fi, abra o Relayium em cada um e envie o arquivo.</p><pre><code>https://relayium.com/</code></pre></li><li><p>Leia o rótulo que o aplicativo dá à conexão. Numa mesma rede ele diz LAN direto.</p></li><li><p>Agora coloque os dois em redes diferentes e envie de novo, desta vez com um código de emparelhamento.</p><pre><code>https://relayium.com/cross-network</code></pre></li><li><p>Leia o rótulo outra vez. P2P direto significa que se achou um caminho direto pela internet. Retransmitido significa que não havia e o retransmissor cifrado levou os bytes.</p></li><li><p>Anote qual apareceu e com que par de redes. Essa é a sua própria resposta à pergunta que abriu este texto, e não a nossa.</p></li></ol>
+      <ol class="steps" data-block="steps"><li><p>Com os dois aparelhos no mesmo Wi-Fi, abra o Relayium em cada um e envie o arquivo.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>Leia o rótulo que o aplicativo dá à conexão. Numa mesma rede ele diz LAN direto.</p></li><li><p>Agora coloque os dois em redes diferentes e envie de novo, desta vez com um código de emparelhamento.</p><pre tabindex="0"><code>https://relayium.com/cross-network</code></pre></li><li><p>Leia o rótulo outra vez. P2P direto significa que se achou um caminho direto pela internet. Retransmitido significa que não havia e o retransmissor cifrado levou os bytes.</p></li><li><p>Anote qual apareceu e com que par de redes. Essa é a sua própria resposta à pergunta que abriu este texto, e não a nossa.</p></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">O que os rótulos contam</p><p>Numa mesma rede você recebe LAN direto. Entre redes você recebe P2P direto ou Retransmitido, e qual dos dois depende dessas duas redes e não de algo que você configurou.</p><p>Retransmitido não é falha. É o plano B existindo e fazendo o serviço dele, e o retransmissor só carrega texto cifrado — é exatamente o caso que a seção sobre TURN deste texto descreve, visto por dentro.</p></div>
       <h2>Quando o rótulo não é o que você esperava</h2>
       <p>Três coisas surpreendem na primeira vez que se olha. Nenhuma é um defeito a corrigir, mas vale saber nomear cada uma.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">O que você vê, o que checar, o que significa</p><dl><dt>Entre redes aparece sempre Retransmitido e nunca P2P direto.</dt><dd><pre><code>https://relayium.com/cross-network   # the path label reads the same on both ends</code></pre><p>Cheque se as duas pontas estão em dados móveis ou atrás de NAT de operadora, que é o motivo usual de não existir caminho direto. Não há o que corrigir: é o plano B previsto, o retransmissor só leva texto cifrado, e esses mesmos dois aparelhos continuam conectando direto e de graça numa mesma rede.</p></dd><dt>Num mesmo Wi-Fi nunca aparece LAN direto.</dt><dd><pre><code>https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct</code></pre><p>Cheque se a rede isola os clientes — Wi-Fi de visitantes, e muitas redes de hotel e de escritório, bloqueiam de saída o tráfego entre aparelhos. Ali os dois não se enxergam de jeito nenhum, então use o emparelhamento entre redes, que não depende de eles se alcançarem localmente.</p></dd><dt>Não aparece rótulo de caminho nenhum.</dt><dd><pre><code>https://relayium.com/   # there is no path label until the two ends have connected</code></pre><p>O rótulo nomeia uma conexão, então ele surge assim que existe uma. Antes de as duas pontas se acharem não há o que nomear, e uma transferência que nunca começa é um problema diferente de uma que tomou um caminho inesperado.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">O que você vê, o que checar, o que significa</p><dl><dt>Entre redes aparece sempre Retransmitido e nunca P2P direto.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # the path label reads the same on both ends</code></pre><p>Cheque se as duas pontas estão em dados móveis ou atrás de NAT de operadora, que é o motivo usual de não existir caminho direto. Não há o que corrigir: é o plano B previsto, o retransmissor só leva texto cifrado, e esses mesmos dois aparelhos continuam conectando direto e de graça numa mesma rede.</p></dd><dt>Num mesmo Wi-Fi nunca aparece LAN direto.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct</code></pre><p>Cheque se a rede isola os clientes — Wi-Fi de visitantes, e muitas redes de hotel e de escritório, bloqueiam de saída o tráfego entre aparelhos. Ali os dois não se enxergam de jeito nenhum, então use o emparelhamento entre redes, que não depende de eles se alcançarem localmente.</p></dd><dt>Não aparece rótulo de caminho nenhum.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # there is no path label until the two ends have connected</code></pre><p>O rótulo nomeia uma conexão, então ele surge assim que existe uma. Antes de as duas pontas se acharem não há o que nomear, e uma transferência que nunca começa é um problema diferente de uma que tomou um caminho inesperado.</p></dd></dl></div>
       <h2>Perguntas frequentes</h2>
       <h3>Ponto a ponto é a mesma coisa que criptografia de ponta a ponta?</h3>
       <p>Estão relacionados, mas não são idênticos. P2P descreve a comunicação entre pontas sem garantir que cada salto de rede seja direto; o TURN pode transportar o tráfego. A criptografia determina se um intermediário consegue lê-lo. O Relayium usa WebRTC direto na mesma LAN e TURN criptografado de ponta a ponta entre redes, que o retransmissor não consegue ler nem descriptografar.</p>

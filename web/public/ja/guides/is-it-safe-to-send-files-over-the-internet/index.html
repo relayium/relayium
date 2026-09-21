@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/guides/is-it-safe-to-send-files-over-the-internet/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="インターネットでファイルを送るのは安全か" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"インターネットでファイルを送るのは安全か","description":"メール添付・クラウドリンク・USBメモリそれぞれの本当のリスク、「エンドツーエンドで暗号化」と「ゼロ知識」が実際に意味すること、そして転送ツールを信頼する前に確認すべきことを平易に解説します。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/is-it-safe-to-send-files-over-the-internet/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"インターネットでファイルを送るのは安全か"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"機密性の高いファイルをメールで送っても安全ですか？","acceptedAnswer":{"@type":"Answer","text":"メールは機密ファイルの転送のために設計されたものではありません。添付ファイルは送受信双方のメールサーバーに日常的に保存・スキャン・バックアップされ、転送されたメッセージは、意図しなかった人の目に触れることがあります。重要度の低いファイルなら問題ありませんが、機密性の高いものには、エンドツーエンド暗号化を備えたツールがこうした露出を取り除きます。"}},{"@type":"Question","name":"「ゼロ知識」とは実際には何を意味しますか？","acceptedAnswer":{"@type":"Answer","text":"データを保存する側が、それを読むための鍵を一度も渡されていないということです。暗号化はアップロードの前に端末上で行われ、鍵は、たとえば URL フラグメントのように、サーバーが決して目にしない場所にのみ存在します。そのためサーバー上にあるのは、構造的に復号できない暗号文であり、単に「見ないと約束された」データではありません。"}},{"@type":"Question","name":"パスワード付きZIPファイルで十分ですか？","acceptedAnswer":{"@type":"Answer","text":"何もしないよりはましですが、そのパスワードはしばしば、たとえば同じメールスレッドのように、ファイルと同じ経路で送られてしまい、それが保護を無効にしてしまいます。また ZIP の暗号化実装は製品によって強度に大きな差があります。エンドツーエンド暗号化を前提としたツールは、そもそも共有パスワードを必要としないため、この弱点そのものを取り除きます。"}},{"@type":"Question","name":"Relayium は私のファイルのコピーを保持しますか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイムモードでは、Relayium はサーバー側のコピーや転送履歴を保持しません。同じ LAN では WebRTC で直接接続し、ネットワークをまたぐブラウザセッションは設計上 TURN で、リレーが読み取りも復号もできないエンドツーエンド暗号文を運びます。保存リンクの場合、サーバーが持つのは読むことのできない暗号文だけで、リンクが期限切れになるか、「閲覧後削除」を選んでいれば一度ダウンロードされるまでの間だけ保持されます。"}},{"@type":"Question","name":"ファイルの送受信にアカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"同一ネットワーク内であれば、どちらの側もアカウントは不要です。ペアリングコードでネットワークをまたいで送る場合や、保存リンクを作成する場合は送信者のサインインが必要ですが、どちらの方式でも受信者にはアカウントが一切必要ありません。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ja/guides/" aria-current="true">ガイド</a><a href="/ja/apps/">アプリ</a><a href="/pricing">料金</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">インターネットでファイルを送るのは安全か</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -116,7 +173,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>転送ツールを信頼する前に、実際に確認すべきこと</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">このチェックリストを回すのに必要なもの</p><ul><li>10分とブラウザ。最初の2つは読むだけで、監査ではありません。</li><li>ライブの項目のための端末2台。3つめと4つめはマーケティングページ上ではできず、だからこそやる価値があります。</li><li>セキュリティの専門知識は不要です。以下の各項目は、読めるものか、起きるのを見られるもののどちらかです。</li></ul></div>
       <p>ウェブサイトの宣伝文句より、いくつかの具体的な質問のほうがずっと役に立ちます。</p>
-      <ol class="steps" data-block="steps"><li><p>「この会社はこちらのファイルを読めるのか」に対する提供者自身の答えを、料金ページではなくソースの中に探します。ソースがないなら、それ自体がすでに答えです。</p><pre><code>https://github.com/relayium/relayium</code></pre></li><li><p>ライセンスを確認し、そのリポジトリが実際に動いているものと対応しているかを見ます。自分で確かめられる主張と、受け入れるよう求められる主張は、種類が違います。</p></li><li><p>ライブ転送で、両方の画面の検証コードを照合します。「エンドツーエンド暗号化」を一文から、この2つの端点のあいだで実際に強制されている状態へ変えるのが、この手順です。</p><pre><code>https://relayium.com/</code></pre></li><li><p>その転送中に、ブラウザの開発者ツールを開いてネットワークパネルを見ます。アップロードされている中身に自分のファイルの内容を探してください。見つからないことが要点で、見つかったならそれが結論です。</p></li><li><p>あとに何が残るかを確認します。リンクが自分で期限切れになるか、そして後日求められたときにサービス側がそのファイルをもう一度出せるのか。</p></li></ol>
+      <ol class="steps" data-block="steps"><li><p>「この会社はこちらのファイルを読めるのか」に対する提供者自身の答えを、料金ページではなくソースの中に探します。ソースがないなら、それ自体がすでに答えです。</p><pre tabindex="0"><code>https://github.com/relayium/relayium</code></pre></li><li><p>ライセンスを確認し、そのリポジトリが実際に動いているものと対応しているかを見ます。自分で確かめられる主張と、受け入れるよう求められる主張は、種類が違います。</p></li><li><p>ライブ転送で、両方の画面の検証コードを照合します。「エンドツーエンド暗号化」を一文から、この2つの端点のあいだで実際に強制されている状態へ変えるのが、この手順です。</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>その転送中に、ブラウザの開発者ツールを開いてネットワークパネルを見ます。アップロードされている中身に自分のファイルの内容を探してください。見つからないことが要点で、見つかったならそれが結論です。</p></li><li><p>あとに何が残るかを確認します。リンクが自分で期限切れになるか、そして後日求められたときにサービス側がそのファイルをもう一度出せるのか。</p></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">このチェックリストを通ることが実際に示すもの</p><p>最初の2つは安上がりで、数分でたいていのツールをふるい落とせます。あとの3つはランディングページには偽装できません。自分の2台の端末で起きるのを見ているからです。</p><p>これで抽象的にツールが信頼できるようになるわけではありません。具体的な主張を確認可能にするだけです。全行を自分で読むのでない限り、それが誰にとっても限界です。</p></div>
       <ul><li>「暗号化」とだけ書かれているか（単なる TLS かもしれません）、それとも明確に「エンドツーエンドで暗号化」と書かれているか（送信者と受信者だけが鍵を持つ）？</li><li>接続が改ざんされていないことを確認する方法があるか、つまり、信頼するしかない錠前アイコンだけでなく、自分で照合するコードがあるか？</li><li>ファイルの完全性がチェックされ、壊れたり改ざんされたりしたファイルが、何ごともなかったかのように届いてしまわないか？</li><li>コードはオープンソースで監査可能か、それとも主張は単に信じるしかない宣伝文句か？</li><li>送受信の際、その転送に本当に必要な以上の身元情報を差し出すことを求められないか？</li><li>何かが保存される場合、有効期限やダウンロード後の削除といった、明確で有限の寿命があるか、それとも無期限にそこに置かれ続けるのか？</li></ul>
       <h2>Relayium はこれらにどう答えるか</h2>
@@ -131,7 +188,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <p>そして、どれほど暗号化がしっかりしていても、すでに侵害された端末上で露出しているファイルを転送ツールが守ることはできません。優れた暗号化は、両端そのものが信頼できることを前提としています。だからといって、ファイルを送ること自体に神経質になる必要はありません。ただ、暗号化がどこまでをカバーし、どこからはカバーしないのかを知っておく価値がある、というだけです。</p>
       <h2>確認がすっきりした答えをくれないとき</h2>
       <p>つまずきやすいのは3か所です。いずれの場合も、その曖昧さ自体に情報があります。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">ぶつかること、確認すること、その意味</p><dl><dt>ネットワークパネルに大きなアップロードがあるが、中身が何かわからない。</dt><dd><pre><code>https://relayium.com/   # developer tools, Network panel, during a transfer</code></pre><p>それが期待どおりの結果であって、行き止まりではありません。探しているのは、見覚えのあるものが何も見つからないことです——自分で付けたファイル名や、その文書にあるとわかっている文字列など。もしアップロードの中身に自分の内容が読めたなら、それが結論であり、決定的な結論です。</p></dd><dt>検証コードがないので、3つめができない。</dt><dd><pre><code>https://relayium.com/   # a stored link has no second live endpoint to compare against</code></pre><p>それはライブ転送ではなく保存リンクの転送です。照合する相手の端点がオンラインにいないため、保証の形が違います。鍵はリンクのフラグメントにあり、サーバーには一切届きません。ライブ転送ではコードを照合し、保存型ではリンクの有効期限を確認してください。</p></dd><dt>ソースは公開されているが、書かれている言語が読めない。</dt><dd><pre><code>https://github.com/relayium/relayium   # is the claim falsifiable at all</code></pre><p>読める必要はありません。この確認が答える問いは、その主張がそもそも反証可能かどうかです。リポジトリはあるか、動いているものと対応しているか、その言語を読める人が反証しうる状態にあるか。誰も確認できる立場にない主張こそが結論です。</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">ぶつかること、確認すること、その意味</p><dl><dt>ネットワークパネルに大きなアップロードがあるが、中身が何かわからない。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # developer tools, Network panel, during a transfer</code></pre><p>それが期待どおりの結果であって、行き止まりではありません。探しているのは、見覚えのあるものが何も見つからないことです——自分で付けたファイル名や、その文書にあるとわかっている文字列など。もしアップロードの中身に自分の内容が読めたなら、それが結論であり、決定的な結論です。</p></dd><dt>検証コードがないので、3つめができない。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # a stored link has no second live endpoint to compare against</code></pre><p>それはライブ転送ではなく保存リンクの転送です。照合する相手の端点がオンラインにいないため、保証の形が違います。鍵はリンクのフラグメントにあり、サーバーには一切届きません。ライブ転送ではコードを照合し、保存型ではリンクの有効期限を確認してください。</p></dd><dt>ソースは公開されているが、書かれている言語が読めない。</dt><dd><pre tabindex="0"><code>https://github.com/relayium/relayium   # is the claim falsifiable at all</code></pre><p>読める必要はありません。この確認が答える問いは、その主張がそもそも反証可能かどうかです。リポジトリはあるか、動いているものと対応しているか、その言語を読める人が反証しうる状態にあるか。誰も確認できる立場にない主張こそが結論です。</p></dd></dl></div>
       <h2>よくある質問</h2>
       <h3>機密性の高いファイルをメールで送っても安全ですか？</h3>
       <p>メールは機密ファイルの転送のために設計されたものではありません。添付ファイルは送受信双方のメールサーバーに日常的に保存・スキャン・バックアップされ、転送されたメッセージは、意図しなかった人の目に触れることがあります。重要度の低いファイルなら問題ありませんが、機密性の高いものには、エンドツーエンド暗号化を備えたツールがこうした露出を取り除きます。</p>

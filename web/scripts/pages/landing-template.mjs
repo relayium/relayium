@@ -6,44 +6,36 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { MAINTAINED_LANGS, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, RELEASES_LABELS, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, landingUrl, ctaHref, urlPath, absUrl, esc, dirAttr, rtlHead, isFrozen, archiveNotice, ARCHIVE_STYLE } from "./shared.mjs";
+import { pageStyle, siteHeader, THEME_HEAD } from "./page-chrome.mjs";
 
 // Exported so mode-template.mjs (and any other landing-style page) can reuse the
 // exact same inline stylesheet + page-shell classes instead of forking them.
-export const STYLE = `
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:820px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:38px;letter-spacing:-.5px;margin:40px 0 12px}
-h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.pitch{font-size:20px;margin:0 0 24px;max-width:42em}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:8px 0}
-ol.shots{display:grid;gap:18px;margin:22px 0 4px}
+// What the landing (and, through it, the mode pages and the 404) owns.
+// Tokens, reading typography, the header band, the footer, `.cta`, `.langbar`
+// and the rest come from page-chrome.mjs, shared with the other templates.
+export const STYLE = pageStyle(`
+.pitch{font-size:calc(var(--fs-body) + 3px);line-height:1.6;margin:0 0 22px;max-inline-size:42em}
+h1{font-size:var(--fs-hero)}
+.shots{display:grid;gap:18px;margin:22px 0 4px}
 .shots figure{margin:0}
-.shots img{display:block;width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:#fff}
-.shots figcaption{margin-top:8px;font-size:14.5px;color:var(--muted);line-height:1.5}
-@media(min-width:820px){.shots{grid-template-columns:repeat(3,1fr);align-items:start}}
-.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
-.cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.why li b,.compare h3{color:var(--text-h)}
-.learn-groups{display:grid;gap:22px;margin-top:14px}
-@media(min-width:820px){.learn-groups{grid-template-columns:repeat(3,1fr)}}
-.learn-groups h3{margin:0 0 6px;font-size:16px}
+.shots img{display:block;inline-size:100%;block-size:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.shots figcaption{margin-block-start:8px;font-size:var(--fs-sm);line-height:1.5}
+@media(min-width:760px){.shots{grid-template-columns:repeat(3,1fr);align-items:start}}
+ol.steps{margin:14px 0;padding-inline-start:24px}
+ol.steps>li{margin:10px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+.learn-groups{display:grid;gap:20px;margin-block-start:14px}
+@media(min-width:760px){.learn-groups{grid-template-columns:repeat(3,1fr)}}
+.learn-groups h3{margin:0 0 8px;font-size:15px}
+/* A list of destinations, so heading-coloured rather than accent-coloured —
+   the same rank the footer and the guides hub use. */
+.learn{list-style:none;padding:0;margin:0;display:grid;gap:6px}
+.learn li{margin:0}
+.learn a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px;font-size:var(--fs-sm)}
+.learn a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
 .learn-all{margin:16px 0 0}
 .close-cta{margin:26px 0 0}
-.learn{list-style:none;padding:0}.learn a{color:var(--accent-fg);text-decoration:none}
-footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
-footer a{color:var(--text-h);text-decoration:none}
-header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
-.cta{transition:transform .18s ease,filter .18s ease}.cta:hover{transform:translateY(-1px);filter:brightness(1.06)}
-/* Pure-CSS staggered entrance — keeps these pages JS-free and crawlable while
+/* Pure-CSS staggered entrance — keeps these pages JS-free for the crawler while
    still giving the content a little life on load. animation fill-mode:both ends
    fully visible, so nothing is ever stuck hidden (no-JS, old browsers, or IO
    quirks all resolve to visible). */
@@ -54,8 +46,8 @@ section.reveal:nth-of-type(3){animation-delay:.18s}
 section.reveal:nth-of-type(4){animation-delay:.25s}
 section.reveal:nth-of-type(5){animation-delay:.32s}
 @keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
-@media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
-`;
+@media(prefers-reduced-motion:reduce){.reveal{animation:none}}
+`);
 
 // Maintained pages get the two-language selector; archived ones get the notice
 // in the same slot. See article-template.mjs for why they are the same slot.
@@ -208,8 +200,7 @@ export function renderLandingPage({ lang, doc, articleLinks = [], categories = n
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${canonical}" />${archived ? "" : "\n    " + alternates()}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    ${THEME_HEAD}
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="${SITE.name}" />
     <meta property="og:title" content="${headTitle}" />
@@ -227,7 +218,7 @@ export function renderLandingPage({ lang, doc, articleLinks = [], categories = n
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="${ctaHref(lang)}">Relayium</a></header>
+      ${siteHeader({ lang, home: ctaHref(lang) })}
       ${langBar(lang)}
       <!-- The language bar and the footer are navigation, so the main landmark
            starts after them: a screen-reader user jumping to the main content

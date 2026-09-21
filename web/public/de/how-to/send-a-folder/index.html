@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/de/how-to/send-a-folder/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Einen ganzen Ordner senden, nicht nur Dateien" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Einen ganzen Ordner senden, nicht nur Dateien","description":"Wähle im Browser einen ganzen Ordner aus und sende ihn in einem Rutsch — relative Pfade bleiben erhalten, bis zu 1.000 Dateien pro Stapel, jede per SHA-256 geprüft. Kein Zip vorab nötig.","inLanguage":"de","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/de/how-to/send-a-folder/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/de/"},{"@type":"ListItem","position":2,"name":"Anleitungen","item":"https://relayium.com/de/guides/"},{"@type":"ListItem","position":3,"name":"Einen ganzen Ordner senden, nicht nur Dateien"}]},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Kann ich einen Ordner von einem iPhone oder iPad senden?","acceptedAnswer":{"@type":"Answer","text":"Als Absender nicht — Safari unter iOS hat keine Ordnerauswahl, nur einzelne Dateien, daher funktioniert Ordnerversand derzeit von Desktop-Chrome, -Edge oder -Firefox aus. Ein iPhone oder iPad kann einen Ordner problemlos empfangen, als .zip."}},{"@type":"Question","name":"Bleiben Unterordner und Dateistruktur erhalten?","acceptedAnswer":{"@type":"Answer","text":"Bei einer Echtzeitsendung ja: Relayium behält den relativen Pfad jeder Datei bei, einschließlich verschachtelter Unterordner, sodass der ankommende Ordner dasselbe Layout hat wie der ausgewählte. Ein gespeicherter Download-Link ist anders — er lädt eine flache Dateiliste hoch und verwirft die Pfade —, also pack den Ordner selbst in ein Archiv und lade das Archiv hoch, wenn die Struktur überleben muss."}},{"@type":"Question","name":"Wie viele Dateien kann ein Ordnerversand enthalten?","acceptedAnswer":{"@type":"Answer","text":"Bis zu 1.000 Dateien in einem einzigen Stapel, jede beim Eintreffen einzeln mit einem SHA-256-Hash geprüft."}},{"@type":"Question","name":"Bekommt die Empfängerin einen echten Ordner oder eine .zip-Datei?","acceptedAnswer":{"@type":"Answer","text":"Das hängt vom Browser ab. Chrome und Edge schreiben die Dateien direkt in ein von ihr gewähltes Verzeichnis. Firefox und Safari erhalten ein einzelnes unkomprimiertes .zip (unter 4 GiB), das beim Entpacken dieselbe Ordnerstruktur ergibt."}},{"@type":"Question","name":"Brauche ich ein Konto, um einen Ordner zu senden?","acceptedAnswer":{"@type":"Answer","text":"Im selben Netz nicht. Beim Senden über Netzwerke hinweg per Pairing-Code muss sich der Absender anmelden, aber die empfangende Person braucht in keinem Fall ein Konto."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/de/guides/" aria-current="true">Anleitungen</a><a href="/de/apps/">Apps</a><a href="/pricing">Preise</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/de/">Relayium</a> <span aria-hidden="true">›</span> <a href="/de/guides/">Anleitungen</a> <span aria-hidden="true">›</span> <span aria-current="page">Einen ganzen Ordner senden, nicht nur Dateien</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -106,13 +163,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Was du brauchst</p><ul><li>Auf der sendenden Seite einen Desktop-Browser — Chrome, Edge oder Firefox. Safaris Dateiauswahl auf iPhone und iPad kann überhaupt keinen Ordner wählen, nur einzelne Dateien, ein Ordnerversand beginnt also am Computer.</li><li>Einen Baum mit höchstens 1.000 Dateien. Diese Grenze gilt pro Stapel und nicht pro Sitzung, ein größerer Baum geht also in mehreren Sendungen hinüber, ohne die Verbindung neu aufzubauen.</li><li>Eine Entscheidung über den empfangenden Browser, denn er bestimmt die Form des Ergebnisses: Chrome oder Edge schreibt den Baum in einen Ordner, den die empfangende Person wählt, jeder andere Browser erzeugt stattdessen eine .zip.</li><li>Beide Seiten gleichzeitig online für eine Echtzeitsendung, oder — wenn die andere Person nicht da ist — eine angemeldete sendende Seite plus ein selbst gepacktes Archiv, denn ein gespeicherter Link lädt eine flache Dateiliste hoch und trägt keinen Verzeichnisbaum.</li></ul></div>
       <p>Statt Dateien einzeln auszuwählen, wählst du den Ordner selbst. Relayium durchläuft den Verzeichnisbaum im Browser und behält den relativen Pfad jeder Datei bei — Unterordner, verschachtelte Unterordner, alles — sodass das, was auf der anderen Seite ankommt, dasselbe Layout hat wie zu Beginn.</p>
       <p>Das funktioniert heute in Desktop-Chrome, -Edge und -Firefox. Unter iOS geht es nicht: Safaris Dateiauswahl auf iPhone und iPad kann keinen Ordner auswählen, nur einzelne Dateien, daher ist Ordnerversand vorerst eine Desktop-Funktion.</p>
-      <ol class="steps" data-block="steps"><li><p>Öffne auf dem sendenden Computer die Übertragungsseite — die Seite für dasselbe Netz, wenn ihr in einem Netz seid, die Echtzeitseite, wenn ein Pairing-Code nötig ist.</p><pre><code>https://relayium.com/</code></pre></li><li><p>Zieh den Ordner auf die Seite, oder nutze die Ordnerauswahl-Schaltfläche. Relayium durchläuft den Baum im Browser und behält den relativen Pfad jeder Datei, es muss also nichts vorher gezippt werden.</p></li><li><p>Im selben Netz findest du die empfangende Person unter „Geräte in der Nähe“, drückst auf ihrer Karte „Arbeitsbereich öffnen“ und nutzt dann im Arbeitsbereich den Anhang „Ordner senden“. Netzübergreifend ist es dieselbe eine Aktion: Tritt dem Pairing-Code-Raum bei und drücke auch dort auf der Karte der Gegenstelle „Arbeitsbereich öffnen“. So oder so nennt die Anfrage, die dort ankommt, die Dateizahl und die Gesamtgröße des ganzen Baums, nicht die einer Datei.</p></li><li><p>Lies auf der Empfangsseite die Zeile unter der Anfrage, bevor du annimmst: In Chrome oder Edge steht dort, dass der Browser nach dem Speicherort fragt, und genau dieser Weg stellt den Ordner auf der Platte wieder her. Dann drücke „Annehmen“.</p></li><li><p>Sieh auf beiden Bildschirmen zu, wie der Dateizähler durch den Baum klettert. Er zählt Dateien, ein Ordner mit 300 Dateien erreicht also „Datei 300/300“ statt einen einzigen Balken für den Stapel zu zeigen.</p><pre><code>Datei 300/300</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">So sieht ein fertiger Ordnerversand aus</p><p>Der Zähler endet bei der letzten Datei des Stapels, und jede Datei kam mit ihrem eigenen Ende-zu-Ende geprüften SHA-256-Hash an, das Gelandete entspricht also byteweise dem Gesendeten.</p><p>Danach schau auf das Ergebnis statt auf die Seite, denn es unterscheidet sich je nach Browser: In Chrome oder Edge liegt der Baum samt Unterordnern in dem Ordner, den du gewählt hast, und in Firefox oder Safari steht eine einzelne .zip in der Download-Liste, die sich zur selben Struktur entpackt.</p><pre><code>LAN direkt
+      <ol class="steps" data-block="steps"><li><p>Öffne auf dem sendenden Computer die Übertragungsseite — die Seite für dasselbe Netz, wenn ihr in einem Netz seid, die Echtzeitseite, wenn ein Pairing-Code nötig ist.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>Zieh den Ordner auf die Seite, oder nutze die Ordnerauswahl-Schaltfläche. Relayium durchläuft den Baum im Browser und behält den relativen Pfad jeder Datei, es muss also nichts vorher gezippt werden.</p></li><li><p>Im selben Netz findest du die empfangende Person unter „Geräte in der Nähe“, drückst auf ihrer Karte „Arbeitsbereich öffnen“ und nutzt dann im Arbeitsbereich den Anhang „Ordner senden“. Netzübergreifend ist es dieselbe eine Aktion: Tritt dem Pairing-Code-Raum bei und drücke auch dort auf der Karte der Gegenstelle „Arbeitsbereich öffnen“. So oder so nennt die Anfrage, die dort ankommt, die Dateizahl und die Gesamtgröße des ganzen Baums, nicht die einer Datei.</p></li><li><p>Lies auf der Empfangsseite die Zeile unter der Anfrage, bevor du annimmst: In Chrome oder Edge steht dort, dass der Browser nach dem Speicherort fragt, und genau dieser Weg stellt den Ordner auf der Platte wieder her. Dann drücke „Annehmen“.</p></li><li><p>Sieh auf beiden Bildschirmen zu, wie der Dateizähler durch den Baum klettert. Er zählt Dateien, ein Ordner mit 300 Dateien erreicht also „Datei 300/300“ statt einen einzigen Balken für den Stapel zu zeigen.</p><pre tabindex="0"><code>Datei 300/300</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">So sieht ein fertiger Ordnerversand aus</p><p>Der Zähler endet bei der letzten Datei des Stapels, und jede Datei kam mit ihrem eigenen Ende-zu-Ende geprüften SHA-256-Hash an, das Gelandete entspricht also byteweise dem Gesendeten.</p><p>Danach schau auf das Ergebnis statt auf die Seite, denn es unterscheidet sich je nach Browser: In Chrome oder Edge liegt der Baum samt Unterordnern in dem Ordner, den du gewählt hast, und in Firefox oder Safari steht eine einzelne .zip in der Download-Liste, die sich zur selben Struktur entpackt.</p><pre tabindex="0"><code>LAN direkt
 Datei 300/300</code></pre></div>
       <h2>Was die andere Person bekommt</h2>
       <p>Wie der Ordner ankommt, hängt vom empfangenden Browser ab. Chrome und Edge können Dateien direkt in ein Verzeichnis schreiben, das die empfangende Person wählt, sodass der Ordner genauso auf der Festplatte erscheint, wie er abgeschickt wurde — kein zusätzlicher Schritt.</p>
       <p>Firefox und Safari haben diese Fähigkeit nicht, deshalb erhalten sie stattdessen ein einzelnes, unkomprimiertes (Store-Modus) .zip-Archiv, das beim Entpacken genau dieselbe Ordnerstruktur ergibt. Es bleibt unter 4 GiB (kein ZIP64), was die große Mehrheit von Projektordnern und Foto- oder Dokumentensammlungen abdeckt — bei mehr teilst du es in zwei Sendungen auf.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, Prüfung, Lösung</p><dl><dt>Auf dem sendenden Gerät gibt es überhaupt keine Möglichkeit, einen Ordner zu wählen.</dt><dd><pre><code>https://relayium.com/   # die Auswahl bietet einen Ordner nur an, wo der Browser das kann</code></pre><p>Du bist mit hoher Wahrscheinlichkeit auf iPhone oder iPad, wo Safaris Auswahl einzelne Dateien zeigt und sonst nichts. Starte den Ordnerversand in einem Desktop-Chrome, -Edge oder -Firefox und nutze das Handy stattdessen als Empfangsseite.</p></dd><dt>Die angekommene .zip ist beschädigt, oder der Download bleibt kurz vor 4 GiB stehen.</dt><dd><pre><code>chrome://downloads   # die Größe der .zip mit dem gesendeten Ordner vergleichen</code></pre><p>Der Archivweg kennt kein ZIP64, sowohl ein einzelner Eintrag als auch das ganze Archiv müssen also unter 4 GiB bleiben. Teile den Baum in zwei Sendungen, oder lass die empfangende Person Chrome oder Edge nehmen: Die schreibt die Dateien in einen gewählten Ordner und baut überhaupt kein Archiv.</p></dd><dt>Die .zip ist genauso groß wie der Ordner, ganz ohne Kompression.</dt><dd><pre><code>chrome://downloads   # die Größe des Eintrags entspricht der Summe des Ordners, nicht weniger</code></pre><p>Das ist so gewollt: Das Archiv läuft im Store-Modus, verpackt den Baum also ohne ihn zu komprimieren und bleibt byteidentisch zum Gesendeten. Komprimiere den Ordner vorher selbst, wenn die Größe auf der Leitung wichtiger ist als eine exakte Kopie.</p></dd><dt>Die Dateien sind angekommen, liegen aber alle flach in einem Ordner, die Unterordner fehlen.</dt><dd><pre><code>chrome://downloads   # ein Browser ohne Verzeichnisauswahl übergibt eine einzelne .zip</code></pre><p>Relative Pfade überleben eine Echtzeitsendung, das hier ist also das Aussehen einer .zip vor dem Entpacken und keine platt gemachte Übertragung. Entpack das Archiv, dann sind die Unterordner da; damit der Baum direkt auf der Platte landet, empfange ihn in Chrome oder Edge und wähle beim Nachfragen einen Zielordner. Der eine Weg, der wirklich flach ist, ist ein gespeicherter Download-Link — er lädt eine einfache Dateiliste hoch und verwirft die Pfade —, weshalb ein Ordner für einen Link vorher in ein Archiv gehört.</p></dd><dt>Ein Ordner mit einigen hundert Dateien bleibt mittendrin stehen, eine Datei fehlt.</dt><dd><pre><code>https://relayium.com/   # der Zähler nennt die Datei, bei der er stehen bleibt</code></pre><p>Eine Echtzeitsendung ist eine Live-Sitzung, und ein kurzer Abbruch kann am letzten dauerhaften Prüfpunkt weitermachen, solange beide Seiten offen bleiben. Wird eine davon geschlossen oder neu geladen, endet die Sitzung, und dann ist nichts mehr fortzusetzen. Lass beide Tabs offen und gib ihr einen Moment, bevor du etwas anfasst; erst wenn die Sitzung wirklich weg ist, sende den Stapel ab der Datei erneut, die der Zähler nannte. Für eine Zustellung ohne Gegenüber packst du den Ordner vorher selbst in ein Zip und lädst dieses eine Archiv als gespeicherten Link hoch, denn ein gespeicherter Upload nimmt eine flache Dateiliste entgegen.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, Prüfung, Lösung</p><dl><dt>Auf dem sendenden Gerät gibt es überhaupt keine Möglichkeit, einen Ordner zu wählen.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # die Auswahl bietet einen Ordner nur an, wo der Browser das kann</code></pre><p>Du bist mit hoher Wahrscheinlichkeit auf iPhone oder iPad, wo Safaris Auswahl einzelne Dateien zeigt und sonst nichts. Starte den Ordnerversand in einem Desktop-Chrome, -Edge oder -Firefox und nutze das Handy stattdessen als Empfangsseite.</p></dd><dt>Die angekommene .zip ist beschädigt, oder der Download bleibt kurz vor 4 GiB stehen.</dt><dd><pre tabindex="0"><code>chrome://downloads   # die Größe der .zip mit dem gesendeten Ordner vergleichen</code></pre><p>Der Archivweg kennt kein ZIP64, sowohl ein einzelner Eintrag als auch das ganze Archiv müssen also unter 4 GiB bleiben. Teile den Baum in zwei Sendungen, oder lass die empfangende Person Chrome oder Edge nehmen: Die schreibt die Dateien in einen gewählten Ordner und baut überhaupt kein Archiv.</p></dd><dt>Die .zip ist genauso groß wie der Ordner, ganz ohne Kompression.</dt><dd><pre tabindex="0"><code>chrome://downloads   # die Größe des Eintrags entspricht der Summe des Ordners, nicht weniger</code></pre><p>Das ist so gewollt: Das Archiv läuft im Store-Modus, verpackt den Baum also ohne ihn zu komprimieren und bleibt byteidentisch zum Gesendeten. Komprimiere den Ordner vorher selbst, wenn die Größe auf der Leitung wichtiger ist als eine exakte Kopie.</p></dd><dt>Die Dateien sind angekommen, liegen aber alle flach in einem Ordner, die Unterordner fehlen.</dt><dd><pre tabindex="0"><code>chrome://downloads   # ein Browser ohne Verzeichnisauswahl übergibt eine einzelne .zip</code></pre><p>Relative Pfade überleben eine Echtzeitsendung, das hier ist also das Aussehen einer .zip vor dem Entpacken und keine platt gemachte Übertragung. Entpack das Archiv, dann sind die Unterordner da; damit der Baum direkt auf der Platte landet, empfange ihn in Chrome oder Edge und wähle beim Nachfragen einen Zielordner. Der eine Weg, der wirklich flach ist, ist ein gespeicherter Download-Link — er lädt eine einfache Dateiliste hoch und verwirft die Pfade —, weshalb ein Ordner für einen Link vorher in ein Archiv gehört.</p></dd><dt>Ein Ordner mit einigen hundert Dateien bleibt mittendrin stehen, eine Datei fehlt.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # der Zähler nennt die Datei, bei der er stehen bleibt</code></pre><p>Eine Echtzeitsendung ist eine Live-Sitzung, und ein kurzer Abbruch kann am letzten dauerhaften Prüfpunkt weitermachen, solange beide Seiten offen bleiben. Wird eine davon geschlossen oder neu geladen, endet die Sitzung, und dann ist nichts mehr fortzusetzen. Lass beide Tabs offen und gib ihr einen Moment, bevor du etwas anfasst; erst wenn die Sitzung wirklich weg ist, sende den Stapel ab der Datei erneut, die der Zähler nannte. Für eine Zustellung ohne Gegenüber packst du den Ordner vorher selbst in ein Zip und lädst dieses eine Archiv als gespeicherten Link hoch, denn ein gespeicherter Upload nimmt eine flache Dateiliste entgegen.</p></dd></dl></div>
       <h2>Jetzt in Echtzeit oder als Link für später</h2>
       <p>Sind beide Seiten gleichzeitig online, sende den Ordner in Echtzeit. Im selben LAN verbindet WebRTC direkt; netzübergreifende Browser nutzen TURN planmäßig für Ende-zu-Ende-Chiffretext, den das Relay weder lesen noch entschlüsseln kann. Relayium bewahrt keine serverseitige Echtzeitkopie oder Übertragungshistorie auf. Im selben Netz ist kein Konto nötig; netzübergreifend meldet sich die Person an, die den Pairing-Code erstellt, die beitretende Person nie.</p>
       <p>Ist die andere Person gerade nicht da, erstelle stattdessen einen gespeicherten Link — aber pack den Ordner vorher selbst in ein Archiv. Ein gespeicherter Upload bekommt eine flache Dateiliste: Die relativen Pfade fallen weg, ein direkt hochgeladener Baum kommt also als lose Dateien an, und zwei gleichnamige Dateien aus verschiedenen Unterordnern kollidieren. Mach eine gewöhnliche .zip und lade diese eine Datei hoch, dann reist die Struktur im Archiv mit. Dein Browser verschlüsselt vor dem Upload, was du hochlädst, mit einem zufälligen AES-256-GCM-Schlüssel, der nur im Link selbst existiert, sodass der Server Chiffretext hält, den er nicht lesen kann. Das Erstellen eines Links erfordert die Anmeldung des Absenders; lege eine Gültigkeit von 1 Stunde, 1 Tag, 3 Tagen, 7 Tagen oder bis zu 14 Tagen je nach Tarif fest, oder lass ihn nach dem ersten Download verfallen.</p>

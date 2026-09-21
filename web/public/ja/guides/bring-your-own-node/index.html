@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/guides/bring-your-own-node/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Bring Your Own Node: Relayium のリレー＆ストレージを無料で使う" />
@@ -27,49 +33,101 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Bring Your Own Node: Relayium のリレー＆ストレージを無料で使う","description":"自分で用意したリレー／ストレージノードを、コマンド1つで Relayium アカウントに紐付けます。以降、転送は当社の従量課金サーバーではなく自分のノードを経由するので無料になり、データも自分で管理するハードウェア上にとどまります。","inLanguage":"ja","datePublished":"2026-07-10","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/bring-your-own-node/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Bring Your Own Node: Relayium のリレー＆ストレージを無料で使う"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"「relayium-node: command not found」と表示されました — 何が問題ですか？","acceptedAnswer":{"@type":"Answer","text":"relayium-node バイナリをインストールする前に実行しています。アカウントページのワンライナーインストールコマンド（curl … | sudo … sh の形式）を使ってください。これがバイナリをダウンロードし、PATH に配置し、サービスとして起動します。relayium-node を個別にインストールすることは決してありません。"}},{"@type":"Question","name":"再起動後もノードはオンラインを維持しますか？","acceptedAnswer":{"@type":"Answer","text":"はい。インストーラーは、起動時に有効化され Restart=always に設定された systemd サービスを登録するため、再起動後に復帰し、クラッシュしても自動的に再起動します。追加で実行するものはありません。"}},{"@type":"Question","name":"これは Relayium のセルフホストとどう違うのですか？","acceptedAnswer":{"@type":"Answer","text":"Bring-your-own-node は、いつもの relayium.com アカウントとアプリをそのまま使い、自分のトラフィックを運ぶノードを追加するだけです。セルフホストはサーバースタック全体（アカウント、Web アプリ、シグナリング）を自分のドメインで運用します。それについては「Relayium をセルフホスト」ガイドを参照してください。"}},{"@type":"Question","name":"他の誰かが私のノードを使ったり、私のデータを見たりできますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。ノードはトークンによって自分のアカウントに紐付けられ、そのアカウントのトラフィックのみを運びます。リアルタイム転送はエンドツーエンド暗号化されており、保存されるブロブは自分のノードが読めない暗号文です。データとノード設定を利用できるのは本人だけです。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.tw{overflow-x:auto;margin:16px 0}
-.tw table{border-collapse:collapse;width:100%;font-size:15px}
-.tw th,.tw td{border:1px solid var(--border);padding:8px 11px;text-align:start;vertical-align:top}
-.tw th{color:var(--text-h);background:var(--card);font-weight:600}
-.tw code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;color:var(--text-h)}
+.tw{overflow-x:auto;margin:16px 0;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.tw table{border-collapse:collapse;inline-size:100%;font-size:var(--fs-sm)}
+.tw th,.tw td{border-block-end:1px solid var(--sep);padding:10px 14px;text-align:start;vertical-align:top}
+.tw tr:last-child td{border-block-end:0}
+.tw th{color:var(--text-h);background:var(--row-hover);font-weight:600}
+.tw code{font-size:13px;color:var(--text-h)}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -87,7 +145,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ja/guides/" aria-current="true">ガイド</a><a href="/ja/apps/">アプリ</a><a href="/pricing">料金</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">Bring Your Own Node: Relayium のリレー＆ストレージを無料で使う</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -115,10 +173,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>ノードをインストールしてオンラインにする</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">手順1の前に必要なもの</p><ul><li>インターネットから到達できる Linux サーバー——安価な VPS でも、自宅の常時起動マシンでも構いません。amd64 と arm64 の両方に対応しています。</li><li>そのサーバーの root 権限、または sudo。インストール時に一度だけ必要で、ノード自体が root で動くことはありません。</li><li>受信ポートを開けること——ホストのファイアウォールに加え、クラウド VPS では事業者のセキュリティグループにも設定が要ります。</li><li>サインイン済みの relayium.com アカウント。インストールコマンドはアカウントページで発行され、使い捨てのトークンを含みます。</li><li>ディスク容量。中継だけでなく保存もさせたい場合のみ必要です。中継専用なら不要で、RELAYIUM_NODE_STORAGE_DIR を外してください。</li></ul></div>
       <p>順に4つのことをします。コマンドを発行し、実行し、ポートを開け、オンラインになったことを確認する——新しいマシンなら5分ほどです。</p>
-      <ol class="steps" data-block="steps"><li><p>relayium.com にサインインし、アカウントページ /me を開きます。</p></li><li><p>「マイノード」まで進み、「ノードを追加」をクリックします。表示されたインストールコマンドはすぐにコピーしてください。含まれるトークンは一度きりの表示で、あとから再表示はできません。</p></li><li><p>それをサーバーに貼り付けて実行します。relayium-node のバイナリをダウンロードしてチェックサムを検証し、/usr/local/bin に配置し、systemd サービスを書いて起動します。</p><pre><code>curl -fsSL https://relayium.com/install-node.sh | sudo RELAYIUM_CENTRAL_URL=https://relayium.com RELAYIUM_NODE_TOKEN=&lt;your-token&gt; RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh</code></pre></li><li><p>サービスが起動していること、再起動後も戻ってくることを確認します。どちらの答えも重要です。active は今動いていること、enabled は再起動をまたいで残ることを意味します。</p><pre><code>systemctl is-active relayium-node</code></pre><pre><code>systemctl is-enabled relayium-node</code></pre></li><li><p>ホストのファイアウォールで受信ポートを開けます。オンライン表示に必要なのは送信方向だけですが、ピアが中継や保存に使うのはこれらのポートです。</p><pre><code>sudo ufw allow 3478/udp        # TURN
+      <ol class="steps" data-block="steps"><li><p>relayium.com にサインインし、アカウントページ /me を開きます。</p></li><li><p>「マイノード」まで進み、「ノードを追加」をクリックします。表示されたインストールコマンドはすぐにコピーしてください。含まれるトークンは一度きりの表示で、あとから再表示はできません。</p></li><li><p>それをサーバーに貼り付けて実行します。relayium-node のバイナリをダウンロードしてチェックサムを検証し、/usr/local/bin に配置し、systemd サービスを書いて起動します。</p><pre tabindex="0"><code>curl -fsSL https://relayium.com/install-node.sh | sudo RELAYIUM_CENTRAL_URL=https://relayium.com RELAYIUM_NODE_TOKEN=&lt;your-token&gt; RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh</code></pre></li><li><p>サービスが起動していること、再起動後も戻ってくることを確認します。どちらの答えも重要です。active は今動いていること、enabled は再起動をまたいで残ることを意味します。</p><pre tabindex="0"><code>systemctl is-active relayium-node</code></pre><pre tabindex="0"><code>systemctl is-enabled relayium-node</code></pre></li><li><p>ホストのファイアウォールで受信ポートを開けます。オンライン表示に必要なのは送信方向だけですが、ピアが中継や保存に使うのはこれらのポートです。</p><pre tabindex="0"><code>sudo ufw allow 3478/udp        # TURN
 sudo ufw allow 8081/tcp        # storage
 sudo ufw allow 49152:65535/udp # relay</code></pre></li><li><p>クラウド VPS の場合は、事業者のセキュリティグループでも同じポートを許可してください。ufw だけでは上流で塞がれたままで、しかもノードはその間ずっと健全に見えます。</p></li><li><p>/me に戻り、ノードがオンラインに変わるのを待ちます——たいてい30秒ほどです。以降、アカウントの転送は自動的にこのノードを優先します。</p></li><li><p>任意: 「自分のノードだけを中継／保存に使う」をオンにすると、共有インフラへ黙って戻る代わりに転送が失敗するようになります。</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">正常なノードの見え方</p><p>systemd がサービスを active かつ enabled と報告し、「マイノード」でノードがオンラインと表示されます。active だけでは不十分です——enabled になっていないノードは次の再起動で消えます。</p><pre><code>$ systemctl is-active relayium-node
+      <div class="cbox ok" data-block="success"><p class="cbox-t">正常なノードの見え方</p><p>systemd がサービスを active かつ enabled と報告し、「マイノード」でノードがオンラインと表示されます。active だけでは不十分です——enabled になっていないノードは次の再起動で消えます。</p><pre tabindex="0"><code>$ systemctl is-active relayium-node
 active
 $ systemctl is-enabled relayium-node
 enabled</code></pre></div>
@@ -139,14 +197,14 @@ enabled</code></pre></div>
       <p>アンインストールはスクリプト 1 本だけで、ファイルを保存するノードでもリレー専用でも同じものを使います。ユニット、バイナリ、設定、サービスアカウントを削除し、ノードが無くなったことを relayium.com にベストエフォートで伝えます。その通知が失敗しても、ターミナルに 1 行出るだけで、アンインストールが壊れたわけではありません — ノード ID が表示されるので、手動で削除済みにできます。</p>
       <p>ダウンロードして、中身を確認してから実行してください。sh に直接パイプすると、404 やネットワークの瞬断のときにコマンド全体が何も出力せず終了コード 0 で終わり、成功したように見えます。</p>
       <p>削除するのは把握しているものだけです。状態ディレクトリや保存ディレクトリに想定外のファイルがあれば、消さずに保持して報告します。</p>
-      <pre><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; \
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; \
   [ -s uninstall-node.sh ] &amp;&amp; sudo sh uninstall-node.sh</code></pre>
       <ul><li>保存ディレクトリに把握していないファイルが 1 つでも残っている間は拒否します（クリーンアップがまだ届いていない期限切れの blob も同じ扱いです）。保存ファイルは 1 台のノードにしか存在せず、レプリカが無いためです。0 になるまで待つか、それらが到達不能になることを受け入れて RELAYIUM_NODE_FORCE=1 を渡してください。</li><li>blob の場所を特定できない場合は、推測せずに停止します。RELAYIUM_NODE_ASSUME_NO_STORAGE=1 が唯一の回避手段で、それでも把握していないものは削除しません。</li><li>保存ディレクトリ自体は、RELAYIUM_NODE_PURGE_STORAGE=1 を併せて渡さない限り残ります。環境変数は | sudo sh を越えないので、sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh の形で渡してください。</li><li>その後、systemctl status relayium-node は not-found になり、relayium-node のタイマーも一覧に出ないはずです。後で再インストールすると、アカウントに追加されるのは新しいノードです。アンインストールがノードの識別ファイルを削除するため、再インストールは旧ノードの復活ではなく新規登録になります。</li></ul>
       <h2>うまくいかないとき</h2>
       <p>立ち上がらないノードのほぼすべては次の5つのどれかで、そのうち3つはサーバー側からは健全に見えます。サービスは動いており、違うと告げるのはアカウントページか待ち受けソケットだけです。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状、確認、対処</p><dl><dt>シェルが「relayium-node: command not found」と返す。</dt><dd><pre><code>command -v relayium-node
-# 何も表示されない</code></pre><p>バイナリが入っていません。relayium-node を単独でインストールすることはありません——アカウントページの1行コマンドこそが、バイナリをダウンロードし、PATH に置き、サービスとして起動するものです。そちらを実行してください。</p></dd><dt>サービスは active なのに、アカウントページでノードがオンラインにならない。</dt><dd><pre><code>journalctl -u relayium-node -n 50 --no-pager</code></pre><p>オンラインかどうかは送信方向のハートビートで決まるため、ここでファイアウォールが原因になることはまれで、たいていは登録の失敗です。トークンは使い捨てなので、すでに実行済みのコマンドや前回の試行で残った古いコマンドは失敗します。「ノードを追加」をもう一度押して新しいコマンドで実行し直してください。</p></dd><dt>ノードはオンラインなのに、転送は依然として共有インフラを通る。</dt><dd><pre><code>sudo ss -lunp | grep 3478</code></pre><p>オンラインが証明するのは送信方向のハートビートだけです。ピアが必要とするのは受信ポートです。ノードが待ち受けていることを確認したうえで、ホストのファイアウォールとクラウドのセキュリティグループの両方で 3478/udp、8081/tcp、49152-65535/udp を開けてください。黙ったフォールバックを完全に排除するには、自分のノードのみを使う設定をオンにします。</p></dd><dt>アンインストールが何も表示せず終了コード0で終わり、サービスは残っている。</dt><dd><pre><code>systemctl status relayium-node
-# active (running)</code></pre><p>失敗したダウンロードを sh にパイプしたときの見え方そのものです。404 やネットワークの瞬断は何も出力せず終了コード0で終わるため、成功と見分けがつきません。スクリプトをダウンロードし、空でないことを確かめてから実行してください。本記事のコマンドが1本のパイプではなく3つに分かれているのはそのためです。</p></dd><dt>ストレージディレクトリにまだファイルが残っているため、アンインストールが拒否される。</dt><dd><pre><code>sudo ls /var/lib/relayium-node/blobs | wc -l</code></pre><p>意図的な動作です。保存済みファイルはちょうど1つのノードにしか存在せず複製もないため、ノードを外すとそれらは取り出せなくなります。ブロブが期限切れになって数がゼロになるまで待つか、RELAYIUM_NODE_FORCE=1 でその損失を受け入れてください。環境変数は sudo sh へのパイプを越えられないので、sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh の形で渡します。</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状、確認、対処</p><dl><dt>シェルが「relayium-node: command not found」と返す。</dt><dd><pre tabindex="0"><code>command -v relayium-node
+# 何も表示されない</code></pre><p>バイナリが入っていません。relayium-node を単独でインストールすることはありません——アカウントページの1行コマンドこそが、バイナリをダウンロードし、PATH に置き、サービスとして起動するものです。そちらを実行してください。</p></dd><dt>サービスは active なのに、アカウントページでノードがオンラインにならない。</dt><dd><pre tabindex="0"><code>journalctl -u relayium-node -n 50 --no-pager</code></pre><p>オンラインかどうかは送信方向のハートビートで決まるため、ここでファイアウォールが原因になることはまれで、たいていは登録の失敗です。トークンは使い捨てなので、すでに実行済みのコマンドや前回の試行で残った古いコマンドは失敗します。「ノードを追加」をもう一度押して新しいコマンドで実行し直してください。</p></dd><dt>ノードはオンラインなのに、転送は依然として共有インフラを通る。</dt><dd><pre tabindex="0"><code>sudo ss -lunp | grep 3478</code></pre><p>オンラインが証明するのは送信方向のハートビートだけです。ピアが必要とするのは受信ポートです。ノードが待ち受けていることを確認したうえで、ホストのファイアウォールとクラウドのセキュリティグループの両方で 3478/udp、8081/tcp、49152-65535/udp を開けてください。黙ったフォールバックを完全に排除するには、自分のノードのみを使う設定をオンにします。</p></dd><dt>アンインストールが何も表示せず終了コード0で終わり、サービスは残っている。</dt><dd><pre tabindex="0"><code>systemctl status relayium-node
+# active (running)</code></pre><p>失敗したダウンロードを sh にパイプしたときの見え方そのものです。404 やネットワークの瞬断は何も出力せず終了コード0で終わるため、成功と見分けがつきません。スクリプトをダウンロードし、空でないことを確かめてから実行してください。本記事のコマンドが1本のパイプではなく3つに分かれているのはそのためです。</p></dd><dt>ストレージディレクトリにまだファイルが残っているため、アンインストールが拒否される。</dt><dd><pre tabindex="0"><code>sudo ls /var/lib/relayium-node/blobs | wc -l</code></pre><p>意図的な動作です。保存済みファイルはちょうど1つのノードにしか存在せず複製もないため、ノードを外すとそれらは取り出せなくなります。ブロブが期限切れになって数がゼロになるまで待つか、RELAYIUM_NODE_FORCE=1 でその損失を受け入れてください。環境変数は sudo sh へのパイプを越えられないので、sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh の形で渡します。</p></dd></dl></div>
       <h2>よくある質問</h2>
       <h3>「relayium-node: command not found」と表示されました — 何が問題ですか？</h3>
       <p>relayium-node バイナリをインストールする前に実行しています。アカウントページのワンライナーインストールコマンド（curl … | sudo … sh の形式）を使ってください。これがバイナリをダウンロードし、PATH に配置し、サービスとして起動します。relayium-node を個別にインストールすることは決してありません。</p>

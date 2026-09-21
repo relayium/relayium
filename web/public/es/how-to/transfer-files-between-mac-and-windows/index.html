@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/es/how-to/transfer-files-between-mac-and-windows/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Transferir archivos entre un Mac y un PC con Windows" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Transferir archivos entre un Mac y un PC con Windows","description":"Cómo enviar archivos entre macOS y Windows sin una memoria USB, una carpeta de red compartida ni una subida a la nube. En la misma red y por internet — nada que instalar en ninguna de las dos máquinas.","inLanguage":"es","datePublished":"2026-07-09","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/es/how-to/transfer-files-between-mac-and-windows/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/es/"},{"@type":"ListItem","position":2,"name":"Guías","item":"https://relayium.com/es/guides/"},{"@type":"ListItem","position":3,"name":"Transferir archivos entre un Mac y un PC con Windows"}]},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿Necesito instalar algo en el Mac o en el PC con Windows?","acceptedAnswer":{"@type":"Answer","text":"No. Relayium funciona por completo en el navegador tanto en macOS como en Windows. Abre relayium.com en cada máquina y estás listo — nada que descargar en ningún caso. En la misma red una transferencia no necesita cuenta alguna; emparejar por internet solo pide al remitente iniciar sesión."}},{"@type":"Question","name":"¿Tienen que estar ambos ordenadores en la misma red?","acceptedAnswer":{"@type":"Answer","text":"No. Estar en la misma red es la vía más rápida porque las dos máquinas se encuentran automáticamente, pero un código de emparejamiento conecta un Mac y un PC con Windows por internet igual de bien — incluso desde ciudades distintas. En cualquier caso la transferencia sigue cifrada de extremo a extremo; la ruta entre redes solo pide que el remitente inicie sesión primero, y quien recibe nunca necesita una cuenta."}},{"@type":"Question","name":"¿Puedo enviar una carpeta entera, no solo archivos sueltos?","acceptedAnswer":{"@type":"Answer","text":"Sí. Arrastra una carpeta y Relayium envía hasta 1.000 archivos en el lote, preservando la estructura de la carpeta. Chrome y Edge en Windows la escriben directamente en un directorio elegido; si el navegador que recibe no puede escribir carpetas directamente, llega como un único .zip con la misma disposición."}},{"@type":"Question","name":"¿Se estropearán los permisos de archivo, los fines de línea o los nombres al pasar de Mac a Windows?","acceptedAnswer":{"@type":"Answer","text":"Los bytes y la ruta relativa dentro de una carpeta quedan sin cambios y se verifican con un hash SHA-256 de extremo a extremo, así que nada toca los fines de línea ni la codificación — todo lo que una conversión a nivel de aplicación tendría que manejar (como CRLF frente a LF en un archivo de texto) queda sin cambios porque el propio archivo queda sin cambios. Dos cosas realmente no cruzan: un nombre que contenga uno de los caracteres que Windows prohíbe no puede crearse en el PC, y los permisos POSIX, la propiedad y los atributos extendidos de macOS no se transfieren, porque el navegador que recibe escribe archivos normales bajo el propio modelo de NTFS."}},{"@type":"Question","name":"¿Hay algún límite de tamaño?","acceptedAnswer":{"@type":"Answer","text":"Hasta 1.000 archivos por lote. No hay ningún límite de tamaño del lado del servidor — Chrome y Edge de escritorio transmiten directamente al disco. Firefox y Safari carecen de la API File System Access, así que un lote recibido en uno de ellos se mantiene en memoria, y Relayium avisa por encima de unos 256 MB — una estimación prudente más que un límite duro, ya que el techo real depende de la memoria de la máquina y de qué más esté ejecutando."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/es/guides/" aria-current="true">Guías</a><a href="/es/apps/">Apps</a><a href="/pricing">Precios</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/es/">Relayium</a> <span aria-hidden="true">›</span> <a href="/es/guides/">Guías</a> <span aria-hidden="true">›</span> <span aria-current="page">Transferir archivos entre un Mac y un PC con Windows</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -107,12 +164,12 @@ ol.steps>li>pre{margin:8px 0 0}
       <p>Nada que instalar en el Mac ni en el PC. En la misma red tampoco hay nada que registrar — el navegador se encarga de todo.</p>
       <h2>Mac y PC en la misma red</h2>
       <p>Si ambos ordenadores están en la misma red de oficina o de casa, esta es la forma más rápida de mover archivos — ninguna unidad compartida que montar, ningún permiso contra el que pelear.</p>
-      <ol class="steps" data-block="steps"><li><p>En el Mac, abre la página de transferencia en el navegador. En el PC con Windows, abre la misma dirección.</p><pre><code>https://relayium.com/</code></pre></li><li><p>Compara la IP pública de la línea de estado en las dos máquinas. Compartir una dirección es lo que las mete en la misma sala. Si dos máquinas de una misma red de oficina anuncian direcciones distintas, una VPN corporativa en el portátil de trabajo es una causa común, aunque no la única.</p><pre><code>Conectado · este dispositivo MacBook · IP pública 203.0.113.9</code></pre></li><li><p>Ahora cada máquina aparece en la otra bajo «Dispositivos cercanos» — sin configurar un grupo de trabajo de Windows, sin habilitar el uso compartido de archivos de macOS. En el ordenador que envía, haz clic en el otro y pulsa «Abrir espacio de trabajo». En un navegador actual esa es la única acción que ofrece la tarjeta, porque archivos, carpetas y mensajes viajan todos por la única conexión cifrada que abre.</p></li><li><p>El espacio de trabajo sustituye a esa tarjeta. Envía desde los controles bajo su encabezado: «Enviar archivos» para un lote de hasta 1.000, «Enviar una carpeta» para un árbol completo, o escribe en el cuadro de mensaje — «Enter para una nueva línea · ⌘/Ctrl+Enter para enviar» — y pulsa «Enviar». En el lado que recibe, lee la línea bajo la solicitud: en Chrome o Edge dice que el navegador preguntará dónde guardar, así que eliges la carpeta tú mismo, y en Safari o Firefox dice que los archivos irán a las descargas del propio navegador. Después pulsa «Aceptar».</p></li><li><p>Observa cómo el contador llega al último archivo en las dos pantallas. Para comparar un código de verificación (SAS) antes de que se mueva un byte, activa primero «Verificación avanzada» en las dos máquinas: una coincidencia confirma que ambas se unieron a la misma sesión cifrada de extremo a extremo, no la ruta de red que transporta el texto cifrado. Si la dejas desactivada, la sesión sigue cifrada y simplemente no hay código que comparar.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">Qué se ve cuando la transferencia funciona</p><p>A esas alturas la tarjeta de la otra máquina ya no está — el espacio de trabajo ocupó su lugar —, así que el estado se lee en el encabezado del espacio de trabajo: la máquina a la que estás conectado, un estado de enlace «Conectado» y una única etiqueta de ruta que marca «Directo por LAN». El contador termina en el último archivo del lote.</p><p>En la carpeta que elegiste, el árbol llega con sus rutas relativas intactas. Un nombre que ya esté en ese directorio de destino no se sobrescribe: report.pdf aterriza al lado como report (1).pdf. Ese renombrado es propio de Relayium y solo se aplica allí donde el navegador nos entregó un directorio en el que escribir — Chrome o Edge con el selector de carpeta. Sin selector, el nombrado pertenece al gestor de descargas de ese navegador, y el resultado se lee en su propia lista: chrome://downloads en Chrome, edge://downloads en Edge, about:downloads en Firefox.</p><pre><code>Conectado a ThinkPad · Conectado · Directo por LAN
+      <ol class="steps" data-block="steps"><li><p>En el Mac, abre la página de transferencia en el navegador. En el PC con Windows, abre la misma dirección.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>Compara la IP pública de la línea de estado en las dos máquinas. Compartir una dirección es lo que las mete en la misma sala. Si dos máquinas de una misma red de oficina anuncian direcciones distintas, una VPN corporativa en el portátil de trabajo es una causa común, aunque no la única.</p><pre tabindex="0"><code>Conectado · este dispositivo MacBook · IP pública 203.0.113.9</code></pre></li><li><p>Ahora cada máquina aparece en la otra bajo «Dispositivos cercanos» — sin configurar un grupo de trabajo de Windows, sin habilitar el uso compartido de archivos de macOS. En el ordenador que envía, haz clic en el otro y pulsa «Abrir espacio de trabajo». En un navegador actual esa es la única acción que ofrece la tarjeta, porque archivos, carpetas y mensajes viajan todos por la única conexión cifrada que abre.</p></li><li><p>El espacio de trabajo sustituye a esa tarjeta. Envía desde los controles bajo su encabezado: «Enviar archivos» para un lote de hasta 1.000, «Enviar una carpeta» para un árbol completo, o escribe en el cuadro de mensaje — «Enter para una nueva línea · ⌘/Ctrl+Enter para enviar» — y pulsa «Enviar». En el lado que recibe, lee la línea bajo la solicitud: en Chrome o Edge dice que el navegador preguntará dónde guardar, así que eliges la carpeta tú mismo, y en Safari o Firefox dice que los archivos irán a las descargas del propio navegador. Después pulsa «Aceptar».</p></li><li><p>Observa cómo el contador llega al último archivo en las dos pantallas. Para comparar un código de verificación (SAS) antes de que se mueva un byte, activa primero «Verificación avanzada» en las dos máquinas: una coincidencia confirma que ambas se unieron a la misma sesión cifrada de extremo a extremo, no la ruta de red que transporta el texto cifrado. Si la dejas desactivada, la sesión sigue cifrada y simplemente no hay código que comparar.</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">Qué se ve cuando la transferencia funciona</p><p>A esas alturas la tarjeta de la otra máquina ya no está — el espacio de trabajo ocupó su lugar —, así que el estado se lee en el encabezado del espacio de trabajo: la máquina a la que estás conectado, un estado de enlace «Conectado» y una única etiqueta de ruta que marca «Directo por LAN». El contador termina en el último archivo del lote.</p><p>En la carpeta que elegiste, el árbol llega con sus rutas relativas intactas. Un nombre que ya esté en ese directorio de destino no se sobrescribe: report.pdf aterriza al lado como report (1).pdf. Ese renombrado es propio de Relayium y solo se aplica allí donde el navegador nos entregó un directorio en el que escribir — Chrome o Edge con el selector de carpeta. Sin selector, el nombrado pertenece al gestor de descargas de ese navegador, y el resultado se lee en su propia lista: chrome://downloads en Chrome, edge://downloads en Edge, about:downloads en Firefox.</p><pre tabindex="0"><code>Conectado a ThinkPad · Conectado · Directo por LAN
 Archivo 12/12</code></pre></div>
       <h2>Cuando una máquina no ve a la otra</h2>
       <p>En esta pareja, una VPN de trabajo y una red de oficina gestionada son las dos que conviene comprobar primero. Son comprobaciones iniciales habituales más que la lista completa, y todo lo de abajo se decide con algo que ya está en pantalla y no con una incidencia de soporte.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Síntoma, comprobación, solución</p><dl><dt>Ninguna de las dos máquinas aparece bajo «Dispositivos cercanos», aunque las dos están en la Wi-Fi de la oficina.</dt><dd><pre><code>https://relayium.com/   # compara la IP pública de la línea de estado en las dos máquinas</code></pre><p>Dos direcciones IP públicas distintas son dos salas, y una VPN corporativa es una causa común: saca una máquina por la dirección de la empresa mientras la otra sale por el router de la oficina. Un SSID de invitados que sale por otro lado es otra, y no son las únicas. Si estás dispuesto a cambiarlas, desconecta la VPN en esa máquina o abandona el SSID de invitados, y recarga https://relayium.com/ ahí. Si la VPN tiene que seguir levantada, un código de emparejamiento en https://relayium.com/cross-network llega a la otra máquina sin desconectarla.</p></dd><dt>Las dos máquinas muestran la misma IP pública y no aparece ninguna tarjeta.</dt><dd><pre><code>https://relayium.com/   # la indicación bajo la lista de dispositivos nombra el ajuste del router</code></pre><p>La red separa a sus propios clientes. En un router que sea tuyo, desactiva «aislamiento de AP / aislamiento de clientes»; en una red de oficina gestionada que no puedes cambiar, empareja las dos máquinas con un código en https://relayium.com/cross-network.</p></dd><dt>Antes de aceptar, el Mac avisa de que tiene que sostener todo el lote en memoria.</dt><dd><pre><code>https://relayium.com/   # la línea bajo la solicitud dice cómo va a guardar este navegador</code></pre><p>Safari no tiene la API File System Access, así que almacena el lote en vez de escribirlo, y Relayium avisa a partir de unos 256 MiB. Recibe el mismo lote en Chrome o Edge en ese Mac: escribe cada archivo directamente al disco y te pide antes una carpeta de destino.</p></dd><dt>Un archivo de una transferencia de carpeta falla en el lado Windows mientras el resto llega.</dt><dd><pre><code>https://relayium.com/   # el contador nombra el archivo en el que se detiene</code></pre><p>Windows prohíbe los caracteres \ / : * ? &quot; &lt; &gt; | en un nombre de archivo y macOS no, así que un nombre legal en el Mac puede ser imposible de crear en el PC. Renombra ese archivo en el Mac y envíalo de nuevo; los dos puntos de una fecha como 2026:08:05 son el caso más frecuente.</p></dd><dt>La transferencia funciona, pero la etiqueta marca «Directo P2P» en lugar de «Directo por LAN».</dt><dd><pre><code>https://relayium.com/   # lee la etiqueta de ruta en el encabezado del espacio de trabajo</code></pre><p>Las dos máquinas comparten una IP pública sin compartir un salto local, que es exactamente el aspecto de dos VLAN detrás de un mismo enlace de subida de oficina. La transferencia sigue siendo directa y sigue cifrada de extremo a extremo; pon las dos en la misma subred si quieres que la ruta sea tu LAN y no el camino que encontraron los navegadores.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Síntoma, comprobación, solución</p><dl><dt>Ninguna de las dos máquinas aparece bajo «Dispositivos cercanos», aunque las dos están en la Wi-Fi de la oficina.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # compara la IP pública de la línea de estado en las dos máquinas</code></pre><p>Dos direcciones IP públicas distintas son dos salas, y una VPN corporativa es una causa común: saca una máquina por la dirección de la empresa mientras la otra sale por el router de la oficina. Un SSID de invitados que sale por otro lado es otra, y no son las únicas. Si estás dispuesto a cambiarlas, desconecta la VPN en esa máquina o abandona el SSID de invitados, y recarga https://relayium.com/ ahí. Si la VPN tiene que seguir levantada, un código de emparejamiento en https://relayium.com/cross-network llega a la otra máquina sin desconectarla.</p></dd><dt>Las dos máquinas muestran la misma IP pública y no aparece ninguna tarjeta.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # la indicación bajo la lista de dispositivos nombra el ajuste del router</code></pre><p>La red separa a sus propios clientes. En un router que sea tuyo, desactiva «aislamiento de AP / aislamiento de clientes»; en una red de oficina gestionada que no puedes cambiar, empareja las dos máquinas con un código en https://relayium.com/cross-network.</p></dd><dt>Antes de aceptar, el Mac avisa de que tiene que sostener todo el lote en memoria.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # la línea bajo la solicitud dice cómo va a guardar este navegador</code></pre><p>Safari no tiene la API File System Access, así que almacena el lote en vez de escribirlo, y Relayium avisa a partir de unos 256 MiB. Recibe el mismo lote en Chrome o Edge en ese Mac: escribe cada archivo directamente al disco y te pide antes una carpeta de destino.</p></dd><dt>Un archivo de una transferencia de carpeta falla en el lado Windows mientras el resto llega.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # el contador nombra el archivo en el que se detiene</code></pre><p>Windows prohíbe los caracteres \ / : * ? &quot; &lt; &gt; | en un nombre de archivo y macOS no, así que un nombre legal en el Mac puede ser imposible de crear en el PC. Renombra ese archivo en el Mac y envíalo de nuevo; los dos puntos de una fecha como 2026:08:05 son el caso más frecuente.</p></dd><dt>La transferencia funciona, pero la etiqueta marca «Directo P2P» en lugar de «Directo por LAN».</dt><dd><pre tabindex="0"><code>https://relayium.com/   # lee la etiqueta de ruta en el encabezado del espacio de trabajo</code></pre><p>Las dos máquinas comparten una IP pública sin compartir un salto local, que es exactamente el aspecto de dos VLAN detrás de un mismo enlace de subida de oficina. La transferencia sigue siendo directa y sigue cifrada de extremo a extremo; pon las dos en la misma subred si quieres que la ruta sea tu LAN y no el camino que encontraron los navegadores.</p></dd></dl></div>
       <h2>Entre redes: emparejamiento y retransmisión</h2>
       <p>El servidor genera exactamente seis dígitos decimales (0–9, incluido un cero inicial). El remitente inicia sesión para crear el código; quien se une por código, enlace o QR nunca necesita una cuenta. Acepta nuevas conexiones durante cinco minutos; una transferencia ya conectada no se corta cuando termina la cuenta atrás.</p>
       <p>Entre redes distintas, los navegadores usan por diseño un retransmisor TURN cifrado en vez de intentar primero una ruta directa. La clave permanece en los dos dispositivos, así que el retransmisor solo reenvía texto cifrado de extremo a extremo, no puede leer los archivos ni conserva una copia o historial del contenido en tiempo real.</p>

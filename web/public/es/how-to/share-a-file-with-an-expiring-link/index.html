@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/es/how-to/share-a-file-with-an-expiring-link/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Compartir un archivo con un enlace de descarga seguro y con caducidad" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Compartir un archivo con un enlace de descarga seguro y con caducidad","description":"Cifra un archivo en tu navegador y obtén un enlace que el servidor no puede descifrar. Elige 1 hora, 1 día, 3 días, 7 días o hasta 14 días según tu plan, o que se borre tras la primera descarga, y luego envíalo cuando estés listo.","inLanguage":"es","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/es/how-to/share-a-file-with-an-expiring-link/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/es/"},{"@type":"ListItem","position":2,"name":"Guías","item":"https://relayium.com/es/guides/"},{"@type":"ListItem","position":3,"name":"Compartir un archivo con un enlace de descarga seguro y con caducidad"}]},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿La persona a la que envío el enlace necesita una cuenta?","acceptedAnswer":{"@type":"Answer","text":"No. Cualquiera que tenga el enlace completo — incluida la parte después del # — puede abrirlo y descargar los archivos. Solo el remitente necesita iniciar sesión para crear el enlace en primer lugar."}},{"@type":"Question","name":"¿Puede Relayium leer mi archivo?","acceptedAnswer":{"@type":"Answer","text":"No. Tu navegador cifra los archivos con una clave AES-256-GCM aleatoria antes de subir nada, y esa clave solo viaja en el fragmento de la URL, que nunca llega al servidor. El navegador desde el que subiste guarda además una copia local para que «Mis archivos» pueda reconstruir el enlace más tarde. El servidor almacena texto cifrado que no tiene forma de descifrar — un diseño de conocimiento cero."}},{"@type":"Question","name":"¿Cuánto duran los enlaces?","acceptedAnswer":{"@type":"Answer","text":"Lo eliges al crear el enlace: 1 hora, 1 día, 3 días, 7 días o hasta 14 días según tu plan, o puedes configurarlo para que se borre en la primera descarga en lugar de una caducidad fija. La plaza se gasta en cuanto empiezan a circular bytes, así que una descarga interrumpida cuenta igual. Pasado ese punto, el enlace deja de funcionar."}},{"@type":"Question","name":"¿El archivo realmente desaparece tras el borrado por lectura?","acceptedAnswer":{"@type":"Answer","text":"El borrado tras la lectura está diseñado para exactamente una descarga, y la plaza se gasta en cuanto esa descarga empieza a entregar texto cifrado de verdad: el enlace deja de funcionar para cualquiera que lo abra después, incluso si esa única descarga se cortó y nunca terminó. Solo se devuelve un intento que no transfirió nada en absoluto."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/es/guides/" aria-current="true">Guías</a><a href="/es/apps/">Apps</a><a href="/pricing">Precios</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/es/">Relayium</a> <span aria-hidden="true">›</span> <a href="/es/guides/">Guías</a> <span aria-hidden="true">›</span> <span aria-current="page">Compartir un archivo con un enlace de descarga seguro y con caducidad</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -108,11 +165,11 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>Cómo crear un enlace</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Lo que necesitas</p><ul><li>Una cuenta conectada solo en el lado que envía — el destinatario no necesita ninguna y no ve ningún aviso de inicio de sesión.</li><li>Archivos que quepan bajo dos techos distintos: el límite por archivo impreso junto al selector, y la cuota de almacenamiento de tu plan. Los dos se leen en la página en vez de suponerlos.</li><li>Una ventana de retención que tu plan permita. La lista solo ofrece las ventanas que tu plan admite, y el servidor aplica ese mismo tope de forma defensiva a lo que recibe.</li><li>Tu propia copia de todo lo importante. La página lo dice bajo las opciones: entrega temporal, no una copia de seguridad.</li></ul></div>
       <p>Crear un enlace lleva unos pocos pasos, todos en el navegador:</p>
-      <ol class="steps" data-block="steps"><li><p>Abre la página de transferencia asíncrona e inicia sesión. Solo el remitente necesita una cuenta; el destinatario nunca.</p><pre><code>https://relayium.com/offline-transfer</code></pre></li><li><p>Elige uno o más archivos, o arrástralos. La cifra junto al selector es el techo por archivo vigente para tu cuenta.</p><pre><code>Elige archivos para subir
-Máx. 512 MiB</code></pre></li><li><p>Ajusta «Caduca en», o activa «Destrucción tras la lectura (eliminar en la primera descarga)». El recordatorio de debajo, entrega temporal y no copia de seguridad, es la página diciéndote que guardes la tuya.</p><pre><code>Caduca en
-1 día</code></pre></li><li><p>Espera mientras el navegador cifra y luego sube; las dos fases se ven mientras ocurren. Deja la página abierta hasta que termine, y después el enlace ya no depende de ella.</p></li><li><p>Copia el enlace, o que el destinatario escanee el QR de al lado, y envíalo como prefieras. Importa la cadena entera: todo lo que sigue a #k= es la clave de descifrado y nunca llega al servidor.</p><pre><code>Enlace listo — envíaselo al destinatario para que descargue:
+      <ol class="steps" data-block="steps"><li><p>Abre la página de transferencia asíncrona e inicia sesión. Solo el remitente necesita una cuenta; el destinatario nunca.</p><pre tabindex="0"><code>https://relayium.com/offline-transfer</code></pre></li><li><p>Elige uno o más archivos, o arrástralos. La cifra junto al selector es el techo por archivo vigente para tu cuenta.</p><pre tabindex="0"><code>Elige archivos para subir
+Máx. 512 MiB</code></pre></li><li><p>Ajusta «Caduca en», o activa «Destrucción tras la lectura (eliminar en la primera descarga)». El recordatorio de debajo, entrega temporal y no copia de seguridad, es la página diciéndote que guardes la tuya.</p><pre tabindex="0"><code>Caduca en
+1 día</code></pre></li><li><p>Espera mientras el navegador cifra y luego sube; las dos fases se ven mientras ocurren. Deja la página abierta hasta que termine, y después el enlace ya no depende de ella.</p></li><li><p>Copia el enlace, o que el destinatario escanee el QR de al lado, y envíalo como prefieras. Importa la cadena entera: todo lo que sigue a #k= es la clave de descifrado y nunca llega al servidor.</p><pre tabindex="0"><code>Enlace listo — envíaselo al destinatario para que descargue:
 https://relayium.com/d/8f3c2a1b#k=hQ2r…</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">Qué se ve cuando el enlace está creado</p><p>La página sustituye el selector por el enlace, la fecha en que caduca y un botón de copiar, además de un QR del mismo enlace y, debajo, el generador del comando para recogerlo desde una terminal.</p><p>Abrir el enlace tú mismo es la comprobación honesta: la página de descarga muestra el título del enlace cifrado, el número de archivos con el tamaño total y una cuenta atrás del tiempo restante. Lo que no muestra es ninguna forma de que nosotros leamos el archivo, porque la clave se quedó en el fragmento que copiaste.</p><pre><code>Enlace listo — envíaselo al destinatario para que descargue:
+      <div class="cbox ok" data-block="success"><p class="cbox-t">Qué se ve cuando el enlace está creado</p><p>La página sustituye el selector por el enlace, la fecha en que caduca y un botón de copiar, además de un QR del mismo enlace y, debajo, el generador del comando para recogerlo desde una terminal.</p><p>Abrir el enlace tú mismo es la comprobación honesta: la página de descarga muestra el título del enlace cifrado, el número de archivos con el tamaño total y una cuenta atrás del tiempo restante. Lo que no muestra es ninguna forma de que nosotros leamos el archivo, porque la clave se quedó en el fragmento que copiaste.</p><pre tabindex="0"><code>Enlace listo — envíaselo al destinatario para que descargue:
 https://relayium.com/d/8f3c2a1b#k=hQ2r…
 Este enlace caduca el jueves, 6 de agosto de 2026 a las 21:40</code></pre></div>
       <h2>Caducidad y borrado tras la lectura</h2>
@@ -122,7 +179,7 @@ Este enlace caduca el jueves, 6 de agosto de 2026 a las 21:40</code></pre></div>
       <h2>La garantía de conocimiento cero, y sus límites</h2>
       <p>Esto es lo que realmente ocurre cuando creas un enlace. Tu navegador genera una clave AES-256-GCM aleatoria — un mecanismo distinto del modo en tiempo real de Relayium, que negocia una clave entre dos dispositivos con X25519; la clave de un enlace almacenado se genera localmente, sin nada que negociar. Esa clave cifra tus archivos y la lista de nombres de archivo antes de que nada salga de tu dispositivo, y se añade al enlace de descarga después de un # — una parte de la URL que los navegadores nunca envían a ningún servidor. El servidor almacena el texto cifrado que se le da, y solo el texto cifrado; no tiene forma de descifrarlo, porque nunca recibe la clave.</p>
       <p>Ese diseño tiene compromisos reales que conviene conocer. La clave nunca llega al servidor, así que no hay restablecimiento de contraseña que podamos ofrecerte. Tampoco es exactamente la única copia: el navegador desde el que subiste la guarda también en local, y «Mis archivos» en la página de cuenta puede reconstruir y copiar el enlace en ese mismo navegador. Lo que deja un archivo irrecuperable es perder las dos cosas — el enlace completo y esa copia local, que es lo que significa abrir la página de cuenta en otro dispositivo o borrar los datos de sitio de este navegador. A partir de ahí, el texto cifrado almacenado queda permanentemente ilegible, para ti y para nosotros. Crear un enlace requiere que el remitente haya iniciado sesión, y cada enlace se descuenta de la cuota de almacenamiento de tu cuenta hasta que se borra o caduca. Y vale la pena ser precisos sobre lo que significa aquí «conocimiento cero»: el texto cifrado sí se almacena en el servidor de Relayium entre la creación y la descarga — solo que es ilegible sin la clave que nunca salió de tu navegador.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Síntoma, comprobación, solución</p><dl><dt>El destinatario abre el enlace y la página dice que falta la clave de descifrado.</dt><dd><pre><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # la clave es todo lo que sigue a #k=</code></pre><p>El fragmento se perdió por el camino: una vista previa de chat, un acortador de enlaces, o una copia que se detuvo en el #. Envía el enlace otra vez como texto plano y que lo pegue él mismo en la barra de direcciones, porque el id a solas no lo puede descifrar nadie, nosotros incluidos.</p></dd><dt>El descifrado falla aunque llegó el enlace completo.</dt><dd><pre><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # a un id le corresponde exactamente una clave</code></pre><p>El id y la clave vienen de enlaces distintos, algo que pasa cuando se copian dos subidas en la misma sesión. Copia el enlace más reciente de una pieza desde la página que lo creó, o abre «Mis archivos» en la página de cuenta en ese mismo navegador y copia el enlace de la entrada correcta: el fragmento #k= y la copia local de ese navegador son los dos únicos sitios donde existe la clave, porque nunca llegó al servidor.</p></dd><dt>El enlace se declara no válido, caducado, o ya descargado y eliminado.</dt><dd><pre><code>https://relayium.com/offline-transfer   # crea un enlace nuevo con la destrucción apagada</code></pre><p>Los tres son el mismo estado: no queda nada que recoger. Con «Destrucción tras la lectura» activada, la primera descarga que entrega texto cifrado de verdad gasta la única plaza — haya terminado o se haya cortado a mitad —, así que vuelve a subirlo y déjala apagada cuando lo necesiten varias personas o un segundo intento.</p></dd><dt>La página de descarga informa de demasiadas peticiones, o de que la transferencia mensual del remitente está agotada.</dt><dd><pre><code>https://relayium.com/me   # el uso de este mes cubre transferencia y almacenamiento</code></pre><p>El archivo está intacto y esto es medición. Un límite de tasa se levanta en unos minutos, mientras que una transferencia mensual agotada espera al mes siguiente, a un cambio de plan o a tu propio nodo. Volver a abrir el enlace después funciona, porque no se consumió nada.</p></dd><dt>Necesitas el archivo y ya no tienes el enlace.</dt><dd><pre><code>https://relayium.com/me   # «Mis archivos» reconstruye el enlace en el navegador que lo subió</code></pre><p>Prueba primero la única vía de recuperación que existe: el navegador desde el que subiste guardó la clave en local, así que abre la página de cuenta en ese mismo navegador, busca la entrada bajo «Mis archivos» y usa su botón de copiar enlace. En cualquier otro dispositivo, o después de borrar los datos de sitio de ese navegador, la clave desaparece y el texto cifrado almacenado es ilegible para todos, también para nosotros — entonces vuelve a subir el archivo desde tu propia copia, que es justo lo que la página te pide conservar.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Síntoma, comprobación, solución</p><dl><dt>El destinatario abre el enlace y la página dice que falta la clave de descifrado.</dt><dd><pre tabindex="0"><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # la clave es todo lo que sigue a #k=</code></pre><p>El fragmento se perdió por el camino: una vista previa de chat, un acortador de enlaces, o una copia que se detuvo en el #. Envía el enlace otra vez como texto plano y que lo pegue él mismo en la barra de direcciones, porque el id a solas no lo puede descifrar nadie, nosotros incluidos.</p></dd><dt>El descifrado falla aunque llegó el enlace completo.</dt><dd><pre tabindex="0"><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # a un id le corresponde exactamente una clave</code></pre><p>El id y la clave vienen de enlaces distintos, algo que pasa cuando se copian dos subidas en la misma sesión. Copia el enlace más reciente de una pieza desde la página que lo creó, o abre «Mis archivos» en la página de cuenta en ese mismo navegador y copia el enlace de la entrada correcta: el fragmento #k= y la copia local de ese navegador son los dos únicos sitios donde existe la clave, porque nunca llegó al servidor.</p></dd><dt>El enlace se declara no válido, caducado, o ya descargado y eliminado.</dt><dd><pre tabindex="0"><code>https://relayium.com/offline-transfer   # crea un enlace nuevo con la destrucción apagada</code></pre><p>Los tres son el mismo estado: no queda nada que recoger. Con «Destrucción tras la lectura» activada, la primera descarga que entrega texto cifrado de verdad gasta la única plaza — haya terminado o se haya cortado a mitad —, así que vuelve a subirlo y déjala apagada cuando lo necesiten varias personas o un segundo intento.</p></dd><dt>La página de descarga informa de demasiadas peticiones, o de que la transferencia mensual del remitente está agotada.</dt><dd><pre tabindex="0"><code>https://relayium.com/me   # el uso de este mes cubre transferencia y almacenamiento</code></pre><p>El archivo está intacto y esto es medición. Un límite de tasa se levanta en unos minutos, mientras que una transferencia mensual agotada espera al mes siguiente, a un cambio de plan o a tu propio nodo. Volver a abrir el enlace después funciona, porque no se consumió nada.</p></dd><dt>Necesitas el archivo y ya no tienes el enlace.</dt><dd><pre tabindex="0"><code>https://relayium.com/me   # «Mis archivos» reconstruye el enlace en el navegador que lo subió</code></pre><p>Prueba primero la única vía de recuperación que existe: el navegador desde el que subiste guardó la clave en local, así que abre la página de cuenta en ese mismo navegador, busca la entrada bajo «Mis archivos» y usa su botón de copiar enlace. En cualquier otro dispositivo, o después de borrar los datos de sitio de ese navegador, la clave desaparece y el texto cifrado almacenado es ilegible para todos, también para nosotros — entonces vuelve a subir el archivo desde tu propia copia, que es justo lo que la página te pide conservar.</p></dd></dl></div>
       <h2>Preguntas frecuentes</h2>
       <h3>¿La persona a la que envío el enlace necesita una cuenta?</h3>
       <p>No. Cualquiera que tenga el enlace completo — incluida la parte después del # — puede abrirlo y descargar los archivos. Solo el remitente necesita iniciar sesión para crear el enlace en primer lugar.</p>

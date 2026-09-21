@@ -12,6 +12,7 @@
 // file for every language) carrying noindex and links back into the site.
 import { SITE, esc } from "./shared.mjs";
 import { STYLE } from "./landing-template.mjs";
+import { siteHeader, THEME_HEAD } from "./page-chrome.mjs";
 
 const LINKS = [
   ["/", "Relayium home — send a file now"],
@@ -40,13 +41,12 @@ export function renderNotFoundPage() {
     <meta name="description" content="That page doesn't exist. Here's the way back into Relayium." />
     <meta name="robots" content="noindex, follow" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    ${THEME_HEAD}
     <style>${STYLE}</style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">${SITE.name}</a></header>
+      ${siteHeader({ lang: "en", home: "/" })}
       <main>
       <h1>Page not found</h1>
       <p class="pitch">

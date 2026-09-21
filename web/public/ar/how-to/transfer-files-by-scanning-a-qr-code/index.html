@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ar/how-to/transfer-files-by-scanning-a-qr-code/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="نقل الملفات بمسح رمز QR ضوئيًا" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"نقل الملفات بمسح رمز QR ضوئيًا","description":"أرسل الملفات بمسح رمز QR من جلسة اقتران ضوئيًا — النقل مشفَّر من الطرف إلى الطرف طوال الطريق. لا حاجة إلى تطبيق أو حساب للشخص الذي يمسح.","inLanguage":"ar","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/how-to/transfer-files-by-scanning-a-qr-code/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"نقل الملفات بمسح رمز QR ضوئيًا"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل يحتاج الشخص الذي يمسح رمز QR إلى حساب Relayium؟","acceptedAnswer":{"@type":"Answer","text":"لا. الجهة التي تُنشئ رمز الاقتران ورمز QR الخاص به هي وحدها التي تسجّل الدخول — وهو الشرط نفسه الذي يحمله رابط التنزيل غير المتزامن. ومن يمسحه ينضم فقط إلى الغرفة التي أُنشئت بالفعل: لا حساب، لا تسجيل، ولا شيء يُثبَّت."}},{"@type":"Question","name":"ماذا يحتوي رمز QR فعلًا؟","acceptedAnswer":{"@type":"Answer","text":"رابط الانضمام نفسه الذي ينسخه زر «نسخ الرابط» — عنوان URL على relayium.com برمز الاقتران مضمّنًا فيه. مسحه ضوئيًا يفتح ذلك الرابط في المتصفح فحسب، فينضم إلى الغرفة تلقائيًا. وعند هذا الحد يقف الأمر: فلا يُختار ملف ولا يُرسَل شيء، وما يُرسَل بعد ذلك يظل بحاجة إلى قبول على جهاز الاستقبال."}},{"@type":"Question","name":"هل مسح رمز QR آمن بقدر إدخال الرمز؟","acceptedAnswer":{"@type":"Answer","text":"نعم، إنه الاتصال ذاته في كلتا الحالتين. لا يزال الجهازان يتفاوضان على تبادل مفاتيح X25519، ويشفّران بـ AES-256-GCM، ويعرضان رمز تحقق SAS متطابقًا — عند تفعيل التحقّق المتقدّم — يمكنك التحقق منه قبل أن تثق بالنقل. رمز QR يغير فقط كيف تدخل الغرفة، لا كيف يُؤمَّن النقل."}},{"@type":"Question","name":"ماذا لو لم يُمسح رمز QR؟","acceptedAnswer":{"@type":"Answer","text":"لا شيء يُفقد — تعرض بطاقة الاقتران نفسها الرمز الخام ورابطًا قابلًا للنسخ، وزر ورقة مشاركة على الأجهزة المدعومة. أي منها يفتح الغرفة نفسها التي يفتحها رمز QR."}},{"@type":"Question","name":"هل يعمل هذا عبر شبكات مختلفة، مثل بيانات الهاتف مع شبكة Wi-Fi المنزلية؟","acceptedAnswer":{"@type":"Answer","text":"نعم. هذا هو مسار الاقتران عبر الشبكات، لذا فهو يعمل سواء أكان الجهازان يتشاركان شبكة أم لا. ورمز الاقتران يصل بينهما دائمًا عبر مُرحِّل TURN مشفَّر — وهو المسار الذي لا يعتمد على إيجاد منفذ عبر ما بين الشبكتين من شبكات NAT وجدران حماية، وهي قد تمنع الاتصال المباشر — ولا يحمل ذلك المُرحِّل إلا نصًا مُشفَّرًا. أما الاتصال المباشر فهو ما يحدث بين أجهزة على الشبكة نفسها يعثر بعضها على بعض دون رمز."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ar/guides/" aria-current="true">الأدلة</a><a href="/ar/apps/">التطبيقات</a><a href="/pricing">الأسعار</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ar/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ar/guides/">الأدلة</a> <span aria-hidden="true">›</span> <span aria-current="page">نقل الملفات بمسح رمز QR ضوئيًا</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -109,11 +166,11 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>امسحه ضوئيًا — لا تطبيق، لا حساب</h2>
       <p>على الجهاز الآخر، افتح تطبيق الكاميرا (أو أي ماسح QR) ووجّهه نحو الشاشة. النقر على الإشعار الذي يظهر يفتح الرابط في متصفح، فينضم إلى الغرفة تلقائيًا — لا كتابة، ولا حساب relayium.com للشخص الذي يمسح، ولا شيء يُثبَّت. والمسح لا يفعل سوى الانضمام؛ فهو لا ينقل أي ملف. ودفعة الملفات الواردة تظل تنتظر على شاشة الاستقبال حتى يضغط أحدهم «قبول».</p>
       <p>إن لم تكن الكاميرا في المتناول، يعمل الرابط نفسه ملصوقًا في أي متصفح، ويعمل الرمز المؤلف من ستة أرقام مكتوبًا في خانة «أدخل الرمز» على relayium.com. رمز QR وسيلة راحة مضافة فوق كليهما، لا آلية منفصلة — اختر أيهما أسهل في اللحظة.</p>
-      <ol class="steps" data-block="steps"><li><p>على جهاز الإرسال، افتح صفحة النقل الفوري وسجّل الدخول.</p><pre dir="ltr"><code>https://relayium.com/cross-network</code></pre></li><li><p>أنشِئ رمز الاقتران. تعرض البطاقة عندئذٍ الأرقام الستة، ومربّع QR تحتها، وعدًّا تنازليًا.</p><pre dir="ltr"><code>رمز اقترانك — اقرأه للطرف الآخر
+      <ol class="steps" data-block="steps"><li><p>على جهاز الإرسال، افتح صفحة النقل الفوري وسجّل الدخول.</p><pre tabindex="0" dir="ltr"><code>https://relayium.com/cross-network</code></pre></li><li><p>أنشِئ رمز الاقتران. تعرض البطاقة عندئذٍ الأرقام الستة، ومربّع QR تحتها، وعدًّا تنازليًا.</p><pre tabindex="0" dir="ltr"><code>رمز اقترانك — اقرأه للطرف الآخر
 483920
 أو اطلب منهم مسح / فتح الرابط للانضمام
-تنتهي صلاحية رمز الاقتران خلال 4:52</code></pre></li><li><p>على الجهاز الآخر، افتح تطبيق الكاميرا أو أي ماسح QR ووجّهه إلى ذلك المربّع، ثم انقر إشعار الرابط الذي يعرضه.</p></li><li><p>يُفتح الرابط في متصفح وينضم إلى الغرفة من تلقاء نفسه — لا كتابة، ولا حساب على هذا الطرف. وهو العنوان نفسه الذي يضعه زر «نسخ الرابط» في الحافظة.</p><pre dir="ltr"><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>عُد إلى جهاز الإرسال: إن لم تكن قد صففت ملفات قبل إنشاء الرمز، فاختر الملفات الآن. ولا يتحرك شيء حتى يضغط جهاز الاستقبال «قبول»، فاستجب لذلك الطلب هناك، ثم اترك التبويبين مفتوحين حتى ينتهي عدّاد الملفات.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">كيف يبدو المسح الناجح</p><p>على جهاز الإرسال يفسح رمز QR وسطر «في انتظار انضمام الجهاز الآخر…» المجالَ لبطاقة الاتصال، ويقرأ وسم المسار عليها «مُرحَّل» — وهي القيمة المتوقَّعة لجلسة برمز اقتران، إذ تسلك بحكم التصميم مُرحِّل TURN المشفَّر.</p><p>ثم يمضي عدّاد الملفات إلى آخر ملف على الشاشتين. ولا يختلف النقل في شيء عن رمز أُدخِل يدويًا: فالمسح لم يقرّر سوى الطريقة التي دخل بها الجهاز الثاني إلى الغرفة.</p><pre dir="ltr"><code>مُرحَّل
+تنتهي صلاحية رمز الاقتران خلال 4:52</code></pre></li><li><p>على الجهاز الآخر، افتح تطبيق الكاميرا أو أي ماسح QR ووجّهه إلى ذلك المربّع، ثم انقر إشعار الرابط الذي يعرضه.</p></li><li><p>يُفتح الرابط في متصفح وينضم إلى الغرفة من تلقاء نفسه — لا كتابة، ولا حساب على هذا الطرف. وهو العنوان نفسه الذي يضعه زر «نسخ الرابط» في الحافظة.</p><pre tabindex="0" dir="ltr"><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>عُد إلى جهاز الإرسال: إن لم تكن قد صففت ملفات قبل إنشاء الرمز، فاختر الملفات الآن. ولا يتحرك شيء حتى يضغط جهاز الاستقبال «قبول»، فاستجب لذلك الطلب هناك، ثم اترك التبويبين مفتوحين حتى ينتهي عدّاد الملفات.</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">كيف يبدو المسح الناجح</p><p>على جهاز الإرسال يفسح رمز QR وسطر «في انتظار انضمام الجهاز الآخر…» المجالَ لبطاقة الاتصال، ويقرأ وسم المسار عليها «مُرحَّل» — وهي القيمة المتوقَّعة لجلسة برمز اقتران، إذ تسلك بحكم التصميم مُرحِّل TURN المشفَّر.</p><p>ثم يمضي عدّاد الملفات إلى آخر ملف على الشاشتين. ولا يختلف النقل في شيء عن رمز أُدخِل يدويًا: فالمسح لم يقرّر سوى الطريقة التي دخل بها الجهاز الثاني إلى الغرفة.</p><pre tabindex="0" dir="ltr"><code>مُرحَّل
 الملف 1/1</code></pre></div>
       <h2>ما يحدث بعد المسح</h2>
       <p>المسح يُدخل الجهازين إلى الغرفة نفسها فحسب؛ أما النقل نفسه فلا يتغير عن أي جلسة رمز اقتران أخرى. ومن أنشأ الرمز يملك الغرفة ومن مسحه انضم إليها، لكن هذا حديث عن اللقاء لا عن الاتجاه: فبعد دخولكما معًا، يمكن لأي طرف أن يكون المُرسِل، وتظل كل دفعة واردة محكومة بزر «قبول» على شاشة الاستقبال. رمز الاقتران يضعكما في غرفة منفصلة لجهازين بدل قائمة أجهزة الشبكة نفسها، غير أنّ الواجهة داخل تلك الغرفة هي مساحة العمل المشتركة نفسها التي يفتحها متصفحان حديثان في أي مكان: إجراء واحد على بطاقة الطرف الآخر، ثم اتصال مشفَّر واحد يحمل الملفات والرسائل معًا. أما ما يغيّره الرمز فعلًا فهو المسار: فهو بحكم التصميم عبر المُرحِّل وحده، ولتلك الوصلة المُرحَّلة عمر محدود تنبّه إليه مساحة العمل قبل بلوغه. يشتقّ المتصفحان مفتاحًا مشتركًا بتبادل مفاتيح X25519، ويشفّران كل جزء بـ AES-256-GCM، ثم يرسلانه عبر قناة WebRTC محمولة على مُرحِّل TURN.</p>
@@ -121,7 +178,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>إن لم يعمل المسح</h2>
       <p>قد تخطئ الكاميرات، أو تكون الإضاءة سيئة، أو لا يكون لدى أحد الجهازين كاميرا في المتناول — لا ينبغي لأي من ذلك أن يعطّل النقل. تعرض بطاقة الاقتران على جهاز الإرسال أيضًا أزرار نسخ للرمز الخام وللرابط (وزر ورقة مشاركة على الأجهزة التي تدعمها)، إضافةً إلى عدّ تنازلي حتى انتهاء صلاحية الرمز.</p>
       <p>أعد كتابة الرمز، أو الصق الرابط، أو استخدم ورقة المشاركة لإرساله بطريقة أخرى (محادثة، AirDrop، أيًا كان الأسرع) — كل مسار يصل إلى الغرفة نفسها ويحصل على الاتصال المشفَّر نفسه. رمز QR واحد من عدة مداخل، وليس شرطًا أبدًا.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">العَرَض والفحص والحل</p><dl><dt>يفتح المسح الصفحة فتقول إن رمز الاقتران غير صالح أو منتهي الصلاحية.</dt><dd><pre dir="ltr"><code>https://relayium.com/cross-network   # بطاقة المُرسِل تعرض العدّ التنازلي الحي</code></pre><p>انقضت الدقائق الخمس، ويظل رمز QR لرمز ميت رابطًا ميتًا مهما تكرّر مسحه. أنشِئ رمزًا جديدًا على جهاز الإرسال — فترسم البطاقة معه رمز QR جديدًا — وامسح ذلك فورًا.</p></dd><dt>تتعرّف الكاميرا على المربّع لكنها لا تعرض شيئًا يمكن فتحه.</dt><dd><pre dir="ltr"><code>https://relayium.com/cross-network   # خانة «أدخِل رمز اقتران» تقبل الأرقام الستة</code></pre><p>بعض المواسح تكتفي بنسخ النص بدل تسليمه إلى متصفح. الصق ما نسخته في شريط العنوان، أو استغنِ عن رمز QR كليًا: افتح الصفحة على جهاز الاستقبال، واكتب الأرقام الستة في خانة «أدخِل رمز اقتران» ثم اضغط «اتصال».</p></dd><dt>كلاكما يبحث عن رمز QR لمسحه ولا تعرضه أي من الشاشتين.</dt><dd><pre dir="ltr"><code>https://relayium.com/cross-network   # البطاقة التي أنشأت الرمز وحدها ترسم QR</code></pre><p>رمز QR يخصّ الجهاز الذي أنشأ الرمز، فلا بد أن ينشئ أحدكما أولًا ويمسح الآخر. قرّرا أي طرف سيُنشئ — وأي طرف يمكنه الإرسال بعد دخولكما معًا إلى الغرفة — واضغط «إنشاء رمز اقتران» على ذلك الجهاز، ثم وجّه كاميرا الجهاز الآخر إلى تلك الشاشة.</p></dd><dt>أُعيد إرسال الرابط عبر تطبيق محادثة فانفتحت الصفحة بلا رمز فيها.</dt><dd><pre dir="ltr"><code>https://relayium.com/cross-network#c=483920   # كل ما بعد ‎#c=‎ هو الرمز</code></pre><p>ينتقل الرمز داخل جزء المرجع في العنوان، وقد تحذف خدمات إعادة كتابة الروابط أو المعاينة كل ما يلي علامة #. اقرأ الأرقام الستة بصوت عالٍ بدلًا من ذلك، أو الصق الرابط بنفسك في شريط العنوان حتى لا يعيد أحد كتابته بينك وبين المتصفح.</p></dd><dt>ينضم المسح إلى الغرفة ثم تقول البطاقة إن المُرحِّل لا يُمنَح إلا للحسابات الموثَّقة.</dt><dd><pre dir="ltr"><code>https://relayium.com/cross-network   # بطاقة الاقتران تسمّي سبب الرفض</code></pre><p>بريد حساب الإرسال لم يُوثَّق بعد، ويجري هذا الفحص عندما تطلب الجلسة مُرحِّلًا لا عند إنشاء الرمز. وثِّق العنوان من لوحة الحساب، ثم أنشِئ رمز اقتران جديدًا وامسح رمز QR الخاص به — ولا يتأثر بذلك النقل على نفس الشبكة.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">العَرَض والفحص والحل</p><dl><dt>يفتح المسح الصفحة فتقول إن رمز الاقتران غير صالح أو منتهي الصلاحية.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/cross-network   # بطاقة المُرسِل تعرض العدّ التنازلي الحي</code></pre><p>انقضت الدقائق الخمس، ويظل رمز QR لرمز ميت رابطًا ميتًا مهما تكرّر مسحه. أنشِئ رمزًا جديدًا على جهاز الإرسال — فترسم البطاقة معه رمز QR جديدًا — وامسح ذلك فورًا.</p></dd><dt>تتعرّف الكاميرا على المربّع لكنها لا تعرض شيئًا يمكن فتحه.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/cross-network   # خانة «أدخِل رمز اقتران» تقبل الأرقام الستة</code></pre><p>بعض المواسح تكتفي بنسخ النص بدل تسليمه إلى متصفح. الصق ما نسخته في شريط العنوان، أو استغنِ عن رمز QR كليًا: افتح الصفحة على جهاز الاستقبال، واكتب الأرقام الستة في خانة «أدخِل رمز اقتران» ثم اضغط «اتصال».</p></dd><dt>كلاكما يبحث عن رمز QR لمسحه ولا تعرضه أي من الشاشتين.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/cross-network   # البطاقة التي أنشأت الرمز وحدها ترسم QR</code></pre><p>رمز QR يخصّ الجهاز الذي أنشأ الرمز، فلا بد أن ينشئ أحدكما أولًا ويمسح الآخر. قرّرا أي طرف سيُنشئ — وأي طرف يمكنه الإرسال بعد دخولكما معًا إلى الغرفة — واضغط «إنشاء رمز اقتران» على ذلك الجهاز، ثم وجّه كاميرا الجهاز الآخر إلى تلك الشاشة.</p></dd><dt>أُعيد إرسال الرابط عبر تطبيق محادثة فانفتحت الصفحة بلا رمز فيها.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/cross-network#c=483920   # كل ما بعد ‎#c=‎ هو الرمز</code></pre><p>ينتقل الرمز داخل جزء المرجع في العنوان، وقد تحذف خدمات إعادة كتابة الروابط أو المعاينة كل ما يلي علامة #. اقرأ الأرقام الستة بصوت عالٍ بدلًا من ذلك، أو الصق الرابط بنفسك في شريط العنوان حتى لا يعيد أحد كتابته بينك وبين المتصفح.</p></dd><dt>ينضم المسح إلى الغرفة ثم تقول البطاقة إن المُرحِّل لا يُمنَح إلا للحسابات الموثَّقة.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/cross-network   # بطاقة الاقتران تسمّي سبب الرفض</code></pre><p>بريد حساب الإرسال لم يُوثَّق بعد، ويجري هذا الفحص عندما تطلب الجلسة مُرحِّلًا لا عند إنشاء الرمز. وثِّق العنوان من لوحة الحساب، ثم أنشِئ رمز اقتران جديدًا وامسح رمز QR الخاص به — ولا يتأثر بذلك النقل على نفس الشبكة.</p></dd></dl></div>
       <h2>الأسئلة الشائعة</h2>
       <h3>هل يحتاج الشخص الذي يمسح رمز QR إلى حساب Relayium؟</h3>
       <p>لا. الجهة التي تُنشئ رمز الاقتران ورمز QR الخاص به هي وحدها التي تسجّل الدخول — وهو الشرط نفسه الذي يحمله رابط التنزيل غير المتزامن. ومن يمسحه ينضم فقط إلى الغرفة التي أُنشئت بالفعل: لا حساب، لا تسجيل، ولا شيء يُثبَّت.</p>

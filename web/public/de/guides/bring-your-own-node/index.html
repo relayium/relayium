@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/de/guides/bring-your-own-node/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Bring Your Own Node: Relay und Speicher von Relayium kostenlos nutzen" />
@@ -27,49 +33,101 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Bring Your Own Node: Relay und Speicher von Relayium kostenlos nutzen","description":"Binde mit einem einzigen Befehl deinen eigenen Relay-/Speicher-Node an dein Relayium-Konto an. Deine Übertragungen laufen dann über deinen Node — nicht über unsere abrechnungspflichtigen Server —, sind also kostenlos, und die Daten bleiben auf Hardware, die du selbst kontrollierst.","inLanguage":"de","datePublished":"2026-07-10","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/de/guides/bring-your-own-node/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/de/"},{"@type":"ListItem","position":2,"name":"Anleitungen","item":"https://relayium.com/de/guides/"},{"@type":"ListItem","position":3,"name":"Bring Your Own Node: Relay und Speicher von Relayium kostenlos nutzen"}]},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Ich habe „relayium-node: command not found“ bekommen — was ist schiefgelaufen?","acceptedAnswer":{"@type":"Answer","text":"Du hast die relayium-node-Binärdatei ausgeführt, bevor du sie installiert hast. Verwende den Einzeiler-Installationsbefehl von der Kontoseite (in der Form curl … | sudo … sh): Er lädt die Binärdatei herunter, legt sie in deinen PATH und startet sie als Dienst. Du installierst relayium-node nie separat."}},{"@type":"Question","name":"Bleibt der Node nach einem Neustart online?","acceptedAnswer":{"@type":"Answer","text":"Ja. Der Installer registriert einen systemd-Dienst, der beim Booten aktiviert und auf Restart=always gesetzt ist, sodass er nach einem Neustart zurückkehrt und sich bei einem Absturz selbst neu startet. Es ist nichts weiter auszuführen."}},{"@type":"Question","name":"Wie unterscheidet sich das davon, Relayium selbst zu hosten?","acceptedAnswer":{"@type":"Answer","text":"Bring-your-own-node behält dein normales relayium.com-Konto und deine Apps bei und fügt lediglich einen Node hinzu, der dir gehört und deinen Verkehr trägt. Hostest du Relayium selbst, läuft der gesamte Server-Stack (Konten, Web-App, Signalisierung) auf deiner eigenen Domain — siehe dazu die Anleitung „Relayium selbst hosten“."}},{"@type":"Question","name":"Kann jemand anderes meinen Node nutzen oder meine Daten sehen?","acceptedAnswer":{"@type":"Answer","text":"Nein. Ein Node ist über seinen Token an dein Konto gebunden und trägt nur den Verkehr deines Kontos. Echtzeit-Übertragungen sind Ende-zu-Ende-verschlüsselt und gespeicherte Blobs sind Chiffretext, den dein Node nicht lesen kann. Deine Daten und deine Node-Konfiguration sind ausschließlich von dir nutzbar."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.tw{overflow-x:auto;margin:16px 0}
-.tw table{border-collapse:collapse;width:100%;font-size:15px}
-.tw th,.tw td{border:1px solid var(--border);padding:8px 11px;text-align:start;vertical-align:top}
-.tw th{color:var(--text-h);background:var(--card);font-weight:600}
-.tw code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;color:var(--text-h)}
+.tw{overflow-x:auto;margin:16px 0;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.tw table{border-collapse:collapse;inline-size:100%;font-size:var(--fs-sm)}
+.tw th,.tw td{border-block-end:1px solid var(--sep);padding:10px 14px;text-align:start;vertical-align:top}
+.tw tr:last-child td{border-block-end:0}
+.tw th{color:var(--text-h);background:var(--row-hover);font-weight:600}
+.tw code{font-size:13px;color:var(--text-h)}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -87,7 +145,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/de/guides/" aria-current="true">Anleitungen</a><a href="/de/apps/">Apps</a><a href="/pricing">Preise</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/de/">Relayium</a> <span aria-hidden="true">›</span> <a href="/de/guides/">Anleitungen</a> <span aria-hidden="true">›</span> <span aria-current="page">Bring Your Own Node: Relay und Speicher von Relayium kostenlos nutzen</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -115,10 +173,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>Den Node installieren und online bringen</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Was du vor Schritt 1 brauchst</p><ul><li>Einen aus dem Internet erreichbaren Linux-Server — ein günstiger VPS oder eine dauerhaft laufende Kiste zu Hause tun es beide. amd64 und arm64 werden unterstützt.</li><li>root auf diesem Server, oder sudo. Die Installation braucht es einmal; der Node selbst läuft nie als root.</li><li>Die Möglichkeit, eingehende Ports zu öffnen — in der Host-Firewall und auf einem Cloud-VPS zusätzlich in der Security Group des Anbieters.</li><li>Ein relayium.com-Konto, an dem du angemeldet bist. Der Installationsbefehl wird auf der Kontoseite erzeugt und trägt ein Einmal-Token.</li><li>Plattenplatz, aber nur wenn der Node außer relayen auch speichern soll. Ein reiner Relay-Node braucht keinen — lass RELAYIUM_NODE_STORAGE_DIR dann weg.</li></ul></div>
       <p>Vier Dinge der Reihe nach: den Befehl erzeugen, ihn ausführen, die Ports öffnen und bestätigen, dass der Node online gegangen ist. Auf einer frischen Kiste rund fünf Minuten.</p>
-      <ol class="steps" data-block="steps"><li><p>Melde dich auf relayium.com an und öffne deine Kontoseite unter /me.</p></li><li><p>Scroll zu Meine Nodes und klick auf Node hinzufügen. Kopiere den Installationsbefehl sofort — das Token darin wird genau einmal angezeigt und lässt sich nicht erneut abrufen.</p></li><li><p>Führ ihn auf deinem Server aus. Er lädt das relayium-node-Binary, prüft dessen Checksumme, installiert es nach /usr/local/bin, schreibt einen systemd-Dienst und startet ihn.</p><pre><code>curl -fsSL https://relayium.com/install-node.sh | sudo RELAYIUM_CENTRAL_URL=https://relayium.com RELAYIUM_NODE_TOKEN=&lt;your-token&gt; RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh</code></pre></li><li><p>Bestätige, dass der Dienst läuft und nach einem Neustart wiederkommt. Beide Antworten zählen: active heißt, er läuft jetzt, enabled ist das, was einen Neustart überlebt.</p><pre><code>systemctl is-active relayium-node</code></pre><pre><code>systemctl is-enabled relayium-node</code></pre></li><li><p>Öffne die eingehenden Ports in der Host-Firewall. Für den Online-Status reicht ausgehender Zugriff, aber Peers relayen und speichern über genau diese Ports.</p><pre><code>sudo ufw allow 3478/udp        # TURN
+      <ol class="steps" data-block="steps"><li><p>Melde dich auf relayium.com an und öffne deine Kontoseite unter /me.</p></li><li><p>Scroll zu Meine Nodes und klick auf Node hinzufügen. Kopiere den Installationsbefehl sofort — das Token darin wird genau einmal angezeigt und lässt sich nicht erneut abrufen.</p></li><li><p>Führ ihn auf deinem Server aus. Er lädt das relayium-node-Binary, prüft dessen Checksumme, installiert es nach /usr/local/bin, schreibt einen systemd-Dienst und startet ihn.</p><pre tabindex="0"><code>curl -fsSL https://relayium.com/install-node.sh | sudo RELAYIUM_CENTRAL_URL=https://relayium.com RELAYIUM_NODE_TOKEN=&lt;your-token&gt; RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh</code></pre></li><li><p>Bestätige, dass der Dienst läuft und nach einem Neustart wiederkommt. Beide Antworten zählen: active heißt, er läuft jetzt, enabled ist das, was einen Neustart überlebt.</p><pre tabindex="0"><code>systemctl is-active relayium-node</code></pre><pre tabindex="0"><code>systemctl is-enabled relayium-node</code></pre></li><li><p>Öffne die eingehenden Ports in der Host-Firewall. Für den Online-Status reicht ausgehender Zugriff, aber Peers relayen und speichern über genau diese Ports.</p><pre tabindex="0"><code>sudo ufw allow 3478/udp        # TURN
 sudo ufw allow 8081/tcp        # storage
 sudo ufw allow 49152:65535/udp # relay</code></pre></li><li><p>Auf einem Cloud-VPS erlaub dieselben Ports zusätzlich in der Security Group des Anbieters. Mit ufw allein bleiben sie weiter oben dicht — und der Node sieht die ganze Zeit gesund aus.</p></li><li><p>Zurück auf /me: warte, bis der Node auf Online springt, meist in etwa 30 Sekunden. Ab da bevorzugen die Übertragungen deines Kontos ihn automatisch.</p></li><li><p>Optional: Schalte &quot;Nur meine eigenen Nodes für Relay/Speicher verwenden&quot; ein, damit eine Übertragung fehlschlägt, statt still auf unsere geteilte Infrastruktur zurückzufallen.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">So sieht ein funktionierender Node aus</p><p>systemd meldet den Dienst als active UND enabled, und der Node steht unter Meine Nodes auf Online. active allein genügt nicht — ein Node ohne enabled ist nach dem nächsten Neustart weg.</p><pre><code>$ systemctl is-active relayium-node
+      <div class="cbox ok" data-block="success"><p class="cbox-t">So sieht ein funktionierender Node aus</p><p>systemd meldet den Dienst als active UND enabled, und der Node steht unter Meine Nodes auf Online. active allein genügt nicht — ein Node ohne enabled ist nach dem nächsten Neustart weg.</p><pre tabindex="0"><code>$ systemctl is-active relayium-node
 active
 $ systemctl is-enabled relayium-node
 enabled</code></pre></div>
@@ -139,14 +197,14 @@ enabled</code></pre></div>
       <p>Die Deinstallation ist ein einziges Skript — dasselbe, ob dein Node Dateien speichert oder nur weiterleitet. Es entfernt die Units, die Binärdatei, die Konfiguration und das Dienstkonto und meldet relayium.com nach bestem Wissen, dass der Node weg ist. Schlägt dieser Aufruf fehl, ist das eine Zeile auf deinem Terminal und keine kaputte Deinstallation — die ausgegebene Node-ID erlaubt es, ihn von Hand als entfernt zu markieren.</p>
       <p>Herunterladen, prüfen, dann ausführen. Direkt in sh zu pipen bedeutet, dass ein 404 oder ein kurzer Netzaussetzer den ganzen Befehl nichts ausgeben und mit Code 0 enden lässt — was wie eine erfolgreiche Deinstallation aussieht.</p>
       <p>Entfernt wird nur, was es kennt: Unerwartetes im Status- oder Speicherverzeichnis wird behalten und gemeldet statt mitgelöscht.</p>
-      <pre><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; \
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; \
   [ -s uninstall-node.sh ] &amp;&amp; sudo sh uninstall-node.sh</code></pre>
       <ul><li>Es verweigert die Deinstallation, solange im Speicherverzeichnis noch eine Datei liegt, die es nicht kennt — auch ein abgelaufener Blob, den die Aufräumung noch nicht erreicht hat. Jede gespeicherte Datei liegt auf genau einem Node, Repliken gibt es nicht. Warte, bis dieser Zähler null ist, oder übergib RELAYIUM_NODE_FORCE=1 und nimm in Kauf, dass diese Dateien unerreichbar werden.</li><li>Kann es nicht ermitteln, wo deine Blobs liegen, hält es an, statt zu raten. RELAYIUM_NODE_ASSUME_NO_STORAGE=1 ist der einzige Weg daran vorbei — und löscht weiterhin nichts, was es nicht kennt.</li><li>Das Speicherverzeichnis selbst bleibt erhalten, sofern du nicht zusätzlich RELAYIUM_NODE_PURGE_STORAGE=1 übergibst. Umgebungsvariablen überleben | sudo sh nicht — übergib sie als sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh.</li><li>Danach sollte systemctl status relayium-node not-found melden und kein relayium-node-Timer mehr gelistet sein. Installierst du später erneut, ist der Node, den dein Konto bekommt, ein ganz neuer: die Deinstallation löscht die Identitätsdatei, eine Neuinstallation registriert also einen frischen Node statt den alten wiederzubeleben.</li></ul>
       <h2>Wenn es nicht funktioniert</h2>
       <p>Fünf Fehler decken fast jeden Node ab, der nicht hochkommt, und drei davon sehen vom Server aus gesund aus: Der Dienst läuft, und nur die Kontoseite oder ein lauschender Socket sagt etwas anderes.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, Prüfung, Lösung</p><dl><dt>Die Shell antwortet &quot;relayium-node: command not found&quot;.</dt><dd><pre><code>command -v relayium-node
-# keine Ausgabe</code></pre><p>Das Binary ist nicht installiert. relayium-node wird nie separat installiert — der Einzeiler von der Kontoseite ist das, was es herunterlädt, in deinen PATH legt und als Dienst startet. Führ stattdessen diesen Befehl aus.</p></dd><dt>Der Dienst ist active, aber der Node springt auf der Kontoseite nie auf Online.</dt><dd><pre><code>journalctl -u relayium-node -n 50 --no-pager</code></pre><p>Über Online entscheidet ein ausgehender Heartbeat, eine Firewall ist hier also selten die Ursache — die Registrierung ist es. Das Token gilt einmal, ein bereits ausgeführter oder ein alter Befehl aus einem früheren Versuch scheitert deshalb. Klick erneut auf Node hinzufügen und führ den frischen Befehl aus.</p></dd><dt>Der Node steht auf Online, aber Übertragungen laufen weiter über unsere geteilte Infrastruktur.</dt><dd><pre><code>sudo ss -lunp | grep 3478</code></pre><p>Online belegt nur den ausgehenden Heartbeat. Peers brauchen die eingehenden Ports: Prüfe, dass der Node lauscht, und öffne dann 3478/udp, 8081/tcp und 49152-65535/udp in der Host-Firewall UND in der Cloud-Security-Group. Um ein stilles Zurückfallen ganz auszuschließen, schalte die Einstellung für ausschließlich eigene Nodes ein.</p></dd><dt>Die Deinstallation gab nichts aus, endete mit 0, und der Dienst ist noch da.</dt><dd><pre><code>systemctl status relayium-node
-# active (running)</code></pre><p>Genau so sieht es aus, wenn ein fehlgeschlagener Download in sh gepipet wird: Ein 404 oder ein kurzer Netzaussetzer gibt nichts aus und endet mit 0, was sich wie Erfolg liest. Lad das Skript herunter, prüfe, dass es nicht leer ist, und führ es dann aus — deshalb steht der Befehl in dieser Anleitung in drei Teilen und nicht als eine Pipe.</p></dd><dt>Die Deinstallation verweigert sich, solange im Speicherverzeichnis noch Dateien liegen.</dt><dd><pre><code>sudo ls /var/lib/relayium-node/blobs | wc -l</code></pre><p>Das ist Absicht. Jede gespeicherte Datei liegt auf genau einem Node, Repliken gibt es nicht — den Node zu entfernen macht sie also unerreichbar. Warte, bis die Zahl mit dem Ablaufen der Blobs auf null geht, oder nimm den Verlust mit RELAYIUM_NODE_FORCE=1 in Kauf. Umgebungsvariablen überleben eine Pipe nach sudo sh nicht, übergib sie also als sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, Prüfung, Lösung</p><dl><dt>Die Shell antwortet &quot;relayium-node: command not found&quot;.</dt><dd><pre tabindex="0"><code>command -v relayium-node
+# keine Ausgabe</code></pre><p>Das Binary ist nicht installiert. relayium-node wird nie separat installiert — der Einzeiler von der Kontoseite ist das, was es herunterlädt, in deinen PATH legt und als Dienst startet. Führ stattdessen diesen Befehl aus.</p></dd><dt>Der Dienst ist active, aber der Node springt auf der Kontoseite nie auf Online.</dt><dd><pre tabindex="0"><code>journalctl -u relayium-node -n 50 --no-pager</code></pre><p>Über Online entscheidet ein ausgehender Heartbeat, eine Firewall ist hier also selten die Ursache — die Registrierung ist es. Das Token gilt einmal, ein bereits ausgeführter oder ein alter Befehl aus einem früheren Versuch scheitert deshalb. Klick erneut auf Node hinzufügen und führ den frischen Befehl aus.</p></dd><dt>Der Node steht auf Online, aber Übertragungen laufen weiter über unsere geteilte Infrastruktur.</dt><dd><pre tabindex="0"><code>sudo ss -lunp | grep 3478</code></pre><p>Online belegt nur den ausgehenden Heartbeat. Peers brauchen die eingehenden Ports: Prüfe, dass der Node lauscht, und öffne dann 3478/udp, 8081/tcp und 49152-65535/udp in der Host-Firewall UND in der Cloud-Security-Group. Um ein stilles Zurückfallen ganz auszuschließen, schalte die Einstellung für ausschließlich eigene Nodes ein.</p></dd><dt>Die Deinstallation gab nichts aus, endete mit 0, und der Dienst ist noch da.</dt><dd><pre tabindex="0"><code>systemctl status relayium-node
+# active (running)</code></pre><p>Genau so sieht es aus, wenn ein fehlgeschlagener Download in sh gepipet wird: Ein 404 oder ein kurzer Netzaussetzer gibt nichts aus und endet mit 0, was sich wie Erfolg liest. Lad das Skript herunter, prüfe, dass es nicht leer ist, und führ es dann aus — deshalb steht der Befehl in dieser Anleitung in drei Teilen und nicht als eine Pipe.</p></dd><dt>Die Deinstallation verweigert sich, solange im Speicherverzeichnis noch Dateien liegen.</dt><dd><pre tabindex="0"><code>sudo ls /var/lib/relayium-node/blobs | wc -l</code></pre><p>Das ist Absicht. Jede gespeicherte Datei liegt auf genau einem Node, Repliken gibt es nicht — den Node zu entfernen macht sie also unerreichbar. Warte, bis die Zahl mit dem Ablaufen der Blobs auf null geht, oder nimm den Verlust mit RELAYIUM_NODE_FORCE=1 in Kauf. Umgebungsvariablen überleben eine Pipe nach sudo sh nicht, übergib sie also als sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh.</p></dd></dl></div>
       <h2>Häufig gestellte Fragen</h2>
       <h3>Ich habe „relayium-node: command not found“ bekommen — was ist schiefgelaufen?</h3>
       <p>Du hast die relayium-node-Binärdatei ausgeführt, bevor du sie installiert hast. Verwende den Einzeiler-Installationsbefehl von der Kontoseite (in der Form curl … | sudo … sh): Er lädt die Binärdatei herunter, legt sie in deinen PATH und startet sie als Dienst. Du installierst relayium-node nie separat.</p>

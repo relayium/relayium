@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/guides/how-relayium-encrypts-your-files/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Relayium がファイルをエンドツーエンドで暗号化する仕組み" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium がファイルをエンドツーエンドで暗号化する仕組み","description":"Relayium がファイルをどう守るかを平易に解説。リアルタイム転送は X25519 と AES-256-GCM、不正なサーバーを見破る6桁の検証コード、そしてゼロ知識の保存リンク。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/how-relayium-encrypts-your-files/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium がファイルをエンドツーエンドで暗号化する仕組み"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"Relayium は私のファイルを読めますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。リアルタイムモードでは、暗号鍵は両方のデバイスで独立に導出され、デバイスの外に出ることはありません——Relayium のサーバーがその鍵やファイルの中身を目にすることは一切ありません。保存リンクの場合、鍵は URL フラグメントにのみ存在し、ブラウザはそれをどのサーバーにも送信しないため、サーバーは復号できない暗号文しか持ちません。"}},{"@type":"Question","name":"サーバーは実際には何を見ているのですか？","acceptedAnswer":{"@type":"Answer","text":"同一ネットワークでのリアルタイムモードでは、2台のデバイスを引き合わせるために必要な接続確立情報だけを見ます——ファイルのバイトは一切見ません。ネットワークをまたぐ場合、TURN リレーは確かにファイルのバイトを運びますが、それは鍵を持たない暗号文としてだけです。保存リンクの場合、暗号文とサイズ・有効期限といった管理情報を見ます——平文やファイル名、復号鍵を見ることは一切ありません。"}},{"@type":"Question","name":"TURN リレーは弱点になりませんか？","acceptedAnswer":{"@type":"Answer","text":"ブラウザでは、直接接続に失敗したときだけの手段ではなく、設計上ネットワークをまたぐ転送すべてを担います——ただし扱うのは常に暗号文だけで、鍵を持たないため、リレーしている内容を読むことはできません。Relayium はリレーしたバイト数をアカウントの月間割り当てに対して数えますが、中身を検査することはありません。"}},{"@type":"Question","name":"Relayium はオープンソースですか？","acceptedAnswer":{"@type":"Answer","text":"はい。プロトコル設計とクライアント・サーバーの全コードは AGPL-3.0 ライセンスのもと GitHub で公開されているため、ここで説明した暗号方式は信じるしかないものではなく、独自に監査できます。"}},{"@type":"Question","name":"画面上の2つの検証コードが一致しない場合はどうすればいいですか？","acceptedAnswer":{"@type":"Answer","text":"転送を中止してください。コードが一致しないということは、2台が同じ接続を見ていないということです——鍵のすり替えや中間者がいる場合にまさに現れる結果であり、単なる不具合ではありません。（コミット後開示ハンドシェイクの失敗はこれとは別の、もっと早い段階の失敗です。接続自体が中止され、コードは表示されません。）理由が分かるまで先に進まないでください。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ja/guides/" aria-current="true">ガイド</a><a href="/ja/apps/">アプリ</a><a href="/pricing">料金</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium がファイルをエンドツーエンドで暗号化する仕組み</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -110,7 +167,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">この照合に必要なもの</p><ul><li>2台とも目の前にあること。あるいは、いま自分の端末の前にいる相手がいること。</li><li>この転送とは別の経路——電話、あるいは同じ部屋にいること。心配している当のチャットにコードを貼り付けても、何の証明にもなりません。</li><li>10秒。不誠実なサーバーを捕まえられる唯一の確認にかかる費用は、それだけです。</li></ul></div>
       <p>ここには正直に触れておくべき細部があります。WebRTC 標準の暗号化（DTLS）は、2台のデバイスを引き合わせるシグナリングサーバー経由で鍵のフィンガープリントを交換します。もしそのサーバーが不正であれば、理論上は中間に入って自分の鍵にすり替えることができます——典型的な中間者攻撃で、しかもどちらのブラウザもすぐには気づきません。</p>
       <p>Relayium はこの隙を短い検証コードで塞ぎます。両方のデバイスは双方の公開鍵から同じ6桁の Short Authentication String（SAS）を導出し、画面に表示できます。表示して照合のために止まるかどうかは「高度な検証」で、既定はオフです——つまり既定の転送ではコードは表示されません。ここで説明しているそれ以外の仕組み（毎回新しい鍵、暗号化、コミット後開示ハンドシェイク、チャンクごとの認証）は、どの転送でもそのまま働きます。既定の転送に欠けているのはこの照合そのものです——鍵のすり替えや、相手が意図した人物でないことを検知するには、高度な検証をオンにしたうえで、二人が実際に別の手段でコードを読み合わせる必要があります。2つのコードが一致すれば公開鍵はすり替えられておらず、シグナリングサーバーやリレーサーバーがどちらかのエンドポイントになりすましたり、アプリケーション層のエンドツーエンド暗号化を終端したりしていないことを確認できます。これはネットワーク経路上にサーバーが存在しないという意味ではありません——ネットワークをまたぐ暗号文は設計どおり TURN を通ることがあります。しかし単純な6桁のコードは約20ビットしかなく、原理的には双方の本物の鍵を見た攻撃者が一致するコードを総当たりで作り出そうとする余地があります。それを防ぐため、Relayium はコミット後開示ハンドシェイクを使います。各側はまず自分の鍵に対するハッシュを送ってコミットし、相手のコミットメントを受け取ってから初めて本物の鍵を開示します。この順序によって、悪意あるサーバーは本物の鍵を見る前に盲目的に偽の鍵をコミットせざるを得ず、後から衝突する鍵を選ぶことはできません。だから短いコードは信頼できるままなのです。</p>
-      <ol class="steps" data-block="steps"><li><p>2台のあいだで転送を開始し、それぞれの画面に検証コードが出るまで待ちます。</p><pre><code>https://relayium.com/</code></pre></li><li><p>どちらか一方を、帯域外の経路で1桁ずつ読み上げます。アプリにコピーしたり、同じチャットに流したりしないでください。</p></li><li><p>6桁すべてを照合します。一部だけ一致しているのは、一致していないのと同じです。</p></li><li><p>一致したときだけ受け入れます。食い違うなら拒否し、相手が実際にどの端末にいるのかを確かめてからやり直してください。</p></li><li><p>CLI では、この照合を任意ではなくブロッキングにできます。--verify はその時点で転送を止めて確認を待つので、誰かが実際に見るまで1バイトも動きません。</p><pre><code>relayium send --verify ./report.pdf</code></pre></li></ol>
+      <ol class="steps" data-block="steps"><li><p>2台のあいだで転送を開始し、それぞれの画面に検証コードが出るまで待ちます。</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>どちらか一方を、帯域外の経路で1桁ずつ読み上げます。アプリにコピーしたり、同じチャットに流したりしないでください。</p></li><li><p>6桁すべてを照合します。一部だけ一致しているのは、一致していないのと同じです。</p></li><li><p>一致したときだけ受け入れます。食い違うなら拒否し、相手が実際にどの端末にいるのかを確かめてからやり直してください。</p></li><li><p>CLI では、この照合を任意ではなくブロッキングにできます。--verify はその時点で転送を止めて確認を待つので、誰かが実際に見るまで1バイトも動きません。</p><pre tabindex="0"><code>relayium send --verify ./report.pdf</code></pre></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">一致した照合が証明すること、しないこと</p><p>2つの画面に同じ6桁が出るということは、両端がピン留めした証明書のフィンガープリントが一致しているということであり、ランデブーが端点をすり替えたり、どちらかになりすましたりしていないことを意味します。まさにこの節が扱っている攻撃です。</p><p>これが認証するのは2つの端点です。あいだのネットワークの各ホップについては何も証明せず、そして誰も照合しなければ何ひとつ証明しません——だからこそ --verify があります。</p></div>
       <ul><li>最も強い保証を得るには、まず高度な検証をオンにしたうえで、隣り合った2つの画面を目で見比べるだけでなく、通話でコードを読み上げるか、対面で照合してください。</li><li>2つのコードが一致しない場合は中止してください。誰かが接続を傍受している可能性を示すサインです。</li></ul>
       <h2>届いたものが送ったものと寸分違わないことを確認する</h2>
@@ -124,7 +181,7 @@ ol.steps>li>pre{margin:8px 0 0}
       <p>ネットワークをまたぐ転送では——制限の厳しい NAT やファイアウォールの内側では直接経路が成立しないことが多いため——暗号化ストリームは TURN リレーサーバーを経由します。リレーが転送するのは暗号文だけです。鍵を持たないため、そこを通過する内容を復号することはできません。リレーが行うのは、送信側アカウントの月間リレー割り当てに対してリレーしたバイト数を数えることだけで、それは純粋に計量と不正利用防止のためであり、中身を検査することは決してありません。</p>
       <h2>照合がうまくいかないとき</h2>
       <p>結果は3通りで、緊急なのは最初の1つだけです。自分がどれを見ているのかを見分けられること自体に、価値の大半があります。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">見えるもの、確認すること、その意味</p><dl><dt>2つの画面で検証コードが違う。</dt><dd><pre><code>https://relayium.com/   # the two screens show different verification codes</code></pre><p>そこで止めて、ファイルを送らないでください。コードが違うということは、両端がピン留めした証明書のフィンガープリントが食い違っているということで、向こう側は思っている端末ではありません。相手がどの端末にいるかを帯域外で確認してから、やり直してください。--verify を付けて実行し直せば、転送はその照合の手前で待ち、注意力任せになりません。</p></dd><dt>検証コードがまだ表示されない。</dt><dd><pre><code>https://relayium.com/   # no verification code on screen yet</code></pre><p>コードは接続から導かれるので、両端がつながって初めて存在します。それまでは照合するものがなく、「そもそもつながらない」は「コードが食い違う」とは別の問題です。</p></dd><dt>すでに使っているチャットにコードを貼って照合した。</dt><dd><pre><code>relayium send --verify ./report.pdf   # holds the transfer at the comparison</code></pre><p>それでは確かめたかったことを確かめられていません。心配しているのがその経路そのものなら、転送を変えられる攻撃者は貼り付けられたコードも変えられます。声に出して読むか、いま点検している経路とは壊れ方の異なる経路を使ってください。</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">見えるもの、確認すること、その意味</p><dl><dt>2つの画面で検証コードが違う。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # the two screens show different verification codes</code></pre><p>そこで止めて、ファイルを送らないでください。コードが違うということは、両端がピン留めした証明書のフィンガープリントが食い違っているということで、向こう側は思っている端末ではありません。相手がどの端末にいるかを帯域外で確認してから、やり直してください。--verify を付けて実行し直せば、転送はその照合の手前で待ち、注意力任せになりません。</p></dd><dt>検証コードがまだ表示されない。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # no verification code on screen yet</code></pre><p>コードは接続から導かれるので、両端がつながって初めて存在します。それまでは照合するものがなく、「そもそもつながらない」は「コードが食い違う」とは別の問題です。</p></dd><dt>すでに使っているチャットにコードを貼って照合した。</dt><dd><pre tabindex="0"><code>relayium send --verify ./report.pdf   # holds the transfer at the comparison</code></pre><p>それでは確かめたかったことを確かめられていません。心配しているのがその経路そのものなら、転送を変えられる攻撃者は貼り付けられたコードも変えられます。声に出して読むか、いま点検している経路とは壊れ方の異なる経路を使ってください。</p></dd></dl></div>
       <h2>よくある質問</h2>
       <h3>Relayium は私のファイルを読めますか？</h3>
       <p>いいえ。リアルタイムモードでは、暗号鍵は両方のデバイスで独立に導出され、デバイスの外に出ることはありません——Relayium のサーバーがその鍵やファイルの中身を目にすることは一切ありません。保存リンクの場合、鍵は URL フラグメントにのみ存在し、ブラウザはそれをどのサーバーにも送信しないため、サーバーは復号できない暗号文しか持ちません。</p>

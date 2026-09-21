@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/de/how-to/transfer-files-by-scanning-a-qr-code/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Dateien per QR-Code-Scan übertragen" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Dateien per QR-Code-Scan übertragen","description":"Dateien per QR-Code-Scan senden: Der QR gehört zu einem Pairing-Code, die Übertragung ist durchgehend Ende-zu-Ende-verschlüsselt. Keine App, kein Konto für die scannende Person.","inLanguage":"de","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/de/how-to/transfer-files-by-scanning-a-qr-code/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/de/"},{"@type":"ListItem","position":2,"name":"Anleitungen","item":"https://relayium.com/de/guides/"},{"@type":"ListItem","position":3,"name":"Dateien per QR-Code-Scan übertragen"}]},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Braucht die scannende Person ein Relayium-Konto?","acceptedAnswer":{"@type":"Answer","text":"Nein. Anmelden muss sich nur die Seite, die den Pairing-Code und dessen QR erstellt — dieselbe Anforderung trägt auch ein asynchroner Download-Link. Wer scannt, tritt lediglich dem bereits erstellten Raum bei: kein Konto, keine Anmeldung, nichts zu installieren."}},{"@type":"Question","name":"Was steckt eigentlich im QR-Code?","acceptedAnswer":{"@type":"Answer","text":"Derselbe Beitrittslink, den auch der Button „Link kopieren“ liefert — eine relayium.com-URL mit dem eingebetteten Pairing-Code. Scannen öffnet einfach diesen Link im Browser, der automatisch dem Raum beitritt. Dabei bleibt es auch: Es wird keine Datei ausgewählt und keine gesendet, und was danach gesendet wird, muss auf dem empfangenden Gerät weiterhin angenommen werden."}},{"@type":"Question","name":"Ist das Scannen des QR-Codes genauso sicher wie das Eintippen des Codes?","acceptedAnswer":{"@type":"Answer","text":"Ja, die Verbindung ist in beiden Fällen identisch. Beide Geräte handeln weiterhin einen X25519-Schlüsselaustausch aus, verschlüsseln mit AES-256-GCM und zeigen bei eingeschalteter erweiterter Verifizierung einen übereinstimmenden SAS-Verifizierungscode, den du vor dem Vertrauen kontrollieren kannst. Der QR-Code ändert nur, wie du in den Raum kommst, nicht wie die Übertragung abgesichert ist."}},{"@type":"Question","name":"Was, wenn sich der QR-Code nicht scannen lässt?","acceptedAnswer":{"@type":"Answer","text":"Nichts geht verloren — dieselbe Pairing-Karte zeigt den rohen Code und einen kopierbaren Link, auf unterstützten Geräten zusätzlich einen Teilen-Button. Jeder davon führt in denselben Raum wie der QR-Code."}},{"@type":"Question","name":"Funktioniert das auch über unterschiedliche Netzwerke hinweg, etwa Handy mit Mobilfunk und PC im heimischen WLAN?","acceptedAnswer":{"@type":"Answer","text":"Ja. Das ist von Grund auf der netzwerkübergreifende Pairing-Ablauf, er funktioniert also unabhängig davon, ob beide Geräte im selben Netz sind. Ein Pairing-Code verbindet die beiden immer über ein verschlüsseltes TURN-Relay — der Weg, der nicht davon abhängt, einen Durchgang durch die NATs und Firewalls zwischen den Netzen zu finden, die eine direkte Verbindung verhindern können —, und dieses Relay trägt ausschließlich Chiffretext. Direkt verbinden sich Geräte im selben Netz, die sich ganz ohne Code finden."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/de/guides/" aria-current="true">Anleitungen</a><a href="/de/apps/">Apps</a><a href="/pricing">Preise</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/de/">Relayium</a> <span aria-hidden="true">›</span> <a href="/de/guides/">Anleitungen</a> <span aria-hidden="true">›</span> <span aria-current="page">Dateien per QR-Code-Scan übertragen</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -109,11 +166,11 @@ ol.steps>li>pre{margin:8px 0 0}
       <h2>Einfach scannen — keine App, kein Konto</h2>
       <p>Öffne auf dem anderen Gerät die Kamera-App (oder einen beliebigen QR-Scanner) und richte sie aufs Display. Ein Tipp auf die erscheinende Benachrichtigung öffnet den Link im Browser, der automatisch dem Raum beitritt — die scannende Person braucht nichts einzutippen, kein relayium.com-Konto und nichts zu installieren. Mehr als Beitreten tut ein Scan nicht; er bewegt keine Dateien. Ein eingehender Stapel wartet weiterhin auf dem empfangenden Bildschirm, bis dort jemand „Annehmen“ drückt.</p>
       <p>Ist gerade keine Kamera griffbereit, funktioniert derselbe Link ebenso, in einen beliebigen Browser eingefügt, und der sechsstellige Zifferncode funktioniert genauso, in das Feld „Code eingeben“ auf relayium.com getippt. Der QR-Code ist eine Annehmlichkeit obendrauf, kein eigener Mechanismus — nimm, was gerade am einfachsten ist.</p>
-      <ol class="steps" data-block="steps"><li><p>Öffne auf dem sendenden Gerät die Seite für Echtzeitübertragung und melde dich an.</p><pre><code>https://relayium.com/cross-network</code></pre></li><li><p>Erstelle den Pairing-Code. Die Karte zeigt danach die sechs Ziffern, darunter das QR-Quadrat und einen Countdown.</p><pre><code>Dein Pairing-Code — sag ihn der anderen Person
+      <ol class="steps" data-block="steps"><li><p>Öffne auf dem sendenden Gerät die Seite für Echtzeitübertragung und melde dich an.</p><pre tabindex="0"><code>https://relayium.com/cross-network</code></pre></li><li><p>Erstelle den Pairing-Code. Die Karte zeigt danach die sechs Ziffern, darunter das QR-Quadrat und einen Countdown.</p><pre tabindex="0"><code>Dein Pairing-Code — sag ihn der anderen Person
 483920
 oder die andere Person scannt den QR / öffnet den Link
-Pairing-Code läuft in 4:52 ab</code></pre></li><li><p>Öffne auf dem anderen Gerät die Kamera-App oder einen beliebigen QR-Scanner, richte sie auf dieses Quadrat und tippe auf die Link-Benachrichtigung, die dabei erscheint.</p></li><li><p>Der Link öffnet sich im Browser und tritt dem Raum von selbst bei — nichts einzutippen, und auf dieser Seite kein Konto. Es ist dieselbe Adresse, die der Knopf „Link kopieren“ in die Zwischenablage legt.</p><pre><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>Zurück auf dem sendenden Gerät: Wähle die Dateien, falls du vor dem Erstellen des Codes keine eingereiht hast. Nichts bewegt sich, bis die Empfangsseite „Annehmen“ drückt — beantworte die Abfrage also dort und lass dann beide Tabs offen, bis der Dateizähler durch ist.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">So sieht ein erfolgreicher Scan aus</p><p>Auf dem sendenden Gerät weichen der QR-Code und die Zeile „Warte darauf, dass das andere Gerät beitritt…“ der verbundenen Karte, und deren Pfad-Abzeichen zeigt „Über Relay“ — der erwartete Wert für eine Pairing-Code-Sitzung, die von Grund auf über das verschlüsselte TURN-Relay läuft.</p><p>Danach läuft der Dateizähler auf beiden Bildschirmen bis zur letzten Datei. An der Übertragung selbst ändert sich gegenüber einem eingetippten Code nichts: Das Scannen hat nur entschieden, wie das zweite Gerät in den Raum kam.</p><pre><code>Über Relay
+Pairing-Code läuft in 4:52 ab</code></pre></li><li><p>Öffne auf dem anderen Gerät die Kamera-App oder einen beliebigen QR-Scanner, richte sie auf dieses Quadrat und tippe auf die Link-Benachrichtigung, die dabei erscheint.</p></li><li><p>Der Link öffnet sich im Browser und tritt dem Raum von selbst bei — nichts einzutippen, und auf dieser Seite kein Konto. Es ist dieselbe Adresse, die der Knopf „Link kopieren“ in die Zwischenablage legt.</p><pre tabindex="0"><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>Zurück auf dem sendenden Gerät: Wähle die Dateien, falls du vor dem Erstellen des Codes keine eingereiht hast. Nichts bewegt sich, bis die Empfangsseite „Annehmen“ drückt — beantworte die Abfrage also dort und lass dann beide Tabs offen, bis der Dateizähler durch ist.</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">So sieht ein erfolgreicher Scan aus</p><p>Auf dem sendenden Gerät weichen der QR-Code und die Zeile „Warte darauf, dass das andere Gerät beitritt…“ der verbundenen Karte, und deren Pfad-Abzeichen zeigt „Über Relay“ — der erwartete Wert für eine Pairing-Code-Sitzung, die von Grund auf über das verschlüsselte TURN-Relay läuft.</p><p>Danach läuft der Dateizähler auf beiden Bildschirmen bis zur letzten Datei. An der Übertragung selbst ändert sich gegenüber einem eingetippten Code nichts: Das Scannen hat nur entschieden, wie das zweite Gerät in den Raum kam.</p><pre tabindex="0"><code>Über Relay
 Datei 1/1</code></pre></div>
       <h2>Was nach dem Scannen passiert</h2>
       <p>Scannen bringt die beiden Geräte lediglich in denselben Raum; die Übertragung selbst unterscheidet sich nicht von jeder anderen Pairing-Code-Sitzung. Wer den Code erstellt hat, dem gehört der Raum, und wer gescannt hat, ist beigetreten — das ist eine Aussage über das Treffen, nicht über die Richtung: Sind beide drin, kann jede Seite die sendende sein, und jeder eingehende Stapel bleibt durch „Annehmen“ auf dem empfangenden Bildschirm abgesichert. Ein Pairing-Code setzt euch in einen separaten Raum für zwei Geräte statt in die Geräteliste des eigenen Netzes. Die Oberfläche in diesem Raum ist aber derselbe gemeinsame Arbeitsbereich, den zwei aktuelle Browser überall öffnen: eine Aktion auf der Karte der Gegenstelle, dann eine verschlüsselte Verbindung für Dateien und Nachrichten zugleich. Was der Code sehr wohl ändert, ist der Weg: Er läuft von Grund auf nur über Relay, und diese Relay-Verbindung hat eine begrenzte Lebensdauer, auf die der Arbeitsbereich vorher hinweist. Die beiden Browser leiten mit einem X25519-Schlüsselaustausch einen gemeinsamen Schlüssel ab, verschlüsseln jeden Block mit AES-256-GCM und schicken ihn über einen WebRTC-Kanal, der auf einem TURN-Relay aufsetzt.</p>
@@ -121,7 +178,7 @@ Datei 1/1</code></pre></div>
       <h2>Wenn das Scannen nicht klappt</h2>
       <p>Die Kamera fokussiert nicht, das Licht ist schlecht, oder ein Gerät hat gerade keine Kamera griffbereit — nichts davon sollte die Übertragung aufhalten. Die Pairing-Karte auf dem sendenden Gerät zeigt zusätzlich Kopier-Buttons für den rohen Code und den Link (sowie einen Teilen-Button auf unterstützten Geräten) sowie einen Countdown bis zum Ablauf des Codes.</p>
       <p>Tippe den Code neu ein, füge den Link ein, oder verschicke ihn über die Teilen-Funktion auf einem anderen Weg (Chat, AirDrop, was auch immer gerade am schnellsten ist) — jeder Weg führt in denselben Raum und ergibt dieselbe verschlüsselte Verbindung. Der QR-Code ist einer von mehreren Einstiegspunkten, nie eine Voraussetzung.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, Prüfung, Lösung</p><dl><dt>Der Scan öffnet die Seite, und dort steht, der Pairing-Code sei ungültig oder abgelaufen.</dt><dd><pre><code>https://relayium.com/cross-network   # die Karte des Senders zeigt den laufenden Countdown</code></pre><p>Die fünf Minuten sind abgelaufen, und der QR-Code eines toten Codes bleibt ein toter Link, so oft man ihn auch scannt. Erstelle auf dem sendenden Gerät einen frischen Code — die Karte zeichnet dazu einen neuen QR — und scanne gleich diesen.</p></dd><dt>Die Kamera erkennt das Quadrat, bietet aber nie etwas zum Öffnen an.</dt><dd><pre><code>https://relayium.com/cross-network   # das Feld „Pairing-Code eingeben“ nimmt die sechs Ziffern</code></pre><p>Manche Scanner kopieren den Text nur, statt ihn an einen Browser zu geben. Füge das Kopierte in die Adresszeile ein, oder lass den QR ganz weg: Öffne die Seite auf dem empfangenden Gerät, tippe die sechs Ziffern in das Feld „Pairing-Code eingeben“ und drücke „Verbinden“.</p></dd><dt>Ihr sucht beide nach einem QR zum Scannen, und auf keinem Bildschirm ist einer.</dt><dd><pre><code>https://relayium.com/cross-network   # nur die Karte, die den Code erzeugt hat, zeichnet einen QR</code></pre><p>Der QR gehört dem Gerät, das den Code erstellt hat, also muss eine Seite erst erstellen und die andere scannen. Entscheidet, wer erstellt — senden kann danach jede von euch beiden, sobald ihr im selben Raum seid —, drückt dort „Pairing-Code erstellen“ und richtet die Kamera des anderen Geräts auf diesen Bildschirm.</p></dd><dt>Der Link wurde über eine Chat-App weitergeleitet, und die Seite öffnet sich ohne Code darin.</dt><dd><pre><code>https://relayium.com/cross-network#c=483920   # alles nach #c= ist der Code</code></pre><p>Der Code reist im URL-Fragment, und ein Link-Umschreiber oder Vorschaudienst kann alles nach dem # verwerfen. Lies stattdessen die sechs Ziffern vor, oder füge den Link selbst in die Adresszeile ein, damit zwischen dir und dem Browser nichts daran herumschreibt.</p></dd><dt>Der Scan tritt dem Raum bei, und dann sagt die Karte, ein Relay gehe nur an bestätigte Konten.</dt><dd><pre><code>https://relayium.com/cross-network   # die Pairing-Karte nennt den Grund der Absage</code></pre><p>Die E-Mail-Adresse des sendenden Kontos ist noch nicht bestätigt, und geprüft wird das, wenn die Sitzung ein Relay anfordert, nicht beim Erzeugen des Codes. Bestätige die Adresse im Kontobereich, erstelle dann einen neuen Pairing-Code und scanne dessen QR — Übertragungen im selben Netz sind davon unberührt.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, Prüfung, Lösung</p><dl><dt>Der Scan öffnet die Seite, und dort steht, der Pairing-Code sei ungültig oder abgelaufen.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # die Karte des Senders zeigt den laufenden Countdown</code></pre><p>Die fünf Minuten sind abgelaufen, und der QR-Code eines toten Codes bleibt ein toter Link, so oft man ihn auch scannt. Erstelle auf dem sendenden Gerät einen frischen Code — die Karte zeichnet dazu einen neuen QR — und scanne gleich diesen.</p></dd><dt>Die Kamera erkennt das Quadrat, bietet aber nie etwas zum Öffnen an.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # das Feld „Pairing-Code eingeben“ nimmt die sechs Ziffern</code></pre><p>Manche Scanner kopieren den Text nur, statt ihn an einen Browser zu geben. Füge das Kopierte in die Adresszeile ein, oder lass den QR ganz weg: Öffne die Seite auf dem empfangenden Gerät, tippe die sechs Ziffern in das Feld „Pairing-Code eingeben“ und drücke „Verbinden“.</p></dd><dt>Ihr sucht beide nach einem QR zum Scannen, und auf keinem Bildschirm ist einer.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # nur die Karte, die den Code erzeugt hat, zeichnet einen QR</code></pre><p>Der QR gehört dem Gerät, das den Code erstellt hat, also muss eine Seite erst erstellen und die andere scannen. Entscheidet, wer erstellt — senden kann danach jede von euch beiden, sobald ihr im selben Raum seid —, drückt dort „Pairing-Code erstellen“ und richtet die Kamera des anderen Geräts auf diesen Bildschirm.</p></dd><dt>Der Link wurde über eine Chat-App weitergeleitet, und die Seite öffnet sich ohne Code darin.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network#c=483920   # alles nach #c= ist der Code</code></pre><p>Der Code reist im URL-Fragment, und ein Link-Umschreiber oder Vorschaudienst kann alles nach dem # verwerfen. Lies stattdessen die sechs Ziffern vor, oder füge den Link selbst in die Adresszeile ein, damit zwischen dir und dem Browser nichts daran herumschreibt.</p></dd><dt>Der Scan tritt dem Raum bei, und dann sagt die Karte, ein Relay gehe nur an bestätigte Konten.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # die Pairing-Karte nennt den Grund der Absage</code></pre><p>Die E-Mail-Adresse des sendenden Kontos ist noch nicht bestätigt, und geprüft wird das, wenn die Sitzung ein Relay anfordert, nicht beim Erzeugen des Codes. Bestätige die Adresse im Kontobereich, erstelle dann einen neuen Pairing-Code und scanne dessen QR — Übertragungen im selben Netz sind davon unberührt.</p></dd></dl></div>
       <h2>Häufige Fragen</h2>
       <h3>Braucht die scannende Person ein Relayium-Konto?</h3>
       <p>Nein. Anmelden muss sich nur die Seite, die den Pairing-Code und dessen QR erstellt — dieselbe Anforderung trägt auch ein asynchroner Download-Link. Wer scannt, tritt lediglich dem bereits erstellten Raum bei: kein Konto, keine Anmeldung, nichts zu installieren.</p>

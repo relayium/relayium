@@ -8,8 +8,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/fr/guides/run-relayium-as-an-always-on-service/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Faire tourner Relayium en service de réception permanent" />
@@ -27,42 +33,93 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Faire tourner Relayium en service de réception permanent","description":"Gardez relayium serve en fonctionnement pour que n'importe quel pair puisse vous pousser des fichiers à tout moment — en daemon-direct sur TLS avec épinglage. Couvre l'approbation du premier push, la pré-autorisation des empreintes, le lancement au démarrage sous systemd (Linux) ou launchd (macOS), ainsi que --allow-delete.","inLanguage":"fr","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/fr/guides/run-relayium-as-an-always-on-service/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/fr/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/fr/guides/"},{"@type":"ListItem","position":3,"name":"Faire tourner Relayium en service de réception permanent"}]},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Sur quel port serve écoute-t-il par défaut ?","acceptedAnswer":{"@type":"Answer","text":"9031. Changez-le avec --port aussi bien sur le processus à l'écoute (serve --port N) que sur la cible de l'émetteur (relayium://host:N)."}},{"@type":"Question","name":"Dois-je approuver chaque envoi à la main ?","acceptedAnswer":{"@type":"Answer","text":"Seulement le premier envoi d'une empreinte donnée, et uniquement quand serve tourne avec un terminal attaché. Ensuite, c'est mémorisé. Faire tourner serve de façon non interactive (systemd, un pipe) supprime totalement l'invite et rejette les pairs inconnus — autorisez-les plutôt à l'avance avec relayium authorize."}},{"@type":"Question","name":"Un émetteur peut-il supprimer des fichiers sur mon récepteur permanent ?","acceptedAnswer":{"@type":"Answer","text":"Seulement si vous avez démarré serve avec --allow-delete et que l'émetteur exécute sync --delete. Sans --allow-delete, les suppressions sont silencieusement ignorées et tout le reste est transféré normalement."}},{"@type":"Question","name":"Faire tourner un récepteur permanent est-il gratuit ?","acceptedAnswer":{"@type":"Answer","text":"Oui. relayium serve fait partie de la CLI gratuite et auto-hébergeable — aucun compte, aucun palier payant, des deux côtés de la connexion."}},{"@type":"Question","name":"Où serve conserve-t-il son identité et sa liste de pairs ?","acceptedAnswer":{"@type":"Answer","text":"Par défaut dans ~/.config/relayium (id.key/id.crt pour l'identité de cet hôte, authorized_fingerprints pour la liste d'autorisation). Pour un service systemd, faites pointer --config-dir vers un emplacement fixe comme /etc/relayium."}},{"@type":"Question","name":"Comment lancer serve au démarrage sous macOS ?","acceptedAnswer":{"@type":"Answer","text":"macOS n'a pas de systemd — utilisez launchd. Installez serve en tant que LaunchDaemon dans /Library/LaunchDaemons (se lance au démarrage ; définissez UserName pour qu'il s'exécute sous votre compte), ou en tant que LaunchAgent dans ~/Library/LaunchAgents (démarre à la connexion). Ce guide fournit un plist prêt à éditer ; il n'y a pas de service Homebrew. Pré-autorisez les expéditeurs avec relayium authorize au préalable, car launchd ne donne à serve aucun terminal pour demander confirmation."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 
-.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card);font-size:var(--fs-sm)}
 .archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
 .archived-label{color:var(--text-h);font-weight:600}
 .archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -80,7 +137,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/fr/guides/" aria-current="true">Guides</a><a href="/fr/apps/">Applis</a><a href="/pricing">Tarifs</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Faire tourner Relayium en service de réception permanent</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -104,16 +161,16 @@ ol.steps>li>pre{margin:8px 0 0}
       <p class="lead">Ce guide couvre le démarrage d&#39;un processus à l&#39;écoute de longue durée, l&#39;approbation de qui est autorisé à envoyer, l&#39;autorisation préalable des pairs pour les cas où personne n&#39;est devant le terminal, l&#39;exécution sous systemd, et le fait de laisser un émetteur utilisant sync --delete répercuter les suppressions.</p>
       <h2>Avant de commencer</h2>
       <p>Tout ci-dessous passe par la CLI relayium, alors installez-la d&#39;abord si ce n&#39;est pas fait. Sous macOS ou Linux, une commande place un binaire précompilé dans votre PATH :</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>Vous préférez choisir le fichier vous-même, ou sous Windows ? Récupérez un binaire depuis la page des releases — relayium.com/cli liste toutes les options (avec Go, go build -o relayium ./cmd/relayium).</li><li>relayium --version confirme l&#39;installation. Sans cela, les commandes ci-dessous affichent seulement « command not found ».</li></ul>
       <h2>Démarrer le processus à l&#39;écoute</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Ce qu&#39;il vous faut avant l&#39;étape 1</p><ul><li>La CLI sur les deux machines. relayium version affiche un numéro de version sur chacune ; si le shell répond command not found, elle n&#39;y est pas encore installée.</li><li>Un répertoire de réception sur cette machine, et l&#39;espace disque pour ce qui va y atterrir.</li><li>Une adresse joignable par l&#39;expéditeur et un port entrant ouvert. Sans --port, serve écoute sur 9031.</li><li>Si cette machine doit tourner sans terminal — et c&#39;est tout l&#39;intérêt d&#39;un service — l&#39;empreinte de l&#39;expéditeur, à l&#39;avance. Une section y est consacrée plus bas, et c&#39;est de loin la première raison pour laquelle un récepteur permanent refuse tout.</li></ul></div>
       <p>serve écoute les envois en daemon-direct (relayium://host:port) via une connexion TLS 1.3 avec épinglage et écrit ce qu&#39;il reçoit dans un répertoire. Rien n&#39;a besoin d&#39;être partagé au préalable pour le démarrer — aucune empreinte à copier, aucun serveur à enregistrer :</p>
-      <pre><code>relayium serve --dir ~/inbox
+      <pre tabindex="0"><code>relayium serve --dir ~/inbox
 relayium serve --dir /srv/drop --port 9040   # port autre que celui par défaut
 relayium serve --dir ~/inbox --allow-delete  # laisser un émetteur sync --delete répercuter les suppressions</code></pre>
-      <ol class="steps" data-block="steps"><li><p>Choisissez où les fichiers doivent atterrir et démarrez l&#39;écouteur. Rien n&#39;a besoin d&#39;être partagé au préalable pour en arriver là.</p><pre><code>relayium serve --dir ~/inbox</code></pre></li><li><p>Depuis la machine émettrice, poussez quelque chose vers cet hôte par son adresse relayium://.</p><pre><code>relayium push ./report.pdf relayium://drop.example.com:9031</code></pre></li><li><p>De retour sur le récepteur, répondez à la demande d&#39;approbation. Un y écrit l&#39;empreinte dans authorized_fingerprints, et les envois suivants de la même machine ne demandent plus rien.</p></li><li><p>Vérifiez que le fichier a bien atterri dans --dir et non dans le répertoire depuis lequel vous avez lancé serve.</p><pre><code>ls -l ~/inbox</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">À quoi ressemble un écouteur qui fonctionne</p><p>serve annonce d&#39;emblée qu&#39;il n&#39;a aucun pair autorisé, demande confirmation au premier envoi d&#39;une machine inconnue, puis reste muet à chaque envoi suivant. L&#39;expéditeur se termine avec 0 et le fichier est dans --dir.</p><pre><code>$ relayium serve --dir ~/inbox
+      <ol class="steps" data-block="steps"><li><p>Choisissez où les fichiers doivent atterrir et démarrez l&#39;écouteur. Rien n&#39;a besoin d&#39;être partagé au préalable pour en arriver là.</p><pre tabindex="0"><code>relayium serve --dir ~/inbox</code></pre></li><li><p>Depuis la machine émettrice, poussez quelque chose vers cet hôte par son adresse relayium://.</p><pre tabindex="0"><code>relayium push ./report.pdf relayium://drop.example.com:9031</code></pre></li><li><p>De retour sur le récepteur, répondez à la demande d&#39;approbation. Un y écrit l&#39;empreinte dans authorized_fingerprints, et les envois suivants de la même machine ne demandent plus rien.</p></li><li><p>Vérifiez que le fichier a bien atterri dans --dir et non dans le répertoire depuis lequel vous avez lancé serve.</p><pre tabindex="0"><code>ls -l ~/inbox</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">À quoi ressemble un écouteur qui fonctionne</p><p>serve annonce d&#39;emblée qu&#39;il n&#39;a aucun pair autorisé, demande confirmation au premier envoi d&#39;une machine inconnue, puis reste muet à chaque envoi suivant. L&#39;expéditeur se termine avec 0 et le fichier est dans --dir.</p><pre tabindex="0"><code>$ relayium serve --dir ~/inbox
 no authorized peers yet — you&#39;ll be asked to approve each new peer on its first push.
 Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
@@ -121,22 +178,22 @@ Accept and remember this peer? [y/N] y</code></pre></div>
       <ul><li>--dir définit où les fichiers atterrissent (le répertoire courant par défaut).</li><li>--port définit le port d&#39;écoute (9031 par défaut) ; ouvrez-le sur votre pare-feu si l&#39;émetteur se trouve ailleurs.</li><li>Sans --once, serve continue de tourner et d&#39;accepter des envois jusqu&#39;à ce que vous l&#39;arrêtiez ou qu&#39;un gestionnaire de processus le redémarre — c&#39;est ce qui en fait un service permanent.</li></ul>
       <h2>Approuver qui est autorisé à envoyer</h2>
       <p>La première fois qu&#39;un nouveau pair envoie quelque chose, serve — s&#39;il tourne dans un terminal — vous montre d&#39;où vient l&#39;envoi et son empreinte, puis vous demande de l&#39;approuver, de la même façon que SSH interroge sur un hôte inconnu à la première connexion :</p>
-      <pre><code>Incoming push from 203.0.113.7:54021
+      <pre tabindex="0"><code>Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
 Accept and remember this peer? [y/N] y</code></pre>
       <ul><li>Répondez y une fois et cette empreinte est écrite dans authorized_fingerprints ; chaque envoi ultérieur depuis la même machine passe alors sans invite.</li><li>Une empreinte identifie une machine, pas une adresse réseau, donc elle reste valable même si l&#39;IP de l&#39;émetteur change.</li><li>Cette étape est interactive par conception — il faut quelqu&#39;un devant le clavier, ce qui ne sera plus vrai une fois que serve passera sous systemd (section suivante).</li></ul>
       <h2>Autoriser des pairs à l&#39;avance pour les configurations non interactives</h2>
       <p>Quand serve n&#39;a pas de terminal où demander confirmation — un service systemd, un processus en arrière-plan, un pipe — il ne peut pas interroger et refuse donc toute empreinte qu&#39;il ne reconnaît pas encore. Autorisez plutôt les pairs à l&#39;avance. Sur la machine qui va envoyer, exécutez relayium id pour afficher son empreinte ; sur le récepteur, ajoutez-la avant que le premier envoi n&#39;arrive :</p>
-      <pre><code># sur la machine qui va envoyer, afficher son empreinte
+      <pre tabindex="0"><code># sur la machine qui va envoyer, afficher son empreinte
 relayium id
 
 # sur ce récepteur permanent, l&#39;autoriser à l&#39;avance
 relayium authorize 74318e3b...</code></pre>
-      <ol class="steps" data-block="steps"><li><p>Sur la machine qui poussera, affichez son empreinte. Ce sont 64 caractères hexadécimaux, et ils identifient la machine, pas son adresse.</p><pre><code>relayium id</code></pre></li><li><p>Autorisez-la sur ce récepteur — avec le même --config-dir que celui sous lequel tournera le service. Autoriser sous un autre utilisateur, ou dans le chemin par défaut alors que l&#39;unité en utilise un autre, écrit l&#39;empreinte dans un fichier que le service ne lit jamais.</p><pre><code>relayium authorize 74318e3b… --config-dir /etc/relayium</code></pre></li></ol>
+      <ol class="steps" data-block="steps"><li><p>Sur la machine qui poussera, affichez son empreinte. Ce sont 64 caractères hexadécimaux, et ils identifient la machine, pas son adresse.</p><pre tabindex="0"><code>relayium id</code></pre></li><li><p>Autorisez-la sur ce récepteur — avec le même --config-dir que celui sous lequel tournera le service. Autoriser sous un autre utilisateur, ou dans le chemin par défaut alors que l&#39;unité en utilise un autre, écrit l&#39;empreinte dans un fichier que le service ne lit jamais.</p><pre tabindex="0"><code>relayium authorize 74318e3b… --config-dir /etc/relayium</code></pre></li></ol>
       <ul><li>authorize est idempotent — l&#39;exécuter à nouveau pour une empreinte déjà approuvée ne fait rien.</li><li>Les fichiers d&#39;identité et de confiance se trouvent dans le répertoire indiqué par --config-dir, ~/.config/relayium par défaut (id.key/id.crt sont l&#39;identité de cet hôte, authorized_fingerprints est la liste d&#39;autorisation des pairs).</li></ul>
       <h2>Exécuter sous systemd</h2>
       <p>Pour un service qui survit aux redémarrages et aux plantages, confiez serve à systemd. Faites pointer --config-dir vers un chemin fixe pour que l&#39;identité de l&#39;hôte et sa liste de pairs autorisés restent stables d&#39;un redémarrage à l&#39;autre :</p>
-      <pre><code># /etc/systemd/system/relayium-serve.service
+      <pre tabindex="0"><code># /etc/systemd/system/relayium-serve.service
 [Unit]
 Description=Relayium always-on receiver
 After=network-online.target
@@ -148,15 +205,15 @@ User=relayium
 
 [Install]
 WantedBy=multi-user.target</code></pre>
-      <ol class="steps" data-block="steps"><li><p>Autorisez chaque pair censé pouvoir pousser, avant même que le service existe. Il ne peut rien demander, donc tout ce qui n&#39;est pas déjà de confiance est refusé.</p></li><li><p>Écrivez l&#39;unité ci-dessus dans /etc/systemd/system/relayium-serve.service, avec --config-dir pointant sur le chemin fixe utilisé pour l&#39;autorisation.</p></li><li><p>Rechargez systemd et démarrez le service, en l&#39;activant pour qu&#39;il revienne après un redémarrage.</p><pre><code>sudo systemctl daemon-reload</code></pre><pre><code>sudo systemctl enable --now relayium-serve</code></pre></li><li><p>Vérifiez qu&#39;il tourne et que l&#39;avertissement qui refuse tout est absent du journal. Seule la seconde vérification est propre à cette installation.</p><pre><code>systemctl is-active relayium-serve</code></pre><pre><code>journalctl -u relayium-serve -n 20 --no-pager</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">À quoi ressemble un service qui fonctionne</p><p>is-active répond active, et l&#39;avertissement de démarrage sur l&#39;absence de pairs autorisés n&#39;apparaît pas. Cet avertissement est la seule ligne qui vous dit, avant qu&#39;un expéditeur ne se plaigne, que ce service refusera chaque envoi.</p><pre><code>$ systemctl is-active relayium-serve
+      <ol class="steps" data-block="steps"><li><p>Autorisez chaque pair censé pouvoir pousser, avant même que le service existe. Il ne peut rien demander, donc tout ce qui n&#39;est pas déjà de confiance est refusé.</p></li><li><p>Écrivez l&#39;unité ci-dessus dans /etc/systemd/system/relayium-serve.service, avec --config-dir pointant sur le chemin fixe utilisé pour l&#39;autorisation.</p></li><li><p>Rechargez systemd et démarrez le service, en l&#39;activant pour qu&#39;il revienne après un redémarrage.</p><pre tabindex="0"><code>sudo systemctl daemon-reload</code></pre><pre tabindex="0"><code>sudo systemctl enable --now relayium-serve</code></pre></li><li><p>Vérifiez qu&#39;il tourne et que l&#39;avertissement qui refuse tout est absent du journal. Seule la seconde vérification est propre à cette installation.</p><pre tabindex="0"><code>systemctl is-active relayium-serve</code></pre><pre tabindex="0"><code>journalctl -u relayium-serve -n 20 --no-pager</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">À quoi ressemble un service qui fonctionne</p><p>is-active répond active, et l&#39;avertissement de démarrage sur l&#39;absence de pairs autorisés n&#39;apparaît pas. Cet avertissement est la seule ligne qui vous dit, avant qu&#39;un expéditeur ne se plaigne, que ce service refusera chaque envoi.</p><pre tabindex="0"><code>$ systemctl is-active relayium-serve
 active
 $ journalctl -u relayium-serve -n 20 --no-pager | grep -c &#39;all pushes will be rejected&#39;
 0</code></pre></div>
       <ul><li>Avant d&#39;activer le service, exécutez relayium authorize &lt;fingerprint&gt; pour chaque pair qui doit pouvoir envoyer — le service lui-même ne peut pas demander confirmation.</li><li>systemctl enable --now relayium-serve le démarre et le fait redémarrer à chaque démarrage de la machine.</li><li>Gardez /etc/relayium/id.key lisible uniquement par l&#39;utilisateur du service ; relayium refuse de charger une clé aux permissions trop permissives.</li></ul>
       <h2>Le lancer au démarrage sous macOS (launchd)</h2>
       <p>macOS n&#39;a pas de systemd — son gestionnaire de services est launchd. Pour maintenir serve en fonctionnement sur un Mac (par exemple un Mac mini laissé allumé comme point de dépôt), installez-le en tant que LaunchDaemon afin qu&#39;il démarre au démarrage, avant que quiconque ne se connecte. Définissez UserName pour qu&#39;il s&#39;exécute sous votre compte plutôt qu&#39;en root, et donnez à --dir et --config-dir des chemins absolus pour que ses fichiers d&#39;identité et de confiance restent dans votre propre ~/.config/relayium :</p>
-      <pre><code>&lt;!-- /Library/LaunchDaemons/com.relayium.serve.plist  (replace YOU with your macOS username) --&gt;
+      <pre tabindex="0"><code>&lt;!-- /Library/LaunchDaemons/com.relayium.serve.plist  (replace YOU with your macOS username) --&gt;
 &lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot; &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;
 &lt;plist version=&quot;1.0&quot;&gt;
@@ -178,7 +235,7 @@ $ journalctl -u relayium-serve -n 20 --no-pager | grep -c &#39;all pushes will b
   &lt;key&gt;StandardErrorPath&lt;/key&gt;  &lt;string&gt;/Users/YOU/relayium-serve.log&lt;/string&gt;
 &lt;/dict&gt;
 &lt;/plist&gt;</code></pre>
-      <pre><code># 1) authorize each pusher first — launchd gives serve no terminal to prompt on:
+      <pre tabindex="0"><code># 1) authorize each pusher first — launchd gives serve no terminal to prompt on:
 relayium authorize &lt;fingerprint&gt;     # get the fingerprint from the pusher&#39;s  relayium id
 
 # 2) save the plist above to that path, then load it (root-owned, starts at boot):
@@ -192,14 +249,14 @@ sudo launchctl bootout system/com.relayium.serve</code></pre>
       <ul><li>launchd ne donne aucun terminal à serve, il ne peut donc pas demander de confirmation — exécutez d&#39;abord relayium authorize &lt;fingerprint&gt; pour chaque expéditeur, comme avec systemd. L&#39;empreinte provient du relayium id de cette machine.</li><li>KeepAlive redémarre serve s&#39;il plante ; RunAtLoad avec un LaunchDaemon dans /Library/LaunchDaemons le lance au démarrage sans connexion — le choix idéal pour un Mac mini sans écran.</li><li>Vous préférez un service à portée de session ? Placez le même plist (sans la clé UserName) dans ~/Library/LaunchAgents/ et chargez-le avec launchctl bootstrap gui/$(id -u) &lt;path&gt; — il démarre à votre connexion plutôt qu&#39;au démarrage.</li><li>Si le coupe-feu applicatif de macOS est activé, autorisez les connexions entrantes pour relayium (Réglages Système → Réseau → Coupe-feu), sinon les envois vers votre port seront bloqués.</li></ul>
       <h2>Laisser un émetteur utilisant sync --delete répercuter les suppressions</h2>
       <p>Par défaut, serve ne fait qu&#39;ajouter ou mettre à jour des fichiers — un émetteur qui exécute sync --delete contre lui voit quand même ses fichiers nouveaux et modifiés copiés, mais les suppressions demandées sont ignorées, avec un avertissement consigné côté récepteur. Démarrez serve avec --allow-delete pour activer un vrai miroir, où les fichiers supprimés côté émetteur le sont aussi ici :</p>
-      <pre><code>relayium serve --dir /srv/mirror --allow-delete</code></pre>
+      <pre tabindex="0"><code>relayium serve --dir /srv/mirror --allow-delete</code></pre>
       <ul><li>--allow-delete est une option activée côté récepteur ; l&#39;émetteur doit tout de même la demander avec sync --delete.</li><li>Sans cette option, rien n&#39;est jamais supprimé sur cette machine, quoi que demande un émetteur.</li></ul>
       <h2>Quand ça ne marche pas</h2>
       <p>Dans quatre de ces cinq pannes, le service continue de tourner et paraît sain — un écouteur qui refuse tout reste un écouteur. Chacune se tranche par une ligne à lire ou une commande à exécuter.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptôme, vérification, correction</p><dl><dt>Le service démarre et reste en vie, mais chaque envoi est refusé.</dt><dd><pre><code>journalctl -u relayium-serve -n 20 --no-pager
-# warning: no authorized peers and no terminal to approve on; all pushes will be rejected.</code></pre><p>Un service n&#39;a pas de terminal, il ne peut donc jamais exécuter la demande d&#39;approbation du premier envoi, et tout ce qu&#39;il voit est une empreinte inconnue. Autorisez chaque expéditeur à l&#39;avance : relayium id sur la machine émettrice, relayium authorize &lt;empreinte&gt; ici, avec le même --config-dir que l&#39;unité. Cet avertissement est affiché au démarrage, il figure donc dans le journal dès la première ligne.</p></dd><dt>Le service ne démarre pas du tout et se plaint de permissions non sûres sur id.key.</dt><dd><pre><code>stat -c &#39;%a %U %n&#39; /etc/relayium/id.key
-# 400 relayium /etc/relayium/id.key</code></pre><p>La clé doit être exactement en 0600. Pas 0644 — et, c&#39;est là que ça piège, pas 0400 non plus : la resserrer casse le service aussi sûrement que la relâcher. Faites chmod 600 sur la clé et assurez-vous qu&#39;elle appartient au User= de l&#39;unité.</p></dd><dt>L&#39;expéditeur signale que la connexion a été refusée.</dt><dd><pre><code>relayium push ./build relayium://drop.example.com:9031
-# hint: if the peer refused the connection, it may not have authorized this host.</code></pre><p>Le récepteur ne reconnaît pas cet expéditeur. Lancez relayium id sur l&#39;expéditeur et relayium authorize avec cette empreinte sur le récepteur. Si c&#39;est déjà fait, vérifiez que ça l&#39;a été sous le --config-dir de l&#39;unité : le fichier de confiance est propre à un répertoire, et une empreinte autorisée dans ~/.config/relayium n&#39;existe tout simplement pas pour un service qui lit /etc/relayium.</p></dd><dt>Les envois passent quand vous lancez serve à la main, mais pas via le service ou pas depuis une autre machine.</dt><dd><pre><code>sudo ss -tlnp | grep 9031</code></pre><p>Deux causes distinctes, une seule vérification pour les séparer. Si rien n&#39;écoute, l&#39;unité n&#39;est pas activée — systemctl is-enabled relayium-serve. Si elle écoute, le port est bloqué : ouvrez 9031 dans le pare-feu de l&#39;hôte et dans tout groupe de sécurité cloud. Un --port non standard doit correspondre au port du relayium://host:N de l&#39;expéditeur.</p></dd><dt>Les suppressions demandées par un expéditeur sync --delete ne se produisent jamais ici.</dt><dd><pre><code>journalctl -u relayium-serve | grep -i delete</code></pre><p>La suppression se décide côté récepteur et elle est désactivée par défaut : les fichiers nouveaux et modifiés sont toujours copiés, et chaque suppression ignorée est journalisée ici en avertissement. Ajoutez --allow-delete à l&#39;ExecStart de l&#39;unité et redémarrez. Que l&#39;expéditeur le demande ne suffit pas, et cette asymétrie est voulue — un récepteur ne perd pas de fichiers à cause d&#39;une option tapée ailleurs.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptôme, vérification, correction</p><dl><dt>Le service démarre et reste en vie, mais chaque envoi est refusé.</dt><dd><pre tabindex="0"><code>journalctl -u relayium-serve -n 20 --no-pager
+# warning: no authorized peers and no terminal to approve on; all pushes will be rejected.</code></pre><p>Un service n&#39;a pas de terminal, il ne peut donc jamais exécuter la demande d&#39;approbation du premier envoi, et tout ce qu&#39;il voit est une empreinte inconnue. Autorisez chaque expéditeur à l&#39;avance : relayium id sur la machine émettrice, relayium authorize &lt;empreinte&gt; ici, avec le même --config-dir que l&#39;unité. Cet avertissement est affiché au démarrage, il figure donc dans le journal dès la première ligne.</p></dd><dt>Le service ne démarre pas du tout et se plaint de permissions non sûres sur id.key.</dt><dd><pre tabindex="0"><code>stat -c &#39;%a %U %n&#39; /etc/relayium/id.key
+# 400 relayium /etc/relayium/id.key</code></pre><p>La clé doit être exactement en 0600. Pas 0644 — et, c&#39;est là que ça piège, pas 0400 non plus : la resserrer casse le service aussi sûrement que la relâcher. Faites chmod 600 sur la clé et assurez-vous qu&#39;elle appartient au User= de l&#39;unité.</p></dd><dt>L&#39;expéditeur signale que la connexion a été refusée.</dt><dd><pre tabindex="0"><code>relayium push ./build relayium://drop.example.com:9031
+# hint: if the peer refused the connection, it may not have authorized this host.</code></pre><p>Le récepteur ne reconnaît pas cet expéditeur. Lancez relayium id sur l&#39;expéditeur et relayium authorize avec cette empreinte sur le récepteur. Si c&#39;est déjà fait, vérifiez que ça l&#39;a été sous le --config-dir de l&#39;unité : le fichier de confiance est propre à un répertoire, et une empreinte autorisée dans ~/.config/relayium n&#39;existe tout simplement pas pour un service qui lit /etc/relayium.</p></dd><dt>Les envois passent quand vous lancez serve à la main, mais pas via le service ou pas depuis une autre machine.</dt><dd><pre tabindex="0"><code>sudo ss -tlnp | grep 9031</code></pre><p>Deux causes distinctes, une seule vérification pour les séparer. Si rien n&#39;écoute, l&#39;unité n&#39;est pas activée — systemctl is-enabled relayium-serve. Si elle écoute, le port est bloqué : ouvrez 9031 dans le pare-feu de l&#39;hôte et dans tout groupe de sécurité cloud. Un --port non standard doit correspondre au port du relayium://host:N de l&#39;expéditeur.</p></dd><dt>Les suppressions demandées par un expéditeur sync --delete ne se produisent jamais ici.</dt><dd><pre tabindex="0"><code>journalctl -u relayium-serve | grep -i delete</code></pre><p>La suppression se décide côté récepteur et elle est désactivée par défaut : les fichiers nouveaux et modifiés sont toujours copiés, et chaque suppression ignorée est journalisée ici en avertissement. Ajoutez --allow-delete à l&#39;ExecStart de l&#39;unité et redémarrez. Que l&#39;expéditeur le demande ne suffit pas, et cette asymétrie est voulue — un récepteur ne perd pas de fichiers à cause d&#39;une option tapée ailleurs.</p></dd></dl></div>
       <h2>Questions fréquentes</h2>
       <h3>Sur quel port serve écoute-t-il par défaut ?</h3>
       <p>9031. Changez-le avec --port aussi bien sur le processus à l&#39;écoute (serve --port N) que sur la cible de l&#39;émetteur (relayium://host:N).</p>

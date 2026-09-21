@@ -11,8 +11,14 @@
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/automate-server-backups/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/automate-server-backups/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script>
+      try {
+        var t = localStorage.getItem('relayium-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+    <meta name="theme-color" content="#f8f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232326" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Schedule an off-host server copy with a cron job" />
@@ -30,37 +36,88 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Schedule an off-host server copy with a cron job","description":"Schedule relayium push or sync from cron to copy a directory to another server automatically — encrypted in transit, SHA-256-verified per file, and free to run as often as you like. It produces an off-host copy, not a versioned backup.","inLanguage":"en","datePublished":"2026-07-09","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/how-to/automate-server-backups/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/guides/"},{"@type":"ListItem","position":3,"name":"Schedule an off-host server copy with a cron job"}]},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Does the backup server need relayium installed?","acceptedAnswer":{"@type":"Answer","text":"It depends on the command. push works either way: with relayium installed it uses the native protocol (an up-front collision check, plus a SHA-256 on every file it transfers); without it, push falls back to a plain tar stream over SSH, so a bare server still works but nothing is verified per file. sync always needs relayium's native protocol on the remote — there's no tar fallback for sync, so install it there first."}},{"@type":"Question","name":"Is the copy encrypted and verified?","acceptedAnswer":{"@type":"Answer","text":"In transit, yes, and per file with a caveat worth knowing. Pushing over SSH or daemon-direct means the bytes are already protected by that connection's encryption, with nothing extra to configure. On the native protocol every file the run transfers is checked with a SHA-256 hash end to end — but the tar fallback hashes nothing, and sync decides what to send from size and modification time, so a file it skips is never read and therefore never hashed. Matching directory sizes are a sanity check, not proof that a skipped file's contents still match."}},{"@type":"Question","name":"What happens if the cron job is interrupted halfway through?","acceptedAnswer":{"@type":"Answer","text":"It depends which command you scheduled. sync continues: the next run skips what already matches and carries on a partial file, and --no-resume turns that off. push does not resume in either protocol — it refuses a destination that already exists, which is why the push line above writes into a dated directory, so the next night is a clean full copy rather than a refusal. --no-resume is accepted by push and does nothing."}},{"@type":"Question","name":"Can --delete accidentally wipe my destination?","acceptedAnswer":{"@type":"Answer","text":"sync refuses to run with --delete if the source directory contains no files, and the receiver has to be started with serve --allow-delete for deletions to take effect at all — otherwise they're skipped and reported back to you."}},{"@type":"Question","name":"Do I need an account or does this cost anything?","acceptedAnswer":{"@type":"Answer","text":"No. The CLI is free and needs no account for push, pull, or sync — the transfer runs over your own SSH connection or a direct daemon connection, not through Relayium's servers."}},{"@type":"Question","name":"Is this a backup?","acceptedAnswer":{"@type":"Answer","text":"It is the off-host copy half of one. A scheduled sync keeps one directory current, which means it also propagates a deletion or an in-place corruption at the source on its next run; a scheduled push into a dated directory does keep older copies, but only for as long as you keep the directories, and nothing here prunes or verifies them for you. Treat it as a copy you own on hardware you control, and pair it with snapshots or a versioning tool if you need to recover a file as it was last week."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+@media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
-header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
-header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-header a{color:var(--text-h);text-decoration:none;font-weight:600}
-h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
-h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
-h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
-.updated{color:var(--text);font-size:14px;margin:0 0 8px}
-.lead{font-size:19px}
-p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
-pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
-pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
-.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
-.ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
-.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
-.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
-.crumbs [aria-current]{color:var(--text)}
-footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.wrap{max-inline-size:var(--col);margin:0 auto;padding:0 22px 72px}
+.wrap.wide{max-inline-size:var(--col-wide)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{color:var(--text-h);font-size:var(--fs-h1);line-height:1.2;letter-spacing:-1px;margin:36px 0 8px}
+h2{color:var(--text-h);font-size:var(--fs-h2);line-height:1.3;letter-spacing:-.3px;margin:40px 0 10px}
+h3{color:var(--text-h);font-size:var(--fs-h3);line-height:1.4;margin:24px 0 4px}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+b,strong{color:var(--text-h);font-weight:600}
+/* Link ranks. An inline link inside a sentence takes the accent and an
+   underline, because it has to be findable mid-paragraph. Everything that is
+   already a list of destinations — the guides hub, related articles, the
+   footer — is heading-coloured and goes accent on hover, which is what stops a
+   page of links from being a page of purple (设计规范 §3). */
+a{color:var(--accent-fg)}
+main p>a,main li>a{text-underline-offset:2px}
+.updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
+.lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+/* Pushed to the far edge only while it shares the brand's row. Once the header
+   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
+   the links against the opposite margin on a line of their own, which reads as
+   a layout accident rather than as a choice. */
+@media(min-width:560px){.sitenav{margin-inline-start:auto}}
+.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
+.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
+.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
+footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
+footer a:hover{color:var(--accent-fg)}
+@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+.card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
+pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:var(--code-bg);border-radius:4px;padding:1px 5px}
+pre code{background:none;padding:0;border-radius:0}
+/* The one purple fill on a content page. Flat, not a ramp: 设计规范 §3 has no
+   gradient, and white on --accent-action measures 6.10:1 light / 5.53:1 dark —
+   a number axe can read, which a gradient's cannot be. */
+.cta{display:inline-flex;align-items:center;justify-content:center;min-block-size:44px;padding:0 22px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:var(--fs-sm);text-decoration:none;background:var(--accent-action);transition:filter .13s,transform .05s}
+.cta:hover{filter:brightness(1.12)}
+.cta:active{transform:translateY(1px)}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 8px;font-size:var(--fs-xs)}
+/* Underlined, not just coloured. Two words side by side with one of them
+   heading-coloured is not an affordance — a reader cannot tell 中文 is a link
+   at all. The current one loses the underline instead of gaining a colour, so
+   the state survives a colour filter. */
+.langbar a{color:var(--text-h);text-decoration:underline;text-decoration-color:var(--accent-border);text-underline-offset:3px}
+.langbar a:hover{color:var(--accent-fg);text-decoration-color:currentColor}
+.langbar a[aria-current]{color:var(--text);font-weight:600;text-decoration:none}
+.crumbs{margin:16px 0 0;font-size:var(--fs-xs);color:var(--text)}
+.crumbs a{color:var(--text-h);text-decoration:underline;text-underline-offset:2px}
+.crumbs a:hover{color:var(--accent-fg)}
+.crumbs [aria-current]{color:var(--text)}
+@media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+.ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.ctacard p{margin:0 0 14px}
+/* Related reading is a row of destinations, not a paragraph of links: each one
+   is a card, so the end of an article looks like the rest of the product
+   instead of a bare <ul>. */
+.related{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+@media(min-width:620px){.related{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.related li{margin:0}
+.related a{display:block;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text-h);text-decoration:none;font-size:var(--fs-sm);line-height:1.45;transition:border-color .13s,color .13s}
+.related a:hover{border-color:var(--accent-border);color:var(--accent-fg)}
+@media(prefers-reduced-motion:reduce){.related a{transition:none}}
 </style>
     <style>
-.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
-.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:var(--radius);background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15px}
 .cbox p:last-child{margin-bottom:0}
 .cbox ul{margin:0}
 .cbox pre{margin:10px 0 0}
@@ -78,7 +135,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/guides/" aria-current="true">Guides</a><a href="/apps">Apps</a><a href="/pricing">Pricing</a></nav></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Relayium</a> <span aria-hidden="true">›</span> <a href="/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Schedule an off-host server copy with a cron job</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -108,11 +165,11 @@ ol.steps>li>pre{margin:8px 0 0}
       <ul><li>Use push into a dated destination when you want each run to stand on its own and older copies to survive.</li><li>Use sync for a large or frequently-changing directory kept as one current copy, where re-sending everything every night would be wasteful.</li><li>Both verify what they transfer with a per-file SHA-256 on the native protocol. Neither push nor pull resumes; sync is the only one of the three that continues a partial file, and the tar fallback verifies and resumes nothing.</li></ul>
       <h2>Before you start</h2>
       <p>Everything below is the relayium CLI, so install it first if you haven&#39;t. On macOS or Linux, one command drops a prebuilt binary on your PATH:</p>
-      <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build -o relayium ./cmd/relayium if you have Go).</li><li>relayium --version confirms it&#39;s installed. Skip this and the commands below just print &#39;command not found&#39;.</li></ul>
       <h2>Two transports: SSH or daemon-direct</h2>
       <p>Point either command at an SSH destination (scp-style, using your ~/.ssh/config) or, if the other machine is running relayium serve, straight at it over the daemon-direct protocol — no SSH needed.</p>
-      <pre><code># SSH destination — uses your existing SSH keys and config
+      <pre tabindex="0"><code># SSH destination — uses your existing SSH keys and config
 relayium push ./data user@backup-server:/srv/backups/
 
 # daemon-direct — the destination runs &quot;relayium serve&quot;, no SSH required
@@ -121,14 +178,14 @@ relayium push ./data relayium://backup-server:9031</code></pre>
       <h2>Schedule it with cron</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">What you need before step 1</p><ul><li>The CLI on this machine, and on the destination too if you plan to use sync. sync has no tar fallback.</li><li>An SSH key with no passphrase, or a destination running relayium serve. cron has no agent and no terminal, so it cannot answer a passphrase prompt.</li><li>A source directory that exists at the moment cron fires — not one on a network mount that is only there while you are logged in.</li><li>Somewhere to write a log. A cron job whose output goes nowhere is a backup you will find out about when you need it.</li></ul></div>
       <p>Both push and sync are single, non-interactive commands, so they drop straight into a crontab. Point them at an SSH key with no passphrase (or an agent), and log the output so failures are visible. Note the destination in the push line: it carries the date, because push refuses a destination that already exists. The % has to be escaped as \% in a crontab, where a bare % means end-of-command:</p>
-      <pre><code># a dated full copy every night at 2am — a fresh destination each run, so the
+      <pre tabindex="0"><code># a dated full copy every night at 2am — a fresh destination each run, so the
 # collision check never refuses it — add to your crontab (crontab -e)
 0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/$(date +\%F)/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1
 
 # incremental mirror every 15 minutes instead
 */15 * * * * relayium sync -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ &gt;&gt; ~/relayium-sync.log 2&gt;&amp;1</code></pre>
-      <ol class="steps" data-block="steps"><li><p>Find out where relayium actually is. cron does not use your shell&#39;s PATH, and install.sh falls back to ~/.local/bin when /usr/local/bin is not writable — which is exactly the case cron cannot see.</p><pre><code>command -v relayium</code></pre></li><li><p>Confirm the key works with nobody at the keyboard. BatchMode=yes fails instead of prompting, which is what cron would do.</p><pre><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true</code></pre></li><li><p>Run the whole command by hand once, written exactly as cron will run it, absolute path included.</p><pre><code>/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/</code></pre></li><li><p>Only then add the schedule. Keep the absolute path and the redirect.</p><pre><code>crontab -e</code></pre></li><li><p>After the first scheduled tick, read the log instead of assuming. This is the step people skip, and it is the one that would have told them.</p><pre><code>tail -n 20 ~/relayium-backup.log</code></pre></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">What a working setup looks like</p><p>relayium resolves to an absolute path you can paste into the crontab, and the BatchMode ssh check exits 0 without printing anything or asking for anything. A backup that only works from your interactive shell is not scheduled yet.</p><pre><code>$ command -v relayium
+      <ol class="steps" data-block="steps"><li><p>Find out where relayium actually is. cron does not use your shell&#39;s PATH, and install.sh falls back to ~/.local/bin when /usr/local/bin is not writable — which is exactly the case cron cannot see.</p><pre tabindex="0"><code>command -v relayium</code></pre></li><li><p>Confirm the key works with nobody at the keyboard. BatchMode=yes fails instead of prompting, which is what cron would do.</p><pre tabindex="0"><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true</code></pre></li><li><p>Run the whole command by hand once, written exactly as cron will run it, absolute path included.</p><pre tabindex="0"><code>/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/</code></pre></li><li><p>Only then add the schedule. Keep the absolute path and the redirect.</p><pre tabindex="0"><code>crontab -e</code></pre></li><li><p>After the first scheduled tick, read the log instead of assuming. This is the step people skip, and it is the one that would have told them.</p><pre tabindex="0"><code>tail -n 20 ~/relayium-backup.log</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">What a working setup looks like</p><p>relayium resolves to an absolute path you can paste into the crontab, and the BatchMode ssh check exits 0 without printing anything or asking for anything. A backup that only works from your interactive shell is not scheduled yet.</p><pre tabindex="0"><code>$ command -v relayium
 /usr/local/bin/relayium
 $ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
 $ echo $?
@@ -141,10 +198,10 @@ $ echo $?
       <ul><li>relayium sync ./data user@backup-server:/srv/backups/ --delete mirrors deletions, and over SSH it needs nobody&#39;s permission but yours. Leave --delete off if a mistaken deletion at the source is a worse outcome than a stale file on the destination.</li><li>relayium sync ./data relayium://backup-server:9031 --delete deletes only if that listener was started with serve --allow-delete; otherwise it is reported back as denied.</li><li>relayium sync ./data user@backup-server:/srv/backups/ --watch stays running and re-syncs on change instead of running once from cron.</li></ul>
       <h2>When it doesn&#39;t work</h2>
       <p>Every one of these is invisible until you look at the log, which is why the log redirect is in the crontab line rather than being optional. The fifth is worse than invisible: it looks like success.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, check, fix</p><dl><dt>The log says relayium: command not found, but the same command works in your shell.</dt><dd><pre><code>tail -n 5 ~/relayium-backup.log
-# /bin/sh: relayium: command not found</code></pre><p>cron runs with a minimal PATH, usually just /usr/bin:/bin. If install.sh could not write to /usr/local/bin it put the binary in ~/.local/bin, which cron will never find. Use the absolute path from command -v in the crontab line, or set PATH= on a line at the top of the crontab.</p></dd><dt>The log shows the ssh connection being refused, or nothing after the first run.</dt><dd><pre><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
-# Permission denied (publickey).</code></pre><p>cron has no ssh-agent and no terminal, so a key with a passphrase can only hang or fail. Point -i at a passphrase-less key reserved for backups, and confirm with BatchMode=yes, which refuses to prompt rather than waiting for someone who is not there.</p></dd><dt>sync runs cleanly but files deleted at the source are still on the destination.</dt><dd><pre><code>grep -i deni ~/relayium-sync.log</code></pre><p>Over a relayium:// destination, deletion is a receiver-side opt-in: without serve --allow-delete on the other end the deletions are skipped and reported back as denied, which is why the log has the answer and the exit code does not. Restart that listener with --allow-delete. Over an SSH destination there is no listener to ask, so a denial is not the explanation — check that --delete is actually on the crontab line, since without it sync only ever adds and updates.</p></dd><dt>sync refuses --delete outright.</dt><dd><pre><code>relayium sync ~/documents user@backup-server:/srv/backups/ --delete
-# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).</code></pre><p>The source resolved to no files, so the mirror would have emptied the destination. That refusal is deliberate. Check the path for a typo, and check that anything mounted there is actually mounted at the time cron fires rather than only when you are logged in.</p></dd><dt>The backup runs, exits 0, and is not what you think it is.</dt><dd><pre><code>ssh user@backup-server command -v relayium</code></pre><p>push falls back to a plain tar stream over SSH when the remote has no relayium. Your files arrive, so nothing complains — but that path has no per-file SHA-256 verification and no up-front collision check, which are the two reasons to schedule this rather than scp, and tar -x -k can leave a batch partly applied. Install the CLI on the destination to get them back. sync does not have this failure mode because it has no fallback at all: it fails loudly instead.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, check, fix</p><dl><dt>The log says relayium: command not found, but the same command works in your shell.</dt><dd><pre tabindex="0"><code>tail -n 5 ~/relayium-backup.log
+# /bin/sh: relayium: command not found</code></pre><p>cron runs with a minimal PATH, usually just /usr/bin:/bin. If install.sh could not write to /usr/local/bin it put the binary in ~/.local/bin, which cron will never find. Use the absolute path from command -v in the crontab line, or set PATH= on a line at the top of the crontab.</p></dd><dt>The log shows the ssh connection being refused, or nothing after the first run.</dt><dd><pre tabindex="0"><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+# Permission denied (publickey).</code></pre><p>cron has no ssh-agent and no terminal, so a key with a passphrase can only hang or fail. Point -i at a passphrase-less key reserved for backups, and confirm with BatchMode=yes, which refuses to prompt rather than waiting for someone who is not there.</p></dd><dt>sync runs cleanly but files deleted at the source are still on the destination.</dt><dd><pre tabindex="0"><code>grep -i deni ~/relayium-sync.log</code></pre><p>Over a relayium:// destination, deletion is a receiver-side opt-in: without serve --allow-delete on the other end the deletions are skipped and reported back as denied, which is why the log has the answer and the exit code does not. Restart that listener with --allow-delete. Over an SSH destination there is no listener to ask, so a denial is not the explanation — check that --delete is actually on the crontab line, since without it sync only ever adds and updates.</p></dd><dt>sync refuses --delete outright.</dt><dd><pre tabindex="0"><code>relayium sync ~/documents user@backup-server:/srv/backups/ --delete
+# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).</code></pre><p>The source resolved to no files, so the mirror would have emptied the destination. That refusal is deliberate. Check the path for a typo, and check that anything mounted there is actually mounted at the time cron fires rather than only when you are logged in.</p></dd><dt>The backup runs, exits 0, and is not what you think it is.</dt><dd><pre tabindex="0"><code>ssh user@backup-server command -v relayium</code></pre><p>push falls back to a plain tar stream over SSH when the remote has no relayium. Your files arrive, so nothing complains — but that path has no per-file SHA-256 verification and no up-front collision check, which are the two reasons to schedule this rather than scp, and tar -x -k can leave a batch partly applied. Install the CLI on the destination to get them back. sync does not have this failure mode because it has no fallback at all: it fails loudly instead.</p></dd></dl></div>
       <h2>Frequently asked questions</h2>
       <h3>Does the backup server need relayium installed?</h3>
       <p>It depends on the command. push works either way: with relayium installed it uses the native protocol (an up-front collision check, plus a SHA-256 on every file it transfers); without it, push falls back to a plain tar stream over SSH, so a bare server still works but nothing is verified per file. sync always needs relayium&#39;s native protocol on the remote — there&#39;s no tar fallback for sync, so install it there first.</p>
