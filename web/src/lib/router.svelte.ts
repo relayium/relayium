@@ -104,15 +104,33 @@ export function setNavGuard(g: (() => NavVerdict) | null): void {
   navGuard = g;
 }
 
+// The only fragment shape navigate() will carry: "#" plus a plain element id.
+// It is appended to a pathname this file chose, so the allowlist is what keeps
+// the parameter from becoming a way to push an arbitrary URL — no "/", "?" or
+// second "#" to change the path or query, and no "=" so it can never spell a
+// pairing code ("#c=<code>"), which routeFromLocation reads as "cross" whatever
+// the path says.
+const FRAGMENT_RE = /^#[A-Za-z0-9_-]+$/;
+
 /** Switch tabs without reloading: drop any active code room, rewrite the URL,
  *  and update the route. Clearing the room makes App's effect reconnect the
- *  signaling socket to the room-less (LAN) endpoint, so no page reload is needed. */
-export function navigate(r: Route): void {
+ *  signaling socket to the room-less (LAN) endpoint, so no page reload is needed.
+ *
+ *  `fragment` ("#compare") names a place on the target page. It is part of the
+ *  navigation rather than something the caller adds afterwards because a caller
+ *  cannot know when "afterwards" is: a guard that answers with a promise commits
+ *  long after this function has returned. It is written in the same history
+ *  entry as the path, exactly when the navigation commits and never otherwise —
+ *  a declined, discarded or no-op navigation leaves the current entry's URL
+ *  alone. Anything that is not a plain "#id" is dropped and the navigation goes
+ *  ahead without it. */
+export function navigate(r: Route, fragment = ""): void {
   if (r === route) return; // already on this tab — don't tear down the room / abort a transfer
-  if (!navGuard) return commitNavigation(r);
+  const hash = FRAGMENT_RE.test(fragment) ? fragment : "";
+  if (!navGuard) return commitNavigation(r, hash);
   const verdict = navGuard();
   if (verdict === false) return; // e.g. user declined the "interrupt transfer?" confirm
-  if (verdict === true) return commitNavigation(r);
+  if (verdict === true) return commitNavigation(r, hash);
   // A pending question. Nothing is torn down until it is answered, so a user who
   // cancels keeps the transfer they were asked about.
   //
@@ -123,12 +141,17 @@ export function navigate(r: Route): void {
   // them off the page they are now on.
   const from = route;
   void verdict.then((ok) => {
-    if (ok && route === from) commitNavigation(r);
+    if (ok && route === from) commitNavigation(r, hash);
   });
 }
 
-/** The navigation itself, once nothing stands in its way. */
-function commitNavigation(r: Route): void {
+/** The navigation itself, once nothing stands in its way. `hash` is "" or an
+ *  already-validated fragment.
+ *
+ *  The URL is written BEFORE the route flips. A page that reads `location.hash`
+ *  as it mounts (CrossPage's `#compare`) mounts because of that flip, so it must
+ *  find the hash already there. */
+function commitNavigation(r: Route, hash: string): void {
   if (r === route) return;
   const pathname =
     r === "cross" ? CROSS_PATH
@@ -143,6 +166,6 @@ function commitNavigation(r: Route): void {
     : r === "magic-link" ? MAGIC_PATH
     : LAN_PATH;
   clearRoom(); // leaving a 2-peer code room rebinds the socket via App's effect
-  history.pushState({}, "", pathname);
+  history.pushState({}, "", pathname + hash);
   route = r;
 }

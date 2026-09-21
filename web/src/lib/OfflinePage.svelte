@@ -10,7 +10,7 @@
   import { session } from "./auth.svelte";
   import { setLoginOpen } from "./login.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
-  import { navigate, currentRoute, PRICING_PATH, CROSS_PATH } from "./router.svelte";
+  import { navigate, PRICING_PATH, CROSS_PATH } from "./router.svelte";
   import PageFooter from "./PageFooter.svelte";
   import Icon from "./Icon.svelte";
   import Group from "./ui/Group.svelte";
@@ -24,14 +24,18 @@
   // to render an identical copy; it now links to the one that exists. The hash
   // rides on the same in-app navigation, and the cross page opens and scrolls
   // to it on mount.
-  const compareHref = `${CROSS_PATH}#compare`;
+  const compareHash = "#compare";
+  const compareHref = `${CROSS_PATH}${compareHash}`;
   function goCompare(e: MouseEvent) {
     e.preventDefault();
-    navigate("cross");
-    // The navigation guard may defer the switch behind a confirm (an upload in
-    // flight); the hash is added only once the route has actually moved, so a
-    // deferred or declined navigation never leaves it on THIS page's entry.
-    if (currentRoute() === "cross") history.replaceState(history.state, "", compareHref);
+    // The hash is handed to the router instead of being written here, because
+    // this handler cannot know when the navigation happens: the guard may put a
+    // confirm in front of it (an upload in flight), and the route then moves
+    // long after this function has returned. The router writes the hash in the
+    // same history entry as the path, at the moment it commits — so a confirmed
+    // navigation still lands on the table, and a deferred or declined one never
+    // leaves `#compare` on THIS page's entry.
+    navigate("cross", compareHash);
   }
 </script>
 

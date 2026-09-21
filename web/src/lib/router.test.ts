@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   routeFromLocation as rfl, downloadId, CROSS_PATH, CLI_PATH, APPS_PATH, DEVICE_INBOX_PATH,
-  VERIFY_EMAIL_PATH, RESET_PASSWORD_PATH, MAGIC_PATH,
+  VERIFY_EMAIL_PATH, RESET_PASSWORD_PATH, MAGIC_PATH, OFFLINE_PATH,
   navigate, currentRoute, setNavGuard, syncRouteFromLocation,
 } from "./router.svelte";
 import { readFileSync } from "node:fs";
@@ -105,6 +105,9 @@ describe("routeFromLocation with a pairing code", () => {
 
 describe("navigate", () => {
   afterEach(() => {
+    // First, so a case that failed before its own mockRestore() cannot leave a
+    // history spy behind for the reset below and for every case after it.
+    vi.restoreAllMocks();
     setNavGuard(null);
     history.replaceState({}, "", "/");
     syncRouteFromLocation(); // reset route to "lan" between cases
@@ -174,6 +177,140 @@ describe("navigate", () => {
     await Promise.resolve();
     expect(currentRoute()).toBe("apps");
     expect(location.pathname).toBe(APPS_PATH);
+  });
+
+  it("writes the fragment only once a promised guard has said yes", async () => {
+    // The offline page's "compare" link under an upload in flight: the answer
+    // arrives after navigate() has returned, so a caller cannot add the hash
+    // itself — it has to travel with the navigation.
+    navigate("offline");
+    let answer: (ok: boolean) => void = () => {};
+    setNavGuard(() => new Promise<boolean>((r) => { answer = r; }));
+    const push = vi.spyOn(history, "pushState");
+    navigate("cross", "#compare");
+    expect(push).not.toHaveBeenCalled(); // nothing written while the question is open
+    expect(location.pathname + location.hash).toBe(OFFLINE_PATH);
+    answer(true);
+    await vi.waitFor(() => expect(currentRoute()).toBe("cross"));
+    expect(location.pathname + location.search + location.hash).toBe(`${CROSS_PATH}#compare`);
+    expect(push).toHaveBeenCalledTimes(1);
+    push.mockRestore();
+  });
+
+  it("carries a fragment into the pushed URL, written before the route flips", () => {
+    // CrossPage reads location.hash as it mounts, and it mounts because the
+    // route changed — so the hash has to be in the URL first, and in the SAME
+    // entry rather than patched on by a second history call.
+    const seen: string[] = [];
+    const real = history.pushState.bind(history);
+    const push = vi.spyOn(history, "pushState").mockImplementation((...args) => {
+      seen.push(currentRoute());
+      real(...args);
+    });
+    const replace = vi.spyOn(history, "replaceState");
+    navigate("cross", "#compare");
+    expect(push.mock.calls).toEqual([[{}, "", "/cross-network#compare"]]);
+    expect(replace).not.toHaveBeenCalled();
+    expect(seen).toEqual(["lan"]); // the old route was still current when the URL was written
+    expect(currentRoute()).toBe("cross");
+    expect(location.pathname + location.search + location.hash).toBe("/cross-network#compare");
+    push.mockRestore();
+    replace.mockRestore();
+  });
+
+  it("pushes exactly the bare path when no fragment is given", () => {
+    // Every call site but one. The string is pinned, not derived, so a default
+    // that started appending anything ("#", "?") would show up here.
+    const push = vi.spyOn(history, "pushState");
+    navigate("cross");
+    expect(push.mock.calls).toEqual([[{}, "", "/cross-network"]]);
+    expect(location.pathname + location.search + location.hash).toBe("/cross-network");
+    push.mockRestore();
+  });
+
+  it("leaves the current entry untouched when a promised guard says no", async () => {
+    navigate("offline");
+    const before = history.length;
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    setNavGuard(() => Promise.resolve(false));
+    navigate("cross", "#compare");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(currentRoute()).toBe("offline");
+    expect(location.pathname + location.search + location.hash).toBe(OFFLINE_PATH);
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    expect(history.length).toBe(before);
+    push.mockRestore();
+    replace.mockRestore();
+  });
+
+  it("leaves the current entry untouched when the guard says no synchronously", () => {
+    navigate("offline");
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    setNavGuard(() => false);
+    navigate("cross", "#compare");
+    expect(currentRoute()).toBe("offline");
+    expect(location.pathname + location.search + location.hash).toBe(OFFLINE_PATH);
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    push.mockRestore();
+    replace.mockRestore();
+  });
+
+  it("discards the fragment along with a late answer once the route has moved", async () => {
+    navigate("offline");
+    let answer: (ok: boolean) => void = () => {};
+    setNavGuard(() => new Promise<boolean>((r) => { answer = r; }));
+    navigate("cross", "#compare");
+    setNavGuard(null);
+    navigate("apps"); // the user went somewhere else while the dialog was open
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    answer(true); // the stale "cross#compare" answer arrives now
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(currentRoute()).toBe("apps");
+    expect(location.pathname + location.search + location.hash).toBe(APPS_PATH);
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    push.mockRestore();
+    replace.mockRestore();
+  });
+
+  it("does not write a fragment when already on the target route", () => {
+    navigate("cross");
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    navigate("cross", "#compare");
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    expect(location.pathname + location.search + location.hash).toBe("/cross-network");
+    push.mockRestore();
+    replace.mockRestore();
+  });
+
+  it("drops anything that is not a plain #id and navigates without it", () => {
+    // The fragment is concatenated onto a path, so this list is the ways a
+    // string could turn that into a different URL — or, for "#c=", into a
+    // pairing code that routeFromLocation reads as "cross" on any path.
+    const hostile = [
+      "compare", "#", "##compare", "#a b", "#c=424242", "#compare\n", "#x/../y",
+      "?q=1#compare", "/evil#compare", "//evil.example/#compare", "https://evil.example/#x",
+      "#compare?x=1", "#%63=424242",
+    ];
+    for (const fragment of hostile) {
+      const push = vi.spyOn(history, "pushState");
+      navigate("apps", fragment);
+      expect(push.mock.calls, JSON.stringify(fragment)).toEqual([[{}, "", "/apps"]]);
+      expect(currentRoute(), JSON.stringify(fragment)).toBe("apps");
+      expect(location.pathname + location.search + location.hash, JSON.stringify(fragment)).toBe("/apps");
+      push.mockRestore();
+      history.replaceState({}, "", "/");
+      syncRouteFromLocation();
+    }
   });
 
   it("switches to verify-email and reset-password and back to their paths", () => {
