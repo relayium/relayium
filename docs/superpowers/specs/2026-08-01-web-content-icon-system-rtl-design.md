@@ -90,3 +90,12 @@ CLI's other working emoji, Me/account chrome, transfer status symbols, route arr
 and native clients remain separate. A later batch may consolidate content icon size
 tokens, but this batch does not add a global icon class or alter typography/color
 tokens.
+
+> **Status 2026-09-21 — closed (owner decision): accepted as the current state, no
+> follow-up batch scheduled.** Measured on `main`: the symbols still written as text are
+> fourteen lines in each maintained catalogue (`web/src/lib/i18n/en.ts`, `zh.ts`) —
+> eleven `✓`/`✗` transfer-status marks, plus `📥` on the incoming-request head, `🔒` on
+> the zero-knowledge note and `⚠️` on the burn-after-read warning — and six lines in
+> components (`MePage.svelte` 3, `CommandBlock.svelte` 2, `HomeSections.svelte` 1).
+> Trigger to migrate them: the next redesign of the Me page or of the transfer-status
+> rows. Native clients remain out of scope, as above.

@@ -61,6 +61,11 @@ Hard invariants:
   CodePairing actions, peer-card actions and adjacent availability callout together;
   changing only three emoji would make one workflow less consistent.
 
+  > **Status 2026-09-21 — closed (owner decision): substantially completed.** Measured
+  > on `main`: `CodePairing.svelte` and `PeerLink.svelte` carry no emoji and fourteen
+  > components render through `Icon`; no separate icon batch is scheduled. What is left
+  > is listed, and accepted as it is, in the content-icon spec's Deferred section.
+
 Known, deferred edge cases:
 
 - duplicate device names remain ambiguous; a localized, protocol-aware identity
