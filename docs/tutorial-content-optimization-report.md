@@ -34,7 +34,7 @@
 > | 12 | 文章元数据 + 五类重组 | ✅ **已完成**（2026-08-06 复核）：`content/taxonomy.mjs` 显式指派 37 篇的分组与组内阅读顺序，五个 GROUPS，zh 标签可区分，**URL 一个没动**。原判「需要动 URL」是当时自加的假设而非需求本身。提交 `abd5a2d0` |
 > | 13 | `/how-to/`、`/compare/` 根 + 面包屑 + sitemap 权重 | ✅ | 两个根已是真 hub（`5e4addaf`）；`article-template.mjs` 已出面包屑 + `BreadcrumbList`；hub priority 已是 0.8 |
 > | 14 | /cli 与 cli-* 主从关系 | ✅ | `/cli` 外壳链 6 篇 CLI 文章（`shells.mjs` + `cli-articles.mjs`），文章侧经 `install-section` 指回 `relayium.com/cli` |
-> | 15 | en 首页与落地页区块契约 / 非英语 footer 标注 /pricing 为英文 | ⏳ **一半已取代、一半仍开**（2026-08-06 复核）：`/pricing` 语言标注曾实现（`6f4669fc`）后被**撤销**（`deebc8da`）——前提是错的，九种语言都有完整的 33 字段 `pricingPage`，标注等于用读者自己的语言告诉他这页不是他的语言；`pricing-label.test.mjs` 已反转为断言「任何标注都不得否认自身语言」。**仍开的是区块契约那一半**：en 首页无 compare 区块、learn 区未分组。判定为差异而非缺陷——页脚已链 guides hub，其 compare 组两次点击可达全部 12 篇 |
+> | 15 | en 首页与落地页区块契约 / 非英语 footer 标注 /pricing 为英文 | ✅ **已结案**（2026-09-21 Owner 决定：接受 en SPA 首页与静态落地页的区块差异，不再作为待办；原标记“⏳ 一半已取代、一半仍开”，2026-08-06 复核）：`/pricing` 语言标注曾实现（`6f4669fc`）后被**撤销**（`deebc8da`）——前提是错的，九种语言都有完整的 33 字段 `pricingPage`，标注等于用读者自己的语言告诉他这页不是他的语言；`pricing-label.test.mjs` 已反转为断言「任何标注都不得否认自身语言」。**仍开的是区块契约那一半**：en 首页无 compare 区块、learn 区未分组。判定为差异而非缺陷——页脚已链 guides hub，其 compare 组两次点击可达全部 12 篇 |
 
 ---
 

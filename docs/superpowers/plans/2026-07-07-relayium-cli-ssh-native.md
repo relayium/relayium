@@ -1700,4 +1700,4 @@ git commit -m "test(cli): opt-in E2E push over ssh localhost"
 ## Deferred within Phase 1 (tracked, not silently dropped)
 - `push -` (stdin body) and `pull` of a single file to stdout: parsing exists; streaming a stdin source of unknown size needs a manifest tweak (`Size == -1` → stream-until-EOF frame). Add as a fast-follow task once the batch path is proven.
 - TTY-aware progress bar: current `progressFn` prints per-file completion lines only. Rich progress is UX polish, not core. **Status 2026-09-21: completed** — `progressFn` is replaced by `sendProgress`: a live in-place bar for the file in flight on a terminal, the unchanged one-line-per-file output everywhere else, used by `push`, `relayium://` daemon sends, `sync` and cross-network `send`.
-- Big-single-file resume in **zero-dep** mode (tar isn't resumable): documented limitation; full-mode resume (Task 5) covers the important case.
+- **Closed 2026-09-21 — accepted as a permanent limitation (owner decision), no longer a deferred item.** Big-single-file resume in **zero-dep** mode (tar isn't resumable): documented limitation; full-mode resume (Task 5) covers the important case.
