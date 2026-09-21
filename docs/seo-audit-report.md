@@ -13,7 +13,7 @@
 > | 1.6 尾斜杠 | ✅ |
 > | 2.1 sitemap `xhtml:link` | 🚫 **决定不做**（长期项，405×9 会让文件膨胀，收益有限；见 DECISION-LOG 2026-08 收益不足条目） |
 > | 2.2 文章 JSON-LD | ✅ 补 `datePublished`（取 git 首次提交日，非编造）、`image`、publisher/author logo |
-> | 2.3 OG 补全 | ✅ 4 个模板补 `og:site_name` + `og:image:width/height/alt`（legal 模板本就无 OG，未新增） |
+> | 2.3 OG 补全 | ✅ 4 个模板补 `og:site_name` + `og:image:width/height/alt`；legal 模板于 2026-09-21 补齐同一组 OG/Twitter 标签（`legal-template.mjs`，复用页面自身的标题与描述，无新增文案；45 个法律页已重新生成） |
 > | 3.3 相关文章策展 | ✅ **已完成**：`web/scripts/pages/content/related-map.mjs` 每篇策展 4 条，不再是 36 条全网格；`related-map.test.mjs` 对着真实文章列表校验 |
 > | 4.1 批次上限 1,000 vs 10 | ✅ 真值 1,000；已改 `index.html`×2、`llms.txt`×2，并加回归测试锁死 |
 > | 5.3 `pt_BR` | ✅ **确认无需改**：GLOSSARY.md 已把葡语语域定为 pt-BR only（`arquivo`/`tela`/`celular`），`pt_BR` 与译文一致 |

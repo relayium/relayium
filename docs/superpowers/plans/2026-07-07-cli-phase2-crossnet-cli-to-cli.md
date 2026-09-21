@@ -1909,6 +1909,6 @@ git commit -m "test(cli): in-process end-to-end cross-network transfer over rela
 
 ## Deferred within this spec (tracked, not dropped)
 - Real opt-in E2E against a **deployed** rendezvous (Task 9 covers in-process; a `RELAYIUM_E2E_CROSSNET=1`-gated real run is a nice manual extra but not required for the CI gate).
-- Progress reporting for cross-network transfers (reuse Phase-1 `SendOpts.Progress`; wire a TTY bar later).
+- Progress reporting for cross-network transfers (reuse Phase-1 `SendOpts.Progress`; wire a TTY bar later). **Status 2026-09-21: completed for the sender** — `runSendCross` passes a `sendProgress` reporter (`server/cmd/relayium/progress.go`), tested through the `crossnetSendDial` seam. Receiver-side progress stays open as its own item: `xfer.RecvOpts` has no progress hook.
 - `RaceDirect` losing-goroutine connection cleanup on the all-error path (bounded; noted in Task 5). **Status 2026-09-21: completed** — `server/internal/connect/direct.go` reaps the stragglers on the winner path and on the all-error path (`reap(total-consumed, nil)`), and the results channel is sized to the producer count.
 - STUN-based candidates / NAT hole-punch (out of scope per spec §2) — expands free-direct coverage to double-NAT peers in a later phase.

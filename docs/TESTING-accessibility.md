@@ -48,10 +48,15 @@ What is true after the correction, state by state:
 - **Message session** — the workspace is scanned with **both lanes live** after
   text consent, so the message surface is inside the scanned document. What is
   *not* separately asserted is a message-session-only scope.
-- **Post-drop-resume completion** — **not** scanned by any runner today. The
-  resume itself is proved byte-exact in `mixed-link.mjs`; its terminal card is
-  not put through axe. This is a real gap, and it is stated here rather than
-  inherited from a row that was never running.
+- **Post-drop-resume completion** — scanned since 2026-09-21. After the
+  `byte-resume` act is recorded, `mixed-link.mjs` proves each tab's card
+  terminal (one successful card for the file, no progress bar, a status line, a
+  close button, nothing else in flight) and then scans it with
+  `scanLiveState(…, { context: XFER.card })`: tab A's send card and tab B's
+  receive card. It sits after the act on purpose — axe's injection perturbs the
+  write throttle, and by then every byte, PeerConnection and SAS read has been
+  taken. It is a check inside the existing scene, not a new act. Until that date
+  this state was scanned by no runner, which this document recorded as a gap.
 
 ## 2. What automation cannot decide
 
