@@ -181,6 +181,63 @@ jobs:
             exit 1
           fi
 
+      # Green checks on HEAD are not evidence that the GO lane ran. go.yml is
+      # path-filtered, HEAD is usually a docs- or web-only commit, and on such a
+      # commit the step above passes on the web and hygiene checks alone —
+      # observed on push tip 7d3b2923: "29 check runs green", none of them from
+      # go.yml — while every binary this workflow publishes is built from
+      # server/. (On 2026-09-20 a manual release had to dispatch go.yml by hand
+      # for exactly this reason.)
+      #
+      # So this step requires a successful go.yml run on a commit whose Go-lane
+      # inputs are IDENTICAL to HEAD's: any commit from E — the last one that
+      # changed server/ or go.yml's other `paths:` — to HEAD, each verified with
+      # `git diff --quiet`. Not "on E": GitHub starts a push workflow once per
+      # push, on the push tip, so in a batch push E itself never gets a run and
+      # never can. scripts/release/go-evidence.sh holds the rules (which events
+      # count, newest run decides, unusable evidence refuses) and
+      # scripts/test/go-evidence-test.sh runs this very step against a stub `gh`.
+      #
+      # Deliberately NOT conditioned on `inputs.force`: force waives "nothing
+      # under server/ changed", never "nobody tested what is being shipped".
+      # Needs the full history the checkout above already fetches, and only
+      # reads the Actions API, which `actions: write` covers.
+      - name: Require a successful go.yml run for the server tree being released
+        if: steps.scan.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          withheld() {
+            # withheld HEADING DETAIL — the same summary block for every refusal.
+            {
+              echo "### Release withheld — $1 on \`$sha\`"
+              echo '```'
+              printf '%s\n' "$2"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          }
+          # The script fetches (one read per candidate commit, every page, no
+          # fallback) and decides. It exits 1 when no tree-identical commit from
+          # E to HEAD carries a successful go.yml run — naming E, every commit
+          # it looked at and what it found there — and 3 when the evidence
+          # cannot prove anything: a failed read, an API error body, a missing
+          # page, runs for a different commit, a shallow clone.
+          if verdict="$(sh scripts/release/go-evidence.sh require "$sha")"; then
+            echo "Go evidence for \`$sha\`: $verdict" >> "$GITHUB_STEP_SUMMARY"
+          else
+            rc=$?
+            if [ "$rc" -eq 1 ]; then
+              withheld "no successful go.yml run covers the server tree" "$verdict"
+              echo "::error::the Go lane never succeeded on the server tree of $sha; refusing to tag it"
+            else
+              withheld "the Go evidence could not be established" "$verdict"
+              echo "::error::could not establish that the Go lane verified the server tree of $sha; refusing to tag it"
+            fi
+            exit 1
+          fi
+
       - name: Choose the next version
         id: ver
         if: steps.scan.outputs.skip == 'false'

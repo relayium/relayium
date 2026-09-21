@@ -413,6 +413,20 @@ jobs:
       # runner image; no token, no network.
       - name: checks-green.sh and the auto-release gate step refuse without evidence
         run: sh scripts/test/checks-green-test.sh
+      # Green checks on HEAD do not show that the GO lane ran: go.yml is
+      # path-filtered and HEAD is usually a docs commit, so the gate above
+      # passed docs-only push tips on the web and hygiene checks alone while
+      # the binaries being published are built from server/.
+      # scripts/release/go-evidence.sh requires a successful go.yml run on a
+      # commit whose Go-lane inputs are identical to HEAD's. The suite shows
+      # the hole against the unchanged HEAD gate, runs the rules over fixtures
+      # and over real throw-away git histories against a stub `gh`, probes each
+      # refusal by mutation, executes the step as written in auto-release.yml,
+      # and fails when the script's pathspec list drifts from go.yml's
+      # `on.push.paths` or go.yml gains a job-level `if:`. Offline: git, jq and
+      # bash, all on the runner image; no token, no network.
+      - name: go-evidence.sh and the auto-release Go-evidence step refuse without a go.yml run
+        run: sh scripts/test/go-evidence-test.sh
 
   macos-ui-selection:
     runs-on: ubuntu-latest
