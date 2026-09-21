@@ -93,3 +93,35 @@ func TestProgressTTYThrottle(t *testing.T) {
 		t.Fatalf("expected 1 paint under throttle, got %d; out=%q", n, buf.String())
 	}
 }
+
+// Once the last byte is handed to the network an upload is waiting for the
+// server, which on a slow path is most of its duration. The bar says so instead
+// of freezing a hair short of 100% -- on a TTY only, and never after finish().
+func TestProgressConfirmingSaysWhatTheUploadIsWaitingFor(t *testing.T) {
+	var buf bytes.Buffer
+	p := &progressBar{w: &buf, tty: true, glyph: "⇡", verb: "Uploading", now: clockFrom(200 * time.Millisecond)}
+	p.update(0, 6_500_000)
+	p.update(6_400_000, 6_500_000)
+	buf.Reset()
+	p.confirming()
+	got := buf.String()
+	if !strings.HasPrefix(got, "\r\033[K") || !strings.Contains(got, "100%") || !strings.Contains(got, "waiting for the server to confirm") {
+		t.Fatalf("confirming line = %q", got)
+	}
+
+	p.finish()
+	buf.Reset()
+	p.confirming()
+	if buf.Len() != 0 {
+		t.Fatalf("painted after finish: %q", buf.String())
+	}
+
+	var plain bytes.Buffer
+	np := &progressBar{w: &plain, glyph: "⇡", verb: "Uploading", now: clockFrom(200 * time.Millisecond)}
+	np.update(0, 100)
+	plain.Reset()
+	np.confirming()
+	if plain.Len() != 0 {
+		t.Fatalf("non-TTY output gained a line: %q", plain.String())
+	}
+}

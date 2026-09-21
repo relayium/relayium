@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/relayium/relayium/internal/storecrypto"
@@ -148,9 +149,46 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 		onProgress = func(sent int64) { c.Progress(sent, total) }
 	}
 
+	// The wait for the server's answer is bounded here rather than by the
+	// transport's ResponseHeaderTimeout; confirmTimeout says why.
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+
+	// Confirming paints into the caller's progress line, and the caller clears
+	// that line as soon as Upload returns -- so it must never run after that, nor
+	// alongside it. A server that answers before the hook is reached simply never
+	// sees it called.
+	var hookMu sync.Mutex
+	returned := false
+	defer func() {
+		hookMu.Lock()
+		returned = true
+		hookMu.Unlock()
+	}()
+
 	pr, pw := io.Pipe()
 	go func() {
-		pw.CloseWithError(writeUploadBody(pw, encManifest, files, key, onProgress))
+		werr := writeUploadBody(pw, encManifest, files, key, onProgress)
+		pw.CloseWithError(werr)
+		if werr != nil {
+			return
+		}
+		hookMu.Lock()
+		if !returned && c.Confirming != nil {
+			c.Confirming()
+		}
+		hookMu.Unlock()
+		wait := c.confirmTimeout(total)
+		if wait <= 0 {
+			return
+		}
+		t := time.NewTimer(wait)
+		defer t.Stop()
+		select {
+		case <-t.C:
+			cancel(&UploadUnconfirmedError{Waited: wait})
+		case <-ctx.Done():
+		}
 	}()
 
 	q := uploadQuery(opt)
@@ -169,9 +207,15 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 	httpc := c.HTTP
 	if httpc == nil {
 		httpc = http.DefaultClient
+	} else if httpc == c.stdHTTP && c.uploadHTTP != nil {
+		httpc = c.uploadHTTP
 	}
 	resp, err := httpc.Do(req)
 	if err != nil {
+		var unconfirmed *UploadUnconfirmedError
+		if errors.As(context.Cause(ctx), &unconfirmed) {
+			return "", "", 0, unconfirmed
+		}
 		return "", "", 0, err
 	}
 	defer resp.Body.Close()
@@ -191,6 +235,20 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 		return "", "", 0, err
 	}
 	return out.ID, storecrypto.EncodeKey(key), out.ExpiresAt, nil
+}
+
+// UploadUnconfirmedError means the whole body was written and the server did
+// not answer within confirmTimeout. Whether the upload arrived is unknown, and
+// the message has to say so: the POST is not idempotent, so Upload never retries
+// it -- a second attempt that also lands is a second stored, metered file.
+type UploadUnconfirmedError struct{ Waited time.Duration }
+
+func (e *UploadUnconfirmedError) Error() string {
+	return fmt.Sprintf("the server did not confirm the upload within %s of the last byte being sent — "+
+		"the link is very slow, or the server is not answering\n"+
+		"  nothing was retried. Run the command again for a link; if this upload did arrive after all, "+
+		"it is listed on your account page in the browser, where it can be deleted",
+		e.Waited.Round(time.Second))
 }
 
 // writeUploadBody writes the framed request body (manifest header + each

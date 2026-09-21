@@ -49,6 +49,22 @@ type Client struct {
 	// resume loop — which only reacts to read errors/EOF — never engages. 0 uses
 	// defaultIdleTimeout; overridable in tests.
 	idleTimeout time.Duration
+
+	// Confirming, if set, is called once during Upload when the last byte of the
+	// body has been handed to the transport and the client starts waiting for the
+	// server's answer. On a slow link that wait is most of the upload -- see
+	// confirmTimeout -- so a caller that paints progress needs to say so instead
+	// of sitting at "100%".
+	Confirming func()
+
+	// uploadHTTP carries the upload POST. It has no ResponseHeaderTimeout; Upload
+	// bounds the wait itself, by confirmTimeout. stdHTTP remembers what NewClient
+	// put in HTTP, so a caller that replaced HTTP keeps being obeyed.
+	uploadHTTP *http.Client
+	stdHTTP    *http.Client
+
+	confirmBase    time.Duration
+	confirmMinRate int
 }
 
 // defaultIdleTimeout is the default per-Read stall bound for streaming bodies.
@@ -67,13 +83,77 @@ func NewClient(server string) *Client {
 	// transport, and let the body stream for as long as it needs — an
 	// interactive `relayium up/down` can always be Ctrl-C'd. Per-request
 	// deadlines still ride on the ctx each method threads through.
-	tr := http.DefaultTransport.(*http.Transport).Clone()
-	tr.ResponseHeaderTimeout = 30 * time.Second
+	return newClientWith(server, http.DefaultTransport.(*http.Transport), defaultClientTimeouts)
+}
+
+// clientTimeouts are the phase bounds NewClient installs; a test scales them
+// down together with the link it simulates.
+type clientTimeouts struct {
+	// responseHeader bounds time-to-first-response-byte for every request EXCEPT
+	// the upload POST.
+	responseHeader time.Duration
+	// confirmBase and confirmMinRate bound the upload POST's wait for an answer;
+	// see confirmTimeout.
+	confirmBase    time.Duration
+	confirmMinRate int // bytes per second
+}
+
+var defaultClientTimeouts = clientTimeouts{
+	responseHeader: 30 * time.Second,
+	confirmBase:    30 * time.Second,
+	confirmMinRate: 32 << 10,
+}
+
+func newClientWith(server string, base *http.Transport, to clientTimeouts) *Client {
+	tr := base.Clone()
+	tr.ResponseHeaderTimeout = to.responseHeader
+	// A second transport, not a per-request option: net/http has no per-request
+	// header timeout, and the HTTP/2 one starts when the body has been written
+	// locally, which is the wrong moment for an upload (confirmTimeout).
+	up := base.Clone()
+	up.ResponseHeaderTimeout = 0
+	std := &http.Client{Transport: &uaTransport{base: tr}}
 	return &Client{
-		Server: server,
-		HTTP:   &http.Client{Transport: &uaTransport{base: tr}},
-		sleep:  time.Sleep,
+		Server:         server,
+		HTTP:           std,
+		stdHTTP:        std,
+		uploadHTTP:     &http.Client{Transport: &uaTransport{base: up}},
+		sleep:          time.Sleep,
+		confirmBase:    to.confirmBase,
+		confirmMinRate: to.confirmMinRate,
 	}
+}
+
+// maxUnconfirmedBytes is how much of an upload can plausibly still be in flight
+// when the last byte has been written locally: the kernel's send buffer plus the
+// HTTP/2 flow-control window. It is a ceiling on what the wait is scaled by, not
+// a measurement -- past it, a longer wait would be waiting for nothing.
+const maxUnconfirmedBytes = 16 << 20
+
+// confirmTimeout is how long Upload waits for the server's answer once the body
+// has been written.
+//
+// "Written" means handed to the socket buffer and the HTTP/2 window, NOT
+// received. From a host whose local write is fast and whose path to the server
+// is slow -- a cloud VM on another continent -- megabytes are still in flight at
+// that moment, and the server answers only when the last one arrives. A flat
+// 30 s there failed healthy uploads with "http2: timeout awaiting response
+// headers" (hands-on, 2026-09-21: 6.2 MB, the bar at 99% a second in). So the
+// wait is the flat allowance PLUS the time the unconfirmed tail needs at the
+// slowest path we undertake to wait out. It stays bounded: a server that never
+// answers still ends the command.
+func (c *Client) confirmTimeout(bodyBytes int64) time.Duration {
+	if c.confirmMinRate <= 0 {
+		return c.confirmBase
+	}
+	tail := bodyBytes
+	if tail > maxUnconfirmedBytes {
+		tail = maxUnconfirmedBytes
+	}
+	if tail < 0 {
+		tail = 0
+	}
+	return c.confirmBase + time.Duration(float64(tail)/float64(c.confirmMinRate)*float64(time.Second))
 }
 
 // userAgent is the bounded identifier every request from this package carries.

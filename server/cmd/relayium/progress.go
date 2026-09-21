@@ -128,6 +128,19 @@ func (p *progressBar) rate(done int64, t time.Time) string {
 	return humanBytes(int64(float64(moved)/el)) + "/s"
 }
 
+// confirming replaces the bar with what an upload is actually doing once its last
+// byte has been handed to the network: waiting for the server to say it has it.
+// From a host that writes faster than its path delivers, that wait is most of the
+// upload, and a bar frozen just short of 100% reads as a hang. TTY only -- a
+// non-TTY has already printed its last milestone, and a fast server would make
+// this a line of noise in every log.
+func (p *progressBar) confirming() {
+	if p.finished || !p.tty || !p.started {
+		return
+	}
+	fmt.Fprintf(p.w, "\r\033[K%s 100%%  %s sent — waiting for the server to confirm…", p.glyph, humanBytes(p.total))
+}
+
 // finish clears the in-place TTY line so the command's summary line starts
 // clean. On a non-TTY it does nothing (milestones already printed). Idempotent.
 func (p *progressBar) finish() {

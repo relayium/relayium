@@ -346,6 +346,7 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	}
 	bar := newProgressBar(stderr, "⇡", "Uploading")
 	client.Progress = bar.update
+	client.Confirming = bar.confirming
 
 	id, key, expiresAt, err := client.Upload(context.Background(), paths, cloud.UploadOpts{
 		Burn:         burn,
