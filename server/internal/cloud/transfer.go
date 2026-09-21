@@ -143,21 +143,17 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 		return "", "", 0, err
 	}
 
-	var onProgress func(sent int64)
-	if c.Progress != nil {
-		c.Progress(0, total) // starting line before any bytes stream
-		onProgress = func(sent int64) { c.Progress(sent, total) }
-	}
-
 	// The wait for the server's answer is bounded here rather than by the
 	// transport's ResponseHeaderTimeout; confirmTimeout says why.
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
-	// Confirming paints into the caller's progress line, and the caller clears
-	// that line as soon as Upload returns -- so it must never run after that, nor
-	// alongside it. A server that answers before the hook is reached simply never
-	// sees it called.
+	// Progress and Confirming paint into the caller's progress line, and the
+	// caller clears that line as soon as Upload returns -- so neither may run
+	// after that, nor still be running when it happens. Upload can return while
+	// the writer goroutine is mid-body: a server may refuse (413, 429) before it
+	// has read anything. Both hooks therefore run under hookMu, which the return
+	// path takes before it lets go.
 	var hookMu sync.Mutex
 	returned := false
 	defer func() {
@@ -165,6 +161,18 @@ func (c *Client) Upload(ctx context.Context, paths []string, opt UploadOpts) (id
 		returned = true
 		hookMu.Unlock()
 	}()
+
+	var onProgress func(sent int64)
+	if c.Progress != nil {
+		c.Progress(0, total) // starting line before any bytes stream
+		onProgress = func(sent int64) {
+			hookMu.Lock()
+			defer hookMu.Unlock()
+			if !returned {
+				c.Progress(sent, total)
+			}
+		}
+	}
 
 	pr, pw := io.Pipe()
 	go func() {
