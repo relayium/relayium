@@ -34,7 +34,7 @@
  * `EXPECTED_SCENARIO_COUNT` 校验，删掉一项就会真的报错。
  */
 import { readFileSync } from "node:fs";
-import { apiFixtureScript, AUTH_METHODS, PRICING_ROUTES } from "./a11y-fixtures.mjs";
+import { apiFixtureScript, AUTH_METHODS, FREE_USER_ROUTES, PRICING_ROUTES } from "./a11y-fixtures.mjs";
 import {
   argFlag, fail, launchBrowser, newTab, ok, setWideViewport, startPreview, withWatchdog,
 } from "./harness.mjs";
@@ -782,6 +782,256 @@ const SIGN_IN_TARGETS = [
   { path: "/device-inbox", container: ".dinbox", button: '.dinbox [data-di="sign-in"]' },
 ];
 
+/**
+ * The offline page's "compare" link, end to end in a real engine.
+ *
+ * The comparison table exists ONCE, on the cross-network page
+ * (`ModeCompare.svelte`, `<section id="compare">`). The offline page links to it
+ * (`OfflinePage.svelte` `goCompare` → `navigate("cross", "#compare")`), the
+ * router writes path and fragment in ONE history entry when the navigation
+ * commits, and `CrossPage.svelte` reads `location.hash` as it mounts: it opens
+ * the disclosure that holds the table (signed in) and scrolls the table to the
+ * top of the viewport. Unit and component tests own each of those three pieces;
+ * what none of them can answer is whether the pieces MEET — whether the hash is
+ * already on the URL when the lazily imported page mounts, whether
+ * `scrollIntoView` inside a `<details>` that opened in the same tick moves a
+ * real viewport, and whether Back returns to an offline URL with no fragment
+ * left on it. Those are layout-engine and session-history questions.
+ *
+ * Both session states run, because they are different DOMs and not a matrix for
+ * its own sake: signed out, the link and the table both sit directly on their
+ * pages; signed in, BOTH are inside a folded `Help` disclosure — the reader has
+ * to open one to find the link, and the landing has to open the other for them.
+ * The signed-in session is `a11y-fixtures.mjs`'s existing `FREE_USER_ROUTES`,
+ * answered in the page's own process like every other fixture in this file.
+ *
+ * **What this does NOT cover: the deferred path** — the recorded defect that
+ * d0155fc6 fixed, where the navigation guard answers with a promise (a confirm
+ * dialog) and the fragment has to survive until the reader confirms. The guard
+ * only defers while `App.svelte`'s `busy` is true, i.e. while
+ * `workspace.warnsOnLeave` (a live peer link / transfer / message session) or
+ * `storedReceiver.active()` holds. Both are driven by a peer that has paired
+ * through a real signalling server; this runner talks to `vite preview` and
+ * nothing else, by design (see the file header), and the product exposes no
+ * hook that would let a page fake `busy`. Reverting d0155fc6 leaves every
+ * assertion below green — that was measured, not assumed — so the deferred
+ * path's proof remains `router.test.ts` and `OfflinePage.test.ts`.
+ *
+ * It is a case inside `shellLoginNavScenario` rather than a seventh entry in
+ * `SCENARIOS` because the inventory is pinned by `page-shell-contract.test.mjs`
+ * and both pages are that scenario's own login-gated targets: the two paths and
+ * the two page containers are read from `SIGN_IN_TARGETS`, not retyped.
+ */
+const COMPARE_FRAGMENT = "#compare";
+
+/**
+ * How far ABOVE the viewport's top edge the table's section may rest and still
+ * count as landed: not at all, bar a pixel of sub-pixel rounding.
+ * `scrollIntoView({ block: "start" })` runs while the route's `.page-enter`
+ * entrance animation (`app.css` `fade-up`) is still displacing the page, so
+ * without help the section aligns to the top edge and then settles ABOVE it —
+ * measured at −13.9px signed out and −19.6px / −20.5px signed in — clipping the
+ * table's heading. `ModeCompare.svelte` gives the section a `scroll-margin-top`
+ * for exactly that reason, and this bound is what notices if it goes missing.
+ * The other bound has no slack either: a landing that did not scroll at all
+ * leaves the section more than a full viewport BELOW the top edge.
+ */
+const COMPARE_LANDING_SLACK_PX = 1;
+
+async function offlineCompareLinkCase(browser, base) {
+  const offline = SIGN_IN_TARGETS.find((target) => target.container === ".offlinepage");
+  const cross = SIGN_IN_TARGETS.find((target) => target.container === ".crosspage");
+  if (!offline || !cross) throw new Error("compare link: SIGN_IN_TARGETS no longer names the offline and cross-network pages");
+  const landingUrl = cross.path + COMPARE_FRAGMENT;
+  const linkSelector = `${offline.container} .compare-link a`;
+
+  // One expression for "where did the reader end up", used for the click's
+  // landing and again for Forward, so the two cannot drift apart.
+  const landingProbe = `(() => {
+    const target = document.getElementById('compare');
+    const grid = target ? target.querySelector('[role="table"]') : null;
+    const fold = target ? target.closest('details') : null;
+    const rect = target ? target.getBoundingClientRect() : null;
+    return {
+      url: location.pathname + location.search + location.hash,
+      crossPage: !!document.querySelector(${JSON.stringify(cross.container)}),
+      offlinePage: !!document.querySelector(${JSON.stringify(offline.container)}),
+      targets: document.querySelectorAll('[id="compare"]').length,
+      rows: grid ? grid.querySelectorAll('[role="row"]').length : 0,
+      visible: !!target && (typeof target.checkVisibility === 'function' ? target.checkVisibility() : true),
+      folded: !!fold,
+      foldOpen: fold ? fold.open : null,
+      top: rect ? rect.top : null,
+      height: rect ? rect.height : null,
+      gridTop: grid ? grid.getBoundingClientRect().top : null,
+      viewport: innerHeight,
+      scrollY,
+      // Where the section's top edge would be had nothing scrolled.
+      unscrolledTop: rect ? rect.top + scrollY : null,
+      sameDocument: window.__compareLinkSameDocument === true,
+      historyLength: history.length,
+    };
+  })()`;
+  const landed = `(() => {
+    const target = document.getElementById('compare');
+    if (location.pathname + location.hash !== ${JSON.stringify(landingUrl)} || !target) return false;
+    // Measured only once the page's entrance animation has finished. The scroll
+    // happens while .page-enter is still translating the page, so a reading
+    // (no backticks in this comment: it lives inside a template literal)
+    // taken any earlier sees the section exactly at the top edge and cannot tell
+    // a landing that then settles above it from one that stays put.
+    const entering = document.querySelector('.page-enter');
+    if (!entering || entering.getAnimations().some((a) => a.playState !== 'finished')) return false;
+    const top = target.getBoundingClientRect().top;
+    return top > -${COMPARE_LANDING_SLACK_PX} && top < innerHeight;
+  })()`;
+  const landingFaults = (at, { signedIn, historyLength }) => {
+    const faults = [];
+    if (at.url !== landingUrl) faults.push(`URL is ${at.url}, expected exactly ${landingUrl}`);
+    if (!at.crossPage) faults.push("the cross-network page is not rendered");
+    if (at.offlinePage) faults.push("the offline page is still rendered");
+    if (at.targets !== 1) faults.push(`${at.targets} elements carry id="compare"`);
+    // Header row plus at least one real row: an empty grid is not a comparison.
+    if (at.rows < 2) faults.push(`the comparison grid has ${at.rows} row(s)`);
+    if (!at.visible) faults.push("checkVisibility() false — the table is inside something closed or hidden");
+    // A hidden box that an engine collapses to 0×0 at y=0 would satisfy every
+    // position bound below. (This Chromium keeps a closed <details>' geometry —
+    // measured: full height, never scrolled to — so here it is a belt to
+    // checkVisibility()'s braces, not the check that fires.)
+    if (!(at.height > 0)) faults.push("the table's section has a zero-sized box");
+    if (at.folded && !at.foldOpen) faults.push("the disclosure holding the table is closed");
+    // Vacuity guards, both directions: the signed-in cell exists to exercise the
+    // disclosure, and the signed-out cell to exercise the page without one.
+    if (signedIn && !at.folded) faults.push("signed in, but the table is not inside a disclosure — this cell no longer tests the fold");
+    if (!signedIn && at.folded) faults.push("signed out, but the table is inside a disclosure — this cell no longer tests the unfolded page");
+    if (!(at.top > -COMPARE_LANDING_SLACK_PX && at.top < at.viewport)) {
+      faults.push(`the table's section rests at y=${at.top} in a ${at.viewport}px viewport`);
+    }
+    if (!(at.gridTop >= 0 && at.gridTop < at.viewport)) {
+      faults.push(`the comparison grid starts at y=${at.gridTop}, outside the ${at.viewport}px viewport`);
+    }
+    // "In view" only means "was scrolled to" if it would NOT have been in view
+    // anyway. Should the page ever get short enough for the table to sit above
+    // the fold unscrolled, this cell needs a shorter viewport, not a free pass.
+    if (!(at.unscrolledTop > at.viewport)) {
+      faults.push(`the table sits at y=${at.unscrolledTop} unscrolled, inside the ${at.viewport}px viewport — the scroll assertion is vacuous here`);
+    }
+    if (!(at.scrollY > 0)) faults.push("the document did not scroll");
+    // The link's href is the same URL, so a link that lost its in-app handler
+    // reaches the same place, table open and in view, by LOADING A NEW DOCUMENT
+    // — every bound above holds and the app's state is gone. (Dropping only the
+    // handler's preventDefault() is not observable, here or to a reader: the
+    // router has already pushed this exact URL, so the default action is a
+    // same-URL fragment navigation that neither reloads nor adds an entry.)
+    if (!at.sameDocument) faults.push("the document was reloaded — this was not an in-app navigation");
+    if (at.historyLength !== historyLength) faults.push(`history.length is ${at.historyLength}, expected ${historyLength}`);
+    return faults;
+  };
+
+  const cells = [];
+  for (const signedIn of [false, true]) {
+    for (const [width, height] of [[1440, 900], [390, 844]]) {
+      const cell = `${signedIn ? "signed-in" : "signed-out"}/${width}`;
+      const tab = await newTab(
+        browser,
+        base + offline.path,
+        `try { localStorage.setItem("relayium-lang", "en"); } catch {}\n`
+          + apiFixtureScript(signedIn ? FREE_USER_ROUTES : LOGIN_ROUTES),
+      );
+      await setWideViewport(tab, width, height);
+      // The session decides which branch renders, and a signed-in page paints
+      // the signed-out branch first while `/api/me` is in flight — so wait for
+      // the branch this cell is about, not merely for a link.
+      await tab.waitFor(
+        signedIn
+          ? `!!document.querySelector('${offline.container} .learn details .compare-link a')`
+          : `!!document.querySelector('${offline.button}') && !!document.querySelector('${linkSelector}')`,
+        `${cell}: the offline page's compare link`,
+      );
+
+      const before = await tab.evaluate(`(() => {
+        const links = [...document.querySelectorAll('${linkSelector}')];
+        const fold = links[0].closest('details');
+        return {
+          url: location.pathname + location.search + location.hash,
+          links: links.length,
+          href: links[0].getAttribute('href'),
+          folded: !!fold,
+          foldOpen: fold ? fold.open : null,
+          visible: links[0].checkVisibility(),
+          historyLength: history.length,
+        };
+      })()`);
+      if (
+        before.url !== offline.path || before.links !== 1 || before.href !== landingUrl ||
+        before.folded !== signedIn || (signedIn && (before.foldOpen || before.visible)) ||
+        (!signedIn && !before.visible)
+      ) throw new Error(`${cell}: offline page did not start in the expected state: ${JSON.stringify(before)}`);
+
+      if (signedIn) {
+        // A reader cannot click a link inside a closed disclosure. Open it the
+        // way they would, and require the link to actually become visible.
+        await tab.evaluate(`(() => { document.querySelector('${linkSelector}').closest('details').querySelector('summary').click(); return true; })()`);
+        await tab.waitFor(`document.querySelector('${linkSelector}').checkVisibility()`, `${cell}: the compare link to become visible`, 5000);
+      }
+
+      await tab.evaluate(`(() => {
+        window.__compareLinkSameDocument = true;
+        document.querySelector('${linkSelector}').click();
+        return true;
+      })()`);
+      // No bare sleep: the URL changes synchronously, the page chunk, the
+      // disclosure and the scroll follow it. On timeout, say what was there.
+      try {
+        await tab.waitFor(landed, `${cell}: the comparison table to land in view`, 10_000);
+      } catch (err) {
+        throw new Error(`${err.message} — ${JSON.stringify(await tab.evaluate(landingProbe))}`);
+      }
+      const at = await tab.evaluate(landingProbe);
+      const expected = { signedIn, historyLength: before.historyLength + 1 };
+      const faults = landingFaults(at, expected);
+      if (faults.length) throw new Error(`${cell}: compare link landing — ${faults.join("; ")} — ${JSON.stringify(at)}`);
+
+      // Back: the offline page again, and its URL carries no fragment. One
+      // history entry took the reader there, so one Back brings them home.
+      await tab.evaluate("(() => { history.back(); return true; })()");
+      await tab.waitFor(
+        `location.pathname === ${JSON.stringify(offline.path)} && !!document.querySelector('${linkSelector}')`
+          + ` && !document.querySelector('${cross.container}')`,
+        `${cell}: Back to return to the offline page`,
+        10_000,
+      );
+      const back = await tab.evaluate(`({
+        url: location.pathname + location.search + location.hash,
+        sameDocument: window.__compareLinkSameDocument === true,
+        table: !!document.getElementById('compare'),
+      })`);
+      if (back.url !== offline.path || !back.sameDocument || back.table) {
+        throw new Error(`${cell}: Back from the comparison table — ${JSON.stringify(back)}, expected exactly ${offline.path}`);
+      }
+
+      // Forward: the SAME entry has to carry the fragment, or a reader who goes
+      // back and forward loses the table they were reading. Same probe, same
+      // bounds, and history must not have grown.
+      await tab.evaluate("(() => { history.forward(); return true; })()");
+      try {
+        await tab.waitFor(landed, `${cell}: Forward to land on the comparison table again`, 10_000);
+      } catch (err) {
+        throw new Error(`${err.message} — ${JSON.stringify(await tab.evaluate(landingProbe))}`);
+      }
+      const again = await tab.evaluate(landingProbe);
+      const forwardFaults = landingFaults(again, expected);
+      if (forwardFaults.length) throw new Error(`${cell}: Forward to the comparison table — ${forwardFaults.join("; ")} — ${JSON.stringify(again)}`);
+
+      const errs = tab.errors.filter((e) => !/401|404|Failed to load resource/.test(e));
+      if (errs.length) throw new Error(`${cell}: compare link logged errors:\n    ${errs.join("\n    ")}`);
+      cells.push(`${cell} (scrolled ${Math.round(at.scrollY)}px)`);
+      await browser.send("Target.closeTarget", { targetId: tab.targetId });
+    }
+  }
+  ok(`offline page's compare link landed on ${landingUrl} in one history entry with the table open and in view, and Back/Forward kept it — IMMEDIATE path only, deferred guard not reachable here: ${cells.join(", ")}`);
+}
+
 async function shellLoginNavScenario(browser, base) {
   const checked = [];
   for (const width of [320, 390]) {
@@ -1010,6 +1260,9 @@ async function shellLoginNavScenario(browser, base) {
   }
 
   ok(`sign-in stayed visible with the utility menu closed, the page behind it was unavailable, and all four destinations stayed on screen, across ${checked.length} narrow cells`);
+
+  // Same two login-gated pages, the link between them. See the case's own header.
+  await offlineCompareLinkCase(browser, base);
 }
 
 // Fixed, not derived from SCENARIOS.length: a future edit that comments out or

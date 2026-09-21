@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * `page-shell.mjs` runs a fixed five-scenario inventory in a real browser and
+ * `page-shell.mjs` runs a fixed six-scenario inventory in a real browser and
  * fails loud when fewer than five finish. This guard reads its SOURCE, not its
  * output, and pins the shape that makes that failure mode possible in the first
  * place:
@@ -50,6 +50,16 @@ function mainBody() {
 }
 
 describe("the six page-shell scenarios are all present and all run", () => {
+  // A case called from INSIDE a scenario is invisible to the inventory count:
+  // deleting its one call leaves six scenarios running and nothing red. The
+  // compare-link case is the only real-browser proof that the offline page's
+  // link lands on the comparison table, so its call is pinned here.
+  it("still runs the offline compare-link case, exactly once", () => {
+    expect(SOURCE).toMatch(/async function offlineCompareLinkCase\(/);
+    const calls = SOURCE.match(/await offlineCompareLinkCase\(/g) ?? [];
+    expect(calls, "the compare-link case is no longer awaited exactly once").toHaveLength(1);
+  });
+
   it("names every scenario as a top-level function", () => {
     for (const name of SCENARIO_NAMES) {
       expect(SOURCE, `${name} is no longer defined`).toMatch(new RegExp(`async function ${name}\\(`));
