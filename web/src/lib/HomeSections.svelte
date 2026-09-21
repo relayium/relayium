@@ -1,5 +1,5 @@
 <script lang="ts">
-  // 首页折叠线以下的营销区块：使用步骤 → 跨网络引流 → 特性 → CLI → 场景 → FAQ。
+  // 首页折叠线以下的营销区块：使用步骤 → 跨网络引流 → 特性 → 可验证的信任 → CLI → 场景 → FAQ。
   //
   // 单独成一个组件只有一个目的：给它们**一个懒加载边界**。它们原本静态挂在
   // App.svelte 上，于是每一个深链访客（/d/<id> 下载页、/me、/pricing…）都要先下载
@@ -14,6 +14,7 @@
   import { navigate } from "./router.svelte";
   import { reveal } from "./reveal";
   import FeatureStrip from "./FeatureStrip.svelte";
+  import HomeTrust from "./HomeTrust.svelte";
   import CliCallout from "./CliCallout.svelte";
   import HowToSteps from "./HowToSteps.svelte";
   import UseCases from "./UseCases.svelte";
@@ -54,6 +55,9 @@
 </section>
 
 <FeatureStrip />
+<!-- 主张在上，证据在下：FeatureStrip 陈述隐私主张，HomeTrust 给出访客自己能做的四项核对。
+     只在首页出现——跨网络页和链接页也挂了 FeatureStrip，但那两页是任务界面。 -->
+<HomeTrust />
 <CliCallout />
 <UseCases />
 <Faq variant="home" />

@@ -166,6 +166,27 @@ An empty source refuses outright on both ends.
 
 Full docs at [relayium.com/cli](https://relayium.com/cli); prebuilt binaries on the [releases page](https://github.com/relayium/relayium/releases).
 
+### Verify a download
+
+You do not have to take a release on trust. Every archive on the releases page — the `relayium` CLI for
+macOS, Linux and Windows, and the `relayium-node` relay — is published by a GitHub Actions workflow that
+records a **build-provenance attestation**: a signed statement that this exact file was built by this
+repository's release workflow from a tagged commit. With the [GitHub CLI](https://cli.github.com/) installed:
+
+```sh
+gh attestation verify relayium_darwin_arm64.tar.gz --repo relayium/relayium
+```
+
+It exits `0` only if the file's SHA-256 matches an attestation issued for `relayium/relayium`; a file that
+was altered after the build — or built anywhere else — fails. Each release also ships a `checksums.txt`
+(SHA-256 of every archive) with a detached signature, `checksums.txt.sig`, made with the project's release
+key. `relayium update` does this for you: it verifies that signature against a public key built into the
+binary, then the downloaded archive's SHA-256 against `checksums.txt`, and refuses to install on a mismatch.
+
+The macOS app is a separate download: it is signed with a Developer ID certificate, notarized by Apple and
+stapled, so Gatekeeper verifies it when you first open it. To check by hand:
+`spctl --assess --type execute --verbose /Applications/Relayium.app`.
+
 ## How does Relayium compare?
 
 |                          | **Relayium**            | AirDrop          | WeTransfer / Drive | Snapdrop / PairDrop |

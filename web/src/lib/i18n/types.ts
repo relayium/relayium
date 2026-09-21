@@ -1527,6 +1527,11 @@ export interface Messages {
   };
   crossPitch: string; // one-line pitch under the realtime page header
   homeCross: { title: string; desc: string; realtimeCta: string; offlineCta: string }; // homepage → the two cross-network pages
+  /** Homepage "every claim can be checked" block. Exactly four items, index-aligned
+   *  with the link targets in HomeTrust.svelte: code, protocol, connection, install.
+   *  Each sentence is a fact about the repository; scripts/test/home-trust-claims-test.mjs
+   *  owns those pins (it runs on every push), HomeTrust.test.ts pins the component. */
+  homeTrust: { title: string; sub: string; items: { title: string; desc: string; link: string }[] };
   // Homepage section that puts ephemeral text next to files instead of hiding it
   // behind the transfer surface. It must not read as stored chat: every locale
   // has to keep all three `points` (peer-scoped E2E · realtime, both online ·

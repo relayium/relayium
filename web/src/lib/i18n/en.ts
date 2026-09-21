@@ -1365,6 +1365,16 @@ const en: Messages = {
     ],
   },
   crossPitch: "Both online but not on the same network? Create a 6-digit code and transfer right here — live and end-to-end encrypted. Recipient offline? Share a link instead, below.",
+  homeTrust: {
+    title: "Every claim here can be checked",
+    sub: "What Relayium says about privacy is something you can check yourself — not just something we promise.",
+    items: [
+      { title: "Read the code", desc: "The server, the web app and the CLI are open source under AGPL-3.0, and the native apps under Apache-2.0 — all in one public repository.", link: "Source on GitHub ↗" },
+      { title: "Read the protocol", desc: "The wire protocol and the cryptography are written down as versioned specifications (CC BY 4.0). Anyone can review them, or build a compatible client from them.", link: "Protocol specifications ↗" },
+      { title: "Check the connection yourself", desc: "Turn on advanced verification and both devices show the same code. Compare it over a call or in person: if it matches, nobody — our server included — has swapped the keys in between.", link: "See how it's encrypted and MITM-protected →" },
+      { title: "Verify what you install", desc: "Every CLI release carries a build-provenance attestation you can verify against the public repository, and the macOS app is Developer ID-signed and notarized by Apple.", link: "How to verify a download ↗" },
+    ],
+  },
   homeCross: {
     title: "Not on the same network?",
     desc: "If they're online, use cross-network transfer (real time, end-to-end encrypted, across networks too; browser traffic goes through TURN as ciphertext); if not, share a link (encrypted storage, fetch by link anytime).",

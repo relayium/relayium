@@ -234,6 +234,17 @@ jobs:
       - name: what the repository's own documents may claim
         run: node scripts/test/document-claims-test.mjs
 
+      # The home page's trust block ("Every claim here can be checked") makes
+      # four statements of fact about things OUTSIDE `web/`: the three LICENSE
+      # files, `docs/protocol/`, this repository's release workflow attesting
+      # every archive, and the README section its install row links to.
+      # `web.yml` starts on `web/**` alone, so a Vitest pin would not run on the
+      # README-only or workflow-only commit that makes a sentence false — the
+      # same shape as the step above. Owned here for the same reason: no path
+      # filter, Linux, seconds, no dependencies.
+      - name: the home page's trust block is still true of this repository
+        run: node scripts/test/home-trust-claims-test.mjs
+
   android-policy:
     runs-on: ubuntu-latest
     timeout-minutes: 5
