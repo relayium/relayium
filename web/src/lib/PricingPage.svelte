@@ -122,7 +122,12 @@
 
   /* ── Settings-shell form ──────────────────────────────────────────────────
      The column already carries the track's top padding and the header is
-     left-aligned by app.css; only the page's own centring and top gap go. */
-  :global(.appshell.shell) .pricing-page { padding-block-start: 0; gap: var(--space-5); }
+     left-aligned by app.css; only the page's own top gap and inline padding
+     go. The inline gutter is the shell's — <main>'s 20px, the column's
+     22px from the sidebar breakpoint up — and --space-4 on top of it set this
+     page 16px further in than /apps and /cli on both sides (measured: 334–1322
+     against their 318–1338 at 1440px, 36–354 against 20–370 at 390px). The base
+     rule keeps its padding for any mount outside the shell. */
+  :global(.appshell.shell) .pricing-page { padding-block-start: 0; padding-inline: 0; gap: var(--space-5); }
   :global(.appshell.shell) .head .sub { margin-inline: 0; font-size: 13px; }
 </style>

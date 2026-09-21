@@ -196,3 +196,39 @@ describe("pricing components reference no phantom design tokens", () => {
     });
   }
 });
+
+// Every SPA route that mounts this page renders it inside `.appshell.shell`,
+// and the shell already supplies the inline gutter: <main>'s 20px below the
+// sidebar breakpoint, the column's 22px above it. The page's own --space-4 on
+// top of that put /pricing 16px further in than /apps and /cli on BOTH sides —
+// measured in Chromium: content box 334–1322 against the siblings' 318–1338 at
+// 1440px, and 36–354 against 20–370 at 390px. jsdom loads neither app.css nor
+// App.svelte's column rules, so no rendered assertion can see either number;
+// the source check is the only guard there is. It pins both halves, because
+// each one can be broken on its own: drop the shell override and the double
+// inset is back, strip the base padding and a mount outside the shell has no
+// gutter at all.
+describe("pricing page inline gutter", () => {
+  const src = readFileSync(join(import.meta.dirname, "PricingPage.svelte"), "utf8");
+  const css = src.slice(src.indexOf("<style>")).replace(/\/\*[\s\S]*?\*\//g, "");
+  const ruleBody = (selector: string): string => {
+    const at = css.indexOf(`\n  ${selector} {`);
+    expect(at, `PricingPage.svelte has no "${selector}" rule block`).toBeGreaterThan(-1);
+    const rule = css.slice(at);
+    return rule.slice(rule.indexOf("{") + 1, rule.indexOf("}"));
+  };
+
+  it("drops the page's own inline padding inside the shell, with a logical property", () => {
+    const body = ruleBody(":global(.appshell.shell) .pricing-page");
+    expect(body, "the shell form no longer zeroes its inline padding — the double inset is back").toMatch(/padding-inline:\s*0\s*;/);
+    expect(body, "the shell form must stay direction-agnostic").not.toMatch(/padding-(left|right)/);
+  });
+
+  it("keeps --space-4 of inline padding on the base rule, the only gutter outside the shell", () => {
+    const body = ruleBody(".pricing-page");
+    expect(body, "the base .pricing-page rule lost its inline padding").toMatch(
+      /padding:\s*var\(--space-6\)\s+var\(--space-4\)\s+var\(--space-8\)\s*;/,
+    );
+    expect(body, "the base rule must not zero the inline padding itself").not.toMatch(/padding-inline/);
+  });
+});
