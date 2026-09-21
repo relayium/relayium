@@ -54,7 +54,10 @@
 </section>
 
 <style>
-  .compare { margin: var(--section-gap) 0 var(--space-2); }
+  /* scroll-margin: the offline page links here (#compare). The page is still in
+     its enter animation when that landing scrolls, and once it settles the
+     section would rest a few pixels ABOVE the viewport with its heading clipped. */
+  .compare { margin: var(--section-gap) 0 var(--space-2); scroll-margin-top: var(--space-6); }
   .head { margin-bottom: var(--space-5); }
   .head h2 { font-size: var(--fs-h2); margin: 0 0 var(--space-2); }
   .head .sub { color: var(--text); font-size: var(--fs-sm); max-width: 60ch; }

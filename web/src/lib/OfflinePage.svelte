@@ -30,7 +30,8 @@
     e.preventDefault();
     // The hash is handed to the router instead of being written here, because
     // this handler cannot know when the navigation happens: the guard may put a
-    // confirm in front of it (an upload in flight), and the route then moves
+    // confirm in front of it (a peer link, transfer or stored receive still alive
+    // from another page — not this page's own upload), and the route then moves
     // long after this function has returned. The router writes the hash in the
     // same history entry as the path, at the moment it commits — so a confirmed
     // navigation still lands on the table, and a deferred or declined one never
