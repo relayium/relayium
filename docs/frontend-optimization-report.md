@@ -140,6 +140,10 @@
 **未做（本轮范围外）**：#12（App.svelte 拆分）、#13（webrtc 去重）、#15（i18n 索引耦合数组）、
 #24（LAN 组件懒加载）。#12/#13 触碰传输核心路径且现有测试不足以兜底，留作单独一轮。
 
+> **状态更正（2026-09-21）：以上四项均已在后续两轮完成**，这一段只是第一轮当时的记录，不是待办。
+> #13 → `web/src/lib/webrtc-core.ts` 的 `establish()`；#12 → `transfer-session.svelte.ts` + `DebugPanel.svelte`；
+> #15 → `cli-page-data.ts` 与 `SameLength<>` 元组类型；#24 → `HomeSections.svelte` 懒加载边界。明细见下文第二、三轮实施记录。
+
 **偏差说明**：#14 的"抽 CopyButton.svelte"改成抽 `clipboard.svelte.ts` 的 `copyFeedback()`——
 四处按钮的外观/位置各不相同，统一成一个组件会为迁就彼此把 CSS 拧成一团，而真正重复的是行为。
 进度条 CSS 提取时改名 `.progress-bar/.progress-fill`：`.bar`/`.fill` 在 CommandBlock 与

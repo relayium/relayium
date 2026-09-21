@@ -150,3 +150,7 @@ asset deployment polling and fresh production browser validation.
 - No Nav/footer changes.
 - The unrelated undefined `--fs-lg` in `MagicLink.svelte` remains a separately
   recorded auth/design-system cleanup candidate.
+
+  > **Status 2026-09-21 — completed, nothing left to do.** `MagicLink.svelte`
+  > no longer references `--fs-lg`; the only occurrences under `web/src` are the
+  > guards that forbid it (`design-tokens.test.ts`, `PricingPage.test.ts`).

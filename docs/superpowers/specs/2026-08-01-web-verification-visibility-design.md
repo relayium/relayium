@@ -127,6 +127,10 @@ controls remain the source of action. The live announcement is supplementary.
 - File and text remain mutually exclusive in this batch. A coherent mixed Web
   session is a separately recorded follow-up; CLI unification is excluded.
 
+  > **Status 2026-09-21 — follow-up completed.** The mixed Web session shipped
+  > (`docs/superpowers/specs/2026-08-01-web-mixed-link-design.md`,
+  > `web/src/lib/mixed-session.svelte.ts`).
+
 ## Regression coverage and acceptance
 
 - Static/component coverage requires activity markup to precede the peer section

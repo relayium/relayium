@@ -2724,4 +2724,11 @@ Deployment order matters, and here it is permissive in both directions — but o
 
 ## Deferred to phase 2 (not in this plan)
 
+> **Status 2026-09-21 — completed.** Phase 2 shipped as the mixed-link work
+> (`docs/superpowers/specs/2026-08-01-web-mixed-link-design.md`):
+> `web/src/lib/peer-link.svelte.ts`, `mixed-session.svelte.ts`,
+> `mixed-file-session.svelte.ts` and `mixed-text-session.svelte.ts` carry both
+> lanes on one authenticated link. The paragraph below is kept as the original
+> plan, not as open work.
+
 Extract `PeerLink`, move both streams onto one handshake and one SAS, add the labelled `relayium-text` DataChannel with a label-filtered `ondatachannel` on both roles, inherit the authenticated resume for message sessions, and lift the mutual exclusion so a message can be sent during a file transfer. The wire does not change: kind 9 and the derived subkey are paid for here precisely so that it does not.

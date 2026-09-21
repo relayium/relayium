@@ -27,7 +27,7 @@
 > | 5 | 每篇配对教程补 5 分钟 TTL / 码从哪来 | ✅ | 16 篇提到配对码的教程已按“教流程 / 仅提及”完整分类；6 篇缺失流程说明的文章已补齐 5 分钟有效期与账户铸码来源，`pairing-facts.test.mjs` 对 9 语言守住分类完备性和事实 |
 > | 6 | 相关链接改策展 | ✅ | `content/related-map.mjs`，每篇 4 条 |
 > | 7 | 教程入口 | ✅ **已完成**（2026-08-06 复核）：`landing-template.mjs` 的 learn 区已是三组各 5 条（`PER_GROUP = 5`）+ 全部索引链接（`.learn-all`）+ 收尾 CTA（`.close-cta`）。提交 `deebc8da` |
-> | 8 | 编号步骤 / 预期输出 / 排障块 | ⏳ **部分**：CLI 6 篇和浏览器 how-to 11 篇均已完成（各 ×9 语言）；模板已支持语义化编号步骤、成功标志与排障定义列表，`cli-tutorial-structure.test.mjs` 与 `browser-howto-tutorial.test.mjs` 分别守住可运行命令、当前 UI 标签、跨网路径、浏览器落盘、阅后即焚和配额事实。guides 8 篇亦已完成（2026-08-06 复核），`guides-tutorial-structure.test.mjs` 把 8 篇 × 9 语言断言为 PROCEDURAL / EXPLAINER 的**完备且互斥**划分并带反向变异证明。提交 `ecf68224`、`8457fcc1`、`fa759d97`、`6418edce`、`bae36671`、`c1195619`、`013af5c2` |
+> | 8 | 编号步骤 / 预期输出 / 排障块 | ✅ **已完成**（2026-09-21 更正，原标记"⏳ 部分"与本行证据不符：三类文章均已完成）：CLI 6 篇和浏览器 how-to 11 篇均已完成（各 ×9 语言）；模板已支持语义化编号步骤、成功标志与排障定义列表，`cli-tutorial-structure.test.mjs` 与 `browser-howto-tutorial.test.mjs` 分别守住可运行命令、当前 UI 标签、跨网路径、浏览器落盘、阅后即焚和配额事实。guides 8 篇亦已完成（2026-08-06 复核），`guides-tutorial-structure.test.mjs` 把 8 篇 × 9 语言断言为 PROCEDURAL / EXPLAINER 的**完备且互斥**划分并带反向变异证明。提交 `ecf68224`、`8457fcc1`、`fa759d97`、`6418edce`、`bae36671`、`c1195619`、`013af5c2` |
 > | 9 | 事实去重成权威 snippet | 🔄 **已被取代（superseded）**（2026-08-06 复核）：snippet 化经实测被否决——它会把同一段文字放到 19 个可索引页面上，而问题本质是**事实**而非重复。改由 `pairing-facts.test.mjs` 把每篇配对教程划分为「讲流程」与「仅提及」两类并断言划分完备；缺失有效期的那一半已在 `6457ff67` 补齐（6 篇 × 9 语言）。不再作为待办 |
 > | 10 | 4 篇中文半角标点 | ✅ | 见下方 §11 的 2026-08-05 记录，并由 lint 守住 |
 > | 11 | 术语表 + 构建期强制 + zh 代码注释 | ✅ | `content/GLOSSARY.md` + `register-glossary.test.mjs` |
@@ -83,6 +83,11 @@
 `cli-cloud-async.mjs` 教 `relayium up ./report.pdf --ttl 7d`，但 `parseTTL`(`cloud.go:104-116`）用 `time.ParseDuration`，没有天单位 → 直接报错。正确写法 `--ttl 168h`。**根因是产品 bug**(`formatTTL` 输出的 `%dd` 格式 `parseTTL` 读不回来），应一并报给工程侧。
 
 #### 🟢 低：零散失准
+
+> **状态（2026-09-21 对代码复核）：以下三条失准均已修正，本节无未完成项。**
+> 内存阈值文案已统一为 256 MiB；`cli-sync-large-folder` 已改为说明 `sync` 只有 `-i`/`-p`/`--delete`/`--watch`/`--config-dir`、
+> 没有路径过滤，并改教"按子目录分别同步"（`sync` 源码中确无 exclude 参数）；5 分钟 TTL 由文首状态表第 5 行关闭，
+> `web/scripts/pages/pairing-facts.test.mjs` 守住。
 
 - 6+ 篇的 "Firefox/Safari ~200MB 内存缓冲" 规则已过时：实际告警阈值 256 MiB，且有 Service Worker 流式落盘路径，Firefox/Safari 单文件也能流式下载(`filesink.ts:98,114-120`)。
 - `cli-sync-large-folder` 排障建议"排除 venv 等目录"，但 `sync` **没有 exclude 参数**——建议不可执行。

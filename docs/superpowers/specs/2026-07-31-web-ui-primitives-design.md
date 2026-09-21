@@ -364,6 +364,11 @@ independently.
 
 ## 11. Non-goals / deferred
 
+> **Status 2026-09-21 — nothing in this section is open.** The 2026-08-05
+> verification note below settled it: `AppsPage` and `PricingPage` migrated, the
+> remaining components were deliberately declined. Read "deferred" in the heading
+> as historical.
+
 - Migrating `AppsPage`, `PricingPage`, `MePage`, `CliPage`, `Account`, `PlanCard`,
   `HowToSteps` onto `.ui-card` / `.ui-badge` (they keep their local `.card` / `.badge`
   until a later batch can verify them).

@@ -48,6 +48,12 @@ realtime actions. This leaves two bolt styles lower on the same Cross landing
 page, an acknowledged follow-up rather than silently expanding a control batch
 through all marketing data.
 
+> **Status 2026-09-21 — the bolt follow-up is completed.** No `⚡` remains in
+> `web/src` or `web/scripts/pages/content`; the only occurrences are the two
+> `i18n.test.ts` assertions that forbid the glyph. Other authored emoji in
+> marketing data are a separate, still-recorded design batch (see
+> `2026-08-01-web-peer-action-geometry-design.md`, icon batch 4b).
+
 Do not change the file/folder labels into buttons, add a second button under
 `.peer-actions`, alter picker focus ownership, touch transfer handlers, or add a
 global `.ui-icon` rule.

@@ -1055,6 +1055,11 @@ the receiver behind an account just because the bytes now come from storage.
   create-code button behind `.disabled(selection.isEmpty)` and need the same
   inversion. Blocked on unowned uncommitted work — see the lease.
 
+  > **Status 2026-09-21 — superseded.** `apps/mac/Relayium/DirectPane.swift` no
+  > longer exists, and `apps/ios/Relayium/DirectView.swift` has no
+  > `selection.isEmpty` gate left (its remaining `.disabled(...)` sites depend on
+  > `isLocked` and `code.canJoin`). Neither premise survives on `main`.
+
 ## Risks
 
 - **Share-target regression.** Removing the files-first buttons changes who fills

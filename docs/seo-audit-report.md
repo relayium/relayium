@@ -9,7 +9,7 @@
 > | 1.2 / 5.2 英文路由 JS-only | ✅ 构建产出每路由静态外壳（`web/scripts/pages/shells.mjs` + `vite-plugin-route-shells.ts`），head + 英文正文均正确 |
 > | 1.3 `/pricing` | ✅ 有外壳 + 入 sitemap |
 > | 1.4 `/cli` canonical | ✅ 外壳 + `pageMeta` 补 `cli` 分支 + `cliPage.metaTitle/metaDesc`（9 语言）+ 入 sitemap |
-> | 1.5 `/d/*` | ⚠️ 部分：`d.html` 外壳已带 `noindex`；仍保留 robots.txt 的 `Disallow: /d/`（隐私优先，代价是 noindex 抓不到）。服务端对过期 id 返 410 未做 |
+> | 1.5 `/d/*` | ✅ 已做部分 + 🚫 其余**决定不做**（2026-09-21 更正，原标记"⚠️ 部分"；410 一项见下方 2026-08-05 补充表的 Owner 决策）：`d.html` 外壳已带 `noindex`；仍保留 robots.txt 的 `Disallow: /d/`（隐私优先，代价是 noindex 抓不到）。服务端对过期 id 返 410 未做 |
 > | 1.6 尾斜杠 | ✅ |
 > | 2.1 sitemap `xhtml:link` | 🚫 **决定不做**（长期项，405×9 会让文件膨胀，收益有限；见 DECISION-LOG 2026-08 收益不足条目） |
 > | 2.2 文章 JSON-LD | ✅ 补 `datePublished`（取 git 首次提交日，非编造）、`image`、publisher/author logo |
@@ -196,8 +196,8 @@
 
 **长期建议**
 
-8. 2.1 sitemap 加 xhtml:link hreflang
-9. 3.3 相关文章从全网格改为同类策展
+8. 2.1 sitemap 加 xhtml:link hreflang —— 🚫 **决定不做**（见文首状态表 2.1）
+9. 3.3 相关文章从全网格改为同类策展 —— ✅ **已完成**（`web/scripts/pages/content/related-map.mjs`，见文首状态表 3.3）
 10. 核对生产 nginx 配置与模板一致（1.1/2.4 的前提）
 
 ---
