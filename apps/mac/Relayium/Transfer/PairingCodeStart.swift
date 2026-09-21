@@ -15,8 +15,9 @@ import RelayiumKit
 ///
 /// It owns no state and holds nothing beyond the module. Ownership of the
 /// surface, the account gate and the error the user sees all stay with the
-/// caller, because those differ between the two: a first code CLAIMS the surface
-/// and a replacement is minted on a surface this module already owns.
+/// caller, because those differ between the two: a first code CLAIMS the surface,
+/// and a replacement loses it for an instant — retiring the dead room passes the
+/// module through idle — and takes it back before it mints (see `regenerate`).
 ///
 /// ## What it no longer does
 ///
@@ -54,30 +55,33 @@ struct PairingCodeStart {
         return watch(code: joined)
     }
 
-    /// **Replace an expired code with a fresh one, without letting go of the
-    /// surface in between.**
+    /// **Replace an expired code with a fresh one. The shared action, not a copy
+    /// of it.**
     ///
-    /// The ORDER is the whole of it, and each step is load-bearing:
+    /// This was three lines here — leave, dismiss, mint — under a comment that
+    /// said the code model never passes through `.idle` and ownership is never
+    /// touched. Neither was true, and macOS 1.4.1 shipped it. `RelayiumApp`
+    /// answers a retired room by cancelling the digits that named it, so
+    /// `leave()` takes the code to `.idle`, `dismiss()` leaves this module
+    /// holding nothing, and the app-scoped liveness observer releases the
+    /// surface. Nothing claimed it again: the replacement code was minted and
+    /// its room was watched, and the peer that linked on it was never drawn.
     ///
-    ///  1. The dead room is left and dismissed FIRST. `watchPairingCode` refuses
-    ///     while a room is held, so a mint that ran before this would produce a
-    ///     code nothing is watching — six digits on screen that no peer could
-    ///     ever reach.
-    ///  2. `mint` is called while the code model is still `.showing`, and it
-    ///     takes that: it bumps its generation and moves to `.minting` from any
-    ///     state. The model must never pass through `.idle`, because the
-    ///     app-scoped liveness observer releases this module's surface the moment
-    ///     it does — which would drop the user back to the connect controls half
-    ///     way through the action they just asked for.
-    ///  3. Ownership is never touched. This module already owns its surface and
-    ///     goes on owning it, which is also why regenerating cannot disturb a
-    ///     session on the OTHER module: nothing here reaches outside
-    ///     `self.module`, and the two modules share no presence, no room and no
-    ///     socket.
+    /// The action DOES pass through idle and cannot avoid it — the dead room has
+    /// to go before `watchPairingCode` will take a new one. What keeps the
+    /// surface is that `CrossNetworkPairingStart.regenerate` retakes the claim
+    /// synchronously, before the mint suspends, and refuses an activation that
+    /// is stale. The reasoning is recorded there, once; iOS had this same defect
+    /// and a second copy is how the two platforms came to disagree.
+    ///
+    /// It still cannot disturb the OTHER module: nothing it reaches is outside
+    /// `self.module`, and the two modules share no presence, room or socket.
+    ///
+    /// `MacSurfaceGuardTests` pins this body as a delegation and nothing else;
+    /// `MacPairingCodeRegenerateTests` drives the action it names on a module
+    /// wired the way `RelayiumApp` wires this one.
     func regenerate(token: String) async {
-        link.leave()
-        link.dismiss()
-        await createAndWatch(token: token)
+        await CrossNetworkPairingStart(module: module).regenerate(token: token)
     }
 
     /// Watch a code's room.

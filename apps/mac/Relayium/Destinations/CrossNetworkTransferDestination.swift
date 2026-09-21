@@ -91,8 +91,9 @@ struct CrossNetworkTransferDestination: View {
         }
     }
 
-    /// **Mint a fresh code in place of an expired one**, without letting go of
-    /// this module's surface on the way.
+    /// **Mint a fresh code in place of an expired one**, ending with this module
+    /// still owning its surface (the shared `regenerate` retakes the claim that
+    /// retiring the dead room releases).
     ///
     /// The account is re-read at activation time for the reason `createCode`
     /// does it: rendering an expired code and pressing the button under it are

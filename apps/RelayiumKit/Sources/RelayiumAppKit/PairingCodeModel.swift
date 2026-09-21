@@ -104,11 +104,16 @@ public final class PairingCodeModel: ObservableObject {
     /// **Mint a code to show. Requires the bearer** — the code's owner pays for
     /// whatever is relayed through it, so the server will not mint anonymously.
     ///
-    /// It moves to `.minting` from ANY state, including `.showing`, and that is
-    /// load-bearing for the expired-code replacement path: passing through
-    /// `.idle` would make this module momentarily hold nothing, and the
-    /// app-scoped liveness observer would release the surface out from under the
-    /// action the user just asked for.
+    /// It moves to `.minting` from ANY state, including `.showing` and `.idle`.
+    ///
+    /// **It does not keep the surface, and the replacement path does not rely on
+    /// it to.** This comment used to say that minting straight from `.showing`
+    /// is what stops an expired-code replacement passing through `.idle`. It
+    /// never did: both apps answer a retired room by cancelling its digits, so
+    /// by the time the replacement mints the code is already `.idle`, the module
+    /// has held nothing for a turn and the liveness observer has released the
+    /// surface. What keeps it is `CrossNetworkPairingStart.regenerate` retaking
+    /// the claim before it calls this.
     public func mint(token: String) async {
         generation += 1
         let mine = generation

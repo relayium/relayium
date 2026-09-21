@@ -3115,6 +3115,42 @@ final class MacSurfaceGuardTests: XCTestCase {
                        + "the two actions that supersede it")
     }
 
+    /// **Replacing an expired code is the SHARED action, not a Mac copy of it.**
+    ///
+    /// STRUCTURAL, and only structural: `swift test` cannot import the macOS app
+    /// target, so this reads the source. The behaviour it protects is driven for
+    /// real in `MacPairingCodeRegenerateTests`, against the type named here.
+    ///
+    /// macOS 1.4.1 shipped its own three-line body — leave, dismiss, mint — and
+    /// `RelayiumApp` answers a retired room by cancelling its digits. So the
+    /// module held nothing for one turn, the liveness observer released the
+    /// surface, and nothing claimed it again: a peer that linked on the
+    /// replacement code was never drawn. iOS had the same body and repaired it
+    /// in `CrossNetworkPairingStart.regenerate`; a second copy is how the two
+    /// platforms came to disagree, so the Mac body may only delegate.
+    func testReplacingAnExpiredCodeDelegatesToTheSharedRegenerate() throws {
+        let starter = try source(named: "Transfer/PairingCodeStart.swift")
+        let opening = "func regenerate(token: String) async {"
+        XCTAssertEqual(occurrences(of: opening, in: starter), 1,
+                       "the pairing start no longer has exactly one regenerate")
+        let tail = try XCTUnwrap(starter.components(separatedBy: opening).dropFirst().first)
+        // The body ends at the first line that closes at the member's own
+        // indentation — four spaces — which is how every member here is laid out.
+        let body = try XCTUnwrap(tail.components(separatedBy: "\n    }").first,
+                                 "regenerate has no closing brace at member indentation")
+        let statements = body.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        XCTAssertEqual(statements,
+                       ["await CrossNetworkPairingStart(module: module).regenerate(token: token)"],
+                       "the Mac regenerate is more than a delegation to the shared action")
+        for inlined in ["leave()", "dismiss()", "createAndWatch(", "mint(", "claim(",
+                        "watchPairingCode("] {
+            XCTAssertFalse(body.contains(inlined),
+                           "the Mac regenerate re-inlined a step of the shared action: \(inlined)")
+        }
+    }
+
     /// The menu bar is the only way back once the window is closed.
     func testTheMenuBarStillReopensTheSameWindow() throws {
         XCTAssertTrue(try source(named: "MenuBarView.swift").contains("openWindow(id: \"main\")"))
