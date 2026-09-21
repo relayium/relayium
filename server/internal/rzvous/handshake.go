@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strconv"
 
 	"github.com/relayium/relayium/internal/secure"
 )
@@ -71,6 +72,14 @@ type hsMsg struct {
 	Candidates  []string `json:"candidates,omitempty"` // kind=reveal
 }
 
+// ErrPeerNotCLI means the peer answered with a signal that is not part of this
+// handshake at all. Pairing codes share one namespace with the apps and the web
+// page, so one of them can join a room `relayium send` minted; they speak WebRTC
+// and none of their signals carries "kind". The handshake still aborts -- the two
+// transports cannot interoperate -- but the caller needs to tell this apart from
+// a CLI peer that sent the wrong message, because the advice is the opposite.
+var ErrPeerNotCLI = errors.New("rzvous: the peer does not speak the CLI handshake")
+
 func sendHS(ctx context.Context, s *Session, m hsMsg) error {
 	b, err := json.Marshal(m)
 	if err != nil {
@@ -85,11 +94,15 @@ func recvHS(ctx context.Context, s *Session, want string) (hsMsg, error) {
 		return hsMsg{}, err
 	}
 	var m hsMsg
-	if err := json.Unmarshal(data, &m); err != nil {
-		return hsMsg{}, err
+	// Every message of this handshake is an object with a kind. A payload that is
+	// neither -- including one that does not decode into the shape at all -- came
+	// from something that is not running it.
+	if err := json.Unmarshal(data, &m); err != nil || m.Kind == "" {
+		return hsMsg{}, ErrPeerNotCLI
 	}
 	if m.Kind != want {
-		return hsMsg{}, errors.New("rzvous: unexpected handshake message " + m.Kind)
+		// The kind is peer-controlled; quote it so it cannot write to the terminal.
+		return hsMsg{}, errors.New("rzvous: unexpected handshake message " + strconv.Quote(m.Kind))
 	}
 	return m, nil
 }

@@ -47,6 +47,25 @@ func modeCommand(mode string) string {
 	}
 }
 
+// errPeerNotCLI is what the user reads when the other end of the code room is a
+// Relayium app or the web page instead of a terminal. Nothing is wrong with either end:
+// the CLI moves bytes over a direct pinned-TLS connection and the apps over
+// WebRTC, so the pairing cannot proceed -- and "unexpected handshake message"
+// said none of that. The way out differs by command: a file has `relayium up`,
+// whose link an app or browser does open; a message session has no stored form.
+func errPeerNotCLI(mode string) error {
+	msg := "the other side is a Relayium app or the web page, not the relayium CLI — " +
+		"the CLI pairs only with another CLI\n" +
+		"  use " + modeCommand(mode) + " in a terminal on both machines (this attempt has ended; start it again)"
+	if mode != rzvous.ModeText {
+		// Role-neutral on purpose: this runs for `send` and for `receive`, and the
+		// code may have been minted by either end.
+		msg += "\n  moving a file between the CLI and an app or a browser?  `relayium up <file>` makes a link they open;" +
+			" `relayium down <link>` fetches one they made"
+	}
+	return errors.New(msg)
+}
+
 func crossnetConn(ctx context.Context, code, name string, f crossFlags, stderr io.Writer, mode string) (*tls.Conn, error) {
 	id, err := secure.NewIdentity()
 	if err != nil {
@@ -67,6 +86,9 @@ func crossnetConn(ctx context.Context, code, name string, f crossFlags, stderr i
 
 	hs, err := rzvous.DoHandshake(ctx, sess, id, connect.LocalCandidates(port, f.advertise), mode)
 	if err != nil {
+		if errors.Is(err, rzvous.ErrPeerNotCLI) {
+			return nil, errPeerNotCLI(mode)
+		}
 		return nil, err
 	}
 

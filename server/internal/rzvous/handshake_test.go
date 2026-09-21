@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -287,5 +288,96 @@ func TestDoHandshakeReportsAnUnknownPeerModeVerbatim(t *testing.T) {
 	}
 	if ModeCompatible(ModeFile, hb.PeerMode) {
 		t.Fatal("an unknown peer mode must not be compatible with file")
+	}
+}
+
+// A pairing code minted by `relayium send` lives in the same namespace as the
+// codes the apps and the web page use, so one of them can join the room. They
+// speak WebRTC, not this handshake, and none of their signals carries "kind" --
+// RelayiumKit even answers our commit with a kind-less {"commit":…} of its own,
+// because ours has a field of that name. The transports cannot interoperate, so
+// the handshake must still abort; what it owes the caller is a way to tell this
+// apart from a broken CLI peer, because the two need opposite advice.
+func TestDoHandshakeNamesAPeerThatIsNotTheCLI(t *testing.T) {
+	for name, payload := range map[string]string{
+		"app commit":             `{"commit":"AAAA"}`,
+		"caps hello":             `{"caps":["link-v2"]}`,
+		"relay rtt":              `{"relayRtt":{"n1":12}}`,
+		"empty object":           `{}`,
+		"not an object":          `["commit"]`,
+		"kind of the wrong type": `{"kind":7}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			base := startHub(t)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			aCh := make(chan *Session, 1)
+			go func() { s, _ := Join(ctx, base, "", "a"); aCh <- s }()
+			b, err := Join(ctx, base, "", "b")
+			if err != nil {
+				t.Fatalf("join b: %v", err)
+			}
+			a := <-aCh
+			idA, _ := secure.NewIdentity()
+
+			type res struct {
+				h   *Handshake
+				err error
+			}
+			ch := make(chan res, 1)
+			go func() {
+				h, err := DoHandshake(ctx, a, idA, nil, ModeFile)
+				ch <- res{h, err}
+			}()
+			if err := b.SendSignal(ctx, json.RawMessage(payload)); err != nil {
+				t.Fatalf("b send: %v", err)
+			}
+
+			ra := <-ch
+			if ra.h != nil {
+				t.Fatalf("handshake completed against a non-CLI peer: %+v", ra.h)
+			}
+			if !errors.Is(ra.err, ErrPeerNotCLI) {
+				t.Fatalf("err = %v, want ErrPeerNotCLI", ra.err)
+			}
+		})
+	}
+}
+
+// A message that IS a handshake message, but the wrong one, is a different
+// failure: the peer is a CLI and something is out of order. It keeps its own
+// error, and the kind -- which the peer controls -- is quoted, so it cannot
+// write control characters into the terminal.
+func TestDoHandshakeQuotesAnUnexpectedKind(t *testing.T) {
+	base := startHub(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	aCh := make(chan *Session, 1)
+	go func() { s, _ := Join(ctx, base, "", "a"); aCh <- s }()
+	b, err := Join(ctx, base, "", "b")
+	if err != nil {
+		t.Fatalf("join b: %v", err)
+	}
+	a := <-aCh
+	idA, _ := secure.NewIdentity()
+
+	ch := make(chan error, 1)
+	go func() {
+		_, err := DoHandshake(ctx, a, idA, nil, ModeFile)
+		ch <- err
+	}()
+	kind := "reveal\x1b[2J"
+	if err := sendHS(ctx, b, hsMsg{Kind: kind}); err != nil {
+		t.Fatalf("b send: %v", err)
+	}
+
+	got := <-ch
+	if got == nil || errors.Is(got, ErrPeerNotCLI) {
+		t.Fatalf("err = %v, want the unexpected-kind error", got)
+	}
+	if strings.Contains(got.Error(), "\x1b") || !strings.Contains(got.Error(), `"reveal\x1b[2J"`) {
+		t.Fatalf("kind must be quoted, got %q", got.Error())
 	}
 }
