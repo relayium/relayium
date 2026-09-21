@@ -299,14 +299,21 @@ async function findTaskByIdempotencyKey(
   return null;
 }
 
-/** Drop a task-purpose object that no task owns.
+/** Ask the server to drop a task-purpose object that no task owns.
  *
  *  Best effort, and only ever called when the object is provably unbound: a
  *  `device_task` object has no link, no file-list row and no user-facing
  *  control, so leaving one behind is storage the account pays for and cannot
- *  see. GC reclaims it an hour later either way (protocol §27), but an hour of
- *  invisible quota after a failure the user watched happen is not a good
- *  answer when one DELETE returns it now. */
+ *  see.
+ *
+ *  Today this request reclaims nothing. `DELETE /api/files/{id}` is the
+ *  account's share-delete route, and the server answers 404 for every purpose
+ *  other than `share`, deliberately: an object that reads as unbound could be
+ *  bound by a concurrent task create before its blob is removed. The server's
+ *  collector is therefore the only reclaim, about an hour after the upload
+ *  (protocol §27), and the account carries that invisible quota until then.
+ *  The call is kept as harmless best effort; it would shorten the window only
+ *  if a future server accepts it for unbound task objects. */
 async function releaseObject(storedFileId: string): Promise<void> {
   if (!isInertId(storedFileId)) return;
   try {

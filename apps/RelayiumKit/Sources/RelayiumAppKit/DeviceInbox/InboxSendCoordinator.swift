@@ -589,9 +589,15 @@ public final class InboxSendCoordinator: @unchecked Sendable {
     private func release(_ plan: PendingUploadPlan, token: String?,
                          includingObject: Bool) async throws {
         if includingObject, let token, let storedId = plan.finalizedStoredId {
-            // Best effort. The server's own collector reclaims an unbound
-            // task-purpose object anyway; this only shortens the window in which
-            // the account pays for storage it cannot see.
+            // Best effort, and today it reclaims nothing: `DELETE
+            // /api/files/{id}` is the account's share-delete route, and the
+            // server answers 404 for every purpose other than `share`, so a
+            // task-purpose object is refused and the error is dropped here.
+            // The server's own collector is the only reclaim, about an hour
+            // after the upload (protocol §27); until then the account pays
+            // for storage it cannot see. The call is kept because it is
+            // harmless, and it would shorten that window only if a future
+            // server accepts it for unbound task objects.
             _ = try? await objects.deleteStoredFile(id: storedId, token: token)
         }
         try? await keys.remove(id: plan.jobId)
