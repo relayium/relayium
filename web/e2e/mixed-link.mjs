@@ -1788,6 +1788,80 @@ async function mixedScenario(browser, base) {
     + `(A ${pcCounts.a}→${senderPcs}, B ${pcCounts.b}→${resumed.peerConnections}), `
     + "keeping the transcript, the attachments and the SAS, and offering one explicit restart");
 
+  // ── 八之二、续传**完成后**的终态卡片过一遍 axe ─────────────────────────────
+  //
+  // The one state of this scene no runner scanned: act 八之一 covers the card
+  // while bytes move, and nothing looked at what it turns into — a status line
+  // that has just been announced, and a close button that replaced Cancel.
+  //
+  // It sits AFTER the `byte-resume` act is recorded, and the reason is in the
+  // code above, not in taste. `runAxe` pushes a ~500 KB source string over CDP and then runs it:
+  // seconds of page-side work. Act 八之一 had to buy a window for that with
+  // `SCAN_WRITE_DELAY_MS`, and restores `RESUME_WRITE_DELAY_MS` before the
+  // `pcCounts` read so that none of it lands on the resume. Down here there is
+  // nothing left to land on: `window.__e2e.closed` is true, every byte, picker,
+  // PeerConnection, SAS and chooser read of this scene has been taken, and the
+  // act is already in the ledger — so a violation on this card is reported as
+  // what it is, under this label, and cannot present itself as "byte-resume
+  // never completed". It is a check, not an act: `ACTS` stays the frozen twenty.
+  //
+  // The only clock still running is the product's own auto-dismiss of a
+  // SUCCESSFUL card (`DISMISS_MS`, three minutes, App.svelte); two axe passes
+  // fit in that with minutes to spare, and the existence proof below is what
+  // would say so if they ever did not.
+  //
+  // Proved first, scanned second, for the reason act 八之一 gives: a scoped scan
+  // whose subject is gone has the same shape as a clean one. Tab A's card was
+  // already awaited above; tab B has only been asked whether its SINK closed,
+  // which is not the same thing as its card having turned terminal.
+  for (const [who, tab, dir] of [["tab A", a, "send"], ["tab B", b, "recv"]]) {
+    await tab.waitFor(
+      namedTransferSucceeded("resume-on-the-same-link.bin"),
+      `the resumed ${dir} card on ${who} to be terminal before it is scanned`,
+      40_000,
+    );
+    const done = await tab.evaluate(`(() => {
+      const cards = ${namedTransferCards("resume-on-the-same-link.bin")};
+      const card = cards[0];
+      const all = [...document.querySelectorAll('${XFER.card}')];
+      return {
+        named: cards.length,
+        heading: card?.querySelector('${XFER.label}')?.id ?? null,
+        ok: !!card?.matches('${XFER.ok}'),
+        bars: card ? card.querySelectorAll('${XFER.bar}').length : -1,
+        // What a finished card is made of. An empty status line or a missing
+        // close button would still scan clean — there is nothing in them for
+        // axe to object to — so they are required here instead.
+        status: (card?.querySelector('.status')?.textContent ?? '').trim(),
+        // Card-relative, like '.count' in \`namedTransferCards\`: dom-contracts
+        // names no card-relative status line or head button. '.x' is the head's
+        // one control — Cancel ('.x.cancel') in flight, close once done.
+        closeButtons: card ? card.querySelectorAll('button.x:not(.cancel)').length : -1,
+        cancelButtons: card ? card.querySelectorAll('button.x.cancel').length : -1,
+        // The scan's context is every '${XFER.card}' on the page, so say what
+        // that is: a card still in flight here would make "terminal" a lie.
+        cards: all.length,
+        inFlight: all.filter((el) => !el.matches('${XFER.ok}, ${XFER.bad}')).length,
+      };
+    })()`);
+    if (
+      done.named !== 1 || done.heading !== `xfer-label-${dir}` || !done.ok || done.bars !== 0 ||
+      !done.status || done.closeButtons !== 1 || done.cancelButtons !== 0 ||
+      done.cards < 1 || done.inFlight !== 0
+    ) {
+      throw new Error(
+        `${who} had no terminal ${dir} card to scan after the resume (want exactly one ` +
+        `successful card for the file, headed by xfer-label-${dir}, no progress bar, a status ` +
+        `line, a close button, and nothing else in flight): ${JSON.stringify(done)}`,
+      );
+    }
+    await scanLiveState(
+      tab,
+      `${who}: terminal ${dir} card after the byte-level resume (${done.cards} card(s) in scope)`,
+      { context: XFER.card },
+    );
+  }
+
   // ── 九、320px、中英文和深色：最窄屏幕上头部仍可读、可操作、不溢出 ──────
   const painted = {};
   for (const variant of [
