@@ -215,6 +215,24 @@ jobs:
       # there is nothing to install.
       - name: shared Swift package CI ownership boundary
         run: node scripts/test/swift-ci-boundary-test.mjs
+      # What `README.md`, `apps/README.md` and the macOS readiness manifest may
+      # claim — the other side of the boundary the step above draws.
+      #
+      # These were XCTest cases, and `swift-package.yml` starts on
+      # `apps/RelayiumKit/**` alone — deliberately, so that a README edit never
+      # buys a paid macOS runner. The cost was that a docs-only commit on
+      # 2026-09-20 moved `apps/README.md` to iOS 0.4.1 while the Swift guard
+      # still pinned 0.4.0: no lane that could run the guard started, every
+      # hosted check was green, and `main` was red for a day. Widening the Swift
+      # filter is refused by the three policy tests in this workflow, correctly.
+      #
+      # So the claims are OWNED here rather than copied here: one file, which
+      # reads the documents and the two release records they are derived from
+      # on Linux in seconds. This workflow has no path filter, so the commit
+      # that changes a document is the commit that is judged. No dependencies,
+      # so there is nothing to install.
+      - name: what the repository's own documents may claim
+        run: node scripts/test/document-claims-test.mjs
 
   android-policy:
     runs-on: ubuntu-latest
