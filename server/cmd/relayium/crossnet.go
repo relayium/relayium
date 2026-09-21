@@ -254,7 +254,7 @@ func runReceiveCross(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	defer conn.Close()
-	rep, err := peerReceive(conn, dest, false)
+	rep, err := peerReceive(conn, dest, false, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

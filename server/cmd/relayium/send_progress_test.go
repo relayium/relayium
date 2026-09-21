@@ -247,7 +247,7 @@ func TestSendProgressTTY(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			s := &sendProgress{w: &buf, tty: true, now: clockFrom(tc.step)}
+			s := &transferProgress{w: &buf, tty: true, now: clockFrom(tc.step)}
 			for _, c := range tc.calls {
 				s.report(c.path, c.sent, c.total)
 			}
@@ -265,7 +265,7 @@ func TestSendProgressFinishTerminatesAFailedSend(t *testing.T) {
 	sendErr := errors.New("write tcp: broken pipe")
 
 	var buf bytes.Buffer
-	s := &sendProgress{w: &buf, tty: true, now: clockFrom(time.Second)}
+	s := &transferProgress{w: &buf, tty: true, now: clockFrom(time.Second)}
 	s.report("big", 100, 1000)
 	s.finish()
 	s.finish() // idempotent
@@ -278,7 +278,7 @@ func TestSendProgressFinishTerminatesAFailedSend(t *testing.T) {
 	// means nothing to clear.
 	for _, tty := range []bool{true, false} {
 		buf.Reset()
-		s := &sendProgress{w: &buf, tty: tty, now: clockFrom(time.Second)}
+		s := &transferProgress{w: &buf, tty: tty, now: clockFrom(time.Second)}
 		s.finish()
 		s.report("big", 100, 1000)
 		s.report("big", 1000, 1000)
@@ -291,7 +291,7 @@ func TestSendProgressFinishTerminatesAFailedSend(t *testing.T) {
 
 	// Not a TTY: no bar was ever painted, so a failed send adds nothing either.
 	buf.Reset()
-	s = &sendProgress{w: &buf, tty: false, now: clockFrom(time.Second)}
+	s = &transferProgress{w: &buf, tty: false, now: clockFrom(time.Second)}
 	s.report("big", 100, 1000)
 	s.finish()
 	if buf.Len() != 0 {

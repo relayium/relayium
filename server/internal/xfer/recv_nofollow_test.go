@@ -22,7 +22,7 @@ func TestWriteFileBodyRefusesSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, err := writeFileBody(strings.NewReader("attacker"), dir, dest, FileEntry{Size: 8, Mode: 0o644}, 0)
+	_, _, err := writeFileBody(strings.NewReader("attacker"), dir, dest, FileEntry{Size: 8, Mode: 0o644}, 0, nil)
 	if err == nil {
 		t.Fatal("writeFileBody followed a pre-planted symlink; want refusal")
 	}
@@ -43,7 +43,7 @@ func TestWriteFileBodyRefusesSymlinkedDir(t *testing.T) {
 	}
 	dest := filepath.Join(destDir, "sub", "file.txt") // lexically inside destDir
 
-	_, _, err := writeFileBody(strings.NewReader("attacker"), destDir, dest, FileEntry{Size: 8, Mode: 0o644}, 0)
+	_, _, err := writeFileBody(strings.NewReader("attacker"), destDir, dest, FileEntry{Size: 8, Mode: 0o644}, 0, nil)
 	if err == nil {
 		t.Fatal("write via a symlinked directory should be refused")
 	}
@@ -56,7 +56,7 @@ func TestWriteFileBodyRefusesSymlinkedDir(t *testing.T) {
 func TestWriteFileBodyAllowsNormalNested(t *testing.T) {
 	destDir := t.TempDir()
 	dest := filepath.Join(destDir, "a", "b", "file.txt")
-	sum, staged, err := writeFileBody(strings.NewReader("hello"), destDir, dest, FileEntry{Size: 5, Mode: 0o644}, 0)
+	sum, staged, err := writeFileBody(strings.NewReader("hello"), destDir, dest, FileEntry{Size: 5, Mode: 0o644}, 0, nil)
 	if err != nil {
 		t.Fatalf("normal nested write failed: %v", err)
 	}

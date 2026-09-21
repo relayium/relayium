@@ -38,6 +38,24 @@ type RecvOpts struct {
 	// own flag can never widen what this side permits. `serve` and the `__recv`
 	// helper set it; `receive` and `pull` do not.
 	AllowSync bool
+	// Progress, when set, observes each file's body as it arrives. It is the
+	// receiving twin of SendOpts.Progress and is called the same way: from
+	// Receive's own goroutine, one file at a time in manifest order, once per
+	// chunk read from the peer, with received cumulative within that file and
+	// total the manifest size. A resumed file therefore starts at its offset,
+	// not at 0 (at 0 when the prefix proof fails and the whole file is taken),
+	// and the last call for a file has received == total. An empty file and a
+	// file sync skipped are never reported. Chunk sizes are the transport's and
+	// are not part of the contract.
+	//
+	// A call means the staging file and the running hash have accepted those
+	// bytes. It does NOT mean the file is verified or installed: received ==
+	// total comes before the sender's hash is compared, so a file that then
+	// fails is still listed in Report.Failed.
+	//
+	// It is purely observational: it cannot fail, shorten or reorder a write,
+	// and nil means no reporting and exactly the behaviour without the field.
+	Progress func(path string, received, total int64)
 }
 
 // Receive accepts a pushed batch into destDir. It reads the manifest, reports
@@ -173,7 +191,7 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 				offset = 0
 			}
 		}
-		ok, err := receiveOneFile(rw, destDir, dest, f, offset, sync)
+		ok, err := receiveOneFile(rw, destDir, dest, f, offset, sync, opts.Progress)
 		if err != nil {
 			return rep, err
 		}
@@ -233,8 +251,8 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 // receiving user already had is never touched by the cleanup.
 //
 // ok=false with a nil error is ONE failed file, not a failed transfer.
-func receiveOneFile(rw io.ReadWriter, base, dest string, f FileEntry, offset int64, replace bool) (ok bool, err error) {
-	sum, staged, werr := writeFileBody(rw, base, dest, f, offset)
+func receiveOneFile(rw io.ReadWriter, base, dest string, f FileEntry, offset int64, replace bool, progress func(path string, received, total int64)) (ok bool, err error) {
+	sum, staged, werr := writeFileBody(rw, base, dest, f, offset, progress)
 	installed := false
 	defer func() {
 		if staged != "" && !installed {
@@ -563,9 +581,28 @@ func syncStateFor(destDir string, m Manifest) ResumeState {
 	return rs
 }
 
+// recvProgress feeds RecvOpts.Progress. writeFileBody places it LAST in the body
+// MultiWriter, so it sees a chunk only after the staging file and the hash have
+// both accepted it, and it always reports the full length with no error: it can
+// observe the body, never change what is written, hashed or verified.
+type recvProgress struct {
+	fn       func(path string, received, total int64)
+	path     string
+	received int64
+	total    int64
+}
+
+func (p *recvProgress) Write(b []byte) (int, error) {
+	p.received += int64(len(b))
+	p.fn(p.path, p.received, p.total)
+	return len(b), nil
+}
+
 // writeFileBody reads exactly f.Size-offset bytes from rw, writes them at the
-// given offset in dest, and returns the SHA-256 (hex) of the full file.
-func writeFileBody(rw io.Reader, base, dest string, f FileEntry, offset int64) (string, string, error) {
+// given offset in dest, and returns the SHA-256 (hex) of the full file. progress
+// may be nil (see RecvOpts.Progress); the resumed prefix, copied from this disk
+// rather than received, is where its count starts and is not itself reported.
+func writeFileBody(rw io.Reader, base, dest string, f FileEntry, offset int64, progress func(path string, received, total int64)) (string, string, error) {
 	dir := filepath.Dir(dest)
 	if info, err := os.Lstat(dest); err == nil && info.Mode()&os.ModeSymlink != 0 {
 		return "", "", fmt.Errorf("refusing symlink destination %q", dest)
@@ -615,6 +652,9 @@ func writeFileBody(rw io.Reader, base, dest string, f FileEntry, offset int64) (
 		existing.Close()
 	}
 	mw := io.MultiWriter(out, h)
+	if progress != nil {
+		mw = io.MultiWriter(out, h, &recvProgress{fn: progress, path: f.Path, received: offset, total: f.Size})
+	}
 	if _, err := io.CopyN(mw, rw, f.Size-offset); err != nil {
 		return "", "", err
 	}

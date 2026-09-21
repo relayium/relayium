@@ -111,8 +111,17 @@ var sshDial = func(e xfer.Endpoint, remoteCmd string, o sshx.Opts) (io.ReadWrite
 // whose bytes come from a process this side did not start. Neither authorizes
 // sync, so a peer's Hello.Sync is refused rather than obeyed. One function so
 // the two cannot drift apart.
-func peerReceive(rw io.ReadWriter, destDir string, noResume bool) (xfer.Report, error) {
-	return xfer.Receive(rw, destDir, xfer.RecvOpts{NoResume: noResume})
+//
+// Both run in the foreground with the user's terminal as stderr, so both report
+// progress there, and the reporter is finished before returning so whatever the
+// caller prints next — an error included — starts on a clean line. `serve` and
+// the `__recv` helper do not: a daemon's log and the far end of someone else's
+// ssh session are not a terminal anyone is watching this transfer on.
+func peerReceive(rw io.ReadWriter, destDir string, noResume bool, stderr io.Writer) (xfer.Report, error) {
+	prog := newRecvProgress(stderr)
+	rep, err := xfer.Receive(rw, destDir, xfer.RecvOpts{NoResume: noResume, Progress: prog.report})
+	prog.finish()
+	return rep, err
 }
 
 // Run dispatches a subcommand and returns a process exit code.
@@ -423,7 +432,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	rep, err := peerReceive(sess, destDir, f.noResume)
+	rep, err := peerReceive(sess, destDir, f.noResume, stderr)
 	cerr := sess.Close()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
