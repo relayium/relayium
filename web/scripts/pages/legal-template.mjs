@@ -7,7 +7,7 @@
 // and the shared footer — plus one list this template knows how to render. A
 // second near-identical template would have meant maintaining this file's head,
 // bidi handling and inlined stylesheet twice.
-import { MAINTAINED_LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, RELEASES_LABELS, BCP47, SITE, urlPath, absUrl, esc, dirAttr, rtlHead, isFrozen, archiveNotice, ARCHIVE_STYLE } from "./shared.mjs";
+import { MAINTAINED_LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, RELEASES_LABELS, BCP47, OG_LOCALE, OG_IMAGE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, dirAttr, rtlHead, isFrozen, archiveNotice, ARCHIVE_STYLE } from "./shared.mjs";
 
 const STYLE = `
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
@@ -102,6 +102,11 @@ export function renderLegalPage({ slug, lang, doc, releases = [] }) {
   // Bidi-isolated for RTL locales: the head is read by browser chrome and search
   // engines, which resolve direction from the first strong character rather than
   // from the page's dir="rtl". See rtlHead() in shared.mjs.
+  //
+  // The share card below reuses these two strings as they are, the way the four
+  // sibling templates do: a legal page has no separate social copy, and adding
+  // some would be new text to translate for a link preview. og:title follows
+  // article-template.mjs — the bare title, since og:site_name carries the brand.
   const headTitle = esc(rtlHead(lang, doc.title));
   const headDesc = esc(rtlHead(lang, doc.description));
   // Above the prose sections, not below them: someone who opens /releases/ came
@@ -125,6 +130,18 @@ export function renderLegalPage({ slug, lang, doc, releases = [] }) {
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="${SITE.name}" />
+    <meta property="og:title" content="${headTitle}" />
+    <meta property="og:description" content="${headDesc}" />
+    <meta property="og:url" content="${canonical}" />
+    <meta property="og:image" content="${OG_IMAGE}" />
+    ${OG_IMAGE_META}
+    <meta property="og:locale" content="${OG_LOCALE[lang]}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${headTitle}" />
+    <meta name="twitter:description" content="${headDesc}" />
+    <meta name="twitter:image" content="${OG_IMAGE}" />
     <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
     <style>${STYLE}${archived ? ARCHIVE_STYLE : ""}</style>
   </head>
