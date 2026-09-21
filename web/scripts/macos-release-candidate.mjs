@@ -6,9 +6,10 @@
 // advance first, on a release branch; the manifest, the signed appcast and every
 // document that names the download can only follow once the DMG is notarized,
 // because the appcast signs the FINAL stapled bytes and the manifest points at
-// an asset that does not exist until the release does. `MacSurfaceGuardTests`
-// documents that split at length, and it is why the READMEs cannot be bumped in
-// the prepare commit: between prepare and publish they would advertise a tag
+// an asset that does not exist until the release does.
+// `scripts/test/document-claims-test.mjs` derives the documented tag from the
+// manifest for exactly that reason, and it is why the READMEs cannot be bumped
+// in the prepare commit: between prepare and publish they would advertise a tag
 // that 404s.
 //
 // The consequence is that manifest, appcast, READMEs, the maintained
@@ -31,8 +32,9 @@
 // appcast come from `stage-macos-release.mjs`, the generated pages come from
 // `gen-pages.mjs`, and whether the resulting prose is TRUE is decided by
 // `repository-status.test.mjs`, `releases.test.mjs`,
-// `macos-release-surface.test.mjs` and `MacSurfaceGuardTests`. This file only
-// makes the candidate; the suites judge it, and they run before publication.
+// `macos-release-surface.test.mjs` and, for the READMEs and the readiness
+// manifest, `scripts/test/document-claims-test.mjs`. This file only makes the
+// candidate; the suites judge it, and they run before publication.
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -211,8 +213,8 @@ function quoteRegExp(literal) {
  * Validate a decoded App Store record, or refuse it.
  *
  * Every consumer — this file when it protects the claim, `content/releases.mjs`
- * when it renders nine pages, `MacSurfaceGuardTests` when it checks the READMEs
- * — resolves a PUBLIC claim from this record. A half-read one does not produce a
+ * when it renders nine pages, `scripts/test/document-claims-test.mjs` when it
+ * checks the READMEs — resolves a PUBLIC claim from this record. A half-read one does not produce a
  * smaller claim, it produces a confident wrong one, so each field is checked for
  * the property its consumers actually depend on rather than merely for presence.
  *
@@ -364,7 +366,8 @@ export async function syncCliReleaseHistory({ repoRoot, tagTable } = {}) {
  *     match inside `1.2.41`, nor inside a longer version that merely begins with
  *     the same components. A bare trailing dot is a
  *     SENTENCE, not a version component, and must still match: "**Status:
- *     released as 1.2.4.**" is one of the claims `MacSurfaceGuardTests` reads,
+ *     released as 1.2.4.**" is one of the claims
+ *     `scripts/test/document-claims-test.mjs` reads,
  *     and an earlier `(?![0-9.])` skipped it and left the status line a version
  *     behind while every other sentence in the same file moved.
  *   * Not followed by ` (<digit>`, which is the Mac App Store package form —
@@ -451,8 +454,8 @@ function assertAppStoreDerived(doc, text, release) {
 /**
  * Hold a claim document to the canonical App Store record, in both directions.
  *
- * PRESENT and CURRENT. `MacSurfaceGuardTests` requires both READMEs to name the
- * App Store product and its version, so a document that lost the claim is
+ * PRESENT and CURRENT. `scripts/test/document-claims-test.mjs` requires both
+ * READMEs to name the App Store product and its version, so a document that lost the claim is
  * broken; and a document whose claim names a version the record does not is the
  * state this repository was actually in for two months, protected from the bump
  * and wrong the whole time. Protected staleness is still staleness.

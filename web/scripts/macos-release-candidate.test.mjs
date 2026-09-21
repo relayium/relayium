@@ -194,9 +194,10 @@ describe("bumping the documents that name the published macOS release", () => {
       const text = await readFile(resolve(root, doc), "utf8");
       expect(text, `${doc} does not name the new release tag`).toContain(`macos-v${NEXT}`);
       // Every link, not merely one. A bump that moved four of five would pass a
-      // containment check and then fail publication: `MacSurfaceGuardTests`
-      // requires the current tag and `repository-status.test.mjs` requires that
-      // no superseded one is left beside it.
+      // containment check and then fail publication:
+      // `scripts/test/document-claims-test.mjs` requires the current tag and
+      // `repository-status.test.mjs` requires that no superseded one is left
+      // beside it.
       expect(text, `${doc} still links the superseded release`)
         .not.toContain(`macos-v${PUBLISHED}`);
     }

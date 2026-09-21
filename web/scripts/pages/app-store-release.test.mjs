@@ -16,7 +16,8 @@
 // Before this file the App Store version was a LITERAL, and fourteen copies of
 // it stood in for the record: the root README twice, `apps/README.md` once, all
 // nine locales of `content/releases.mjs`, and once more in each of the two
-// suites that check the READMEs — `MacSurfaceGuardTests` and
+// suites that check the READMEs — `MacSurfaceGuardTests` (those cases have since
+// moved to `scripts/test/document-claims-test.mjs`) and
 // `repository-status.test.mjs`. `releases.test.mjs` carried nine more, one per
 // locale, checking the pages. Every one of those copies said 1.3.1. The listing
 // had been at 1.3.8 since 2026-08-26. Nothing failed, because the tests were
@@ -28,8 +29,8 @@
 //
 //   1. It is WELL FORMED. Everything that consumes it — `content/releases.mjs`
 //      at page-generation time, `bumpReleaseDocs` when it protects the App Store
-//      claim from a Developer ID bump, `MacSurfaceGuardTests` when it checks the
-//      READMEs — fails closed on a malformed record rather than rendering or
+//      claim from a Developer ID bump, `scripts/test/document-claims-test.mjs`
+//      when it checks the READMEs — fails closed on a malformed record rather than rendering or
 //      certifying whatever it happened to parse.
 //   2. It actually REACHED the committed pages. The nine `/releases` twins are
 //      the bytes a reader without JavaScript, a crawler or an answer engine
