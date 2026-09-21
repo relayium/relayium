@@ -153,8 +153,9 @@ final class FakeInboxSenderTransport: InboxSenderTransport, @unchecked Sendable 
 }
 
 /// Records what was deleted, and can refuse. Stands in for the account's own
-/// stored-object routes, which is where an unbound `device_task` object's quota
-/// is returned.
+/// stored-object routes. The send coordinator must never call the delete — the
+/// server refuses it for a `device_task` object — so tests assert `deleted`
+/// stays empty on every path.
 final class FakeStoredObjectService: AccountManagementService, @unchecked Sendable {
     private let lock = NSLock()
     private var _deleted: [String] = []

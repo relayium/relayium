@@ -9,9 +9,9 @@ import XCTest
 /// that the whole design turns on:
 ///
 ///  * **definitive** — central answered, and the answer says no task exists.
-///    The create's transaction rolled back, nothing can own the ciphertext, and
-///    holding it would be invisible storage the account pays for and cannot see.
-///    Release it.
+///    The create's transaction rolled back and nothing can own the ciphertext.
+///    The local job is released; no stored-file delete is attempted, because the
+///    server refuses it for a task-purpose object and reclaims it itself.
 ///  * **ambiguous** — the request never arrived, or its answer was lost. A
 ///    delivery MAY be live. Releasing here would destroy a real transfer, so
 ///    everything is kept: the staged bytes, the content key, the plan, and above
@@ -36,6 +36,12 @@ final class InboxSendCoordinatorTests: XCTestCase {
     private var devicePublicKey = ""
     private var rotatedKeyID = "KEY9999999999abcd"
     private var rotatedPublicKey = ""
+
+    /// `DELETE /api/files/{id}` is the account's share-delete route and the
+    /// server answers 404 for a task-purpose object, so no path may issue it:
+    /// an unbound object is reclaimed by the server's collector (protocol §27).
+    private static let noStoredFileDelete =
+        "no stored-file delete may be attempted for a task-purpose object"
 
     override func setUpWithError() throws {
         root = FileManager.default.temporaryDirectory
@@ -628,8 +634,7 @@ final class InboxSendCoordinatorTests: XCTestCase {
             XCTAssertEqual($0 as? InboxSendFailure, .staleTargetKey)
         }
         XCTAssertEqual(sender.creates.count, 2, "no third attempt")
-        XCTAssertEqual(objects.deleted, ["STORED0123456789"],
-                       "a refused create rolled back, so no task can own this object")
+        XCTAssertEqual(objects.deleted, [], Self.noStoredFileDelete)
     }
 
     /// Durability of the budget: a plan that already resealed in a previous
@@ -649,11 +654,10 @@ final class InboxSendCoordinatorTests: XCTestCase {
         XCTAssertEqual(sender.creates.count, 0, "a key it cannot seal to is not worth a create")
     }
 
-    /// The budget being spent is a DEFINITIVE dead end, so the ciphertext it
-    /// left behind has to go back. Without this the job would be purged and its
-    /// object would sit in the account's storage, unreachable and unnamed, until
-    /// the server's collector noticed.
-    func testASpentBudgetOnAnUploadedDeliveryStillReleasesTheObject() async throws {
+    /// The budget being spent is a DEFINITIVE dead end, so the local job is
+    /// released. The ciphertext it uploaded is unbound and is left to the
+    /// server's collector (protocol §27); no stored-file delete is issued.
+    func testASpentBudgetOnAnUploadedDeliveryReleasesTheJobAndIssuesNoStoredFileDelete() async throws {
         let plan = try await staged()
         let uploaded = try store.markFinalized(plan, storedId: "STORED0123456789")
         let resealedBox = InboxKeyMaterial.encode(
@@ -667,7 +671,7 @@ final class InboxSendCoordinatorTests: XCTestCase {
             try await self.coordinator().deliver(already, token: "bearer")) {
             XCTAssertEqual($0 as? InboxSendFailure, .staleTargetKey)
         }
-        XCTAssertEqual(objects.deleted, ["STORED0123456789"])
+        XCTAssertEqual(objects.deleted, [], Self.noStoredFileDelete)
         try await assertJobIsGone(already)
     }
 
@@ -763,7 +767,7 @@ final class InboxSendCoordinatorTests: XCTestCase {
 
     // MARK: - definitive refusals
 
-    func testADefinitiveRefusalReleasesTheObjectAndTheJob() async throws {
+    func testADefinitiveRefusalReleasesTheJobAndIssuesNoStoredFileDelete() async throws {
         let plan = try await staged()
         sender.createOutcomes = [refusal(.autoReceiveDisabled)]
 
@@ -771,13 +775,13 @@ final class InboxSendCoordinatorTests: XCTestCase {
             XCTAssertEqual($0 as? InboxSendFailure, .refused(.autoReceiveDisabled))
         }
         XCTAssertEqual(sender.creates.count, 1, "a definitive no is not retried")
-        XCTAssertEqual(objects.deleted, ["STORED0123456789"])
+        XCTAssertEqual(objects.deleted, [], Self.noStoredFileDelete)
         try await assertJobIsGone(plan)
     }
 
-    /// The one definitive refusal that must NOT release: central says some
-    /// other task already owns this object. Deleting it would destroy a
-    /// delivery this send cannot see and did not create.
+    /// Central says some other task already owns this object. Deleting it
+    /// would destroy a delivery this send cannot see and did not create — and
+    /// no refusal issues a stored-file delete at all.
     func testAnObjectAlreadyBoundToAnotherTaskIsNeverDeleted() async throws {
         let plan = try await staged()
         sender.createOutcomes = [refusal(.storedObjectAlreadyBound)]
@@ -798,7 +802,7 @@ final class InboxSendCoordinatorTests: XCTestCase {
         await XCTAssertThrowsErrorAsync(try await self.coordinator().deliver(plan, token: "bearer")) {
             XCTAssertEqual($0 as? InboxSendFailure, .rejected(status: 402))
         }
-        XCTAssertEqual(objects.deleted, ["STORED0123456789"])
+        XCTAssertEqual(objects.deleted, [], Self.noStoredFileDelete)
     }
 
     // MARK: - guards
@@ -881,14 +885,15 @@ final class InboxSendCoordinatorTests: XCTestCase {
     }
 
     /// Abandoning a delivery that has no task yet: nothing exists on central to
-    /// cancel, so this is purely the local release plus the object's quota.
-    func testDiscardingADeliveryBeforeItsTaskExistsReleasesEverything() async throws {
+    /// cancel, so this is purely the local release. The unbound object is left
+    /// to the server's collector; no stored-file delete is issued for it.
+    func testDiscardingADeliveryBeforeItsTaskExistsReleasesTheJobAndIssuesNoStoredFileDelete() async throws {
         let plan = try await staged()
         let finalized = try store.markFinalized(plan, storedId: "STORED0123456789")
 
         try await coordinator().discard(finalized, token: "bearer")
 
-        XCTAssertEqual(objects.deleted, ["STORED0123456789"])
+        XCTAssertEqual(objects.deleted, [], Self.noStoredFileDelete)
         XCTAssertEqual(sender.calls, [], "there is no task to cancel")
         try await assertJobIsGone(plan)
     }

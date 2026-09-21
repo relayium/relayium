@@ -299,33 +299,6 @@ async function findTaskByIdempotencyKey(
   return null;
 }
 
-/** Ask the server to drop a task-purpose object that no task owns.
- *
- *  Best effort, and only ever called when the object is provably unbound: a
- *  `device_task` object has no link, no file-list row and no user-facing
- *  control, so leaving one behind is storage the account pays for and cannot
- *  see.
- *
- *  Today this request reclaims nothing. `DELETE /api/files/{id}` is the
- *  account's share-delete route, and the server answers 404 for every purpose
- *  other than `share`, deliberately: an object that reads as unbound could be
- *  bound by a concurrent task create before its blob is removed. The server's
- *  collector is therefore the only reclaim, about an hour after the upload
- *  (protocol §27), and the account carries that invisible quota until then.
- *  The call is kept as harmless best effort; it would shorten the window only
- *  if a future server accepts it for unbound task objects. */
-async function releaseObject(storedFileId: string): Promise<void> {
-  if (!isInertId(storedFileId)) return;
-  try {
-    await fetch(`/api/files/${encodeURIComponent(storedFileId)}`, {
-      method: "DELETE",
-      credentials: "include",
-    });
-  } catch {
-    /* GC still reclaims it; nothing here is worth surfacing to the user */
-  }
-}
-
 /** How many times a create may be repeated after an AMBIGUOUS answer. Each
  *  repeat carries the same idempotency key, so a landed write converges rather
  *  than duplicating. */
@@ -444,14 +417,10 @@ async function deliver(
   if (!isInertId(target.deviceID)) throw new SendFailure("unsupported_key");
   if (aborted(signal)) throw new SendFailure("cancelled");
 
-  let storedFileId = "";
-  let released = false;
-  /** Return the object's quota once, and only when nothing can own it. */
-  const release = async () => {
-    if (!storedFileId || released) return;
-    released = true;
-    await releaseObject(storedFileId);
-  };
+  // Nothing is issued for an uploaded object that a failed send leaves unbound.
+  // `DELETE /api/files/{id}` is the account's share-delete route and the server
+  // refuses it (404) for task-purpose objects, so the server's collector is the
+  // reclaim, about an hour after the upload (protocol §27).
   try {
     const uploaded = await uploadFileResumable(
       delivery.payload,
@@ -473,7 +442,7 @@ async function deliver(
       (p: UploadProgress) => onProgress?.({ phase: p.phase, sent: p.sent, total: p.total }),
       signal,
     );
-    storedFileId = uploaded.id;
+    const storedFileId = uploaded.id;
     if (aborted(signal)) throw new SendFailure("cancelled");
 
     onProgress?.({ phase: "registering", sent: 0, total: 0 });
@@ -494,10 +463,7 @@ async function deliver(
         // transaction, so this is the first binding, not a rebinding.
         staleRetried = true;
         const fresh = await currentDeviceKey(target.deviceID, signal);
-        if (!fresh) {
-          await release();
-          throw new SendFailure("stale_target_key");
-        }
+        if (!fresh) throw new SendFailure("stale_target_key");
         attempt = {
           wrappedKey: await sealContentKey(decodeKey(uploaded.key), fresh.Algorithm, fresh.PublicKey),
           targetKeyId: fresh.ID,
@@ -506,32 +472,21 @@ async function deliver(
         n--; // the re-seal is not one of the ambiguity retries
         continue;
       }
-      if (result.error) {
-        // A definitive refusal means the create's transaction rolled back, so
-        // nothing bound this object and it can be returned immediately.
-        await release();
-        throw new SendFailure(result.error);
-      }
+      // A definitive refusal: the create's transaction rolled back, so nothing
+      // bound this object. It is surfaced as-is.
+      if (result.error) throw new SendFailure(result.error);
       if (aborted(signal)) throw new SendFailure("cancelled");
     }
 
     // Every attempt was ambiguous. Ask what actually exists rather than guess.
     const found = await findTaskByIdempotencyKey(target.deviceID, opts.idempotencyKey, signal);
     if (found) return found;
-    // `null` is a definitive "no such task": safe to return the quota now.
-    // `undefined` is still unknown, so the ciphertext is KEPT — a delivery that
-    // may be live must never be destroyed to tidy up a failed request.
-    if (found === null) await release();
+    // `null` (provably no such task) and `undefined` (still unknown) surface the
+    // same way, and the ciphertext is left to the server in both: the collector
+    // reclaims an object no task owns, and never one a live delivery does.
     throw new SendFailure("network");
   } catch (e) {
-    const failure = failureFor(e, signal);
-    // Every failure except `network` is a definitive one: the create either
-    // never happened or rolled back, so no task can own this ciphertext and
-    // holding it would be invisible quota. `network` is the one case where a
-    // delivery MAY be live, and the convergence lookup above is the only thing
-    // allowed to decide it — a guess there would destroy a real transfer.
-    if (failure.code !== "network") await release();
-    throw failure;
+    throw failureFor(e, signal);
   }
 }
 

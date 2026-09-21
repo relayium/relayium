@@ -20,12 +20,13 @@ import RelayiumKit
 /// ambiguous:
 ///
 ///  * a DEFINITIVE answer that is not a success means central's transaction
-///    rolled back and no task can own this ciphertext. The object is invisible
-///    — no link, no list row, no control — so leaving it behind is storage the
-///    account pays for and cannot see. Release it. What that releases is the
-///    OBJECT and the local job that described it; a send that never uploaded an
-///    object releases neither, because there is no storage to reclaim and the
-///    staged copy may be the last one Relayium holds. See `abandon`.
+///    rolled back and no task can own this ciphertext. The local job that
+///    described it is released. The object itself is invisible — no link, no
+///    list row, no control — and nothing is issued for it: the server refuses
+///    the share-delete route for task-purpose objects, and its collector
+///    reclaims an unbound one about an hour after the upload (protocol §27). A
+///    send that never uploaded an object releases nothing, because the staged
+///    copy may be the last one Relayium holds. See `abandon`.
 ///  * an AMBIGUOUS outcome — the request never arrived, or its answer was lost
 ///    — means a delivery MAY be live. Nothing is released, because the mistake
 ///    in that direction destroys a real transfer of the user's file. The staged
@@ -55,8 +56,9 @@ public final class InboxSendCoordinator: @unchecked Sendable {
     private let keys: StoredLinkKeyStore
     private let uploader: CloudUploader
     private let sender: InboxSenderTransport
-    /// The account's own stored-object routes, used for exactly one thing:
-    /// returning the quota of a `device_task` object that is provably unbound.
+    /// The account's own stored-object routes. Unused since the stored-file
+    /// delete of an unbound `device_task` object was removed (the server
+    /// refuses it); retained only so the public initializer is unchanged.
     private let objects: AccountManagementService
 
     public init(store: PendingUploadStore, keys: StoredLinkKeyStore, uploader: CloudUploader,
@@ -129,9 +131,9 @@ public final class InboxSendCoordinator: @unchecked Sendable {
             || sealTarget.keyGeneration != current.targetKeyGeneration {
             // A rotation on a send that has already followed one is a dead end,
             // and a definitive one: nothing was created, so the ciphertext this
-            // job uploaded is provably unbound and goes back now.
+            // job uploaded is provably unbound and the job is released now.
             guard !current.targetKeyWasResealed else {
-                try await abandon(current, token: token, includingObject: true)
+                try await abandon(current)
                 throw InboxSendFailure.staleTargetKey
             }
             (current, wrapped) = try persistReseal(current, to: sealTarget,
@@ -168,7 +170,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
             } catch {
                 // Locally malformed, so nothing was sent and nothing can own the
                 // ciphertext. Definitive by construction.
-                try await abandon(current, token: token, includingObject: true)
+                try await abandon(current)
                 throw InboxSendFailure.sealFailed
             }
 
@@ -193,7 +195,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
                     // binding back, so the retry is the first binding rather
                     // than a rebinding, and no byte is re-uploaded.
                     guard !current.targetKeyWasResealed else {
-                        try await abandon(current, token: token, includingObject: true)
+                        try await abandon(current)
                         throw InboxSendFailure.staleTargetKey
                     }
                     sealTarget = try await eligibleTarget(target.deviceId, plan: current,
@@ -212,24 +214,20 @@ public final class InboxSendCoordinator: @unchecked Sendable {
                     return try await converge(current, target: target,
                                               resealed: resealed, token: token)
                 case .refused(let token_):
-                    // `stored_object_already_bound` is the one refusal that must
-                    // NOT release. It says a task we did not create owns these
-                    // bytes; deleting them would destroy somebody else's live
-                    // delivery in order to tidy up ours.
-                    try await abandon(current, token: token,
-                                      includingObject: token_ != .storedObjectAlreadyBound)
+                    // Includes `stored_object_already_bound`, which says a task
+                    // we did not create owns these bytes. Only the local job is
+                    // released; no refusal issues anything for the object.
+                    try await abandon(current)
                     throw InboxSendFailure.refused(token_)
                 case .rejected(let status):
-                    try await abandon(current, token: token, includingObject: true)
+                    try await abandon(current)
                     throw InboxSendFailure.rejected(status: status)
                 case .unauthorized:
                     // Deliberately releases NOTHING. The create provably did not
                     // happen, but this is the one refusal whose remedy is local
                     // and self-healing: sign in and retry with the same
-                    // idempotency key. Releasing would also be issued with the
-                    // very bearer that was just rejected, so it would fail and
-                    // orphan the object anyway — after destroying the user's
-                    // staged copy of their own file.
+                    // idempotency key. Releasing would destroy the user's
+                    // staged copy of their own file for nothing.
                     throw InboxSendFailure.notAuthorized
                 }
             }
@@ -285,12 +283,12 @@ public final class InboxSendCoordinator: @unchecked Sendable {
             // Central says the task is gone — deleted or expired. Its ciphertext
             // went with it inside the same transaction, so only the local
             // remains are ours to remove.
-            try await abandon(plan, token: token, includingObject: false)
+            try await abandon(plan)
             throw InboxSendFailure.noTaskCreated
         } catch {
             throw InboxSendFailure.unknownOutcome
         }
-        try await release(plan, token: token, includingObject: false)
+        try await release(plan)
         return InboxSendResult(targetDeviceID: target.deviceId, task: task, created: false,
                                resealed: plan.targetKeyWasResealed)
     }
@@ -311,9 +309,8 @@ public final class InboxSendCoordinator: @unchecked Sendable {
             // converge after local storage becomes writable again.
             throw InboxSendFailure.recoveryStateWriteFailed
         }
-        // `includingObject: false` — the object belongs to the task now, and
-        // deleting it would strand a delivery central has already promised.
-        try await release(recorded, token: nil, includingObject: false)
+        // Local remains only: the object belongs to the task now.
+        try await release(recorded)
         return InboxSendResult(targetDeviceID: target.deviceId, task: task, created: created,
                                resealed: resealed)
     }
@@ -334,22 +331,20 @@ public final class InboxSendCoordinator: @unchecked Sendable {
                                     taskID: result.task.id)
     }
 
-    /// Abandon a staged delivery, releasing whatever it is safe to release.
+    /// Abandon a staged delivery and remove its local remains.
     ///
-    /// The object is dropped only when nothing else can own it: once a task
-    /// exists, central's own delete takes the ciphertext with it, and issuing a
-    /// second delete would be this app removing bytes it no longer owns.
+    /// Once a task exists, central's own delete takes the ciphertext with it.
+    /// An object no task owns is left to the server's collector (protocol §27);
+    /// no stored-file delete is issued for it.
     public func discard(_ plan: PendingUploadPlan, token: String) async throws {
         guard plan.effectivePurpose == .deviceTask else { throw InboxSendFailure.notADelivery }
-        var owned = true
         if let taskID = plan.deviceTaskId, let target = plan.target {
             // Not `try?`. A cancel central refuses leaves a live delivery, and
             // deleting the local record of it would leave the user with a file
             // arriving that nothing here can name or stop.
             try await sender.cancelTask(targetDeviceID: target.deviceId, taskID: taskID)
-            owned = false
         }
-        try await release(plan, token: token, includingObject: owned)
+        try await release(plan)
     }
 
     // MARK: - steps
@@ -410,7 +405,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
             // Nothing on this device can seal these bytes, so a task created now
             // would be one no target could ever open. Whatever was uploaded is
             // unopenable too, which makes releasing it the honest outcome.
-            try await abandon(plan, token: token, includingObject: true)
+            try await abandon(plan)
             throw InboxSendFailure.contentKeyMissing
         }
         return key
@@ -435,12 +430,12 @@ public final class InboxSendCoordinator: @unchecked Sendable {
         guard let row = rows.first(where: { $0.id == deviceID }) else {
             // Definitive: the account no longer has this device, so no task
             // could ever be created against it.
-            try await abandon(plan, token: token, includingObject: true)
+            try await abandon(plan)
             throw InboxSendFailure.targetMissing
         }
         guard let target = InboxTargetEligibility.target(for: row) else {
             let block = InboxTargetEligibility.availability(for: row).block ?? .cannotReceive
-            try await abandon(plan, token: token, includingObject: true)
+            try await abandon(plan)
             throw InboxSendFailure.targetUnavailable(block)
         }
         // The capability gate for a MESSAGE, re-checked here rather than trusted
@@ -454,13 +449,13 @@ public final class InboxSendCoordinator: @unchecked Sendable {
         // a native build without the surface may commit the message to its own
         // store and never show it to anyone. Either way the sender would have
         // promised a message its recipient cannot read. Definitive — the remedy
-        // is on that machine — so the ciphertext goes back.
+        // is on that machine — so an uploaded job is released.
         //
         // A FILE delivery deliberately never reaches this branch. Requiring
         // `inbox.text.v1` of it would refuse ordinary file sends to every
         // receiver that does not render messages.
         if plan.effectiveDeliveryKind == .text, !InboxTargetEligibility.canReceiveText(row) {
-            try await abandon(plan, token: token, includingObject: true)
+            try await abandon(plan)
             throw InboxSendFailure.textUnsupported
         }
         return target
@@ -487,7 +482,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
             // so every later attempt would rebuild exactly the same refusal.
             // Nothing has been uploaded yet, so `abandon` releases only what a
             // never-uploaded send owns — which is nothing.
-            try await abandon(plan, token: token, includingObject: true)
+            try await abandon(plan)
             throw InboxSendFailure.unsendableContent
         }
         do {
@@ -562,44 +557,32 @@ public final class InboxSendCoordinator: @unchecked Sendable {
     /// Give up on this send, giving back only what it actually owns.
     ///
     /// **A send that never reached the server keeps the user's staged files.**
-    /// The point of `release` is to return the quota of an object nothing can
-    /// see; when no object was ever created there is no quota to return, and
-    /// purging the staged copy accomplishes exactly one thing — deleting the
-    /// user's files. That matters most for a job copied out of a Share
-    /// Extension draft: the draft is retired the moment this plan becomes
-    /// durable, so the staged copy IS the last copy Relayium holds, and every
-    /// refusal that lands here names a remedy on the other device and invites a
-    /// retry. Deleting the bytes would make that invitation false.
+    /// When no object was ever created, purging the staged copy accomplishes
+    /// exactly one thing — deleting the user's files. That matters most for a
+    /// job copied out of a Share Extension draft: the draft is retired the
+    /// moment this plan becomes durable, so the staged copy IS the last copy
+    /// Relayium holds, and every refusal that lands here names a remedy on the
+    /// other device and invites a retry. Deleting the bytes would make that
+    /// invitation false.
     ///
     /// The job stays outstanding instead, with its idempotency key and content
     /// key intact, and the user decides: Retry once the other device is fixed,
     /// or Discard. Discard goes through `release` directly, because a person
     /// asking for their copy to be removed is not this branch.
-    private func abandon(_ plan: PendingUploadPlan, token: String?,
-                         includingObject: Bool) async throws {
+    private func abandon(_ plan: PendingUploadPlan) async throws {
         guard plan.finalizedStoredId != nil else { return }
-        try await release(plan, token: token, includingObject: includingObject)
+        try await release(plan)
     }
 
-    /// Give back what this send no longer owns.
+    /// Remove this send's local remains: its content key, its plan and its
+    /// staged bytes.
     ///
-    /// `token` is nil when only the local remains are being removed, which is
-    /// also the compile-time reason a success path cannot accidentally delete
-    /// the object its own task now owns.
-    private func release(_ plan: PendingUploadPlan, token: String?,
-                         includingObject: Bool) async throws {
-        if includingObject, let token, let storedId = plan.finalizedStoredId {
-            // Best effort, and today it reclaims nothing: `DELETE
-            // /api/files/{id}` is the account's share-delete route, and the
-            // server answers 404 for every purpose other than `share`, so a
-            // task-purpose object is refused and the error is dropped here.
-            // The server's own collector is the only reclaim, about an hour
-            // after the upload (protocol §27); until then the account pays
-            // for storage it cannot see. The call is kept because it is
-            // harmless, and it would shorten that window only if a future
-            // server accepts it for unbound task objects.
-            _ = try? await objects.deleteStoredFile(id: storedId, token: token)
-        }
+    /// Nothing is issued for the uploaded object, bound or not. `DELETE
+    /// /api/files/{id}` is the account's share-delete route and the server
+    /// refuses it (404) for task-purpose objects, so an unbound object is
+    /// reclaimed by the server's collector, about an hour after the upload
+    /// (protocol §27).
+    private func release(_ plan: PendingUploadPlan) async throws {
         try? await keys.remove(id: plan.jobId)
         // The tombstone goes down before the bytes, so a removal that fails
         // cannot turn this job back into outstanding work on the next launch.
@@ -710,7 +693,7 @@ public enum InboxSendFailure: Error, Equatable, Sendable {
     /// nothing, because retrying after protected storage recovers is safe.
     case recoveryStateReadFailed
     /// Central was asked and no task carrying this send's idempotency key
-    /// exists. Definitive: the ciphertext has been released.
+    /// exists. Definitive: the local job has been released.
     case noTaskCreated
     /// Nobody knows whether a delivery exists. NOTHING has been released — not
     /// the ciphertext, not the staged bytes, not the content key, and not the

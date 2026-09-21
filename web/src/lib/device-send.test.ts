@@ -113,9 +113,8 @@ function stubFetch() {
     if (call.url.includes("/inbox/tasks") && call.method === "POST") {
       return json({ task: taskJson(), created: true }, 201);
     }
-    if (call.url.startsWith("/api/files/") && call.method === "DELETE") {
-      return json({ status: "ok" });
-    }
+    // Anything else is a 404 — including `DELETE /api/files/{id}`, which is what
+    // the real server answers for a task-purpose object. No send path issues it.
     return json({}, 404);
   });
   vi.stubGlobal("fetch", impl);
@@ -223,6 +222,8 @@ afterEach(() => vi.unstubAllGlobals());
 
 const created = () => calls.find((c) => c.url.includes("/inbox/tasks") && c.method === "POST");
 const creates = () => calls.filter((c) => c.url.includes("/inbox/tasks") && c.method === "POST");
+/** Requests to the account's share-delete route. The server refuses it for a
+ *  task-purpose object, so a send must never issue one — on any path. */
 const deletes = () => calls.filter((c) => c.url.startsWith("/api/files/") && c.method === "DELETE");
 const uploadInits = () => calls.filter((c) => c.url.startsWith("/api/uploads?"));
 
@@ -454,7 +455,7 @@ describe("the stale-key race", () => {
     expect(deletes()).toHaveLength(0);
   });
 
-  it("gives up honestly when the device has no usable current key, and releases the object", async () => {
+  it("gives up honestly when the device has no usable current key, and issues no stored-file delete", async () => {
     handlers.push((c) => {
       if (c.url.includes("/inbox/tasks") && c.method === "POST") return json({ error: "stale_target_key" }, 409);
       if (c.url.endsWith("/inbox/keys")) return json({ keys: [] });
@@ -463,7 +464,7 @@ describe("the stale-key race", () => {
     await expect(sendFilesToDevice(targetSpec(), FILES(), sendOpts())).rejects.toMatchObject({
       code: "stale_target_key",
     });
-    expect(deletes().map((d) => d.url)).toEqual([`/api/files/${OBJECT_ID}`]);
+    expect(deletes().map((d) => d.url), "a dead share-route DELETE was issued").toEqual([]);
   });
 
   it("does not loop forever on a device that keeps rotating", async () => {
@@ -483,7 +484,7 @@ describe("the stale-key race", () => {
 });
 
 describe("failures and cleanup", () => {
-  it("returns the invisible quota immediately on every definitive refusal", async () => {
+  it("surfaces every definitive refusal and issues no stored-file delete for it", async () => {
     for (const [serverCode, expected] of [
       ["auto_receive_disabled", "auto_receive_disabled"],
       ["device_cannot_receive", "device_cannot_receive"],
@@ -499,7 +500,8 @@ describe("failures and cleanup", () => {
             : undefined,
       ];
       await expect(sendFilesToDevice(targetSpec(), FILES(), sendOpts())).rejects.toMatchObject({ code: expected });
-      expect(deletes(), `no cleanup after ${serverCode}`).toHaveLength(1);
+      expect(creates(), `create repeated after ${serverCode}`).toHaveLength(1);
+      expect(deletes(), `a dead share-route DELETE after ${serverCode}`).toHaveLength(0);
     }
   });
 
@@ -519,14 +521,16 @@ describe("failures and cleanup", () => {
     expect(deletes(), "a converged task's ciphertext was deleted").toHaveLength(0);
   });
 
-  it("releases the object when the lookup PROVES no task was created", async () => {
+  it("issues no stored-file delete even when the lookup PROVES no task was created", async () => {
     handlers.push((c) => {
       if (c.url.includes("/inbox/tasks") && c.method === "POST") throw new TypeError("network down");
       if (c.url.includes("/inbox/tasks?limit=") && c.method === "GET") return json({ tasks: [] });
       return undefined;
     });
     await expect(sendFilesToDevice(targetSpec(), FILES(), sendOpts())).rejects.toMatchObject({ code: "network" });
-    expect(deletes()).toHaveLength(1);
+    // The object is unbound, and the server's collector is what reclaims it
+    // (protocol §27): the share-delete route answers 404 for this purpose.
+    expect(deletes(), "a dead share-route DELETE was issued").toHaveLength(0);
   });
 
   it("KEEPS the ciphertext when the outcome is genuinely unknown", async () => {
@@ -570,13 +574,14 @@ describe("failures and cleanup", () => {
     await expect(
       sendFilesToDevice({ ...targetSpec(), publicKey: zeroKey }, FILES(), sendOpts()),
     ).rejects.toMatchObject({ code: "unsupported_key" });
-    // The upload already happened (the seal is deliberately last), so the
-    // object must be released rather than left invisible.
-    expect(deletes()).toHaveLength(1);
+    // The upload already happened (the seal is deliberately last). The unbound
+    // object is left to the server's collector; nothing is issued for it.
+    expect(uploadInits()).toHaveLength(1);
+    expect(deletes(), "a dead share-route DELETE was issued").toHaveLength(0);
     expect(created()).toBeUndefined();
   });
 
-  it("cancelling between finalize and create releases the object", async () => {
+  it("cancelling between finalize and create issues no stored-file delete", async () => {
     const controller = new AbortController();
     handlers.push((c) => {
       if (c.url.includes("/inbox/tasks") && c.method === "POST") {
@@ -588,7 +593,7 @@ describe("failures and cleanup", () => {
     await expect(
       sendFilesToDevice(targetSpec(), FILES(), sendOpts({ signal: controller.signal })),
     ).rejects.toMatchObject({ code: "cancelled" });
-    expect(deletes()).toHaveLength(1);
+    expect(deletes(), "a dead share-route DELETE was issued").toHaveLength(0);
   });
 
   it("reports progress through the two sender-local phases", async () => {
