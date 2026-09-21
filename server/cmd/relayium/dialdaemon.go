@@ -78,7 +78,9 @@ func pushDaemon(target string, srcs []string, configDir string, noResume bool, s
 		return 1
 	}
 	defer tconn.Close()
-	rep, err := xfer.Send(tconn, m, paths, xfer.SendOpts{Progress: progressFn(stderr)})
+	prog := newSendProgress(stderr)
+	rep, err := xfer.Send(tconn, m, paths, xfer.SendOpts{Progress: prog.report})
+	prog.finish()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		// The authorization hint is a guess for the silent case — an unauthorized

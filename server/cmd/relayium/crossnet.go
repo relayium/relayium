@@ -157,6 +157,17 @@ func splitSendArgs(args []string) (srcs []string, code string, err error) {
 		strings.Join(args[:len(args)-1], " "))
 }
 
+// crossnetSendDial is the transport `send` runs over. It is a var so a test can
+// drive runSendCross itself — its argument handling, its SendOpts and what it
+// prints — against a peer on a pipe.
+var crossnetSendDial = func(ctx context.Context, code string, f crossFlags, stderr io.Writer) (io.ReadWriteCloser, error) {
+	conn, err := crossnetConn(ctx, code, "sender", f, stderr, rzvous.ModeFile)
+	if err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
 func runSendCross(args []string, stdout, stderr io.Writer) int {
 	if wantsHelpFS(crossFlagSet(&crossFlags{}), args) {
 		fmt.Fprint(stdout, sendUsage)
@@ -189,13 +200,15 @@ func runSendCross(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 	}
-	conn, err := crossnetConn(ctx, code, "sender", f, stderr, rzvous.ModeFile)
+	conn, err := crossnetSendDial(ctx, code, f, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	defer conn.Close()
-	rep, err := xfer.Send(conn, m, paths, xfer.SendOpts{})
+	prog := newSendProgress(stderr)
+	rep, err := xfer.Send(conn, m, paths, xfer.SendOpts{Progress: prog.report})
+	prog.finish()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

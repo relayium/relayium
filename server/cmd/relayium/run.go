@@ -353,7 +353,9 @@ func runPush(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
-		rep, err := xfer.Send(sess, m, srcs, xfer.SendOpts{Progress: progressFn(stderr)})
+		prog := newSendProgress(stderr)
+		rep, err := xfer.Send(sess, m, srcs, xfer.SendOpts{Progress: prog.report})
+		prog.finish()
 		cerr := sess.Close()
 		if err != nil {
 			fmt.Fprintln(stderr, err)
@@ -481,13 +483,4 @@ func reportExit(rep xfer.Report, stderr io.Writer) int {
 		return 1
 	}
 	return 0
-}
-
-func progressFn(stderr io.Writer) func(string, int64, int64) {
-	// Minimal, non-TTY-safe progress; refined rendering is out of Phase 1 scope.
-	return func(path string, sent, total int64) {
-		if sent == total {
-			fmt.Fprintf(stderr, "  %s (%d bytes)\n", path, total)
-		}
-	}
 }

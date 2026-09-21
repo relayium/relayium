@@ -172,7 +172,8 @@ func syncOnce(dest string, srcs []string, f syncFlags, stdout, stderr io.Writer)
 		fmt.Fprintln(stderr, "refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).")
 		return 1
 	}
-	opts := xfer.SendOpts{Sync: true, Delete: f.del, Progress: progressFn(stderr)}
+	prog := newSendProgress(stderr)
+	opts := xfer.SendOpts{Sync: true, Delete: f.del, Progress: prog.report}
 
 	if strings.HasPrefix(dest, daemonScheme) {
 		tconn, err := dialDaemon(dest, f.configDir, stderr)
@@ -182,6 +183,7 @@ func syncOnce(dest string, srcs []string, f syncFlags, stdout, stderr io.Writer)
 		}
 		defer tconn.Close()
 		rep, err := xfer.Send(tconn, m, paths, opts)
+		prog.finish()
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -219,6 +221,7 @@ func syncOnce(dest string, srcs []string, f syncFlags, stdout, stderr io.Writer)
 		return 1
 	}
 	rep, serr := xfer.Send(sess, m, paths, opts)
+	prog.finish()
 	cerr := sess.Close()
 	if serr != nil {
 		fmt.Fprintln(stderr, serr)

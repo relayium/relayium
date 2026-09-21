@@ -27,7 +27,8 @@ type progressBar struct {
 	start    time.Time
 	last     time.Time // last TTY repaint
 	total    int64
-	nextPct  int // non-TTY: next milestone still to print
+	nextPct  int   // non-TTY: next milestone still to print
+	base     int64 // bytes already done when the bar started (a resumed send); not counted in the rate
 }
 
 // newProgressBar builds a bar writing to w, auto-detecting whether w is a
@@ -117,10 +118,11 @@ func (p *progressBar) renderTTY(done, total int64, t time.Time) {
 // meaningful (avoids a wild figure in the first fraction of a second).
 func (p *progressBar) rate(done int64, t time.Time) string {
 	el := t.Sub(p.start).Seconds()
-	if el < 0.2 || done <= 0 {
+	moved := done - p.base
+	if el < 0.2 || moved <= 0 {
 		return ""
 	}
-	return humanBytes(int64(float64(done)/el)) + "/s"
+	return humanBytes(int64(float64(moved)/el)) + "/s"
 }
 
 // finish clears the in-place TTY line so the command's summary line starts
@@ -132,6 +134,62 @@ func (p *progressBar) finish() {
 	p.finished = true
 	if p.tty && p.started {
 		fmt.Fprint(p.w, "\r\033[K")
+	}
+}
+
+// sendProgress adapts xfer.SendOpts.Progress to a progressBar. xfer.Send reports
+// from its own single goroutine, one file at a time, after every chunk it
+// writes: sent is cumulative within that file (it starts at the resume offset,
+// not at 0) and total is the manifest size. An empty file is never reported,
+// and total can be 0 or smaller than sent only when the file changed under the
+// send, which Send then fails.
+//
+// Not a TTY: exactly one "  path (N bytes)" line as each file completes — no
+// start or milestone lines, so a tree of small files costs a pipe or CI log
+// one line per file, never five. TTY: the file in flight additionally gets a
+// live in-place bar, cleared before its completion line is printed.
+type sendProgress struct {
+	w   io.Writer
+	tty bool
+	now func() time.Time // injectable clock (tests); nil → time.Now
+
+	bar  *progressBar // the file in flight; nil between files and when not a TTY
+	path string
+}
+
+func newSendProgress(w io.Writer) *sendProgress {
+	return &sendProgress{w: w, tty: isTTY(w), now: time.Now}
+}
+
+// report is the xfer.SendOpts.Progress callback.
+func (s *sendProgress) report(path string, sent, total int64) {
+	if s.bar != nil && path != s.path {
+		s.finish()
+	}
+	if sent == total {
+		s.finish()
+		fmt.Fprintf(s.w, "  %s (%d bytes)\n", path, total)
+		return
+	}
+	if !s.tty {
+		return
+	}
+	if s.bar == nil {
+		// base: a resumed file opens at its offset, and counting those bytes
+		// would report a transfer rate nothing achieved.
+		s.bar = &progressBar{w: s.w, tty: true, glyph: "⇡", verb: "Sending", now: s.now, base: sent}
+		s.path = path
+	}
+	s.bar.update(sent, total)
+}
+
+// finish clears a bar a failed send left painted, so the caller's error starts
+// on a clean line instead of being glued to it. A completed file has already
+// cleared its own; with nothing in flight this does nothing. Idempotent.
+func (s *sendProgress) finish() {
+	if s.bar != nil {
+		s.bar.finish()
+		s.bar = nil
 	}
 }
 
