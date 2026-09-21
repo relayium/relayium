@@ -61,7 +61,7 @@
     </div>
   </section>
 
-  <!-- Self-host to stay 100% free -->
+  <!-- Self-hosting -->
   <section class="selfhost ui-card ui-stack">
     <h2>{p.selfhostTitle}</h2>
     <p>{p.selfhostBody}</p>
