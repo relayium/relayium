@@ -115,8 +115,9 @@ async function main() {
       // A disabled control is NOT clicked, and saying so is the point. The
       // helper this was copied from returned true here, so the first run of
       // this file reported success for pressing a button that is disabled by
-      // design. Fixed once already in the resident driver; the OS-entry one
-      // still has the weak version. (No backticks in this comment: it lives
+      // design. The check below is the resident driver's rule (clickTest in
+      // resident-main.mjs), and the OS-entry and pair-handoff helpers, which
+      // once lacked it, carry it too. (No backticks in this comment: it lives
       // inside a template literal.)
       if (e.disabled === true) return false;
       e.click();

@@ -115,8 +115,10 @@ async function main() {
       // A disabled control is not clicked, and saying so is the point: a
       // helper that returned true here reports success for a press that did
       // nothing, and the real failure surfaces somewhere else as a symptom.
-      // The rule and its wording are the resident driver's; this file kept the
-      // weak version because the batch that fixed the others did not sweep.
+      // The rule and its wording are the resident driver's (clickTest in
+      // resident-main.mjs). This helper used to lack the check and answer true
+      // for a disabled control; the line below is that fix. (No backticks in
+      // this comment: it lives inside a template literal.)
       if (e.disabled === true) return false;
       e.click();
       await window.__tick();
