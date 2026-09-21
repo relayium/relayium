@@ -21,9 +21,11 @@ import { CAP_RENEW } from "./relay-renew-wire";
  * The single-lane legacy conversation wire. **This build does not speak it.**
  *
  * Kept as a named constant because it is still a real capability on this room's
- * wire — a paused iOS build and the CLI announce it — and because naming the
- * thing we do NOT implement is what lets a fixture describe a legacy peer
- * without a bare string. Nothing here advertises it and nothing routes on it:
+ * wire — a paused iOS build announces it — and because naming the thing we do
+ * NOT implement is what lets a fixture describe a legacy peer without a bare
+ * string. (The `relayium` CLI is not such a peer: it announces no capability at
+ * all and speaks its own `kind`-tagged handshake, so it lands under "a peer
+ * that never announced" below.) Nothing here advertises it and nothing routes on it:
  * a peer whose hello is exactly this is unsupported, terminally, and that is
  * the whole of the Web's answer to it.
  */
@@ -174,7 +176,7 @@ export function peerCapsKnown(peerId: string): boolean {
  * "Exact" is the load-bearing word, and this is now the browser's ONLY admission
  * decision: there is no second transport to fall through to, so a false answer
  * here is not a downgrade, it is a connection that cannot work. An older Web
- * peer, a native client or the CLI announces `text/1` and nothing else, and such
+ * peer or a native client announces `text/1` and nothing else, and such
  * a peer starts receiving FILES from any inbound offer — so a speculative
  * two-channel offer to it becomes a transfer whose manifest never arrives, and it
  * waits out a stall watchdog. `link/2`, a capitalised variant, `text/1` and a
@@ -198,9 +200,9 @@ export function peerSupportsLink(peerId: string): boolean {
  * This is the one gate on frame kind 12. An unknown kind is a HARD ERROR in
  * every implementation, so a speculative handoff does not degrade to the live
  * link — it kills the whole transfer on a frame the peer cannot parse. Native
- * clients and the CLI announce `text/1` (and, for a current Web peer, `link/1`)
- * and nothing else, so they take the ordinary live-link path and are never sent
- * one. `preupload/2` is a different wire and must not be read as this one.
+ * clients announce `text/1` (and, for a current Web peer, `link/1`) and nothing
+ * else, and the CLI announces nothing, so they take the ordinary live-link path
+ * or none at all and are never sent one. `preupload/2` is a different wire and must not be read as this one.
  *
  * Gated on `linkRoomActive()` in front of the membership test for the same
  * reason peerSupportsLink is: the frame has no transport without a link, so one
