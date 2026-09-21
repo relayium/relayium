@@ -84,9 +84,11 @@ public func piecePlainBytes(maxFrameBytes: Int) throws -> Int {
 ///
 /// It exists because the byte bound alone is not a bound: a peer can send
 /// unlimited ZERO-length pieces, which never advance the byte counter while each
-/// one costs the receiver an array slot. This is a deliberate hardening beyond
-/// the current web receiver, and it is strictly compatible — it accepts every
-/// stream a conforming web sender can produce.
+/// one costs the receiver an array slot. The web receiver holds the same line
+/// (`web/src/lib/transfer.ts` `Receiver.addPart`: it refuses an empty non-final
+/// piece and more than `limit / MIN_PIECE_BYTES` of them), as does Android. The
+/// bound is strictly compatible — it accepts every stream a conforming sender
+/// can produce.
 public let MAX_PIECES_PER_LOGICAL_UNIT = 64
 
 /// The default per-frame allowance: exactly one whole logical chunk, which is

@@ -451,10 +451,33 @@ export class Receiver {
   }
 
   /** Buffer one non-final piece. `limit` bounds how much a peer can make this
-   *  receiver hold before the terminating frame arrives. */
+   *  receiver hold before the terminating frame arrives.
+   *
+   *  Three separate bounds, because plaintext bytes alone bound nothing: a peer
+   *  can authenticate any number of ZERO-LENGTH pieces, each one retained while
+   *  the byte total stays at zero — and a manifest's pieces arrive before the
+   *  user has been asked anything.
+   *
+   *  - An empty non-final piece is refused. `Sender.pieces` cannot emit one: a
+   *    non-final piece is always exactly `pieceBytes`, which `piecePlainBytes`
+   *    floors at MIN_PIECE_BYTES. It is not a small frame, it is a frame no
+   *    conforming sender produces.
+   *  - The COUNT is bounded on its own, at the protocol floor rather than at
+   *    this connection's piece size — the receiver does not know what the
+   *    sender negotiated. One-byte pieces would otherwise fit 196,608 array
+   *    slots inside a single chunk's byte bound.
+   *  - The byte total is bounded as before.
+   *
+   *  The Android and Apple receivers hold the same line. */
   private addPart(kind: number, plain: Uint8Array, limit: number): void {
     if (this.partKind && this.partKind !== kind) {
       throw new Error("relayium: interleaved partial frames");
+    }
+    if (plain.length === 0) {
+      throw new Error("relayium: empty non-final fragment");
+    }
+    if (this.parts.length + 1 > Math.floor(limit / MIN_PIECE_BYTES)) {
+      throw new Error("relayium: too many fragments for one logical unit");
     }
     if (this.partBytes + plain.length > limit) {
       throw new Error("relayium: oversized fragmented frame");
@@ -478,7 +501,9 @@ export class Receiver {
     if (this.partBytes + plain.length > limit) {
       throw new Error("relayium: oversized frame");
     }
-    if (this.partBytes === 0) return plain;
+    // "Is anything buffered?" is asked of the pieces, not of their byte total,
+    // so the answer cannot depend on how large a buffered piece happened to be.
+    if (this.parts.length === 0) return plain;
     const out = new Uint8Array(this.partBytes + plain.length);
     let off = 0;
     for (const p of this.parts) { out.set(p, off); off += p.length; }
@@ -541,7 +566,7 @@ export class Receiver {
       this.expectedSeq++;
       // A file cannot end in the middle of a chunk. Leftover pieces mean the
       // sender's framing and ours disagree — fail rather than hash a short chunk.
-      if (this.partBytes > 0) throw new Error("relayium: file ended mid-chunk");
+      if (this.parts.length > 0) throw new Error("relayium: file ended mid-chunk");
       const { sha256 } = JSON.parse(dec.decode(plain)) as { sha256: string };
       const ok = sha256 === toHex(this.hash);
       this.hash = new Uint8Array(32); // reset chain for the next file in the batch

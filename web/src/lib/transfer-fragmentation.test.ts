@@ -5,6 +5,7 @@ import {
   CHUNK_SIZE,
   FRAME,
   MANIFEST_MAX_BYTES,
+  MIN_PIECE_BYTES,
   Receiver,
   Sender,
   isChunkFrame,
@@ -364,6 +365,82 @@ describe("receiver bounds on fragments", () => {
     await receiver.feed(await rawFrame(FRAME.CHUNK_PART, 0, new Uint8Array(CHUNK_SIZE - 1), ka.send), kb);
     await expect(receiver.feed(await rawFrame(FRAME.CHUNK, 1, new Uint8Array(2), ka.send), kb))
       .rejects.toThrow(/oversized frame/);
+  });
+
+  // The byte bound is not a bound on its own. A zero-length PART is
+  // authenticated and adds nothing to the byte total, so a paired peer could
+  // keep the receiver appending array slots for as long as it liked — before
+  // the manifest has arrived, i.e. before the user has been asked anything.
+  it("refuses an empty non-final fragment, which no conforming sender emits", async () => {
+    const { ka, kb } = await session();
+    const receiver = new Receiver();
+    await expect(receiver.feed(await rawFrame(FRAME.CHUNK_PART, 0, new Uint8Array(0), ka.send), kb))
+      .rejects.toThrow(/empty non-final fragment/);
+  });
+
+  it("refuses an empty manifest fragment too, the one that arrives before any consent", async () => {
+    const { ka, kb } = await session();
+    const receiver = new Receiver();
+    await expect(receiver.feed(await rawFrame(11 /* BATCH_PART */, 0, new Uint8Array(0), ka.send), kb))
+      .rejects.toThrow(/empty non-final fragment/);
+  });
+
+  it("does not hold an empty fragment that arrives behind real ones", async () => {
+    const { ka, kb } = await session();
+    const receiver = new Receiver();
+    await receiver.feed(await rawFrame(FRAME.CHUNK_PART, 0, new Uint8Array(4096), ka.send), kb);
+    await expect(receiver.feed(await rawFrame(FRAME.CHUNK_PART, 1, new Uint8Array(0), ka.send), kb))
+      .rejects.toThrow(/empty non-final fragment/);
+  });
+
+  // One byte per piece stays inside the byte bound for 196,608 pieces. The
+  // smallest piece a conforming sender cuts is MIN_PIECE_BYTES, so a chunk is at
+  // most CHUNK_SIZE / MIN_PIECE_BYTES pieces and a manifest at most
+  // MANIFEST_MAX_BYTES / MIN_PIECE_BYTES; past that the peer is not fragmenting,
+  // it is filling memory.
+  it("refuses more chunk fragments than a conforming sender can cut one chunk into", async () => {
+    const { ka, kb } = await session();
+    const receiver = new Receiver();
+    const most = CHUNK_SIZE / MIN_PIECE_BYTES;
+    expect(most).toBe(48);
+    let seq = 0;
+    for (let i = 0; i < most; i++) {
+      await receiver.feed(await rawFrame(FRAME.CHUNK_PART, seq++, new Uint8Array(1), ka.send), kb);
+    }
+    await expect(receiver.feed(await rawFrame(FRAME.CHUNK_PART, seq++, new Uint8Array(1), ka.send), kb))
+      .rejects.toThrow(/too many fragments/);
+  });
+
+  it("refuses more manifest fragments than a conforming sender can cut one manifest into", async () => {
+    const { ka, kb } = await session();
+    const receiver = new Receiver();
+    const most = MANIFEST_MAX_BYTES / MIN_PIECE_BYTES;
+    expect(most).toBe(50);
+    let seq = 0;
+    for (let i = 0; i < most; i++) {
+      await receiver.feed(await rawFrame(11 /* BATCH_PART */, seq++, new Uint8Array(1), ka.send), kb);
+    }
+    await expect(receiver.feed(await rawFrame(11 /* BATCH_PART */, seq++, new Uint8Array(1), ka.send), kb))
+      .rejects.toThrow(/too many fragments/);
+  });
+
+  // The other side of that bound: the most fragmented stream a conforming
+  // sender CAN produce — a whole chunk cut at the protocol's smallest piece —
+  // must still arrive intact. 47 non-final pieces and the terminal one.
+  it("still accepts a whole chunk cut at the smallest conforming piece size", async () => {
+    const { ka, kb } = await session();
+    const data = content(CHUNK_SIZE, 11);
+    const file = new File([data], "a.bin");
+    const frames: Uint8Array<ArrayBuffer>[] = [];
+    const sender = new Sender();
+    for await (const f of sender.dataFrames([file], ka, undefined, MIN_PIECE_BYTES + CHUNK_OVERHEAD)) frames.push(f);
+    const chunkFrames = frames.filter(isChunkFrame);
+    expect(chunkFrames).toHaveLength(48);
+    expect(chunkFrames.filter((f) => f[0] === FRAME.CHUNK_PART)).toHaveLength(47);
+    const receiver = new Receiver();
+    let chunk: Uint8Array | undefined;
+    for (const f of chunkFrames) chunk = (await receiver.feed(f, kb)).chunk ?? chunk;
+    expect(chunk).toEqual(data);
   });
 
   it("refuses fragments of two different things interleaved", async () => {

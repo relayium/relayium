@@ -741,8 +741,20 @@ Fragmentation rules:
   that skips the PART kinds and sends one oversized authenticated terminal frame
   is the cheapest way to hand a receiver an arbitrarily large plaintext to hash
   or JSON-parse before any consent.
+- **The byte bound is not sufficient on its own; the number of buffered pieces is
+  bounded too.** A zero-length PART is authenticated and adds nothing to the byte
+  total, so a receiver that counts only bytes can be made to retain pieces
+  without limit — for a manifest, before the user has been asked anything. A
+  conforming sender never emits an empty non-final piece (every non-final piece
+  is exactly `piecePlainBytes`, which is at least `MIN_PIECE_BYTES`), so one
+  logical unit is at most `limit / MIN_PIECE_BYTES` pieces: 48 for a chunk, 50
+  for a manifest. The Web and Android receivers refuse an empty non-final piece
+  and refuse more than `floor(limit / MIN_PIECE_BYTES)` non-final pieces; the
+  Apple receiver caps the count at 64 and tolerates empty pieces inside that
+  cap. All three accept every stream a conforming sender can produce.
 - A `DONE_ENC` with pieces still buffered is an error: a file cannot end in the
-  middle of a chunk.
+  middle of a chunk. "Buffered" means a piece exists, not that its bytes are
+  non-zero.
 
 Flow control:
 
