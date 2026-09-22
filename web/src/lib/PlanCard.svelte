@@ -144,11 +144,17 @@
 <style>
   /* 与 QuotaMeters.svelte 的 .quota 同款卡片：两块在 /me 页上下相邻，视觉重量
      必须一致，否则会读成主次关系。 */
+  /* --surface, not --social-bg. Inside `.appshell.shell` --surface IS the
+     reference's card (#2d2d30 dark / #ffffff light); --social-bg is the site's
+     warm translucent tint (#2f303a80 dark), so these cards were a different
+     hue AND semi-transparent against every other card on the same pane.
+     Measured on production 2026-09-22: /device-inbox's cards #ffffff,
+     /me's #2f303a80, on the same #f8f8fa pane. */
   .plan-card {
     padding: var(--space-5) var(--space-4);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    background: var(--social-bg);
+    background: var(--surface);
     margin-bottom: var(--space-3);
   }
   .head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }

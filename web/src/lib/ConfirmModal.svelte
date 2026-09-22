@@ -37,8 +37,16 @@
   .modal {
     position: fixed; z-index: 61; top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: min(340px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto;
-    padding: var(--space-5); border-radius: var(--radius); border: 1px solid var(--border);
-    background: var(--bg); box-shadow: var(--shadow);
+    padding: var(--space-5); border-radius: var(--radius);
+    /* The reference's card, named directly. This dialog is mounted OUTSIDE
+       `.appshell.shell` — deliberately, so a guard on any route can open it —
+       so it does not inherit the shell's re-pointed --surface/--border, and
+       `var(--bg)` painted it #16171d while every card behind it was #2d2d30 on
+       a #232326 pane: a dialog darker than the page it interrupts. The
+       `--shell-*` tokens are declared on :root, so naming them here is the one
+       way to match the surface the reader is actually looking at. */
+    border: 1px solid var(--shell-card-border);
+    background: var(--shell-card); box-shadow: var(--shadow);
     text-align: start;
   }
   .msg { margin: 0 0 var(--space-4); color: var(--text-h); font-size: var(--fs-xs); }

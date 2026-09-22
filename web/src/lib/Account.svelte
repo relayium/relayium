@@ -585,7 +585,14 @@
     position: fixed; z-index: 41; top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: min(340px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto;
     padding: var(--space-5); border-radius: var(--radius); border: 1px solid var(--border);
-    background: var(--bg); box-shadow: var(--shadow);
+    /* --surface, not --bg. This panel sits inside `.appshell.shell`, which
+       re-points --surface at the reference's card — and custom properties
+       inherit through the DOM whatever `position` says, so it gets the right
+       one. `--bg` is NOT re-pointed, so the dialog painted #16171d over a
+       #232326 pane while every card behind it was #2d2d30. Invisible in light,
+       where --bg and --shell-card are both #ffffff, which is why measuring one
+       theme missed it. */
+    background: var(--surface); box-shadow: var(--shadow);
     text-align: start;
   }
   .close-x {
@@ -652,7 +659,7 @@
     position: fixed; z-index: 42; top: var(--space-3); left: 50%; transform: translateX(-50%);
     display: flex; align-items: center; gap: var(--space-3);
     padding: var(--space-2) var(--space-4); border-radius: var(--radius-sm); border: 1px solid var(--border);
-    background: var(--bg); box-shadow: var(--shadow); color: var(--text-h); font-size: var(--fs-xs);
+    background: var(--surface); box-shadow: var(--shadow); color: var(--text-h); font-size: var(--fs-xs);
     max-width: calc(100vw - 32px);
   }
   .billing-toast.cancel { color: var(--text); }

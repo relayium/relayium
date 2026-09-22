@@ -748,7 +748,7 @@
   .stat {
     display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center;
     padding: var(--space-5) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius);
-    background: var(--social-bg); text-align: center;
+    background: var(--surface); text-align: center;
   }
   .stat.wide { grid-column: 1 / -1; }
   .stat .num { font-size: 26px; font-weight: 600; color: var(--text-h); }
@@ -767,7 +767,7 @@
   .filelist li {
     display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
     padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm);
-    background: var(--social-bg); font-size: var(--fs-xs);
+    background: var(--surface); font-size: var(--fs-xs);
   }
   .fid { font-family: ui-monospace, monospace; color: var(--text-h); }
   .fsize { color: var(--text); }
@@ -834,7 +834,7 @@
   .nodelist li {
     display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
     padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm);
-    background: var(--social-bg); font-size: var(--fs-xs);
+    background: var(--surface); font-size: var(--fs-xs);
   }
   .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text); opacity: .4; flex: none; }
   .dot.on { background: var(--accent); opacity: 1; }

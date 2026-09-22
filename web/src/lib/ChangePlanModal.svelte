@@ -129,7 +129,14 @@
 
 <style>
   .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
-  .modal { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-5); max-width: 420px; width: calc(100% - var(--space-4)); }
+  /* --surface for the same reason as Account.svelte's panel and ConfirmModal:
+     inside `.appshell.shell` it is the reference's card, and --bg is not
+     re-pointed, so this painted #16171d over a #232326 pane with #2d2d30 cards
+     behind it. Found by sweeping the source for `background: var(--bg)` after
+     the same defect was measured on two other dialogs — this one cannot be
+     reached in a browser on an App Store-billed account, so a screenshot audit
+     would never have found it. */
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-5); max-width: 420px; width: calc(100% - var(--space-4)); }
   .modal h3 { margin: 0 0 var(--space-3); font-size: var(--fs-h3); color: var(--text-h); }
   .summary { margin: 0 0 var(--space-4); color: var(--text-h); }
   .muted { margin: 0 0 var(--space-4); color: var(--text); }

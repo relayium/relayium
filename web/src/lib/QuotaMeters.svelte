@@ -70,11 +70,17 @@
   /* Same card treatment as MePage.svelte's .stat — this block is the primary
      content of the page (current-month quota), not a footnote to the lifetime
      stats below it, so it needs the same visual weight. */
+  /* --surface, not --social-bg. Inside `.appshell.shell` --surface IS the
+     reference's card (#2d2d30 dark / #ffffff light); --social-bg is the site's
+     warm translucent tint (#2f303a80 dark), so these cards were a different
+     hue AND semi-transparent against every other card on the same pane.
+     Measured on production 2026-09-22: /device-inbox's cards #ffffff,
+     /me's #2f303a80, on the same #f8f8fa pane. */
   .quota {
     padding: var(--space-5) var(--space-4);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    background: var(--social-bg);
+    background: var(--surface);
   }
   /* <h2> for the same reason as PlanCard: it is a top-level section of /me. */
   .quota h2 { margin: 0; font-size: var(--fs-h3); color: var(--text-h); }
