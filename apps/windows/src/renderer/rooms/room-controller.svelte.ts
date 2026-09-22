@@ -17,6 +17,7 @@
 // per room).
 
 import { CapsAnnouncer } from "../../../../../web/src/lib/peer-caps.svelte";
+import { isCliHandshakeSignal } from "../../../../../web/src/lib/cli-peer.svelte";
 import { chooseRtcConfig, fetchIceConfig, measureRelays, type IceConfig } from "../../../../../web/src/lib/ice";
 import {
   createRelaySelection,
@@ -172,6 +173,12 @@ export class RoomController {
    *  expired, or already claimed. Distinct from an ordinary drop, because there
    *  is nothing to reconnect to. */
   #refused = $state(false);
+
+  /** A relayium CLI joined this code room. Latched, never derived from the
+   *  roster: the CLI exits on this client's capability hello about 0.2 s after
+   *  arriving, so by the time anything renders the roster is empty again. One
+   *  controller is one room, so the flag needs no room key. */
+  #cliPeer = $state(false);
   /**
    * What the signalling membership is actually doing.
    *
@@ -603,6 +610,14 @@ export class RoomController {
     return this.#refused;
   }
 
+  /** True once the relayium CLI has been seen in this code room. The pairing
+   *  cannot complete -- the CLI moves bytes over a direct pinned-TLS connection
+   *  and this client over WebRTC -- and without this the page would wait out a
+   *  join that already happened and left. */
+  get cliPeer(): boolean {
+    return this.#cliPeer;
+  }
+
   get peers(): readonly Peer[] {
     return this.#peers.filter((p) => p.id !== this.#selfId);
   }
@@ -912,6 +927,7 @@ export class RoomController {
       this.#joined = true;
       this.#everJoined = true;
       this.#refused = false;
+      this.#cliPeer = false;
       this.#connection = "joined";
       this.#retryAttempt = 0;
       this.#clearRetry();
@@ -996,6 +1012,16 @@ export class RoomController {
     // how two clients greet each other forever.
     this.#unsubscribeSignal = this.#signaling.onSignal((from, data) => {
       if (from === this.#selfId) return;
+      // The relayium CLI joined this code room. Consumed here: nothing below
+      // understands a CLI handshake frame, and reading it as an app frame is
+      // the specific hazard -- it carries a `commit` field, which is a real
+      // field on an app's offer. See cli-peer.svelte.ts for why a top-level
+      // `kind` is the safe discriminator.
+      if (isCliHandshakeSignal(data)) {
+        this.#cliPeer = true;
+        this.#changed();
+        return;
+      }
       // A relay RTT map. Held until the pool exists, so it informs this room's
       // FIRST choice rather than arriving before there is anything to choose
       // between. Consumed here, so it is not also read as a capability hello.

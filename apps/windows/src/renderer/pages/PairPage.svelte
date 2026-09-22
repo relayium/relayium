@@ -150,6 +150,16 @@
     {/if}
   </Card>
 
+  <!-- The relayium CLI joined this code room. Page-level on purpose: either end
+       may have minted the code -- the CLI can join one made in the card above,
+       and a code printed by `relayium send` can be typed into the one below --
+       so it belongs to the ROOM, not to one of the two actions. Without it this
+       page says nothing at all: the CLI leaves ~0.2 s after arriving and the
+       screen goes back to looking idle. -->
+  {#if room !== null && room.cliPeer}
+    <p class="problem" data-test="pair-cli-peer">{t("pairCliPeer")}</p>
+  {/if}
+
   <Card title={t("pairEnterCode")}>
     <form
       class="row"
