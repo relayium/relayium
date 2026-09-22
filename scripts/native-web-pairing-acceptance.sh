@@ -124,10 +124,17 @@ repo="$(cd "$here/.." && pwd)"
 source "$here/lib/local-acceptance.sh"
 
 # How many pairings to run before giving up on seeing both role assignments.
-# Each is an independent coin flip on the hub's random ids, so eight rounds miss
-# a side with probability 2^-7 — small enough that a failure here is a signal
-# rather than noise, and bounded enough that a wedged run ends.
-max_rounds="${RELAYIUM_PAIRING_ROUNDS:-8}"
+# Each is an independent coin flip on the hub's random ids, so N rounds miss a
+# side with probability 2^-(N-1).
+#
+# Raised from 8 to 10 on 2026-09-22 together with the Android lane, which
+# asserts the same thing and had been left at 6 (a 2^-5 miss rate, ~3%, which is
+# what turned that lane red that day with all six rounds functionally green).
+# **Extra rounds are free on a run that would have passed** — the loop breaks as
+# soon as both roles have been seen AND round >= 3 — so this buys 2^-9 (~0.2%)
+# without moving a green run's wall clock, and masks nothing: the assertion is
+# unchanged, so a role that is genuinely stuck still fails it.
+max_rounds="${RELAYIUM_PAIRING_ROUNDS:-10}"
 
 # Deliberately not ASCII-only, and deliberately whitespace-significant. The
 # message rides an AEAD-sealed text frame and the file rides an encrypted
