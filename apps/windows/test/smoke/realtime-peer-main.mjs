@@ -252,9 +252,18 @@ async function until(win, what, expr, budgetMs) {
   return false;
 }
 
+// Answers false for a DISABLED target instead of claiming the press happened.
+// Without this the helper returned true whenever the element merely EXISTED: a
+// disabled button's click() is a no-op, and its return value feeds sasConfirmed
+// and leftRoom, so a race read as a pass. The rule and its wording are the
+// resident driver's (clickTest in resident-main.mjs); os-entry-main.mjs and
+// pair-handoff-main.mjs already carry it and this was the one left behind.
 const clickTest = (win, name) =>
   js(win, `(() => { const el = document.querySelector('[data-test="${name}"]');
-    if (!el) return false; (el.tagName === 'BUTTON' ? el : el.querySelector('button') ?? el).click(); return true; })()`);
+    if (!el) return false;
+    const target = el.tagName === 'BUTTON' ? el : el.querySelector('button') ?? el;
+    if (target.disabled === true) return false;
+    target.click(); return true; })()`);
 
 const textOf = (win, name) =>
   js(win, `document.querySelector('[data-test="${name}"]')?.textContent?.trim() ?? ""`);
