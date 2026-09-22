@@ -6,6 +6,7 @@
   import { navigate } from "./router.svelte";
   import { canShare, share } from "./share";
   import { enterRoom } from "./room.svelte";
+  import { cliPeerInRoom } from "./cli-peer.svelte";
   import { messages, lang, type Messages } from "./i18n.svelte";
   import { outbox, addToOutbox, removeFromOutbox, clearOutbox, outboxIndexOf } from "./outbox.svelte";
   import { startPreupload, holdPreupload, resetPreupload, preuploadNotice, preuploadProgress, preuploadDeadline, preuploadUnconfirmed } from "./preupload.svelte";
@@ -506,7 +507,16 @@
     {#if relayWarn}
       <p class="quota-warn">{relayWarn}</p>
     {/if}
-    <p class="waiting"><span class="pulse" aria-hidden="true"></span>{t.pair.waiting}</p>
+    <!-- A relayium CLI joined this code room. It cannot complete a pairing with
+         this page and has already left, so the spinner would never resolve;
+         say what happened and name the two commands that DO cross. The verdict
+         is latched per room (cli-peer.svelte.ts), not read from the roster,
+         which is empty again by now. -->
+    {#if cliPeerInRoom(roomCode)}
+      <p class="cli-peer">{t.pair.cliPeer}</p>
+    {:else}
+      <p class="waiting"><span class="pulse" aria-hidden="true"></span>{t.pair.waiting}</p>
+    {/if}
   {:else if mode === "receive"}
     <p class="lead">{t.pair.enterHint}</p>
     <div class="row">
@@ -704,6 +714,14 @@
     border: 1px solid var(--accent-border); border-radius: var(--radius-sm);
     padding: var(--space-2) var(--space-3); background: var(--code-bg);
   }
+  /* Takes the waiting line's place, so it is shaped like the quota note rather
+     than the spinner it replaces: this is a terminal statement, not progress. */
+  .cli-peer {
+    margin: 0; font-size: var(--fs-xs); line-height: 1.5; text-align: center; max-width: 42ch;
+    color: var(--text-h);
+    border: 1px solid var(--accent-border); border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3); background: var(--code-bg);
+  }
 
   /* ── Settings-shell form ──────────────────────────────────────────────────
      Inside `.appshell.shell` the pairing room keeps every control, state and
@@ -743,6 +761,7 @@
   :global(.appshell.shell) .waiting { font-size: 11px; }
   :global(.appshell.shell) .handoff { font-size: 13px; }
   :global(.appshell.shell) .blocked,
+  :global(.appshell.shell) .cli-peer,
   :global(.appshell.shell) .quota-warn,
   :global(.appshell.shell) .preupload-expired { max-inline-size: none; border-radius: 10px; }
 </style>

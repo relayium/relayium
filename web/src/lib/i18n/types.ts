@@ -1251,6 +1251,12 @@ export interface Messages {
     yourCode: string;
     scanHint: string; // caption under the pairing-code QR
     waiting: string;
+    // Shown INSTEAD of `waiting` once a relayium CLI has been seen in this room.
+    // Pairing codes share one namespace with the CLI, so a CLI can join a code
+    // minted here and vice versa, and the two transports cannot interoperate.
+    // Without this the page waits forever: a joiner has no mint expiry to count
+    // down, and the CLI leaves ~0.2 s after it arrives.
+    cliPeer: string;
     queued: (n: number, size: string) => string; // files picked before pairing, auto-send on join
     // What to do with the code that is now on screen. The waiting room shows six
     // digits, a QR and a spinner; without this it never says to pass them on.

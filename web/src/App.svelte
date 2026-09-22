@@ -9,6 +9,7 @@
   import { labelPeers } from "./lib/peer-labels";
   import { wsURL } from "./lib/transfer-link";
   import { roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
+  import { noteCliPeer } from "./lib/cli-peer.svelte";
   import type { Conn, ConnPath, RtcConfig } from "./lib/webrtc";
   import { applyRename } from "./lib/apply-rename";
   import { CapsAnnouncer, recordPeerCaps, retainPeers, resetPeerCaps } from "./lib/peer-caps.svelte";
@@ -753,6 +754,12 @@
   // here (broadcasts fire on measure-done and on peer-join instead), so there is no
   // ping-pong loop.
   function onPeerRelayRtt(from: string, data: unknown) {
+    // The relayium CLI joined this code room. Latched against the room and
+    // CONSUMED here: nothing below understands a CLI handshake frame, and the
+    // CLI exits on our capability hello about 0.2 s from now, so the roster
+    // this verdict would otherwise be read from is about to be empty. See
+    // cli-peer.svelte.ts for why a top-level `kind` is the safe discriminator.
+    if (noteCliPeer(data, roomCode)) return;
     // A capability hello shares this envelope but is neither of the two things
     // below. The WebRTC handlers ignore it too (it carries no sdp/ice), which is
     // why it needs no generation tag.

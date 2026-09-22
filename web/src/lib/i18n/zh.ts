@@ -1106,6 +1106,8 @@ const zh: Messages = {
     yourCode: "你的配对码 —— 念给对方",
   scanHint: "或让对方扫码 / 打开链接加入",
     waiting: "等待对方加入…",
+    cliPeer:
+      "对方是 relayium 命令行工具，它只能与另一个命令行工具配对——命令行走直连，本页走 WebRTC。要在两者之间传文件：在命令行运行 relayium up <文件>，然后在这里打开它打印的链接；或者从这里分享一个链接，再用 relayium down 取回。",
     queued: (n, s) => `已选 ${n} 个文件 · ${s}，对方加入后自动发送`,
     handoff: "把配对码或链接发给对方，让对方加入。",
     stageLead: "不用干等——现在就可以先把要发的内容选好。",

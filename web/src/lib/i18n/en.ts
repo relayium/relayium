@@ -1146,6 +1146,8 @@ const en: Messages = {
     yourCode: "Your pairing code — read it to the other person",
   scanHint: "or have them scan / open the link to join",
     waiting: "Waiting for the other device to join…",
+    cliPeer:
+      "The other end is the relayium CLI, and it pairs only with another CLI — it sends over a direct connection, this page over WebRTC. To move a file between them: run relayium up <file> and open the link it prints here, or share a link from here and fetch it with relayium down.",
     queued: (n, s) => `${n} file(s) · ${s} — sends automatically once the other side joins`,
     handoff: "Send the code or the link to the other person so they can join.",
     stageLead: "No need to wait — pick what you want to send now.",
