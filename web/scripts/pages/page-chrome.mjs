@@ -46,7 +46,7 @@
 // is a hard constraint, not an accident: adding chrome copy would mean nine
 // translations, and would break the 2026-08-14 freeze on the seven archived
 // locales, whose wording must stay byte-for-byte what was published.
-import { GUIDES_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, urlPath, esc } from "./shared.mjs";
+import { SHELL_CSS } from "./page-shell.mjs";
 
 /**
  * The pre-paint theme snippet, byte-identical to the first inline <script> in
@@ -96,7 +96,7 @@ export const THEME_HEAD = `${THEME_SCRIPT}
  * same reason — a theme that is an attribute cannot be expressed by a media
  * query alone.
  */
-const DARK_TOKENS = `--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)`;
+const DARK_TOKENS = `--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)`;
 
 /**
  * Design tokens.
@@ -117,9 +117,16 @@ const DARK_TOKENS = `--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30
  *          --accent-fg #bda4ff 7.40:1 · 5.65:1      white on --accent-action 5.53:1
  * `--accent` itself is decorative — rims, tints, the mark — and is never the
  * colour of a word. `static-landmarks.test.mjs` pins that.
+ *
+ * The `--space-*` scale is `src/app.css`'s, value for value. It is not
+ * decoration: page-shell.mjs reproduces the reference's rail with the same
+ * declarations the app uses, and those name these tokens. Without them every
+ * such declaration is invalid and silently dropped — which is exactly what
+ * happened on the first build of the rail, measured as `padding: 0px` against
+ * the app's `16px 12px`.
  */
 const TOKENS = `
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){${DARK_TOKENS}}}
 :root[data-theme="dark"]{${DARK_TOKENS}}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}`;
@@ -157,35 +164,19 @@ main p>a,main li>a{text-underline-offset:2px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}`;
 
 /**
- * Site chrome: the header band and the footer.
+ * The footer.
  *
- * The header is modelled on the app's own compact top bar (`.topnav` in
- * `Nav.svelte`) rather than on its 216px sidebar. A settings rail belongs to an
- * app with destinations; a guide read from a search result has one destination
- * — its own text — and a rail of transfer modes down the side of 447 crawled
- * pages would be navigation wearing the content's clothes. The app shows the
- * same top bar whenever the rail does not fit, so this is its form, not a
- * different one.
+ * The header half of this layer moved to page-shell.mjs on 2026-09-22: the
+ * generated pages now render the app's actual rail, which is both the sidebar
+ * at full width and the top bar below it. The first attempt at unification gave
+ * them a top bar and kept a document skeleton; the owner reviewed that on
+ * production and it was not what "統一" meant.
  */
 const CHROME = `
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}`;
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}`;
 
 /**
  * Content primitives, named and shaped like the app's `.ui-*` layer.
@@ -232,71 +223,8 @@ pre code{background:none;padding:0;border-radius:0}
  * ended up fighting each other in the first place.
  */
 export function pageStyle(extra = "") {
-  return `${TOKENS}${BASE}${CHROME}${PRIMITIVES}${extra}`;
+  return `${TOKENS}${BASE}${CHROME}${PRIMITIVES}${SHELL_CSS}${extra}`;
 }
 
 /** Exported for the tests that assert the system's contracts directly. */
 export const STYLE_PARTS = { TOKENS, BASE, CHROME, PRIMITIVES };
-
-/**
- * The Relayium mark, kept in sync with `src/lib/Logo.svelte` and
- * `public/favicon.svg` — two arrows passing each other, drawn as strokes.
- *
- * The generated tree used to print `⇌` in a gradient square instead. That is a
- * different shape, in a different colour, from the logo in the app the page is
- * advertising; a reader who noticed would be right to wonder whether they were
- * still on the same site. `aria-hidden` because the wordmark beside it already
- * says Relayium.
- */
-export function brandMark(size = 28) {
-  return `<svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false">`
-    + `<defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">`
-    + `<stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs>`
-    + `<rect width="64" height="64" rx="15" fill="url(#bm)" />`
-    + `<path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg>`;
-}
-
-/**
- * The site header: the mark and wordmark, then the three places a reader of a
- * static page can usefully go next.
- *
- * `home` is passed in rather than derived because the templates already
- * disagree for a good reason — a landing or an article sends the reader to the
- * app pre-set to this page's language (`ctaHref`), while a legal page sends
- * them to `/`. That difference predates this file and is not this file's to
- * settle.
- *
- * `self` is this page's own URL and `section` the nav entry it belongs under, so
- * the guides hub does not offer a link to itself with no sign that it is where
- * you already are, and an article shows which section it sits in. Same treatment
- * as `.tool.active` in `Nav.svelte`.
- *
- * Every destination here is one the footer of these pages already linked, so
- * the internal link graph gains no new edge — `site-graph.test.mjs` keeps
- * watching that the archive is never linked from a maintained page and that no
- * link lands on a redirect.
- */
-export function siteHeader({ lang, home, self = null, section = null }) {
-  const items = [
-    ["guides", urlPath("guides", lang), GUIDES_LABELS[lang]],
-    ["apps", urlPath("apps", lang), APPS_LABELS[lang]],
-    ["pricing", PRICING_URL, pricingLabel(lang)],
-  ];
-  // `page` and `true` are different claims and the difference is not cosmetic:
-  // `aria-current="page"` says "this link is where you are", and an article page
-  // that marked the Guides hub with it would announce two current pages — the
-  // hub link and the breadcrumb's own leaf — neither of which is the hub. So an
-  // exact URL match gets `page`, and belonging to a section gets `true`.
-  const mark = (id, href) =>
-    (self !== null && href === self) ? ' aria-current="page"'
-      : (id === section) ? ' aria-current="true"' : "";
-  const links = items
-    .map(([id, href, label]) => `<a href="${href}"${mark(id, href)}>${esc(label)}</a>`)
-    .join("");
-  // aria-label is English in every locale, matching the language bar's
-  // `aria-label="Language"` that has shipped on all nine since the tree
-  // existed. Translating one landmark name and not the other would be the
-  // inconsistency, and new chrome copy is exactly what this change may not add.
-  return `<header><a class="brand" href="${home}">${brandMark()}<span>Relayium</span></a>`
-    + `<nav class="sitenav" aria-label="Site">${links}</nav></header>`;
-}

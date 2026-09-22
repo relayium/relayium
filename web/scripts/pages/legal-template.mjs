@@ -8,7 +8,8 @@
 // second near-identical template would have meant maintaining this file's head,
 // bidi handling and inlined stylesheet twice.
 import { MAINTAINED_LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, RELEASES_LABELS, BCP47, OG_LOCALE, OG_IMAGE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, dirAttr, rtlHead, isFrozen, archiveNotice, ARCHIVE_STYLE } from "./shared.mjs";
-import { pageStyle, siteHeader, THEME_HEAD } from "./page-chrome.mjs";
+import { pageStyle, THEME_HEAD } from "./page-chrome.mjs";
+import { appShell } from "./page-shell.mjs";
 
 // What the legal/releases template owns; the rest is page-chrome.mjs.
 const STYLE = pageStyle(`
@@ -43,6 +44,8 @@ function alternates(slug) {
   return links.join("\n    ");
 }
 
+// One section, one card — the app's grouped-rows shape rather than a wall of
+// prose. See page-shell.mjs's `.sheet`.
 function sectionHtml(s) {
   let out = `<h2>${esc(s.heading)}</h2>`;
   for (const p of s.body || []) out += `<p>${esc(p)}</p>`;
@@ -134,13 +137,13 @@ export function renderLegalPage({ slug, lang, doc, releases = [] }) {
     <style>${STYLE}${archived ? ARCHIVE_STYLE : ""}</style>
   </head>
   <body>
-    <div class="wrap">
-      ${siteHeader({ lang, home: "/" })}
-      <!-- The legal text is the main landmark. The site header and footer are
-           outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. On an
-           archived page that slot holds the archived-translation notice, a
-           labelled <aside>, which is a landmark in its own right too. -->
+    ${appShell({ lang, home: "/", foot: archived ? "" : langBar(slug, lang), content: `
+      <!-- The legal text is the main landmark; the rail and the footer are
+           outside it. The language bar now lives in the rail's foot slot, with
+           the rest of the navigation. An ARCHIVED page keeps its notice here
+           instead: it is a paragraph of explanation, not a selector, and it has
+           no business in a 216px rail. It is a labelled <aside>, so it is still
+           a landmark of its own. -->
       <main>
       <h1>${esc(doc.title)}</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO
@@ -150,9 +153,9 @@ export function renderLegalPage({ slug, lang, doc, releases = [] }) {
            a browser, not deduced. <bdi> resolves LTR (no strong character
            inside) and pins the order. -->
       <p class="updated">${esc(doc.updatedLabel)}: <bdi>${esc(doc.updated)}</bdi></p>
-      ${langBar(slug, lang)}
+      ${archived ? langBar(slug, lang) : ""}
       ${(doc.lead || []).map((p) => `<p>${esc(p)}</p>`).join("\n      ")}${releaseList}
-      ${doc.sections.map(sectionHtml).join("\n      ")}
+      ${doc.sections.map((sec) => `<section class="sheet">${sectionHtml(sec)}</section>`).join("\n      ")}
       </main>
       <footer>
         <a href="/">← ${esc(SITE.name)}</a>
@@ -162,7 +165,7 @@ export function renderLegalPage({ slug, lang, doc, releases = [] }) {
         <a href="${urlPath("releases", lang)}">${esc(RELEASES_LABELS[lang])}</a>`}
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
-    </div>
+` })}
   </body>
 </html>
 `;

@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Enviar arquivos entre dois computadores pela Internet","description":"Um guia para transferir arquivos entre navegadores: conexão direta na mesma LAN ou TURN criptografado de ponta a ponta entre redes, sem upload para a nuvem nem instalação.","inLanguage":"pt","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/pt/how-to/send-files-between-two-computers-over-the-internet/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/pt/"},{"@type":"ListItem","position":2,"name":"Guias","item":"https://relayium.com/pt/guides/"},{"@type":"ListItem","position":3,"name":"Enviar arquivos entre dois computadores pela Internet"}]},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"É realmente ponto a ponto, ou o arquivo passa por um servidor?","acceptedAnswer":{"@type":"Answer","text":"É ponto a ponto no sentido que importa: o arquivo passa de um navegador para o outro e nunca é armazenado em um servidor. Na mesma LAN os navegadores se conectam diretamente; entre redes, o código de emparelhamento usa TURN por decisão de projeto. O retransmissor só leva texto cifrado de ponta a ponta, não consegue ler nem descriptografar o arquivo e não mantém cópia de conteúdo nem histórico no servidor."}},{"@type":"Question","name":"As duas pessoas precisam de conta?","acceptedAnswer":{"@type":"Answer","text":"Não. Na mesma rede, nenhum dos lados precisa de conta. Entre redes diferentes, quem envia faz login para criar o código de emparelhamento — é o que permite ao Relayium gerar e gerenciar o código — mas quem recebe nunca precisa de conta, seja digitando o código ou apenas abrindo o link."}},{"@type":"Question","name":"Funciona entre redes e países diferentes?","acceptedAnswer":{"@type":"Answer","text":"Sim. O código de emparelhamento existe justamente para este caso: dois computadores que não estão na mesma rede local, onde quer que cada um esteja no mundo. Esse caminho corre por um retransmissor TURN criptografado em vez de uma ligação direta — é o que conecta de forma confiável quando NATs e firewalls estão no meio, e sobe em um ou dois segundos em vez de esperar tentativas diretas que quase sempre acabariam em tempo esgotado."}},{"@type":"Question","name":"Há um limite de tamanho de arquivo ou de quantos arquivos posso enviar?","acceptedAnswer":{"@type":"Answer","text":"Você pode enviar até 1.000 arquivos em um único lote. Não há limite de tamanho imposto pelo servidor — o limite é o que o navegador que recebe consegue lidar: praticamente ilimitado no Chrome ou Edge de computador (transmitido para o disco), enquanto Firefox e Safari mantêm o lote na memória, onde o Relayium avisa acima de cerca de 256 MB. Esse limiar é uma estimativa conservadora, não um teto rígido; o real depende da máquina."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/pt/guides/" aria-current="true">Guias</a><a href="/pt/apps/">Apps</a><a href="/pricing">Preços</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Navegação principal"><a class="row" href="/">LAN</a><a class="row" href="/pt/cross-network/">Entre redes</a><a class="row" href="/pt/offline-transfer/">Assíncrono</a><a class="row" href="/device-inbox">Caixa de dispositivo</a><a class="row" href="/cli">CLI</a><a class="row" href="/pt/apps/">Apps</a><a class="row" href="/pricing">Preços</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/pt/">Relayium</a> <span aria-hidden="true">›</span> <a href="/pt/guides/">Guias</a> <span aria-hidden="true">›</span> <span aria-current="page">Enviar arquivos entre dois computadores pela Internet</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,29 +203,29 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="Tradução arquivada"><p class="archived-label">Tradução arquivada</p><p>Esta página é uma tradução em português arquivada. O produto Relayium e sua documentação atual são mantidos em inglês e em chinês simplificado; o próprio aplicativo não oferece mais português. Por isso as telas e os detalhes descritos aqui podem diferir do comportamento atual.</p><p class="archived-links archived-pricing">Os planos e os limites de uso mencionados aqui podem estar desatualizados; os atuais estão na página <a href="/pricing">Preços</a>.</p><p class="archived-links">Versão atual: <a href="/how-to/send-files-between-two-computers-over-the-internet/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/how-to/send-files-between-two-computers-over-the-internet/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Enviar um arquivo para outro computador normalmente significa enviá-lo primeiro para algum lugar — um drive na nuvem, um anexo de e-mail, um aplicativo de chat — e torcer para que o destinatário consiga recuperá-lo. O Relayium pula essa etapa de armazenamento: na mesma LAN os navegadores se conectam diretamente; entre redes, um retransmissor TURN só leva texto cifrado de ponta a ponta e não mantém cópia de conteúdo nem histórico no servidor.</p>
       <p class="lead">Este guia cobre os dois casos — dois computadores na mesma rede, e dois computadores em redes completamente diferentes (casas, escritórios, países diferentes) — e mostra exatamente o que cada lado precisa fazer.</p>
-      <h2>A abordagem direta: sem nuvem no meio</h2>
+      <section class="sheet"><h2>A abordagem direta: sem nuvem no meio</h2>
       <p>O Relayium roda inteiramente no navegador, em relayium.com. Não há nada para instalar em nenhum dos dois computadores, e nenhum armazenamento de terceiros fica entre você e o destinatário: o arquivo vai de um navegador para o outro e nunca é gravado em um servidor — nem mesmo quando as duas redes obrigam o fluxo a passar por um retransmissor, que apenas repassa os bytes, sem cópia e sem chave.</p>
-      <p>Isso importa por dois motivos: velocidade (você não fica limitado pela cota de upload/download de outra pessoa) e privacidade (nenhuma cópia do seu arquivo fica nos servidores de uma empresa esperando para ser solicitada, vazada ou esquecida).</p>
-      <h2>Mesma rede vs. pela Internet</h2>
+      <p>Isso importa por dois motivos: velocidade (você não fica limitado pela cota de upload/download de outra pessoa) e privacidade (nenhuma cópia do seu arquivo fica nos servidores de uma empresa esperando para ser solicitada, vazada ou esquecida).</p></section>
+      <section class="sheet"><h2>Mesma rede vs. pela Internet</h2>
       <p>Se os dois computadores estiverem no mesmo Wi-Fi ou rede local, o Relayium os encontra automaticamente — abra relayium.com nos dois, e não é preciso conta em nenhum dos lados.</p>
-      <p>Se os dois computadores estiverem em redes diferentes — o seu desktop em casa e o notebook de um colega do outro lado do país, por exemplo — a descoberta automática não consegue atravessar a Internet, então o Relayium usa em vez disso um código de emparelhamento curto. Quem envia faz login para gerar esse código; quem recebe nunca precisa de conta, seja digitando o código ou apenas abrindo o link que ele gera. O código vale cinco minutos, então deixe os dois aparelhos à mão antes de gerar um.</p>
-      <h2>Passo a passo: enviar um arquivo pela Internet</h2>
+      <p>Se os dois computadores estiverem em redes diferentes — o seu desktop em casa e o notebook de um colega do outro lado do país, por exemplo — a descoberta automática não consegue atravessar a Internet, então o Relayium usa em vez disso um código de emparelhamento curto. Quem envia faz login para gerar esse código; quem recebe nunca precisa de conta, seja digitando o código ou apenas abrindo o link que ele gera. O código vale cinco minutos, então deixe os dois aparelhos à mão antes de gerar um.</p></section>
+      <section class="sheet"><h2>Passo a passo: enviar um arquivo pela Internet</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Antes de começar</p><ul><li>Uma conta conectada só no computador que envia. Criar um código de emparelhamento exige uma; o computador que entra por código ou link nunca faz login.</li><li>Um e-mail verificado nessa conta. O retransmissor de uma sessão entre redes só é entregue a contas verificadas, e o cartão de emparelhamento diz isso com todas as letras quando recusa.</li><li>Os dois na frente dos computadores ao mesmo tempo. Um código de emparelhamento vive cinco minutos, e isto é uma sessão ao vivo, não um envio que alguém busca depois.</li><li>Um jeito de passar seis dígitos ou um link por outro canal — uma ligação, uma janela de chat, uma mensagem.</li></ul></div>
       <p>Este é o fluxo completo para dois computadores em redes diferentes:</p>
       <ol class="steps" data-block="steps"><li><p>No computador que envia, abra a página de transferência em tempo real e faça login.</p><pre tabindex="0"><code>https://relayium.com/cross-network</code></pre></li><li><p>Escolha os arquivos ou a pasta a enviar — até 1.000 arquivos por lote — e crie o código de emparelhamento. O cartão então mostra os seis dígitos, um botão para copiar o link, um código QR e uma contagem regressiva.</p><pre tabindex="0"><code>Seu código de emparelhamento — leia-o para a outra pessoa
 483920
 o código de emparelhamento expira em 4:52</code></pre></li><li><p>Compartilhe esse código ou link com a outra pessoa da forma que for mais conveniente — leia em voz alta, mande por mensagem, cole no chat. O link carrega o mesmo código no fragmento, então compartilhar um ou outro é o mesmo ato.</p><pre tabindex="0"><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>No computador que recebe, abra esse link, ou abra a mesma página, digite os seis dígitos e clique em “Conectar”. Deste lado não há login.</p><pre tabindex="0"><code>https://relayium.com/cross-network</code></pre></li><li><p>A transferência começa assim que o outro dispositivo entra. Deixe as duas abas abertas até o contador de arquivos terminar: a contagem regressiva rege apenas novas entradas, então ela acabar não corta uma transferência já em andamento. Ligar a “Verificação avançada” antes de começar acrescenta um código de verificação (SAS) para comparar: a coincidência confirma que as chaves não foram substituídas e que os dois computadores entraram na mesma sessão criptografada de ponta a ponta, mas não prova qual caminho de rede leva o texto cifrado.</p></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">Como é uma transferência que funciona</p><p>A linha “Aguardando o outro dispositivo entrar…” de quem envia dá lugar ao cartão conectado, e o selo de caminho nele indica “Retransmitido”. Esse é o valor esperado aqui, não uma falha: uma sessão de navegador entre redes passa pelo retransmissor TURN criptografado por decisão de projeto, e “LAN direto” só apareceria se os dois computadores acabassem compartilhando uma rede.</p><p>O contador de arquivos vai então até o último arquivo do lote nas duas telas, e o arquivo em si está onde a linha abaixo do pedido disse que o navegador que recebe o colocaria.</p><pre tabindex="0"><code>Retransmitido
-Arquivo 1/1</code></pre></div>
-      <h2>Quando o código é recusado, ou a transferência para</h2>
+Arquivo 1/1</code></pre></div></section>
+      <section class="sheet"><h2>Quando o código é recusado, ou a transferência para</h2>
       <p>Uma transferência entre redes tem mais peças móveis do que uma na mesma rede — um código com prazo, uma conta, uma cota de retransmissão — e cada uma se identifica no cartão de emparelhamento em vez de falhar em silêncio. Então leia esse cartão primeiro.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Sintoma, verificação, correção</p><dl><dt>O computador que recebe digita o código e aparece “O código de emparelhamento é inválido ou expirou”.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # o cartão de quem envia mostra a contagem ao vivo</code></pre><p>Passaram-se cinco minutos desde que foi criado, ou um dígito foi digitado errado. Crie um código novo no computador que envia e peça para a outra pessoa digitar na hora, ou mande o link de entrada, que dispensa digitação.</p></dd><dt>O cartão diz que o retransmissor só é entregue a contas verificadas.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # o cartão de emparelhamento nomeia o motivo da recusa</code></pre><p>O e-mail de quem envia ainda não foi verificado. Abra o painel da conta, verifique o endereço pela mensagem que o Relayium mandou e crie então um código novo, porque o antigo não vai pegar um retransmissor que já lhe foi negado. Transferências na mesma rede e a CLI não dependem disso.</p></dd><dt>O cartão diz que o tráfego de retransmissão deste mês acabou.</dt><dd><pre tabindex="0"><code>https://relayium.com/me   # o uso deste mês mostra o que sobrou da cota</code></pre><p>Sessões de navegador entre redes não podem começar nem continuar até a cota zerar no mês que vem. Para enviar agora, suba os arquivos como link de download em https://relayium.com/offline-transfer, mude de plano, ou rode o seu próprio nó; transferências na mesma rede continuam funcionando de qualquer forma.</p></dd><dt>A transferência para no meio e não recomeça.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # as duas abas precisam continuar nesta página</code></pre><p>Isto é uma sessão ao vivo: uma queda de rede passageira pode retomar de onde parou, mas fechar a aba ou recarregar a página encerra tudo e não há cópia no servidor para continuar. Comece de novo com outro código, e se a outra pessoa não puder ficar online, use o link de download em https://relayium.com/offline-transfer.</p></dd><dt>A transferência funciona, mas bem mais devagar do que os mesmos arquivos em uma única rede.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # o selo de caminho do cartão conectado diz Retransmitido</code></pre><p>Uma sessão retransmitida é limitada pelas duas conexões de internet mais o salto do retransmissor, então é de fato mais lenta que uma transferência por LAN, e nenhuma configuração muda isso. Para um lote muito grande, o link de download em https://relayium.com/offline-transfer é o caminho mais tranquilo, porque não exige os dois lados online ao mesmo tempo.</p></dd></dl></div>
-      <h2>Entre redes: o retransmissor criptografado</h2>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Sintoma, verificação, correção</p><dl><dt>O computador que recebe digita o código e aparece “O código de emparelhamento é inválido ou expirou”.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # o cartão de quem envia mostra a contagem ao vivo</code></pre><p>Passaram-se cinco minutos desde que foi criado, ou um dígito foi digitado errado. Crie um código novo no computador que envia e peça para a outra pessoa digitar na hora, ou mande o link de entrada, que dispensa digitação.</p></dd><dt>O cartão diz que o retransmissor só é entregue a contas verificadas.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # o cartão de emparelhamento nomeia o motivo da recusa</code></pre><p>O e-mail de quem envia ainda não foi verificado. Abra o painel da conta, verifique o endereço pela mensagem que o Relayium mandou e crie então um código novo, porque o antigo não vai pegar um retransmissor que já lhe foi negado. Transferências na mesma rede e a CLI não dependem disso.</p></dd><dt>O cartão diz que o tráfego de retransmissão deste mês acabou.</dt><dd><pre tabindex="0"><code>https://relayium.com/me   # o uso deste mês mostra o que sobrou da cota</code></pre><p>Sessões de navegador entre redes não podem começar nem continuar até a cota zerar no mês que vem. Para enviar agora, suba os arquivos como link de download em https://relayium.com/offline-transfer, mude de plano, ou rode o seu próprio nó; transferências na mesma rede continuam funcionando de qualquer forma.</p></dd><dt>A transferência para no meio e não recomeça.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # as duas abas precisam continuar nesta página</code></pre><p>Isto é uma sessão ao vivo: uma queda de rede passageira pode retomar de onde parou, mas fechar a aba ou recarregar a página encerra tudo e não há cópia no servidor para continuar. Comece de novo com outro código, e se a outra pessoa não puder ficar online, use o link de download em https://relayium.com/offline-transfer.</p></dd><dt>A transferência funciona, mas bem mais devagar do que os mesmos arquivos em uma única rede.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # o selo de caminho do cartão conectado diz Retransmitido</code></pre><p>Uma sessão retransmitida é limitada pelas duas conexões de internet mais o salto do retransmissor, então é de fato mais lenta que uma transferência por LAN, e nenhuma configuração muda isso. Para um lote muito grande, o link de download em https://relayium.com/offline-transfer é o caminho mais tranquilo, porque não exige os dois lados online ao mesmo tempo.</p></dd></dl></div></section>
+      <section class="sheet"><h2>Entre redes: o retransmissor criptografado</h2>
       <p>Dois navegadores na mesma rede se conectam diretamente um ao outro. Entre redes — onde firewalls corporativos e NATs restritos bloqueiam rotineiramente qualquer caminho direto — o Relayium carrega o fluxo criptografado por um retransmissor TURN, para que a conexão se estabeleça de forma confiável.</p>
-      <p>O retransmissor só vê texto cifrado: o arquivo é criptografado de ponta a ponta (troca de chaves X25519 mais AES-256-GCM) antes mesmo de sair do navegador que envia, então o retransmissor não consegue lê-lo, assim como qualquer computador aleatório na Internet também não conseguiria. Se a conexão cair no meio do caminho, a transferência é retomada em vez de recomeçar.</p>
-      <h2>Quantos arquivos, e de que tamanho</h2>
+      <p>O retransmissor só vê texto cifrado: o arquivo é criptografado de ponta a ponta (troca de chaves X25519 mais AES-256-GCM) antes mesmo de sair do navegador que envia, então o retransmissor não consegue lê-lo, assim como qualquer computador aleatório na Internet também não conseguiria. Se a conexão cair no meio do caminho, a transferência é retomada em vez de recomeçar.</p></section>
+      <section class="sheet"><h2>Quantos arquivos, e de que tamanho</h2>
       <p>Você pode enviar até 1.000 arquivos em um único lote, incluindo a estrutura de pastas. Não há limite de tamanho do lado do servidor — o teto prático é definido pelo navegador que recebe.</p>
-      <p>Um navegador com a API File System Access — Chrome ou Edge no computador — transmite os dados recebidos direto para o disco, então arquivos de vários gigabytes não são problema. Firefox e Safari não têm essa API, então um lote recebido neles é montado na memória, e o Relayium avisa antes de você aceitar assim que passa de cerca de 256 MB: uma estimativa propositalmente conservadora, não um limite medido, já que o teto real depende da memória da máquina, do sistema e do que mais estiver aberto. Cada arquivo também é verificado de ponta a ponta com um hash SHA-256, para você saber que o que chega é, byte a byte, o que foi enviado.</p>
+      <p>Um navegador com a API File System Access — Chrome ou Edge no computador — transmite os dados recebidos direto para o disco, então arquivos de vários gigabytes não são problema. Firefox e Safari não têm essa API, então um lote recebido neles é montado na memória, e o Relayium avisa antes de você aceitar assim que passa de cerca de 256 MB: uma estimativa propositalmente conservadora, não um limite medido, já que o teto real depende da memória da máquina, do sistema e do que mais estiver aberto. Cada arquivo também é verificado de ponta a ponta com um hash SHA-256, para você saber que o que chega é, byte a byte, o que foi enviado.</p></section>
       <h2>Perguntas frequentes</h2>
       <h3>É realmente ponto a ponto, ou o arquivo passa por um servidor?</h3>
       <p>É ponto a ponto no sentido que importa: o arquivo passa de um navegador para o outro e nunca é armazenado em um servidor. Na mesma LAN os navegadores se conectam diretamente; entre redes, o código de emparelhamento usa TURN por decisão de projeto. O retransmissor só leva texto cifrado de ponta a ponta, não consegue ler nem descriptografar o arquivo e não mantém cópia de conteúdo nem histórico no servidor.</p>
@@ -206,6 +250,8 @@ Arquivo 1/1</code></pre></div>
         <a href="/pricing">Preços</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

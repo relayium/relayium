@@ -36,9 +36,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"扫描二维码传输文件","description":"如何用 Relayium 扫二维码传文件：先创建配对码，再扫描出现的二维码，传输全程端到端加密——扫码那一方不用装 App，也不用账号。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/transfer-files-by-scanning-a-qr-code/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"扫描二维码传输文件"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"扫二维码的一方需要 Relayium 账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。只有创建配对码和它二维码的那一侧需要登录——异步下载链接也是同样的要求。扫码的一方只是加入一个已经建好的房间：不用账号，不用注册，也没有任何东西要安装。"}},{"@type":"Question","name":"二维码里到底存的是什么？","acceptedAnswer":{"@type":"Answer","text":"和「复制链接」按钮复制出来的那条加入链接一模一样——一个内嵌了配对码的 relayium.com 网址。扫一下，就是在浏览器里打开那条链接，然后自动加入房间。到这里就结束了：它不会替你挑文件，也不会发送任何东西；之后发过去的内容，仍然要在接收设备上确认接收。"}},{"@type":"Question","name":"扫二维码和手动输码一样安全吗？","acceptedAnswer":{"@type":"Answer","text":"一样，两种方式建立的是完全相同的连接。都会协商 X25519 密钥交换、用 AES-256-GCM 加密，并在打开高级验证时显示一致的 SAS 校验码，供你确认后再信任传输。二维码只改变了你进入房间的方式，不改变传输的安全机制。"}},{"@type":"Question","name":"如果二维码扫不出来怎么办？","acceptedAnswer":{"@type":"Answer","text":"不会有任何损失——同一张配对卡片上也有原始配对码和可复制的链接，支持的设备上还有系统分享按钮。用哪一个都能进到二维码指向的同一个房间。"}},{"@type":"Question","name":"跨网络也能用吗，比如手机用移动数据、电脑连家里 Wi-Fi？","acceptedAnswer":{"@type":"Answer","text":"可以。这本来就是跨网络配对流程，所以无论两台设备是否同一网络都能用。配对码总是通过加密的 TURN 中继把两端连起来——这条路不依赖在两个网络之间的 NAT 和防火墙里找出一条通路，而它们可能挡住直连——而中继只经手密文。真正直连的是同一网络下无需配对码、自动发现彼此的那种情况。"}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -60,24 +60,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -103,6 +89,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -134,8 +176,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/?lang=zh"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="主导航"><span class="rail-group">实时传输</span><a class="row" href="/?lang=zh" aria-label="局域网传输">局域网</a><a class="row" href="/zh/cross-network/" aria-label="跨网络传输">跨网络</a><span class="rail-group">链接</span><a class="row" href="/zh/offline-transfer/" aria-label="分享链接">链接</a><span class="rail-group">我的设备</span><a class="row" href="/device-inbox" aria-label="设备收件箱">收件箱</a><span class="rail-group">下载与工具</span><a class="row" href="/cli">CLI</a><a class="row" href="/zh/apps/">应用</a><a class="row" href="/pricing">定价</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-by-scanning-a-qr-code/">English</a><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code/" aria-current="true">中文</a></nav></div></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">扫描二维码传输文件</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -154,14 +198,14 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-08-05</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-by-scanning-a-qr-code/">English</a><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code/" aria-current="true">中文</a></nav>
+      
       <p class="lead">输入六位数字的配对码很快，但扫码更快——手机摄像头对准屏幕一扫，往往比你把码打完还快。Relayium 的配对流程会在每个配对码旁边同时显示一个二维码，就是为了这个。</p>
       <p class="lead">这是跨网络流程：无论两台设备是不是同一个 Wi-Fi，甚至身处地球两端，都能用。二维码只是这个流程的一条捷径——如果扫码不方便，下面的配对码和链接同样能用，效果完全一样。</p>
-      <h2>创建配对码，就会拿到二维码</h2>
+      <section class="sheet"><h2>创建配对码，就会拿到二维码</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">开始之前</p><ul><li>只有发送方设备需要已登录账号。生成配对码需要账号——创建异步下载链接同样需要——而扫码的那一方全程不用登录。</li><li>该账号的邮箱已验证，因为跨网络会话的中继只发给已验证的账号，被拒时配对卡片会明确写出来。</li><li>接收方设备上有摄像头或任意二维码扫描工具，而且两个人同时在场——配对码有效期 5 分钟。</li><li>先说好由谁来创建：二维码只会显示在创建配对码的那台设备上，所以扫码的是另一台。这只决定了谁加入谁的房间，并不决定两台都进来之后文件能往哪个方向传。</li></ul></div>
       <p>在发送端设备上打开 relayium.com 并登录——创建配对码需要账号，因为这个码得归属于某个人；创建异步下载链接也是同样的道理。真正不需要账号的是「加入」这一侧：扫码的那个人自始至终都不用登录。选一个文件、一个文件夹，或者先不排队文件直接连接。</p>
-      <p>Relayium 会生成一段简短的配对码——六位十进制数字，所以手机可以直接弹出数字键盘，念出来也不用逐个拼字母——并紧挨着它渲染出一个二维码。配对码有效期五分钟，过期后重新生成一个即可。二维码本身并没有编码什么新东西——它就是「复制链接」按钮给你的那条加入链接，只是渲染成了可扫描的方块而不是文字。谁打开那条链接，谁就会直接进入你的配对房间。</p>
-      <h2>扫一下——不用装 App，不用账号</h2>
+      <p>Relayium 会生成一段简短的配对码——六位十进制数字，所以手机可以直接弹出数字键盘，念出来也不用逐个拼字母——并紧挨着它渲染出一个二维码。配对码有效期五分钟，过期后重新生成一个即可。二维码本身并没有编码什么新东西——它就是「复制链接」按钮给你的那条加入链接，只是渲染成了可扫描的方块而不是文字。谁打开那条链接，谁就会直接进入你的配对房间。</p></section>
+      <section class="sheet"><h2>扫一下——不用装 App，不用账号</h2>
       <p>在另一台设备上打开相机 App（或任何二维码扫描工具），对准屏幕。点一下弹出的通知，会在浏览器里打开那条链接，并自动加入房间——扫码那一方不用打字，不用注册 relayium.com 账号，也没有任何东西要安装。扫码只做「加入」这一件事，它不会搬动任何文件：送过来的一批文件仍然会停在接收端的屏幕上，等人按下「接收」。</p>
       <p>如果手边没有摄像头，同一条链接粘贴到任意浏览器里也能用，那六位数字的配对码打进 relayium.com 的「输入配对码」框里也一样能用。二维码只是叠加在两者之上的一层便利，不是另一套机制——哪个方便用哪个。</p>
       <ol class="steps" data-block="steps"><li><p>在发送方设备上打开实时传输页面并登录。</p><pre tabindex="0"><code>https://relayium.com/cross-network</code></pre></li><li><p>生成配对码。卡片上会显示这六位数字、下方的二维码方块，以及一个倒计时。</p><pre tabindex="0"><code>你的配对码 —— 念给对方
@@ -169,14 +213,14 @@ ol.steps>li>pre{margin:8px 0 0}
 或让对方扫码 / 打开链接加入
 配对码 4:52 后失效</code></pre></li><li><p>在另一台设备上打开相机 App 或任意二维码扫描工具，对准那个方块，点一下它给出的链接通知。</p></li><li><p>链接会在浏览器里打开并自动加入房间——不用打字，这一侧也不需要账号。它和「复制链接」按钮放进剪贴板的是同一个地址。</p><pre tabindex="0"><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>回到发送方设备：如果创建配对码之前还没排上文件，现在选好要发送的文件。在接收方按下「接收」之前什么都不会开始，所以请在那一侧回应这个提示，然后让两个标签页都开着，直到文件计数走完。</p></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">扫码成功时是什么样</p><p>发送方设备上，二维码和那行「等待对方加入…」会让位给已连接的卡片，卡片上的路径标签显示「中继」——这正是配对码会话的预期值，它刻意走加密的 TURN 中继。</p><p>随后两块屏幕上的文件计数都会走到最后一个文件。传输本身和手工输码没有任何差别：扫码只是决定了第二台设备用什么方式进的房间。</p><pre tabindex="0"><code>中继
-文件 1/1</code></pre></div>
-      <h2>扫码之后发生了什么</h2>
+文件 1/1</code></pre></div></section>
+      <section class="sheet"><h2>扫码之后发生了什么</h2>
       <p>扫码只是让两台设备进到同一个房间；传输本身和其他任何配对码会话完全一样。创建配对码的一方拥有这个房间，扫码的一方加入进来——但这说的是「谁加入谁」，不是方向：两台都进来之后，哪一侧都可以当发送方，而每一批送过来的文件仍然要在接收端按「接收」才会开始。配对码把你们放进一个单独的两台设备房间，而不是同网络的设备列表；但房间里的界面就是两个够新的浏览器在哪里都会打开的那个共享工作区：对端卡片上一个动作，然后一条加密连接同时承载文件和消息。配对码真正改变的是路径——它按设计只走中继，而这条中继链路有一个有限的存活期，工作区会在到点之前提醒你。两边浏览器用 X25519 密钥交换协商出共享密钥，用 AES-256-GCM 对每个数据块加密，再把这些数据块通过架在 TURN 中继上的 WebRTC 通道发出去。</p>
-      <p>打开「高级验证」（默认关闭）后，两块屏幕会显示同一段六位数字校验码（SAS）——扫一眼两边，确认一致后再信任这条连接。校验码一致能确认密钥未被替换：服务器或中继没有冒充任一端，也没有终止应用层端到端加密。配对码传输一律走这条中继路径，而不是先去试直连，因此它不依赖在两个网络之间的 NAT 和防火墙里探测出一条直连路径——它们可能挡住这样的路径。中继只转发密文——它没有密钥，永远看不到你的文件内容。每个文件都会用 SHA-256 哈希做端到端完整性校验，中途断开也能续传而不必重来。</p>
-      <h2>扫码失败怎么办</h2>
+      <p>打开「高级验证」（默认关闭）后，两块屏幕会显示同一段六位数字校验码（SAS）——扫一眼两边，确认一致后再信任这条连接。校验码一致能确认密钥未被替换：服务器或中继没有冒充任一端，也没有终止应用层端到端加密。配对码传输一律走这条中继路径，而不是先去试直连，因此它不依赖在两个网络之间的 NAT 和防火墙里探测出一条直连路径——它们可能挡住这样的路径。中继只转发密文——它没有密钥，永远看不到你的文件内容。每个文件都会用 SHA-256 哈希做端到端完整性校验，中途断开也能续传而不必重来。</p></section>
+      <section class="sheet"><h2>扫码失败怎么办</h2>
       <p>摄像头没对好焦、光线不好，或者某台设备手边没有摄像头——这些都不该挡住传输。发送端的配对卡片同时也提供原始配对码和链接的复制按钮（支持的设备上还有系统分享按钮），以及配对码的失效倒计时。</p>
       <p>重新输一遍码、粘贴链接，或者用系统分享把它发到别的地方（聊天软件、隔空传送，怎么快怎么来）——每条路径都会进到同一个房间，得到同样加密的连接。二维码只是众多入口之一，从来不是必需品。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>扫码打开了页面，但提示配对码无效或已过期。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # 发送方卡片上有实时倒计时</code></pre><p>5 分钟已经走完了，而一个失效配对码的二维码扫多少次都还是失效的链接。请在发送方设备上重新生成一个配对码——卡片会随之画出新的二维码——然后立刻扫这一个。</p></dd><dt>相机认出了那个方块，却始终不给出任何可以打开的东西。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # 「输入配对码」框接受这六位数字</code></pre><p>有些扫描工具只把文本复制下来，而不会交给浏览器。把它复制到的内容粘贴进地址栏；或者干脆不用二维码：在接收方设备上打开页面，把六位数字打进「输入配对码」框，然后按「连接」。</p></dd><dt>两个人都在找二维码想扫，可是两块屏幕上都没有。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # 只有生成配对码的那张卡片才会画二维码</code></pre><p>二维码属于创建配对码的那台设备，所以必须有一方先创建、另一方来扫。先定好哪一侧创建——两台都进房间之后，谁都可以发送——在那台设备上按「生成配对码」，再把另一台设备的摄像头对准那块屏幕。</p></dd><dt>链接经过聊天软件转发后，打开的页面里没有配对码。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network#c=483920   # #c= 之后的部分就是配对码</code></pre><p>配对码是放在 URL 片段里传的，而链接改写器或预览服务可能会把 # 之后的部分整个丢掉。请改成把六位数字念给对方，或者自己把链接粘进地址栏，这样中间就没有人再改写它。</p></dd><dt>扫码已经进了房间，随后卡片提示中继只发给已验证的账号。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # 配对卡片会写明被拒的原因</code></pre><p>发送账号的邮箱地址还没有验证，而这项检查发生在会话申请中继时，而不是生成配对码时。请在账户面板里完成邮箱验证，然后重新生成配对码并扫它的二维码——同网络传输不受此影响。</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>扫码打开了页面，但提示配对码无效或已过期。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # 发送方卡片上有实时倒计时</code></pre><p>5 分钟已经走完了，而一个失效配对码的二维码扫多少次都还是失效的链接。请在发送方设备上重新生成一个配对码——卡片会随之画出新的二维码——然后立刻扫这一个。</p></dd><dt>相机认出了那个方块，却始终不给出任何可以打开的东西。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # 「输入配对码」框接受这六位数字</code></pre><p>有些扫描工具只把文本复制下来，而不会交给浏览器。把它复制到的内容粘贴进地址栏；或者干脆不用二维码：在接收方设备上打开页面，把六位数字打进「输入配对码」框，然后按「连接」。</p></dd><dt>两个人都在找二维码想扫，可是两块屏幕上都没有。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # 只有生成配对码的那张卡片才会画二维码</code></pre><p>二维码属于创建配对码的那台设备，所以必须有一方先创建、另一方来扫。先定好哪一侧创建——两台都进房间之后，谁都可以发送——在那台设备上按「生成配对码」，再把另一台设备的摄像头对准那块屏幕。</p></dd><dt>链接经过聊天软件转发后，打开的页面里没有配对码。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network#c=483920   # #c= 之后的部分就是配对码</code></pre><p>配对码是放在 URL 片段里传的，而链接改写器或预览服务可能会把 # 之后的部分整个丢掉。请改成把六位数字念给对方，或者自己把链接粘进地址栏，这样中间就没有人再改写它。</p></dd><dt>扫码已经进了房间，随后卡片提示中继只发给已验证的账号。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # 配对卡片会写明被拒的原因</code></pre><p>发送账号的邮箱地址还没有验证，而这项检查发生在会话申请中继时，而不是生成配对码时。请在账户面板里完成邮箱验证，然后重新生成配对码并扫它的二维码——同网络传输不受此影响。</p></dd></dl></div></section>
       <h2>常见问题</h2>
       <h3>扫二维码的一方需要 Relayium 账号吗？</h3>
       <p>不需要。只有创建配对码和它二维码的那一侧需要登录——异步下载链接也是同样的要求。扫码的一方只是加入一个已经建好的房间：不用账号，不用注册，也没有任何东西要安装。</p>
@@ -203,6 +247,8 @@ ol.steps>li>pre{margin:8px 0 0}
         <a href="/pricing">定价</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

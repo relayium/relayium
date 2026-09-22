@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Windows·Linux·Android용 AirDrop 대안","description":"Windows·Linux·Android에는 공식 AirDrop이 없습니다 — 가장 가까운 방법은 이것입니다: 브라우저에서 같은 Wi-Fi로 즉시 공유, 계정도 설치도 불필요, 게다가 AirDrop이 못 하는 인터넷 너머 전송까지.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/how-to/airdrop-for-windows-and-android/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Windows·Linux·Android용 AirDrop 대안"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"Windows나 Android용 공식 AirDrop이 있나요?","acceptedAnswer":{"@type":"Answer","text":"없습니다 — AirDrop은 Apple 기기 전용이며 Apple은 Windows나 Android용 클라이언트를 낸 적이 없습니다. Relayium은 브라우저 기반 대안입니다. 두 기기에서 relayium.com을 열면, Apple과 비Apple이 섞인 조합을 포함해 플랫폼과 상관없이 똑같이 동작합니다."}},{"@type":"Question","name":"계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"같은 Wi-Fi 흐름에서는 필요 없습니다 — 양쪽에서 페이지를 열면 서로를 찾고, 로그인이 전혀 필요 없습니다. 다른 네트워크를 넘어 페어링 코드로 보낼 때는 보내는 쪽의 로그인이 필요하지만, 어느 네트워크 모드든 받는 쪽은 계정이 필요 없습니다."}},{"@type":"Question","name":"뭔가 설치해야 하나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. Windows·Linux·macOS·Android·iOS 어디서나 웹 페이지이므로 스토어에서 내려받을 것도, 계속 업데이트할 것도 없습니다."}},{"@type":"Question","name":"'Relayium vs AirDrop' 비교 글과는 무엇이 다른가요?","acceptedAnswer":{"@type":"Answer","text":"그 글은 AirDrop이 실제로 더 나은 부분(순수 Apple 가정)과 부족한 부분을 정면으로 비교한 글입니다. 이 가이드는 적어도 한 기기가 Apple 제품이 아닐 때 실제로 AirDrop 같은 경험을 얻는 방법을 알려주는 실전 가이드입니다."}},{"@type":"Question","name":"AirDrop처럼 여러 명에게 보낼 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"한 번에는 못 합니다. 로컬 방은 두 기기로 제한되지 않으므로 그 네트워크에서 페이지를 연 기기는 모두 한꺼번에 목록에 나옵니다 — 하지만 전송은 1대1입니다: 한 수신자와 작업 공간을 열면 그 파일은 그 사람에게 갑니다. 같은 배치를 방의 여러 사람에게 나누려면 각자와 차례로 작업 공간을 열면 됩니다. 인터넷 너머의 페어링 코드 모드는 암호화된 릴레이를 거쳐 두 기기만 잇습니다."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ko/guides/" aria-current="true">가이드</a><a href="/ko/apps/">앱</a><a href="/pricing">요금제</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="기본 탐색"><a class="row" href="/">LAN 전송</a><a class="row" href="/ko/cross-network/">네트워크 간 전송</a><a class="row" href="/ko/offline-transfer/">비동기 전송</a><a class="row" href="/device-inbox">기기 수신함</a><a class="row" href="/cli">CLI</a><a class="row" href="/ko/apps/">앱</a><a class="row" href="/pricing">요금제</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">Windows·Linux·Android용 AirDrop 대안</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,24 +203,24 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="보관된 번역"><p class="archived-label">보관된 번역</p><p>이 페이지는 기록으로 보관 중인 한국어 번역입니다. Relayium 제품과 최신 문서는 영어와 중국어 간체로 관리되며, 앱 자체도 더 이상 한국어를 제공하지 않습니다. 여기에 적힌 화면과 세부 사항은 현재 동작과 다를 수 있습니다.</p><p class="archived-links archived-pricing">이 페이지에 적혀 있는 요금제와 사용 한도는 오래된 내용일 수 있습니다. 현재 내용은 <a href="/pricing">요금제</a> 페이지에서 확인하세요.</p><p class="archived-links">최신 버전: <a href="/how-to/airdrop-for-windows-and-android/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/how-to/airdrop-for-windows-and-android/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">AirDrop은 Apple의 세계 안에만 존재하므로, Windows·Linux·Android 사용자와 여러 종류의 기기가 섞인 가정에는 내장된 대안이 없습니다. 이 가이드는 Apple이 아닌 기기에서 AirDrop과 가장 가까운 경험을 얻는 방법을 보여줍니다 — 양쪽에서 웹 페이지를 열면 파일이 옮겨집니다.</p>
       <p class="lead">이 방식은 플랫폼과 상관없이 똑같이 동작하므로, AirDrop이 잘 다루지 못하는 상황도 다룹니다 — 같은 방에 Windows 노트북, Linux 데스크톱, Android 폰이 함께 있거나, 여기에 iPhone까지 더해진 경우요.</p>
-      <h2>AirDrop 같은 흐름: 같은 Wi-Fi, 브라우저 안에서</h2>
+      <section class="sheet"><h2>AirDrop 같은 흐름: 같은 Wi-Fi, 브라우저 안에서</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">필요한 것</p><ul><li>각 기기에 최신 브라우저 — Windows는 Chrome이나 Edge, Linux는 Firefox나 Chrome, Android는 Chrome. 스토어에서 받을 것도, 설치할 것도 없습니다.</li><li>두 기기가 같은 Wi-Fi에 있어야 합니다. AirDrop과 달리 기준은 ‘가까이 있음’이 아닙니다. 기기 탐색은 접속해 온 공인 IP로 묶이므로, 모바일 데이터에 남아 있는 휴대폰은 같은 책상 위에 있어도 나타나지 않습니다.</li><li>두 기기 모두 인터넷에 연결되고 페이지를 https://relayium.com/ 으로 열어야 합니다. AirDrop은 인터넷이 전혀 필요 없지만, 이 두 브라우저는 서로를 찾기 위해 랑데부에 닿아야 하므로 격리된 LAN이라면 자체 호스팅 인스턴스를 쓰세요.</li><li>같은 네트워크에서는 계정도 페어링 코드도 필요 없습니다 — 이 흐름이 AirDrop과 같은 부분이 바로 그것입니다.</li></ul></div>
       <p>이것이 바로 AirDrop이 위해 만들어진 일상적인 상황이며, Relayium은 어느 스토어에서도 앱을 받지 않고 같은 결과를 냅니다.</p>
       <ol class="steps" data-block="steps"><li><p>각 기기에서 브라우저로 전송 페이지를 엽니다.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>두 기기의 상태 표시에 있는 공인 IP를 비교합니다. 주소를 하나 공유하는 것이 두 기기를 서로 보이게 만드는 조건이며, 모바일 데이터를 벗어나지 않은 휴대폰을 잡아내는 가장 빠른 방법이기도 합니다.</p><pre tabindex="0"><code>연결됨 · 내 기기 ThinkPad · 공인 IP 203.0.113.9</code></pre></li><li><p>보내는 기기에서 “주변 기기”에서 상대를 찾아 그 카드를 고르고 “작업 공간 열기”를 누르세요. 최신 브라우저에서 카드가 제공하는 동작은 이 하나뿐입니다 — 이후 파일과 폴더와 메시지가 모두 그때 열리는 암호화된 연결 하나를 지나기 때문입니다. 방에는 여러 기기가 나열될 수 있습니다. 작업 공간을 여는 것이 이번 전송을 받을 한 명을 고르는 방법이고, 다음 사람 차례가 되면 하나를 더 엽니다.</p></li><li><p>작업 공간이 그 카드를 대신합니다. 보내기는 헤더 아래의 컨트롤로 합니다: 한 배치에 최대 1,000개라면 “파일 보내기”, 브라우저가 폴더 선택을 지원하면 트리째 “폴더 보내기”, 또는 메시지 상자에 입력하고 — “Enter 로 줄바꿈 · ⌘/Ctrl+Enter 로 전송” — “보내기”를 누릅니다. 받는 기기에서는 수락하기 전에 요청 아래 줄을 읽으세요 — 브라우저가 저장 위치를 물을지, 자체 다운로드 폴더에 쓸지가 적혀 있습니다 — 그다음 “받기”를 누릅니다. 먼저 검증 코드(SAS)를 대조하려면 시작 전에 두 기기에서 “고급 검증”을 켜세요.</p></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">전송이 잘될 때의 화면</p><p>그때쯤 상대 기기 카드는 사라져 있습니다 — 작업 공간이 그 자리를 차지했으니까요 — 그래서 상태는 작업 공간 헤더에서 읽습니다: 연결된 기기, “연결됨”이라는 링크 상태, 그리고 하나뿐인 경로 배지 “LAN 직접”. 두 화면의 파일 카운터가 그 배치의 마지막 파일까지 갑니다.</p><p>폴더가 어떻게 내려앉는지는 받는 브라우저에 달렸으니 단정하지 말고 결과를 확인하세요. 컴퓨터의 Chrome과 Edge는 고른 디렉터리에 트리를 쓰고, Firefox와 Safari, 모든 휴대폰 브라우저는 같은 구조로 풀리는 .zip 하나를 건넵니다. 그것을 확인하는 자리는 그 브라우저 자체의 다운로드 목록입니다 — chrome://downloads (Chrome), edge://downloads (Edge), about:downloads (Firefox).</p><pre tabindex="0"><code>Pixel 에 연결됨 · 연결됨 · LAN 직접
-파일 8/8</code></pre></div>
-      <h2>상대 기기가 나타나지 않을 때</h2>
+파일 8/8</code></pre></div></section>
+      <section class="sheet"><h2>상대 기기가 나타나지 않을 때</h2>
       <p>이 흐름이 AirDrop과 다른 지점에서 시작하세요. 두 기기를 서로 보이게 하는 것은 얼마나 가까운지가 아니라 어느 네트워크에서 접속했는지입니다. 아래 확인은 전부를 담은 목록이 아니라 흔한 1차 점검이며, 모두 짐작이 아니라 페이지에서 답을 읽어냅니다.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 조치</p><dl><dt>상대 기기가 바로 옆에 있는데도 “주변 기기”에 나타나지 않습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 두 기기의 상태 표시에 있는 공인 IP를 비교한다</code></pre><p>공인 IP가 다르면 방도 둘이고, 가까이 있다고 해결되지 않습니다. 먼저 두 기기를 같은 Wi-Fi에 두고 휴대폰의 모바일 데이터를 끄세요. 어느 쪽이든 켜진 VPN이나 iCloud 비공개 릴레이도 주소가 둘로 갈리는 흔한 이유입니다. 설정을 바꿔도 괜찮다면 VPN을 끄거나 그 한 네트워크에서만 비공개 릴레이를 끄고 그 기기에서 https://relayium.com/ 을 다시 불러오세요. 그대로 두고 싶다면 https://relayium.com/cross-network 의 페어링 코드가 두 설정을 건드리지 않고 상대 기기에 닿습니다.</p></dd><dt>두 기기가 같은 공인 IP를 보여주는데도 어느 카드도 나타나지 않습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 기기 목록 아래 안내에 바꿔야 할 공유기 설정 이름이 있다</code></pre><p>공유기가 자기 클라이언트를 갈라놓고 있습니다. Wi-Fi 설정에서 ‘AP 격리 / 클라이언트 격리’를 끄거나, 공유기를 바꿀 수 없다면 https://relayium.com/cross-network 의 페어링 코드를 쓰세요.</p></dd><dt>인터넷이 없는 네트워크에서는 페이지 자체가 열리지 않습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 이것이 열리지 않으면 그 네트워크에 랑데부로 가는 길이 없다</code></pre><p>인터넷이 전혀 필요 없는 AirDrop과의 진짜 차이가 이것입니다. 두 브라우저는 서로를 소개받기 위해 랑데부에 닿아야 하므로, 망 분리된 LAN이라면 그 네트워크 안에서 자체 인스턴스를 돌리거나(Relayium은 AGPL-3.0으로 github.com/relayium/relayium에 있습니다) USB 메모리로 돌아가세요.</p></dd><dt>받기를 누르기 전에, 받는 쪽이 배치를 메모리에 담아야 한다고 경고합니다.</dt><dd><pre tabindex="0"><code>chrome://downloads   # Chrome용 / Edge는 edge://downloads / Firefox는 about:downloads</code></pre><p>Firefox와 Safari, 모든 휴대폰 브라우저에는 File System Access API가 없어 배치를 메모리에서 조립하며, 대략 256 MiB를 넘으면 Relayium이 경고합니다. 컴퓨터의 Chrome이나 Edge로 받거나 한 번에 보내는 파일 수를 줄이고, 저장되었다고 단정하지 말고 그 브라우저 자체의 다운로드 목록 — chrome://downloads (Chrome), edge://downloads (Edge), about:downloads (Firefox) — 에서 하나씩 확인하세요.</p></dd><dt>폴더 대신 .zip 하나가 도착했습니다.</dt><dd><pre tabindex="0"><code>chrome://downloads   # Chrome에서 본다. 디렉터리 선택기가 없는 브라우저에서는 항목이 .zip 하나가 된다</code></pre><p>디렉터리 선택기가 없는 브라우저에서는 이것이 예상된 결과이고, 압축을 풀면 상대 경로를 그대로 유지한 같은 구조가 됩니다. 압축을 풀거나, 같은 폴더를 컴퓨터의 Chrome이나 Edge로 받으세요. 그쪽은 대상 디렉터리를 묻고 트리를 그 자리에 씁니다.</p></dd></dl></div>
-      <h2>다른 네트워크: 페어링과 릴레이</h2>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 조치</p><dl><dt>상대 기기가 바로 옆에 있는데도 “주변 기기”에 나타나지 않습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 두 기기의 상태 표시에 있는 공인 IP를 비교한다</code></pre><p>공인 IP가 다르면 방도 둘이고, 가까이 있다고 해결되지 않습니다. 먼저 두 기기를 같은 Wi-Fi에 두고 휴대폰의 모바일 데이터를 끄세요. 어느 쪽이든 켜진 VPN이나 iCloud 비공개 릴레이도 주소가 둘로 갈리는 흔한 이유입니다. 설정을 바꿔도 괜찮다면 VPN을 끄거나 그 한 네트워크에서만 비공개 릴레이를 끄고 그 기기에서 https://relayium.com/ 을 다시 불러오세요. 그대로 두고 싶다면 https://relayium.com/cross-network 의 페어링 코드가 두 설정을 건드리지 않고 상대 기기에 닿습니다.</p></dd><dt>두 기기가 같은 공인 IP를 보여주는데도 어느 카드도 나타나지 않습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 기기 목록 아래 안내에 바꿔야 할 공유기 설정 이름이 있다</code></pre><p>공유기가 자기 클라이언트를 갈라놓고 있습니다. Wi-Fi 설정에서 ‘AP 격리 / 클라이언트 격리’를 끄거나, 공유기를 바꿀 수 없다면 https://relayium.com/cross-network 의 페어링 코드를 쓰세요.</p></dd><dt>인터넷이 없는 네트워크에서는 페이지 자체가 열리지 않습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 이것이 열리지 않으면 그 네트워크에 랑데부로 가는 길이 없다</code></pre><p>인터넷이 전혀 필요 없는 AirDrop과의 진짜 차이가 이것입니다. 두 브라우저는 서로를 소개받기 위해 랑데부에 닿아야 하므로, 망 분리된 LAN이라면 그 네트워크 안에서 자체 인스턴스를 돌리거나(Relayium은 AGPL-3.0으로 github.com/relayium/relayium에 있습니다) USB 메모리로 돌아가세요.</p></dd><dt>받기를 누르기 전에, 받는 쪽이 배치를 메모리에 담아야 한다고 경고합니다.</dt><dd><pre tabindex="0"><code>chrome://downloads   # Chrome용 / Edge는 edge://downloads / Firefox는 about:downloads</code></pre><p>Firefox와 Safari, 모든 휴대폰 브라우저에는 File System Access API가 없어 배치를 메모리에서 조립하며, 대략 256 MiB를 넘으면 Relayium이 경고합니다. 컴퓨터의 Chrome이나 Edge로 받거나 한 번에 보내는 파일 수를 줄이고, 저장되었다고 단정하지 말고 그 브라우저 자체의 다운로드 목록 — chrome://downloads (Chrome), edge://downloads (Edge), about:downloads (Firefox) — 에서 하나씩 확인하세요.</p></dd><dt>폴더 대신 .zip 하나가 도착했습니다.</dt><dd><pre tabindex="0"><code>chrome://downloads   # Chrome에서 본다. 디렉터리 선택기가 없는 브라우저에서는 항목이 .zip 하나가 된다</code></pre><p>디렉터리 선택기가 없는 브라우저에서는 이것이 예상된 결과이고, 압축을 풀면 상대 경로를 그대로 유지한 같은 구조가 됩니다. 압축을 풀거나, 같은 폴더를 컴퓨터의 Chrome이나 Edge로 받으세요. 그쪽은 대상 디렉터리를 묻고 트리를 그 자리에 씁니다.</p></dd></dl></div></section>
+      <section class="sheet"><h2>다른 네트워크: 페어링과 릴레이</h2>
       <p>페어링 코드는 서버가 생성하는 정확히 6자리 십진수입니다(0–9, 맨 앞의 0도 유효). 보내는 쪽은 코드를 만들 때 로그인하지만 코드·링크·QR로 참가하는 쪽은 계정이 필요 없습니다. 새 기기가 참가할 수 있는 시간은 5분이며, 이미 연결된 전송은 카운트다운이 끝나도 끊기지 않습니다.</p>
-      <p>네트워크가 다르면 브라우저는 직접 경로를 먼저 시도하지 않고 설계상 암호화된 TURN 릴레이를 사용합니다. 키는 두 기기에만 남으므로 릴레이는 종단 간 암호화된 암호문만 전달하고 파일을 읽을 수 없으며 실시간 콘텐츠 사본이나 기록도 보관하지 않습니다.</p>
-      <h2>실제로 파일을 지키는 것</h2>
+      <p>네트워크가 다르면 브라우저는 직접 경로를 먼저 시도하지 않고 설계상 암호화된 TURN 릴레이를 사용합니다. 키는 두 기기에만 남으므로 릴레이는 종단 간 암호화된 암호문만 전달하고 파일을 읽을 수 없으며 실시간 콘텐츠 사본이나 기록도 보관하지 않습니다.</p></section>
+      <section class="sheet"><h2>실제로 파일을 지키는 것</h2>
       <p>위 두 모드 모두 실시간 전송이며, 같은 암호화 방식을 씁니다: X25519 키 교환으로 도출한 키를 블록별 AES-256-GCM에 사용하며, 오직 두 기기 사이에서만 협상됩니다. 기본값이 꺼짐인 고급 검증을 켜면 양쪽이 동일한 6자리 검증 코드(짧은 인증 문자열, SAS)를 표시하므로 도출된 키가 바뀌지 않았는지, 즉 시그널링 서버나 TURN 릴레이가 어느 한쪽 엔드포인트를 사칭하거나 애플리케이션 계층의 종단간 암호화를 종료하지 않았는지 확인할 수 있습니다. 네트워크 간 전송에서는 TURN이 여전히 데이터 경로에 있지만 암호문만 운반하며 암호화 엔드포인트가 아닙니다. 각 파일은 SHA-256 해시로 종단간 검증됩니다.</p>
-      <p>이 모드에서는 서버에 아무것도 저장되지 않습니다 — 전송이 이루어지는 동안만 존재합니다. Relayium은 AGPL-3.0 라이선스로 오픈소스이며 코드는 github.com/relayium/relayium에 있어, 블랙박스가 아니라 검증 가능한 구조입니다.</p>
-      <h2>솔직한 실제 한계</h2>
+      <p>이 모드에서는 서버에 아무것도 저장되지 않습니다 — 전송이 이루어지는 동안만 존재합니다. Relayium은 AGPL-3.0 라이선스로 오픈소스이며 코드는 github.com/relayium/relayium에 있어, 블랙박스가 아니라 검증 가능한 구조입니다.</p></section>
+      <section class="sheet"><h2>솔직한 실제 한계</h2>
       <p>파일이 서버에 놓이는 일이 없으므로 업로드 할당량이 없습니다 — 실제 한계는 어떤 브라우저로 받느냐에 달렸습니다. File System Access API를 갖춘 데스크톱 브라우저(Windows나 Linux의 Chrome, Edge)는 들어오는 데이터를 곧장 디스크로 스트리밍해 수 기가바이트 파일도 괜찮습니다. Firefox와 Safari, 그리고 모든 휴대폰 브라우저(Android의 Chrome 포함)에는 그 API가 없어서 받은 내용을 일단 메모리에 모으게 되며, 대략 256 MB를 넘어서면 Relayium이 받는 쪽이 수락하기 전에 미리 경고합니다. 이 수치는 측정된 상한이 아니라 일부러 보수적으로 잡은 추정치로 보세요. 실제로 버티지 못하는 지점은 기기 메모리와 OS, 열어 둔 탭 수에 따라 달라집니다.</p>
-      <p>폴더도 지원됩니다: 데스크톱(iOS 제외)에서 폴더를 고르면 상대 경로가 유지됩니다. 받는 쪽 브라우저가 선택한 디렉터리에 바로 쓸 수 있으면(데스크톱 Chrome, Edge) 파일이 그대로 자리를 잡고, 그렇지 않으면(Firefox, Safari, 휴대폰 브라우저) 폴더 전체가 하나의 .zip으로 도착해 풀면 같은 구조가 됩니다.</p>
+      <p>폴더도 지원됩니다: 데스크톱(iOS 제외)에서 폴더를 고르면 상대 경로가 유지됩니다. 받는 쪽 브라우저가 선택한 디렉터리에 바로 쓸 수 있으면(데스크톱 Chrome, Edge) 파일이 그대로 자리를 잡고, 그렇지 않으면(Firefox, Safari, 휴대폰 브라우저) 폴더 전체가 하나의 .zip으로 도착해 풀면 같은 구조가 됩니다.</p></section>
       <h2>자주 묻는 질문</h2>
       <h3>Windows나 Android용 공식 AirDrop이 있나요?</h3>
       <p>없습니다 — AirDrop은 Apple 기기 전용이며 Apple은 Windows나 Android용 클라이언트를 낸 적이 없습니다. Relayium은 브라우저 기반 대안입니다. 두 기기에서 relayium.com을 열면, Apple과 비Apple이 섞인 조합을 포함해 플랫폼과 상관없이 똑같이 동작합니다.</p>
@@ -203,6 +247,8 @@ ol.steps>li>pre{margin:8px 0 0}
         <a href="/pricing">요금제</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

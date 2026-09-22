@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs Google Drive: 파일을 더 직접적으로 보내기","description":"공정한 비교입니다. Google Drive는 영구 저장에 뛰어나지만, 보내려면 업로드하고 권한을 관리해야 합니다. Relayium은 실시간 내용의 서버 측 사본을 저장하지 않으며 브라우저는 LAN에서 직접, 네트워크 간에는 종단간 암호화 TURN 릴레이를 사용하거나 영지식·자동 만료 링크를 만듭니다.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/compare/google-drive/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs Google Drive: 파일을 더 직접적으로 보내기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"Relayium도 Google Drive처럼 제 파일을 저장하나요?","acceptedAnswer":{"@type":"Answer","text":"실시간 모드에서는 Relayium이 내용의 서버 측 사본을 저장하지 않습니다. 브라우저 파일은 LAN에서 직접 이동하고, 네트워크 간에는 TURN이 릴레이가 읽거나 복호화할 수 없는 종단간 암호문만 운반합니다. 다운로드 링크는 복호화할 수 없는 영지식 암호문을 저장하며, 만료되거나(1시간/1일/3일/7일, 요금제에 따라 다름) 첫 다운로드 후 삭제됩니다."}},{"@type":"Question","name":"계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"같은 네트워크에서는 계정이 전혀 필요 없습니다. 네트워크를 넘어 보내기 위한 페어링 코드를 만들거나 저장 다운로드 링크를 만들 때는 로그인이 필요합니다. 어느 경우든 받는 쪽은 항상 계정이 필요 없습니다."}},{"@type":"Question","name":"크기 제한이 있나요?","acceptedAnswer":{"@type":"Answer","text":"실시간 전송은 한 번에 최대 1,000개 파일을 다룰 수 있고 서버 측 크기 제한이 없습니다. Chrome과 Edge는 수십 기가바이트까지 곧바로 디스크로 스트리밍합니다. 디스크로 흘려보낼 경로가 하나도 적용되지 않아 브라우저가 메모리에 담아야 할 때는 Relayium이 약 256 MB를 넘으면 경고합니다. 이 수치는 일부러 보수적으로 잡은 추정치이지 하드 한계가 아닙니다. 저장 링크는 계정에 연결된 용량 한도에 포함됩니다."}},{"@type":"Question","name":"Relayium은 무료인가요?","acceptedAnswer":{"@type":"Answer","text":"네. Relayium은 AGPL-3.0 라이선스의 무료 오픈소스이며, 프로토콜과 코드 전체가 github.com/relayium/relayium에 있습니다. 더 크거나 빠른 전송을 여는 유료 등급은 없습니다."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -119,8 +161,10 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ko/guides/" aria-current="true">가이드</a><a href="/ko/apps/">앱</a><a href="/pricing">요금제</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="기본 탐색"><a class="row" href="/">LAN 전송</a><a class="row" href="/ko/cross-network/">네트워크 간 전송</a><a class="row" href="/ko/offline-transfer/">비동기 전송</a><a class="row" href="/device-inbox">기기 수신함</a><a class="row" href="/cli">CLI</a><a class="row" href="/ko/apps/">앱</a><a class="row" href="/pricing">요금제</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs Google Drive: 파일을 더 직접적으로 보내기</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -142,21 +186,21 @@ pre code{background:none;padding:0;border-radius:0}
       <aside class="archived" aria-label="보관된 번역"><p class="archived-label">보관된 번역</p><p>이 페이지는 기록으로 보관 중인 한국어 번역입니다. Relayium 제품과 최신 문서는 영어와 중국어 간체로 관리되며, 앱 자체도 더 이상 한국어를 제공하지 않습니다. 여기에 적힌 화면과 세부 사항은 현재 동작과 다를 수 있습니다.</p><p class="archived-links archived-pricing">이 페이지에 적혀 있는 요금제와 사용 한도는 오래된 내용일 수 있습니다. 현재 내용은 <a href="/pricing">요금제</a> 페이지에서 확인하세요.</p><p class="archived-links">최신 버전: <a href="/compare/google-drive/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/compare/google-drive/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Google Drive는 정말 훌륭한 제품입니다. 파일이 한곳에 모여 있고, 기기 간 동기화되며, 백업되고, 팀과 함께 실시간으로 편집하기도 쉽습니다. 계속 다시 찾게 될 파일의 영구적인 보관 장소가 필요하다면 Drive는 합리적인 기본 선택지이며, 이 글은 그것을 그만두라고 설득하려는 것이 아닙니다.</p>
       <p class="lead">하지만 많은 사람이 Drive로 하는 일은 실제로는 일회성 전달입니다. 친구에게 동영상을 보내거나, 고객에게 계약서를 보내거나, 동료에게 데이터셋을 보내는 일이지 영구 저장이 아닙니다. 그 특정 작업만 놓고 보면, 사본을 Google 서버에 업로드하고 누가 볼 수 있는지 설정하는 것은 작업에 필요한 것보다 더 많은 절차입니다. Relayium의 실시간 전송은 서버 측 내용 사본을 저장하지 않고, 브라우저는 LAN에서 직접, 네트워크 간에는 종단간 암호화 TURN을 사용합니다. 저장 링크는 받는 사람만 복호화할 수 있습니다.</p>
-      <h2>Google Drive가 잘하는 것</h2>
+      <section class="sheet"><h2>Google Drive가 잘하는 것</h2>
       <p>Drive의 강점은 영속성과 협업입니다. 업로드한 파일은 휴대폰, 노트북, 웹 사이에서 동기화되며 삭제할 때까지 그곳에 계속 남아 있습니다. 이는 작업 폴더나 팀 공유 드라이브, 실시간으로 함께 편집하는 문서에 정확히 필요한 것입니다.</p>
-      <p>저장 측면에서도 관대하고 손이 덜 갑니다. 넉넉한 무료 등급, 자동 백업, 버전 기록, 그동안 저장한 모든 것에 대한 검색까지. 이런 것들은 Relayium이 대체하려는 것이 아닙니다.</p>
-      <h2>차이가 나는 지점: 보내는 것과 저장하는 것은 같은 일이 아니다</h2>
+      <p>저장 측면에서도 관대하고 손이 덜 갑니다. 넉넉한 무료 등급, 자동 백업, 버전 기록, 그동안 저장한 모든 것에 대한 검색까지. 이런 것들은 Relayium이 대체하려는 것이 아닙니다.</p></section>
+      <section class="sheet"><h2>차이가 나는 지점: 보내는 것과 저장하는 것은 같은 일이 아니다</h2>
       <p>Drive로 파일 하나를 보내려면 사본을 Google 인프라에 업로드한 뒤, 누가 열 수 있는지 정해야 합니다. 특정 사람의 Google 계정, 또는 ‘링크가 있는 모든 사람’. 공유 설정을 잘못하면 파일에 접근할 수 없거나 의도한 것보다 더 공개됩니다. 어느 쪽이든, 사본은 나중에 직접 돌아가 지울 때까지 Google 서버에 무기한 남아 있습니다.</p>
-      <p>Relayium은 흔한 실시간 경우에 서버 측 내용 저장을 건너뜁니다. LAN에서는 브라우저 파일이 기기 사이를 직접 이동하고, 네트워크를 넘으면 브라우저 세션은 설계상 TURN을 사용하며 릴레이는 읽거나 복호화할 수 없는 종단간 암호문만 운반합니다. 받는 사람이 오프라인이라 링크가 정말로 필요할 때는, 저장 링크 모드가 Drive에는 없는 영지식 속성을 유지합니다. 브라우저가 업로드 전에 무작위로 생성한 AES-256-GCM 키로 파일을 암호화하고, 그 키는 URL 프래그먼트, 즉 # 뒤의 브라우저가 서버로 절대 보내지 않는 부분에만 존재합니다. Google의 서버는 Drive 파일을 보관하며 기술적으로 읽을 수 있습니다. 반면 Relayium의 서버는 저장 링크에 대해 복호화할 수 없는 암호문만 보관합니다.</p>
-      <h2>실시간: 서버 측 내용 사본을 저장하지 않음</h2>
+      <p>Relayium은 흔한 실시간 경우에 서버 측 내용 저장을 건너뜁니다. LAN에서는 브라우저 파일이 기기 사이를 직접 이동하고, 네트워크를 넘으면 브라우저 세션은 설계상 TURN을 사용하며 릴레이는 읽거나 복호화할 수 없는 종단간 암호문만 운반합니다. 받는 사람이 오프라인이라 링크가 정말로 필요할 때는, 저장 링크 모드가 Drive에는 없는 영지식 속성을 유지합니다. 브라우저가 업로드 전에 무작위로 생성한 AES-256-GCM 키로 파일을 암호화하고, 그 키는 URL 프래그먼트, 즉 # 뒤의 브라우저가 서버로 절대 보내지 않는 부분에만 존재합니다. Google의 서버는 Drive 파일을 보관하며 기술적으로 읽을 수 있습니다. 반면 Relayium의 서버는 저장 링크에 대해 복호화할 수 없는 암호문만 보관합니다.</p></section>
+      <section class="sheet"><h2>실시간: 서버 측 내용 사본을 저장하지 않음</h2>
       <p>가장 전형적인 경우(두 사람이 지금 모두 온라인)에는 실시간 전송이 한 번에 최대 1,000개 파일을 보내며 서버 측 내용 사본을 저장하지 않습니다. 브라우저 파일은 LAN에서 직접 이동하고, 네트워크 간에는 TURN이 릴레이가 읽거나 복호화할 수 없는 종단간 암호문만 운반합니다. 양쪽 SAS와 파일별 SHA-256을 확인하며, 연결이 끊기면 이어서 재개됩니다.</p>
-      <p>서버 측 크기 제한이 없으므로 실질적인 한계는 받는 쪽 브라우저에서 옵니다. Chrome과 Edge는 들어오는 데이터를 곧바로 디스크로 스트리밍해 수십 기가바이트도 무리 없이 처리합니다. Firefox와 Safari에는 그 API가 없어, 디스크로 흘려보낼 경로가 하나도 적용되지 않으면 들어오는 데이터를 메모리에 담습니다. Relayium은 약 256 MB를 넘으면 경고하는데, 이는 측정된 하드 한계가 아니라 일부러 보수적으로 잡은 추정치입니다. 같은 네트워크에서는 계정이 전혀 필요 없고, 두 기기가 서로 직접 연결됩니다. 네트워크를 넘어 보낼 때는 페어링 코드를 쓰고, 그 코드를 만드는 쪽의 로그인이 필요하며, 설계상 암호화된 TURN 릴레이를 거칩니다. 덕분에 네트워크 사이에서는 좀처럼 성공하지 않는 직접 연결 시도를 기다리지 않고 1~2초 만에 연결됩니다. 릴레이는 스스로 읽을 수 없는 암호문만 전달하고, 어느 네트워크 구성이든 받는 쪽은 항상 계정이 필요 없습니다.</p>
-      <h2>그래도 링크가 필요하다면: 영지식 저장 링크</h2>
+      <p>서버 측 크기 제한이 없으므로 실질적인 한계는 받는 쪽 브라우저에서 옵니다. Chrome과 Edge는 들어오는 데이터를 곧바로 디스크로 스트리밍해 수십 기가바이트도 무리 없이 처리합니다. Firefox와 Safari에는 그 API가 없어, 디스크로 흘려보낼 경로가 하나도 적용되지 않으면 들어오는 데이터를 메모리에 담습니다. Relayium은 약 256 MB를 넘으면 경고하는데, 이는 측정된 하드 한계가 아니라 일부러 보수적으로 잡은 추정치입니다. 같은 네트워크에서는 계정이 전혀 필요 없고, 두 기기가 서로 직접 연결됩니다. 네트워크를 넘어 보낼 때는 페어링 코드를 쓰고, 그 코드를 만드는 쪽의 로그인이 필요하며, 설계상 암호화된 TURN 릴레이를 거칩니다. 덕분에 네트워크 사이에서는 좀처럼 성공하지 않는 직접 연결 시도를 기다리지 않고 1~2초 만에 연결됩니다. 릴레이는 스스로 읽을 수 없는 암호문만 전달하고, 어느 네트워크 구성이든 받는 쪽은 항상 계정이 필요 없습니다.</p></section>
+      <section class="sheet"><h2>그래도 링크가 필요하다면: 영지식 저장 링크</h2>
       <p>때로는 정말로 링크가 필요합니다. 받는 사람이 온라인이 아니거나, 어디에든 붙여넣을 수 있는 URL 하나가 필요할 때입니다. Relayium의 저장 링크 모드는 실시간 모드의 프라이버시를 포기하지 않고 이 경우를 다룹니다.</p>
-      <p>만료 기간을 1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름) 중에서 고르거나, 첫 다운로드 완료 후 삭제되도록 설정할 수 있습니다. 링크 생성에는 보내는 쪽의 로그인이 필요하지만(계정의 저장 용량 한도에 포함됩니다), 받는 쪽은 링크를 열어 다운로드하기만 하면 되고 계정은 필요 없습니다. 복호화 키가 URL 프래그먼트를 벗어나는 일이 없기 때문에, Google의 모델과 Relayium의 저장 링크 모델은 핵심적인 지점에서 다릅니다. Google은 기술적으로 Drive에 호스팅된 파일을 복호화할 수 있지만, Relayium의 서버는 저장 링크에 대해 구조적으로 그렇게 할 수 없습니다.</p>
-      <h2>기능 한눈에 비교</h2>
+      <p>만료 기간을 1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름) 중에서 고르거나, 첫 다운로드 완료 후 삭제되도록 설정할 수 있습니다. 링크 생성에는 보내는 쪽의 로그인이 필요하지만(계정의 저장 용량 한도에 포함됩니다), 받는 쪽은 링크를 열어 다운로드하기만 하면 되고 계정은 필요 없습니다. 복호화 키가 URL 프래그먼트를 벗어나는 일이 없기 때문에, Google의 모델과 Relayium의 저장 링크 모델은 핵심적인 지점에서 다릅니다. Google은 기술적으로 Drive에 호스팅된 파일을 복호화할 수 있지만, Relayium의 서버는 저장 링크에 대해 구조적으로 그렇게 할 수 없습니다.</p></section>
+      <section class="sheet"><h2>기능 한눈에 비교</h2>
       <p>가장 중요한 차이를 나란히 정리하면:</p>
-      <ul><li>목적: Google Drive는 협업 기능을 갖춘, 항상 그 자리에 있는 영구 저장소임. Relayium은 일회성 전송을 위해 만들어졌고, 실시간 P2P 또는 자동 만료 링크를 씀.</li><li>파일이 놓이는 곳: Drive는 삭제할 때까지 사본을 Google 서버에 무기한 보관함. Relayium 실시간은 파일을 아예 저장하지 않고, 저장 링크는 자동 만료(1시간/1일/3일/7일, 요금제에 따라 다름)되거나 첫 다운로드 후 삭제됨.</li><li>누가 읽을 수 있는가: Google의 인프라는 기술적으로 Drive 파일을 복호화할 수 있음. Relayium의 저장 링크는 영지식으로, 키가 URL 프래그먼트에만 있어 서버는 읽을 수 없는 암호문을 보관함.</li><li>계정: Drive는 보내는 쪽에 Google 계정을 요구하고, 공유 설정에 따라 받는 쪽에도 필요할 수 있음. Relayium은 같은 네트워크에서 계정이 전혀 필요 없고, 페어링 코드나 저장 링크를 만드는 쪽만 로그인함. 받는 쪽은 항상 계정 불필요.</li><li>크기 제한: Drive는 저장 용량 한도에 제약됨. Relayium 실시간은 서버 측 제한 없음(Chrome/Edge는 수십 GB까지 디스크로 스트리밍하고, 브라우저가 메모리에 담을 수밖에 없을 때는 약 256 MB를 넘으면 경고).</li><li>비용과 개방성: Relayium은 무료이며 AGPL-3.0 라이선스로 github.com/relayium/relayium에 있고, 브라우저에서 Windows·macOS·Linux·Android·iOS로 동작하며 설치가 필요 없음.</li></ul>
+      <ul><li>목적: Google Drive는 협업 기능을 갖춘, 항상 그 자리에 있는 영구 저장소임. Relayium은 일회성 전송을 위해 만들어졌고, 실시간 P2P 또는 자동 만료 링크를 씀.</li><li>파일이 놓이는 곳: Drive는 삭제할 때까지 사본을 Google 서버에 무기한 보관함. Relayium 실시간은 파일을 아예 저장하지 않고, 저장 링크는 자동 만료(1시간/1일/3일/7일, 요금제에 따라 다름)되거나 첫 다운로드 후 삭제됨.</li><li>누가 읽을 수 있는가: Google의 인프라는 기술적으로 Drive 파일을 복호화할 수 있음. Relayium의 저장 링크는 영지식으로, 키가 URL 프래그먼트에만 있어 서버는 읽을 수 없는 암호문을 보관함.</li><li>계정: Drive는 보내는 쪽에 Google 계정을 요구하고, 공유 설정에 따라 받는 쪽에도 필요할 수 있음. Relayium은 같은 네트워크에서 계정이 전혀 필요 없고, 페어링 코드나 저장 링크를 만드는 쪽만 로그인함. 받는 쪽은 항상 계정 불필요.</li><li>크기 제한: Drive는 저장 용량 한도에 제약됨. Relayium 실시간은 서버 측 제한 없음(Chrome/Edge는 수십 GB까지 디스크로 스트리밍하고, 브라우저가 메모리에 담을 수밖에 없을 때는 약 256 MB를 넘으면 경고).</li><li>비용과 개방성: Relayium은 무료이며 AGPL-3.0 라이선스로 github.com/relayium/relayium에 있고, 브라우저에서 Windows·macOS·Linux·Android·iOS로 동작하며 설치가 필요 없음.</li></ul></section>
       <h2>자주 묻는 질문</h2>
       <h3>Relayium도 Google Drive처럼 제 파일을 저장하나요?</h3>
       <p>실시간 모드에서는 Relayium이 내용의 서버 측 사본을 저장하지 않습니다. 브라우저 파일은 LAN에서 직접 이동하고, 네트워크 간에는 TURN이 릴레이가 읽거나 복호화할 수 없는 종단간 암호문만 운반합니다. 다운로드 링크는 복호화할 수 없는 영지식 암호문을 저장하며, 만료되거나(1시간/1일/3일/7일, 요금제에 따라 다름) 첫 다운로드 후 삭제됩니다.</p>
@@ -181,6 +225,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/pricing">요금제</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

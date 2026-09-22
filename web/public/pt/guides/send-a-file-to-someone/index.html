@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Enviar um arquivo para alguém entre redes com a CLI do Relayium","description":"Use relayium send e receive para mover um arquivo diretamente entre duas pessoas em redes diferentes, com um código de emparelhamento curto. Com criptografia de ponta a ponta, com um código SAS opcional para comparar e gratuito: o arquivo vai direto entre as duas pontas, nunca através dos nossos servidores.","inLanguage":"pt","datePublished":"2026-07-08","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/pt/guides/send-a-file-to-someone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/pt/"},{"@type":"ListItem","position":2,"name":"Guias","item":"https://relayium.com/pt/guides/"},{"@type":"ListItem","position":3,"name":"Enviar um arquivo para alguém entre redes com a CLI do Relayium"}]},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"De onde vem o código de emparelhamento?","acceptedAnswer":{"@type":"Answer","text":"Quem gera é o Relayium. Rode relayium send ./release.zip (depois de relayium login) e a CLI exibe um código de 6 dígitos válido por cinco minutos, junto com o comando exato que a outra ponta executa. Você não pode escolhê-lo — o servidor só aceita os códigos que ele mesmo emitiu."}},{"@type":"Question","name":"O arquivo é enviado para algum lugar?","acceptedAnswer":{"@type":"Answer","text":"Não. O arquivo flui diretamente entre as duas partes, com criptografia de ponta a ponta. Apenas um pequeno handshake de encontro passa pelo Relayium para apresentar as pontas — nunca o arquivo."}},{"@type":"Question","name":"E se não conseguirmos conectar?","acceptedAnswer":{"@type":"Answer","text":"Se ambas as pontas estiverem atrás de um NAT estrito sem endereço alcançável, a conexão direta não pode ser feita e a transferência falha — a CLI não tem retorno por retransmissor, por decisão de projeto. Use daemon direto entre dois servidores alcançáveis, ou push por SSH, quando não houver um caminho direto disponível."}},{"@type":"Question","name":"Como sei que é mesmo a pessoa certa do outro lado?","acceptedAnswer":{"@type":"Answer","text":"Os dois terminais exibem um código SAS idêntico de 6 dígitos derivado das impressões digitais dos certificados TLS fixados. Compare-o fora de banda; a coincidência confirma que as impressões digitais não foram substituídas e que o serviço de encontro não se passou por nenhuma das pontas. Ele autentica as pontas, não cada salto da rota de rede. Adicione --verify para exigir essa confirmação antes que qualquer byte se mova."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/pt/guides/" aria-current="true">Guias</a><a href="/pt/apps/">Apps</a><a href="/pricing">Preços</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Navegação principal"><a class="row" href="/">LAN</a><a class="row" href="/pt/cross-network/">Entre redes</a><a class="row" href="/pt/offline-transfer/">Assíncrono</a><a class="row" href="/device-inbox">Caixa de dispositivo</a><a class="row" href="/cli">CLI</a><a class="row" href="/pt/apps/">Apps</a><a class="row" href="/pricing">Preços</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/pt/">Relayium</a> <span aria-hidden="true">›</span> <a href="/pt/guides/">Guias</a> <span aria-hidden="true">›</span> <span aria-current="page">Enviar um arquivo para alguém entre redes com a CLI do Relayium</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,11 +203,11 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="Tradução arquivada"><p class="archived-label">Tradução arquivada</p><p>Esta página é uma tradução em português arquivada. O produto Relayium e sua documentação atual são mantidos em inglês e em chinês simplificado; o próprio aplicativo não oferece mais português. Por isso as telas e os detalhes descritos aqui podem diferir do comportamento atual.</p><p class="archived-links archived-pricing">Os planos e os limites de uso mencionados aqui podem estar desatualizados; os atuais estão na página <a href="/pricing">Preços</a>.</p><p class="archived-links">Versão atual: <a href="/guides/send-a-file-to-someone/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/send-a-file-to-someone/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Às vezes a outra máquina não é sua e você não consegue entrar por SSH: um arquivo para um colega em outro escritório, um build para um cliente, um arquivo compactado para um amigo do outro lado do país. relayium send e receive o movem diretamente entre as duas partes, entre redes, usando apenas um código de emparelhamento curto que a sua CLI gera na hora de enviar.</p>
       <p class="lead">A conexão é ponto a ponto e com criptografia de ponta a ponta. Apenas um pequeníssimo handshake de encontro passa pelo Relayium para apresentar as duas pontas; os bytes do arquivo nunca passam.</p>
-      <h2>Antes de começar</h2>
+      <section class="sheet"><h2>Antes de começar</h2>
       <p>Tudo abaixo é a CLI do relayium, então instale-a primeiro se ainda não tiver. No macOS ou Linux, um comando coloca um binário pré-compilado no seu PATH:</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>Prefere escolher o arquivo você mesmo, ou está no Windows? Pegue um binário na página de releases — relayium.com/cli lista todas as opções de instalação (ou go build -o relayium ./cmd/relayium se você tiver Go).</li><li>relayium --version confirma que está instalada. Pule isso e os comandos abaixo só imprimirão “command not found”.</li></ul>
-      <h2>Envie e depois repasse o código que aparece</h2>
+      <ul><li>Prefere escolher o arquivo você mesmo, ou está no Windows? Pegue um binário na página de releases — relayium.com/cli lista todas as opções de instalação (ou go build -o relayium ./cmd/relayium se você tiver Go).</li><li>relayium --version confirma que está instalada. Pule isso e os comandos abaixo só imprimirão “command not found”.</li></ul></section>
+      <section class="sheet"><h2>Envie e depois repasse o código que aparece</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">O que você precisa</p><ul><li>A CLI nas duas máquinas. relayium version imprime uma versão em cada uma; se o shell responder “command not found”, ela ainda não está instalada ali.</li><li>Quem envia com login feito. relayium whoami imprime o e-mail da conta, e gerar um código de emparelhamento exige antes relayium login. A máquina que recebe não faz login em momento algum.</li><li>As duas pessoas diante de um terminal ao mesmo tempo. O código vive cinco minutos, então combine o momento antes de gerar um.</li><li>Um jeito de ditar seis dígitos fora de banda: uma ligação, uma janela de chat ou a própria sala, quando as duas pessoas estão juntas.</li></ul></div>
       <p>Faça login uma vez com relayium login e depois é só enviar. A CLI gera um código de emparelhamento, exibe-o junto com o comando exato que a outra ponta executa, e fica aguardando. Repasse esse código fora de banda: diga em uma chamada, coloque em um chat:</p>
       <ol class="steps" data-block="steps"><li><p>Na máquina que envia, faça login uma única vez. Pule este passo se relayium whoami já imprime o e-mail da sua conta.</p><pre tabindex="0"><code>relayium login</code></pre></li><li><p>No diretório onde está o arquivo, inicie o envio. A CLI gera o código, imprime o comando para a outra ponta e então aguarda.</p><pre tabindex="0"><code>relayium send ./release.zip</code></pre></li><li><p>Dite fora de banda os seis dígitos que apareceram. Eles param de funcionar cinco minutos depois de gerados.</p></li><li><p>Na máquina que recebe, dentro do diretório onde os arquivos devem chegar, rode o comando que apareceu para quem enviou. Acrescente um diretório para colocá-los em outro lugar.</p><pre tabindex="0"><code>relayium receive 483920</code></pre><pre tabindex="0"><code>relayium receive 483920 ./downloads</code></pre></li><li><p>Deixe os dois terminais abertos até o shell de quem recebe voltar ao prompt. É uma única sessão ao vivo: fechar qualquer uma das pontas interrompe a transferência.</p></li></ol>
@@ -174,23 +218,23 @@ On the other machine:  relayium receive 483920
 waiting for the receiver…
 verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
 path: direct</code></pre></div>
-      <ul><li>O código tem 6 dígitos decimais — qualquer um de 0 a 9, zeros à esquerda incluídos — e expira 5 minutos depois de gerado.</li><li>O código é apenas um segredo compartilhado para se encontrar; não é enviado a ninguém além do ponto de encontro, e serve apenas para apresentar as duas pontas.</li><li>As duas pontas precisam ser a CLI — um navegador não consegue entrar em um código de emparelhamento da CLI. Vai enviar para alguém que só tem navegador? Use relayium up, que devolve um link de download.</li></ul>
-      <h2>Verificar com o código SAS</h2>
+      <ul><li>O código tem 6 dígitos decimais — qualquer um de 0 a 9, zeros à esquerda incluídos — e expira 5 minutos depois de gerado.</li><li>O código é apenas um segredo compartilhado para se encontrar; não é enviado a ninguém além do ponto de encontro, e serve apenas para apresentar as duas pontas.</li><li>As duas pontas precisam ser a CLI — um navegador não consegue entrar em um código de emparelhamento da CLI. Vai enviar para alguém que só tem navegador? Use relayium up, que devolve um link de download.</li></ul></section>
+      <section class="sheet"><h2>Verificar com o código SAS</h2>
       <p>Quando as duas pontas se conectam, os dois terminais exibem o mesmo SAS (short authentication string) de 6 dígitos derivado das impressões digitais dos certificados TLS fixados. Compare-o fora de banda — leia em voz alta durante a chamada — para confirmar que as impressões digitais não foram substituídas e que o serviço de encontro não se passou por nenhuma das pontas. O SAS autentica as pontas; não prova cada salto da rota de rede.</p>
       <p>Para a proteção mais forte, adicione --verify: a transferência então espera que você confirme que os códigos coincidem antes que um único byte se mova.</p>
-      <pre tabindex="0"><code>relayium send --verify ./release.zip</code></pre>
-      <h2>Somente direto: gratuito, ou falha</h2>
+      <pre tabindex="0"><code>relayium send --verify ./release.zip</code></pre></section>
+      <section class="sheet"><h2>Somente direto: gratuito, ou falha</h2>
       <p>A transferência disputa o estabelecimento de uma conexão direta entre as duas pontas. Quando ela pode ser estabelecida — o caso comum quando pelo menos um lado tem um endereço alcançável — o arquivo flui direto, criptografado, na velocidade máxima e sem custo.</p>
       <p>send/receive e text da CLI do Relayium são P2P e direct-only: nunca retransmitem bytes de arquivos ou mensagens por TURN nem por qualquer outro servidor Relayium. Se as duas pontas não conseguirem estabelecer uma conexão direta, a sessão falha em vez de recorrer a um retransmissor.</p>
       <p>Se isso acontecer, a resposta confiável é daemon direto entre dois servidores alcançáveis, push por SSH ou um link armazenado criado com relayium up.</p>
-      <ul><li>A conexão direta é bem-sucedida → gratuita, na velocidade máxima, com criptografia de ponta a ponta.</li><li>Ambas as pontas podem estar em qualquer lugar geograficamente — quem envia só roda send, e quem recebe roda receive com o código que apareceu.</li></ul>
-      <h2>Quando não funciona</h2>
+      <ul><li>A conexão direta é bem-sucedida → gratuita, na velocidade máxima, com criptografia de ponta a ponta.</li><li>Ambas as pontas podem estar em qualquer lugar geograficamente — quem envia só roda send, e quem recebe roda receive com o código que apareceu.</li></ul></section>
+      <section class="sheet"><h2>Quando não funciona</h2>
       <p>Quatro falhas explicam quase toda tentativa malsucedida. Cada uma tem uma linha para ler ou um comando para rodar que decide a questão, então nunca é preciso adivinhar qual ponta está com problema.</p>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Sintoma, verificação, correção</p><dl><dt>Quem envia nem começa: “minting a pairing code needs an account”.</dt><dd><pre tabindex="0"><code>relayium whoami
 # not logged in (run `relayium login`)</code></pre><p>Essa máquina não tem credenciais salvas. Rode relayium login e aprove no navegador; depois disso whoami imprime o e-mail da conta e o envio segue. Nada tinha sido gerado, então nenhum código foi desperdiçado.</p></dd><dt>Quem recebe digita o código e o ponto de encontro recusa.</dt><dd><pre tabindex="0"><code># na máquina que ENVIA: o bloco de repasse informa a vida exata
 relayium send ./release.zip
 Code: 483920   (valid 5 minutes)</code></pre><p>O código expirou. Aperte Ctrl-C em quem envia, rode relayium send ./release.zip de novo e dite os seis dígitos novos dentro dos cinco minutos que o novo bloco de repasse anuncia.</p></dd><dt>Os dois terminais mostram códigos de verificação diferentes.</dt><dd><pre tabindex="0"><code>relayium send --verify ./release.zip</code></pre><p>Pare e não envie o arquivo. Códigos diferentes significam que as impressões digitais dos certificados TLS fixadas pelas duas pontas não batem, ou seja, o outro lado não é a máquina que você imagina. Rode de novo com --verify, que trava a transferência exatamente nessa comparação até você confirmar, e cheque com a outra pessoa em qual máquina ela está.</p></dd><dt>“no direct connection to the peer (both ends behind strict NAT?)”.</dt><dd><pre tabindex="0"><code>relayium send ./release.zip
-# no direct connection to the peer (both ends behind strict NAT?): …</code></pre><p>Nenhuma das pontas conseguiu alcançar a outra, e a CLI não tem, por decisão de projeto, nenhum caminho por retransmissor para os bytes de um arquivo. Leve uma das pontas para uma rede com endereço alcançável — um servidor, ou o roteamento do celular — ou suba o arquivo com relayium up e repasse o link de download.</p></dd></dl></div>
+# no direct connection to the peer (both ends behind strict NAT?): …</code></pre><p>Nenhuma das pontas conseguiu alcançar a outra, e a CLI não tem, por decisão de projeto, nenhum caminho por retransmissor para os bytes de um arquivo. Leve uma das pontas para uma rede com endereço alcançável — um servidor, ou o roteamento do celular — ou suba o arquivo com relayium up e repasse o link de download.</p></dd></dl></div></section>
       <h2>Perguntas frequentes</h2>
       <h3>De onde vem o código de emparelhamento?</h3>
       <p>Quem gera é o Relayium. Rode relayium send ./release.zip (depois de relayium login) e a CLI exibe um código de 6 dígitos válido por cinco minutos, junto com o comando exato que a outra ponta executa. Você não pode escolhê-lo — o servidor só aceita os códigos que ele mesmo emitiu.</p>
@@ -215,6 +259,8 @@ Code: 483920   (valid 5 minutes)</code></pre><p>O código expirou. Aperte Ctrl-C
         <a href="/pricing">Preços</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

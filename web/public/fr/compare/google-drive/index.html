@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs Google Drive pour envoyer des fichiers","description":"Comparatif équitable : Google Drive excelle pour le stockage durable, mais envoyer signifie téléverser et gérer des permissions. Relayium ne conserve aucune copie côté serveur du contenu en temps réel : les fichiers du navigateur circulent directement sur un LAN et via un relais TURN chiffré de bout en bout entre réseaux, ou par un lien à divulgation nulle et expiration automatique.","inLanguage":"fr","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/fr/compare/google-drive/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/fr/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/fr/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs Google Drive pour envoyer des fichiers"}]},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Relayium stocke-t-il mes fichiers comme Google Drive ?","acceptedAnswer":{"@type":"Answer","text":"Pas en mode temps réel : Relayium ne conserve aucune copie du contenu côté serveur. Sur un LAN les fichiers circulent directement ; entre réseaux TURN ne transporte que du texte chiffré de bout en bout que le relais ne peut ni lire ni déchiffrer. Un lien stocke du texte chiffré à divulgation nulle sans clé de déchiffrement, puis expire (1 h/1 j/3 j/7 j, selon l'offre) ou s'autodétruit après le premier téléchargement."}},{"@type":"Question","name":"Ai-je besoin d'un compte ?","acceptedAnswer":{"@type":"Answer","text":"Sur le même réseau, aucun compte n'est nécessaire du tout. Créer le code d'appairage pour un envoi entre réseaux, ou créer un lien de téléchargement stocké, exige d'être connecté. Le destinataire n'a jamais besoin de compte, dans les deux cas."}},{"@type":"Question","name":"Y a-t-il une limite de taille ?","acceptedAnswer":{"@type":"Answer","text":"Les transferts en temps réel portent jusqu'à 1 000 fichiers par lot sans limite de taille côté serveur — Chrome et Edge écrivent directement sur le disque pour plusieurs dizaines de gigaoctets. Quand aucun chemin d'écriture en flux ne s'applique et que le navigateur doit mettre en mémoire tampon, Relayium prévient au-delà d'environ 256 Mo ; ce chiffre est une estimation volontairement prudente, pas une limite dure. Les liens stockés comptent dans un quota lié à votre compte."}},{"@type":"Question","name":"Relayium est-il gratuit ?","acceptedAnswer":{"@type":"Answer","text":"Oui. Relayium est gratuit et open source sous licence AGPL-3.0, avec l'intégralité du protocole et du code sur github.com/relayium/relayium — aucune offre payante pour débloquer des transferts plus grands ou plus rapides."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -119,8 +161,10 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/fr/guides/" aria-current="true">Guides</a><a href="/fr/apps/">Applis</a><a href="/pricing">Tarifs</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Navigation principale"><a class="row" href="/">LAN</a><a class="row" href="/fr/cross-network/">Entre réseaux</a><a class="row" href="/fr/offline-transfer/">Asynchrone</a><a class="row" href="/device-inbox">Boîte appareil</a><a class="row" href="/cli">CLI</a><a class="row" href="/fr/apps/">Applis</a><a class="row" href="/pricing">Tarifs</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs Google Drive pour envoyer des fichiers</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -142,21 +186,21 @@ pre code{background:none;padding:0;border-radius:0}
       <aside class="archived" aria-label="Traduction archivée"><p class="archived-label">Traduction archivée</p><p>Cette page est une traduction française archivée. Le produit Relayium et sa documentation à jour sont maintenus en anglais et en chinois simplifié ; l&#39;application elle-même ne propose plus le français. Les écrans et les détails décrits ici peuvent donc différer du comportement actuel.</p><p class="archived-links archived-pricing">Les offres et les limites d&#39;utilisation citées ici peuvent être obsolètes ; les actuelles figurent sur la page <a href="/pricing">Tarifs</a>.</p><p class="archived-links">Version à jour : <a href="/compare/google-drive/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/compare/google-drive/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Google Drive est un vrai bon produit : vos fichiers vivent au même endroit, se synchronisent entre appareils, restent sauvegardés, et se coéditent facilement en équipe. Si vous avez besoin d&#39;un foyer durable pour des fichiers auxquels vous reviendrez, Drive est un choix par défaut raisonnable, et cet article n&#39;essaie pas de vous en dissuader.</p>
       <p class="lead">Mais une grande partie de ce pour quoi les gens utilisent Drive est en réalité une remise ponctuelle — envoyer une vidéo à un ami, un contrat à un client, un jeu de données à un collègue — pas du stockage durable. Pour cette tâche précise, téléverser une copie sur les serveurs de Google puis configurer qui peut la voir demande plus de rouages que nécessaire. Le temps réel de Relayium ne conserve aucune copie de contenu côté serveur : navigateur direct sur le LAN, TURN chiffré de bout en bout entre réseaux. Seul le destinataire peut déchiffrer le lien stocké.</p>
-      <h2>Ce que Google Drive fait bien</h2>
+      <section class="sheet"><h2>Ce que Google Drive fait bien</h2>
       <p>La force de Drive, c&#39;est la permanence et la collaboration. Un fichier téléversé y reste — synchronisé entre votre téléphone, votre ordinateur portable et le web — jusqu&#39;à ce que vous le supprimiez, exactement ce qu&#39;il faut pour un dossier de travail, un lecteur d&#39;équipe partagé, ou des documents que vous coéditez en temps réel.</p>
-      <p>Il est aussi généreux et sans friction côté stockage : une offre gratuite solide, une sauvegarde automatique, un historique des versions, et une recherche sur tout ce que vous avez jamais enregistré. Rien de tout cela n&#39;est ce que Relayium cherche à remplacer.</p>
-      <h2>Là où ils diffèrent : envoyer n&#39;est pas la même tâche que stocker</h2>
+      <p>Il est aussi généreux et sans friction côté stockage : une offre gratuite solide, une sauvegarde automatique, un historique des versions, et une recherche sur tout ce que vous avez jamais enregistré. Rien de tout cela n&#39;est ce que Relayium cherche à remplacer.</p></section>
+      <section class="sheet"><h2>Là où ils diffèrent : envoyer n&#39;est pas la même tâche que stocker</h2>
       <p>Pour envoyer un fichier via Drive, vous téléversez une copie sur l&#39;infrastructure de Google, puis décidez qui peut l&#39;ouvrir — le compte Google d&#39;une personne précise, ou « toute personne disposant du lien ». Si vous vous trompez de réglage de partage, le fichier devient soit inaccessible, soit plus ouvert que prévu. Dans les deux cas, une copie réside désormais indéfiniment sur les serveurs de Google, jusqu&#39;à ce que vous reveniez la retirer.</p>
-      <p>Relayium évite le stockage de contenu côté serveur dans le cas temps réel courant. Sur un LAN, les fichiers du navigateur circulent directement entre appareils ; entre réseaux, les sessions navigateur utilisent TURN par conception et le relais ne transporte que du texte chiffré de bout en bout qu&#39;il ne peut ni lire ni déchiffrer. Quand le destinataire est hors ligne et que vous voulez vraiment un lien, le mode lien stocké conserve la propriété à divulgation nulle que Drive n&#39;a pas : votre navigateur chiffre le fichier avec une clé AES-256-GCM aléatoire avant le téléversement, et cette clé ne vit que dans le fragment de l&#39;URL (la partie après le #, que les navigateurs n&#39;envoient jamais à un serveur). Les serveurs de Google détiennent vos fichiers Drive et peuvent techniquement les lire ; le serveur de Relayium, pour un lien stocké, ne détient qu&#39;un texte chiffré qu&#39;il ne peut pas déchiffrer.</p>
-      <h2>Temps réel : aucune copie de contenu côté serveur</h2>
+      <p>Relayium évite le stockage de contenu côté serveur dans le cas temps réel courant. Sur un LAN, les fichiers du navigateur circulent directement entre appareils ; entre réseaux, les sessions navigateur utilisent TURN par conception et le relais ne transporte que du texte chiffré de bout en bout qu&#39;il ne peut ni lire ni déchiffrer. Quand le destinataire est hors ligne et que vous voulez vraiment un lien, le mode lien stocké conserve la propriété à divulgation nulle que Drive n&#39;a pas : votre navigateur chiffre le fichier avec une clé AES-256-GCM aléatoire avant le téléversement, et cette clé ne vit que dans le fragment de l&#39;URL (la partie après le #, que les navigateurs n&#39;envoient jamais à un serveur). Les serveurs de Google détiennent vos fichiers Drive et peuvent techniquement les lire ; le serveur de Relayium, pour un lien stocké, ne détient qu&#39;un texte chiffré qu&#39;il ne peut pas déchiffrer.</p></section>
+      <section class="sheet"><h2>Temps réel : aucune copie de contenu côté serveur</h2>
       <p>Pour le cas classique — les deux personnes sont en ligne — le temps réel envoie jusqu&#39;à 1 000 fichiers sans copie de contenu côté serveur. Sur un LAN les fichiers du navigateur circulent directement ; entre réseaux TURN ne transporte que du texte chiffré de bout en bout que le relais ne peut ni lire ni déchiffrer. Les deux côtés vérifient le SAS et chaque fichier par SHA-256 ; une interruption reprend.</p>
-      <p>Il n&#39;y a aucune limite de taille côté serveur, la limite pratique vient donc du navigateur du destinataire : Chrome et Edge écrivent les données entrantes directement sur le disque, gérant sans peine plusieurs dizaines de gigaoctets. Firefox et Safari n&#39;ont pas cette API et, quand aucun chemin d&#39;écriture en flux ne s&#39;applique, gardent les données entrantes en mémoire — Relayium prévient au-delà d&#39;environ 256 Mo, une estimation volontairement prudente et non une limite dure mesurée. Sur le même réseau, aucun compte n&#39;est nécessaire du tout et les deux appareils se connectent directement l&#39;un à l&#39;autre. Envoyer entre réseaux différents utilise un code d&#39;appairage, exige que la personne qui crée ce code se connecte, et passe par conception par un relais TURN chiffré : la connexion s&#39;établit ainsi en une ou deux secondes au lieu d&#39;attendre des tentatives de connexion directe qui aboutissent rarement entre deux réseaux ; le relais ne transporte que du texte chiffré qu&#39;il ne peut pas lire, et le destinataire n&#39;a jamais besoin de compte, dans aucune des deux configurations réseau.</p>
-      <h2>Vous voulez quand même un lien ? Liens stockés à divulgation nulle</h2>
+      <p>Il n&#39;y a aucune limite de taille côté serveur, la limite pratique vient donc du navigateur du destinataire : Chrome et Edge écrivent les données entrantes directement sur le disque, gérant sans peine plusieurs dizaines de gigaoctets. Firefox et Safari n&#39;ont pas cette API et, quand aucun chemin d&#39;écriture en flux ne s&#39;applique, gardent les données entrantes en mémoire — Relayium prévient au-delà d&#39;environ 256 Mo, une estimation volontairement prudente et non une limite dure mesurée. Sur le même réseau, aucun compte n&#39;est nécessaire du tout et les deux appareils se connectent directement l&#39;un à l&#39;autre. Envoyer entre réseaux différents utilise un code d&#39;appairage, exige que la personne qui crée ce code se connecte, et passe par conception par un relais TURN chiffré : la connexion s&#39;établit ainsi en une ou deux secondes au lieu d&#39;attendre des tentatives de connexion directe qui aboutissent rarement entre deux réseaux ; le relais ne transporte que du texte chiffré qu&#39;il ne peut pas lire, et le destinataire n&#39;a jamais besoin de compte, dans aucune des deux configurations réseau.</p></section>
+      <section class="sheet"><h2>Vous voulez quand même un lien ? Liens stockés à divulgation nulle</h2>
       <p>Parfois un lien est vraiment ce qu&#39;il vous faut — le destinataire n&#39;est pas en ligne, ou vous voulez une seule URL à coller n&#39;importe où. Le mode lien stocké de Relayium couvre ce cas sans renoncer à la confidentialité du mode temps réel.</p>
-      <p>Vous choisissez une expiration — 1 heure, 1 jour, 3 jours, 7 jours ou jusqu&#39;à 14 jours selon votre offre — ou réglez le lien pour qu&#39;il s&#39;autodétruise après le premier téléchargement complet. Créer un lien exige que l&#39;expéditeur se connecte (cela compte dans un quota de stockage lié à votre compte), mais le destinataire n&#39;a qu&#39;à ouvrir le lien et télécharger, sans compte requis. Comme la clé de déchiffrement ne quitte jamais le fragment de l&#39;URL, le modèle de Google et celui des liens stockés de Relayium diffèrent sur un point essentiel : Google peut techniquement déchiffrer les fichiers hébergés sur Drive ; le serveur de Relayium, pour les liens stockés, ne le peut structurellement pas.</p>
-      <h2>Comparatif des fonctions en un coup d&#39;œil</h2>
+      <p>Vous choisissez une expiration — 1 heure, 1 jour, 3 jours, 7 jours ou jusqu&#39;à 14 jours selon votre offre — ou réglez le lien pour qu&#39;il s&#39;autodétruise après le premier téléchargement complet. Créer un lien exige que l&#39;expéditeur se connecte (cela compte dans un quota de stockage lié à votre compte), mais le destinataire n&#39;a qu&#39;à ouvrir le lien et télécharger, sans compte requis. Comme la clé de déchiffrement ne quitte jamais le fragment de l&#39;URL, le modèle de Google et celui des liens stockés de Relayium diffèrent sur un point essentiel : Google peut techniquement déchiffrer les fichiers hébergés sur Drive ; le serveur de Relayium, pour les liens stockés, ne le peut structurellement pas.</p></section>
+      <section class="sheet"><h2>Comparatif des fonctions en un coup d&#39;œil</h2>
       <p>Les différences qui comptent le plus, côte à côte :</p>
-      <ul><li>Objectif : Google Drive est un stockage durable, toujours disponible, avec collaboration intégrée ; Relayium est conçu pour un envoi ponctuel — P2P en temps réel ou lien à expiration automatique.</li><li>Où résident les fichiers : Drive garde une copie indéfinie sur les serveurs de Google jusqu&#39;à ce que vous la supprimiez ; le temps réel de Relayium ne stocke jamais le fichier du tout, et les liens stockés expirent automatiquement (1 h/1 j/3 j/7 j, selon l&#39;offre) ou s&#39;autodétruisent après le premier téléchargement.</li><li>Qui peut le lire : l&#39;infrastructure de Google peut techniquement déchiffrer les fichiers Drive ; les liens stockés de Relayium sont à divulgation nulle — la clé ne vit que dans le fragment de l&#39;URL, donc le serveur détient un texte chiffré qu&#39;il ne peut pas lire.</li><li>Comptes : Drive exige un compte Google pour l&#39;expéditeur, et souvent pour le destinataire selon les réglages de partage ; Relayium ne demande aucun compte sur le même réseau, et seule la personne qui crée le code d&#39;appairage ou le lien stocké se connecte — le destinataire n&#39;en a jamais besoin.</li><li>Limites de taille : Drive est borné par votre quota de stockage ; le temps réel de Relayium n&#39;a aucune limite côté serveur (Chrome/Edge écrivent sur le disque pour plusieurs dizaines de Go ; quand le navigateur doit mettre en mémoire tampon, Relayium prévient au-delà d&#39;environ 256 Mo).</li><li>Coût et ouverture : Relayium est gratuit et sous licence AGPL-3.0 sur github.com/relayium/relayium, et tourne dans le navigateur sur Windows, macOS, Linux, Android et iOS sans rien installer.</li></ul>
+      <ul><li>Objectif : Google Drive est un stockage durable, toujours disponible, avec collaboration intégrée ; Relayium est conçu pour un envoi ponctuel — P2P en temps réel ou lien à expiration automatique.</li><li>Où résident les fichiers : Drive garde une copie indéfinie sur les serveurs de Google jusqu&#39;à ce que vous la supprimiez ; le temps réel de Relayium ne stocke jamais le fichier du tout, et les liens stockés expirent automatiquement (1 h/1 j/3 j/7 j, selon l&#39;offre) ou s&#39;autodétruisent après le premier téléchargement.</li><li>Qui peut le lire : l&#39;infrastructure de Google peut techniquement déchiffrer les fichiers Drive ; les liens stockés de Relayium sont à divulgation nulle — la clé ne vit que dans le fragment de l&#39;URL, donc le serveur détient un texte chiffré qu&#39;il ne peut pas lire.</li><li>Comptes : Drive exige un compte Google pour l&#39;expéditeur, et souvent pour le destinataire selon les réglages de partage ; Relayium ne demande aucun compte sur le même réseau, et seule la personne qui crée le code d&#39;appairage ou le lien stocké se connecte — le destinataire n&#39;en a jamais besoin.</li><li>Limites de taille : Drive est borné par votre quota de stockage ; le temps réel de Relayium n&#39;a aucune limite côté serveur (Chrome/Edge écrivent sur le disque pour plusieurs dizaines de Go ; quand le navigateur doit mettre en mémoire tampon, Relayium prévient au-delà d&#39;environ 256 Mo).</li><li>Coût et ouverture : Relayium est gratuit et sous licence AGPL-3.0 sur github.com/relayium/relayium, et tourne dans le navigateur sur Windows, macOS, Linux, Android et iOS sans rien installer.</li></ul></section>
       <h2>Questions fréquentes</h2>
       <h3>Relayium stocke-t-il mes fichiers comme Google Drive ?</h3>
       <p>Pas en mode temps réel : Relayium ne conserve aucune copie du contenu côté serveur. Sur un LAN les fichiers circulent directement ; entre réseaux TURN ne transporte que du texte chiffré de bout en bout que le relais ne peut ni lire ni déchiffrer. Un lien stocke du texte chiffré à divulgation nulle sans clé de déchiffrement, puis expire (1 h/1 j/3 j/7 j, selon l&#39;offre) ou s&#39;autodétruit après le premier téléchargement.</p>
@@ -181,6 +225,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/pricing">Tarifs</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

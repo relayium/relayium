@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Compartilhar um arquivo com um link de download seguro e com validade","description":"Criptografe um arquivo no seu navegador e obtenha um link que o servidor não consegue descriptografar. Escolha 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano, ou que se autodestrua após o primeiro download, e envie quando estiver pronto.","inLanguage":"pt","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/pt/how-to/share-a-file-with-an-expiring-link/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/pt/"},{"@type":"ListItem","position":2,"name":"Guias","item":"https://relayium.com/pt/guides/"},{"@type":"ListItem","position":3,"name":"Compartilhar um arquivo com um link de download seguro e com validade"}]},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"A pessoa para quem envio o link precisa de uma conta?","acceptedAnswer":{"@type":"Answer","text":"Não. Qualquer pessoa com o link completo — incluindo a parte depois do # — pode abri-lo e baixar os arquivos. Só o remetente precisa fazer login para criar o link em primeiro lugar."}},{"@type":"Question","name":"O Relayium consegue ler meu arquivo?","acceptedAnswer":{"@type":"Answer","text":"Não. O seu navegador criptografa os arquivos com uma chave AES-256-GCM aleatória antes de qualquer coisa ser enviada, e essa chave viaja apenas no fragmento da URL, que nunca chega ao servidor. O navegador de onde você enviou também guarda uma cópia local dela para que “Meus arquivos” consiga remontar o link mais tarde. O servidor armazena texto cifrado que não tem como descriptografar — um design de conhecimento zero."}},{"@type":"Question","name":"Quanto tempo os links duram?","acceptedAnswer":{"@type":"Answer","text":"Você escolhe ao criar o link: 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano, ou pode configurá-lo para se autodestruir no primeiro download em vez de uma validade fixa. A vaga é gasta assim que bytes começam a sair, então um download interrompido conta igual. Depois desse ponto, o link para de funcionar."}},{"@type":"Question","name":"O arquivo realmente some depois da autodestruição após a leitura?","acceptedAnswer":{"@type":"Answer","text":"A autodestruição após a leitura é projetada para exatamente um download, e a vaga é gasta assim que esse download começa a entregar texto cifrado de verdade: o link para de funcionar para qualquer um que o abra depois, mesmo que esse único download tenha sido interrompido e nunca tenha terminado. Só uma tentativa que não transferiu nada é devolvida."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/pt/guides/" aria-current="true">Guias</a><a href="/pt/apps/">Apps</a><a href="/pricing">Preços</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Navegação principal"><a class="row" href="/">LAN</a><a class="row" href="/pt/cross-network/">Entre redes</a><a class="row" href="/pt/offline-transfer/">Assíncrono</a><a class="row" href="/device-inbox">Caixa de dispositivo</a><a class="row" href="/cli">CLI</a><a class="row" href="/pt/apps/">Apps</a><a class="row" href="/pricing">Preços</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/pt/">Relayium</a> <span aria-hidden="true">›</span> <a href="/pt/guides/">Guias</a> <span aria-hidden="true">›</span> <span aria-current="page">Compartilhar um arquivo com um link de download seguro e com validade</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,10 +203,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="Tradução arquivada"><p class="archived-label">Tradução arquivada</p><p>Esta página é uma tradução em português arquivada. O produto Relayium e sua documentação atual são mantidos em inglês e em chinês simplificado; o próprio aplicativo não oferece mais português. Por isso as telas e os detalhes descritos aqui podem diferir do comportamento atual.</p><p class="archived-links archived-pricing">Os planos e os limites de uso mencionados aqui podem estar desatualizados; os atuais estão na página <a href="/pricing">Preços</a>.</p><p class="archived-links">Versão atual: <a href="/how-to/share-a-file-with-an-expiring-link/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/how-to/share-a-file-with-an-expiring-link/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Nem toda transferência tem alguém esperando do outro lado. Talvez o destinatário esteja dormindo, em um voo, ou você só queira deixar um link em uma mensagem e seguir com o seu dia. Para isso o Relayium tem um segundo modo: em vez de transmitir um arquivo ao vivo para outro navegador aberto, ele criptografa o arquivo onde você está, envia apenas o texto cifrado e lhe entrega um link que você pode enviar quando quiser — o download acontece de acordo com a agenda do próprio destinatário.</p>
       <p class="lead">Este guia percorre a criação de um desses links, as opções de validade e de autodestruição após a leitura, e o que exatamente o design de conhecimento zero significa na prática — incluindo os limites honestos: criar um link exige que o remetente faça login, e os links contam contra uma cota de armazenamento.</p>
-      <h2>Links armazenados vs. tempo real: quando usar cada um</h2>
+      <section class="sheet"><h2>Links armazenados vs. tempo real: quando usar cada um</h2>
       <p>O modo em tempo real do Relayium transmite um arquivo ao vivo entre duas abas abertas: na mesma LAN, o WebRTC conecta diretamente; entre redes, as sessões do navegador usam TURN por design para transportar texto cifrado de ponta a ponta que o retransmissor não consegue ler nem descriptografar. O Relayium não mantém cópia no servidor nem histórico em tempo real, mas as duas pessoas precisam estar online ao mesmo tempo. Um link armazenado e com validade inverte esse compromisso: o seu navegador faz a criptografia e envia o resultado uma única vez, e o destinatário pode abrir o link minutos, horas ou dias depois, no próprio tempo.</p>
-      <p>Use um link armazenado quando não souber exatamente quando a outra pessoa estará livre, quando estiver enviando o mesmo arquivo para mais de uma pessoa, ou quando simplesmente quiser algo que você possa colar em um e-mail ou chat e pronto.</p>
-      <h2>Como criar um link</h2>
+      <p>Use um link armazenado quando não souber exatamente quando a outra pessoa estará livre, quando estiver enviando o mesmo arquivo para mais de uma pessoa, ou quando simplesmente quiser algo que você possa colar em um e-mail ou chat e pronto.</p></section>
+      <section class="sheet"><h2>Como criar um link</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">O que você precisa</p><ul><li>Uma conta conectada só no lado que envia — quem recebe não precisa de nenhuma e não vê nenhum pedido de login.</li><li>Arquivos que caibam sob dois tetos distintos: o limite por arquivo impresso ao lado do seletor, e a cota de armazenamento do seu plano. Os dois se leem na página em vez de serem adivinhados.</li><li>Um prazo de retenção que o seu plano permita. A lista só oferece os prazos que o seu plano aceita, e o servidor aplica esse mesmo teto de forma defensiva ao que recebe.</li><li>A sua própria cópia de tudo o que importa. A página diz isso abaixo das opções: entrega temporária, não backup.</li></ul></div>
       <p>Criar um link leva alguns passos, todos no navegador:</p>
       <ol class="steps" data-block="steps"><li><p>Abra a página de transferência assíncrona e faça login. Só o remetente precisa de uma conta; o destinatário nunca.</p><pre tabindex="0"><code>https://relayium.com/offline-transfer</code></pre></li><li><p>Escolha um ou mais arquivos, ou arraste-os. O número ao lado do seletor é o teto por arquivo vigente para a sua conta.</p><pre tabindex="0"><code>Escolher arquivos para enviar
@@ -171,15 +215,15 @@ Máx. 512 MiB</code></pre></li><li><p>Defina “Expira em”, ou ligue “Autode
 https://relayium.com/d/8f3c2a1b#k=hQ2r…</code></pre></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">Como é um link criado</p><p>A página troca o seletor pelo link, pela data em que ele expira e por um botão de copiar — além de um QR do mesmo link e, abaixo, o gerador do comando para buscá-lo de um terminal.</p><p>Abrir o link você mesmo é a confirmação honesta: a página de download mostra o título do link criptografado, a quantidade de arquivos com o tamanho total e uma contagem do tempo restante. O que ela não mostra é qualquer caminho para nós lermos o arquivo, porque a chave ficou no fragmento que você copiou.</p><pre tabindex="0"><code>Link pronto — envie-o ao destinatário para ele baixar:
 https://relayium.com/d/8f3c2a1b#k=hQ2r…
-Este link expira em quinta-feira, 6 de agosto de 2026 às 21:40</code></pre></div>
-      <h2>Validade e autodestruição após a leitura</h2>
+Este link expira em quinta-feira, 6 de agosto de 2026 às 21:40</code></pre></div></section>
+      <section class="sheet"><h2>Validade e autodestruição após a leitura</h2>
       <p>Todo link precisa de um tempo de vida — deixar um ativo para sempre não é o objetivo de uma transferência pontual. Ao criar um link você escolhe por quanto tempo ele deve permanecer válido, ou pode configurá-lo para desaparecer assim que for usado uma vez.</p>
       <p>A autodestruição após a leitura significa um download e nada mais — útil quando o arquivo é sensível e você quer exatamente uma pessoa, uma vez, sem deixar nada solto depois. Vale ser preciso sobre quando essa vaga única é gasta: ela vai no momento em que texto cifrado de verdade começa a sair, não quando o download termina. Um download interrompido no meio já a consumiu, e o link está morto mesmo com o destinatário tendo só parte do arquivo. Só uma tentativa que não entregou absolutamente nada — zero bytes — devolve a vaga, então conectar e cair em seguida não custa nada. Essa assimetria é proposital: devolver uma leitura quase completa é exatamente como quem tem o link puxaria um arquivo de uso único vez após vez. De qualquer forma, o destinatário vê uma contagem regressiva ao vivo na página de download, então sabe quanto tempo (ou quantos downloads) resta — e se a conexão dele for instável, deixe a autodestruição desligada e escolha uma validade curta.</p>
-      <ul><li>1 hora</li><li>1 dia (o padrão)</li><li>3 dias</li><li>7 dias</li><li>14 dias (o máximo, no plano superior)</li><li>Ou: autodestruição no primeiro download que entregar bytes, em vez de um tempo fixo</li></ul>
-      <h2>A garantia de conhecimento zero, e seus limites</h2>
+      <ul><li>1 hora</li><li>1 dia (o padrão)</li><li>3 dias</li><li>7 dias</li><li>14 dias (o máximo, no plano superior)</li><li>Ou: autodestruição no primeiro download que entregar bytes, em vez de um tempo fixo</li></ul></section>
+      <section class="sheet"><h2>A garantia de conhecimento zero, e seus limites</h2>
       <p>Veja o que realmente acontece quando você cria um link. O seu navegador gera uma chave AES-256-GCM aleatória — um mecanismo diferente do modo em tempo real do Relayium, que negocia uma chave entre dois dispositivos com X25519; a chave de um link armazenado é gerada localmente, sem nada a negociar. Essa chave criptografa seus arquivos e a lista de nomes de arquivo antes de qualquer coisa sair do seu dispositivo, e é anexada ao link de download depois de um # — uma parte da URL que os navegadores nunca enviam a nenhum servidor. O servidor armazena o texto cifrado que recebe, e apenas o texto cifrado; ele não tem como descriptografá-lo, porque nunca recebe a chave.</p>
       <p>Esse design tem compromissos reais que vale a pena conhecer. A chave nunca chega ao servidor, então não existe redefinição de senha que possamos oferecer. Só que o link também não é bem a única cópia dela: o navegador de onde você enviou a guarda localmente, e “Meus arquivos” na página de conta consegue remontar e copiar o link nesse mesmo navegador. O que deixa um arquivo irrecuperável é perder as duas coisas — o link completo e essa cópia local, que é o que significa abrir a página de conta em outro dispositivo ou limpar os dados de site deste navegador. Daí em diante, o texto cifrado armazenado fica permanentemente ilegível, para você e para nós. Criar um link exige que o remetente esteja com login feito, e cada link conta contra a cota de armazenamento da sua conta até ser apagado ou expirar. E vale ser preciso sobre o que “conhecimento zero” significa aqui: o texto cifrado é de fato armazenado no servidor do Relayium entre a criação e o download — só que é ilegível sem a chave que nunca saiu do seu navegador.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Sintoma, verificação, correção</p><dl><dt>Quem recebe abre o link e a página diz que a chave de descriptografia está faltando.</dt><dd><pre tabindex="0"><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # a chave é tudo depois de #k=</code></pre><p>O fragmento se perdeu no caminho: uma prévia de chat, um encurtador de link, ou uma cópia que parou no #. Envie o link de novo como texto puro e peça para a pessoa colar na barra de endereços, porque o id sozinho não pode ser descriptografado por ninguém, inclusive por nós.</p></dd><dt>A descriptografia falha mesmo com o link inteiro tendo chegado.</dt><dd><pre tabindex="0"><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # a um id corresponde exatamente uma chave</code></pre><p>O id e a chave vieram de links diferentes, o que acontece quando dois uploads são copiados na mesma sessão. Copie o link mais recente em uma peça só, da página que o criou, ou abra “Meus arquivos” na página de conta nesse mesmo navegador e copie o link da entrada certa: o fragmento #k= e a cópia local desse navegador são os dois únicos lugares onde a chave existe, porque ela nunca chegou ao servidor.</p></dd><dt>O link se declara inválido, expirado, ou já baixado e excluído.</dt><dd><pre tabindex="0"><code>https://relayium.com/offline-transfer   # crie um link novo com a autodestruição desligada</code></pre><p>Os três são o mesmo estado: não há mais nada para buscar. Com “Autodestruição após a leitura” ligada, o primeiro download que realmente entrega texto cifrado gasta a vaga única — tendo terminado ou quebrado no meio —, então envie de novo e deixe isso desligado quando mais de uma pessoa, ou uma segunda tentativa, precisar dele.</p></dd><dt>A página de download informa pedidos demais, ou que a transferência mensal de quem enviou acabou.</dt><dd><pre tabindex="0"><code>https://relayium.com/me   # o uso deste mês cobre transferência e armazenamento</code></pre><p>O arquivo está intacto e isto é medição. Um limite de taxa se solta em alguns minutos, enquanto uma transferência mensal esgotada espera a virada do mês, uma troca de plano ou o seu próprio nó. Reabrir o link depois funciona, porque nada foi consumido.</p></dd><dt>Você precisa do arquivo e não tem mais o link.</dt><dd><pre tabindex="0"><code>https://relayium.com/me   # “Meus arquivos” remonta o link no navegador que o enviou</code></pre><p>Tente primeiro o único caminho de recuperação que existe: o navegador de onde você enviou guardou a chave localmente, então abra a página de conta nesse mesmo navegador, ache a entrada em “Meus arquivos” e use o botão de copiar link dela. Em qualquer outro dispositivo, ou depois de limpar os dados de site desse navegador, a chave some e o texto cifrado armazenado é ilegível para todos, inclusive para nós — aí envie o arquivo de novo a partir da sua própria cópia, que é justamente o que a página pede para você guardar.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Sintoma, verificação, correção</p><dl><dt>Quem recebe abre o link e a página diz que a chave de descriptografia está faltando.</dt><dd><pre tabindex="0"><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # a chave é tudo depois de #k=</code></pre><p>O fragmento se perdeu no caminho: uma prévia de chat, um encurtador de link, ou uma cópia que parou no #. Envie o link de novo como texto puro e peça para a pessoa colar na barra de endereços, porque o id sozinho não pode ser descriptografado por ninguém, inclusive por nós.</p></dd><dt>A descriptografia falha mesmo com o link inteiro tendo chegado.</dt><dd><pre tabindex="0"><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # a um id corresponde exatamente uma chave</code></pre><p>O id e a chave vieram de links diferentes, o que acontece quando dois uploads são copiados na mesma sessão. Copie o link mais recente em uma peça só, da página que o criou, ou abra “Meus arquivos” na página de conta nesse mesmo navegador e copie o link da entrada certa: o fragmento #k= e a cópia local desse navegador são os dois únicos lugares onde a chave existe, porque ela nunca chegou ao servidor.</p></dd><dt>O link se declara inválido, expirado, ou já baixado e excluído.</dt><dd><pre tabindex="0"><code>https://relayium.com/offline-transfer   # crie um link novo com a autodestruição desligada</code></pre><p>Os três são o mesmo estado: não há mais nada para buscar. Com “Autodestruição após a leitura” ligada, o primeiro download que realmente entrega texto cifrado gasta a vaga única — tendo terminado ou quebrado no meio —, então envie de novo e deixe isso desligado quando mais de uma pessoa, ou uma segunda tentativa, precisar dele.</p></dd><dt>A página de download informa pedidos demais, ou que a transferência mensal de quem enviou acabou.</dt><dd><pre tabindex="0"><code>https://relayium.com/me   # o uso deste mês cobre transferência e armazenamento</code></pre><p>O arquivo está intacto e isto é medição. Um limite de taxa se solta em alguns minutos, enquanto uma transferência mensal esgotada espera a virada do mês, uma troca de plano ou o seu próprio nó. Reabrir o link depois funciona, porque nada foi consumido.</p></dd><dt>Você precisa do arquivo e não tem mais o link.</dt><dd><pre tabindex="0"><code>https://relayium.com/me   # “Meus arquivos” remonta o link no navegador que o enviou</code></pre><p>Tente primeiro o único caminho de recuperação que existe: o navegador de onde você enviou guardou a chave localmente, então abra a página de conta nesse mesmo navegador, ache a entrada em “Meus arquivos” e use o botão de copiar link dela. Em qualquer outro dispositivo, ou depois de limpar os dados de site desse navegador, a chave some e o texto cifrado armazenado é ilegível para todos, inclusive para nós — aí envie o arquivo de novo a partir da sua própria cópia, que é justamente o que a página pede para você guardar.</p></dd></dl></div></section>
       <h2>Perguntas frequentes</h2>
       <h3>A pessoa para quem envio o link precisa de uma conta?</h3>
       <p>Não. Qualquer pessoa com o link completo — incluindo a parte depois do # — pode abri-lo e baixar os arquivos. Só o remetente precisa fazer login para criar o link em primeiro lugar.</p>
@@ -204,6 +248,8 @@ Este link expira em quinta-feira, 6 de agosto de 2026 às 21:40</code></pre></di
         <a href="/pricing">Preços</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

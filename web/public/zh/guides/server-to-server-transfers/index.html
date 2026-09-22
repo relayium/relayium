@@ -36,9 +36,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 实现服务器到服务器直传（daemon 直连）","description":"用 relayium serve 和 push relayium:// 在你自己掌控的两台服务器之间直接搬运文件——基于证书固定的 TLS，无需中继、无需 SSH、无需配对码。在新的推送方首次推送时批准一次，之后即可自动化，或在 systemd 下运行。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/server-to-server-transfers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"用 Relayium CLI 实现服务器到服务器直传（daemon 直连）"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"daemon 直连和通过 SSH 推送有什么不同？","acceptedAnswer":{"@type":"Answer","text":"通过 SSH 推送会把传输隧道进你的 SSH 连接，并且需要在远端有一个 SSH 账号。daemon 直连不需要 SSH，也不需要账号——两台服务器通过证书固定的 TLS，用证书指纹互相验证身份，当两台机器都是你自己的时候，这样更轻量。"}},{"@type":"Question","name":"我需要手动到处复制指纹吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。在终端中，serve 会在每个新推送方首次推送时提示你批准它——显示其地址和指纹——并记住它，因此后续推送是静默的。只有在没有终端的非交互式场景（比如作为 systemd 服务运行，没有人来回应提示）时，你才需要用到 relayium id 或 relayium authorize。"}},{"@type":"Question","name":"身份和信任文件在哪里？","acceptedAnswer":{"@type":"Answer","text":"默认在 ~/.config/relayium/ 中（可用 --config-dir 覆盖）。id.key / id.crt 是这台主机的持久身份，known_hosts 保存着你推送过的监听端的指纹，authorized_fingerprints 则是监听端的推送方允许列表。"}},{"@type":"Question","name":"指纹变化了会怎样？","acceptedAnswer":{"@type":"Answer","text":"监听端会拒绝这次推送并发出警告。监听端的密钥在首次使用时就固定在 known_hosts 中，因此之后的变化——无论是主机重新生成了密钥，还是中间人攻击——都会遭到拒绝，而不会默默放行。只有在你确实主动轮换了密钥时，才应删除 known_hosts 中对应的那一行。"}},{"@type":"Question","name":"有没有中继回退？","acceptedAnswer":{"@type":"Answer","text":"没有。daemon 直连假定监听端地址是可达的；如果无法建立连接，就会失败。任何数据都绝不会经由 Relayium 代理——这正是这个模式的意义所在。"}},{"@type":"Question","name":"需要 Relayium 账号吗？登录之后别的机器就能访问我了吗？","acceptedAnswer":{"@type":"Answer","text":"都不需要、也不会。daemon 直连全程不会联系 Relayium，所以两端都不涉及账号。登录同样不会给任何人文件访问权限：只有当推送方的指纹在监听端自己的 authorized_fingerprints 文件里时，监听端才会接受它。账号登录和监听端授权是两件独立的事，谁都不蕴含谁。"}},{"@type":"Question","name":"这种场景该改用「设备收件箱」吗？","acceptedAnswer":{"@type":"Answer","text":"不该——CLI 上的收件箱只有接收这一侧。它接收的是你的账号发给这台机器的文件，而 CLI 并没有向收件箱发送的命令；要发给某个收件箱，请用网页版或原生 App。要在你自己掌控的两台服务器之间搬文件，serve 加 push 或 sync 才是直连的那条路，而且完全不需要账号。"}},{"@type":"Question","name":"推送会删掉接收方的文件吗？","acceptedAnswer":{"@type":"Answer","text":"普通的 push 既不会删除也不会覆盖——遇到同名冲突会拒绝，并指出是哪个路径。sync --delete 确实可以删除文件，但前提是监听端以 --allow-delete 启动，而且只在本次传输实际发送的那些顶层目录之内删除。接收方 --dir 下的其他任何东西都不在范围内；源为空或无法解析时，删除会被直接拒绝。"}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -60,24 +60,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -103,6 +89,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -134,8 +176,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/?lang=zh"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="主导航"><span class="rail-group">实时传输</span><a class="row" href="/?lang=zh" aria-label="局域网传输">局域网</a><a class="row" href="/zh/cross-network/" aria-label="跨网络传输">跨网络</a><span class="rail-group">链接</span><a class="row" href="/zh/offline-transfer/" aria-label="分享链接">链接</a><span class="rail-group">我的设备</span><a class="row" href="/device-inbox" aria-label="设备收件箱">收件箱</a><span class="rail-group">下载与工具</span><a class="row" href="/cli">CLI</a><a class="row" href="/zh/apps/">应用</a><a class="row" href="/pricing">定价</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers/">English</a><a href="/zh/guides/server-to-server-transfers/" aria-current="true">中文</a></nav></div></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">用 Relayium CLI 实现服务器到服务器直传（daemon 直连）</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -154,22 +198,22 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-09-01</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers/">English</a><a href="/zh/guides/server-to-server-transfers/" aria-current="true">中文</a></nav>
+      
       <p class="lead">当两台机器都是你自己的，并且彼此知道对方地址时，用 SSH 是白绕一道，走会合服务器更是纯粹的额外开销。daemon 直连正是为此而生：一台服务器监听，另一台通过证书固定的 TLS 1.3 连接直接推送过去。无需中继、无需 SSH、无需配对码——信任基于公钥，只需设置一次。</p>
       <p class="lead">本指南涵盖启动监听端、向其推送、在首次联系时批准新的推送方、实现自动化，以及把监听端作为 systemd 服务运行。</p>
-      <h2>开始之前</h2>
+      <section class="sheet"><h2>开始之前</h2>
       <p>下面用到的都是 relayium CLI，所以没装的话先装上。在 macOS 或 Linux 上，一条命令就能把预编译二进制放进你的 PATH：</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul>
-      <h2>启动监听端（在接收方）</h2>
+      <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul></section>
+      <section class="sheet"><h2>启动监听端（在接收方）</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">你需要准备</p><ul><li>两台你自己掌控的机器，并且接收方的地址从发送方可达。主机名或裸 IP 都行。</li><li>两端都装好 relayium。daemon 直连只说原生协议，所以这里没有 tar 兜底来救一台没装的机器。</li><li>把监听端的端口对发送方开放——默认是 9031/TCP——主机防火墙和云安全组都要开。</li><li>接收方在第一次推送时要有一个终端，好回答批准提示。没有终端的话，请改为预先授权发送方（见下文）。</li></ul></div>
       <p>在接收方服务器上，serve 监听推送并把它们写入某个目录。它默认长期运行；加上 --once 可以只接受一次传输就退出。你不需要预先共享任何东西——不用提前复制任何指纹：</p>
       <ol class="steps" data-block="steps"><li><p>建好推送要落地的目录。</p><pre tabindex="0"><code>mkdir -p ~/inbox</code></pre></li><li><p>只对发送方开放监听端的端口。把 203.0.113.7 换成发送方自己的地址——公网 IP，或者两台服务器同处一个内网时的内网 IP——并且把云安全组也收敛到同一个来源，而不是对整个互联网开放。</p><pre tabindex="0"><code>sudo ufw allow from 203.0.113.7 to any port 9031 proto tcp</code></pre></li><li><p>在终端里启动监听端，这样第一次推送时才有人回答批准提示。加 --once 只接一次传输就退出，加 --port 可以离开 9031。</p><pre tabindex="0"><code>relayium serve --dir ~/inbox</code></pre></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">监听端跑起来是什么样</p><p>serve 会写明它绑定的地址、写入的目录，以及本机自己的指纹。在还没有已批准的对端时，它还会说明每遇到一个新对端都会来问你。</p><pre tabindex="0"><code>relayium serve --dir ~/inbox
 no authorized peers yet — you&#39;ll be asked to approve each new peer on its first push.
 relayium serve: listening on [::]:9031, receiving into /home/you/inbox (fingerprint 5c1d9f04…)</code></pre></div>
-      <ul><li>serve 会并发处理连接，最多同时 64 个，并把文件落到 --dir 指定的目录下。</li><li>--dir 必须是已经存在、并且 serve 所属用户可写的目录。serve 会在绑定端口之前先检查这一点，所以路径写错会立刻失败，而不会变成一个跑起来却写不进去的监听端。</li><li>默认端口是 9031；可用 --port 修改，并在防火墙上开放该端口。</li><li>不加 --bind 时，serve 会监听所有网络接口（包括公网接口），安全完全依赖你的防火墙。加上 --bind 10.0.0.5（在隧道后面则用 --bind 127.0.0.1）可以直接把监听端本身限制在某个地址上。</li><li>这一切和有没有登录 Relayium 账号无关。账号不会给任何人这台主机的文件访问权限：只有当推送方的指纹在本监听端自己的 authorized_fingerprints 中时，推送才会被接受。</li></ul>
-      <h2>向监听端推送（在发送方）</h2>
+      <ul><li>serve 会并发处理连接，最多同时 64 个，并把文件落到 --dir 指定的目录下。</li><li>--dir 必须是已经存在、并且 serve 所属用户可写的目录。serve 会在绑定端口之前先检查这一点，所以路径写错会立刻失败，而不会变成一个跑起来却写不进去的监听端。</li><li>默认端口是 9031；可用 --port 修改，并在防火墙上开放该端口。</li><li>不加 --bind 时，serve 会监听所有网络接口（包括公网接口），安全完全依赖你的防火墙。加上 --bind 10.0.0.5（在隧道后面则用 --bind 127.0.0.1）可以直接把监听端本身限制在某个地址上。</li><li>这一切和有没有登录 Relayium 账号无关。账号不会给任何人这台主机的文件访问权限：只有当推送方的指纹在本监听端自己的 authorized_fingerprints 中时，推送才会被接受。</li></ul></section>
+      <section class="sheet"><h2>向监听端推送（在发送方）</h2>
       <p>从发送方服务器，推送到接收方的 relayium:// 地址。第一次连接会固定接收方的指纹；此后每次连接都会校验它，指纹一旦变化，监听端就会拒绝连接，而不会默默放行——密钥掉包或中间人攻击会当场暴露，不会被当成可信。在第一次推送时，发送方会稍等片刻，等待接收方批准（下一步）。</p>
       <ol class="steps" data-block="steps"><li><p>在发送方服务器上执行推送。第一次连接时它会正好停在这里，等接收方批准。</p><pre tabindex="0"><code>relayium push ./build.tar.zst relayium://receiver.example.com</code></pre></li><li><p>在接收方回答那个提示——就是下一节的内容。之后推送会自己走完，以后的推送也不会再停在这里。</p></li><li><p>监听端不在 9031 时，在地址后面加上端口。</p><pre tabindex="0"><code>relayium push ./build.tar.zst relayium://receiver.example.com:9040</code></pre></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">推送成功是什么样</p><p>第一次接触时，发送方会学到并固定监听端的指纹，然后开始传输。接收方会记下推送方的指纹，并报告文件数和字节数。</p><pre tabindex="0"><code># on the SENDER, first contact
@@ -179,20 +223,20 @@ learned receiver.example.com:9031 5c1d9f04… (added to known_hosts)
 # on the RECEIVER
 authorized 74318e3b… (added to /home/you/.config/relayium/authorized_fingerprints)
 received 1 file(s), 48213004 bytes from 74318e3b…</code></pre></div>
-      <ul><li>没有中继，也没有回退：如果监听端无法到达，推送就会失败——文件字节永远不会经过其他任何人转发。</li><li>使用与其他模式相同的传输引擎：每个文件都做逐文件 SHA-256 校验，并先落到暂存区再安装。push 不续传——无论走这条路还是走 SSH：它会拒绝已存在的目标，所以中断之后要么补传缺失的路径，要么改用 relayium sync（它会接着传半截文件，而这个监听端会遵守，除非它是以 --no-resume 启动的）。</li></ul>
-      <h2>在首次推送时批准发送方（在接收方）</h2>
+      <ul><li>没有中继，也没有回退：如果监听端无法到达，推送就会失败——文件字节永远不会经过其他任何人转发。</li><li>使用与其他模式相同的传输引擎：每个文件都做逐文件 SHA-256 校验，并先落到暂存区再安装。push 不续传——无论走这条路还是走 SSH：它会拒绝已存在的目标，所以中断之后要么补传缺失的路径，要么改用 relayium sync（它会接着传半截文件，而这个监听端会遵守，除非它是以 --no-resume 启动的）。</li></ul></section>
+      <section class="sheet"><h2>在首次推送时批准发送方（在接收方）</h2>
       <p>当一台新机器第一次向你的监听端推送时，serve（在终端中）会显示它的来源和指纹，并请你批准它——就像 SSH 首次连接时的提示，只不过是在接收方这一侧：</p>
       <pre tabindex="0"><code># 在接收方，当有新的发送方推送时：
 Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
 Accept and remember this peer? [y/N] y</code></pre>
-      <ul><li>回答 y，该指纹就会记入 authorized_fingerprints；此后同一台机器的每次推送都会静默通过。</li><li>指纹是一台机器的稳定身份（重启和 IP 变化都不受影响），因此批准对每个推送方来说只是一次性的步骤。</li><li>推送方则在首次连接时获知监听端的密钥（首次使用即信任），并将其固定在 known_hosts 中。</li></ul>
-      <h2>实现自动化（或在没有终端的环境下运行）</h2>
+      <ul><li>回答 y，该指纹就会记入 authorized_fingerprints；此后同一台机器的每次推送都会静默通过。</li><li>指纹是一台机器的稳定身份（重启和 IP 变化都不受影响），因此批准对每个推送方来说只是一次性的步骤。</li><li>推送方则在首次连接时获知监听端的密钥（首次使用即信任），并将其固定在 known_hosts 中。</li></ul></section>
+      <section class="sheet"><h2>实现自动化（或在没有终端的环境下运行）</h2>
       <p>由于已批准的指纹会一直保留，后续推送不再需要确认——因此 relayium push 可以直接接入部署脚本或 CI，做加密、可校验完整性的服务器到服务器投递。如果是定时往同一个目录跑的任务，请改用 relayium sync：push 会拒绝已存在的目标，所以反复往同一个固定路径 push 只有第一次会成功，之后都会被拒。当 serve 在没有终端的环境下运行（作为 systemd 服务、通过管道）时，它无法弹出提示，因此会拒绝未知的推送方；这时应改为预先授权它们。可以从推送方的 relayium id 获取指纹，或者从 serve 日志中「rejected unauthorized peer …」那一行复制它，然后：</p>
       <pre tabindex="0"><code># 在接收方：无需提示，预先授权一个发送方
 relayium authorize --config-dir /etc/relayium 74318e3b...</code></pre>
-      <ul><li>身份和信任文件存放在 ~/.config/relayium/ 中（可用 --config-dir 覆盖，例如作为服务时用 /etc/relayium）。</li><li>给 authorize 传监听端运行时所用的同一个 --config-dir，否则它写进去的文件，监听端根本不会去读。以 --config-dir /etc/relayium 启动的服务，对应的是 relayium authorize --config-dir /etc/relayium &lt;指纹&gt;；不带参数的 authorize 写的是 ~/.config/relayium/authorized_fingerprints，推送仍然会被一直拒绝。</li><li>正在运行的监听端会在下一次连接时认出新授权的指纹——不需要重启它。撤销则不对称：要收回授权，请删掉那一行并重启监听端。</li><li>authorize 是幂等的——对同一个指纹再次运行它不会有任何效果。</li><li>如果你要的不是往里拷贝，而是镜像一个目录，请对同一个 relayium:// 目标使用 relayium sync。push 从不覆盖——接收方已存在的同名文件会被拒绝，并且拒绝信息里会指出是哪个路径；sync 则只发送有变化的部分，还可以把删除一并镜像过去。</li><li>sync --delete 会删除源端已经不存在的文件，但前提是监听端以 --allow-delete 启动；否则什么都不会删，并且会告知发送方。删除被限制在本次传输实际发送的那些顶层目录之内：镜像 ./site 只会动接收方 --dir 下的 site/，同级目录和无关文件永远不会被删除，空目录也只在这些根之内才会被清理，一次镜像多个源时各源之间也删不到对方。源是单个文件时作用范围就只有那一个文件，因此什么都不会删；源为空或无法解析时，两端都会直接拒绝删除，因为那等于「把所有东西都删掉」。</li></ul>
-      <h2>在 systemd 下运行监听端</h2>
+      <ul><li>身份和信任文件存放在 ~/.config/relayium/ 中（可用 --config-dir 覆盖，例如作为服务时用 /etc/relayium）。</li><li>给 authorize 传监听端运行时所用的同一个 --config-dir，否则它写进去的文件，监听端根本不会去读。以 --config-dir /etc/relayium 启动的服务，对应的是 relayium authorize --config-dir /etc/relayium &lt;指纹&gt;；不带参数的 authorize 写的是 ~/.config/relayium/authorized_fingerprints，推送仍然会被一直拒绝。</li><li>正在运行的监听端会在下一次连接时认出新授权的指纹——不需要重启它。撤销则不对称：要收回授权，请删掉那一行并重启监听端。</li><li>authorize 是幂等的——对同一个指纹再次运行它不会有任何效果。</li><li>如果你要的不是往里拷贝，而是镜像一个目录，请对同一个 relayium:// 目标使用 relayium sync。push 从不覆盖——接收方已存在的同名文件会被拒绝，并且拒绝信息里会指出是哪个路径；sync 则只发送有变化的部分，还可以把删除一并镜像过去。</li><li>sync --delete 会删除源端已经不存在的文件，但前提是监听端以 --allow-delete 启动；否则什么都不会删，并且会告知发送方。删除被限制在本次传输实际发送的那些顶层目录之内：镜像 ./site 只会动接收方 --dir 下的 site/，同级目录和无关文件永远不会被删除，空目录也只在这些根之内才会被清理，一次镜像多个源时各源之间也删不到对方。源是单个文件时作用范围就只有那一个文件，因此什么都不会删；源为空或无法解析时，两端都会直接拒绝删除，因为那等于「把所有东西都删掉」。</li></ul></section>
+      <section class="sheet"><h2>在 systemd 下运行监听端</h2>
       <p>要做一个常驻收件箱，把 serve 作为 systemd 服务运行。把 --config-dir 指向一个固定位置，例如 /etc/relayium，让身份在重启之间保持稳定，并交给 systemd 来保活：</p>
       <pre tabindex="0"><code># /etc/systemd/system/relayium-serve.service
 [Unit]
@@ -206,8 +250,8 @@ User=relayium
 
 [Install]
 WantedBy=multi-user.target</code></pre>
-      <ul><li>用 systemctl enable --now relayium-serve 启动它，并让它开机自启。</li><li>先建好 /srv/inbox，并让服务用户可写。serve 会在绑定端口之前校验这个目录，所以配置有问题时单元会在启动时带着明确报错失败，而不会接下一个自己根本落不了盘的传输。</li><li>授权新的推送方时要用同一个目录：relayium authorize --config-dir /etc/relayium &lt;指纹&gt;。不需要 systemctl restart——正在运行的监听端遇到不认识的指纹时会重新读取这个文件。</li><li>让 /etc/relayium/id.key 只对服务用户可读——权限过于宽松时 relayium 会拒绝加载该密钥。</li><li>如果这个单元只应该监听某一个地址，在 ExecStart 那一行加上 --bind。</li></ul>
-      <h2>推送不通的时候</h2>
+      <ul><li>用 systemctl enable --now relayium-serve 启动它，并让它开机自启。</li><li>先建好 /srv/inbox，并让服务用户可写。serve 会在绑定端口之前校验这个目录，所以配置有问题时单元会在启动时带着明确报错失败，而不会接下一个自己根本落不了盘的传输。</li><li>授权新的推送方时要用同一个目录：relayium authorize --config-dir /etc/relayium &lt;指纹&gt;。不需要 systemctl restart——正在运行的监听端遇到不认识的指纹时会重新读取这个文件。</li><li>让 /etc/relayium/id.key 只对服务用户可读——权限过于宽松时 relayium 会拒绝加载该密钥。</li><li>如果这个单元只应该监听某一个地址，在 ExecStart 那一行加上 --bind。</li></ul></section>
+      <section class="sheet"><h2>推送不通的时候</h2>
       <p>先查的是可达性和信任这两件事：在发送方跑 ss -tinp，能看出监听端到底通没通；在接收方跑 relayium authorize，则是把被拒绝的发送方缺的那份信任补上。但推送出错的方式不止这两类——接收方磁盘满了、收件目录对运行它的用户不可写、某个文件传完后过不了完整性校验，这些都会自己报错——所以请先看眼前的报错，而不是假定它一定是下面四种之一。</p>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>推送一直挂着，最后报连接错误。</dt><dd><pre tabindex="0"><code># 在发送方，推送还在跑的时候——隔几秒跑两次
 ss -tinp dst :9031
@@ -219,7 +263,7 @@ relayium id
 # 在接收方
 relayium authorize --config-dir /etc/relayium 74318e3b…</code></pre><p>serve 当时没有终端可问——比如跑在 systemd 下或接了管道——所以对未知指纹选择拒绝而不是信任。预先授权后再推一次即可：监听端每次遇到不认识的指纹时都会重新读取允许列表，所以这会在下一次连接时生效，无需重启。拒绝那行里的指纹，正是发送方 relayium id 打印出来的那个，而 authorize 是幂等的。如果还是失败，请给 authorize 也加上监听端自己的 --config-dir——把指纹写进了 serve 并不会读的另一个目录，是最常见的原因。</p></dd><dt>“fingerprint mismatch for receiver.example.com:9031”。</dt><dd><pre tabindex="0"><code>grep receiver.example.com ~/.config/relayium/known_hosts</code></pre><p>监听端出示的密钥，和首次接触时固定下来的那把不一样。如果是你自己有意轮换了密钥，就删掉对应的 known_hosts 那一行再推。如果不是，先别动那一行，弄清楚密钥为什么变了，再发任何东西。</p></dd><dt>systemd 单元一启动就因为权限不安全而退出。</dt><dd><pre tabindex="0"><code>systemctl status relayium-serve
 # secure: /etc/relayium/id.key has insecure permissions 0644; run: chmod 600 /etc/relayium/id.key
-ls -l /etc/relayium/id.key</code></pre><p>relayium 拒绝加载一把除属主之外还有人能读的私钥，这和 ssh 的规矩一样。对报错里给出的路径执行 chmod 600，确认它属于那个服务用户，然后重启单元。</p></dd></dl></div>
+ls -l /etc/relayium/id.key</code></pre><p>relayium 拒绝加载一把除属主之外还有人能读的私钥，这和 ssh 的规矩一样。对报错里给出的路径执行 chmod 600，确认它属于那个服务用户，然后重启单元。</p></dd></dl></div></section>
       <h2>常见问题</h2>
       <h3>daemon 直连和通过 SSH 推送有什么不同？</h3>
       <p>通过 SSH 推送会把传输隧道进你的 SSH 连接，并且需要在远端有一个 SSH 账号。daemon 直连不需要 SSH，也不需要账号——两台服务器通过证书固定的 TLS，用证书指纹互相验证身份，当两台机器都是你自己的时候，这样更轻量。</p>
@@ -252,6 +296,8 @@ ls -l /etc/relayium/id.key</code></pre><p>relayium 拒绝加载一把除属主�
         <a href="/pricing">定价</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

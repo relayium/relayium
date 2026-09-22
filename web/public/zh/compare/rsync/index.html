@@ -36,9 +36,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 rsync：无需配置 SSH 也能同步文件夹","description":"客观对比 Relayium sync 与 rsync：rsync 是成熟强大的黄金标准，Relayium sync 用一部分能力换取更简单的配置，并且跨网络无需搭建 SSH 服务。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/compare/rsync/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"Relayium 对比 rsync：无需配置 SSH 也能同步文件夹"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"sync 能完全替代 rsync 吗？","acceptedAnswer":{"@type":"Answer","text":"不能。它只做单向镜像，也没有 rsync 那种基于数据块的增量算法——大小或时间戳变化的文件会被整个重传，参数也远少于 rsync。如果你需要双向同步、精细的过滤控制，或者依赖 rsync 成熟的生态，rsync 仍然是更好的工具。"}},{"@type":"Question","name":"sync 需要 SSH 服务吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。daemon 直连（relayium://host:port）完全跳过 SSH：用证书固定的 TLS 连接，通过接收方的指纹认证，批准一次之后就会被记住。你也可以选择走 SSH（user@host:path），前提是远端已经装了 relayium——但和 push 不同，sync 没有 tar 兜底。"}},{"@type":"Question","name":"sync 会删除源端已经移除的文件吗？","acceptedAnswer":{"@type":"Answer","text":"只有在你传了 --delete、并且接收方的 serve 是以 --allow-delete 启动时才会。否则接收方会拒绝删除请求，并把结果回传给发送方，而不会静默忽略。"}},{"@type":"Question","name":"能做到实时持续同步吗？","acceptedAnswer":{"@type":"Answer","text":"可以，加上 --watch。完成首次镜像之后 sync 会继续运行，只要源目录下有文件变化（有防抖），就会重新镜像。"}},{"@type":"Question","name":"这是免费的吗？","acceptedAnswer":{"@type":"Answer","text":"就本文对比涉及的部分而言，是的。Relayium CLI 免费且开源，sync、push/pull 和 daemon 直连都是直连传输，不计量，也不需要账号。send 需要账号，好让服务器签发配对码。只有云端 up 会用到托管存储，受套餐的存储上限约束。"}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -60,24 +60,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -103,6 +89,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -117,8 +159,10 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/?lang=zh"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="主导航"><span class="rail-group">实时传输</span><a class="row" href="/?lang=zh" aria-label="局域网传输">局域网</a><a class="row" href="/zh/cross-network/" aria-label="跨网络传输">跨网络</a><span class="rail-group">链接</span><a class="row" href="/zh/offline-transfer/" aria-label="分享链接">链接</a><span class="rail-group">我的设备</span><a class="row" href="/device-inbox" aria-label="设备收件箱">收件箱</a><span class="rail-group">下载与工具</span><a class="row" href="/cli">CLI</a><a class="row" href="/zh/apps/">应用</a><a class="row" href="/pricing">定价</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/compare/rsync/">English</a><a href="/zh/compare/rsync/" aria-current="true">中文</a></nav></div></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -137,32 +181,32 @@ pre code{background:none;padding:0;border-radius:0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-07-12</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/rsync/">English</a><a href="/zh/compare/rsync/" aria-current="true">中文</a></nav>
+      
       <p class="lead">rsync 自 1996 年起就在镜像文件夹，这是有原因的：双向同步、基于滚动校验和的增量算法（只传输文件内部真正变化的字节），以及几十年积累、覆盖各种边界情况的参数。如果你已经有 SSH 访问权限并且熟悉 rsync，它很难被超越。</p>
       <p class="lead">Relayium 的 sync 命令只覆盖一个更窄的场景——单向增量镜像——但它省掉了 rsync 默认你已经做好的一步：搭建 SSH。它既可以跑在你已有的 SSH 之上，也可以让两台机器直接连接，完全不需要 SSH 服务。本文客观对比两者：sync 不是 rsync 的完整替代品，FAQ 里也会直说这一点。</p>
-      <h2>rsync 做对了什么</h2>
+      <section class="sheet"><h2>rsync 做对了什么</h2>
       <p>rsync 是双向的——任意一端都可以作为源——它的增量传输算法用滚动校验和逐块比较文件，因此对一个巨大文件做的小修改只会发送变化的数据块，而不是整个文件重传。再加上几十年积累的参数（--exclude、用于硬链接快照的 --link-dest、压缩、带宽限制等等），让它能胜任很多工作。</p>
-      <p>它也无处不在：大多数 Linux 和 macOS 系统自带 rsync，并且能跑在你大概率已经配置好的 SSH 连接上。这些都不是 Relayium sync 想要取代的东西。</p>
-      <h2>开始之前</h2>
+      <p>它也无处不在：大多数 Linux 和 macOS 系统自带 rsync，并且能跑在你大概率已经配置好的 SSH 连接上。这些都不是 Relayium sync 想要取代的东西。</p></section>
+      <section class="sheet"><h2>开始之前</h2>
       <p>下面用到的都是 relayium CLI，所以没装的话先装上。在 macOS 或 Linux 上，一条命令就能把预编译二进制放进你的 PATH：</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul>
-      <h2>Relayium sync 换了一种做法</h2>
+      <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul></section>
+      <section class="sheet"><h2>Relayium sync 换了一种做法</h2>
       <p>relayium sync &lt;源...&gt; &lt;目标&gt; [--delete] [--watch] 是单向增量镜像：它比较每个文件的大小和修改时间，跳过已经一致的文件，只发送其余的。</p>
       <p>它支持两种传输方式。指向 user@host:/dest 时走 SSH——但远端必须已经装好 relayium；和 push 不同，sync 没有 tar 兜底方案。指向 relayium://host[:port] 时则完全不需要 SSH：直接用证书固定的 TLS 1.3 连接到对端机器上运行的 relayium serve 监听端，通过对端的指纹认证（首次批准，之后记住）。第二种方式才是真正的便利所在：不用配置 sshd，不用管理 SSH 密钥，只要两台机器都装了 relayium，并且之间有一个端口互通即可。</p>
       <pre tabindex="0"><code>relayium sync ./photos user@host:/backup/photos       # 走 SSH</code></pre>
-      <pre tabindex="0"><code>relayium sync ./photos relayium://203.0.113.9:9031    # daemon 直连，无需 SSH</code></pre>
-      <h2>删除与持续同步</h2>
+      <pre tabindex="0"><code>relayium sync ./photos relayium://203.0.113.9:9031    # daemon 直连，无需 SSH</code></pre></section>
+      <section class="sheet"><h2>删除与持续同步</h2>
       <p>默认情况下 sync 只新增和更新——从不自作主张删除任何东西。加上 --delete 才会镜像删除，但接收方必须主动开启：它必须以 relayium serve --allow-delete 运行。如果没有，接收方会拒绝删除请求，并把结果回传给发送方，而不是悄悄忽略。</p>
       <p>对于持续变化的文件夹，--watch 会让 sync 在第一次同步之后继续运行，只要源目录下有文件变化就重新镜像——这一点 rsync 并没有内置支持，通常你得借助 cron 任务或 lsyncd 这类封装工具。</p>
       <pre tabindex="0"><code>relayium serve --dir /backup --port 9031 --allow-delete</code></pre>
-      <pre tabindex="0"><code>relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch</code></pre>
-      <h2>完整性、续传，以及诚实的局限</h2>
+      <pre tabindex="0"><code>relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch</code></pre></section>
+      <section class="sheet"><h2>完整性、续传，以及诚实的局限</h2>
       <p>每个文件都会用 SHA-256 做端到端校验，传到一半被打断的传输会从磁盘上已有的字节偏移续传，而不是重新开始——这一点和 rsync 的续传出于同样的道理。</p>
-      <p>但要说清楚续传不是什么：它不是 rsync 的增量算法。如果一个文件已经完整存在，只是大小或时间戳不同，sync 会把它整个重传，而不是去比对内部变化的数据块。对于一个经常发生小改动的巨大文件，rsync 的增量传输会传更少的数据。sync 也只处理常规文件——符号链接和特殊文件会被跳过，依赖它们的场景需要另外处理。</p>
-      <h2>什么时候 rsync 仍是更好的工具</h2>
+      <p>但要说清楚续传不是什么：它不是 rsync 的增量算法。如果一个文件已经完整存在，只是大小或时间戳不同，sync 会把它整个重传，而不是去比对内部变化的数据块。对于一个经常发生小改动的巨大文件，rsync 的增量传输会传更少的数据。sync 也只处理常规文件——符号链接和特殊文件会被跳过，依赖它们的场景需要另外处理。</p></section>
+      <section class="sheet"><h2>什么时候 rsync 仍是更好的工具</h2>
       <p>当你需要双向同步、已经配好 SSH 不想再跑一个守护进程、需要精细控制（排除规则、过滤器、硬链接快照、带宽限制、压缩），或者某个文件经常发生小改动、增量传输能省下实打实的带宽时，选 rsync。这些都不是 Relayium sync 想要覆盖的场景。</p>
-      <ul><li>仅单向：sync 只从源镜像到目标；rsync 可以双向进行。</li><li>没有增量传输：sync 会整个重传变化的文件；rsync 的滚动校验和只发送变化的数据块。</li><li>参数更少：rsync 有几十年积累的过滤、压缩、快照参数；sync 只有 --delete 和 --watch。</li><li>Relayium sync 的优势：不需要 SSH 服务（daemon 直连）、带指纹认证的证书固定 TLS、用 --watch 实时重新同步，而且直连模式——sync、push/pull 与 daemon 直连——都免费、不计量；sync 本身完全不需要账号。</li></ul>
+      <ul><li>仅单向：sync 只从源镜像到目标；rsync 可以双向进行。</li><li>没有增量传输：sync 会整个重传变化的文件；rsync 的滚动校验和只发送变化的数据块。</li><li>参数更少：rsync 有几十年积累的过滤、压缩、快照参数；sync 只有 --delete 和 --watch。</li><li>Relayium sync 的优势：不需要 SSH 服务（daemon 直连）、带指纹认证的证书固定 TLS、用 --watch 实时重新同步，而且直连模式——sync、push/pull 与 daemon 直连——都免费、不计量；sync 本身完全不需要账号。</li></ul></section>
       <h2>常见问题</h2>
       <h3>sync 能完全替代 rsync 吗？</h3>
       <p>不能。它只做单向镜像，也没有 rsync 那种基于数据块的增量算法——大小或时间戳变化的文件会被整个重传，参数也远少于 rsync。如果你需要双向同步、精细的过滤控制，或者依赖 rsync 成熟的生态，rsync 仍然是更好的工具。</p>
@@ -189,6 +233,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/pricing">定价</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

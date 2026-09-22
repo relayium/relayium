@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"الأمان ونموذج التهديد · Relayium","description":"كيف تحمي Relayium ملفاتك ونصوصك المؤقتة: مفاتيح لكل جلسة، وتشفير موثّق، والتحقق عبر SAS، والمسارات المباشرة والمُرحَّلة، وروابط تنزيل بمعرفة صفرية، وعرض صادق لحدود الحماية.","url":"https://relayium.com/ar/security/","inLanguage":"ar","dateModified":"2026-08-02","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 /* The release list is the app's settings-row shape: 1px separators inside one
    card, no line under the last row (设计规范 §4). */
 .releases{list-style:none;margin:18px 0 0;padding:0;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);overflow:clip}
@@ -116,13 +158,16 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ar/guides/">الأدلة</a><a href="/ar/apps/">التطبيقات</a><a href="/pricing">الأسعار</a></nav></header>
-      <!-- The legal text is the main landmark. The site header and footer are
-           outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. On an
-           archived page that slot holds the archived-translation notice, a
-           labelled <aside>, which is a landmark in its own right too. -->
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="التنقل الرئيسي"><a class="row" href="/">LAN</a><a class="row" href="/ar/cross-network/">عبر الشبكات</a><a class="row" href="/ar/offline-transfer/">غير متزامن</a><a class="row" href="/device-inbox">بريد الأجهزة</a><a class="row" href="/cli">CLI</a><a class="row" href="/ar/apps/">التطبيقات</a><a class="row" href="/pricing">الأسعار</a></nav></header>
+      <div class="pane"><div class="wrap">
+
+      <!-- The legal text is the main landmark; the rail and the footer are
+           outside it. The language bar now lives in the rail's foot slot, with
+           the rest of the navigation. An ARCHIVED page keeps its notice here
+           instead: it is a paragraph of explanation, not a selector, and it has
+           no business in a 216px rail. It is a labelled <aside>, so it is still
+           a landmark of its own. -->
       <main>
       <h1>الأمان ونموذج التهديد</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO
@@ -135,16 +180,16 @@ pre code{background:none;padding:0;border-radius:0}
       <aside class="archived" aria-label="ترجمة مؤرشفة"><p class="archived-label">ترجمة مؤرشفة</p><p>هذه الصفحة ترجمة عربية محفوظة للأرشيف. يجري صيانة منتج Relayium وتوثيقه الحالي بالإنجليزية والصينية المبسّطة، ولم يعد التطبيق نفسه يوفّر العربية. لذلك قد تختلف الشاشات والتفاصيل الموصوفة هنا عن السلوك الحالي.</p><p class="archived-links archived-pricing">قد تكون الباقات وحدود الاستخدام المذكورة هنا قديمة؛ والحالية منها موجودة في صفحة <a href="/pricing">الأسعار</a>.</p><p class="archived-links">النسخة الحالية: <a href="/security/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/security/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p>صُمِّمت Relayium بحيث يكون مَن ينقلون الملفات أو النصوص المؤقتة — لا الخادم — هم مَن يملكون المفاتيح. تصف هذه الصفحة بدقة ما هو محميّ، وكيف يعمل، وحدود تلك الحماية.</p>
       <p>باختصار: تنتقل الملفات والرسائل الفورية مباشرة بين الأجهزة على الشبكة نفسها. وعبر الشبكات تستخدم جلسات المتصفح مُرحِّلًا لا يحمل سوى النص المُشفَّر من الطرف إلى الطرف ولا يملك مفتاح المحتوى. وتُستخدَم دائمًا مفاتيح جلسة جديدة؛ ويتيح رمز تحقّق اختياري يُقارَن عبر قناة خارجية للطرفين اكتشاف اعتراض الإشارة أيضًا. وفيما يلي التفاصيل.</p>
-      <h2>تشفير ملفات المتصفح الفورية (X25519 + AES-256-GCM)</h2><p>لنقل الملفات الفوري في المتصفح، تُولِّد كل عملية زوج مفاتيح X25519 مؤقتًا على كل جهاز، ويشتق المتصفحان مفتاح AES-256-GCM مشتركًا. تُشفَّر كل كتلة بقيمة nonce فريدة، فلا ترى الإشارة أو المُرحِّل سوى النص المُشفَّر بدل الملف الصريح. تستخدم عمليات CLI بروتوكول TLS 1.3 مباشرًا ومختلفًا موضحًا أدناه.</p><ul><li>المفاتيح مؤقتة وخاصة بكل عملية نقل — ولا يُعاد استخدام أي شيء عبر الجلسات.</li><li>يُشتَقّ المفتاح المشترك على الجهازين؛ ولا يُرسَل أبدًا إلى أي خادم ولا يُخزَّن عليه.</li><li>يُطبَّق التشفير في طبقة التطبيق، فوق أمان النقل الخاص بـ WebRTC، فيظل صامدًا حتى لو تعرّضت طبقة النقل للاختراق.</li></ul>
-      <h2>رمز التحقق (SAS) — اكتشاف خادم خبيث</h2><p>يتبادل WebRTC بصمات المفاتيح عبر خادم الإشارة الذي قد يحاول تبديلها. لذلك يمكن أن تعرض Relayium سلسلة SAS من 6 أرقام على الشاشتين. ولا يمنح تطابق الرمزين أقوى كشف للاعتراض إلا عندما يقارنهما الطرفان عبر قناة خارجية. أما عرض هذا الرمز والتوقّف لمقارنته فهو إعداد — «التحقّق المتقدّم» في الويب (معطَّل افتراضيًا)، و`--verify` في CLI. وتعطيله يغيّر ما يُعرض وأي الخطوات تتوقّف طلبًا للتأكيد فقط، ولا يغيّر التشفير: فمصافحة «الالتزام ثم الكشف» أدناه تعمل على كل اتصال وترفض أي اتصال لا يطابق كشفه التزامه، وتُولَّد المفاتيح على جهازك ولا تصلنا أبدًا، ولا ينقل المُرحِّل سوى نص مشفَّر، وفي المتصفح يظل استقبال الملفات يسألك قبل حفظ أي شيء — أما تطبيق macOS الأصلي فيكتب دون سؤال في وجهة الحفظ المضبوطة (مجلد التنزيلات افتراضيًا). وهذا السؤال يمنع الكتابة غير المطلوبة على قرصك، ولا يثبت من يكون الطرف الآخر؛ فذلك لا تؤكّده إلا مقارنة الرمز.</p><p>تمنع مصافحة «الالتزام ثم الكشف» الخادم من اختيار مفتاح متصادم بعد الحدث. وتستخدم عمليات CLI سلسلة SAS منفصلة مشتقة من تبادل الالتزام ثم الكشف لبصمات شهادة TLS المثبّتة؛ وهي أيضًا لا تكشف شيئًا ما لم يقارنها أحد فعليًا عبر قناة خارجية، وهو ما يتوقّف من أجله الخيار `--verify`.</p><ul><li>للحصول على أقوى ضمان، فعِّل التحقّق المتقدّم ثم قارِن الرمز عبر قناة خارجية — وجهًا لوجه أو عبر مكالمة صوتية.</li><li>إذا اختلف الرمزان، فأوقِف النقل: قد يكون أحدهم يعترض الاتصال.</li></ul>
-      <h2>النص الصريح الذي لا يستطيع الخادم رؤيته أو فكّه</h2><p>صُمِّمت خوادمنا بحيث لا تستطيع رؤية أو فك النص الصريح التالي:</p><p>على الشبكة نفسها تنتقل بايتات الملفات والرسائل مباشرة بين الجهازين. وعبر الشبكات تمر عبر TURN كنص مُشفَّر ولا يملك المُرحِّل مفتاح المحتوى. ومع ذلك تعالج الإشارة بيانات الإعداد وترى بيانات وصفية مثل IP العام وعضوية الغرفة والتوقيت واسم الجهاز والحضور.</p><ul><li>محتويات ملفاتك.</li><li>أسماء ملفاتك.</li><li>النص الصريح لرسائلك.</li><li>مفاتيح التشفير الخاصة بك.</li></ul>
-      <h2>عندما تُرحَّل ملفات ونصوص المتصفح (TURN)</h2><p>تستخدم عمليات ملفات ونصوص المتصفح عبر الشبكات TURN بحكم التصميم، لا كخيار احتياطي، لأن NAT وجدران الحماية تجعل المسار المباشر غير مرجح. تتصل جلسات المتصفح على الشبكة نفسها مباشرة دون بيانات اعتماد ترحيل. ولا تستخدم عمليات ملفات أو نصوص CLI بروتوكول TURN إطلاقًا: فهي مباشرة فقط وتفشل إن لم يوجد مسار مباشر.</p><ul><li>لا ينقل المُرحِّل سوى النص المُشفَّر — ولا يمكنه قراءة ملفاتك أو رسائلك، التي تظل مُشفَّرة من الطرف إلى الطرف.</li><li>نسجّل عدد البايتات المُرحَّلة لكل حساب لفرض حصة ترحيل شهرية ومنع إساءة الاستخدام — ولا نفحص أبدًا ما يُرحَّل، بل نسجّل عدد البايتات فقط.</li><li>لا نفحص أبدًا المحتوى المُرحَّل.</li></ul>
-      <h2>نقل النص المؤقت</h2><p>تستخدم جلسات النص في المتصفح بروتوكول Web: يُجري الطرفان تبادل X25519 مؤقتًا ويشتقان مفاتيح فرعية AES-256-GCM منفصلة حسب الاتجاه وفي نطاق منفصل عن مفاتيح نقل الملفات. وتُوثَّق كل رسالة UTF-8 صالحة وتُشفَّر في إطار مستقل. وعبر الشبكات تستخدم جلسات المتصفح TURN بحكم التصميم؛ فلا يحمل المُرحِّل إلا النص المُشفَّر ولا يملك مفتاح الرسالة. وعند تفعيل التحقّق المتقدّم، تكشف مقارنة SAS عبر قناة خارجية اعتراض الإشارة أيضًا.</p><p>يستخدم نص CLI بروتوكولًا مختلفًا ومباشرًا فقط عبر TLS 1.3 مع تثبيت الشهادة. ولا يستخدم إطارات X25519/AES الخاصة بالمتصفح ولا TURN، ويفشل إن تعذّر إنشاء مسار مباشر. لا تخزّن Relayium متون الرسائل، لكن يمكن لأي من الطرفين نسخ النص أو تسجيله أو التقاط صورة له أو الاحتفاظ به بطريقة أخرى بعد استلامه.</p><ul><li>يجب أن يكون الشخصان متصلين في الوقت نفسه؛ ولا توفّر Relayium تسليم النص دون اتصال أو سجل رسائل على الخادم.</li><li>تعالج الخوادم بالضرورة بيانات وصفية للاتصال مثل عناوين IP، وعضوية الغرفة، والتوقيت، واسم الجهاز والحضور لجلسات المتصفح، وعند الاقتضاء ارتباط الحساب المستخدم لإنشاء رمز اقتران.</li><li>في جلسات TURN قد تسجّل Relayium عدد البايتات المُرحَّلة لفرض الحصة ومنع إساءة الاستخدام، لكنها لا تفحص النص الصريح للرسائل.</li></ul>
-      <h2>روابط التنزيل المُخزَّنة — المفتاح لا يغادر متصفحك أبدًا</h2><p>وضع رابط التنزيل الاختياري مُخصَّص لما يكون فيه المُستقبِل غير متصل. يُشفِّر متصفحك الملفات باستخدام AES-256-GCM قبل رفع أي شيء، ويوضَع مفتاح فك التشفير في جزء URL فقط — الجزء الذي يلي # — وهو ما لا ترسله المتصفحات أبدًا إلى الخادم.</p><ul><li>لا يخزّن الخادم سوى النص المُشفَّر، إضافةً إلى حجم النص المُشفَّر والطوابع الزمنية لأغراض الحصة والتنظيف — ولا يخزّن أبدًا نصًا صريحًا أو أسماء ملفات أو مفاتيح.</li><li>يستطيع أي شخص يملك الرابط الكامل فكّ التشفير، لذا تعامَل مع الرابط كأنه الملف نفسه وشارِكه عبر قناة موثوقة.</li><li>يمكن ضبط الروابط لتنتهي صلاحيتها (من ساعة واحدة وحتى 14 يومًا، حسب خطتك) أو لتُحذَف بعد أول تنزيل كامل.</li></ul>
-      <h2>سلامة الملفات (SHA-256)</h2><p>إلى جانب السرية، يُتحقَّق من سلامة كل ملف. تحمل كل كتلة وسم مصادقة AES-GCM، ويُتحقَّق من تجزئة SHA-256 لكل ملف من الطرف إلى الطرف على جانب المُستقبِل، بحيث يُكتشَف الملف التالف أو المُتلاعَب به بدلًا من قبوله بصمت.</p>
-      <h2>ما لا تحمي منه Relayium</h2><p>يحمي التشفير من الطرف إلى الطرف البيانات أثناء انتقالها بين طرفين أمينين. ولا يمكنه، بحكم التصميم، أن يحمي من:</p><ul><li>جهاز أو متصفح مُخترَق على أي من الطرفين — برمجية خبيثة، أو امتداد متصفح عدائي، أو شخص يقرأ الشاشة.</li><li>البيانات الوصفية الضرورية: توقيت الجلسة وعدد البايتات المُرحَّلة، وفي الرابط المُخزَّن أو جلسة رمز الاقتران الحساب الذي أنشأ الرابط أو الرمز.</li><li>اختيار المُستقبِل الاحتفاظ بالملفات أو الرسائل أو نسخها أو إعادة توجيهها بعد استلامها.</li><li>مشاركة رابط تنزيل عبر قناة غير موثوقة، إذ إن مفتاح فك التشفير ينتقل داخل الرابط.</li></ul>
-      <h2>دعم المتصفحات وحدوده</h2><p>تعمل Relayium في أي متصفح حديث يدعم WebRTC عبر HTTPS. وتختلف بعض القدرات باختلاف المتصفح:</p><ul><li>يتوفّر في Chrome وEdge على سطح المكتب واجهة File System Access، فيبثّان الملفات الكبيرة مباشرةً إلى القرص، دون سقف عملي للذاكرة.</li><li>أما Firefox وSafari وجميع متصفحات الهاتف (فكل متصفح على iOS يعمل بـ WebKit) فتفتقر إلى تلك الواجهة وتجمّع الملف في الذاكرة على المسار الفوري، ولذلك يحذّر التطبيق مسبقًا عند تجاوز نحو 256 MB — وهو تقدير متحفّظ عن قصد، لا حدّ مقيس. لملفات بهذا الحجم فضّل Chrome/Edge على سطح المكتب، أو استخدم وضع رابط التنزيل، الذي يمكن لصفحة التنزيل فيه أيضًا الكتابة إلى القرص عبر service worker.</li><li>يتطلب WebRTC سياقًا آمنًا (HTTPS)؛ ولن يتصل التطبيق عبر HTTP العادي.</li></ul>
-      <h2>المصدر المفتوح والإبلاغ عن المشكلات</h2><p>تصميم البروتوكول وكامل شِفرة العميل والخادم متاحة للعموم على GitHub، بحيث يستطيع أي شخص تدقيق التشفير، أو تشغيل خادمه الخاص، أو المساهمة. وإذا اكتشفت مشكلة أمنية، فيُرجى الإبلاغ عنها بصورة خاصة عبر آلية الإبلاغ عن الثغرات في GitHub على المستودع، بدلًا من فتح مشكلة عامة.</p>
+      <section class="sheet"><h2>تشفير ملفات المتصفح الفورية (X25519 + AES-256-GCM)</h2><p>لنقل الملفات الفوري في المتصفح، تُولِّد كل عملية زوج مفاتيح X25519 مؤقتًا على كل جهاز، ويشتق المتصفحان مفتاح AES-256-GCM مشتركًا. تُشفَّر كل كتلة بقيمة nonce فريدة، فلا ترى الإشارة أو المُرحِّل سوى النص المُشفَّر بدل الملف الصريح. تستخدم عمليات CLI بروتوكول TLS 1.3 مباشرًا ومختلفًا موضحًا أدناه.</p><ul><li>المفاتيح مؤقتة وخاصة بكل عملية نقل — ولا يُعاد استخدام أي شيء عبر الجلسات.</li><li>يُشتَقّ المفتاح المشترك على الجهازين؛ ولا يُرسَل أبدًا إلى أي خادم ولا يُخزَّن عليه.</li><li>يُطبَّق التشفير في طبقة التطبيق، فوق أمان النقل الخاص بـ WebRTC، فيظل صامدًا حتى لو تعرّضت طبقة النقل للاختراق.</li></ul></section>
+      <section class="sheet"><h2>رمز التحقق (SAS) — اكتشاف خادم خبيث</h2><p>يتبادل WebRTC بصمات المفاتيح عبر خادم الإشارة الذي قد يحاول تبديلها. لذلك يمكن أن تعرض Relayium سلسلة SAS من 6 أرقام على الشاشتين. ولا يمنح تطابق الرمزين أقوى كشف للاعتراض إلا عندما يقارنهما الطرفان عبر قناة خارجية. أما عرض هذا الرمز والتوقّف لمقارنته فهو إعداد — «التحقّق المتقدّم» في الويب (معطَّل افتراضيًا)، و`--verify` في CLI. وتعطيله يغيّر ما يُعرض وأي الخطوات تتوقّف طلبًا للتأكيد فقط، ولا يغيّر التشفير: فمصافحة «الالتزام ثم الكشف» أدناه تعمل على كل اتصال وترفض أي اتصال لا يطابق كشفه التزامه، وتُولَّد المفاتيح على جهازك ولا تصلنا أبدًا، ولا ينقل المُرحِّل سوى نص مشفَّر، وفي المتصفح يظل استقبال الملفات يسألك قبل حفظ أي شيء — أما تطبيق macOS الأصلي فيكتب دون سؤال في وجهة الحفظ المضبوطة (مجلد التنزيلات افتراضيًا). وهذا السؤال يمنع الكتابة غير المطلوبة على قرصك، ولا يثبت من يكون الطرف الآخر؛ فذلك لا تؤكّده إلا مقارنة الرمز.</p><p>تمنع مصافحة «الالتزام ثم الكشف» الخادم من اختيار مفتاح متصادم بعد الحدث. وتستخدم عمليات CLI سلسلة SAS منفصلة مشتقة من تبادل الالتزام ثم الكشف لبصمات شهادة TLS المثبّتة؛ وهي أيضًا لا تكشف شيئًا ما لم يقارنها أحد فعليًا عبر قناة خارجية، وهو ما يتوقّف من أجله الخيار `--verify`.</p><ul><li>للحصول على أقوى ضمان، فعِّل التحقّق المتقدّم ثم قارِن الرمز عبر قناة خارجية — وجهًا لوجه أو عبر مكالمة صوتية.</li><li>إذا اختلف الرمزان، فأوقِف النقل: قد يكون أحدهم يعترض الاتصال.</li></ul></section>
+      <section class="sheet"><h2>النص الصريح الذي لا يستطيع الخادم رؤيته أو فكّه</h2><p>صُمِّمت خوادمنا بحيث لا تستطيع رؤية أو فك النص الصريح التالي:</p><p>على الشبكة نفسها تنتقل بايتات الملفات والرسائل مباشرة بين الجهازين. وعبر الشبكات تمر عبر TURN كنص مُشفَّر ولا يملك المُرحِّل مفتاح المحتوى. ومع ذلك تعالج الإشارة بيانات الإعداد وترى بيانات وصفية مثل IP العام وعضوية الغرفة والتوقيت واسم الجهاز والحضور.</p><ul><li>محتويات ملفاتك.</li><li>أسماء ملفاتك.</li><li>النص الصريح لرسائلك.</li><li>مفاتيح التشفير الخاصة بك.</li></ul></section>
+      <section class="sheet"><h2>عندما تُرحَّل ملفات ونصوص المتصفح (TURN)</h2><p>تستخدم عمليات ملفات ونصوص المتصفح عبر الشبكات TURN بحكم التصميم، لا كخيار احتياطي، لأن NAT وجدران الحماية تجعل المسار المباشر غير مرجح. تتصل جلسات المتصفح على الشبكة نفسها مباشرة دون بيانات اعتماد ترحيل. ولا تستخدم عمليات ملفات أو نصوص CLI بروتوكول TURN إطلاقًا: فهي مباشرة فقط وتفشل إن لم يوجد مسار مباشر.</p><ul><li>لا ينقل المُرحِّل سوى النص المُشفَّر — ولا يمكنه قراءة ملفاتك أو رسائلك، التي تظل مُشفَّرة من الطرف إلى الطرف.</li><li>نسجّل عدد البايتات المُرحَّلة لكل حساب لفرض حصة ترحيل شهرية ومنع إساءة الاستخدام — ولا نفحص أبدًا ما يُرحَّل، بل نسجّل عدد البايتات فقط.</li><li>لا نفحص أبدًا المحتوى المُرحَّل.</li></ul></section>
+      <section class="sheet"><h2>نقل النص المؤقت</h2><p>تستخدم جلسات النص في المتصفح بروتوكول Web: يُجري الطرفان تبادل X25519 مؤقتًا ويشتقان مفاتيح فرعية AES-256-GCM منفصلة حسب الاتجاه وفي نطاق منفصل عن مفاتيح نقل الملفات. وتُوثَّق كل رسالة UTF-8 صالحة وتُشفَّر في إطار مستقل. وعبر الشبكات تستخدم جلسات المتصفح TURN بحكم التصميم؛ فلا يحمل المُرحِّل إلا النص المُشفَّر ولا يملك مفتاح الرسالة. وعند تفعيل التحقّق المتقدّم، تكشف مقارنة SAS عبر قناة خارجية اعتراض الإشارة أيضًا.</p><p>يستخدم نص CLI بروتوكولًا مختلفًا ومباشرًا فقط عبر TLS 1.3 مع تثبيت الشهادة. ولا يستخدم إطارات X25519/AES الخاصة بالمتصفح ولا TURN، ويفشل إن تعذّر إنشاء مسار مباشر. لا تخزّن Relayium متون الرسائل، لكن يمكن لأي من الطرفين نسخ النص أو تسجيله أو التقاط صورة له أو الاحتفاظ به بطريقة أخرى بعد استلامه.</p><ul><li>يجب أن يكون الشخصان متصلين في الوقت نفسه؛ ولا توفّر Relayium تسليم النص دون اتصال أو سجل رسائل على الخادم.</li><li>تعالج الخوادم بالضرورة بيانات وصفية للاتصال مثل عناوين IP، وعضوية الغرفة، والتوقيت، واسم الجهاز والحضور لجلسات المتصفح، وعند الاقتضاء ارتباط الحساب المستخدم لإنشاء رمز اقتران.</li><li>في جلسات TURN قد تسجّل Relayium عدد البايتات المُرحَّلة لفرض الحصة ومنع إساءة الاستخدام، لكنها لا تفحص النص الصريح للرسائل.</li></ul></section>
+      <section class="sheet"><h2>روابط التنزيل المُخزَّنة — المفتاح لا يغادر متصفحك أبدًا</h2><p>وضع رابط التنزيل الاختياري مُخصَّص لما يكون فيه المُستقبِل غير متصل. يُشفِّر متصفحك الملفات باستخدام AES-256-GCM قبل رفع أي شيء، ويوضَع مفتاح فك التشفير في جزء URL فقط — الجزء الذي يلي # — وهو ما لا ترسله المتصفحات أبدًا إلى الخادم.</p><ul><li>لا يخزّن الخادم سوى النص المُشفَّر، إضافةً إلى حجم النص المُشفَّر والطوابع الزمنية لأغراض الحصة والتنظيف — ولا يخزّن أبدًا نصًا صريحًا أو أسماء ملفات أو مفاتيح.</li><li>يستطيع أي شخص يملك الرابط الكامل فكّ التشفير، لذا تعامَل مع الرابط كأنه الملف نفسه وشارِكه عبر قناة موثوقة.</li><li>يمكن ضبط الروابط لتنتهي صلاحيتها (من ساعة واحدة وحتى 14 يومًا، حسب خطتك) أو لتُحذَف بعد أول تنزيل كامل.</li></ul></section>
+      <section class="sheet"><h2>سلامة الملفات (SHA-256)</h2><p>إلى جانب السرية، يُتحقَّق من سلامة كل ملف. تحمل كل كتلة وسم مصادقة AES-GCM، ويُتحقَّق من تجزئة SHA-256 لكل ملف من الطرف إلى الطرف على جانب المُستقبِل، بحيث يُكتشَف الملف التالف أو المُتلاعَب به بدلًا من قبوله بصمت.</p></section>
+      <section class="sheet"><h2>ما لا تحمي منه Relayium</h2><p>يحمي التشفير من الطرف إلى الطرف البيانات أثناء انتقالها بين طرفين أمينين. ولا يمكنه، بحكم التصميم، أن يحمي من:</p><ul><li>جهاز أو متصفح مُخترَق على أي من الطرفين — برمجية خبيثة، أو امتداد متصفح عدائي، أو شخص يقرأ الشاشة.</li><li>البيانات الوصفية الضرورية: توقيت الجلسة وعدد البايتات المُرحَّلة، وفي الرابط المُخزَّن أو جلسة رمز الاقتران الحساب الذي أنشأ الرابط أو الرمز.</li><li>اختيار المُستقبِل الاحتفاظ بالملفات أو الرسائل أو نسخها أو إعادة توجيهها بعد استلامها.</li><li>مشاركة رابط تنزيل عبر قناة غير موثوقة، إذ إن مفتاح فك التشفير ينتقل داخل الرابط.</li></ul></section>
+      <section class="sheet"><h2>دعم المتصفحات وحدوده</h2><p>تعمل Relayium في أي متصفح حديث يدعم WebRTC عبر HTTPS. وتختلف بعض القدرات باختلاف المتصفح:</p><ul><li>يتوفّر في Chrome وEdge على سطح المكتب واجهة File System Access، فيبثّان الملفات الكبيرة مباشرةً إلى القرص، دون سقف عملي للذاكرة.</li><li>أما Firefox وSafari وجميع متصفحات الهاتف (فكل متصفح على iOS يعمل بـ WebKit) فتفتقر إلى تلك الواجهة وتجمّع الملف في الذاكرة على المسار الفوري، ولذلك يحذّر التطبيق مسبقًا عند تجاوز نحو 256 MB — وهو تقدير متحفّظ عن قصد، لا حدّ مقيس. لملفات بهذا الحجم فضّل Chrome/Edge على سطح المكتب، أو استخدم وضع رابط التنزيل، الذي يمكن لصفحة التنزيل فيه أيضًا الكتابة إلى القرص عبر service worker.</li><li>يتطلب WebRTC سياقًا آمنًا (HTTPS)؛ ولن يتصل التطبيق عبر HTTP العادي.</li></ul></section>
+      <section class="sheet"><h2>المصدر المفتوح والإبلاغ عن المشكلات</h2><p>تصميم البروتوكول وكامل شِفرة العميل والخادم متاحة للعموم على GitHub، بحيث يستطيع أي شخص تدقيق التشفير، أو تشغيل خادمه الخاص، أو المساهمة. وإذا اكتشفت مشكلة أمنية، فيُرجى الإبلاغ عنها بصورة خاصة عبر آلية الإبلاغ عن الثغرات في GitHub على المستودع، بدلًا من فتح مشكلة عامة.</p></section>
       </main>
       <footer>
         <a href="/">← Relayium</a>
@@ -154,6 +199,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/ar/releases/">الإصدارات</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

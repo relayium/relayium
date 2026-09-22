@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"ما هو نقل الملفات من الند للند؟","description":"شرح بلغة مبسّطة لنقل الملفات من الند للند (P2P): كيف يختلف عن الرفع إلى خادم، وكيف يُعثَر على اتصال WebRTC مباشر، ولماذا هو خاص وسريع.","inLanguage":"ar","datePublished":"2026-07-09","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/guides/what-is-peer-to-peer-file-transfer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"ما هو نقل الملفات من الند للند؟"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل النقل من الند للند هو نفسه التشفير من الطرف إلى الطرف؟","acceptedAnswer":{"@type":"Answer","text":"هما مترابطان لكنهما ليسا متطابقين. يصف P2P الاتصال بين النهايات ولا يضمن أن تكون كل قفزة مباشرة؛ فقد يحمل TURN الحركة. ويحدد التشفير إن كان الوسيط يستطيع قراءتها. يستخدم Relayium WebRTC مباشرةً داخل شبكة LAN نفسها وTURN مشفّرًا من الطرف إلى الطرف عبر الشبكات، ولا يستطيع المُرحِّل قراءته أو فك تشفيره."}},{"@type":"Question","name":"هل يمرّ النقل من الند للند بأي خادم على الإطلاق؟","acceptedAnswer":{"@type":"Answer","text":"يساعد خادم إشارة صغير الجهازين على العثور على عنوان كل منهما — لكنه لا يرى سوى معلومات إعداد الاتصال، ولا يرى بايتات الملف قط. وعبر الشبكات في المتصفح، يمرّر مُرحِّل TURN بيانات الملف المُشفَّرة بحكم التصميم، لكنه حتى حينئذٍ لا يتعامل إلا مع نص مُشفَّر لا يستطيع فك تشفيره."}},{"@type":"Question","name":"لماذا قد يفشل الاتصال المباشر من الأساس؟","acceptedAnswer":{"@type":"Answer","text":"بعض الشبكات — غالبًا جدران الحماية الصارمة للشركات أو بعض أنواع NAT لدى مشغّلي الهاتف المحمول — مبنية على نحو يجعل من المستحيل اكتشاف عنوان يمكن الوصول إليه من المعلومات الخارجية وحدها. وبدل إنفاق نحو عشرين ثانية لاكتشاف ذلك في كل عملية نقل، يُمرِّر تطبيق Relayium في المتصفح كل عمليات النقل عبر الشبكات على المُرحِّل من البداية — فالذي يحملها هو المُرحِّل، لا محاولة اتصال مباشر فاشلة."}},{"@type":"Question","name":"هل يكون النقل من الند للند أبطأ حين يمرّ عبر مُرحِّل؟","acceptedAnswer":{"@type":"Answer","text":"قد يضيف بعض زمن الاستجابة، إذ إن المُرحِّل قفزة إضافية تمر بها البيانات وهو خادم مشترك لا خادم مخصَّص. لكنه يظل أسرع عمومًا من أسلوب الرفع ثم التنزيل، إذ لا انتظار لاستقرار الملف كاملًا على خادم قبل أن يبدأ جانب التنزيل."}},{"@type":"Question","name":"هل يحتاج الطرفان إلى حساب للنقل من الند للند؟","acceptedAnswer":{"@type":"Answer","text":"جهازان على الشبكة نفسها لا يحتاجان إلى حساب على الإطلاق. والإرسال عبر الشبكات برمز اقتران يتطلب أن يسجّل المُرسِل الدخول، أما الشخص المُستقبِل فلا يحتاج إلى حساب مطلقًا في كلتا الحالتين."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ar/guides/" aria-current="true">الأدلة</a><a href="/ar/apps/">التطبيقات</a><a href="/pricing">الأسعار</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="التنقل الرئيسي"><a class="row" href="/">LAN</a><a class="row" href="/ar/cross-network/">عبر الشبكات</a><a class="row" href="/ar/offline-transfer/">غير متزامن</a><a class="row" href="/device-inbox">بريد الأجهزة</a><a class="row" href="/cli">CLI</a><a class="row" href="/ar/apps/">التطبيقات</a><a class="row" href="/pricing">الأسعار</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ar/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ar/guides/">الأدلة</a> <span aria-hidden="true">›</span> <span aria-current="page">ما هو نقل الملفات من الند للند؟</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,30 +203,30 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="ترجمة مؤرشفة"><p class="archived-label">ترجمة مؤرشفة</p><p>هذه الصفحة ترجمة عربية محفوظة للأرشيف. يجري صيانة منتج Relayium وتوثيقه الحالي بالإنجليزية والصينية المبسّطة، ولم يعد التطبيق نفسه يوفّر العربية. لذلك قد تختلف الشاشات والتفاصيل الموصوفة هنا عن السلوك الحالي.</p><p class="archived-links archived-pricing">قد تكون الباقات وحدود الاستخدام المذكورة هنا قديمة؛ والحالية منها موجودة في صفحة <a href="/pricing">الأسعار</a>.</p><p class="archived-links">النسخة الحالية: <a href="/guides/what-is-peer-to-peer-file-transfer/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/what-is-peer-to-peer-file-transfer/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">يُستخدم مصطلح «من الند للند» بشكل فضفاض، وإليك ما يعنيه فعليًا في نقل الملفات: ينتقل ملفك مباشرةً من جهاز إلى آخر، لا صعودًا إلى خادم شركة ونزولًا منه. لا محطة في المنتصف يمكن أن تستقر فيها نسخة.</p>
       <p class="lead">يبدو ذلك بسيطًا، لكن المسارات الفعلية تختلف. تشرح الصفحة أولًا WebRTC/ICE العام حيث يمكن أن يكون TURN احتياطيًا، ثم تميّز تنفيذ Relayium: WebRTC في المتصفح مباشر داخل شبكة LAN نفسها، وTURN مستخدم حسب التصميم عبر الشبكات، وCLI مباشرة فقط.</p>
-      <h2>P2P مقابل الطريقة المعتادة: إلغاء المحطة الوسطى</h2>
+      <section class="sheet"><h2>P2P مقابل الطريقة المعتادة: إلغاء المحطة الوسطى</h2>
       <p>تعمل معظم أدوات «إرسال ملف» بالرفع: يصعد ملفك من جهازك إلى خادم الشركة، ويُخزَّن هناك، ثم ينزّله الشخص الآخر منه. هذه قفزتان، ولبعض الوقت تستقر نسخة كاملة من ملفك على مساحة تخزين شخص آخر — حتى وإن حُذفت لاحقًا.</p>
       <p>يتخطى النقل من الند للند تلك المحطة. فما إن يُفتح اتصال بين جهازك وجهاز الشخص الآخر حتى تتدفق بايتات الملف مباشرةً عبر تلك القفزة الواحدة ولا شيء غيرها. لا توجد نسخة على جانب الخادم لتُخزَّن أو تُؤمَّن أو تُحذَف في نهاية المطاف، لأنها لم تُرفع أصلًا.</p>
-      <ul><li>النقل القائم على الرفع: من جهازك إلى خادم إلى جهازهم — قفزتان، ونسخة مُخزَّنة بينهما.</li><li>النقل من الند للند: من جهازك مباشرةً إلى جهازهم — قفزة واحدة، ولا شيء يُخزَّن.</li><li>لوضع Relayium الفوري في المتصفح مساران: يتصل WebRTC مباشرةً داخل شبكة LAN نفسها؛ وعبر الشبكات يحمل TURN حسب التصميم نصًا مشفّرًا من الطرف إلى الطرف بلا نسخة محتوى أو سجل فوري على الخادم.</li></ul>
-      <h2>كيف يعثر جهازان على بعضهما فعليًا: STUN</h2>
+      <ul><li>النقل القائم على الرفع: من جهازك إلى خادم إلى جهازهم — قفزتان، ونسخة مُخزَّنة بينهما.</li><li>النقل من الند للند: من جهازك مباشرةً إلى جهازهم — قفزة واحدة، ولا شيء يُخزَّن.</li><li>لوضع Relayium الفوري في المتصفح مساران: يتصل WebRTC مباشرةً داخل شبكة LAN نفسها؛ وعبر الشبكات يحمل TURN حسب التصميم نصًا مشفّرًا من الطرف إلى الطرف بلا نسخة محتوى أو سجل فوري على الخادم.</li></ul></section>
+      <section class="sheet"><h2>كيف يعثر جهازان على بعضهما فعليًا: STUN</h2>
       <p>إليك الجزء غير البديهي: يكاد يكون مؤكدًا أن جهازك لا يعرف عنوانه الخاص كما يُرى من الإنترنت الخارجي — فهو يقبع خلف موجّه منزلي أو خلف ترجمة عناوين الشبكة (NAT) لمشغّل الهاتف المحمول، التي تخفيه خلف عنوان IP عام مشترك وتعيد تخصيص المنافذ لحظيًا. والجهاز الآخر في الوضع نفسه. ولا يمكن لأي منهما أن «يتصل» بالآخر مباشرةً دون أن يعرف أولًا أي عنوان يصل إليه فعلًا.</p>
       <p>هذا هو الغرض من STUN (أدوات اجتياز الجلسة عبر NAT). يسأل كل جهاز خادم STUN صغيرًا خفيفًا سؤالًا واحدًا لوهلة: «من أي عنوان ومنفذ تراني قادمًا؟» فتخبره الإجابة بعنوانه المرئي للخارج — لا الملف، ولا أي محتوى، بل ما يكفي من معلومات الشبكة لوصف مسار العودة إليه. ويتبادل الجهازان هذه المعلومات (عبر خطوة إشارة لا تحمل سوى تفاصيل إعداد الاتصال، ولا تحمل بايتات الملف قط) ثم يحاولان فتح مسار مباشر إلى عنوان كل منهما. وفي حصة كبيرة من الحالات الواقعية — لا سيما جهازان على نفس شبكة Wi-Fi، أو أنواع NAT التي تتصرف على نحو متوقّع — ينجح ذلك، ويُفتح اتصال مباشر بالكامل.</p>
-      <ul><li>لا يعرف STUN ويشارك سوى عناوين الشبكة — ولا يعرف قط محتويات الملفات أو أسماءها أو مفاتيح التشفير.</li><li>يستخدم Relayium تقنية WebRTC مباشرةً لجلسات المتصفح داخل شبكة LAN نفسها. أما مسار المتصفح عبر الشبكات فيُرحّل عمدًا.</li><li>تعمل أوامر send/receive وtext في Relayium CLI باتصال P2P مباشر فقط: فلا تُمرَّر بايتات الملفات أو الرسائل عبر TURN أو أي خادم Relayium آخر. وإذا تعذّر على الطرفين إنشاء اتصال مباشر، تفشل الجلسة بدل الرجوع إلى مُرحِّل.</li><li>جهازان على الشبكة نفسها (دون حاجة إلى رمز) يتصلان عادةً على النحو الأكثر مباشرةً بينها جميعًا، إذ لا يوجد غالبًا أي NAT يعترض الطريق.</li></ul>
-      <h2>حين يتعذّر العثور على مسار مباشر: مُرحِّل TURN</h2>
+      <ul><li>لا يعرف STUN ويشارك سوى عناوين الشبكة — ولا يعرف قط محتويات الملفات أو أسماءها أو مفاتيح التشفير.</li><li>يستخدم Relayium تقنية WebRTC مباشرةً لجلسات المتصفح داخل شبكة LAN نفسها. أما مسار المتصفح عبر الشبكات فيُرحّل عمدًا.</li><li>تعمل أوامر send/receive وtext في Relayium CLI باتصال P2P مباشر فقط: فلا تُمرَّر بايتات الملفات أو الرسائل عبر TURN أو أي خادم Relayium آخر. وإذا تعذّر على الطرفين إنشاء اتصال مباشر، تفشل الجلسة بدل الرجوع إلى مُرحِّل.</li><li>جهازان على الشبكة نفسها (دون حاجة إلى رمز) يتصلان عادةً على النحو الأكثر مباشرةً بينها جميعًا، إذ لا يوجد غالبًا أي NAT يعترض الطريق.</li></ul></section>
+      <section class="sheet"><h2>حين يتعذّر العثور على مسار مباشر: مُرحِّل TURN</h2>
       <p>أحيانًا لا يكفي STUN. فبعض أنواع NAT — لا سيما على شبكات الشركات الأكثر صرامةً أو لدى بعض مشغّلي الهاتف المحمول — يصعب التنبؤ بها إلى حدٍّ يجعل من المستحيل اكتشاف مسار مباشر من المعلومات الخارجية وحدها. وإذا كان كلا الجهازين خلف هذا النوع من NAT، فإن الاتصال المباشر حقًا يكون ببساطة غير ممكن؛ ولا بد لشيء أن يُرحِّل حركة البيانات بينهما.</p>
       <p>في تصميم WebRTC/ICE عام، يمكن أن يكون TURN مُرحِّلًا احتياطيًا عند فشل المسار المباشر. أما تطبيق Relayium في المتصفح فيختار بوضوح WebRTC المباشر داخل شبكة LAN نفسها وTURN منذ البداية لكل الجلسات عبر الشبكات. يُشفّر الملف من الطرف إلى الطرف قبل وصوله، فلا يحمل المُرحِّل إلا نصًا مشفّرًا ولا يستطيع قراءة المحتوى أو فك تشفيره.</p>
-      <ul><li>على الشبكة نفسها يصل Relayium بين الأجهزة مباشرةً؛ أمّا عبر الشبكات فيستخدم مُرحِّل TURN افتراضيًّا، لأن المسار المباشر كثيرًا ما يتعذّر إيجاده هناك.</li><li>يمرّر المُرحِّل نصًا مُشفَّرًا فقط؛ ولا يملك قط مفتاح فك التشفير ولا يستطيع قراءة محتويات الملفات أو أسمائها أو أي شيء آخر عمّا بداخلها.</li><li>تعمل أوامر send/receive وtext في Relayium CLI باتصال P2P مباشر فقط: فلا تُمرَّر بايتات الملفات أو الرسائل عبر TURN أو أي خادم Relayium آخر. وإذا تعذّر على الطرفين إنشاء اتصال مباشر، تفشل الجلسة بدل الرجوع إلى مُرحِّل.</li></ul>
-      <h2>لماذا يهم هذا: الخصوصية والسرعة</h2>
+      <ul><li>على الشبكة نفسها يصل Relayium بين الأجهزة مباشرةً؛ أمّا عبر الشبكات فيستخدم مُرحِّل TURN افتراضيًّا، لأن المسار المباشر كثيرًا ما يتعذّر إيجاده هناك.</li><li>يمرّر المُرحِّل نصًا مُشفَّرًا فقط؛ ولا يملك قط مفتاح فك التشفير ولا يستطيع قراءة محتويات الملفات أو أسمائها أو أي شيء آخر عمّا بداخلها.</li><li>تعمل أوامر send/receive وtext في Relayium CLI باتصال P2P مباشر فقط: فلا تُمرَّر بايتات الملفات أو الرسائل عبر TURN أو أي خادم Relayium آخر. وإذا تعذّر على الطرفين إنشاء اتصال مباشر، تفشل الجلسة بدل الرجوع إلى مُرحِّل.</li></ul></section>
+      <section class="sheet"><h2>لماذا يهم هذا: الخصوصية والسرعة</h2>
       <p>حجة الخصوصية واضحة ومباشرة: حين لا تعبر بايتات الملف سوى قفزة واحدة، مباشرةً بين جهازين، فلا توجد خطوة تخزين على جانب الخادم يمكن أن تستقر فيها نسخة أو تُسجَّل أو يصل إليها أي شخص آخر — لأنها لم تُوضَع هناك قط. وهذا ضمان مختلف بنيويًا عن «نَعِدُ بحذفه في نهاية المطاف».</p>
-      <p>وحجة السرعة تتبع المنطق نفسه. فالنقل بالرفع ثم التنزيل عليه أن يعبر الشبكة مرتين — مرة صعودًا ومرة نزولًا — وكثيرًا ما ينتظر جانب الإرسال حتى ينتهي تمامًا قبل أن يستطيع جانب الاستقبال البدء. أما الاتصال المباشر فيعبر الشبكة مرة واحدة، ويمكن للبيانات أن تُبَثّ باستمرار بين الجهازين بأقصى سرعة يسمح بها الاتصال الأبطأ، دون خادم في المنتصف يحدّ من الإنتاجية أو يضيف زمن استجابته الخاص.</p>
-      <h2>كيف يجمع Relayium هذا كله</h2>
+      <p>وحجة السرعة تتبع المنطق نفسه. فالنقل بالرفع ثم التنزيل عليه أن يعبر الشبكة مرتين — مرة صعودًا ومرة نزولًا — وكثيرًا ما ينتظر جانب الإرسال حتى ينتهي تمامًا قبل أن يستطيع جانب الاستقبال البدء. أما الاتصال المباشر فيعبر الشبكة مرة واحدة، ويمكن للبيانات أن تُبَثّ باستمرار بين الجهازين بأقصى سرعة يسمح بها الاتصال الأبطأ، دون خادم في المنتصف يحدّ من الإنتاجية أو يضيف زمن استجابته الخاص.</p></section>
+      <section class="sheet"><h2>كيف يجمع Relayium هذا كله</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">ما تحتاجه للتحقّق بنفسك</p><ul><li>جهازان تستطيع النظر إلى شاشتيهما في آنٍ واحد — حاسوب محمول وهاتف هما الأنسب.</li><li>ملف صغير واحد. فالمقصود هنا هو المسار الذي يسلكه الاتصال، لا سرعة النقل.</li><li>فترة يكون فيها الجهازان على شبكة Wi-Fi نفسها، وفترة يكونان فيها على شبكتين مختلفتين — ويكفي إطفاء Wi-Fi في الهاتف والانتقال إلى بيانات الجوال.</li></ul></div>
       <p>افتح relayium.com على جهازين على الشبكة نفسها فيعثر كل منهما على الآخر تلقائيًا في العادة — دون حساب ودون رمز ودون أي شيء يُثبَّت؛ تلك هي حالة الشبكة المحلية التي لا يكون STUN فيها ضروريًا غالبًا. أما الإرسال عبر الإنترنت إلى شخص على شبكة مختلفة فيستخدم رمز اقتران: يسجّل المُرسِل الدخول، ويولّد رمزًا (أو يشارك رابطًا، مع رمز QR اختياري للمسح)، وما إن ينضم الشخص الآخر حتى يجري النقل عبر مُرحِّل TURN مشفَّر — وهو المسار الموثوق عبر شبكات NAT التي يصعب التنبؤ بها، ولا يحمل إلا نصًا مُشفَّرًا — ويبقى المُستقبِل بلا حاجة إلى حساب.</p>
       <p>عند فتح المسار الفوري، يتدفق ما يصل إلى 1000 ملف باستمرار عبر الطريق المختار ويُفحص كل ملف بـ SHA-256. لا يحتفظ Relayium بنسخة محتوى فورية أو سجل نقل على الخادم. وإذا كان الطرف الآخر غير متصل، فالرابط المُخزّن بمعرفة صفرية وضع منفصل.</p>
       <ol class="steps" data-block="steps"><li><p>والجهازان على شبكة Wi-Fi نفسها، افتح Relayium على كلٍّ منهما وأرسل الملف.</p><pre tabindex="0" dir="ltr"><code>https://relayium.com/</code></pre></li><li><p>اقرأ الوسم الذي يضعه التطبيق على الاتصال. على الشبكة نفسها يكتب «مباشر عبر LAN».</p></li><li><p>والآن ضع الجهازين على شبكتين مختلفتين وأرسل مرة أخرى، هذه المرة برمز اقتران.</p><pre tabindex="0" dir="ltr"><code>https://relayium.com/cross-network</code></pre></li><li><p>اقرأ الوسم مجددًا. «مباشر P2P» يعني أنه وُجد مسار مباشر عبر الإنترنت، و«مُرحَّل» يعني أنه لم يوجد، وأن المُرحِّل المشفَّر هو من حمل البايتات.</p></li><li><p>دوّن أيَّهما ظهر لك، وعلى أي زوج من الشبكات. فهذه إجابتك أنت عن السؤال الذي فتح به هذا المقال، لا إجابتنا نحن.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">ماذا تخبرك هذه الأوسمة</p><p>على الشبكة نفسها تحصل على «مباشر عبر LAN». وعبر الشبكات تحصل إما على «مباشر P2P» وإما على «مُرحَّل»، وأيُّهما يتحدّد بالشبكتين ذاتيهما لا بشيء ضبطته أنت.</p><p>و«مُرحَّل» ليس فشلًا. بل يعني أن مسار الاحتياط موجود ويؤدّي عمله، وأن المُرحِّل لا يحمل طوال الوقت إلا نصًا مشفَّرًا — وهي بعينها الحالة التي يصفها قسم TURN في هذا المقال، لكن مرئية من الداخل.</p></div>
-      <h2>حين لا يكون الوسم كما توقّعت</h2>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">ماذا تخبرك هذه الأوسمة</p><p>على الشبكة نفسها تحصل على «مباشر عبر LAN». وعبر الشبكات تحصل إما على «مباشر P2P» وإما على «مُرحَّل»، وأيُّهما يتحدّد بالشبكتين ذاتيهما لا بشيء ضبطته أنت.</p><p>و«مُرحَّل» ليس فشلًا. بل يعني أن مسار الاحتياط موجود ويؤدّي عمله، وأن المُرحِّل لا يحمل طوال الوقت إلا نصًا مشفَّرًا — وهي بعينها الحالة التي يصفها قسم TURN في هذا المقال، لكن مرئية من الداخل.</p></div></section>
+      <section class="sheet"><h2>حين لا يكون الوسم كما توقّعت</h2>
       <p>ثلاثة أمور تفاجئ الناس أول مرة ينظرون فيها. ولا أحد منها عيب يحتاج إصلاحًا، لكن كلًّا منها يستحق أن تعرف اسمه.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">ما تراه، وما تفحصه، وماذا يعني</p><dl><dt>عبر الشبكات يظهر دائمًا «مُرحَّل» ولا يظهر «مباشر P2P» أبدًا.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/cross-network   # the path label reads the same on both ends</code></pre><p>تحقّق إن كان الطرفان على بيانات الجوال أو خلف NAT على مستوى المشغّل، فهذا السبب المعتاد لغياب أي مسار مباشر. ولا شيء هنا يحتاج إصلاحًا: فهذا هو مسار الاحتياط المقصود، والمُرحِّل لا يحمل إلا نصًا مشفَّرًا، وهذان الجهازان نفساهما يظلان يتصلان مباشرةً ومجانًا على الشبكة نفسها.</p></dd><dt>على شبكة Wi-Fi واحدة لا يظهر «مباشر عبر LAN» إطلاقًا.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct</code></pre><p>تحقّق إن كانت الشبكة تعزل عملاءها — فشبكات Wi-Fi للضيوف، وكثير من شبكات الفنادق والمكاتب، تحجب حركة المرور بين الأجهزة من الأساس. فالجهازان هناك لا يريان بعضهما أبدًا، فاستخدم مسار الاقتران عبر الشبكات الذي لا يعتمد على وصول أحدهما إلى الآخر محليًا.</p></dd><dt>لا يوجد أي وسم مسار على الإطلاق.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/   # there is no path label until the two ends have connected</code></pre><p>الوسم يسمّي اتصالًا، فهو يظهر متى وُجد اتصال. وقبل أن يعثر الطرفان على بعضهما لا يوجد ما يُسمّى، و«نقل لا يبدأ أصلًا» مشكلة مختلفة عن «نقل سلك مسارًا غير متوقَّع».</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">ما تراه، وما تفحصه، وماذا يعني</p><dl><dt>عبر الشبكات يظهر دائمًا «مُرحَّل» ولا يظهر «مباشر P2P» أبدًا.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/cross-network   # the path label reads the same on both ends</code></pre><p>تحقّق إن كان الطرفان على بيانات الجوال أو خلف NAT على مستوى المشغّل، فهذا السبب المعتاد لغياب أي مسار مباشر. ولا شيء هنا يحتاج إصلاحًا: فهذا هو مسار الاحتياط المقصود، والمُرحِّل لا يحمل إلا نصًا مشفَّرًا، وهذان الجهازان نفساهما يظلان يتصلان مباشرةً ومجانًا على الشبكة نفسها.</p></dd><dt>على شبكة Wi-Fi واحدة لا يظهر «مباشر عبر LAN» إطلاقًا.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct</code></pre><p>تحقّق إن كانت الشبكة تعزل عملاءها — فشبكات Wi-Fi للضيوف، وكثير من شبكات الفنادق والمكاتب، تحجب حركة المرور بين الأجهزة من الأساس. فالجهازان هناك لا يريان بعضهما أبدًا، فاستخدم مسار الاقتران عبر الشبكات الذي لا يعتمد على وصول أحدهما إلى الآخر محليًا.</p></dd><dt>لا يوجد أي وسم مسار على الإطلاق.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/   # there is no path label until the two ends have connected</code></pre><p>الوسم يسمّي اتصالًا، فهو يظهر متى وُجد اتصال. وقبل أن يعثر الطرفان على بعضهما لا يوجد ما يُسمّى، و«نقل لا يبدأ أصلًا» مشكلة مختلفة عن «نقل سلك مسارًا غير متوقَّع».</p></dd></dl></div></section>
       <h2>الأسئلة الشائعة</h2>
       <h3>هل النقل من الند للند هو نفسه التشفير من الطرف إلى الطرف؟</h3>
       <p>هما مترابطان لكنهما ليسا متطابقين. يصف P2P الاتصال بين النهايات ولا يضمن أن تكون كل قفزة مباشرة؛ فقد يحمل TURN الحركة. ويحدد التشفير إن كان الوسيط يستطيع قراءتها. يستخدم Relayium WebRTC مباشرةً داخل شبكة LAN نفسها وTURN مشفّرًا من الطرف إلى الطرف عبر الشبكات، ولا يستطيع المُرحِّل قراءته أو فك تشفيره.</p>
@@ -209,6 +253,8 @@ ol.steps>li>pre{margin:8px 0 0}
         <a href="/pricing">الأسعار</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

@@ -12,7 +12,8 @@
 // file for every language) carrying noindex and links back into the site.
 import { SITE, esc } from "./shared.mjs";
 import { STYLE } from "./landing-template.mjs";
-import { siteHeader, THEME_HEAD } from "./page-chrome.mjs";
+import { THEME_HEAD } from "./page-chrome.mjs";
+import { appShell } from "./page-shell.mjs";
 
 const LINKS = [
   ["/", "Relayium home — send a file now"],
@@ -45,8 +46,7 @@ export function renderNotFoundPage() {
     <style>${STYLE}</style>
   </head>
   <body>
-    <div class="wrap">
-      ${siteHeader({ lang: "en", home: "/" })}
+    ${appShell({ lang: "en", home: "/", content: `
       <main>
       <h1>Page not found</h1>
       <p class="pitch">
@@ -68,7 +68,7 @@ export function renderNotFoundPage() {
         <a href="/security/">Security</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
-    </div>
+` })}
   </body>
 </html>
 `;

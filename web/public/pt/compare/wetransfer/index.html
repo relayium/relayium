@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs WeTransfer: links criptografados e entregas ao vivo","description":"Uma comparação honesta de Relayium e WeTransfer. O WeTransfer é ótimo para compartilhar links de forma assíncrona; o Relayium adiciona transferências em tempo real sem cópia do arquivo nem histórico no servidor, e links armazenados de conhecimento zero.","inLanguage":"pt","datePublished":"2026-07-03","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/pt/compare/wetransfer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/pt/"},{"@type":"ListItem","position":2,"name":"Guias","item":"https://relayium.com/pt/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs WeTransfer: links criptografados e entregas ao vivo"}]},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"Realmente não há limite de tamanho de arquivo?","acceptedAnswer":{"@type":"Answer","text":"O tempo real não tem limite no servidor; conecta direto na LAN e o TURN transporta a criptografia entre redes. Chrome/Edge pode gravar no disco, mas as duas páginas ao vivo precisam continuar ativas, então o link armazenado serve melhor para arquivos grandes. O máximo e a cota aparecem antes do upload; Firefox/Safari avisa perto de 256 MB em uma recepção na memória."}},{"@type":"Question","name":"E se o destinatário não estiver online?","acceptedAnswer":{"@type":"Answer","text":"Use um link de download armazenado. Seu navegador criptografa os arquivos com AES-256-GCM, a chave fica só no fragmento da URL, e o servidor guarda texto cifrado de conhecimento zero que o destinatário pode buscar depois. Criar o link exige que o remetente entre, e você pode configurá-lo para expirar ou se autodestruir após o primeiro download."}},{"@type":"Question","name":"O Relayium é gratuito?","acceptedAnswer":{"@type":"Answer","text":"Sim. O Relayium é gratuito e de código aberto sob a licença AGPL-3.0, com o protocolo e o código completos em github.com/relayium/relayium. Não há nível pago para desbloquear transferências em tempo real maiores — a folga de tamanho vem da transmissão para o disco no navegador, não de uma assinatura."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -119,8 +161,10 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/pt/guides/" aria-current="true">Guias</a><a href="/pt/apps/">Apps</a><a href="/pricing">Preços</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Navegação principal"><a class="row" href="/">LAN</a><a class="row" href="/pt/cross-network/">Entre redes</a><a class="row" href="/pt/offline-transfer/">Assíncrono</a><a class="row" href="/device-inbox">Caixa de dispositivo</a><a class="row" href="/cli">CLI</a><a class="row" href="/pt/apps/">Apps</a><a class="row" href="/pricing">Preços</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/pt/">Relayium</a> <span aria-hidden="true">›</span> <a href="/pt/guides/">Guias</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs WeTransfer: links criptografados e entregas ao vivo</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -142,21 +186,21 @@ pre code{background:none;padding:0;border-radius:0}
       <aside class="archived" aria-label="Tradução arquivada"><p class="archived-label">Tradução arquivada</p><p>Esta página é uma tradução em português arquivada. O produto Relayium e sua documentação atual são mantidos em inglês e em chinês simplificado; o próprio aplicativo não oferece mais português. Por isso as telas e os detalhes descritos aqui podem diferir do comportamento atual.</p><p class="archived-links archived-pricing">Os planos e os limites de uso mencionados aqui podem estar desatualizados; os atuais estão na página <a href="/pricing">Preços</a>.</p><p class="archived-links">Versão atual: <a href="/compare/wetransfer/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/compare/wetransfer/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">O WeTransfer fez o envio de arquivos grandes parecer sem esforço: solte um arquivo, receba um link e o destinatário baixa quando estiver pronto — mesmo que estivesse offline quando você enviou. Essa experiência assíncrona, sem conta para receber, é genuinamente boa, e é por isso que tanta gente recorre a ela.</p>
       <p class="lead">Este artigo compara com justiça. Para arquivos grandes ou pegar depois, o Relayium também recomenda um link armazenado, mas o servidor guarda apenas texto cifrado de conhecimento zero. O tempo real é uma força separada para arquivos pequenos e texto enquanto os dois lados ficam online: direto na LAN ou criptografado de ponta a ponta pelo TURN entre redes.</p>
-      <h2>O que o WeTransfer faz bem</h2>
+      <section class="sheet"><h2>O que o WeTransfer faz bem</h2>
       <p>A ideia central do WeTransfer é assíncrona: o remetente envia uma vez, recebe um link e o destinatário baixa mais tarde. As duas pessoas nunca precisam estar online ao mesmo tempo, que é exatamente o que você quer quando manda por e-mail um vídeo a um cliente que vai abri-lo amanhã.</p>
-      <p>Também é maduro e sem atrito. Não há nada para instalar, o nível gratuito permite enviar sem conta e a interface é famosa por ser simples. Para compartilhar links de vez em quando dentro do limite de tamanho, ele simplesmente funciona.</p>
-      <h2>Onde eles diferem: o arquivo vive num servidor</h2>
+      <p>Também é maduro e sem atrito. Não há nada para instalar, o nível gratuito permite enviar sem conta e a interface é famosa por ser simples. Para compartilhar links de vez em quando dentro do limite de tamanho, ele simplesmente funciona.</p></section>
+      <section class="sheet"><h2>Onde eles diferem: o arquivo vive num servidor</h2>
       <p>Com o WeTransfer, seu arquivo é enviado para os servidores dele, armazenado ali por um tempo e baixado de lá. O nível gratuito limita cada transferência a 2 GB, e o link aponta para uma cópia hospedada numa infraestrutura que você não controla. A transferência é criptografada em trânsito e em repouso, mas não é de conhecimento zero: o serviço guarda as chaves e poderia, em princípio, ler o arquivo.</p>
-      <p>O modo em tempo real do Relayium não mantém cópia do arquivo nem histórico no servidor, então não há limite de tamanho do lado do servidor. Na mesma LAN os navegadores se conectam diretamente; entre redes usam um retransmissor TURN por projeto. O TURN transporta texto cifrado de ponta a ponta, mas não consegue ler nem descriptografar o conteúdo em claro. Sobre o WebRTC, o Relayium adiciona X25519, AES-256-GCM por bloco, código SAS de 6 dígitos e verificação SHA-256 de ponta a ponta.</p>
-      <h2>Transferências em tempo real sem limite de tamanho</h2>
+      <p>O modo em tempo real do Relayium não mantém cópia do arquivo nem histórico no servidor, então não há limite de tamanho do lado do servidor. Na mesma LAN os navegadores se conectam diretamente; entre redes usam um retransmissor TURN por projeto. O TURN transporta texto cifrado de ponta a ponta, mas não consegue ler nem descriptografar o conteúdo em claro. Sobre o WebRTC, o Relayium adiciona X25519, AES-256-GCM por bloco, código SAS de 6 dígitos e verificação SHA-256 de ponta a ponta.</p></section>
+      <section class="sheet"><h2>Transferências em tempo real sem limite de tamanho</h2>
       <p>Como o tempo real não mantém cópia do arquivo nem histórico no servidor, o limite prático de tamanho vem do seu navegador. No Chrome ou no Edge, o Relayium transmite os dados recebidos direto para o disco, então praticamente não há limite de tamanho — vídeos de vários gigabytes e arquivos compactados de projetos vão bem.</p>
-      <p>Firefox e Safari não oferecem esse mesmo fluxo pela API File System Access, então, quando nenhum caminho de gravação em fluxo se aplica, o navegador guarda o arquivo na memória; o Relayium avisa acima de cerca de 256 MB, uma estimativa deliberadamente conservadora e não um limite rígido medido. Na mesma LAN não é preciso conta e os dispositivos se conectam diretamente. Entre redes, quem cria o código de emparelhamento faz login e a sessão do navegador usa um retransmissor TURN criptografado por projeto; quem participa com o código ou link não precisa de conta. O TURN transporta texto cifrado de ponta a ponta, mas não consegue ler nem descriptografar o conteúdo em claro. Se uma conexão cai no meio, a transferência retoma em vez de começar de novo.</p>
-      <h2>Quando o destinatário está offline: links armazenados de conhecimento zero</h2>
+      <p>Firefox e Safari não oferecem esse mesmo fluxo pela API File System Access, então, quando nenhum caminho de gravação em fluxo se aplica, o navegador guarda o arquivo na memória; o Relayium avisa acima de cerca de 256 MB, uma estimativa deliberadamente conservadora e não um limite rígido medido. Na mesma LAN não é preciso conta e os dispositivos se conectam diretamente. Entre redes, quem cria o código de emparelhamento faz login e a sessão do navegador usa um retransmissor TURN criptografado por projeto; quem participa com o código ou link não precisa de conta. O TURN transporta texto cifrado de ponta a ponta, mas não consegue ler nem descriptografar o conteúdo em claro. Se uma conexão cai no meio, a transferência retoma em vez de começar de novo.</p></section>
+      <section class="sheet"><h2>Quando o destinatário está offline: links armazenados de conhecimento zero</h2>
       <p>A transferência em tempo real precisa das duas pessoas presentes, que é a única coisa que o modelo de links do WeTransfer faz melhor. Então o Relayium oferece a mesma comodidade assíncrona sem abrir mão da privacidade: um link de download armazenado.</p>
-      <p>Seu navegador criptografa os arquivos com AES-256-GCM antes do envio, e a chave de descriptografia vive só no fragmento da URL — a parte depois do # que os navegadores nunca enviam ao servidor. O servidor, portanto, armazena texto cifrado de conhecimento zero que não consegue ler, e o destinatário não precisa de conta para baixar. Criar um link assim exige que o remetente entre, e cada link pode ser configurado para expirar ou para se autodestruir após o primeiro download.</p>
-      <h2>Comparativo de recursos em resumo</h2>
+      <p>Seu navegador criptografa os arquivos com AES-256-GCM antes do envio, e a chave de descriptografia vive só no fragmento da URL — a parte depois do # que os navegadores nunca enviam ao servidor. O servidor, portanto, armazena texto cifrado de conhecimento zero que não consegue ler, e o destinatário não precisa de conta para baixar. Criar um link assim exige que o remetente entre, e cada link pode ser configurado para expirar ou para se autodestruir após o primeiro download.</p></section>
+      <section class="sheet"><h2>Comparativo de recursos em resumo</h2>
       <p>As diferenças que mais importam, lado a lado:</p>
-      <ul><li>Limite de tamanho: o nível gratuito do WeTransfer limita as transferências a 2 GB; o tempo real do Relayium não tem limite do lado do servidor (Chrome/Edge gravam no disco; quando o navegador precisa armazenar na memória, o Relayium avisa acima de cerca de 256 MB).</li><li>Onde os arquivos vivem: o WeTransfer armazena seu arquivo nos servidores dele; o tempo real do Relayium não mantém cópia do arquivo nem histórico no servidor. Na mesma LAN os navegadores se conectam diretamente; entre redes o TURN transporta por projeto texto cifrado de ponta a ponta que não consegue ler nem descriptografar.</li><li>Criptografia: o WeTransfer criptografa em trânsito e em repouso, mas guarda as chaves; o Relayium é de ponta a ponta com um código SAS de 6 dígitos, e os links armazenados são de conhecimento zero com a chave só no fragmento da URL.</li><li>Destinatário offline: os dois lidam com isso — o WeTransfer via seu link armazenado, o Relayium via um link de download armazenado de conhecimento zero com expiração ou autodestruição após a leitura.</li><li>Integridade e retomada: o Relayium verifica cada arquivo com SHA-256 e pode retomar uma transferência interrompida em vez de reiniciar.</li><li>Custo e abertura: o Relayium é gratuito e licenciado sob AGPL-3.0 em github.com/relayium/relayium, e roda no navegador em Windows, macOS, Linux, Android e iOS sem nada para instalar.</li></ul>
+      <ul><li>Limite de tamanho: o nível gratuito do WeTransfer limita as transferências a 2 GB; o tempo real do Relayium não tem limite do lado do servidor (Chrome/Edge gravam no disco; quando o navegador precisa armazenar na memória, o Relayium avisa acima de cerca de 256 MB).</li><li>Onde os arquivos vivem: o WeTransfer armazena seu arquivo nos servidores dele; o tempo real do Relayium não mantém cópia do arquivo nem histórico no servidor. Na mesma LAN os navegadores se conectam diretamente; entre redes o TURN transporta por projeto texto cifrado de ponta a ponta que não consegue ler nem descriptografar.</li><li>Criptografia: o WeTransfer criptografa em trânsito e em repouso, mas guarda as chaves; o Relayium é de ponta a ponta com um código SAS de 6 dígitos, e os links armazenados são de conhecimento zero com a chave só no fragmento da URL.</li><li>Destinatário offline: os dois lidam com isso — o WeTransfer via seu link armazenado, o Relayium via um link de download armazenado de conhecimento zero com expiração ou autodestruição após a leitura.</li><li>Integridade e retomada: o Relayium verifica cada arquivo com SHA-256 e pode retomar uma transferência interrompida em vez de reiniciar.</li><li>Custo e abertura: o Relayium é gratuito e licenciado sob AGPL-3.0 em github.com/relayium/relayium, e roda no navegador em Windows, macOS, Linux, Android e iOS sem nada para instalar.</li></ul></section>
       <h2>Perguntas frequentes</h2>
       <h3>Realmente não há limite de tamanho de arquivo?</h3>
       <p>O tempo real não tem limite no servidor; conecta direto na LAN e o TURN transporta a criptografia entre redes. Chrome/Edge pode gravar no disco, mas as duas páginas ao vivo precisam continuar ativas, então o link armazenado serve melhor para arquivos grandes. O máximo e a cota aparecem antes do upload; Firefox/Safari avisa perto de 256 MB em uma recepção na memória.</p>
@@ -179,6 +223,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/pricing">Preços</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

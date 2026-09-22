@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?","description":"Un comparatif honnête de Relayium, Snapdrop et PairDrop. Les trois font du transfert pair-à-pair dans le navigateur ; la vraie différence est le chiffrement de bout en bout au niveau applicatif de Relayium et sa portée entre réseaux.","inLanguage":"fr","datePublished":"2026-07-03","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/fr/compare/snapdrop/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/fr/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/fr/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?"}]},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Relayium et Snapdrop/PairDrop peuvent-ils se remplacer mutuellement ?","acceptedAnswer":{"@type":"Answer","text":"Pour un partage rapide entre appareils du même réseau, chacun fonctionne bien. Si vous devez atteindre des réseaux différents ou voulez une couche de chiffrement supplémentaire, indépendante du serveur, avec un code de vérification, Relayium vise cela ; si vous aimez les salons et l'appairage persistant de PairDrop, il reste un excellent choix."}},{"@type":"Question","name":"Relayium est-il open source et auto-hébergeable ?","acceptedAnswer":{"@type":"Answer","text":"Oui. Relayium est sous licence AGPL-3.0 et l'intégralité du protocole et du code est publique sur github.com/relayium/relayium, vous pouvez donc l'auditer ou faire tourner votre propre instance — la même ouverture qui a rendu Snapdrop et PairDrop dignes de confiance."}},{"@type":"Question","name":"Y a-t-il une différence de performance ?","acceptedAnswer":{"@type":"Answer","text":"Sur le même LAN, les trois utilisent un chemin WebRTC direct et leurs performances sont généralement proches. Entre réseaux, Relayium utilise TURN par conception : l'emplacement et la capacité du relais peuvent donc affecter la latence et le débit. La couche AES-256-GCM supplémentaire s'exécute dans le navigateur et ajoute normalement peu de coût face au chemin réseau."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -119,8 +161,10 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/fr/guides/" aria-current="true">Guides</a><a href="/fr/apps/">Applis</a><a href="/pricing">Tarifs</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Navigation principale"><a class="row" href="/">LAN</a><a class="row" href="/fr/cross-network/">Entre réseaux</a><a class="row" href="/fr/offline-transfer/">Asynchrone</a><a class="row" href="/device-inbox">Boîte appareil</a><a class="row" href="/cli">CLI</a><a class="row" href="/fr/apps/">Applis</a><a class="row" href="/pricing">Tarifs</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -142,21 +186,21 @@ pre code{background:none;padding:0;border-radius:0}
       <aside class="archived" aria-label="Traduction archivée"><p class="archived-label">Traduction archivée</p><p>Cette page est une traduction française archivée. Le produit Relayium et sa documentation à jour sont maintenus en anglais et en chinois simplifié ; l&#39;application elle-même ne propose plus le français. Les écrans et les détails décrits ici peuvent donc différer du comportement actuel.</p><p class="archived-links archived-pricing">Les offres et les limites d&#39;utilisation citées ici peuvent être obsolètes ; les actuelles figurent sur la page <a href="/pricing">Tarifs</a>.</p><p class="archived-links">Version à jour : <a href="/compare/snapdrop/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/compare/snapdrop/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Snapdrop et son fork activement maintenu PairDrop sont des pionniers du partage de fichiers sans installation, dans le navigateur. Ce sont des outils soignés, familiers et vraiment bons — Relayium s&#39;appuie sur la même idée plutôt que de la balayer.</p>
       <p class="lead">Cet article compare les trois équitablement : ce qu&#39;ils partagent, là où Snapdrop et PairDrop sont plus forts, et là où Relayium diffère. En bref, Relayium se concentre sur la force du chiffrement et l&#39;atteinte entre réseaux, pas sur le remplacement de ce qui fonctionne déjà bien sur votre réseau local.</p>
-      <h2>Ce qu&#39;ils ont en commun</h2>
+      <section class="sheet"><h2>Ce qu&#39;ils ont en commun</h2>
       <p>Les trois fonctionnent entièrement dans un navigateur moderne, sans rien à installer. Sur le même LAN, tous utilisent WebRTC pour déplacer les octets de fichiers directement entre deux appareils plutôt que de les stocker sur un serveur.</p>
-      <p>Sur le même réseau local, ils peuvent découvrir automatiquement les appareils proches, si bien qu&#39;envoyer une photo d&#39;un ordinateur portable à un téléphone dans la même pièce ne prend que quelques touches avec n&#39;importe lequel.</p>
-      <h2>Là où Snapdrop et PairDrop brillent</h2>
+      <p>Sur le même réseau local, ils peuvent découvrir automatiquement les appareils proches, si bien qu&#39;envoyer une photo d&#39;un ordinateur portable à un téléphone dans la même pièce ne prend que quelques touches avec n&#39;importe lequel.</p></section>
+      <section class="sheet"><h2>Là où Snapdrop et PairDrop brillent</h2>
       <p>Snapdrop existe depuis des années et compte une grande communauté qui lui fait confiance ; PairDrop l&#39;étend avec des fonctions que Relayium ne cherche pas à égaler aujourd&#39;hui.</p>
-      <ul><li>PairDrop ajoute des salons et un appairage d&#39;appareils persistant, permettant de connecter des appareils précis par code d&#39;appairage, même sur des réseaux différents.</li><li>Les deux sont simples à auto-héberger — le code serveur est petit et bien compris, ce qui compte si vous voulez faire tourner votre propre instance.</li><li>Des années d&#39;usage réel signifient une large compatibilité d&#39;appareils, une documentation abondante et une expérience mature et prévisible.</li></ul>
-      <h2>Là où Relayium diffère : chiffrement de bout en bout au niveau applicatif</h2>
+      <ul><li>PairDrop ajoute des salons et un appairage d&#39;appareils persistant, permettant de connecter des appareils précis par code d&#39;appairage, même sur des réseaux différents.</li><li>Les deux sont simples à auto-héberger — le code serveur est petit et bien compris, ce qui compte si vous voulez faire tourner votre propre instance.</li><li>Des années d&#39;usage réel signifient une large compatibilité d&#39;appareils, une documentation abondante et une expérience mature et prévisible.</li></ul></section>
+      <section class="sheet"><h2>Là où Relayium diffère : chiffrement de bout en bout au niveau applicatif</h2>
       <p>Le WebRTC brut est chiffré en transit par DTLS, ce qui protège réellement contre une écoute réseau passive. Mais les empreintes DTLS qui authentifient chaque partie sont échangées via le serveur de signalisation. Un serveur de signalisation malveillant ou compromis peut y substituer ses propres empreintes et s&#39;intercaler de façon invisible — une attaque de l&#39;homme du milieu classique que DTLS seul n&#39;empêche pas.</p>
-      <p>Relayium ajoute une seconde couche de chiffrement indépendante par-dessus le canal WebRTC : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, et cette clé n&#39;est jamais envoyée à aucun serveur. Pour détecter un homme du milieu, activez la vérification avancée (désactivée par défaut) et les deux appareils affichent la même chaîne d&#39;authentification courte (SAS) à 6 chiffres ; si les codes concordent, aucun serveur n&#39;a usurpé l&#39;identité d&#39;un appareil ni terminé le chiffrement de la couche applicative. Chaque fichier est aussi vérifié de bout en bout par une empreinte SHA-256.</p>
-      <h2>Au-delà du réseau local</h2>
+      <p>Relayium ajoute une seconde couche de chiffrement indépendante par-dessus le canal WebRTC : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, et cette clé n&#39;est jamais envoyée à aucun serveur. Pour détecter un homme du milieu, activez la vérification avancée (désactivée par défaut) et les deux appareils affichent la même chaîne d&#39;authentification courte (SAS) à 6 chiffres ; si les codes concordent, aucun serveur n&#39;a usurpé l&#39;identité d&#39;un appareil ni terminé le chiffrement de la couche applicative. Chaque fichier est aussi vérifié de bout en bout par une empreinte SHA-256.</p></section>
+      <section class="sheet"><h2>Au-delà du réseau local</h2>
       <p>Relayium est conçu pour fonctionner entre réseaux, pas seulement sur le même Wi-Fi. Les transferts entre navigateurs se connectent directement sur le même LAN ; une session par code d&#39;appairage entre réseaux utilise un relais TURN par conception tout en restant chiffrée de bout en bout entre les navigateurs.</p>
-      <p>Entre réseaux, le relais TURN ne transporte que du texte chiffré qu&#39;il ne peut ni lire ni déchiffrer, et Relayium ne conserve aucune copie ni aucun historique du contenu en temps réel côté serveur. Il existe aussi un mode optionnel de lien de téléchargement stocké : le navigateur chiffre les fichiers en AES-256-GCM et la clé de déchiffrement ne vit que dans le fragment de l&#39;URL, si bien que le serveur ne stocke qu&#39;un texte chiffré à divulgation nulle qu&#39;il ne peut pas lire. Sur le même réseau, aucun compte n&#39;est nécessaire ; le créateur d&#39;un code d&#39;appairage entre réseaux doit se connecter, tandis que la personne qui rejoint n&#39;a besoin d&#39;aucun compte. La création d&#39;un lien de téléchargement stocké exige aussi une connexion. Les transferts interrompus en cours de route peuvent reprendre au lieu de tout recommencer.</p>
-      <h2>Comparatif des fonctions en un coup d&#39;œil</h2>
+      <p>Entre réseaux, le relais TURN ne transporte que du texte chiffré qu&#39;il ne peut ni lire ni déchiffrer, et Relayium ne conserve aucune copie ni aucun historique du contenu en temps réel côté serveur. Il existe aussi un mode optionnel de lien de téléchargement stocké : le navigateur chiffre les fichiers en AES-256-GCM et la clé de déchiffrement ne vit que dans le fragment de l&#39;URL, si bien que le serveur ne stocke qu&#39;un texte chiffré à divulgation nulle qu&#39;il ne peut pas lire. Sur le même réseau, aucun compte n&#39;est nécessaire ; le créateur d&#39;un code d&#39;appairage entre réseaux doit se connecter, tandis que la personne qui rejoint n&#39;a besoin d&#39;aucun compte. La création d&#39;un lien de téléchargement stocké exige aussi une connexion. Les transferts interrompus en cours de route peuvent reprendre au lieu de tout recommencer.</p></section>
+      <section class="sheet"><h2>Comparatif des fonctions en un coup d&#39;œil</h2>
       <p>Les différences qui comptent le plus, côte à côte :</p>
-      <ul><li>Couche de chiffrement : le WebRTC brut ne repose que sur DTLS ; Relayium ajoute par-dessus X25519 + AES-256-GCM au niveau applicatif.</li><li>Défense MITM : Relayium propose en option un code SAS à 6 chiffres (vérification avancée, désactivée par défaut) que les deux parties peuvent vérifier ; le WebRTC brut n&#39;a aucun contrôle équivalent contre un serveur de signalisation malveillant.</li><li>Entre réseaux : Relayium se connecte par code d&#39;appairage (ou son lien de participation) via un relais TURN chiffré ; pour Snapdrop, la découverte sur le réseau local est la voie principale.</li><li>Mode de stockage : Relayium propose des liens de téléchargement stockés à divulgation nulle en option ; les autres sont uniquement en temps réel.</li><li>Reprise : Relayium peut reprendre un transfert interrompu au lieu de recommencer.</li><li>Lot : Relayium envoie jusqu&#39;à 1 000 fichiers par lot avec une vérification d&#39;intégrité SHA-256 par fichier.</li></ul>
+      <ul><li>Couche de chiffrement : le WebRTC brut ne repose que sur DTLS ; Relayium ajoute par-dessus X25519 + AES-256-GCM au niveau applicatif.</li><li>Défense MITM : Relayium propose en option un code SAS à 6 chiffres (vérification avancée, désactivée par défaut) que les deux parties peuvent vérifier ; le WebRTC brut n&#39;a aucun contrôle équivalent contre un serveur de signalisation malveillant.</li><li>Entre réseaux : Relayium se connecte par code d&#39;appairage (ou son lien de participation) via un relais TURN chiffré ; pour Snapdrop, la découverte sur le réseau local est la voie principale.</li><li>Mode de stockage : Relayium propose des liens de téléchargement stockés à divulgation nulle en option ; les autres sont uniquement en temps réel.</li><li>Reprise : Relayium peut reprendre un transfert interrompu au lieu de recommencer.</li><li>Lot : Relayium envoie jusqu&#39;à 1 000 fichiers par lot avec une vérification d&#39;intégrité SHA-256 par fichier.</li></ul></section>
       <h2>Questions fréquentes</h2>
       <h3>Relayium et Snapdrop/PairDrop peuvent-ils se remplacer mutuellement ?</h3>
       <p>Pour un partage rapide entre appareils du même réseau, chacun fonctionne bien. Si vous devez atteindre des réseaux différents ou voulez une couche de chiffrement supplémentaire, indépendante du serveur, avec un code de vérification, Relayium vise cela ; si vous aimez les salons et l&#39;appairage persistant de PairDrop, il reste un excellent choix.</p>
@@ -179,6 +223,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/pricing">Tarifs</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs croc : transfert de fichiers chiffré en terminal","description":"Relayium et croc sont deux outils CLI gratuits, open source et chiffrés pour le transfert pair-à-pair. Un comparatif honnête de leurs forces respectives.","inLanguage":"fr","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/fr/compare/croc/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/fr/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/fr/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs croc : transfert de fichiers chiffré en terminal"}]},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"La CLI Relayium est-elle gratuite ?","acceptedAnswer":{"@type":"Answer","text":"Oui, entièrement. Il n'y a aucun palier payant et rien à mesurer — chaque mode connecte directement les deux extrémités, et la CLI est sous licence AGPL-3.0 et open source."}},{"@type":"Question","name":"A-t-elle besoin d'un compte ?","acceptedAnswer":{"@type":"Answer","text":"send oui, et le up cloud aussi. push/pull utilise votre propre accès SSH et daemon-direct utilise une confiance par certificat TLS avec épinglage entre vos machines, donc ni l'un ni l'autre ne touche un compte Relayium. send/receive fait exception : seul le serveur peut générer un code d'appairage, et seulement pour un compte connecté, donc l'expéditeur lance une fois relayium login — un send auquel vous passez un code qu'on vous a donné n'en génère aucun et ne demande pas de connexion. Recevoir ne nécessite jamais de compte."}},{"@type":"Question","name":"Puis-je utiliser le code d'appairage de la CLI avec l'application web de Relayium ?","acceptedAnswer":{"@type":"Answer","text":"Pas encore pour un transfert appairé en direct — le send/receive de la CLI utilise sa propre poignée de main directe, distincte du flux d'appairage du navigateur basé sur WebRTC, donc les deux n'interopèrent pas aujourd'hui. Pour remettre un fichier à quelqu'un via un simple navigateur, utilisez le lien de téléchargement stocké de Relayium ou le mode par code d'appairage propre à l'application web."}},{"@type":"Question","name":"Puis-je l'auto-héberger ?","acceptedAnswer":{"@type":"Answer","text":"Oui. Le serveur de Relayium est distribué sous forme d'image Docker (docker compose up -d --build), et vous pouvez pointer le send/receive de la CLI vers votre propre instance avec --server https://your-domain — le même esprit que faire tourner votre propre relais croc."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -119,8 +161,10 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/fr/guides/" aria-current="true">Guides</a><a href="/fr/apps/">Applis</a><a href="/pricing">Tarifs</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Navigation principale"><a class="row" href="/">LAN</a><a class="row" href="/fr/cross-network/">Entre réseaux</a><a class="row" href="/fr/offline-transfer/">Asynchrone</a><a class="row" href="/device-inbox">Boîte appareil</a><a class="row" href="/cli">CLI</a><a class="row" href="/fr/apps/">Applis</a><a class="row" href="/pricing">Tarifs</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs croc : transfert de fichiers chiffré en terminal</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -142,30 +186,30 @@ pre code{background:none;padding:0;border-radius:0}
       <aside class="archived" aria-label="Traduction archivée"><p class="archived-label">Traduction archivée</p><p>Cette page est une traduction française archivée. Le produit Relayium et sa documentation à jour sont maintenus en anglais et en chinois simplifié ; l&#39;application elle-même ne propose plus le français. Les écrans et les détails décrits ici peuvent donc différer du comportement actuel.</p><p class="archived-links archived-pricing">Les offres et les limites d&#39;utilisation citées ici peuvent être obsolètes ; les actuelles figurent sur la page <a href="/pricing">Tarifs</a>.</p><p class="archived-links">Version à jour : <a href="/compare/croc/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/compare/croc/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">croc est l&#39;un des outils les plus appréciés pour envoyer un fichier d&#39;un terminal à un autre : une courte phrase-code facile à retenir, un échange de clés PAKE, et cela fonctionne tout simplement. La CLI Relayium vise le même objectif et est construite dans le même esprit — gratuite, open source, chiffrée de bout en bout, un compte n&#39;étant requis que pour que send puisse générer son code d&#39;appairage.</p>
       <p class="lead">Ceci n&#39;est pas un dénigrement ; la réputation de croc est méritée. Cet article compare franchement ce que partagent les deux outils, là où la CLI Relayium fait plus parce qu&#39;elle sait aussi parler à des serveurs que vous exploitez déjà, et le cas où croc est honnêtement le choix le plus simple.</p>
-      <h2>Ce que Relayium et croc ont en commun</h2>
+      <section class="sheet"><h2>Ce que Relayium et croc ont en commun</h2>
       <p>Commençons par ce qui se recoupe, et c&#39;est substantiel : les deux sont de petits binaires uniques à installer une fois, tous deux entièrement gratuits sans palier payant, et tous deux open source sous une licence permissive, si bien que vous pouvez lire chaque ligne qui touche à vos fichiers.</p>
-      <ul><li>Un court code connu des deux seules extrémités suffit pour qu&#39;elles se trouvent et s&#39;accordent sur une clé. Celui de croc s&#39;invente sur le moment ; celui de Relayium est généré par son serveur pour un expéditeur connecté, et le destinataire n&#39;a toujours besoin d&#39;aucun compte.</li><li>Chiffré de bout en bout pendant le transfert : le relais ou le point de rendez-vous au milieu ne voit jamais le contenu de votre fichier.</li><li>Les transferts interrompus peuvent reprendre au lieu de repartir de zéro, et les deux vérifient que ce qui est arrivé correspond bien à ce qui a été envoyé.</li><li>Multiplateforme : macOS, Linux et Windows.</li></ul>
-      <h2>Avant de commencer</h2>
+      <ul><li>Un court code connu des deux seules extrémités suffit pour qu&#39;elles se trouvent et s&#39;accordent sur une clé. Celui de croc s&#39;invente sur le moment ; celui de Relayium est généré par son serveur pour un expéditeur connecté, et le destinataire n&#39;a toujours besoin d&#39;aucun compte.</li><li>Chiffré de bout en bout pendant le transfert : le relais ou le point de rendez-vous au milieu ne voit jamais le contenu de votre fichier.</li><li>Les transferts interrompus peuvent reprendre au lieu de repartir de zéro, et les deux vérifient que ce qui est arrivé correspond bien à ce qui a été envoyé.</li><li>Multiplateforme : macOS, Linux et Windows.</li></ul></section>
+      <section class="sheet"><h2>Avant de commencer</h2>
       <p>Tout ci-dessous passe par la CLI relayium, alors installez-la d&#39;abord si ce n&#39;est pas fait. Sous macOS ou Linux, une commande place un binaire précompilé dans votre PATH :</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>Vous préférez choisir le fichier vous-même, ou sous Windows ? Récupérez un binaire depuis la page des releases — relayium.com/cli liste toutes les options (avec Go, go build -o relayium ./cmd/relayium).</li><li>relayium --version confirme l&#39;installation. Sans cela, les commandes ci-dessous affichent seulement « command not found ».</li></ul>
-      <h2>SSH et daemon-direct : parler à un serveur que vous exploitez déjà</h2>
+      <ul><li>Vous préférez choisir le fichier vous-même, ou sous Windows ? Récupérez un binaire depuis la page des releases — relayium.com/cli liste toutes les options (avec Go, go build -o relayium ./cmd/relayium).</li><li>relayium --version confirme l&#39;installation. Sans cela, les commandes ci-dessous affichent seulement « command not found ».</li></ul></section>
+      <section class="sheet"><h2>SSH et daemon-direct : parler à un serveur que vous exploitez déjà</h2>
       <p>C&#39;est la plus grande différence pratique. croc est construit autour d&#39;un seul flux — entrer la phrase-code, transmettre la phrase-code. La CLI Relayium ajoute deux autres façons de déplacer des fichiers qui s&#39;appuient sur une infrastructure que vous possédez déjà.</p>
       <p>relayium push / pull réutilise votre accès SSH existant, donc aucune nouvelle brique à qui faire confiance et aucun code à partager. push fonctionne même contre un serveur sans relayium installé, en basculant sur un simple flux tar via la connexion SSH — ce repli n&#39;existe que pour push ; pull a toujours besoin de relayium sur la machine distante, puisqu&#39;il y joue le rôle d&#39;expéditeur.</p>
       <p>relayium serve transforme n&#39;importe quelle machine que vous possédez en cible daemon-direct, accessible via TLS 1.3 avec épinglage, sans SSH ni phrase-code — la confiance s&#39;établit à la première connexion (approuvée de façon interactive, ou pré-autorisée pour un usage sans surveillance) puis reste épinglée ensuite, la même idée qu&#39;une clé d&#39;hôte SSH.</p>
       <pre tabindex="0"><code>relayium push ./photos user@your-server:backups/</code></pre>
       <pre tabindex="0"><code>relayium serve --dir ~/incoming</code></pre>
-      <pre tabindex="0"><code>relayium push ./build relayium://your-server</code></pre>
-      <h2>Synchronisation de dossiers, et un code de vérification à comparer deux fois</h2>
+      <pre tabindex="0"><code>relayium push ./build relayium://your-server</code></pre></section>
+      <section class="sheet"><h2>Synchronisation de dossiers, et un code de vérification à comparer deux fois</h2>
       <p>croc envoie un lot de fichiers puis se termine — pour mettre à jour l&#39;autre côté, il faut renvoyer, sans aucune notion de ce qui devrait être supprimé. La CLI Relayium ajoute relayium sync, un miroir incrémental à sens unique sur l&#39;un ou l&#39;autre des transports ci-dessus : il ne déplace que ce qui a changé ; --delete supprime sur la destination les fichiers disparus de la source (un daemon ne le respecte que s&#39;il a été lancé avec --allow-delete, le destinataire doit donc explicitement l&#39;accepter) ; --watch continue de resynchroniser en temps réel à chaque changement, sans tâche cron nécessaire.</p>
       <p>Pour un transfert ponctuel entre réseaux différents, relayium send / receive joue le même rôle que la phrase-code de croc, en appairant deux ordinateurs par un court code. C&#39;est du pair-à-pair direct, et un court code de vérification (un Short Authentication String) s&#39;affiche des deux côtés. Le comparer hors bande confirme que les empreintes des certificats TLS épinglés n&#39;ont pas été substituées et que le service de rendez-vous n&#39;a usurpé aucune extrémité ; il authentifie les extrémités, pas chaque saut réseau. Ce mode est exclusivement direct : si les deux extrémités ne trouvent pas de chemin direct, le transfert échoue plutôt que de basculer vers un relais.</p>
-      <pre tabindex="0"><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre>
-      <h2>Quand croc est le choix le plus simple</h2>
+      <pre tabindex="0"><code>relayium sync ./photos user@your-server:backups/photos --delete --watch</code></pre></section>
+      <section class="sheet"><h2>Quand croc est le choix le plus simple</h2>
       <p>Il existe de vrais cas où croc est le meilleur outil pour la tâche, et il vaut la peine de le dire clairement.</p>
-      <ul><li>Vous voulez juste remettre un fichier à un ami là, maintenant, avec le moins d&#39;étapes possible — aucun serveur à joindre, rien à configurer d&#39;un côté comme de l&#39;autre.</li><li>Vous êtes derrière un NAT strict sans moyen d&#39;ouvrir un chemin direct : le relais de croc transporte quand même le flux chiffré, si bien que le transfert aboutit dans tous les cas. Le send / receive de Relayium est exclusivement direct et peut échouer dans cette situation (push/pull ou daemon-direct vers un serveur joignable fonctionnent toujours, car ils ne dépendent pas d&#39;un saut P2P direct).</li><li>Vous n&#39;avez besoin ni de miroir de dossier, ni d&#39;intégration SSH, ni d&#39;un processus à l&#39;écoute qui tourne en permanence — croc n&#39;est qu&#39;une commande ponctuelle de chaque côté, sans rien d&#39;autre à gérer.</li><li>Vous faites déjà confiance à la grande communauté établie de croc et à ses années d&#39;usage réel.</li></ul>
-      <h2>Comparatif des fonctions en un coup d&#39;œil</h2>
+      <ul><li>Vous voulez juste remettre un fichier à un ami là, maintenant, avec le moins d&#39;étapes possible — aucun serveur à joindre, rien à configurer d&#39;un côté comme de l&#39;autre.</li><li>Vous êtes derrière un NAT strict sans moyen d&#39;ouvrir un chemin direct : le relais de croc transporte quand même le flux chiffré, si bien que le transfert aboutit dans tous les cas. Le send / receive de Relayium est exclusivement direct et peut échouer dans cette situation (push/pull ou daemon-direct vers un serveur joignable fonctionnent toujours, car ils ne dépendent pas d&#39;un saut P2P direct).</li><li>Vous n&#39;avez besoin ni de miroir de dossier, ni d&#39;intégration SSH, ni d&#39;un processus à l&#39;écoute qui tourne en permanence — croc n&#39;est qu&#39;une commande ponctuelle de chaque côté, sans rien d&#39;autre à gérer.</li><li>Vous faites déjà confiance à la grande communauté établie de croc et à ses années d&#39;usage réel.</li></ul></section>
+      <section class="sheet"><h2>Comparatif des fonctions en un coup d&#39;œil</h2>
       <p>Les différences qui comptent le plus, côte à côte :</p>
-      <ul><li>Parler à un serveur : Relayium réutilise votre accès SSH (push/pull) ou un daemon TLS avec épinglage ; croc n&#39;a aucune intégration SSH — installez croc des deux côtés et partagez une phrase-code.</li><li>Synchronisation de dossiers : relayium sync fait un miroir incrémental avec --delete et --watch ; croc envoie un lot puis se termine, sans sémantique de miroir ni de suppression.</li><li>Aucun chemin direct disponible : le relais de croc transporte le flux chiffré, si bien que le transfert aboutit quand même ; le send/receive de Relayium est exclusivement direct.</li><li>Vérification : les deux sont chiffrés de bout en bout ; le send/receive de Relayium affiche en plus un court code que les deux parties comparent avant le début du transfert.</li><li>Auto-hébergement : les deux sont auto-hébergeables — le relais de croc est un petit binaire autonome ; le serveur de Relayium fait aussi tourner l&#39;application web, et le send/receive de la CLI peut pointer vers votre propre instance avec --server.</li><li>Licence et coût : les deux sous licence AGPL-3.0 et tous deux entièrement gratuits. croc ne nécessite aucun compte ; Relayium n&#39;en demande un que pour send, afin de générer le code d&#39;appairage.</li></ul>
+      <ul><li>Parler à un serveur : Relayium réutilise votre accès SSH (push/pull) ou un daemon TLS avec épinglage ; croc n&#39;a aucune intégration SSH — installez croc des deux côtés et partagez une phrase-code.</li><li>Synchronisation de dossiers : relayium sync fait un miroir incrémental avec --delete et --watch ; croc envoie un lot puis se termine, sans sémantique de miroir ni de suppression.</li><li>Aucun chemin direct disponible : le relais de croc transporte le flux chiffré, si bien que le transfert aboutit quand même ; le send/receive de Relayium est exclusivement direct.</li><li>Vérification : les deux sont chiffrés de bout en bout ; le send/receive de Relayium affiche en plus un court code que les deux parties comparent avant le début du transfert.</li><li>Auto-hébergement : les deux sont auto-hébergeables — le relais de croc est un petit binaire autonome ; le serveur de Relayium fait aussi tourner l&#39;application web, et le send/receive de la CLI peut pointer vers votre propre instance avec --server.</li><li>Licence et coût : les deux sous licence AGPL-3.0 et tous deux entièrement gratuits. croc ne nécessite aucun compte ; Relayium n&#39;en demande un que pour send, afin de générer le code d&#39;appairage.</li></ul></section>
       <h2>Questions fréquentes</h2>
       <h3>La CLI Relayium est-elle gratuite ?</h3>
       <p>Oui, entièrement. Il n&#39;y a aucun palier payant et rien à mesurer — chaque mode connecte directement les deux extrémités, et la CLI est sous licence AGPL-3.0 et open source.</p>
@@ -190,6 +234,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/pricing">Tarifs</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

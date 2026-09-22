@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"릴리스 · Relayium","description":"공개된 모든 Relayium 버전과 배포 날짜, 각 버전의 전체 변경 내역. 버전 번호가 무엇을 포함하는지, 릴리스가 어떻게 만들어지는지, 내려받은 파일을 어떻게 확인하는지도 함께 정리했습니다.","url":"https://relayium.com/ko/releases/","inLanguage":"ko","dateModified":"2026-09-21","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 /* The release list is the app's settings-row shape: 1px separators inside one
    card, no line under the last row (设计规范 §4). */
 .releases{list-style:none;margin:18px 0 0;padding:0;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);overflow:clip}
@@ -116,13 +158,16 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ko/guides/">가이드</a><a href="/ko/apps/">앱</a><a href="/pricing">요금제</a></nav></header>
-      <!-- The legal text is the main landmark. The site header and footer are
-           outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. On an
-           archived page that slot holds the archived-translation notice, a
-           labelled <aside>, which is a landmark in its own right too. -->
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="기본 탐색"><a class="row" href="/">LAN 전송</a><a class="row" href="/ko/cross-network/">네트워크 간 전송</a><a class="row" href="/ko/offline-transfer/">비동기 전송</a><a class="row" href="/device-inbox">기기 수신함</a><a class="row" href="/cli">CLI</a><a class="row" href="/ko/apps/">앱</a><a class="row" href="/pricing">요금제</a></nav></header>
+      <div class="pane"><div class="wrap">
+
+      <!-- The legal text is the main landmark; the rail and the footer are
+           outside it. The language bar now lives in the rail's foot slot, with
+           the rest of the navigation. An ARCHIVED page keeps its notice here
+           instead: it is a paragraph of explanation, not a selector, and it has
+           no business in a 216px rail. It is a labelled <aside>, so it is still
+           a landmark of its own. -->
       <main>
       <h1>릴리스</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO
@@ -136,9 +181,9 @@ pre code{background:none;padding:0;border-radius:0}
       <p>Relayium은 세 가지 리듬으로 배포되며, 이 페이지는 셋 모두를 있는 그대로 밝힙니다. 웹 앱은 계속 배포되고, 명령줄 도구는 번호를 붙여 릴리스하며, 네이티브 앱은 각자 따로 릴리스합니다. macOS 1.2.3은 서명된 다운로드로 GitHub에 공개되어 있고, iOS 앱은 아직 공개되지 않은 개발 빌드입니다.</p>
       <p>아래 모든 버전은 main 브랜치에서 자동으로 태그되었고, 해당 커밋의 검사가 통과한 뒤에만 공개되었습니다. 각 버전의 전체 변경 내역——포함된 모든 커밋——은 GitHub에서 한 번의 클릭으로 볼 수 있습니다.</p>
       <h2>공개된 모든 버전</h2><p>최신순입니다. 각 버전에서 GitHub의 전체 변경 내역과 다운로드로 이동합니다.</p><ul class="releases"><li><a href="https://github.com/relayium/relayium/releases/tag/v0.26.0"><bdi>v0.26.0</bdi></a><span class="date"><bdi>2026-09-21</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.25.1"><bdi>v0.25.1</bdi></a><span class="date"><bdi>2026-09-20</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.25.0"><bdi>v0.25.0</bdi></a><span class="date"><bdi>2026-09-14</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.24.0"><bdi>v0.24.0</bdi></a><span class="date"><bdi>2026-09-01</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.23.0"><bdi>v0.23.0</bdi></a><span class="date"><bdi>2026-08-31</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.22.2"><bdi>v0.22.2</bdi></a><span class="date"><bdi>2026-08-24</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.22.1"><bdi>v0.22.1</bdi></a><span class="date"><bdi>2026-08-24</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.22.0"><bdi>v0.22.0</bdi></a><span class="date"><bdi>2026-08-20</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.21.0"><bdi>v0.21.0</bdi></a><span class="date"><bdi>2026-08-17</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.20.0"><bdi>v0.20.0</bdi></a><span class="date"><bdi>2026-08-17</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.19.1"><bdi>v0.19.1</bdi></a><span class="date"><bdi>2026-08-12</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.19.0"><bdi>v0.19.0</bdi></a><span class="date"><bdi>2026-08-12</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.18.0"><bdi>v0.18.0</bdi></a><span class="date"><bdi>2026-08-09</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.17.0"><bdi>v0.17.0</bdi></a><span class="date"><bdi>2026-08-09</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.16.0"><bdi>v0.16.0</bdi></a><span class="date"><bdi>2026-08-09</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.15.0"><bdi>v0.15.0</bdi></a><span class="date"><bdi>2026-08-03</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.14.0"><bdi>v0.14.0</bdi></a><span class="date"><bdi>2026-08-02</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.13.0"><bdi>v0.13.0</bdi></a><span class="date"><bdi>2026-08-01</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.12.0"><bdi>v0.12.0</bdi></a><span class="date"><bdi>2026-07-30</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.11.1"><bdi>v0.11.1</bdi></a><span class="date"><bdi>2026-07-28</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.11.0"><bdi>v0.11.0</bdi></a><span class="date"><bdi>2026-07-28</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.10.2"><bdi>v0.10.2</bdi></a><span class="date"><bdi>2026-07-23</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.10.1"><bdi>v0.10.1</bdi></a><span class="date"><bdi>2026-07-23</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.10.0"><bdi>v0.10.0</bdi></a><span class="date"><bdi>2026-07-23</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.9.0"><bdi>v0.9.0</bdi></a><span class="date"><bdi>2026-07-22</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.8.1"><bdi>v0.8.1</bdi></a><span class="date"><bdi>2026-07-22</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.8.0"><bdi>v0.8.0</bdi></a><span class="date"><bdi>2026-07-22</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.7.0"><bdi>v0.7.0</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.6.0"><bdi>v0.6.0</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.5.0"><bdi>v0.5.0</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.4.0"><bdi>v0.4.0</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.3.1"><bdi>v0.3.1</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.3.0"><bdi>v0.3.0</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.2.0"><bdi>v0.2.0</bdi></a><span class="date"><bdi>2026-07-08</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.1.2"><bdi>v0.1.2</bdi></a><span class="date"><bdi>2026-07-08</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.1.1"><bdi>v0.1.1</bdi></a><span class="date"><bdi>2026-07-08</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.1.0"><bdi>v0.1.0</bdi></a><span class="date"><bdi>2026-07-08</bdi></span></li></ul>
-      <h2>버전 번호가 포함하는 것</h2><p>버전 태그 하나가 공개하는 프로그램은 둘입니다. relayium 명령줄 도구와, 자체 호스팅으로 운영하는 릴레이 겸 스토리지 노드인 relayium-node입니다. 둘 다 같은 소스 트리에서 빌드되므로, 그 트리가 바뀐 경우에만 새 버전이 생깁니다.</p><ul><li>웹 앱에는 버전 번호가 없습니다. 검사가 통과하는 대로 main 브랜치에서 배포되므로, 브라우저에서 쓰는 것은 대개 여기 있는 최신 버전보다 새롭습니다.</li><li>macOS 앱은 macos-v1.2.3이라는 자체 태그로 따로 릴리스합니다. Developer ID로 서명하고 Apple 공증을 마친 GitHub 직접 다운로드입니다. 별도로 버전을 관리하는 Mac App Store 릴리스는 현재 1.4.0입니다. 아래 어떤 버전에도 포함되어 있지 않습니다. iOS 앱은 개발 빌드이며 아직 공개 릴리스가 아닙니다.</li><li>노드는 이 목록을 스스로 따라가지 않습니다. 소속된 서버에 어떤 버전을 실행할지 물어보므로, 누군가 롤아웃을 시작하기 전까지 새 버전은 아무것도 바꾸지 않습니다. 명령줄 도구는 relayium update로 업데이트합니다.</li></ul>
-      <h2>릴리스를 만드는 방식</h2><p>릴리스는 누가 기억해서가 아니라 일정에 따라 이루어집니다. 매주 한 번 워크플로가 지난 버전 이후 반영된 변경을 확인하고, 두 경우에는 태그 없이 멈춥니다. 실제로 공개되는 코드가 바뀌지 않았을 때, 그리고 그 커밋의 검사가 통과하지 않았을 때입니다.</p><ul><li>둘 다 설계상 의도한 것입니다. 기억에 맡긴 탓에 이미 완성된 기능이 몇 달 동안 배포되지 못한 적이 있고, 검증되지 않은 커밋에 태그를 붙이면 일정이 막으려던 장애를 그대로 내보내게 됩니다.</li><li>문서나 앱만 바뀐 주에는 새 버전이 나오지 않습니다. 공개되는 프로그램이 직전 버전과 바이트 단위로 같기 때문입니다.</li></ul>
-      <h2>내려받은 파일 확인하기</h2><p>릴리스마다 아카이브 옆에 체크섬 파일과 그 파일에 대한 서명이 함께 공개됩니다. 업데이터는 무엇이든 설치하기 전에, 프로그램에 내장된 공개 키로 둘 다 검증합니다. 그래서 변조된 아카이브는 Relayium이 알아챘는지와 무관하게, 쓰고 있는 컴퓨터에서 검증에 실패합니다.</p><ul><li>GitHub에 접속할 수 없는 네트워크를 위해 Relayium은 자체 릴리스 파일도 미러링합니다. 바이트가 어디에서 오는지는 도달성의 문제이지 신뢰의 문제가 아닙니다. 검증은 어느 경로에서나 동일합니다.</li><li>소스 코드는 공개되어 있습니다. 서버와 노드, 웹 앱은 AGPL-3.0, 네이티브 앱은 Apache-2.0, 문서는 CC BY 4.0입니다.</li></ul>
+      <section class="sheet"><h2>버전 번호가 포함하는 것</h2><p>버전 태그 하나가 공개하는 프로그램은 둘입니다. relayium 명령줄 도구와, 자체 호스팅으로 운영하는 릴레이 겸 스토리지 노드인 relayium-node입니다. 둘 다 같은 소스 트리에서 빌드되므로, 그 트리가 바뀐 경우에만 새 버전이 생깁니다.</p><ul><li>웹 앱에는 버전 번호가 없습니다. 검사가 통과하는 대로 main 브랜치에서 배포되므로, 브라우저에서 쓰는 것은 대개 여기 있는 최신 버전보다 새롭습니다.</li><li>macOS 앱은 macos-v1.2.3이라는 자체 태그로 따로 릴리스합니다. Developer ID로 서명하고 Apple 공증을 마친 GitHub 직접 다운로드입니다. 별도로 버전을 관리하는 Mac App Store 릴리스는 현재 1.4.0입니다. 아래 어떤 버전에도 포함되어 있지 않습니다. iOS 앱은 개발 빌드이며 아직 공개 릴리스가 아닙니다.</li><li>노드는 이 목록을 스스로 따라가지 않습니다. 소속된 서버에 어떤 버전을 실행할지 물어보므로, 누군가 롤아웃을 시작하기 전까지 새 버전은 아무것도 바꾸지 않습니다. 명령줄 도구는 relayium update로 업데이트합니다.</li></ul></section>
+      <section class="sheet"><h2>릴리스를 만드는 방식</h2><p>릴리스는 누가 기억해서가 아니라 일정에 따라 이루어집니다. 매주 한 번 워크플로가 지난 버전 이후 반영된 변경을 확인하고, 두 경우에는 태그 없이 멈춥니다. 실제로 공개되는 코드가 바뀌지 않았을 때, 그리고 그 커밋의 검사가 통과하지 않았을 때입니다.</p><ul><li>둘 다 설계상 의도한 것입니다. 기억에 맡긴 탓에 이미 완성된 기능이 몇 달 동안 배포되지 못한 적이 있고, 검증되지 않은 커밋에 태그를 붙이면 일정이 막으려던 장애를 그대로 내보내게 됩니다.</li><li>문서나 앱만 바뀐 주에는 새 버전이 나오지 않습니다. 공개되는 프로그램이 직전 버전과 바이트 단위로 같기 때문입니다.</li></ul></section>
+      <section class="sheet"><h2>내려받은 파일 확인하기</h2><p>릴리스마다 아카이브 옆에 체크섬 파일과 그 파일에 대한 서명이 함께 공개됩니다. 업데이터는 무엇이든 설치하기 전에, 프로그램에 내장된 공개 키로 둘 다 검증합니다. 그래서 변조된 아카이브는 Relayium이 알아챘는지와 무관하게, 쓰고 있는 컴퓨터에서 검증에 실패합니다.</p><ul><li>GitHub에 접속할 수 없는 네트워크를 위해 Relayium은 자체 릴리스 파일도 미러링합니다. 바이트가 어디에서 오는지는 도달성의 문제이지 신뢰의 문제가 아닙니다. 검증은 어느 경로에서나 동일합니다.</li><li>소스 코드는 공개되어 있습니다. 서버와 노드, 웹 앱은 AGPL-3.0, 네이티브 앱은 Apache-2.0, 문서는 CC BY 4.0입니다.</li></ul></section>
       </main>
       <footer>
         <a href="/">← Relayium</a>
@@ -147,6 +192,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/pricing">요금제</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

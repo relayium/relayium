@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"コマンドラインでファイルを受信する","description":"Relayium CLI でファイルを受信する3つの方法: ネットワークを越えたペアリングコード送信を receive で受け取る、デーモン直結のプッシュを待ち受ける serve、すでに SSH でログインできるサーバーから取り込む pull。無料、アカウント不要。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/receive-files-from-the-command-line/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"コマンドラインでファイルを受信する"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"ファイルを受信するのにアカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。receive、serve、pull の3つすべてが完全に無料で、受信側に Relayium アカウントは不要です。どこかでサインインが要るのは receive モードの送信側だけで、その CLI がペアリングコードを発行できるようにするためです。"}},{"@type":"Question","name":"relayium receive はブラウザのペアリングコードと相互運用しますか？","acceptedAnswer":{"@type":"Answer","text":"しません。CLI のペアリングコード・プロトコルは、relayium.com のブラウザ側の参加リンクや QR フローとは別物です——ハンドシェイクの方式が異なり、現時点では互いに通信しないので、CLI のコードは別の CLI としかペアリングできません。それはロードマップ上の話であり、今はまだ頼れるものではありません。それまでは、ブラウザで受け取る相手にはコードではなく relayium up のリンクを渡します。"}},{"@type":"Question","name":"未知のマシンが自分の serve リスナーへプッシュしてきたらどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"ターミナルでは、初回のプッシュ時にアドレスとフィンガープリントを見せて承認するかどうか尋ねられ、その承認は記憶されます。ターミナルがない場合——systemd サービスや cron ジョブ——確認する相手がいないため、未知のプッシュ側は拒否されます。先に relayium authorize \u003cfingerprint> で事前承認してください。"}},{"@type":"Question","name":"relayium がインストールされていないサーバーから pull できますか？","acceptedAnswer":{"@type":"Answer","text":"できません。pull は常にリモート側に relayium が必要です——push にあるような tar フォールバックはありません。先にリモートへ relayium をインストールしてください。"}},{"@type":"Question","name":"relayium は自分のアイデンティティと信頼済みの相手をどこに保存しますか？","acceptedAnswer":{"@type":"Answer","text":"デフォルトでは ~/.config/relayium にあります——アイデンティティや信頼に関わるどのコマンドでも --config-dir でこの場所を上書きできます。"}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ja/guides/" aria-current="true">ガイド</a><a href="/ja/apps/">アプリ</a><a href="/pricing">料金</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="メインナビゲーション"><a class="row" href="/">LAN</a><a class="row" href="/ja/cross-network/">ネットワーク間</a><a class="row" href="/ja/offline-transfer/">非同期</a><a class="row" href="/device-inbox">デバイス受信箱</a><a class="row" href="/cli">CLI</a><a class="row" href="/ja/apps/">アプリ</a><a class="row" href="/pricing">料金</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">コマンドラインでファイルを受信する</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,10 +203,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links archived-pricing">このページに記載されている料金プランや利用上限は古くなっている可能性があります。現在の内容は<a href="/pricing">料金</a>のページでご確認ください。</p><p class="archived-links">最新版：<a href="/guides/receive-files-from-the-command-line/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/receive-files-from-the-command-line/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">送信は話の半分にすぎません——いずれ受け取る側になります。同僚がインターネット越しにファイルを渡したいとき、自分のマシン同士で受け渡ししたいとき、あるいは自分が管理するサーバーから何かを取りに行きたいとき。Relayium CLI はそれぞれに異なるコマンドで、この3つすべてに対応しています。どれもアカウントは不要です。</p>
       <p class="lead">相手がペアリングコードでこちらへプッシュしてくるなら receive、信頼できるマシンがいつでもプッシュできる常設の受信箱が欲しいなら serve、そして自分からすでに SSH でログインできるサーバーへ出向くなら pull を選びます。</p>
-      <h2>受信の3つの方法と、それぞれが当てはまる場面</h2>
+      <section class="sheet"><h2>受信の3つの方法と、それぞれが当てはまる場面</h2>
       <p>どのコマンドを使うかは、誰が転送を始めるのか、そして2台のマシンがどう互いを知っているかによって決まります:</p>
-      <ul><li>relayium receive &lt;code&gt; [destdir] ——相手の CLI が発行し、帯域外で伝えられたペアリングコードを使って、相手がネットワークを越えて送ってきます。直接ピアツーピアで、照合用の SAS コードが表示されます。</li><li>relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——このマシンがデーモン直結の relayium:// プッシュを待ち受けます。デフォルトのポートは 9031 です。</li><li>relayium pull [user@]host:src &lt;dest&gt; ——自分からすでにログインできるサーバーへ SSH で出向き、ファイルを取り込みます。</li></ul>
-      <h2>receive: 相手がネットワークを越えてファイルを送ってくる</h2>
+      <ul><li>relayium receive &lt;code&gt; [destdir] ——相手の CLI が発行し、帯域外で伝えられたペアリングコードを使って、相手がネットワークを越えて送ってきます。直接ピアツーピアで、照合用の SAS コードが表示されます。</li><li>relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——このマシンがデーモン直結の relayium:// プッシュを待ち受けます。デフォルトのポートは 9031 です。</li><li>relayium pull [user@]host:src &lt;dest&gt; ——自分からすでにログインできるサーバーへ SSH で出向き、ファイルを取り込みます。</li></ul></section>
+      <section class="sheet"><h2>receive: 相手がネットワークを越えてファイルを送ってくる</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">手順1の前に必要なもの</p><ul><li>このマシンに CLI。relayium version はバージョン文字列を表示します。command not found と返るなら、ここにはまだ入っていません。</li><li>いまサインイン済みで、いま端末の前にいる送信者。アカウントが要るのは送信者だけで、受信側がサインインすることはありません。</li><li>6桁の数字を、帯域外の手段で受け取ること。相手の CLI が発行した瞬間から5分間だけ有効なので、先にタイミングを合わせてください。</li><li>あとで6桁をもう一度読み返せる手段。SAS は画面上ではなく口頭で照合します。</li><li>相手側も CLI であること。ブラウザは CLI のペアリングコードに参加できません。手元にブラウザしかないなら、relayium up のリンクを頼んでください。</li></ul></div>
       <p>これは relayium send の受信側です。相手は自分の側で relayium send &lt;path&gt; を実行します（事前に relayium login 済み）。相手の CLI が 5 分間有効な 6 桁の数字コードを発行して表示するので、通話やチャットなど二人が信頼できる手段でそれを伝えてもらいます。受け取ったコードで receive を実行します:</p>
       <pre tabindex="0"><code>relayium receive 483920
@@ -173,30 +217,30 @@ relayium receive 483920 ./downloads</code></pre>
       <div class="cbox ok" data-block="success"><p class="cbox-t">受信が成功したときの見え方</p><p>接続は direct と表示され、両方の端末が同じ確認コードを表示します。コードが食い違うことだけは受け入れてはいけません——そこで止めて、相手がどのマシンにいるのかを確認してください。</p><pre tabindex="0"><code>$ relayium receive 483920
 verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
 path: direct</code></pre></div>
-      <ul><li>接続は直接のピアツーピアでエンドツーエンドに暗号化されています。接続後、両方のターミナルに同じ SAS（short authentication string）が表示されます。送信側と帯域外で照合すると、固定された TLS 証明書フィンガープリントが差し替えられておらず、ランデブーサービスがどちらのエンドポイントにもなりすましていないことを確認できます。SAS はエンドポイントを認証するもので、ネットワーク経路上のすべてのホップを証明するものではありません。</li><li>宛先を指定しない場合、ファイルはカレントディレクトリに置かれます。</li><li>send と同じく直接接続のみのルールです。2つのネットワークの間に直接の経路が見つからなければ、リレー経由で送るのではなく転送が失敗します。</li><li>これは CLI 独自のペアリングコード・プロトコルです——CLI のコードは CLI 同士でしかペアリングできません。現時点では relayium.com のブラウザ側のペアリングコードや QR フローとは相互運用しません。将来追加される可能性はありますが、今はまだ頼れるものではありません。ブラウザしかない場合は、代わりに relayium up のダウンロードリンクを送ってもらってください。</li><li>受信側はどのネットワークにいても、アカウントは一切不要です。サインインするのは送信側だけで、その CLI がコードを発行できるようにするためです。</li></ul>
-      <h2>serve: このマシンを待ち受け型の受信箱にする</h2>
+      <ul><li>接続は直接のピアツーピアでエンドツーエンドに暗号化されています。接続後、両方のターミナルに同じ SAS（short authentication string）が表示されます。送信側と帯域外で照合すると、固定された TLS 証明書フィンガープリントが差し替えられておらず、ランデブーサービスがどちらのエンドポイントにもなりすましていないことを確認できます。SAS はエンドポイントを認証するもので、ネットワーク経路上のすべてのホップを証明するものではありません。</li><li>宛先を指定しない場合、ファイルはカレントディレクトリに置かれます。</li><li>send と同じく直接接続のみのルールです。2つのネットワークの間に直接の経路が見つからなければ、リレー経由で送るのではなく転送が失敗します。</li><li>これは CLI 独自のペアリングコード・プロトコルです——CLI のコードは CLI 同士でしかペアリングできません。現時点では relayium.com のブラウザ側のペアリングコードや QR フローとは相互運用しません。将来追加される可能性はありますが、今はまだ頼れるものではありません。ブラウザしかない場合は、代わりに relayium up のダウンロードリンクを送ってもらってください。</li><li>受信側はどのネットワークにいても、アカウントは一切不要です。サインインするのは送信側だけで、その CLI がコードを発行できるようにするためです。</li></ul></section>
+      <section class="sheet"><h2>serve: このマシンを待ち受け型の受信箱にする</h2>
       <p>serve は逆方向に動作します。こちらから出向くのではなく、他のマシンが relayium:// 経由で直接プッシュしてきます——自分のノート PC が NAS へプッシュする、ビルドサーバーが成果物を自分のマシンへ落とすなど、すでに信頼しているマシン向けです。証明書ピンニング付き TLS 1.3 接続で、SSH もランデブーも不要です。</p>
       <pre tabindex="0"><code>relayium serve
 
 # ディレクトリとポートを指定し、削除要求を許可する場合
 relayium serve --dir ~/incoming --port 9031 --allow-delete</code></pre>
       <ol class="steps" data-block="steps"><li><p>受信先ディレクトリを指定してリスナーを起動します。</p><pre tabindex="0"><code>relayium serve --dir ~/incoming</code></pre></li><li><p>新しいマシンが初めて push してくると、serve はそのアドレスとフィンガープリントを示して確認を求めます。一度承認すれば、同じフィンガープリントからの push は以後そのまま通ります。</p></li><li><p>このリスナーを端末なしで動かすつもりなら、そのプロンプトを当てにしないでください。答える人がいないため、見知らぬ送信元は問答無用で拒否されます。次の節にある事前承認を使ってください。</p></li></ol>
-      <ul><li>新しいマシンが初めてプッシュしてくると、serve は（ターミナルで実行している場合）そのアドレスとフィンガープリントを表示し、一度だけ承認するよう求めます。以降、同じフィンガープリントからのプッシュは黙って通過します。</li><li>ターミナルがない場合——systemd サービスや TTY のないスクリプト——確認する相手がいないため、未知のプッシュ側はそのまま拒否されます。代わりに、プッシュ側が relayium id で表示するフィンガープリントを使って事前に承認してください:</li></ul>
-      <h2>無人稼働の serve のために事前承認する</h2>
+      <ul><li>新しいマシンが初めてプッシュしてくると、serve は（ターミナルで実行している場合）そのアドレスとフィンガープリントを表示し、一度だけ承認するよう求めます。以降、同じフィンガープリントからのプッシュは黙って通過します。</li><li>ターミナルがない場合——systemd サービスや TTY のないスクリプト——確認する相手がいないため、未知のプッシュ側はそのまま拒否されます。代わりに、プッシュ側が relayium id で表示するフィンガープリントを使って事前に承認してください:</li></ul></section>
+      <section class="sheet"><h2>無人稼働の serve のために事前承認する</h2>
       <p>無人で動作する serve（systemd、バックグラウンドスクリプト）では、プッシュ側に relayium id を実行させてフィンガープリントを表示させ、受信側であらかじめそれを承認しておきます:</p>
       <pre tabindex="0"><code>relayium authorize &lt;fingerprint&gt;</code></pre>
-      <ul><li>--dir はファイルの置き場所を設定します（デフォルトはカレントディレクトリ）。--once は1回の転送だけ受け入れて終了します。--allow-delete は受信した --delete（ミラー）要求によって実際にここでファイルを削除できるようにするもので、デフォルトでは無効です。</li><li>--config-dir（デフォルト ~/.config/relayium）は、このホストのアイデンティティと承認済みフィンガープリントのリストが置かれる場所です——serve を専用サービスとして動かす場合は上書きしてください。</li></ul>
-      <h2>pull: すでに SSH でログインできるサーバーから取り込む</h2>
+      <ul><li>--dir はファイルの置き場所を設定します（デフォルトはカレントディレクトリ）。--once は1回の転送だけ受け入れて終了します。--allow-delete は受信した --delete（ミラー）要求によって実際にここでファイルを削除できるようにするもので、デフォルトでは無効です。</li><li>--config-dir（デフォルト ~/.config/relayium）は、このホストのアイデンティティと承認済みフィンガープリントのリストが置かれる場所です——serve を専用サービスとして動かす場合は上書きしてください。</li></ul></section>
+      <section class="sheet"><h2>pull: すでに SSH でログインできるサーバーから取り込む</h2>
       <p>pull は push の鏡像です。誰かが何かを送ってくるのを待つのではなく、すでに持っている SSH アクセスを使って自分から出向き、ファイルを取り込みます。</p>
       <pre tabindex="0"><code>relayium pull user@host:/path/to/files ./local-dest</code></pre>
       <ol class="steps" data-block="steps"><li><p>リモートに本当に CLI が入っているか確認します。pull はリモート側で relayium を実行し、push と違って tar のフォールバックがないため、バイナリがなければコマンド全体が失敗します。</p><pre tabindex="0"><code>ssh user@host command -v relayium</code></pre></li><li><p>入っていなければ、まずリモートに入れます。</p><pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre></li><li><p>既存の SSH アクセスでファイルを取り戻します。-i と -p は ssh 自身と同じ挙動です。</p><pre tabindex="0"><code>relayium pull user@host:/path/to/files ./local-dest</code></pre></li></ol>
-      <ul><li>push と異なり、pull は常にリモート側にすでに relayium がインストールされている必要があります——素のサーバーから pull するための tar フォールバックはありません。リモートにまだ入っていない場合は、先に curl -fsSL https://relayium.com/install.sh | sh でインストールしてください。</li><li>ファイルはファイルごとの SHA-256 チェックで検証されます。pull は再開しません。取得を始める前に、すでに存在する宛先を拒否します。中断したときは足りないパスを取り直すか、同じ方向で relayium sync を使ってください。--no-resume はここでも受け付けられますが、何もしません。</li><li>-i と -p は ssh 自体の -i/-p と同様に、特定のアイデンティティファイルやポートを指定するために使えます。</li></ul>
-      <h2>うまくいかないとき</h2>
+      <ul><li>push と異なり、pull は常にリモート側にすでに relayium がインストールされている必要があります——素のサーバーから pull するための tar フォールバックはありません。リモートにまだ入っていない場合は、先に curl -fsSL https://relayium.com/install.sh | sh でインストールしてください。</li><li>ファイルはファイルごとの SHA-256 チェックで検証されます。pull は再開しません。取得を始める前に、すでに存在する宛先を拒否します。中断したときは足りないパスを取り直すか、同じ方向で relayium sync を使ってください。--no-resume はここでも受け付けられますが、何もしません。</li><li>-i と -p は ssh 自体の -i/-p と同様に、特定のアイデンティティファイルやポートを指定するために使えます。</li></ul></section>
+      <section class="sheet"><h2>うまくいかないとき</h2>
       <p>失敗する受信のほぼすべては次の5つのどれかです。どのコマンドを実行していたかで該当するものが決まり、どれにも読めば分かる1行か実行すれば決着がつくコマンドがあります。</p>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状、確認、対処</p><dl><dt>コードを入力したのに、ランデブーがそれを拒否する。</dt><dd><pre tabindex="0"><code>relayium receive 483920
 # the rendezvous refuses the code</code></pre><p>ほぼ確実に5分が経過しています。コードの有効期限は送信者の CLI が発行した瞬間から始まり、知らされた瞬間からではありません。もう一度 send を実行してもらい、新しい数字をその場で読み上げてもらってください。1桁の打ち間違いはこちらからは見分けがつかないので、期限切れと決めつける前に読み返して照合します。</p></dd><dt>転送は終わったのに、ファイルが見つからない。</dt><dd><pre tabindex="0"><code>relayium receive 483920 ./downloads</code></pre><p>宛先を指定しない場合、receive は実行したディレクトリに書き込みます。そこは探している場所とは限りません。明示的に指定するか、先に pwd で確かめてください。</p></dd><dt>「no direct connection to the peer (both ends behind strict NAT?)」で失敗する。</dt><dd><pre tabindex="0"><code>relayium receive 483920
 # no direct connection to the peer (both ends behind strict NAT?): …</code></pre><p>CLI のペアリング経路は設計上ダイレクト専用で、直接の経路が見つからないときはファイルをリレー経由にせず失敗します。こちら側でできることはありません。送信者に relayium up のダウンロードリンクを頼むか、双方が管理するマシン同士ならデーモン直結か SSH 経由の push を使ってください。</p></dd><dt>pull が即座に失敗し、relayium が見つからないと言われる。</dt><dd><pre tabindex="0"><code>ssh user@host command -v relayium
-# (no output)</code></pre><p>pull はリモート側で relayium を実行します——その交換ではリモートが送信側です——そして push のような tar フォールバックはありません。先にリモートへ CLI を入れてから pull をやり直してください。</p></dd><dt>あるマシンが serve リスナーに push して拒否されたのに、こちらには一度も確認が出なかった。</dt><dd><pre tabindex="0"><code>relayium serve --dir ~/incoming</code></pre><p>あの確認は serve に端末があるときにしか存在しません。systemd 配下、スクリプト内、パイプの先では尋ねる相手がいないため、未知のフィンガープリントは問答無用で拒否されます。送信側に relayium id を実行してもらい、こちらで relayium authorize &lt;フィンガープリント&gt; を、リスナーと同じ --config-dir で実行してください。</p></dd></dl></div>
+# (no output)</code></pre><p>pull はリモート側で relayium を実行します——その交換ではリモートが送信側です——そして push のような tar フォールバックはありません。先にリモートへ CLI を入れてから pull をやり直してください。</p></dd><dt>あるマシンが serve リスナーに push して拒否されたのに、こちらには一度も確認が出なかった。</dt><dd><pre tabindex="0"><code>relayium serve --dir ~/incoming</code></pre><p>あの確認は serve に端末があるときにしか存在しません。systemd 配下、スクリプト内、パイプの先では尋ねる相手がいないため、未知のフィンガープリントは問答無用で拒否されます。送信側に relayium id を実行してもらい、こちらで relayium authorize &lt;フィンガープリント&gt; を、リスナーと同じ --config-dir で実行してください。</p></dd></dl></div></section>
       <h2>よくある質問</h2>
       <h3>ファイルを受信するのにアカウントは必要ですか？</h3>
       <p>いいえ。receive、serve、pull の3つすべてが完全に無料で、受信側に Relayium アカウントは不要です。どこかでサインインが要るのは receive モードの送信側だけで、その CLI がペアリングコードを発行できるようにするためです。</p>
@@ -223,6 +267,8 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete</code></pre>
         <a href="/pricing">料金</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

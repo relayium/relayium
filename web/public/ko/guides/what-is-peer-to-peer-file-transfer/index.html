@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"P2P(피어투피어) 파일 전송이란?","description":"P2P 파일 전송을 쉽게 설명합니다. 서버 업로드 방식과 무엇이 다른지, WebRTC가 직접 연결을 찾는 방법, 왜 사적이고 빠른지까지.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/what-is-peer-to-peer-file-transfer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"P2P(피어투피어) 파일 전송이란?"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"P2P와 종단간 암호화는 같은 것인가요?","acceptedAnswer":{"@type":"Answer","text":"관련은 있지만 같지는 않습니다. P2P는 끝점 간 통신을 뜻하며 모든 네트워크 홉이 직접이라는 보장은 없습니다. TURN이 트래픽을 운반할 수도 있습니다. 암호화는 중간자가 읽을 수 있는지를 뜻합니다. Relayium은 같은 LAN에서 WebRTC로 직접 연결하고, 네트워크를 넘을 때는 종단간 암호화 TURN을 사용하며 릴레이는 읽거나 복호화할 수 없습니다."}},{"@type":"Question","name":"P2P 전송이 애초에 서버를 거치기는 하나요?","acceptedAnswer":{"@type":"Answer","text":"작은 시그널링 서버가 두 기기가 서로의 주소를 찾도록 돕지만, 그것이 보는 것은 연결 설정 정보뿐이며 파일 바이트는 전혀 보지 않습니다. 브라우저에서 네트워크를 넘을 때는 설계상 TURN 릴레이가 암호화된 파일 데이터를 전달하지만, 그때조차 다루는 것은 복호화할 수 없는 암호문뿐입니다."}},{"@type":"Question","name":"직접 연결은 애초에 왜 실패할 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"일부 네트워크는 외부 정보만으로는 도달 가능한 주소를 발견할 수 없도록 구성되어 있습니다. 엄격한 기업 방화벽이나 일부 이동통신사 NAT에서 흔한 일입니다. 전송할 때마다 20초 남짓을 들여 그것을 확인하는 대신, Relayium의 브라우저 앱은 네트워크 간 전송을 처음부터 모두 릴레이로 보냅니다. 그것들을 나르는 것은 실패한 직접 연결 시도가 아니라 릴레이입니다."}},{"@type":"Question","name":"릴레이를 거치면 P2P 전송이 느려지나요?","acceptedAnswer":{"@type":"Answer","text":"릴레이는 데이터가 통과하는 추가적인 한 단계이고 전용 서버가 아닌 공유 서버이므로 약간의 지연이 더해질 수 있습니다. 그래도 파일이 서버에 완전히 도착할 때까지 기다리지 않고 다운로드 측이 시작할 수 있으므로, 업로드 후 다운로드하는 방식보다는 대체로 더 빠릅니다."}},{"@type":"Question","name":"P2P 전송에는 양쪽 모두 계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"같은 네트워크에 있는 두 기기는 계정이 전혀 필요 없습니다. 페어링 코드로 다른 네트워크 간에 보낼 때는 발신자의 로그인이 필요하지만, 어느 경로든 수신자는 계정이 필요 없습니다."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ko/guides/" aria-current="true">가이드</a><a href="/ko/apps/">앱</a><a href="/pricing">요금제</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="기본 탐색"><a class="row" href="/">LAN 전송</a><a class="row" href="/ko/cross-network/">네트워크 간 전송</a><a class="row" href="/ko/offline-transfer/">비동기 전송</a><a class="row" href="/device-inbox">기기 수신함</a><a class="row" href="/cli">CLI</a><a class="row" href="/ko/apps/">앱</a><a class="row" href="/pricing">요금제</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">P2P(피어투피어) 파일 전송이란?</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,30 +203,30 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="보관된 번역"><p class="archived-label">보관된 번역</p><p>이 페이지는 기록으로 보관 중인 한국어 번역입니다. Relayium 제품과 최신 문서는 영어와 중국어 간체로 관리되며, 앱 자체도 더 이상 한국어를 제공하지 않습니다. 여기에 적힌 화면과 세부 사항은 현재 동작과 다를 수 있습니다.</p><p class="archived-links archived-pricing">이 페이지에 적혀 있는 요금제와 사용 한도는 오래된 내용일 수 있습니다. 현재 내용은 <a href="/pricing">요금제</a> 페이지에서 확인하세요.</p><p class="archived-links">최신 버전: <a href="/guides/what-is-peer-to-peer-file-transfer/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/what-is-peer-to-peer-file-transfer/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">&quot;P2P&quot;라는 말은 느슨하게 쓰이곤 하지만, 파일 전송에서 실제로 의미하는 바는 이렇습니다. 파일이 어느 회사의 서버로 올라갔다가 다시 내려오는 게 아니라, 한 기기에서 다른 기기로 곧장 이동한다는 뜻입니다. 중간에 사본이 머무를 수 있는 정거장이 없습니다.</p>
       <p class="lead">단순해 보이지만 실제 경로는 서로 다릅니다. 이 페이지는 먼저 TURN이 대체 경로가 될 수 있는 일반 WebRTC/ICE 개념을 설명한 뒤 Relayium의 구현을 구분합니다. 같은 LAN 브라우저는 WebRTC 직접 연결, 네트워크 간 브라우저는 설계상 TURN, CLI는 직접 연결 전용입니다.</p>
-      <h2>P2P와 일반적인 방식의 차이: 중간 정거장을 없애다</h2>
+      <section class="sheet"><h2>P2P와 일반적인 방식의 차이: 중간 정거장을 없애다</h2>
       <p>대부분의 &quot;파일 보내기&quot; 도구는 업로드 방식으로 동작합니다. 내 기기에서 회사 서버로 파일이 올라가 그곳에 저장되고, 상대방은 그것을 다시 다운로드합니다. 이는 두 번의 이동이며, 나중에 삭제되더라도 한동안은 내 파일의 완전한 사본이 다른 누군가의 저장소에 존재합니다.</p>
       <p>P2P 전송은 이 정거장을 건너뜁니다. 내 기기와 상대방 기기 사이에 연결이 열리면, 파일의 바이트는 그 한 번의 이동만으로 직접 흐르고 다른 어디도 거치지 않습니다. 저장하거나 보호하거나 나중에 삭제해야 할 서버 측 사본이 없습니다. 애초에 업로드된 적이 없기 때문입니다.</p>
-      <ul><li>업로드 기반 전송: 내 기기 → 서버 → 상대 기기. 두 번의 이동, 그 사이에 저장된 사본.</li><li>P2P 전송: 내 기기 → 상대 기기. 한 번의 이동, 아무것도 저장되지 않음.</li><li>Relayium의 실시간 브라우저 모드에는 두 경로가 있습니다. 같은 LAN에서는 WebRTC가 직접 연결하고, 네트워크를 넘을 때는 설계상 TURN으로 종단간 암호문을 운반하며 서버 측 내용 복사본이나 기록을 남기지 않습니다.</li></ul>
-      <h2>두 기기가 실제로 서로를 찾는 방법: STUN</h2>
+      <ul><li>업로드 기반 전송: 내 기기 → 서버 → 상대 기기. 두 번의 이동, 그 사이에 저장된 사본.</li><li>P2P 전송: 내 기기 → 상대 기기. 한 번의 이동, 아무것도 저장되지 않음.</li><li>Relayium의 실시간 브라우저 모드에는 두 경로가 있습니다. 같은 LAN에서는 WebRTC가 직접 연결하고, 네트워크를 넘을 때는 설계상 TURN으로 종단간 암호문을 운반하며 서버 측 내용 복사본이나 기록을 남기지 않습니다.</li></ul></section>
+      <section class="sheet"><h2>두 기기가 실제로 서로를 찾는 방법: STUN</h2>
       <p>여기 직관적이지 않은 부분이 있습니다. 내 기기는 외부 인터넷에서 자신이 어떻게 보이는지 거의 확실히 알지 못합니다. 가정용 라우터나 통신사의 네트워크 주소 변환(NAT) 뒤에 있어, 공유된 공인 IP 뒤에 숨겨지고 포트도 동적으로 재할당되기 때문입니다. 상대 기기도 같은 처지입니다. 어느 쪽도 실제로 도달 가능한 주소를 먼저 알아내지 않고서는 상대에게 곧바로 &quot;전화를 걸&quot; 수 없습니다.</p>
       <p>이때 쓰이는 것이 STUN(NAT 통과용 세션 순회 유틸리티)입니다. 각 기기는 가벼운 STUN 서버에 짧게 한 가지를 묻습니다. &quot;내가 어느 주소, 어느 포트에서 오는 것으로 보이나요?&quot; 그 답이 자신의 외부 주소를 알려줍니다. 파일도 아니고 어떤 콘텐츠도 아니며, 그곳으로 가는 경로를 설명하기에 충분한 네트워크 정보일 뿐입니다. 두 기기는 이 정보를(연결 설정 세부 사항만 전달하고 파일 바이트는 전혀 전달하지 않는 시그널링 단계를 통해) 교환한 뒤, 서로의 주소로 직접 경로를 열려고 시도합니다. 실제 상황의 상당수에서는 이것만으로 성공해 완전히 직접적인 연결이 열립니다. 특히 같은 Wi-Fi에 있는 두 기기나 예측 가능하게 동작하는 NAT이라면 그렇습니다.</p>
-      <ul><li>STUN은 오직 네트워크 주소만 알아내고 주고받습니다. 파일 내용이나 파일 이름, 암호화 키는 절대 다루지 않습니다.</li><li>Relayium은 같은 LAN의 브라우저 세션에서 WebRTC를 직접 사용합니다. 네트워크를 넘는 브라우저 경로는 의도적으로 릴레이됩니다.</li><li>Relayium CLI의 send/receive와 text는 P2P 직접 연결 전용입니다. 파일이나 메시지 바이트를 TURN 또는 다른 Relayium 서버로 릴레이하지 않습니다. 두 기기가 직접 연결을 맺지 못하면 릴레이로 대체하지 않고 세션이 실패합니다.</li><li>같은 네트워크에 있는 두 기기(코드 불필요)는 대개 그 사이에 NAT 자체가 없는 경우가 많아 가장 직접적으로 연결되는 경향이 있습니다.</li></ul>
-      <h2>직접 경로를 찾지 못할 때: TURN 릴레이</h2>
+      <ul><li>STUN은 오직 네트워크 주소만 알아내고 주고받습니다. 파일 내용이나 파일 이름, 암호화 키는 절대 다루지 않습니다.</li><li>Relayium은 같은 LAN의 브라우저 세션에서 WebRTC를 직접 사용합니다. 네트워크를 넘는 브라우저 경로는 의도적으로 릴레이됩니다.</li><li>Relayium CLI의 send/receive와 text는 P2P 직접 연결 전용입니다. 파일이나 메시지 바이트를 TURN 또는 다른 Relayium 서버로 릴레이하지 않습니다. 두 기기가 직접 연결을 맺지 못하면 릴레이로 대체하지 않고 세션이 실패합니다.</li><li>같은 네트워크에 있는 두 기기(코드 불필요)는 대개 그 사이에 NAT 자체가 없는 경우가 많아 가장 직접적으로 연결되는 경향이 있습니다.</li></ul></section>
+      <section class="sheet"><h2>직접 경로를 찾지 못할 때: TURN 릴레이</h2>
       <p>때로는 STUN만으로 부족합니다. 일부 NAT은 예측하기 어렵게 동작해서, 외부 정보만으로는 도달 가능한 주소를 전혀 발견할 수 없는 경우가 있습니다. 특히 엄격한 기업 네트워크나 일부 이동통신사가 그렇습니다. 두 기기 모두 그런 종류의 NAT 뒤에 있다면 진정한 의미의 직접 연결은 불가능하며, 무언가가 그 사이에서 트래픽을 중계해야 합니다.</p>
       <p>일반 WebRTC/ICE 설계에서 TURN은 직접 경로가 실패할 때 대체 릴레이가 될 수 있습니다. Relayium 브라우저 앱은 더 명확하게 같은 LAN은 WebRTC로 직접 연결하고, 네트워크를 넘는 모든 세션은 처음부터 TURN을 사용합니다. 파일은 릴레이 전에 종단간 암호화되므로 릴레이는 암호문만 운반하며 읽거나 복호화할 수 없습니다.</p>
-      <ul><li>같은 네트워크에서는 Relayium이 기기를 직접 연결합니다. 네트워크를 넘을 때는 직접 경로를 찾지 못하는 경우가 워낙 많아 기본적으로 TURN 릴레이를 사용합니다.</li><li>릴레이는 암호문만 전달합니다. 복호화 키를 절대 갖지 않으며, 파일 내용도 파일 이름도 그 안의 다른 어떤 정보도 읽을 수 없습니다.</li><li>Relayium CLI의 send/receive와 text는 P2P 직접 연결 전용입니다. 파일이나 메시지 바이트를 TURN 또는 다른 Relayium 서버로 릴레이하지 않습니다. 두 기기가 직접 연결을 맺지 못하면 릴레이로 대체하지 않고 세션이 실패합니다.</li></ul>
-      <h2>왜 중요한가: 프라이버시와 속도</h2>
+      <ul><li>같은 네트워크에서는 Relayium이 기기를 직접 연결합니다. 네트워크를 넘을 때는 직접 경로를 찾지 못하는 경우가 워낙 많아 기본적으로 TURN 릴레이를 사용합니다.</li><li>릴레이는 암호문만 전달합니다. 복호화 키를 절대 갖지 않으며, 파일 내용도 파일 이름도 그 안의 다른 어떤 정보도 읽을 수 없습니다.</li><li>Relayium CLI의 send/receive와 text는 P2P 직접 연결 전용입니다. 파일이나 메시지 바이트를 TURN 또는 다른 Relayium 서버로 릴레이하지 않습니다. 두 기기가 직접 연결을 맺지 못하면 릴레이로 대체하지 않고 세션이 실패합니다.</li></ul></section>
+      <section class="sheet"><h2>왜 중요한가: 프라이버시와 속도</h2>
       <p>프라이버시 측면의 논리는 단순합니다. 파일의 바이트가 두 기기 사이를 단 한 번만 직접 오갈 때, 사본이 머무르거나 기록되거나 다른 누군가에게 접근될 수 있는 서버 측 저장 단계 자체가 존재하지 않습니다. 애초에 거기에 놓인 적이 없기 때문입니다. 이는 &quot;결국엔 삭제하겠다고 약속합니다&quot;와는 구조적으로 전혀 다른 보장입니다.</p>
-      <p>속도 측면의 논리도 같은 맥락입니다. 업로드 후 다운로드하는 전송은 네트워크를 두 번 가로질러야 합니다. 한 번은 올리고, 한 번은 내립니다. 게다가 종종 발신 측이 완전히 끝날 때까지 수신 측이 시작하지 못하고 기다립니다. 직접 연결은 네트워크를 한 번만 가로지르며, 처리량을 제한하거나 자체 지연을 더하는 서버가 중간에 없이, 둘 중 느린 쪽 연결이 허용하는 속도로 데이터가 두 기기 사이에서 끊임없이 스트리밍될 수 있습니다.</p>
-      <h2>Relayium이 이를 어떻게 조합하는가</h2>
+      <p>속도 측면의 논리도 같은 맥락입니다. 업로드 후 다운로드하는 전송은 네트워크를 두 번 가로질러야 합니다. 한 번은 올리고, 한 번은 내립니다. 게다가 종종 발신 측이 완전히 끝날 때까지 수신 측이 시작하지 못하고 기다립니다. 직접 연결은 네트워크를 한 번만 가로지르며, 처리량을 제한하거나 자체 지연을 더하는 서버가 중간에 없이, 둘 중 느린 쪽 연결이 허용하는 속도로 데이터가 두 기기 사이에서 끊임없이 스트리밍될 수 있습니다.</p></section>
+      <section class="sheet"><h2>Relayium이 이를 어떻게 조합하는가</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">직접 확인하려면 필요한 것</p><ul><li>동시에 화면을 볼 수 있는 기기 두 대 — 노트북과 휴대폰 조합이 가장 좋습니다.</li><li>작은 파일 하나. 여기서 보는 것은 연결이 어느 경로를 탔는지이지 속도가 아닙니다.</li><li>두 대가 같은 Wi-Fi에 있는 시간과, 서로 다른 네트워크에 있는 시간. 휴대폰 Wi-Fi를 끄고 모바일 데이터로 바꾸면 충분합니다.</li></ul></div>
       <p>같은 네트워크에 있는 두 기기에서 relayium.com을 열면 보통 자동으로 서로를 찾습니다. 계정도, 코드도 필요 없고, 설치할 것도 없습니다. 이것이 LAN 상황이며, 많은 경우 STUN조차 필요하지 않습니다. 다른 네트워크에 있는 사람에게 인터넷 너머로 보낼 때는 페어링 코드를 사용합니다. 발신자가 로그인해서 코드를 생성하면(또는 스캔할 수 있는 QR 코드 옵션과 함께 링크를 공유하면), 상대방이 참여하는 순간 전송은 암호화된 TURN 릴레이를 통해 이뤄집니다. 이는 예측하기 어려운 NAT을 넘는 가장 확실한 경로이며, 릴레이는 암호문만 나릅니다. 수신자는 여전히 계정이 필요 없습니다.</p>
       <p>실시간 경로가 열리면 최대 1,000개 파일이 선택된 경로를 따라 계속 흐르고 각 파일을 SHA-256으로 검증합니다. Relayium은 서버 측 실시간 내용 복사본이나 전송 기록을 보관하지 않습니다. 상대가 오프라인이면 영지식 저장 링크라는 별도 모드를 사용합니다.</p>
       <ol class="steps" data-block="steps"><li><p>두 기기를 같은 Wi-Fi에 둔 상태로 각각 Relayium을 열고 파일을 보냅니다.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>앱이 연결에 붙인 라벨을 읽으세요. 같은 네트워크라면 「LAN 직접」이라고 나옵니다.</p></li><li><p>이제 두 기기를 서로 다른 네트워크에 두고, 이번에는 페어링 코드로 다시 보냅니다.</p><pre tabindex="0"><code>https://relayium.com/cross-network</code></pre></li><li><p>라벨을 다시 읽으세요. 「P2P 직접」은 인터넷을 가로질러 직접 경로를 찾았다는 뜻이고, 「릴레이」는 찾지 못해 암호화된 릴레이가 바이트를 날랐다는 뜻입니다.</p></li><li><p>어느 쪽이 나왔는지, 그리고 그때 어떤 네트워크 조합이었는지 적어 두세요. 그것이 이 글이 처음에 던진 질문에 대한, 우리가 아닌 스스로의 답입니다.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">라벨이 알려 주는 것</p><p>같은 네트워크에서는 「LAN 직접」이 나옵니다. 네트워크를 넘어가면 「P2P 직접」이나 「릴레이」 중 하나가 되고, 어느 쪽인지는 설정한 무엇이 아니라 그 두 네트워크에 달려 있습니다.</p><p>「릴레이」는 실패가 아닙니다. 대비책이 존재하고 제 일을 하고 있다는 뜻이며, 릴레이는 시종일관 암호문만 나릅니다 — 이 글의 TURN 절이 설명하는 상황을 안쪽에서 본 것입니다.</p></div>
-      <h2>라벨이 예상과 다를 때</h2>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">라벨이 알려 주는 것</p><p>같은 네트워크에서는 「LAN 직접」이 나옵니다. 네트워크를 넘어가면 「P2P 직접」이나 「릴레이」 중 하나가 되고, 어느 쪽인지는 설정한 무엇이 아니라 그 두 네트워크에 달려 있습니다.</p><p>「릴레이」는 실패가 아닙니다. 대비책이 존재하고 제 일을 하고 있다는 뜻이며, 릴레이는 시종일관 암호문만 나릅니다 — 이 글의 TURN 절이 설명하는 상황을 안쪽에서 본 것입니다.</p></div></section>
+      <section class="sheet"><h2>라벨이 예상과 다를 때</h2>
       <p>처음 들여다보면 대개 세 가지에 놀랍니다. 어느 것도 고쳐야 할 결함은 아니지만, 각각 이름을 댈 수 있으면 좋습니다.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">보이는 것, 확인할 것, 그 의미</p><dl><dt>네트워크를 넘어가면 항상 「릴레이」이고 「P2P 직접」이 되지 않습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # the path label reads the same on both ends</code></pre><p>양쪽이 모두 모바일 데이터이거나 통신사 등급 NAT 뒤에 있는지 확인하세요. 직접 경로가 없는 가장 흔한 이유입니다. 고칠 것은 없습니다. 설계된 대비책이고, 릴레이는 암호문만 나르며, 같은 두 기기라도 같은 네트워크에서는 여전히 직접 연결되고 무료입니다.</p></dd><dt>같은 Wi-Fi인데 「LAN 직접」이 나오지 않습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct</code></pre><p>그 네트워크가 클라이언트를 서로 격리하는지 확인하세요. 게스트 Wi-Fi와 많은 호텔·사무실 네트워크는 기기 간 통신을 아예 막습니다. 거기서는 두 기기가 서로를 전혀 찾지 못하므로, 로컬 도달성에 기대지 않는 네트워크 간 페어링 코드 방식을 쓰세요.</p></dd><dt>경로 라벨이 아예 없습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # there is no path label until the two ends have connected</code></pre><p>이 라벨은 연결에 이름을 붙이는 것이라 연결이 생긴 뒤에야 나타납니다. 양쪽이 서로를 찾기 전에는 이름 붙일 대상이 없고, 「아예 시작되지 않는 전송」은 「예상 밖의 경로를 탄 전송」과는 다른 문제입니다.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">보이는 것, 확인할 것, 그 의미</p><dl><dt>네트워크를 넘어가면 항상 「릴레이」이고 「P2P 직접」이 되지 않습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # the path label reads the same on both ends</code></pre><p>양쪽이 모두 모바일 데이터이거나 통신사 등급 NAT 뒤에 있는지 확인하세요. 직접 경로가 없는 가장 흔한 이유입니다. 고칠 것은 없습니다. 설계된 대비책이고, 릴레이는 암호문만 나르며, 같은 두 기기라도 같은 네트워크에서는 여전히 직접 연결되고 무료입니다.</p></dd><dt>같은 Wi-Fi인데 「LAN 직접」이 나오지 않습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct</code></pre><p>그 네트워크가 클라이언트를 서로 격리하는지 확인하세요. 게스트 Wi-Fi와 많은 호텔·사무실 네트워크는 기기 간 통신을 아예 막습니다. 거기서는 두 기기가 서로를 전혀 찾지 못하므로, 로컬 도달성에 기대지 않는 네트워크 간 페어링 코드 방식을 쓰세요.</p></dd><dt>경로 라벨이 아예 없습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # there is no path label until the two ends have connected</code></pre><p>이 라벨은 연결에 이름을 붙이는 것이라 연결이 생긴 뒤에야 나타납니다. 양쪽이 서로를 찾기 전에는 이름 붙일 대상이 없고, 「아예 시작되지 않는 전송」은 「예상 밖의 경로를 탄 전송」과는 다른 문제입니다.</p></dd></dl></div></section>
       <h2>자주 묻는 질문</h2>
       <h3>P2P와 종단간 암호화는 같은 것인가요?</h3>
       <p>관련은 있지만 같지는 않습니다. P2P는 끝점 간 통신을 뜻하며 모든 네트워크 홉이 직접이라는 보장은 없습니다. TURN이 트래픽을 운반할 수도 있습니다. 암호화는 중간자가 읽을 수 있는지를 뜻합니다. Relayium은 같은 LAN에서 WebRTC로 직접 연결하고, 네트워크를 넘을 때는 종단간 암호화 TURN을 사용하며 릴레이는 읽거나 복호화할 수 없습니다.</p>
@@ -209,6 +253,8 @@ ol.steps>li>pre{margin:8px 0 0}
         <a href="/pricing">요금제</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

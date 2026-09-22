@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium مقابل Google Drive لإرسال الملفات","description":"مقارنة منصفة لعملية تسليم ملف لمرة واحدة: Google Drive تخزين دائم ممتاز، لكن الإرسال يعني الرفع وإدارة الأذونات. لا تحتفظ Relayium بنسخة على الخادم من المحتوى الفوري؛ تنتقل ملفات المتصفح مباشرة على LAN وعبر مُرحِّل TURN مشفّر من الطرف إلى الطرف بين الشبكات، أو عبر رابط ذاتي الانتهاء بمعرفة صفرية.","inLanguage":"ar","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/compare/google-drive/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"Relayium مقابل Google Drive لإرسال الملفات"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل يخزّن Relayium ملفاتي كما يفعل Google Drive؟","acceptedAnswer":{"@type":"Answer","text":"ليس في الوضع الفوري: لا تحتفظ Relayium بنسخة من المحتوى على الخادم. تنتقل ملفات المتصفح مباشرة على LAN؛ وعبر الشبكات لا يحمل TURN سوى نص مشفّر من الطرف إلى الطرف لا يستطيع المُرحِّل قراءته أو فك تشفيره. يخزّن رابط التنزيل نصًا مشفّرًا بمعرفة صفرية بلا مفتاح فك تشفير، وينتهي (ساعة/يوم/3 أيام/7 أيام، حسب الخطة) أو يُحذف بعد أول تنزيل."}},{"@type":"Question","name":"هل أحتاج إلى حساب؟","acceptedAnswer":{"@type":"Answer","text":"على نفس الشبكة لا يلزم أي حساب على الإطلاق. أما إنشاء رمز الاقتران لإرسال عبر الشبكات، أو إنشاء رابط تنزيل مُخزَّن، فيتطلب تسجيل الدخول. أما المُستقبِل فلا يحتاج إلى حساب أبدًا، في كلتا الحالتين."}},{"@type":"Question","name":"هل هناك حدّ للحجم؟","acceptedAnswer":{"@type":"Answer","text":"تحمل عمليات النقل الفوري ما يصل إلى 1,000 ملف في الدفعة دون حدّ للحجم من جانب الخادم — يبثّ Chrome وEdge مباشرةً إلى القرص لعشرات الغيغابايت. وحين لا ينطبق أي مسار للكتابة التدفّقية ويضطر المتصفح إلى التخزين في الذاكرة، يحذّر Relayium فوق نحو 256 ميغابايت؛ وهذا الرقم تقدير متحفّظ عن قصد، لا حدّ صلب. أما الروابط المُخزَّنة فتُحتسب ضمن حصة مرتبطة بحسابك."}},{"@type":"Question","name":"هل Relayium مجاني؟","acceptedAnswer":{"@type":"Answer","text":"نعم. Relayium مجاني ومفتوح المصدر بموجب رخصة AGPL-3.0، والبروتوكول والشيفرة بالكامل على github.com/relayium/relayium — دون طبقة مدفوعة لفتح عمليات نقل أكبر أو أسرع."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -119,8 +161,10 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ar/guides/" aria-current="true">الأدلة</a><a href="/ar/apps/">التطبيقات</a><a href="/pricing">الأسعار</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="التنقل الرئيسي"><a class="row" href="/">LAN</a><a class="row" href="/ar/cross-network/">عبر الشبكات</a><a class="row" href="/ar/offline-transfer/">غير متزامن</a><a class="row" href="/device-inbox">بريد الأجهزة</a><a class="row" href="/cli">CLI</a><a class="row" href="/ar/apps/">التطبيقات</a><a class="row" href="/pricing">الأسعار</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ar/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ar/guides/">الأدلة</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium مقابل Google Drive لإرسال الملفات</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -142,21 +186,21 @@ pre code{background:none;padding:0;border-radius:0}
       <aside class="archived" aria-label="ترجمة مؤرشفة"><p class="archived-label">ترجمة مؤرشفة</p><p>هذه الصفحة ترجمة عربية محفوظة للأرشيف. يجري صيانة منتج Relayium وتوثيقه الحالي بالإنجليزية والصينية المبسّطة، ولم يعد التطبيق نفسه يوفّر العربية. لذلك قد تختلف الشاشات والتفاصيل الموصوفة هنا عن السلوك الحالي.</p><p class="archived-links archived-pricing">قد تكون الباقات وحدود الاستخدام المذكورة هنا قديمة؛ والحالية منها موجودة في صفحة <a href="/pricing">الأسعار</a>.</p><p class="archived-links">النسخة الحالية: <a href="/compare/google-drive/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/compare/google-drive/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Google Drive منتج جيد فعلًا: ملفاتك تعيش في مكان واحد، وتتزامن عبر الأجهزة، وتبقى منسوخة احتياطيًا، ويسهل تحريرها بشكل مشترك مع فريق. إن كان ما تحتاجه بيتًا دائمًا لملفات ستعود إليها، فإن Drive خيار افتراضي معقول، وهذه المقالة لا تحاول أن تثنيك عن ذلك.</p>
       <p class="lead">لكن كثيرًا مما يستخدم الناس Drive لأجله هو في الحقيقة تسليم لمرة واحدة — إرسال مقطع فيديو إلى صديق، أو عقد إلى عميل، أو مجموعة بيانات إلى زميل — لا تخزين دائم. لتلك المهمة تحديدًا، فإن رفع نسخة إلى خوادم Google ثم ضبط من يمكنه رؤيتها آليةٌ أكثر مما تتطلبه المهمة. لا يحتفظ النقل الفوري في Relayium بنسخة محتوى على الخادم؛ ينتقل المتصفح مباشرة على LAN ويستخدم TURN المشفّر من الطرف إلى الطرف عبر الشبكات. ولا يفك رابط التخزين إلا المُستقبِل.</p>
-      <h2>ما الذي يجيده Google Drive</h2>
+      <section class="sheet"><h2>ما الذي يجيده Google Drive</h2>
       <p>قوة Drive في الدوام والتعاون. يبقى الملف الذي ترفعه هناك — متزامنًا عبر هاتفك وحاسوبك المحمول والويب — حتى تحذفه، وهذا بالضبط ما تريده لمجلد عمل، أو قرص فريق مشترك، أو مستندات تحرّرونها معًا في الوقت الفعلي.</p>
-      <p>كما أنه سخيّ وسلس في التخزين: طبقة مجانية متينة، ونسخ احتياطي تلقائي، وسجل إصدارات، وبحث في كل ما حفظته يومًا. لا شيء من ذلك يحاول Relayium استبداله.</p>
-      <h2>أين يختلفان: الإرسال ليس المهمة نفسها كالتخزين</h2>
+      <p>كما أنه سخيّ وسلس في التخزين: طبقة مجانية متينة، ونسخ احتياطي تلقائي، وسجل إصدارات، وبحث في كل ما حفظته يومًا. لا شيء من ذلك يحاول Relayium استبداله.</p></section>
+      <section class="sheet"><h2>أين يختلفان: الإرسال ليس المهمة نفسها كالتخزين</h2>
       <p>لإرسال ملف واحد عبر Drive، ترفع نسخة إلى بنية Google التحتية، ثم تقرر من يمكنه فتحه — حساب Google لشخص محدد، أو «أي شخص لديه الرابط». إن أخطأت في إعداد المشاركة، صار الملف إما غير قابل للوصول أو أكثر انفتاحًا مما قصدت. وفي كلتا الحالتين، تصبح نسخة الآن مقيمة على خوادم Google إلى أجل غير مسمى، حتى تعود وتزيلها.</p>
-      <p>يتخطى Relayium تخزين المحتوى على الخادم في الحالة الفورية الشائعة. على LAN تنتقل ملفات المتصفح مباشرة بين الجهازين؛ وعبر الشبكات تستخدم جلسات المتصفح TURN بحكم التصميم، ولا يحمل المُرحِّل سوى نص مشفّر من الطرف إلى الطرف لا يستطيع قراءته أو فك تشفيره. وعندما يكون المُستقبِل غير متصل وتريد فعلًا رابطًا، يحافظ وضع الرابط المُخزَّن على خاصية المعرفة الصفرية التي لا يملكها Drive: يشفّر متصفحك الملف بمفتاح AES-256-GCM عشوائي قبل الرفع، ويعيش ذلك المفتاح في جزء الـ URL فقط (الجزء بعد #، الذي لا ترسله المتصفحات أبدًا إلى خادم). تحتفظ خوادم Google بملفات Drive الخاصة بك وتستطيع تقنيًا قراءتها؛ أما خادم Relayium، بالنسبة إلى رابط مُخزَّن، فلا يحتفظ إلا بنص مُشفَّر لا يستطيع فكّ تشفيره.</p>
-      <h2>الفوري: بلا نسخة محتوى على الخادم</h2>
+      <p>يتخطى Relayium تخزين المحتوى على الخادم في الحالة الفورية الشائعة. على LAN تنتقل ملفات المتصفح مباشرة بين الجهازين؛ وعبر الشبكات تستخدم جلسات المتصفح TURN بحكم التصميم، ولا يحمل المُرحِّل سوى نص مشفّر من الطرف إلى الطرف لا يستطيع قراءته أو فك تشفيره. وعندما يكون المُستقبِل غير متصل وتريد فعلًا رابطًا، يحافظ وضع الرابط المُخزَّن على خاصية المعرفة الصفرية التي لا يملكها Drive: يشفّر متصفحك الملف بمفتاح AES-256-GCM عشوائي قبل الرفع، ويعيش ذلك المفتاح في جزء الـ URL فقط (الجزء بعد #، الذي لا ترسله المتصفحات أبدًا إلى خادم). تحتفظ خوادم Google بملفات Drive الخاصة بك وتستطيع تقنيًا قراءتها؛ أما خادم Relayium، بالنسبة إلى رابط مُخزَّن، فلا يحتفظ إلا بنص مُشفَّر لا يستطيع فكّ تشفيره.</p></section>
+      <section class="sheet"><h2>الفوري: بلا نسخة محتوى على الخادم</h2>
       <p>للحالة الكلاسيكية — كلا الشخصين متصلان الآن — يرسل النقل الفوري حتى 1,000 ملف بلا نسخة محتوى على الخادم. على LAN تنتقل ملفات المتصفح مباشرة؛ وعبر الشبكات لا يحمل TURN سوى نص مشفّر من الطرف إلى الطرف لا يستطيع المُرحِّل قراءته أو فك تشفيره. يتحقق الطرفان من SAS ومن كل ملف عبر SHA-256، ويُستأنف النقل بعد الانقطاع.</p>
-      <p>لا يوجد حدّ للحجم من جانب الخادم، لذا يأتي الحدّ العملي من متصفح الاستقبال: يبثّ Chrome وEdge البيانات الواردة مباشرةً إلى القرص، متعاملَين بأريحية مع عشرات الغيغابايت. أما Firefox وSafari فلا يملكان تلك الواجهة، وحين لا ينطبق أي مسار للكتابة التدفّقية يحتفظان بالبيانات الواردة في الذاكرة — ويحذّر Relayium فوق نحو 256 ميغابايت، وهو تقدير متحفّظ عن قصد لا حدّ صلب مقيس. على نفس الشبكة لا يلزم أي حساب على الإطلاق، ويتّصل الجهازان أحدهما بالآخر مباشرةً. أما الإرسال عبر الشبكات فيستخدم رمز اقتران، ويتطلب تسجيل دخول مُنشئ الرمز، ويمرّ بحكم التصميم عبر مُرحِّل TURN مشفّر، فينعقد الاتصال خلال ثانية أو ثانيتين بدل انتظار محاولات اتصال مباشر نادرًا ما تنجح بين شبكتين؛ والمُرحِّل لا ينقل سوى نص مُشفَّر لا يستطيع قراءته، ولا يحتاج المُستقبِل إلى حساب أبدًا، في أي من إعدادَي الشبكة.</p>
-      <h2>ما زلت تريد رابطًا؟ روابط مُخزَّنة بمعرفة صفرية</h2>
+      <p>لا يوجد حدّ للحجم من جانب الخادم، لذا يأتي الحدّ العملي من متصفح الاستقبال: يبثّ Chrome وEdge البيانات الواردة مباشرةً إلى القرص، متعاملَين بأريحية مع عشرات الغيغابايت. أما Firefox وSafari فلا يملكان تلك الواجهة، وحين لا ينطبق أي مسار للكتابة التدفّقية يحتفظان بالبيانات الواردة في الذاكرة — ويحذّر Relayium فوق نحو 256 ميغابايت، وهو تقدير متحفّظ عن قصد لا حدّ صلب مقيس. على نفس الشبكة لا يلزم أي حساب على الإطلاق، ويتّصل الجهازان أحدهما بالآخر مباشرةً. أما الإرسال عبر الشبكات فيستخدم رمز اقتران، ويتطلب تسجيل دخول مُنشئ الرمز، ويمرّ بحكم التصميم عبر مُرحِّل TURN مشفّر، فينعقد الاتصال خلال ثانية أو ثانيتين بدل انتظار محاولات اتصال مباشر نادرًا ما تنجح بين شبكتين؛ والمُرحِّل لا ينقل سوى نص مُشفَّر لا يستطيع قراءته، ولا يحتاج المُستقبِل إلى حساب أبدًا، في أي من إعدادَي الشبكة.</p></section>
+      <section class="sheet"><h2>ما زلت تريد رابطًا؟ روابط مُخزَّنة بمعرفة صفرية</h2>
       <p>أحيانًا يكون الرابط فعلًا ما تحتاجه — المُستقبِل غير متصل، أو تريد عنوان URL واحدًا يمكنك لصقه في أي مكان. يغطّي وضع الرابط المُخزَّن في Relayium تلك الحالة دون التخلي عن خصوصية الوضع الفوري.</p>
-      <p>تختار مدة انتهاء — ساعة واحدة أو يوم واحد أو 3 أيام أو 7 أيام أو حتى 14 يومًا حسب خطتك — أو تضبط الرابط ليُحذف بعد أول تنزيل مكتمل. يتطلب إنشاء رابط تسجيل دخول المُرسِل (يُحتسب ضمن حصة تخزين في حسابك)، لكن المُستقبِل يفتح الرابط ويُنزّل فحسب، دون الحاجة إلى حساب. ولأن مفتاح فكّ التشفير لا يغادر جزء الـ URL أبدًا، يختلف نموذج Google ونموذج الرابط المُخزَّن في Relayium في نقطة جوهرية واحدة: تستطيع Google تقنيًا فكّ تشفير الملفات المستضافة على Drive؛ أما خادم Relayium فلا يمكنه ذلك بنيويًا بالنسبة إلى الروابط المُخزَّنة.</p>
-      <h2>مقارنة الميزات في لمحة</h2>
+      <p>تختار مدة انتهاء — ساعة واحدة أو يوم واحد أو 3 أيام أو 7 أيام أو حتى 14 يومًا حسب خطتك — أو تضبط الرابط ليُحذف بعد أول تنزيل مكتمل. يتطلب إنشاء رابط تسجيل دخول المُرسِل (يُحتسب ضمن حصة تخزين في حسابك)، لكن المُستقبِل يفتح الرابط ويُنزّل فحسب، دون الحاجة إلى حساب. ولأن مفتاح فكّ التشفير لا يغادر جزء الـ URL أبدًا، يختلف نموذج Google ونموذج الرابط المُخزَّن في Relayium في نقطة جوهرية واحدة: تستطيع Google تقنيًا فكّ تشفير الملفات المستضافة على Drive؛ أما خادم Relayium فلا يمكنه ذلك بنيويًا بالنسبة إلى الروابط المُخزَّنة.</p></section>
+      <section class="sheet"><h2>مقارنة الميزات في لمحة</h2>
       <p>الفروق الأهمّ، جنبًا إلى جنب:</p>
-      <ul><li>الغرض: Google Drive تخزين دائم متاح دومًا مع تعاون مدمج؛ أما Relayium فمبني للإرسال لمرة واحدة — إما فوري من الند للند أو رابط ذاتي الانتهاء.</li><li>أين تعيش الملفات: يحتفظ Drive بنسخة غير محددة المدة على خوادم Google حتى تحذفها؛ أما Relayium الفوري فلا يخزّن الملف على الإطلاق، والروابط المُخزَّنة تنتهي تلقائيًا (ساعة/يوم/3 أيام/7 أيام، حسب الخطة) أو تُحذف بعد أول تنزيل.</li><li>من يمكنه قراءتها: تستطيع بنية Google التحتية تقنيًا فكّ تشفير ملفات Drive؛ أما روابط Relayium المُخزَّنة فبمعرفة صفرية — يعيش المفتاح في جزء الـ URL فقط، فيحتفظ الخادم بنص مُشفَّر لا يستطيع قراءته.</li><li>الحسابات: يتطلب Drive حساب Google للمُرسِل، وغالبًا للمُستقبِل بحسب إعدادات المشاركة؛ أما Relayium فلا يحتاج إلى حساب على نفس الشبكة، ولا يسجّل الدخول إلا من ينشئ رمز الاقتران أو الرابط المُخزَّن — والمُستقبِل لا يحتاج إليه أبدًا.</li><li>حدود الحجم: Drive محدود بحصة التخزين لديك؛ أما Relayium الفوري فلا حدّ له من جانب الخادم (يبثّ Chrome/Edge إلى القرص لعشرات الغيغابايت؛ وحين يضطر المتصفح إلى التخزين في الذاكرة يحذّر Relayium فوق نحو 256 ميغابايت).</li><li>التكلفة والانفتاح: Relayium مجاني ومرخّص بموجب AGPL-3.0 على github.com/relayium/relayium، ويعمل في المتصفح على Windows وmacOS وLinux وAndroid وiOS دون أي شيء يُثبَّت.</li></ul>
+      <ul><li>الغرض: Google Drive تخزين دائم متاح دومًا مع تعاون مدمج؛ أما Relayium فمبني للإرسال لمرة واحدة — إما فوري من الند للند أو رابط ذاتي الانتهاء.</li><li>أين تعيش الملفات: يحتفظ Drive بنسخة غير محددة المدة على خوادم Google حتى تحذفها؛ أما Relayium الفوري فلا يخزّن الملف على الإطلاق، والروابط المُخزَّنة تنتهي تلقائيًا (ساعة/يوم/3 أيام/7 أيام، حسب الخطة) أو تُحذف بعد أول تنزيل.</li><li>من يمكنه قراءتها: تستطيع بنية Google التحتية تقنيًا فكّ تشفير ملفات Drive؛ أما روابط Relayium المُخزَّنة فبمعرفة صفرية — يعيش المفتاح في جزء الـ URL فقط، فيحتفظ الخادم بنص مُشفَّر لا يستطيع قراءته.</li><li>الحسابات: يتطلب Drive حساب Google للمُرسِل، وغالبًا للمُستقبِل بحسب إعدادات المشاركة؛ أما Relayium فلا يحتاج إلى حساب على نفس الشبكة، ولا يسجّل الدخول إلا من ينشئ رمز الاقتران أو الرابط المُخزَّن — والمُستقبِل لا يحتاج إليه أبدًا.</li><li>حدود الحجم: Drive محدود بحصة التخزين لديك؛ أما Relayium الفوري فلا حدّ له من جانب الخادم (يبثّ Chrome/Edge إلى القرص لعشرات الغيغابايت؛ وحين يضطر المتصفح إلى التخزين في الذاكرة يحذّر Relayium فوق نحو 256 ميغابايت).</li><li>التكلفة والانفتاح: Relayium مجاني ومرخّص بموجب AGPL-3.0 على github.com/relayium/relayium، ويعمل في المتصفح على Windows وmacOS وLinux وAndroid وiOS دون أي شيء يُثبَّت.</li></ul></section>
       <h2>الأسئلة الشائعة</h2>
       <h3>هل يخزّن Relayium ملفاتي كما يفعل Google Drive؟</h3>
       <p>ليس في الوضع الفوري: لا تحتفظ Relayium بنسخة من المحتوى على الخادم. تنتقل ملفات المتصفح مباشرة على LAN؛ وعبر الشبكات لا يحمل TURN سوى نص مشفّر من الطرف إلى الطرف لا يستطيع المُرحِّل قراءته أو فك تشفيره. يخزّن رابط التنزيل نصًا مشفّرًا بمعرفة صفرية بلا مفتاح فك تشفير، وينتهي (ساعة/يوم/3 أيام/7 أيام، حسب الخطة) أو يُحذف بعد أول تنزيل.</p>
@@ -181,6 +225,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/pricing">الأسعار</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

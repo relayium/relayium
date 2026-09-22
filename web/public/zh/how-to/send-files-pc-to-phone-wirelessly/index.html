@@ -36,9 +36,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"电脑无线传文件到手机：不用数据线，不用装 App","description":"一步步教你在电脑和手机之间通过 Wi-Fi 传文件——拖拽即发，不用数据线，不用网盘账号，全程端到端加密。","inLanguage":"zh-Hans","datePublished":"2026-07-03","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-files-pc-to-phone-wirelessly/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"电脑无线传文件到手机：不用数据线，不用装 App"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Mac 和 Android 也行吗，不只是 Windows 和 iPhone？","acceptedAnswer":{"@type":"Answer","text":"行。Relayium 在 Windows、macOS、Linux、Android 和 iOS 的浏览器里都能运行，所以任意组合都可以——Windows 传 Android、Mac 传 iPhone、Linux 传手机，反过来也一样。两端都无需安装任何东西。"}},{"@type":"Question","name":"传输速度有多快？","acceptedAnswer":{"@type":"Answer","text":"在同一 Wi-Fi 下，两台设备直接互连，所以速度由你的本地网络决定，而不受任何服务器限制——通常能跑满你的 Wi-Fi。跨网络时，传输按设计走加密 TURN 中继，因此速度取决于双方的网络以及中继这一跳；换来的是连接不依赖在中间的 NAT 和防火墙之间探测出一条直连路径——它们可能挡住这样的路径。"}},{"@type":"Question","name":"这样传文件安全吗？","acceptedAnswer":{"@type":"Answer","text":"安全。在浏览器的传输加密之上，Relayium 再加了一层：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，这把密钥从不接触服务器。两台设备的 6 位校验码（SAS）一致，能确认密钥未被替换：服务器或中继没有冒充任一端，也没有终止应用层端到端加密。跨网络时，TURN 中继仍处于传输路径上，但只转发无法解密的密文。每个文件还会用 SHA-256 做端到端校验。"}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -60,24 +60,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -103,6 +89,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -134,8 +176,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/?lang=zh"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="主导航"><span class="rail-group">实时传输</span><a class="row" href="/?lang=zh" aria-label="局域网传输">局域网</a><a class="row" href="/zh/cross-network/" aria-label="跨网络传输">跨网络</a><span class="rail-group">链接</span><a class="row" href="/zh/offline-transfer/" aria-label="分享链接">链接</a><span class="rail-group">我的设备</span><a class="row" href="/device-inbox" aria-label="设备收件箱">收件箱</a><span class="rail-group">下载与工具</span><a class="row" href="/cli">CLI</a><a class="row" href="/zh/apps/">应用</a><a class="row" href="/pricing">定价</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/how-to/send-files-pc-to-phone-wirelessly/">English</a><a href="/zh/how-to/send-files-pc-to-phone-wirelessly/" aria-current="true">中文</a></nav></div></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">电脑无线传文件到手机：不用数据线，不用装 App</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -154,31 +198,31 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-08-07</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-pc-to-phone-wirelessly/">English</a><a href="/zh/how-to/send-files-pc-to-phone-wirelessly/" aria-current="true">中文</a></nav>
+      
       <p class="lead">把一个文件从笔记本弄到手机上，不该还得翻找合适的数据线、给自己发邮件，或者先上传到网盘再下载一遍。Relayium 通过你自己的 Wi-Fi，把文件字节直接从电脑传到手机，全程在浏览器里完成，两端都无需安装任何软件。</p>
       <p class="lead">本文一步步讲清无线传输的做法——同一网络或跨网络都行——再客观地和常见的几种替代方式（数据线、蓝牙、聊天软件和邮件）作对比，帮你为不同场景选对工具。</p>
-      <h2>同一 Wi-Fi 下，从电脑传到手机</h2>
+      <section class="sheet"><h2>同一 Wi-Fi 下，从电脑传到手机</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">开始之前</p><ul><li>电脑和手机在同一个 Wi-Fi 里，并且路由器没有把客户端互相隔开。设备列表下方的提示写着那个开关的名字：「AP 隔离 / 客户端隔离」。</li><li>两边各有一个浏览器，并且是通过 https://relayium.com/ 打开页面。加密传输需要 HTTPS，用普通 http:// 打开时页面会直接这么说，而不会列出任何设备。</li><li>整个传输过程中手机上的这个标签页保持在最前面。只要浏览器提供，Relayium 会申请屏幕唤醒锁，这能盖住屏幕自动熄灭——但盖不住你切到别的 App，而手机浏览器可能会限速甚至挂起退到后台的标签页。</li><li>同网络传输时两边都不需要账号。只有在两端处于不同网络、必须生成配对码时，发送方才需要登录。</li></ul></div>
       <p>这是最快的方式：两台设备在同一网络里，直接互连，传输速度只受你的 Wi-Fi 限制。除了浏览器，两边什么都不需要。</p>
       <ol class="steps" data-block="steps"><li><p>在电脑上用任意现代浏览器（Chrome、Edge、Firefox 或 Safari）打开传输页面。</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>在手机上打开同一个页面，然后对比两块屏幕上状态条里的公网 IP。地址一致才会把两台设备放进同一个房间——如果手机悄悄留在移动数据上，它显示的会是另一个地址。</p><pre tabindex="0"><code>已连接 · 本机 Pixel · 公网 IP 203.0.113.9</code></pre></li><li><p>在电脑上于「附近的设备」里找到手机，点它的卡片，然后按「打开工作区」。在当前浏览器上，这是卡片提供的唯一一个动作——因为接下来文件、文件夹和消息都走它打开的那一条加密连接。把文件直接拖到那张卡片上也能发出去，不必先经过这一步。</p></li><li><p>工作区会取代那张卡片。用它标题栏下面的控件来发送：「发送文件」发一批（最多 1,000 个），浏览器支持选目录时用「发送文件夹」发整棵树，或者直接在消息框里打字——「回车换行 · ⌘/Ctrl+回车发送」——然后按「发送」。</p></li><li><p>在手机上，先看请求下面那行再决定接收：它会说明浏览器是要问你存到哪，还是直接写进它的下载目录。然后按「接收」，并让那个标签页一直留在最前面，直到文件计数走到这一批的最后一个文件。如果想在任何字节移动之前核对校验码（SAS），开始前先在两台设备上打开「高级验证」——它默认关闭，打开后增加的是一次核对和一步确认，而不是加密。</p></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">传输完成时是什么样</p><p>这时手机的卡片已经不在了——工作区取代了它——所以状态要从工作区标题栏上读：你连到了哪台设备、连接状态是「已连接」，以及唯一一个路径标签显示「局域网直连」。两块屏幕上的文件计数都停在这一批的最后一个文件。</p><p>然后要检查的是文件，而不是页面。落在哪里由手机浏览器决定：Android 上的 Chrome 和 Firefox 会放进浏览器自己的下载列表（分别是 chrome://downloads 和 about:downloads），iOS 上的 Safari 会放进你可以在「文件」App 里打开的下载目录。</p><pre tabindex="0"><code>已连接到 Pixel · 已连接 · 局域网直连
 文件 1/1</code></pre></div>
-      <ul><li>同网络房间会容纳所有从该网络打开页面的设备，所以手机旁边多出一台平板或第二台笔记本是正常的。</li><li>1,000 个文件的上限是按批而不是按会话算的，所以很大的目录树可以分几次拖过去，不用重新连接。</li></ul>
-      <h2>手机没出现，或者传输中断时</h2>
+      <ul><li>同网络房间会容纳所有从该网络打开页面的设备，所以手机旁边多出一台平板或第二台笔记本是正常的。</li><li>1,000 个文件的上限是按批而不是按会话算的，所以很大的目录树可以分几次拖过去，不用重新连接。</li></ul></section>
+      <section class="sheet"><h2>手机没出现，或者传输中断时</h2>
       <p>通常是手机那一侧会把原因摆出来：它其实不在你以为的那个网络里、它的标签页退到了后台，或者它的浏览器装不下被要求装的东西。这些是常见的首轮排查，而不是全部可能，而且每一项都有屏幕上现成的东西能判定。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>电脑上的「附近的设备」里始终没有手机。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 对比两块屏幕上状态条里的公网 IP</code></pre><p>两个不同的公网 IP 就是两个房间。手机悄悄留在移动数据上是常见原因之一；VPN 或 iCloud 专用代理把它从另一个地址送出去是另一种，而且都不是唯一可能。如果你愿意改这些设置：让它连上 Wi-Fi、断开 VPN，或只对这一个网络关闭专用代理，然后在手机上重新加载 https://relayium.com/。如果你更想保留它们，用 https://relayium.com/cross-network 上的配对码也能连到这台手机，两个设置都不用动，端到端加密同样成立。</p></dd><dt>两台设备显示的公网 IP 相同，卡片却还是不出现。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关</code></pre><p>路由器把自己的客户端隔开了，访客网络和酒店 Wi-Fi 经常默认这样。关闭「AP 隔离 / 客户端隔离」；如果路由器不由你改，就改用 https://relayium.com/cross-network 上的配对码。</p></dd><dt>传输开始后，你在手机上切了别的 App，然后它就卡住或失败了。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 手机上 Relayium 这个标签页必须是最前面那个</code></pre><p>手机浏览器可能会限速甚至挂起退到后台的标签页，而在它这么做的时候字节根本不动。Relayium 的停滞看护在页面回到前台后会额外给一个完整窗口，而不是立刻判失败，但真正的解决办法是让标签页留在最前面——Relayium 申请的唤醒锁只盖住屏幕熄灭，并不能换来后台执行，而较旧的 Safari 和 Android 连唤醒锁都没有可申请的。</p></dd><dt>还没点接收，手机就警告说整批文件必须放在内存里。</dt><dd><pre tabindex="0"><code>chrome://downloads   # Chrome 用这个 / Edge 用 edge://downloads / Firefox 用 about:downloads</code></pre><p>手机浏览器没有 File System Access API，所以整批内容会在内存里拼装，超过大约 256 MiB 时 Relayium 就会警告。这个数字是一个偏保守的警告线，不是硬上限：一次少发几个文件，或者把大文件改成反向发送，发给电脑上的 Chrome 或 Edge，由它直接写盘。每个文件是否真的到了，要在接收端浏览器自己的下载列表里确认——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。</p></dd><dt>跨网络时手机输入配对码被拒绝。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # 配对卡片上有倒计时，以及中继被拒的原因</code></pre><p>配对码有效期 5 分钟，而且只有生成它的那台设备需要账号。重新生成一个，然后立刻输入。如果卡片提示中继只发给已验证的账号，请先在账户面板里验证发送方的邮箱地址——上面那套同网络流程不受此影响。</p></dd></dl></div>
-      <h2>跨网络：配对与中继</h2>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>电脑上的「附近的设备」里始终没有手机。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 对比两块屏幕上状态条里的公网 IP</code></pre><p>两个不同的公网 IP 就是两个房间。手机悄悄留在移动数据上是常见原因之一；VPN 或 iCloud 专用代理把它从另一个地址送出去是另一种，而且都不是唯一可能。如果你愿意改这些设置：让它连上 Wi-Fi、断开 VPN，或只对这一个网络关闭专用代理，然后在手机上重新加载 https://relayium.com/。如果你更想保留它们，用 https://relayium.com/cross-network 上的配对码也能连到这台手机，两个设置都不用动，端到端加密同样成立。</p></dd><dt>两台设备显示的公网 IP 相同，卡片却还是不出现。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关</code></pre><p>路由器把自己的客户端隔开了，访客网络和酒店 Wi-Fi 经常默认这样。关闭「AP 隔离 / 客户端隔离」；如果路由器不由你改，就改用 https://relayium.com/cross-network 上的配对码。</p></dd><dt>传输开始后，你在手机上切了别的 App，然后它就卡住或失败了。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 手机上 Relayium 这个标签页必须是最前面那个</code></pre><p>手机浏览器可能会限速甚至挂起退到后台的标签页，而在它这么做的时候字节根本不动。Relayium 的停滞看护在页面回到前台后会额外给一个完整窗口，而不是立刻判失败，但真正的解决办法是让标签页留在最前面——Relayium 申请的唤醒锁只盖住屏幕熄灭，并不能换来后台执行，而较旧的 Safari 和 Android 连唤醒锁都没有可申请的。</p></dd><dt>还没点接收，手机就警告说整批文件必须放在内存里。</dt><dd><pre tabindex="0"><code>chrome://downloads   # Chrome 用这个 / Edge 用 edge://downloads / Firefox 用 about:downloads</code></pre><p>手机浏览器没有 File System Access API，所以整批内容会在内存里拼装，超过大约 256 MiB 时 Relayium 就会警告。这个数字是一个偏保守的警告线，不是硬上限：一次少发几个文件，或者把大文件改成反向发送，发给电脑上的 Chrome 或 Edge，由它直接写盘。每个文件是否真的到了，要在接收端浏览器自己的下载列表里确认——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。</p></dd><dt>跨网络时手机输入配对码被拒绝。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # 配对卡片上有倒计时，以及中继被拒的原因</code></pre><p>配对码有效期 5 分钟，而且只有生成它的那台设备需要账号。重新生成一个，然后立刻输入。如果卡片提示中继只发给已验证的账号，请先在账户面板里验证发送方的邮箱地址——上面那套同网络流程不受此影响。</p></dd></dl></div></section>
+      <section class="sheet"><h2>跨网络：配对与中继</h2>
       <p>配对码由服务器生成，固定为 6 位十进制数字（0–9，可以 0 开头）。发送方登录后创建配对码；通过配对码、链接或二维码加入的人始终无需账号。它可在 5 分钟内用于新设备加入；倒计时结束不会中断已经连上的传输。</p>
-      <p>跨网络时，浏览器按设计直接使用加密的 TURN 中继，不会先尝试直连。密钥始终留在两台设备上，因此中继只转发端到端加密后的密文，无法读取文件，也不保留实时内容副本或历史。</p>
-      <h2>像 App 一样安装（可选的 PWA）</h2>
+      <p>跨网络时，浏览器按设计直接使用加密的 TURN 中继，不会先尝试直连。密钥始终留在两台设备上，因此中继只转发端到端加密后的密文，无法读取文件，也不保留实时内容副本或历史。</p></section>
+      <section class="sheet"><h2>像 App 一样安装（可选的 PWA）</h2>
       <p>Relayium 就是一个网站，所以确实没有什么要安装的。但如果你经常传文件，可以把它添加到主屏幕或桌面，作为渐进式网页应用（PWA）：它会在独立窗口中打开，像原生应用一样启动，而底层依然只是那张网页。</p>
-      <p>在手机上用浏览器的「添加到主屏幕」；在电脑上用地址栏里的安装图标。无论哪种方式它都保持免费——Relayium 采用 AGPL-3.0 许可开源，代码在 github.com/relayium/relayium，支持 Windows、macOS、Linux、Android 和 iOS。</p>
-      <h2>大文件：你的浏览器能扛多大</h2>
+      <p>在手机上用浏览器的「添加到主屏幕」；在电脑上用地址栏里的安装图标。无论哪种方式它都保持免费——Relayium 采用 AGPL-3.0 许可开源，代码在 github.com/relayium/relayium，支持 Windows、macOS、Linux、Android 和 iOS。</p></section>
+      <section class="sheet"><h2>大文件：你的浏览器能扛多大</h2>
       <p>由于实时传输从不把文件存到服务器上，所以不用担心任何上传配额。实际的上限取决于用哪个浏览器接收。</p>
-      <p>支持 File System Access API 的浏览器——桌面版 Chrome、Edge——会把接收到的数据直接流式写入磁盘，因此几乎没有大小上限，几个 GB 的视频也没问题。Firefox、Safari 以及所有手机浏览器都没有这个 API，这时整批文件只能先攒在内存里，因此一旦超过约 256 MB，Relayium 会在你点「接收」之前先提示一次。这要当成刻意取的保守估计，而不是硬性上限——手机标签页到了这个量级本来就很容易被系统回收，真正的临界点还随设备内存、系统和标签页数量浮动。这里接收端是手机，所以真正很大的文件更适合反过来传：发到桌面端的 Chrome 或 Edge，那边可以直接流式写盘。</p>
-      <h2>电脑传手机的其他方式（及其局限）</h2>
+      <p>支持 File System Access API 的浏览器——桌面版 Chrome、Edge——会把接收到的数据直接流式写入磁盘，因此几乎没有大小上限，几个 GB 的视频也没问题。Firefox、Safari 以及所有手机浏览器都没有这个 API，这时整批文件只能先攒在内存里，因此一旦超过约 256 MB，Relayium 会在你点「接收」之前先提示一次。这要当成刻意取的保守估计，而不是硬性上限——手机标签页到了这个量级本来就很容易被系统回收，真正的临界点还随设备内存、系统和标签页数量浮动。这里接收端是手机，所以真正很大的文件更适合反过来传：发到桌面端的 Chrome 或 Edge，那边可以直接流式写盘。</p></section>
+      <section class="sheet"><h2>电脑传手机的其他方式（及其局限）</h2>
       <p>浏览器无线传输并不是唯一选择，而且说句实话，每种替代方式都有它的用武之地。常见的几种对比如下：</p>
-      <ul><li>数据线：可靠又快，但你得有合适的线，而且手机到电脑的文件访问有时挺麻烦（尤其 iPhone 到 Windows）。它是有线的，不是无线。</li><li>蓝牙：真正免线，但慢——发几张大照片就可能要好几分钟，传视频或大批文件很不现实。</li><li>聊天软件或给自己发邮件（微信、Telegram、邮箱）：如果已经开着，用起来方便，但大多有大小限制、可能重新压缩照片，而且会把文件经由第三方服务器中转，而非保持私密。</li><li>Relayium：无线、免安装、同一网络下免账号（跨网络配对仅需发送方登录）、不重新压缩（字节级传输并对每个文件做 SHA-256 完整性校验），且端到端加密，还带一个你能亲自核对的校验码。</li></ul>
+      <ul><li>数据线：可靠又快，但你得有合适的线，而且手机到电脑的文件访问有时挺麻烦（尤其 iPhone 到 Windows）。它是有线的，不是无线。</li><li>蓝牙：真正免线，但慢——发几张大照片就可能要好几分钟，传视频或大批文件很不现实。</li><li>聊天软件或给自己发邮件（微信、Telegram、邮箱）：如果已经开着，用起来方便，但大多有大小限制、可能重新压缩照片，而且会把文件经由第三方服务器中转，而非保持私密。</li><li>Relayium：无线、免安装、同一网络下免账号（跨网络配对仅需发送方登录）、不重新压缩（字节级传输并对每个文件做 SHA-256 完整性校验），且端到端加密，还带一个你能亲自核对的校验码。</li></ul></section>
       <h2>常见问题</h2>
       <h3>Mac 和 Android 也行吗，不只是 Windows 和 iPhone？</h3>
       <p>行。Relayium 在 Windows、macOS、Linux、Android 和 iOS 的浏览器里都能运行，所以任意组合都可以——Windows 传 Android、Mac 传 iPhone、Linux 传手机，反过来也一样。两端都无需安装任何东西。</p>
@@ -201,6 +245,8 @@ ol.steps>li>pre{margin:8px 0 0}
         <a href="/pricing">定价</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

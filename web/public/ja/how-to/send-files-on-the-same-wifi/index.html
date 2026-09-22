@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"同じ Wi-Fi 上の端末間でファイルを送る","description":"同じ Wi-Fi やローカルネットワーク上のどの端末同士でもファイルを送る方法。アカウント不要、ペアリングコード不要、両方で relayium.com を開くだけで直接転送、エンドツーエンド暗号化。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/send-files-on-the-same-wifi/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"同じ Wi-Fi 上の端末間でファイルを送る"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"同じ Wi-Fi でファイルを送るのにアカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。同一ネットワークでの転送はどちら側にもアカウントもペアリングコードも不要です。各端末で relayium.com を開くだけです。"}},{"@type":"Question","name":"Relayium はどの端末が自分のネットワークにあると分かるのですか？","acceptedAnswer":{"@type":"Answer","text":"同一ネットワーク上の端末は通常同じグローバル IP アドレスを共有しており、Relayium はグローバル IP が一致する端末を自動的に同じルームにまとめます。コードは不要です。"}},{"@type":"Question","name":"3台以上の端末が同時に互いを見られますか？","acceptedAnswer":{"@type":"Answer","text":"はい。そのネットワークから relayium.com を開いた端末はすべてルームに並ぶので、スマートフォンもノートPCもデスクトップも横並びで表示されます。ただし転送そのものは 1 対 1 です。並んだ端末のうち 1 台とワークスペースを開き、ファイルはその相手に届きます。同じ部屋の複数人に渡すときは、相手ごとに順番にワークスペースを開いてください。"}},{"@type":"Question","name":"ネットワークの外に出ない転送でも暗号化されていますか？","acceptedAnswer":{"@type":"Answer","text":"はい。同一ネットワークの転送もネットワークをまたぐ転送と同じ X25519 鍵交換と AES-256-GCM 暗号化を使い、自分で確認できる検証コードと、ファイルごとの SHA-256 整合性チェックがあります。"}},{"@type":"Question","name":"片方が Wi-Fi、もう片方がモバイル通信の場合は？","acceptedAnswer":{"@type":"Answer","text":"それは同じネットワークではないので、自動発見ではつながりません。代わりにペアリングコードを使ってください。送信側がサインインしてコードを作成し、受信側はアカウント不要です。ネットワークをまたぐ転送は直接接続ではなく暗号化された TURN リレー経由で行われますが、全体を通じてエンドツーエンド暗号化のままです。リレーが転送するのは暗号文だけで、ファイルの中身は読めません。"}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ja/guides/" aria-current="true">ガイド</a><a href="/ja/apps/">アプリ</a><a href="/pricing">料金</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="メインナビゲーション"><a class="row" href="/">LAN</a><a class="row" href="/ja/cross-network/">ネットワーク間</a><a class="row" href="/ja/offline-transfer/">非同期</a><a class="row" href="/device-inbox">デバイス受信箱</a><a class="row" href="/cli">CLI</a><a class="row" href="/ja/apps/">アプリ</a><a class="row" href="/pricing">料金</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">同じ Wi-Fi 上の端末間でファイルを送る</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,27 +203,27 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links archived-pricing">このページに記載されている料金プランや利用上限は古くなっている可能性があります。現在の内容は<a href="/pricing">料金</a>のページでご確認ください。</p><p class="archived-links">最新版：<a href="/how-to/send-files-on-the-same-wifi/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/how-to/send-files-on-the-same-wifi/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">2台以上の端末が同じ Wi-Fi やローカルネットワークにあるなら、その間でファイルを送るのにアカウントもコードもクラウド経由も要らないはずです。Relayium は端末が同じネットワークを共有しているかを検出し、ブラウザの中で直接つなぎます。登録するものは何もありません。</p>
       <p class="lead">本ガイドは汎用的な同一ネットワークのケースを扱います。どんな端末・OS でも、同時に2台以上でも構いません。特定の端末の組み合わせを想定しているなら、末尾にリンクした PC からスマホへ、Mac から Windows へ、あるいは Windows/Linux/Android 向けの AirDrop 的な手順の専用ガイドを参照してください。</p>
-      <h2>同一ネットワークの検出の仕組み</h2>
+      <section class="sheet"><h2>同一ネットワークの検出の仕組み</h2>
       <p>Relayium は近くの端末を見つけるのに何かを入力させることはありません。ペアリングコードなしでブラウザが relayium.com を開くと、サーバーは接続元のネットワークをもとにルームへ割り当てます。実際には、同じグローバル IP アドレスを共有する端末（同じ自宅・オフィス・キャンパスの Wi-Fi、同じモバイルホットスポットなど）が自動的に同じルームに入ります。</p>
-      <p>そのルームは2台までに限られません。そのネットワークから relayium.com を開いた端末はいくつでも入れるので、机を並べたノートPCの一群や教室のスマホ全員が、1対1に限らず一度に互いを見つけられます。</p>
-      <h2>手順</h2>
+      <p>そのルームは2台までに限られません。そのネットワークから relayium.com を開いた端末はいくつでも入れるので、机を並べたノートPCの一群や教室のスマホ全員が、1対1に限らず一度に互いを見つけられます。</p></section>
+      <section class="sheet"><h2>手順</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">始める前に</p><ul><li>すべての端末が同じ Wi-Fi またはローカルネットワークにあり、ルーターがクライアント同士を隔てていないこと。探すべき設定名は、端末一覧の下にある Relayium 自身のヒントに書かれています：「AP 分離 / クライアント分離」。</li><li>各端末に最近のブラウザ（Chrome、Edge、Firefox、Safari）があり、ページを https://relayium.com/ で開いていること。暗号化転送には HTTPS が必要で、素の http:// で開いた場合は端末一覧の代わりにその旨が表示されます。</li><li>アカウントもペアリングコードも不要です。同一ネットワークの検出はどちら側にもそれを求めないので、最初の転送の前に設定するものは何もありません。</li><li>受信側にファイルの置き場所があること。どこに置かれるかを決めるのは Relayium ではなく受信側のブラウザと OS です：PC の Chrome と Edge は保存先を尋ねられますが、ほかのブラウザは自分のダウンロード先に書き込みます。実際にどこへ着いたかは、そのブラウザ自身のダウンロード一覧——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)——で確認します。</li></ul></div>
       <p>すべてブラウザの中で完結します。どの端末にもインストールするものはありません。</p>
       <ol class="steps" data-block="steps"><li><p>使いたいすべての端末を同じ Wi-Fi またはローカルネットワークに接続し、それぞれで転送ページを開きます。</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>両方の端末で見出しの下のステータス表示を読み、そこにあるグローバル IP を比べます。同じアドレスであることが 2 台を同じルームに入れる条件で、アドレスが違えばネットワークも別です。Wi-Fi の名前が同じでも関係ありません。</p><pre tabindex="0"><code>接続済み · このデバイス MacBook · グローバル IP 203.0.113.9</code></pre></li><li><p>「近くのデバイス」の欄を見てください。そのネットワークからページを開いた端末はすべて、自分の名前を載せたカードとして並びます。入力も確認も要りません。</p></li><li><p>送信側で相手のカードを押し、「ワークスペースを開く」を押します。最近のブラウザでは、近くのデバイスのカードが差し出す操作はこれ 1 つだけです。ファイルもフォルダもメッセージも、それが開く 1 本の暗号化接続を通ります。ルームに何台も並んでいることはありますが、ワークスペースを開くという操作が、今回の送り先を 1 台に決める操作です。次の相手にはあらためてもう 1 つ開きます。</p></li><li><p>ワークスペースがそのカードと入れ替わります。以後、接続の状態はワークスペース上部のヘッダーで読みます——どの端末につながっているか、リンクの状態、そして 1 つだけの経路バッジ。送信はその下のコントロールで行います：まとめて送るなら「ファイルを送信」、ディレクトリ全体はブラウザがフォルダ選択に対応していれば「フォルダを送信」、あるいはメッセージ欄に入力して「送信」を押します。1 バッチは最大 1,000 ファイルです。</p></li><li><p>受信側にはファイル数と合計サイズを添えたリクエストが届き、その下の行に「受信」を押すと何が起きるかが書かれています。ブラウザが保存先を尋ねるか、ダウンロード先に入るかのどちらかです。「受信」を押すと始まります。</p></li><li><p>両方の画面でファイルカウンターが最後のファイルに達するまで見守ります。1 バイトも動く前に検証コード（SAS）を照合したい場合は、先に両方の端末で「高度な検証」をオンにしてください。既定はオフで、オンにして増えるのは照合と承認の一手間であって暗号化ではありません。オンでもオフでも転送は暗号化されています。</p></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">転送が成功したときの画面</p><p>その頃には相手のカードは消えています——ワークスペースが取って代わったからです。状態はワークスペースのヘッダーで読みます：どの端末につながっているか、リンクの状態は「接続済み」、そして 1 つだけの経路バッジが「LAN直結」。自分のネットワーク内のホスト間 1 ホップという意味です。「P2P直結」はもう一つの正直な結果です：2 台は確かに同じグローバル IP を共有していたものの、ブラウザが選んだホップはローカルなものではありませんでした。</p><p>受信側ではカウンターが最後のファイルで止まり、ファイル自体は保存の案内が示した場所にあります。それを確かめる場所はこのページではなく、受信側のブラウザ自身のダウンロード一覧です——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。</p><pre tabindex="0"><code>MacBook に接続済み · 接続済み · LAN直結
 ファイル 3/3</code></pre></div>
-      <ul><li>同一ネットワークのルームは 2 台に限られないので、部屋にあるスマートフォンやノート PC の分だけカードが並ぶのは正常で、不具合ではありません。</li><li>ここでは先にアップロードして後からダウンロードする、という動きはありません。あとで取りに行けるサーバー上のコピーは存在しないので、カウンターが終わるまで両方の端末はページに留まってください。</li></ul>
-      <h2>端末が互いに見えないとき</h2>
+      <ul><li>同一ネットワークのルームは 2 台に限られないので、部屋にあるスマートフォンやノート PC の分だけカードが並ぶのは正常で、不具合ではありません。</li><li>ここでは先にアップロードして後からダウンロードする、という動きはありません。あとで取りに行けるサーバー上のコピーは存在しないので、カウンターが終わるまで両方の端末はページに留まってください。</li></ul></section>
+      <section class="sheet"><h2>端末が互いに見えないとき</h2>
       <p>同一ネットワークの検出は、ブラウザがどのネットワークから接続しているかを手がかりにします。だからまずそこを見ます。2 台が実は同じネットワークにない、ルーターがクライアントを隔てている、ページが HTTPS で開かれていない、あるいは受信側のブラウザが抱えきれない量を求められている。これらは原因の全部ではなく、よくある最初の確認項目です。どれも画面上に判定材料があります。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>「近くのデバイス」がずっと空か、今見ている端末しか並ばない。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 両方で開き、ステータス表示のグローバル IP を比べる</code></pre><p>グローバル IP が 2 つ違えばルームも 2 つです。VPN、iCloud プライベートリレー、クライアントを別アドレスから出すゲスト SSID はよくある原因ですが、原因はそれだけではありません。設定を変えてよいなら、VPN を切る、その Wi-Fi にかぎってプライベートリレーをオフにする、または両方の端末をメインのネットワークへ移し、それぞれで https://relayium.com/ を再読み込みしてください。変えたくない場合は、https://relayium.com/cross-network のペアリングコードならどちらの設定も触らずに相手へ届き、同じくエンドツーエンド暗号化です。</p></dd><dt>両方の端末が同じグローバル IP を表示しているのに、カードが 1 枚も現れない。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 端末一覧の下のヒントに、変更すべきルーター設定名がある</code></pre><p>ルーターが自分のクライアントを隔てています。Wi-Fi 設定で「AP 分離 / クライアント分離」をオフにし——メッシュ機器やホテル・ゲスト用ネットワークでは既定で有効なことが多いです——両方の端末でページを再読み込みしてください。ルーターを管理できない場合は、https://relayium.com/cross-network のペアリングコードが代わりの道です。</p></dd><dt>暗号化転送には HTTPS が必要と表示され、端末一覧がまったく出ない。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # アドレス欄は http ではなく https でなければならない</code></pre><p>ページが http:// か素の IP アドレスで開かれているため、ブラウザが暗号化転送に必要な API を渡しません。relayium.com 自体は HTTPS へリダイレクトするので、これは通常 http:// で参照している自己ホスト環境を意味します。https://relayium.com/ で開くか、自分の環境に証明書を用意してください。</p></dd><dt>受信を押す前に、受信側がバッチ全体をメモリに保持しなければならないと警告する。</dt><dd><pre tabindex="0"><code>chrome://downloads   # Chrome 用 / Edge は edge://downloads / Firefox は about:downloads</code></pre><p>そのブラウザはダウンロードをディスクへ直接ストリーミングできないため、バッチ全体を抱え込み、大きいとタブが落ちて終わることがあります。PC の Chrome か Edge で受け取るか、一度に送るファイルを減らし、保存できたと決め込まずに受信側のブラウザ自身のダウンロード一覧——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)——で 1 つずつ確認してください。</p></dd><dt>転送は動くが、バッジが「LAN直結」ではなく「P2P直結」になっている。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # ワークスペースのヘッダーにある経路バッジを読む</code></pre><p>2 台はグローバル IP を共有しているのに、ローカルなホップは共有していません。キャリアグレード NAT、1 本の上流にぶら下がる 2 つの VLAN、クライアントモードの中継機などがこうなります。転送は依然として直接で、依然としてエンドツーエンド暗号化です。経路をブラウザが見つけた道ではなく LAN にしたいなら、両方の端末を同じアクセスポイントにつないでください。</p></dd></dl></div>
-      <h2>なぜ速いのか：間にサーバーが挟まらない</h2>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>「近くのデバイス」がずっと空か、今見ている端末しか並ばない。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 両方で開き、ステータス表示のグローバル IP を比べる</code></pre><p>グローバル IP が 2 つ違えばルームも 2 つです。VPN、iCloud プライベートリレー、クライアントを別アドレスから出すゲスト SSID はよくある原因ですが、原因はそれだけではありません。設定を変えてよいなら、VPN を切る、その Wi-Fi にかぎってプライベートリレーをオフにする、または両方の端末をメインのネットワークへ移し、それぞれで https://relayium.com/ を再読み込みしてください。変えたくない場合は、https://relayium.com/cross-network のペアリングコードならどちらの設定も触らずに相手へ届き、同じくエンドツーエンド暗号化です。</p></dd><dt>両方の端末が同じグローバル IP を表示しているのに、カードが 1 枚も現れない。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 端末一覧の下のヒントに、変更すべきルーター設定名がある</code></pre><p>ルーターが自分のクライアントを隔てています。Wi-Fi 設定で「AP 分離 / クライアント分離」をオフにし——メッシュ機器やホテル・ゲスト用ネットワークでは既定で有効なことが多いです——両方の端末でページを再読み込みしてください。ルーターを管理できない場合は、https://relayium.com/cross-network のペアリングコードが代わりの道です。</p></dd><dt>暗号化転送には HTTPS が必要と表示され、端末一覧がまったく出ない。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # アドレス欄は http ではなく https でなければならない</code></pre><p>ページが http:// か素の IP アドレスで開かれているため、ブラウザが暗号化転送に必要な API を渡しません。relayium.com 自体は HTTPS へリダイレクトするので、これは通常 http:// で参照している自己ホスト環境を意味します。https://relayium.com/ で開くか、自分の環境に証明書を用意してください。</p></dd><dt>受信を押す前に、受信側がバッチ全体をメモリに保持しなければならないと警告する。</dt><dd><pre tabindex="0"><code>chrome://downloads   # Chrome 用 / Edge は edge://downloads / Firefox は about:downloads</code></pre><p>そのブラウザはダウンロードをディスクへ直接ストリーミングできないため、バッチ全体を抱え込み、大きいとタブが落ちて終わることがあります。PC の Chrome か Edge で受け取るか、一度に送るファイルを減らし、保存できたと決め込まずに受信側のブラウザ自身のダウンロード一覧——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)——で 1 つずつ確認してください。</p></dd><dt>転送は動くが、バッジが「LAN直結」ではなく「P2P直結」になっている。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # ワークスペースのヘッダーにある経路バッジを読む</code></pre><p>2 台はグローバル IP を共有しているのに、ローカルなホップは共有していません。キャリアグレード NAT、1 本の上流にぶら下がる 2 つの VLAN、クライアントモードの中継機などがこうなります。転送は依然として直接で、依然としてエンドツーエンド暗号化です。経路をブラウザが見つけた道ではなく LAN にしたいなら、両方の端末を同じアクセスポイントにつないでください。</p></dd></dl></div></section>
+      <section class="sheet"><h2>なぜ速いのか：間にサーバーが挟まらない</h2>
       <p>2 台は同じネットワークから接続しているので、Relayium は両者を P2P で直接つなぎます。バイトは一方からもう一方へ渡り、Relayium のサーバーを往復しません。先にアップロードするものも、あとからダウンロードを待つものもありません。どれだけ速いかは、2 つのブラウザが最終的に選んだホップ次第で、それを言い当てるのが経路バッジです。「LAN直結」はローカルなホップで、データは自分のネットワークの外に出ず、インターネット回線ではなく LAN の速度で流れます。「P2P直結」も同じく直接で、間にサーバーはありませんが、ブラウザが見つけた経路はローカルなセグメントを出ているので、実際に通る回線の速さに縛られます。グローバル IP が同じであることは 2 台を同じルームに入れるだけで、それ自体は 2 台の間のホップがローカルだという保証ではありません。</p>
-      <p>これがどちら側にもアカウントが要らない理由でもあります。全員がすでに同じ信頼できるネットワーク上にいるので、誰が誰につないでよいかを知るのにサインインは必要ありません。</p>
-      <h2>それでもエンドツーエンド暗号化</h2>
-      <p>同じネットワーク上にあるからといって、転送が平文で送られるわけではありません。Relayium は2台の端末間で X25519 鍵交換を行い、すべてのチャンクを AES-256-GCM で暗号化します。その鍵は、端末同士が互いを見つける手助けをするだけの Relayium 自身のシグナリングサーバーを含め、いかなるサーバーにも見えません。高度な検証をオンにすると両方の画面に短い検証コード（SAS）も表示され、接続が本当に手元の2台の端末間であることを目視で確認でき、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるので、バイト単位で無事に届いたことがわかります。</p>
-      <h2>別のネットワーク：ペアリングとリレー</h2>
+      <p>これがどちら側にもアカウントが要らない理由でもあります。全員がすでに同じ信頼できるネットワーク上にいるので、誰が誰につないでよいかを知るのにサインインは必要ありません。</p></section>
+      <section class="sheet"><h2>それでもエンドツーエンド暗号化</h2>
+      <p>同じネットワーク上にあるからといって、転送が平文で送られるわけではありません。Relayium は2台の端末間で X25519 鍵交換を行い、すべてのチャンクを AES-256-GCM で暗号化します。その鍵は、端末同士が互いを見つける手助けをするだけの Relayium 自身のシグナリングサーバーを含め、いかなるサーバーにも見えません。高度な検証をオンにすると両方の画面に短い検証コード（SAS）も表示され、接続が本当に手元の2台の端末間であることを目視で確認でき、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるので、バイト単位で無事に届いたことがわかります。</p></section>
+      <section class="sheet"><h2>別のネットワーク：ペアリングとリレー</h2>
       <p>ペアリングコードはサーバーが生成する6桁の10進数字です（0〜9、先頭の0も有効）。送信側はコード作成時にサインインしますが、コード、リンク、QRから参加する側にアカウントは不要です。新しく参加できるのは5分間で、すでに接続済みの転送はカウントダウン終了で切断されません。</p>
-      <p>ネットワークをまたぐ場合、ブラウザは先に直接経路を試すのではなく、設計どおり暗号化された TURN リレーを使います。鍵は2台の端末に留まるため、リレーが転送するのはエンドツーエンド暗号化された暗号文だけで、ファイルを読めず、リアルタイム内容のコピーや履歴も保持しません。</p>
+      <p>ネットワークをまたぐ場合、ブラウザは先に直接経路を試すのではなく、設計どおり暗号化された TURN リレーを使います。鍵は2台の端末に留まるため、リレーが転送するのはエンドツーエンド暗号化された暗号文だけで、ファイルを読めず、リアルタイム内容のコピーや履歴も保持しません。</p></section>
       <h2>よくある質問</h2>
       <h3>同じ Wi-Fi でファイルを送るのにアカウントは必要ですか？</h3>
       <p>いいえ。同一ネットワークでの転送はどちら側にもアカウントもペアリングコードも不要です。各端末で relayium.com を開くだけです。</p>
@@ -206,6 +250,8 @@ ol.steps>li>pre{margin:8px 0 0}
         <a href="/pricing">料金</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

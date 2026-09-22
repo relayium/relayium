@@ -36,9 +36,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"How to transfer files from Android to iPhone (no cable)","description":"A step-by-step guide to sending photos, videos and documents from Android to iPhone in a browser — no AirDrop, no cable, no cloud upload. Just open Relayium on both devices.","inLanguage":"en","datePublished":"2026-07-03","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/how-to/transfer-files-android-to-iphone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/guides/"},{"@type":"ListItem","position":3,"name":"How to transfer files from Android to iPhone (no cable)"}]},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Do I need to install an app on either phone?","acceptedAnswer":{"@type":"Answer","text":"No. Relayium runs entirely in the browser on both Android and iPhone. Open relayium.com on each device and you're ready — no download either way. On the same network a realtime transfer needs no account; pairing across networks just asks the sender to sign in. You can optionally add it to your home screen as a PWA, but that's just a shortcut."}},{"@type":"Question","name":"Do both phones have to be on the same Wi-Fi?","acceptedAnswer":{"@type":"Answer","text":"No. The same network is the fastest path because the devices discover each other automatically, but a pairing code connects two phones across different networks — even one on mobile data and one on Wi-Fi. The transfer stays end-to-end encrypted in both cases, though pairing across networks requires the sender to sign in — the receiver never needs an account."}},{"@type":"Question","name":"Are the photos compressed or changed in any way?","acceptedAnswer":{"@type":"Answer","text":"No. The original file is transferred byte-for-byte with no compression, and each file is checked end-to-end with a SHA-256 hash, so what arrives on the iPhone is bit-for-bit identical to what you sent from Android."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -60,24 +60,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -103,6 +89,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -134,8 +176,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/guides/" aria-current="true">Guides</a><a href="/apps">Apps</a><a href="/pricing">Pricing</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Main"><span class="rail-group">Live transfer</span><a class="row" href="/">LAN</a><a class="row" href="/cross-network" aria-label="Cross-network transfer">Cross-network</a><span class="rail-group">Links</span><a class="row" href="/offline-transfer" aria-label="Share a link">Share</a><span class="rail-group">Your devices</span><a class="row" href="/device-inbox" aria-label="Device Inbox">Inbox</a><span class="rail-group">Downloads and tools</span><a class="row" href="/cli">CLI</a><a class="row" href="/apps">Apps</a><a class="row" href="/pricing">Pricing</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-android-to-iphone/" aria-current="true">English</a><a href="/zh/how-to/transfer-files-android-to-iphone/">中文</a></nav></div></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Relayium</a> <span aria-hidden="true">›</span> <a href="/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">How to transfer files from Android to iPhone (no cable)</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -154,29 +198,29 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Last updated: <bdi>2026-08-07</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-android-to-iphone/" aria-current="true">English</a><a href="/zh/how-to/transfer-files-android-to-iphone/">中文</a></nav>
+      
       <p class="lead">Android and iPhone do not share an AirDrop, so moving a few photos or a video between them usually means a USB cable, a chat app that compresses your images, or a round-trip through some cloud drive. All three are slower and more fiddly than they should be.</p>
       <p class="lead">Relayium skips all of that. Both phones open the same page: on the same LAN the end-to-end encrypted files travel directly, while across networks a TURN relay carries ciphertext it cannot read or decrypt and keeps no realtime content copy or history. No app is needed; the creator signs in for cross-network pairing, while the person joining never needs an account. This guide walks through it step by step.</p>
-      <h2>What you need before you start</h2>
+      <section class="sheet"><h2>What you need before you start</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">What you need</p><ul><li>An Android phone with Chrome (or any modern browser) and an iPhone with Safari — both up to date.</li><li>For the fastest path, both devices on the same Wi-Fi network. On the iPhone that usually also means turning iCloud Private Relay off for that one network: it sends the phone out through a different public IP, and same-network discovery groups devices by exactly that address. Leaving it on is a perfectly good choice — a pairing code on https://relayium.com/cross-network then reaches the phone without changing the setting.</li><li>The page open over https://relayium.com/ on both phones. Encrypted transfer needs HTTPS, and over plain http:// the page says so instead of listing devices.</li><li>The files you want to send, up to 1,000 per batch, and somewhere for them to land on the receiving phone — which folder that is belongs to its browser, not to Relayium.</li></ul></div>
-      <p>Nothing to install. On the same network there is nothing to sign up for either — realtime transfers work straight from the browser on both devices.</p>
-      <h2>Step by step: both devices on the same Wi-Fi</h2>
+      <p>Nothing to install. On the same network there is nothing to sign up for either — realtime transfers work straight from the browser on both devices.</p></section>
+      <section class="sheet"><h2>Step by step: both devices on the same Wi-Fi</h2>
       <p>This is the simplest route. On the same network, the two phones discover each other automatically, so there is almost nothing to type.</p>
       <ol class="steps" data-block="steps"><li><p>On both the Android phone and the iPhone, open the transfer page in the browser.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>Compare the public IP in the status pill on both phones. Matching addresses put the two in one room; a different one on the iPhone commonly means iCloud Private Relay or mobile data rather than a broken Wi-Fi.</p><pre tabindex="0"><code>Connected · this device iPhone · public IP 203.0.113.9</code></pre></li><li><p>Each phone now lists the other under “Nearby devices”. On the sending phone, tap the receiving one and press “Open workspace”. On a current browser that is the card&#39;s one action, because files and messages then share the single encrypted connection it opens.</p></li><li><p>The workspace replaces that card, and its controls carry both: “Send files” for a batch of up to 1,000, or type into the message box and press “Send”. “Send a folder” is offered on the Android phone but not on the iPhone, because no iOS browser lets a page pick a folder. Then, on the receiving iPhone, read the line under the request before you accept — it says whether Safari will ask where to save or write to its own Downloads — and tap “Accept”.</p></li><li><p>Keep both browser tabs in front until the file counter reaches the last file. To compare a verification code (SAS) first, turn on “Advanced verification” on both phones before you start: a match confirms both phones joined the same end-to-end encrypted session, and it does not prove which network path carries the ciphertext. Left off, there is no code to compare and the session is still encrypted.</p></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">What a working transfer looks like</p><p>The other phone&#39;s card is gone by then — the workspace took its place — so the state is read off the workspace header: the device you are connected to, a link state of “Connected”, and one path badge reading “LAN direct”. The file counter on both screens ends on the last file of the batch.</p><p>Then confirm the file rather than the page. On the iPhone that means the Downloads folder in the Files app, which is where Safari puts a download; on the Android phone it means the browser&#39;s own downloads list — chrome://downloads in Chrome, about:downloads in Firefox.</p><pre tabindex="0"><code>Connected to iPhone · Connected · LAN direct
-File 2/2</code></pre></div>
-      <h2>When the two phones can&#39;t see each other</h2>
+File 2/2</code></pre></div></section>
+      <section class="sheet"><h2>When the two phones can&#39;t see each other</h2>
       <p>One cause worth knowing on the iPhone: iCloud Private Relay is on for many iCloud+ accounts and changes the public IP the phone appears to come from, which is exactly what same-network discovery groups by. It is one common reason among several, not the only one, and the checks below are the usual first ones rather than an exhaustive list — each decides its case from what is already on screen.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, check, fix</p><dl><dt>The iPhone never appears on the Android phone, or the other way round.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # compare the public IP in the status pill on both phones</code></pre><p>Two different public IP addresses mean two rooms. On an iPhone iCloud Private Relay is one common cause, and a phone that quietly stayed on mobile data is another; neither is the only possibility. If you are willing to change them, turn Private Relay off for that one Wi-Fi under Settings › Wi-Fi › the network › Limit IP Address Tracking, or join the Wi-Fi, then reload https://relayium.com/. If you would rather leave Private Relay or a VPN on, a pairing code on https://relayium.com/cross-network reaches the phone without touching either.</p></dd><dt>Both phones show the same public IP and neither card appears.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # the hint under the device list names the router setting</code></pre><p>The router is separating its own clients. Turn off “AP isolation / client isolation” in its Wi-Fi settings, or pair the two phones across networks with a code on https://relayium.com/cross-network when the router is not yours to change.</p></dd><dt>The iPhone warns, before you accept, that the whole batch has to be held in memory.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # the warning states the batch size it is about to hold</code></pre><p>Every iPhone browser is WebKit and has no File System Access API, so the batch is assembled in memory and Relayium warns past roughly 256 MiB. Send fewer files at a time, or send that file into a desktop Chrome or Edge instead, which writes it straight to disk with no size cap.</p></dd><dt>The counter finished but you cannot find the file on the iPhone.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # the line under the request said where this browser saves</code></pre><p>Safari does not put a download in the photo library. Look in the Files app under Downloads — the exact location is whatever Settings › Safari › Downloads points at, iCloud Drive or On My iPhone — and open it from there; a photo only reaches the Photos app if you save it out of the file yourself.</p></dd><dt>The transfer stalls or fails when you switch apps or the screen locks.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # the Relayium tab has to be the one in front on both phones</code></pre><p>A backgrounded tab may be throttled or suspended on either phone, and while it is, no bytes move. Relayium requests a screen wake lock where the browser offers one, which covers the screen switching off but grants no background execution and does not survive app switching — leave both tabs in front until the counter finishes.</p></dd></dl></div>
-      <h2>On different networks: pairing and relay</h2>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, check, fix</p><dl><dt>The iPhone never appears on the Android phone, or the other way round.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # compare the public IP in the status pill on both phones</code></pre><p>Two different public IP addresses mean two rooms. On an iPhone iCloud Private Relay is one common cause, and a phone that quietly stayed on mobile data is another; neither is the only possibility. If you are willing to change them, turn Private Relay off for that one Wi-Fi under Settings › Wi-Fi › the network › Limit IP Address Tracking, or join the Wi-Fi, then reload https://relayium.com/. If you would rather leave Private Relay or a VPN on, a pairing code on https://relayium.com/cross-network reaches the phone without touching either.</p></dd><dt>Both phones show the same public IP and neither card appears.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # the hint under the device list names the router setting</code></pre><p>The router is separating its own clients. Turn off “AP isolation / client isolation” in its Wi-Fi settings, or pair the two phones across networks with a code on https://relayium.com/cross-network when the router is not yours to change.</p></dd><dt>The iPhone warns, before you accept, that the whole batch has to be held in memory.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # the warning states the batch size it is about to hold</code></pre><p>Every iPhone browser is WebKit and has no File System Access API, so the batch is assembled in memory and Relayium warns past roughly 256 MiB. Send fewer files at a time, or send that file into a desktop Chrome or Edge instead, which writes it straight to disk with no size cap.</p></dd><dt>The counter finished but you cannot find the file on the iPhone.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # the line under the request said where this browser saves</code></pre><p>Safari does not put a download in the photo library. Look in the Files app under Downloads — the exact location is whatever Settings › Safari › Downloads points at, iCloud Drive or On My iPhone — and open it from there; a photo only reaches the Photos app if you save it out of the file yourself.</p></dd><dt>The transfer stalls or fails when you switch apps or the screen locks.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # the Relayium tab has to be the one in front on both phones</code></pre><p>A backgrounded tab may be throttled or suspended on either phone, and while it is, no bytes move. Relayium requests a screen wake lock where the browser offers one, which covers the screen switching off but grants no background execution and does not survive app switching — leave both tabs in front until the counter finishes.</p></dd></dl></div></section>
+      <section class="sheet"><h2>On different networks: pairing and relay</h2>
       <p>The server generates exactly six decimal digits (0–9, including a leading zero). The sender signs in to create the code, while the person joining by code, link or QR never needs an account. It accepts new joins for five minutes; an already connected transfer is not cut off when that countdown ends.</p>
-      <p>Across networks, browsers use an encrypted TURN relay by design rather than trying a direct path first. The key stays on the two devices, so the relay forwards only end-to-end-encrypted ciphertext, cannot read the files and keeps no realtime content copy or history.</p>
-      <h2>Other ways to move files between Android and iPhone</h2>
+      <p>Across networks, browsers use an encrypted TURN relay by design rather than trying a direct path first. The key stays on the two devices, so the relay forwards only end-to-end-encrypted ciphertext, cannot read the files and keeps no realtime content copy or history.</p></section>
+      <section class="sheet"><h2>Other ways to move files between Android and iPhone</h2>
       <p>Relayium isn&#39;t the only option, and it&#39;s worth knowing the honest trade-offs of the alternatives:</p>
-      <ul><li>Google&#39;s Quick Share and third-party apps like SHAREit move files quickly, but they need an install on both phones and Quick Share doesn&#39;t reach iPhones.</li><li>A cloud drive (Google Drive, iCloud, Dropbox) works when the other person is offline, but you upload and then download the same file twice, it counts against your quota, and the provider holds a copy.</li><li>Chat apps and email are everywhere, but they usually re-compress photos, cap attachment sizes, and are not end-to-end encrypted for file sharing.</li><li>A USB cable is reliable but needs the right adapter between USB-C and Lightning, plus a computer in the middle for many file types.</li></ul>
-      <h2>Will my photos lose quality?</h2>
+      <ul><li>Google&#39;s Quick Share and third-party apps like SHAREit move files quickly, but they need an install on both phones and Quick Share doesn&#39;t reach iPhones.</li><li>A cloud drive (Google Drive, iCloud, Dropbox) works when the other person is offline, but you upload and then download the same file twice, it counts against your quota, and the provider holds a copy.</li><li>Chat apps and email are everywhere, but they usually re-compress photos, cap attachment sizes, and are not end-to-end encrypted for file sharing.</li><li>A USB cable is reliable but needs the right adapter between USB-C and Lightning, plus a computer in the middle for many file types.</li></ul></section>
+      <section class="sheet"><h2>Will my photos lose quality?</h2>
       <p>No. Unlike a messaging app, Relayium sends the original file byte-for-byte — no re-compression, no resizing. What lands on the iPhone is an exact copy of what left the Android phone.</p>
-      <p>To prove it, each file is verified end-to-end with a SHA-256 hash, so a photo or video that arrives is guaranteed identical to the one you sent. Large files are handled well too: a browser with the File System Access API (Chrome or Edge on a desktop) writes the incoming file straight to disk, with no size cap. Firefox, Safari and phone browsers — an iPhone is always WebKit — don&#39;t have that API, so there the batch is assembled in memory instead, and Relayium warns you before you accept once it goes past roughly 256 MB. That number is a deliberately cautious estimate rather than a measured ceiling: where it actually breaks down depends on the device&#39;s memory, its OS and how many tabs are open.</p>
+      <p>To prove it, each file is verified end-to-end with a SHA-256 hash, so a photo or video that arrives is guaranteed identical to the one you sent. Large files are handled well too: a browser with the File System Access API (Chrome or Edge on a desktop) writes the incoming file straight to disk, with no size cap. Firefox, Safari and phone browsers — an iPhone is always WebKit — don&#39;t have that API, so there the batch is assembled in memory instead, and Relayium warns you before you accept once it goes past roughly 256 MB. That number is a deliberately cautious estimate rather than a measured ceiling: where it actually breaks down depends on the device&#39;s memory, its OS and how many tabs are open.</p></section>
       <h2>Frequently asked questions</h2>
       <h3>Do I need to install an app on either phone?</h3>
       <p>No. Relayium runs entirely in the browser on both Android and iPhone. Open relayium.com on each device and you&#39;re ready — no download either way. On the same network a realtime transfer needs no account; pairing across networks just asks the sender to sign in. You can optionally add it to your home screen as a PWA, but that&#39;s just a shortcut.</p>
@@ -199,6 +243,8 @@ File 2/2</code></pre></div>
         <a href="/pricing">Pricing</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

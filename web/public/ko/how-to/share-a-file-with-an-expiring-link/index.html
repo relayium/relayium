@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"만료되는 안전한 다운로드 링크로 파일 공유하기","description":"브라우저에서 파일을 암호화하고 서버가 복호화할 수 없는 링크를 생성하세요. 1시간·1일·3일·7일·최대 14일(요금제에 따라 다름) 만료 또는 첫 다운로드 후 소각 중 선택하고, 준비됐을 때 보내세요.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/how-to/share-a-file-with-an-expiring-link/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"만료되는 안전한 다운로드 링크로 파일 공유하기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"링크를 보낼 상대방도 계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"아니요. # 뒤의 부분을 포함한 전체 링크를 가진 사람이라면 누구나 열어서 파일을 다운로드할 수 있습니다. 링크를 만들 때 로그인이 필요한 쪽은 보내는 사람뿐입니다."}},{"@type":"Question","name":"Relayium이 제 파일을 읽을 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 브라우저는 업로드하기 전에 무작위로 생성한 AES-256-GCM 키로 파일을 암호화하며, 그 키는 URL 프래그먼트로만 전달되고 서버에는 절대 도달하지 않습니다. 업로드한 브라우저는 나중에 “내 파일”이 링크를 다시 만들 수 있도록 로컬 사본도 보관합니다. 서버가 저장하는 것은 복호화할 방법이 없는 암호문뿐입니다. 영지식 설계입니다."}},{"@type":"Question","name":"링크는 얼마나 유지되나요?","acceptedAnswer":{"@type":"Answer","text":"링크를 만들 때 직접 선택합니다: 1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름), 또는 고정 기간 대신 첫 다운로드에서 소각으로 설정할 수 있습니다. 슬롯은 바이트가 나가기 시작할 때 소모되므로 중간에 끊긴 다운로드도 똑같이 계산됩니다. 그 시점이 지나면 링크는 더 이상 작동하지 않습니다."}},{"@type":"Question","name":"첫 다운로드 후 소각이면 파일이 정말로 사라지나요?","acceptedAnswer":{"@type":"Answer","text":"첫 다운로드 후 소각은 정확히 한 번의 다운로드를 위해 설계되었습니다. 슬롯은 그 다운로드가 실제 암호문을 내보내기 시작하는 순간 소모되므로, 이후 링크를 여는 누구에게도 작동하지 않습니다 — 그 한 번의 다운로드가 중간에 끊겨 끝나지 않았더라도 마찬가지입니다. 한 바이트도 전송하지 못한 시도만 되돌려받습니다."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ko/guides/" aria-current="true">가이드</a><a href="/ko/apps/">앱</a><a href="/pricing">요금제</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="기본 탐색"><a class="row" href="/">LAN 전송</a><a class="row" href="/ko/cross-network/">네트워크 간 전송</a><a class="row" href="/ko/offline-transfer/">비동기 전송</a><a class="row" href="/device-inbox">기기 수신함</a><a class="row" href="/cli">CLI</a><a class="row" href="/ko/apps/">앱</a><a class="row" href="/pricing">요금제</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">만료되는 안전한 다운로드 링크로 파일 공유하기</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,10 +203,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="보관된 번역"><p class="archived-label">보관된 번역</p><p>이 페이지는 기록으로 보관 중인 한국어 번역입니다. Relayium 제품과 최신 문서는 영어와 중국어 간체로 관리되며, 앱 자체도 더 이상 한국어를 제공하지 않습니다. 여기에 적힌 화면과 세부 사항은 현재 동작과 다를 수 있습니다.</p><p class="archived-links archived-pricing">이 페이지에 적혀 있는 요금제와 사용 한도는 오래된 내용일 수 있습니다. 현재 내용은 <a href="/pricing">요금제</a> 페이지에서 확인하세요.</p><p class="archived-links">최신 버전: <a href="/how-to/share-a-file-with-an-expiring-link/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/how-to/share-a-file-with-an-expiring-link/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">모든 전송에서 상대방이 지금 기다리고 있는 것은 아닙니다. 수신자가 자고 있거나 비행기 안이거나, 아니면 그냥 메시지에 링크를 남기고 하던 일로 돌아가고 싶을 수도 있습니다. 이를 위해 Relayium에는 두 번째 모드가 있습니다. 열려 있는 다른 브라우저로 파일을 실시간 스트리밍하는 대신, 내 쪽에서 파일을 암호화하고 암호문만 업로드한 뒤, 언제든 보낼 수 있는 링크를 건네줍니다. 다운로드는 수신자 자신의 일정에 맞춰 이루어집니다.</p>
       <p class="lead">이 가이드는 이런 링크를 만드는 방법, 만료 및 첫 다운로드 후 소각 옵션, 그리고 영지식 설계가 실제로 무엇을 의미하는지 설명합니다. 솔직한 제약도 함께 다룹니다. 링크 생성에는 보내는 쪽의 로그인이 필요하고, 링크는 스토리지 할당량을 차지합니다.</p>
-      <h2>저장 링크 vs 실시간: 어느 쪽을 써야 할까</h2>
+      <section class="sheet"><h2>저장 링크 vs 실시간: 어느 쪽을 써야 할까</h2>
       <p>Relayium의 실시간 모드는 열려 있는 두 브라우저 탭 사이에서 파일을 실시간으로 전송합니다. 같은 LAN에서는 WebRTC로 직접 연결하고, 네트워크를 넘는 브라우저 세션은 설계상 TURN을 사용해 릴레이가 읽거나 복호화할 수 없는 종단간 암호문을 운반합니다. Relayium은 서버 측 복사본이나 실시간 기록을 보관하지 않지만, 양쪽이 동시에 온라인이어야 합니다. 저장형 만료 링크는 그 반대입니다. 브라우저가 암호화를 수행하고 결과를 한 번 업로드하면, 수신자는 몇 분, 몇 시간, 심지어 며칠 뒤에도 자기 시간에 맞춰 링크를 열 수 있습니다.</p>
-      <p>상대가 언제 시간이 날지 모를 때, 같은 파일을 여러 사람에게 보낼 때, 아니면 그냥 이메일이나 채팅에 붙여넣고 끝내고 싶을 때 저장 링크를 사용하세요.</p>
-      <h2>링크 만드는 방법</h2>
+      <p>상대가 언제 시간이 날지 모를 때, 같은 파일을 여러 사람에게 보낼 때, 아니면 그냥 이메일이나 채팅에 붙여넣고 끝내고 싶을 때 저장 링크를 사용하세요.</p></section>
+      <section class="sheet"><h2>링크 만드는 방법</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">필요한 것</p><ul><li>로그인한 계정은 보내는 쪽에만 필요합니다. 받는 사람은 필요 없고 로그인 안내도 보지 않습니다.</li><li>서로 다른 두 상한에 들어가는 파일. 선택기 옆에 찍히는 파일당 상한과 요금제의 저장 용량입니다. 둘 다 짐작이 아니라 페이지에서 읽습니다.</li><li>요금제가 허용하는 보관 기간. 목록에는 요금제가 지원하는 기간만 나오고, 서버도 받은 요청에 같은 상한을 방어적으로 적용합니다.</li><li>중요한 것은 내 사본도 갖고 있기. 페이지가 옵션 아래에서 그렇게 말합니다: 이것은 임시 전달이고 백업이 아닙니다.</li></ul></div>
       <p>링크를 만드는 과정은 모두 브라우저 안에서 몇 단계로 이루어집니다.</p>
       <ol class="steps" data-block="steps"><li><p>비동기 전송 페이지를 열고 로그인합니다. 계정이 필요한 쪽은 보내는 사람뿐이고, 받는 사람은 필요 없습니다.</p><pre tabindex="0"><code>https://relayium.com/offline-transfer</code></pre></li><li><p>파일을 하나 이상 고르거나 끌어다 놓습니다. 선택기 옆의 숫자가 이 계정의 현재 파일당 상한입니다.</p><pre tabindex="0"><code>업로드할 파일 선택
@@ -170,15 +214,15 @@ ol.steps>li>pre{margin:8px 0 0}
 1일</code></pre></li><li><p>브라우저가 먼저 암호화한 뒤 업로드하는 동안 기다립니다. 두 단계 모두 진행 중에 표시됩니다. 끝날 때까지 페이지를 열어 두세요. 끝나면 링크는 페이지에 의존하지 않습니다.</p></li><li><p>링크를 복사하거나 옆의 QR을 상대가 스캔하게 하고, 원하는 방식으로 보내세요. 문자열은 전체가 중요합니다. #k= 뒤는 복호화 키이고 서버에는 결코 닿지 않습니다.</p><pre tabindex="0"><code>링크가 생성되었습니다. 상대에게 보내 다운로드하세요:
 https://relayium.com/d/8f3c2a1b#k=hQ2r…</code></pre></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">만들어진 링크는 이렇게 보입니다</p><p>페이지가 선택기를 링크, 만료 날짜, 복사 버튼으로 바꿉니다 — 여기에 같은 링크의 QR과, 그 아래 터미널에서 가져오는 명령 생성기가 함께 놓입니다.</p><p>링크를 직접 열어 보는 것이 정직한 확인입니다. 다운로드 페이지에는 암호화된 다운로드 링크 제목, 파일 개수와 총 크기, 남은 시간 카운트다운이 뜹니다. 뜨지 않는 것은 우리가 파일을 읽을 수 있는 경로이며, 키는 복사해 둔 프래그먼트에 남아 있기 때문입니다.</p><pre tabindex="0"><code>링크가 생성되었습니다. 상대에게 보내 다운로드하세요:
-https://relayium.com/d/8f3c2a1b#k=hQ2r…</code></pre></div>
-      <h2>만료와 첫 다운로드 후 소각</h2>
+https://relayium.com/d/8f3c2a1b#k=hQ2r…</code></pre></div></section>
+      <section class="sheet"><h2>만료와 첫 다운로드 후 소각</h2>
       <p>모든 링크에는 수명이 필요합니다. 영원히 살아있게 두는 것은 일회성 전송의 취지에 맞지 않습니다. 링크를 만들 때 얼마나 오래 유효할지 고를 수 있고, 한 번 쓰이면 즉시 사라지도록 설정할 수도 있습니다.</p>
       <p>첫 다운로드 후 소각은 다운로드가 딱 한 번뿐이고 그 뒤에는 아무것도 남지 않는다는 뜻입니다. 파일이 민감해서 딱 한 사람에게 한 번만 보여주고 이후로는 아무것도 남기고 싶지 않을 때 유용합니다. 다만 그 한 번의 슬롯이 언제 소모되는지는 정확히 짚어야 합니다. 다운로드가 끝나는 순간이 아니라, 실제 암호문이 흐르기 시작하는 순간입니다. 중간에 끊긴 다운로드도 이미 슬롯을 써버린 것이라, 수신자가 파일의 일부만 갖고 있어도 링크는 죽습니다. 단 한 바이트도 전달하지 못한 시도만 슬롯을 돌려받으므로, 연결했다가 곧바로 끊긴 경우에는 아무것도 소모되지 않습니다. 이 비대칭은 의도된 것입니다. 거의 다 받은 읽기를 공짜로 환불해 주는 것이야말로 링크를 가진 사람이 소각 파일을 몇 번이고 다시 빼가는 방법이기 때문입니다. 어느 쪽을 선택하든 수신자는 다운로드 페이지에서 실시간 카운트다운을 볼 수 있어, 남은 시간(또는 다운로드 가능 여부)을 알 수 있습니다. 상대의 연결이 불안정하다면 소각은 끄고 짧은 만료 기간을 고르세요.</p>
-      <ul><li>1시간</li><li>1일(기본값)</li><li>3일</li><li>7일</li><li>14일(최대, 최상위 요금제)</li><li>또는: 고정된 시간 대신 실제로 바이트가 나가기 시작한 첫 다운로드에서 소각</li></ul>
-      <h2>영지식 보장, 그리고 그 한계</h2>
+      <ul><li>1시간</li><li>1일(기본값)</li><li>3일</li><li>7일</li><li>14일(최대, 최상위 요금제)</li><li>또는: 고정된 시간 대신 실제로 바이트가 나가기 시작한 첫 다운로드에서 소각</li></ul></section>
+      <section class="sheet"><h2>영지식 보장, 그리고 그 한계</h2>
       <p>링크를 만들 때 실제로 일어나는 일은 이렇습니다. 브라우저가 무작위 AES-256-GCM 키를 생성합니다. 이는 Relayium의 실시간 모드와는 다른 방식으로, 실시간 모드는 X25519로 두 기기 사이에 키를 협상합니다. 저장 링크의 키는 로컬에서 생성되며 협상할 상대가 없습니다. 이 키는 무언가가 기기를 떠나기 전에 파일 본문과 파일명 목록을 암호화하고, 다운로드 링크의 # 뒤에 붙습니다. 브라우저가 어떤 서버로도 절대 보내지 않는 URL 부분입니다. 서버는 전달받은 암호문을, 오직 암호문만 저장합니다. 키를 전혀 받지 않으므로 복호화할 방법이 없습니다.</p>
       <p>이 설계에는 알아둘 만한 현실적인 절충점이 있습니다. 키는 서버에 한 번도 닿지 않으므로 저희가 드릴 수 있는 비밀번호 재설정 같은 것은 없습니다. 그렇다고 링크가 키의 유일한 사본인 것도 아닙니다. 업로드한 브라우저가 키를 로컬에도 보관하고 있어서, 같은 브라우저에서 계정 페이지의 “내 파일”을 열면 링크를 다시 만들어 복사할 수 있습니다. 파일을 정말로 되찾을 수 없게 되는 것은 그 둘을 모두 잃었을 때입니다 — 전체 링크와, 그 브라우저의 로컬 사본(다른 기기에서 계정 페이지를 열거나 이 브라우저의 사이트 데이터를 지우는 것이 여기에 해당합니다). 그다음부터 저장된 암호문은 여러분에게도 저희에게도 영구히 읽을 수 없습니다. 링크 생성에는 보내는 쪽이 로그인 상태여야 하고, 삭제되거나 만료될 때까지 각 링크는 계정의 스토리지 할당량을 차지합니다. 그리고 여기서 &#39;영지식&#39;이 정확히 무엇을 뜻하는지 분명히 해둘 가치가 있습니다. 암호문은 생성부터 다운로드까지 실제로 Relayium 서버에 저장되어 있습니다. 다만 내 브라우저를 한 번도 떠난 적 없는 키가 없으면 읽을 수 없을 뿐입니다.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 조치</p><dl><dt>상대가 링크를 열면 복호화 키가 없다고 페이지가 말합니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # #k= 뒤 전부가 키다</code></pre><p>오는 길에 프래그먼트가 사라졌습니다. 채팅 미리보기, 링크 단축기, 또는 # 에서 멈춘 복사가 원인입니다. 링크를 평문으로 다시 보내고 상대가 직접 주소창에 붙여 넣게 하세요. id만으로는 우리를 포함해 누구도 복호화할 수 없습니다.</p></dd><dt>링크 전체가 도착했는데도 복호화가 실패합니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # 하나의 id에는 정확히 하나의 키</code></pre><p>id와 키가 서로 다른 링크에서 왔습니다. 한 자리에서 두 번 업로드하면 흔히 생깁니다. 그것을 만든 페이지에서 가장 최근 링크를 한 덩어리로 복사하거나, 같은 브라우저에서 계정 페이지의 “내 파일”을 열어 해당 항목의 링크를 복사하세요. 키가 존재하는 곳은 링크의 #k= 프래그먼트와 그 브라우저의 로컬 사본, 이 둘뿐입니다. 서버에는 한 번도 닿지 않았습니다.</p></dd><dt>링크가 잘못되었거나 만료되었거나 이미 다운로드되어 삭제되었다고 나옵니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/offline-transfer   # 삭제를 끄고 새 링크를 만든다</code></pre><p>셋 다 같은 상태입니다. 가져올 것이 남아 있지 않습니다. “열람 후 삭제”가 켜져 있으면 실제로 암호문을 내보내기 시작한 첫 다운로드가 하나뿐인 슬롯을 써버립니다 — 끝까지 갔든 중간에 끊겼든 마찬가지입니다. 여러 사람이나 재시도가 필요하다면 그것을 끄고 다시 올리세요.</p></dd><dt>다운로드 페이지가 요청이 너무 많다거나 보낸 사람의 월 전송량이 다 되었다고 합니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/me   # 이번 달 사용량은 저장뿐 아니라 전송도 포함한다</code></pre><p>파일은 온전하고 이것은 계량입니다. 속도 제한은 몇 분이면 풀리고, 월 전송량을 다 쓴 경우에는 달이 바뀌거나 요금제를 올리거나 자체 노드를 써야 합니다. 그 뒤에 링크를 다시 열면 동작합니다. 아무것도 소비되지 않았기 때문입니다.</p></dd><dt>파일을 되찾아야 하는데 링크가 더 이상 없습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/me   # “내 파일”은 업로드한 그 브라우저에서 링크를 다시 만든다</code></pre><p>존재하는 단 하나의 복구 경로부터 시도하세요. 업로드한 브라우저가 키를 로컬에 남겨 두었으므로, 같은 브라우저에서 계정 페이지를 열고 “내 파일”에서 해당 항목을 찾아 링크 복사 버튼을 누르면 됩니다. 다른 기기에서는, 또는 그 브라우저의 사이트 데이터를 지운 뒤에는 키가 사라지고 저장된 암호문은 우리를 포함해 누구도 읽을 수 없습니다 — 그때는 내 사본에서 다시 업로드하세요. 페이지가 사본을 남기라고 말하는 이유가 그것입니다.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 조치</p><dl><dt>상대가 링크를 열면 복호화 키가 없다고 페이지가 말합니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # #k= 뒤 전부가 키다</code></pre><p>오는 길에 프래그먼트가 사라졌습니다. 채팅 미리보기, 링크 단축기, 또는 # 에서 멈춘 복사가 원인입니다. 링크를 평문으로 다시 보내고 상대가 직접 주소창에 붙여 넣게 하세요. id만으로는 우리를 포함해 누구도 복호화할 수 없습니다.</p></dd><dt>링크 전체가 도착했는데도 복호화가 실패합니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # 하나의 id에는 정확히 하나의 키</code></pre><p>id와 키가 서로 다른 링크에서 왔습니다. 한 자리에서 두 번 업로드하면 흔히 생깁니다. 그것을 만든 페이지에서 가장 최근 링크를 한 덩어리로 복사하거나, 같은 브라우저에서 계정 페이지의 “내 파일”을 열어 해당 항목의 링크를 복사하세요. 키가 존재하는 곳은 링크의 #k= 프래그먼트와 그 브라우저의 로컬 사본, 이 둘뿐입니다. 서버에는 한 번도 닿지 않았습니다.</p></dd><dt>링크가 잘못되었거나 만료되었거나 이미 다운로드되어 삭제되었다고 나옵니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/offline-transfer   # 삭제를 끄고 새 링크를 만든다</code></pre><p>셋 다 같은 상태입니다. 가져올 것이 남아 있지 않습니다. “열람 후 삭제”가 켜져 있으면 실제로 암호문을 내보내기 시작한 첫 다운로드가 하나뿐인 슬롯을 써버립니다 — 끝까지 갔든 중간에 끊겼든 마찬가지입니다. 여러 사람이나 재시도가 필요하다면 그것을 끄고 다시 올리세요.</p></dd><dt>다운로드 페이지가 요청이 너무 많다거나 보낸 사람의 월 전송량이 다 되었다고 합니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/me   # 이번 달 사용량은 저장뿐 아니라 전송도 포함한다</code></pre><p>파일은 온전하고 이것은 계량입니다. 속도 제한은 몇 분이면 풀리고, 월 전송량을 다 쓴 경우에는 달이 바뀌거나 요금제를 올리거나 자체 노드를 써야 합니다. 그 뒤에 링크를 다시 열면 동작합니다. 아무것도 소비되지 않았기 때문입니다.</p></dd><dt>파일을 되찾아야 하는데 링크가 더 이상 없습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/me   # “내 파일”은 업로드한 그 브라우저에서 링크를 다시 만든다</code></pre><p>존재하는 단 하나의 복구 경로부터 시도하세요. 업로드한 브라우저가 키를 로컬에 남겨 두었으므로, 같은 브라우저에서 계정 페이지를 열고 “내 파일”에서 해당 항목을 찾아 링크 복사 버튼을 누르면 됩니다. 다른 기기에서는, 또는 그 브라우저의 사이트 데이터를 지운 뒤에는 키가 사라지고 저장된 암호문은 우리를 포함해 누구도 읽을 수 없습니다 — 그때는 내 사본에서 다시 업로드하세요. 페이지가 사본을 남기라고 말하는 이유가 그것입니다.</p></dd></dl></div></section>
       <h2>자주 묻는 질문</h2>
       <h3>링크를 보낼 상대방도 계정이 필요한가요?</h3>
       <p>아니요. # 뒤의 부분을 포함한 전체 링크를 가진 사람이라면 누구나 열어서 파일을 다운로드할 수 있습니다. 링크를 만들 때 로그인이 필요한 쪽은 보내는 사람뿐입니다.</p>
@@ -203,6 +247,8 @@ https://relayium.com/d/8f3c2a1b#k=hQ2r…</code></pre></div>
         <a href="/pricing">요금제</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

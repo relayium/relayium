@@ -4,7 +4,8 @@
 // only scripts are the pre-paint theme snippet every page in this tree carries
 // and, on the handful of pages with a command builder, BUILDER_SCRIPT.
 import { MAINTAINED_LANGS, DEFAULT_LANG, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, ctaHref, landingUrl, dirAttr, RTL_LANGS, rtlHead, isFrozen, archiveNotice, ARCHIVE_STYLE } from "./shared.mjs";
-import { pageStyle, siteHeader, THEME_HEAD } from "./page-chrome.mjs";
+import { pageStyle, THEME_HEAD } from "./page-chrome.mjs";
+import { appShell } from "./page-shell.mjs";
 
 // Footer link label; matches content/landing.mjs footer.privacy per language.
 const PRIVACY_LABELS = {
@@ -414,7 +415,13 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
   // Explicit arrow, not a bare `map(sectionHtml)`: map's second argument is the
   // index, which would silently arrive as the `rtl` flag and make section 0 LTR
   // and every later section RTL on the same page.
-  const sections = doc.sections.map((s) => sectionHtml(s, rtl)).join("\n      ");
+  // One section, one card — the app's grouped-rows shape rather than an
+  // unbroken column of prose. `.sheet` is page-shell.mjs's; a block that draws
+  // its own surface (a tutorial box, a <pre>, a table) flattens inside it, so
+  // nothing becomes a card inside a card.
+  const sections = doc.sections
+    .map((s) => `<section class="sheet">${sectionHtml(s, rtl)}</section>`)
+    .join("\n      ");
   const faq = doc.faq
     ? `<h2>${esc(doc.faq.heading)}</h2>\n      ` +
       doc.faq.items.map((it) => `<h3>${esc(it.q)}</h3>\n      <p>${esc(it.a)}</p>`).join("\n      ")
@@ -458,8 +465,7 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
     <style>${STYLE}${archived ? ARCHIVE_STYLE : ""}</style>${hasTable(doc) ? "\n    " + TABLE_STYLE : ""}${hasBlocks(doc) ? "\n    " + BLOCK_STYLE : ""}${hasWidget(doc) ? "\n    " + BUILDER_STYLE : ""}
   </head>
   <body>
-    <div class="wrap">
-      ${siteHeader({ lang, home: ctaHref(lang), section: "guides" })}
+    ${appShell({ lang, home: ctaHref(lang), foot: archived ? "" : langBar(slug, lang), content: `
       <nav class="crumbs" aria-label="Breadcrumb"><a href="${landingUrl(lang)}">${esc(SITE.name)}</a> <span aria-hidden="true">›</span> <a href="${urlPath("guides", lang)}">${esc(GUIDES_LABELS[lang])}</a> <span aria-hidden="true">›</span> <span aria-current="page">${esc(doc.title)}</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -478,7 +484,7 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">${esc(doc.updatedLabel)}: <bdi>${esc(dateModified)}</bdi></p>
-      ${langBar(slug, lang)}
+      ${archived ? langBar(slug, lang) : ""}
       ${lead}
       ${sections}
       ${faq}
@@ -496,7 +502,7 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
         <a href="${PRICING_URL}">${esc(pricingLabel(lang))}</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
-    </div>${hasWidget(doc) ? "\n    " + BUILDER_SCRIPT : ""}
+` })}${hasWidget(doc) ? "\n    " + BUILDER_SCRIPT : ""}
   </body>
 </html>
 `;

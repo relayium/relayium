@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"شغّل عقدتك الخاصة: استخدم مُرحِّل وتخزين Relayium مجانًا","description":"اربط عقدتك للترحيل/التخزين بحساب Relayium بأمر واحد. عندها تمر عمليات النقل عبر عقدتك — لا عبر خوادمنا المحسوبة بالاستهلاك — فتصبح مجانية، وتبقى البيانات على عتاد تتحكم فيه أنت.","inLanguage":"ar","datePublished":"2026-07-10","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/guides/bring-your-own-node/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"شغّل عقدتك الخاصة: استخدم مُرحِّل وتخزين Relayium مجانًا"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"ظهر لي «‎relayium-node: command not found‎» — ما الخطأ؟","acceptedAnswer":{"@type":"Answer","text":"لقد شغّلت ثنائي relayium-node قبل تثبيته. استخدم أمر التثبيت ذا السطر الواحد من صفحة الحساب (بصيغة curl … | sudo … sh): إنه ينزّل الثنائي، ويضعه في مسار PATH، ويشغّله كخدمة. أنت لا تثبّت relayium-node بشكل منفصل أبدًا."}},{"@type":"Question","name":"هل تبقى العقدة متصلة بعد إعادة التشغيل؟","acceptedAnswer":{"@type":"Answer","text":"نعم. يسجّل المثبّت خدمة systemd مُفعَّلة عند الإقلاع ومضبوطة على Restart=always، فتعود بعد إعادة التشغيل وتعيد تشغيل نفسها إذا تعطّلت. لا شيء إضافي لتشغيله."}},{"@type":"Question","name":"كيف يختلف هذا عن الاستضافة الذاتية لـ Relayium؟","acceptedAnswer":{"@type":"Answer","text":"تشغيل عقدتك الخاصة يبقي حساب relayium.com المعتاد وتطبيقاتك ويضيف فقط عقدة تملكها لتحمل حركتك. أما الاستضافة الذاتية فتشغّل حزمة الخادم بالكامل (الحسابات، تطبيق الويب، الإشارة) على نطاقك الخاص — راجع دليل «الاستضافة الذاتية لـ Relayium» لذلك."}},{"@type":"Question","name":"هل يمكن لأي شخص آخر استخدام عقدتي أو رؤية بياناتي؟","acceptedAnswer":{"@type":"Answer","text":"لا. ترتبط العقدة بحسابك عبر رمزها ولا تحمل سوى حركة حسابك. النقل الفوري مشفَّر من الطرف إلى الطرف والكتل المُخزَّنة نص مُشفَّر لا تستطيع عقدتك قراءته. بياناتك وإعدادات عقدتك قابلة للاستخدام من قِبلك أنت وحدك."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -144,8 +186,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ar/guides/" aria-current="true">الأدلة</a><a href="/ar/apps/">التطبيقات</a><a href="/pricing">الأسعار</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="التنقل الرئيسي"><a class="row" href="/">LAN</a><a class="row" href="/ar/cross-network/">عبر الشبكات</a><a class="row" href="/ar/offline-transfer/">غير متزامن</a><a class="row" href="/device-inbox">بريد الأجهزة</a><a class="row" href="/cli">CLI</a><a class="row" href="/ar/apps/">التطبيقات</a><a class="row" href="/pricing">الأسعار</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ar/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ar/guides/">الأدلة</a> <span aria-hidden="true">›</span> <span aria-current="page">شغّل عقدتك الخاصة: استخدم مُرحِّل وتخزين Relayium مجانًا</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -167,10 +211,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="ترجمة مؤرشفة"><p class="archived-label">ترجمة مؤرشفة</p><p>هذه الصفحة ترجمة عربية محفوظة للأرشيف. يجري صيانة منتج Relayium وتوثيقه الحالي بالإنجليزية والصينية المبسّطة، ولم يعد التطبيق نفسه يوفّر العربية. لذلك قد تختلف الشاشات والتفاصيل الموصوفة هنا عن السلوك الحالي.</p><p class="archived-links archived-pricing">قد تكون الباقات وحدود الاستخدام المذكورة هنا قديمة؛ والحالية منها موجودة في صفحة <a href="/pricing">الأسعار</a>.</p><p class="archived-links">النسخة الحالية: <a href="/guides/bring-your-own-node/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/bring-your-own-node/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">عمليات النقل عبر الشبكات والروابط المُخزَّنة تستهلك عرض نطاق المُرحِّل والقرص، وهذا يكلّفنا مالًا، لذا تعمل ضمن حصة مجانية وتصبح مدفوعة بعد تجاوزها. هناك طريقة لتفادي ذلك: شغّل عقدتك للترحيل/التخزين، اربطها بحسابك، فتتدفق عمليات نقلك عبر عقدتك بدل عقدتنا — لا شيء يُحسَب، ولا شيء يُفوتَر.</p>
       <p class="lead">هذا يختلف عن الاستضافة الذاتية لخادم Relayium بالكامل. تبقى تستخدم حساب relayium.com المعتاد ونفس التطبيقات؛ أنت فقط تضيف عقدة تملكها لتحمل حركتك. يأخذك هذا الدليل من جهاز Linux جديد إلى عقدة متصلة في نحو خمس دقائق.</p>
-      <h2>لماذا تشغّل عقدتك الخاصة</h2>
+      <section class="sheet"><h2>لماذا تشغّل عقدتك الخاصة</h2>
       <p>سببان. الأول هو التكلفة: عقدة تملكها تحمل حركة مُرحِّلك وتخزينك مباشرة، فلا تلمس أبدًا بنيتنا المحسوبة بالاستهلاك ولا يوجد ما يُفوتَر — استخدامك مجاني مهما كان كبيرًا.</p>
-      <p>الثاني هو التحكم: البايتات المُرحَّلة والكتل المُخزَّنة تعيش على عتاد تشغّله أنت، تحت تحكمك التشغيلي الخاص. يبقى النقل الفوري مشفَّرًا من الطرف إلى الطرف طوال الطريق، لذا حتى عقدتك الخاصة لا ترى سوى نص مُشفَّر.</p>
-      <h2>ثبّت العقدة وأوصلها إلى الإنترنت</h2>
+      <p>الثاني هو التحكم: البايتات المُرحَّلة والكتل المُخزَّنة تعيش على عتاد تشغّله أنت، تحت تحكمك التشغيلي الخاص. يبقى النقل الفوري مشفَّرًا من الطرف إلى الطرف طوال الطريق، لذا حتى عقدتك الخاصة لا ترى سوى نص مُشفَّر.</p></section>
+      <section class="sheet"><h2>ثبّت العقدة وأوصلها إلى الإنترنت</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">ما تحتاجه قبل الخطوة 1</p><ul><li>خادم لينكس يمكن الوصول إليه من الإنترنت — سواء VPS رخيص أو جهاز يعمل دائمًا في البيت. المعماريتان amd64 وarm64 مدعومتان.</li><li>صلاحية root على ذلك الخادم، أو sudo. التثبيت يحتاجها مرة واحدة، والعقدة نفسها لا تعمل بصلاحية root أبدًا.</li><li>القدرة على فتح المنافذ الواردة — في جدار حماية المضيف، وعلى VPS سحابي في مجموعة الأمان لدى المزوّد أيضًا.</li><li>حساب على relayium.com مسجَّل الدخول. أمر التثبيت يُولَّد في صفحة الحساب ويحمل رمزًا صالحًا لمرة واحدة.</li><li>مساحة قرص، فقط إن أردت للعقدة أن تخزّن إضافةً إلى الترحيل. العقدة المخصصة للترحيل وحده لا تحتاجها — احذف عندها RELAYIUM_NODE_STORAGE_DIR.</li></ul></div>
       <p>أربعة أمور بالترتيب: تولّد الأمر، ثم تشغّله، ثم تفتح المنافذ، ثم تتأكّد أن العقدة صارت متصلة. نحو خمس دقائق على جهاز جديد.</p>
       <ol class="steps" data-block="steps"><li><p>سجّل الدخول في relayium.com وافتح صفحة حسابك على ‎/me‎.</p></li><li><p>انزل إلى «عقدي» واضغط «إضافة عقدة». انسخ أمر التثبيت فورًا — فالرمز الذي بداخله يُعرض مرة واحدة فقط ولا يمكن عرضه ثانيةً.</p></li><li><p>الصقه على خادمك. سينزّل ثنائي relayium-node ويتحقّق من مجموع التحقّق الخاص به، ويثبّته في ‎/usr/local/bin‎، ويكتب خدمة systemd ويشغّلها.</p><pre tabindex="0" dir="ltr"><code>curl -fsSL https://relayium.com/install-node.sh | sudo RELAYIUM_CENTRAL_URL=https://relayium.com RELAYIUM_NODE_TOKEN=&lt;your-token&gt; RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh</code></pre></li><li><p>تأكّد أن الخدمة تعمل وأنها ستعود بعد إعادة التشغيل. الإجابتان كلتاهما مهمّة: active تعني أنها تعمل الآن، وenabled هي ما يصمد أمام إعادة التشغيل.</p><pre tabindex="0" dir="ltr"><code>systemctl is-active relayium-node</code></pre><pre tabindex="0" dir="ltr"><code>systemctl is-enabled relayium-node</code></pre></li><li><p>افتح المنافذ الواردة في جدار حماية المضيف. حالة «متصل» لا تحتاج إلا وصولًا صادرًا، لكن الأقران يرحّلون ويخزّنون عبر هذه المنافذ تحديدًا.</p><pre tabindex="0" dir="ltr"><code>sudo ufw allow 3478/udp        # TURN
@@ -180,31 +224,31 @@ sudo ufw allow 49152:65535/udp # relay</code></pre></li><li><p>على VPS سحا
 active
 $ systemctl is-enabled relayium-node
 enabled</code></pre></div>
-      <ul><li>الجزء ‎&lt;your-token&gt;‎ يُملأ لك في صفحة الحساب — لا تلصق العنصر النائب أعلاه حرفيًا.</li><li>RELAYIUM_NODE_STORAGE_DIR يفعّل تخزين الكتل إضافةً إلى الترحيل. اتركه معطّلًا (احذف المتغير) إن أردت أن تقوم العقدة بالترحيل فقط دون التخزين.</li><li>تأكّد من أنه بدأ: systemctl status relayium-node (يجب أن يظهر active/running).</li><li>تأكّد من الاستمرارية عبر الإقلاع: systemctl is-enabled relayium-node (يجب أن يظهر enabled).</li><li>راقب السجلات مباشرة: journalctl -u relayium-node -f.</li><li>المنفذ 3478/udp هو منفذ TURN الذي يستخدمه الأقران للترحيل؛ 8081/tcp هو منفذ HTTP لتخزين الكتل؛ 49152–65535/udp هو نطاق وسائط الترحيل.</li><li>على VPS سحابي، اسمح بهذه أيضًا في مجموعة الأمان / جدار حماية الشبكة لدى المزوّد، لا في ufw فقط.</li></ul>
-      <h2>هل تشغيل هذا المثبّت بصلاحية root آمن؟</h2>
+      <ul><li>الجزء ‎&lt;your-token&gt;‎ يُملأ لك في صفحة الحساب — لا تلصق العنصر النائب أعلاه حرفيًا.</li><li>RELAYIUM_NODE_STORAGE_DIR يفعّل تخزين الكتل إضافةً إلى الترحيل. اتركه معطّلًا (احذف المتغير) إن أردت أن تقوم العقدة بالترحيل فقط دون التخزين.</li><li>تأكّد من أنه بدأ: systemctl status relayium-node (يجب أن يظهر active/running).</li><li>تأكّد من الاستمرارية عبر الإقلاع: systemctl is-enabled relayium-node (يجب أن يظهر enabled).</li><li>راقب السجلات مباشرة: journalctl -u relayium-node -f.</li><li>المنفذ 3478/udp هو منفذ TURN الذي يستخدمه الأقران للترحيل؛ 8081/tcp هو منفذ HTTP لتخزين الكتل؛ 49152–65535/udp هو نطاق وسائط الترحيل.</li><li>على VPS سحابي، اسمح بهذه أيضًا في مجموعة الأمان / جدار حماية الشبكة لدى المزوّد، لا في ufw فقط.</li></ul></section>
+      <section class="sheet"><h2>هل تشغيل هذا المثبّت بصلاحية root آمن؟</h2>
       <p>قبل كل شيء: العقد التي تشغّلها بنفسك تعمل بالشيفرة ذاتها والتحصين ذاته الذي تعمل به عقد أسطولنا نحن — الثنائي نفسه من الإصدار المُوقَّع نفسه، يثبّته السكربت نفسه، تحت وحدة systemd نفسها. الفارق الوحيد هو لمن يعود الجهاز. وكل ما يلي ينطبق على الاثنين معًا.</p>
       <p>سؤال في محله عن أمرٍ يمرّر سكربتًا من الإنترنت إلى صدفة root، وهو يستحق جوابًا محددًا لا مجرد طمأنة. صلاحية root تُستخدم للتثبيت فقط، ولا تُستخدم في أي شيء تفعله العقدة بعد ذلك. يُنشئ المثبّت حسابًا نظاميًا اسمه relayium-node بلا صدفة دخول وبلا مجلد منزل، ويكتب وحدات systemd، ويشغّل الخدمة، ثم ينتهي. أما العقدة نفسها فلا تعمل بصلاحية root أبدًا: وحدتها تضبط User=relayium-node، فمنذ اللحظة التي تتصل فيها هي حساب غير مُمتاز لا يملك شيئًا آخر على جهازك. (التحديث التلقائي، وهو مفعّل افتراضيًا، يضيف بالفعل وحدة ثانية تعمل بصلاحية root — والقسم التالي مخصص بالكامل لما تستطيع تلك الوحدة فعله وما لا تستطيعه.)</p>
       <p>وحول هذا الحساب تضع الوحدة صندوق عزل من systemd. كل سطر فيه موجَّه إلى شيء قد يمدّ إليه مهاجمٌ يده لو استولى يومًا على عملية العقدة. ولا شيء هنا مخفيّ عنك: بعد التثبيت اقرأ الوحدة كاملة بـ cat /etc/systemd/system/relayium-node.service.</p>
       <div class="tw"><table><thead><tr><th>في الوحدة</th><th>ما الذي يمنعه إن اختُرقت العقدة يومًا</th></tr></thead><tbody><tr><td><code dir="ltr">User=relayium-node</code></td><td>المهاجم مجرد مستخدم لا يملك شيئًا، وليس root.</td></tr><tr><td><code dir="ltr">ProtectHome=yes</code></td><td>‏/home و /root غير مرئيين — لا مفاتيح SSH خاصة ولا بيانات مشاريع أخرى.</td></tr><tr><td><code dir="ltr">ProtectSystem=strict</code></td><td>نظام الملفات كله للقراءة فقط؛ لا يمكن تعديل أي ملف نظام.</td></tr><tr><td><code dir="ltr">ReadWritePaths=</code></td><td>المواضع الوحيدة القابلة للكتابة هي مجلد حالة العقدة نفسها، ومجلد التخزين إن أعددت واحدًا. وأي كتابة في مكان آخر تفشل.</td></tr><tr><td><code dir="ltr">NoExecPaths=</code></td><td>لا شيء في مجلد التخزين قابل للتنفيذ — الملف المرفوع لا يمكن تشغيله.</td></tr><tr><td><code dir="ltr">NoNewPrivileges=yes</code></td><td>لا طريق للعودة إلى root؛ حيل تصعيد الصلاحيات المعتادة مغلقة.</td></tr><tr><td><code dir="ltr">CapabilityBoundingSet=</code></td><td>فارغة — لا قدرات Linux على الإطلاق.</td></tr><tr><td><code dir="ltr">ProtectKernelTunables=yes، ProtectKernelModules=yes</code></td><td>النواة بعيدة المنال: لا تغيير لـ sysctl، ولا تحميل وحدات، ولا زرع rootkit.</td></tr></tbody></table></div>
-      <ul><li>لا يشير ReadWritePaths وNoExecPaths إلى مجلد التخزين إلا على عقدة تخزّن فعلًا. أما العقدة المخصصة للترحيل فقط فلا يظهر لديها أيٌّ من السطرين، ولا تستطيع الكتابة في أي مكان سوى مجلد حالتها.</li><li>مجموعة القدرات فارغة في الحالة المعتادة. والاستثناء الوحيد هو مستمع التنزيل المباشر على منفذ أقل من 1024، إذ يحتاج CAP_NET_BIND_SERVICE للارتباط به؛ ومنفذ التنزيل الافتراضي هو 2053، أي فوق 1024، فلا يُمنح شيء.</li><li>العقدة لا تحمل أي مفاتيح. تُشفَّر الملفات لدى المرسِل قبل رفعها، فما يصل إلى عقدة التخزين نصٌّ مُشفَّر لا تستطيع قراءته — بما في ذلك عقدتك أنت، وبما في ذلك أنت شخصيًا.</li></ul>
-      <h2>ما الذي يستطيع المحدِّث التلقائي فعله وما لا يستطيعه</h2>
+      <ul><li>لا يشير ReadWritePaths وNoExecPaths إلى مجلد التخزين إلا على عقدة تخزّن فعلًا. أما العقدة المخصصة للترحيل فقط فلا يظهر لديها أيٌّ من السطرين، ولا تستطيع الكتابة في أي مكان سوى مجلد حالتها.</li><li>مجموعة القدرات فارغة في الحالة المعتادة. والاستثناء الوحيد هو مستمع التنزيل المباشر على منفذ أقل من 1024، إذ يحتاج CAP_NET_BIND_SERVICE للارتباط به؛ ومنفذ التنزيل الافتراضي هو 2053، أي فوق 1024، فلا يُمنح شيء.</li><li>العقدة لا تحمل أي مفاتيح. تُشفَّر الملفات لدى المرسِل قبل رفعها، فما يصل إلى عقدة التخزين نصٌّ مُشفَّر لا تستطيع قراءته — بما في ذلك عقدتك أنت، وبما في ذلك أنت شخصيًا.</li></ul></section>
+      <section class="sheet"><h2>ما الذي يستطيع المحدِّث التلقائي فعله وما لا يستطيعه</h2>
       <p>يُعِدّ المثبّت أيضًا مؤقّت تحديث ذاتي، مفعّلًا افتراضيًا: يسأل relayium-node-update.timer موقع relayium.com كل عشر دقائق تقريبًا عن الإصدار الذي ينبغي أن تشغّله هذه العقدة. هذه وحدة ثانية، وهي تعمل بصلاحية root، لذا فهي مدينة لك بشرحٍ خاص بها.</p>
       <p>المركز لا يرسل ثنائيًا أبدًا. جوابه كله رقم إصدار، وعلَمان (هل يجوز لهذه العقدة أن تنتقل الآن، وهل هذا تخفيضٌ متعمَّد للإصدار) وسطر قصير يوضّح السبب — لا بايتات ولا رابط ولا أمر. بعدها تجلب العقدة ذلك الإصدار بنفسها، وتقارن SHA-256 للأرشيف بملف checksums.txt الخاص بالإصدار، ثم تتحقق من توقيع ECDSA P-256 على ذلك الملف باستخدام مفتاح عام مُضمَّن داخل الثنائي نفسه الذي يجري التحقق. والنصف الخاص من هذا المفتاح ليس على الخادم الذي يجيب عن هذه الاستعلامات. فحتى لو اختُرق المركز، فأقصى ما يستطيعه هو تسمية إصدار؛ ولا يستطيع صناعة ثنائي يجتاز التحقق.</p>
       <p>المحدِّث والعقدة عمليتان منفصلتان بصلاحيتين متعاكستين. فـ relayium-node.service هو صندوق العزل الموصوف أعلاه — وتحت ProtectSystem=strict لا يستطيع الكتابة في /usr/local/bin إطلاقًا، أي أن العقدة لا تستطيع أبدًا تعديل أي ثنائي، بما فيه ثنائيها هي. أما relayium-node-update.service فهو وحدة oneshot صغيرة تعمل بصلاحية root ولا تحمل صندوق عزل عن قصد، لأن استبدال ملف في /usr/local/bin يتطلب بالضبط تلك الصلاحية التي وُجد صندوق عزل العقدة كي يمنعها عنها. وحصر هذه القدرة في وحدة واحدة أحادية الغرض، بدل إرخاء تحصين العقدة نفسها، هو مغزى هذا الفصل كله: العملية التي تملك root لا تفعل شيئًا سوى تبديل الثنائيات، والعملية الحبيسة لا تستطيع أن تمسّ ثنائيًا أبدًا.</p>
       <p>والتحديث الذي يسوء يتراجع عن نفسه. يبقي المحدِّث الثنائي القديم بجوار الجديد، ويعيد تشغيل الخدمة، ثم يترقّب نبضة لعشر دقائق كحد أقصى؛ فإن لم يبلّغ الإصدار الجديد عن سلامته خلال هذه المهلة أعاد الثنائي القديم إلى مكانه، وأعاد التشغيل من جديد، وسجّل الإصدار المعطوب حتى لا تُعاد المحاولة به. ولا يُقرأ أي ملف مخزَّن ولا يُنقل ولا يُحذف في أيٍّ من هذا.</p>
-      <ul><li>إن لم ترده: أعد تشغيل المثبّت مع RELAYIUM_NODE_AUTO_UPDATE=off. عندها يُعطَّل المؤقّت وخدمته ويُحذفان؛ وتستمر العقدة في العمل، وتحدّثها أنت متى شئت.</li><li>إن انتهيت من العقدة تمامًا: انظر «إزالة عقدتك» أدناه.</li></ul>
-      <h2>إزالة عقدتك</h2>
+      <ul><li>إن لم ترده: أعد تشغيل المثبّت مع RELAYIUM_NODE_AUTO_UPDATE=off. عندها يُعطَّل المؤقّت وخدمته ويُحذفان؛ وتستمر العقدة في العمل، وتحدّثها أنت متى شئت.</li><li>إن انتهيت من العقدة تمامًا: انظر «إزالة عقدتك» أدناه.</li></ul></section>
+      <section class="sheet"><h2>إزالة عقدتك</h2>
       <p>الإلغاء سكربت واحد، وهو نفسه سواء كانت عقدتك تخزّن الملفات أو تُرحّل فقط. يزيل الوحدات والثنائي والإعدادات وحساب الخدمة، ويحاول قدر استطاعته إبلاغ relayium.com بأن العقدة لم تعد موجودة. وإن فشل ذلك الاتصال فهو سطر واحد على طرفيتك لا إلغاء معطوب — ويطبع معرّف العقدة كي تُعلَّم كمُزالة يدويًا.</p>
       <p>نزّله وتحقّق منه ثم شغّله. تمريره مباشرة إلى sh يعني أن خطأ 404 أو انقطاعًا عابرًا في الشبكة سيجعل الأمر كله لا يطبع شيئًا وينتهي برمز 0، وهو ما يبدو كإلغاء ناجح.</p>
       <p>لا يزيل إلا ما يعرفه: أي شيء غير متوقع في دليل الحالة أو دليل التخزين يُحتفظ به ويُبلَّغ عنه بدل حذفه.</p>
       <pre tabindex="0" dir="ltr"><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; \
   [ -s uninstall-node.sh ] &amp;&amp; sudo sh uninstall-node.sh</code></pre>
-      <ul><li>يرفض ما دام دليل التخزين يحوي أي ملف لا يعرفه — بما في ذلك كائن منتهي الصلاحية لم يصله التنظيف بعد — لأن كل ملف مخزَّن يوجد على عقدة واحدة فقط ولا توجد نسخ. انتظر حتى يصل العدد إلى صفر، أو مرّر RELAYIUM_NODE_FORCE=1 قابلًا بأن تصبح تلك الملفات غير قابلة للوصول.</li><li>إن تعذّر عليه تحديد مكان الكائنات، يتوقف بدل أن يخمّن. المتغير RELAYIUM_NODE_ASSUME_NO_STORAGE=1 هو السبيل الوحيد لتجاوز ذلك، ومع هذا لا يحذف شيئًا لا يعرفه.</li><li>يبقى دليل التخزين نفسه ما لم تمرّر أيضًا RELAYIUM_NODE_PURGE_STORAGE=1. متغيرات البيئة لا تعبر | sudo sh — مرّرها هكذا: sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh.</li><li>بعد ذلك يجب أن يقول systemctl status relayium-node أنه not-found وألا يظهر أي مؤقّت relayium-node. وإذا أعدت التثبيت لاحقًا فستحصل في حسابك على عقدة جديدة تمامًا: فالإلغاء يحذف ملف هوية العقدة، لذا يسجّل التثبيت الجديد عقدة جديدة بدل إحياء القديمة.</li></ul>
-      <h2>حين لا ينجح الأمر</h2>
+      <ul><li>يرفض ما دام دليل التخزين يحوي أي ملف لا يعرفه — بما في ذلك كائن منتهي الصلاحية لم يصله التنظيف بعد — لأن كل ملف مخزَّن يوجد على عقدة واحدة فقط ولا توجد نسخ. انتظر حتى يصل العدد إلى صفر، أو مرّر RELAYIUM_NODE_FORCE=1 قابلًا بأن تصبح تلك الملفات غير قابلة للوصول.</li><li>إن تعذّر عليه تحديد مكان الكائنات، يتوقف بدل أن يخمّن. المتغير RELAYIUM_NODE_ASSUME_NO_STORAGE=1 هو السبيل الوحيد لتجاوز ذلك، ومع هذا لا يحذف شيئًا لا يعرفه.</li><li>يبقى دليل التخزين نفسه ما لم تمرّر أيضًا RELAYIUM_NODE_PURGE_STORAGE=1. متغيرات البيئة لا تعبر | sudo sh — مرّرها هكذا: sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh.</li><li>بعد ذلك يجب أن يقول systemctl status relayium-node أنه not-found وألا يظهر أي مؤقّت relayium-node. وإذا أعدت التثبيت لاحقًا فستحصل في حسابك على عقدة جديدة تمامًا: فالإلغاء يحذف ملف هوية العقدة، لذا يسجّل التثبيت الجديد عقدة جديدة بدل إحياء القديمة.</li></ul></section>
+      <section class="sheet"><h2>حين لا ينجح الأمر</h2>
       <p>خمسة إخفاقات تغطي تقريبًا كل عقدة لا تقلع، وثلاثة منها تبدو سليمة من جهة الخادم: الخدمة تعمل، ولا يخبرك بغير ذلك إلا صفحة الحساب أو مقبس مُنصِت.</p>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">العَرَض، الفحص، الإصلاح</p><dl><dt>تردّ الصدفة بـ «relayium-node: command not found».</dt><dd><pre tabindex="0" dir="ltr"><code>command -v relayium-node
 # لا شيء يُطبع</code></pre><p>الثنائي غير مثبَّت. ولا يُثبَّت relayium-node منفصلًا أبدًا — فأمر السطر الواحد في صفحة الحساب هو ما ينزّله ويضعه في مسار PATH ويشغّله كخدمة. شغّل ذلك الأمر بدلًا من هذا.</p></dd><dt>الخدمة active لكن العقدة لا تصير «متصلة» في صفحة الحساب أبدًا.</dt><dd><pre tabindex="0" dir="ltr"><code>journalctl -u relayium-node -n 50 --no-pager</code></pre><p>حالة «متصل» يقرّرها نبض صادر، لذا نادرًا ما يكون جدار الحماية هو السبب هنا — بل التسجيل. الرمز صالح لمرة واحدة، فيفشل أمر سبق تشغيله أو أمر قديم بقي من محاولة سابقة. اضغط «إضافة عقدة» مجددًا للحصول على أمر جديد وأعد تشغيله.</p></dd><dt>العقدة تظهر «متصلة» ومع ذلك تمر عمليات النقل عبر بنيتنا المشتركة.</dt><dd><pre tabindex="0" dir="ltr"><code>sudo ss -lunp | grep 3478</code></pre><p>«متصل» لا تثبت إلا النبض الصادر. ما يحتاجه الأقران هو المنافذ الواردة: تأكّد أن العقدة تُنصِت، ثم افتح 3478/udp و8081/tcp و49152-65535/udp في جدار حماية المضيف وفي مجموعة الأمان السحابية معًا. ولاستبعاد أي عودة صامتة تمامًا، فعّل إعداد الاقتصار على عقدك.</p></dd><dt>أمر الإزالة لم يطبع شيئًا وانتهى بالرمز 0، والخدمة ما تزال موجودة.</dt><dd><pre tabindex="0" dir="ltr"><code>systemctl status relayium-node
-# active (running)</code></pre><p>هذا بالضبط شكل تمرير تنزيل فاشل إلى sh: خطأ 404 أو انقطاع عابر في الشبكة لا يطبع شيئًا وينتهي بالرمز 0، فيُقرأ كنجاح. نزّل السكربت، وتحقّق أنه ليس فارغًا، ثم شغّله — ولهذا كُتب الأمر في هذا الدليل على ثلاثة أجزاء لا كأنبوب واحد.</p></dd><dt>الإزالة ترفض ما دام دليل التخزين يحوي ملفات.</dt><dd><pre tabindex="0" dir="ltr"><code>sudo ls /var/lib/relayium-node/blobs | wc -l</code></pre><p>هذا مقصود. فكل ملف مخزَّن يوجد على عقدة واحدة بالضبط ولا نسخ احتياطية له، وإزالة العقدة تجعل تلك الملفات غير قابلة للوصول. انتظر حتى يبلغ العدد صفرًا مع انتهاء صلاحية الكتل، أو اقبل الخسارة بـ RELAYIUM_NODE_FORCE=1. ومتغيرات البيئة لا تعبر أنبوبًا إلى sudo sh، فمرّرها بصيغة sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh.</p></dd></dl></div>
+# active (running)</code></pre><p>هذا بالضبط شكل تمرير تنزيل فاشل إلى sh: خطأ 404 أو انقطاع عابر في الشبكة لا يطبع شيئًا وينتهي بالرمز 0، فيُقرأ كنجاح. نزّل السكربت، وتحقّق أنه ليس فارغًا، ثم شغّله — ولهذا كُتب الأمر في هذا الدليل على ثلاثة أجزاء لا كأنبوب واحد.</p></dd><dt>الإزالة ترفض ما دام دليل التخزين يحوي ملفات.</dt><dd><pre tabindex="0" dir="ltr"><code>sudo ls /var/lib/relayium-node/blobs | wc -l</code></pre><p>هذا مقصود. فكل ملف مخزَّن يوجد على عقدة واحدة بالضبط ولا نسخ احتياطية له، وإزالة العقدة تجعل تلك الملفات غير قابلة للوصول. انتظر حتى يبلغ العدد صفرًا مع انتهاء صلاحية الكتل، أو اقبل الخسارة بـ RELAYIUM_NODE_FORCE=1. ومتغيرات البيئة لا تعبر أنبوبًا إلى sudo sh، فمرّرها بصيغة sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh.</p></dd></dl></div></section>
       <h2>الأسئلة الشائعة</h2>
       <h3>ظهر لي «‎relayium-node: command not found‎» — ما الخطأ؟</h3>
       <p>لقد شغّلت ثنائي relayium-node قبل تثبيته. استخدم أمر التثبيت ذا السطر الواحد من صفحة الحساب (بصيغة curl … | sudo … sh): إنه ينزّل الثنائي، ويضعه في مسار PATH، ويشغّله كخدمة. أنت لا تثبّت relayium-node بشكل منفصل أبدًا.</p>
@@ -229,6 +273,8 @@ enabled</code></pre></div>
         <a href="/pricing">الأسعار</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Dateien und Text mit der Relayium CLI vom Terminal übertragen","description":"Nutze die kostenlose, Ende-zu-Ende-verschlüsselte Relayium CLI für Dateien über SSH, Pairing-Code oder daemon-direct — und für flüchtigen Text, solange beide Rechner online sind.","inLanguage":"de","datePublished":"2026-07-08","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/de/guides/transfer-files-from-terminal/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/de/"},{"@type":"ListItem","position":2,"name":"Anleitungen","item":"https://relayium.com/de/guides/"},{"@type":"ListItem","position":3,"name":"Dateien und Text mit der Relayium CLI vom Terminal übertragen"}]},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Kostet die CLI etwas?","acceptedAnswer":{"@type":"Answer","text":"Nein. Die CLI ist völlig kostenlos. Direkt übertragene Datei- und Textbytes laufen nie über ein Relayium-Relay, also gibt es nichts zu messen und nichts zu bezahlen."}},{"@type":"Question","name":"Brauche ich ein Relayium-Konto?","acceptedAnswer":{"@type":"Answer","text":"Zum Erzeugen eines Pairing-Codes mit send oder text und für Cloud-up. push / pull und daemon-direct brauchen kein Konto. Der Server erzeugt Codes nur für angemeldete Konten, daher führt die erstellende Seite einmal relayium login aus. Wer mit einem erhaltenen Code beitritt, braucht keine Anmeldung; auch receive meldet sich nie an."}},{"@type":"Question","name":"Welche Betriebssysteme werden unterstützt?","acceptedAnswer":{"@type":"Answer","text":"Vorkompilierte Binaries werden für macOS, Linux und Windows veröffentlicht, jeweils für x86-64 und arm64. Das Installationsskript deckt macOS und Linux ab; unter Windows lädst du die .zip von der Releases-Seite herunter."}},{"@type":"Question","name":"Laufen meine Dateien über Relayiums Server?","acceptedAnswer":{"@type":"Answer","text":"Nein. In jedem Modus wandern die Dateibytes direkt zwischen den beiden Enden. Nur send / receive kontaktiert unsere Server überhaupt, und auch nur für einen kleinen Rendezvous-Handshake — nie für den Dateiinhalt."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/de/guides/" aria-current="true">Anleitungen</a><a href="/de/apps/">Apps</a><a href="/pricing">Preise</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Hauptnavigation"><a class="row" href="/">LAN</a><a class="row" href="/de/cross-network/">Netzwerkübergreifend</a><a class="row" href="/de/offline-transfer/">Asynchron</a><a class="row" href="/device-inbox">Geräte-Posteingang</a><a class="row" href="/cli">CLI</a><a class="row" href="/de/apps/">Apps</a><a class="row" href="/pricing">Preise</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/de/">Relayium</a> <span aria-hidden="true">›</span> <a href="/de/guides/">Anleitungen</a> <span aria-hidden="true">›</span> <span aria-current="page">Dateien und Text mit der Relayium CLI vom Terminal übertragen</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,20 +203,20 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="Archivierte Übersetzung"><p class="archived-label">Archivierte Übersetzung</p><p>Diese Seite ist eine archivierte deutsche Übersetzung. Produkt und aktuelle Dokumentation von Relayium werden auf Englisch und in vereinfachtem Chinesisch gepflegt; die App selbst bietet kein Deutsch mehr an. Beschriebene Bildschirme und Details können deshalb vom heutigen Verhalten abweichen.</p><p class="archived-links archived-pricing">Die hier genannten Tarife und Nutzungsgrenzen können veraltet sein; die aktuellen stehen auf der Seite <a href="/pricing">Preise</a>.</p><p class="archived-links">Aktuelle Fassung: <a href="/guides/transfer-files-from-terminal/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/transfer-files-from-terminal/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Die Relayium CLI ist ein kleines einzelnes Binary für Dateien und flüchtigen Text im Terminal — Ende-zu-Ende-verschlüsselt, selbst hostbar und kostenlos. Kopiere Dateien auf Server, pushe Builds zwischen Maschinen oder sende URLs, Befehle und Codeausschnitte, ohne sie erst als Datei zu speichern.</p>
       <p class="lead">Egal welchen Weg du nutzt, die Dateibytes wandern direkt zwischen den beiden Enden und laufen nie über Relayiums Server. Diese Anleitung bringt dich zur Installation und durch deine erste Übertragung und verweist dich dann auf die ausführlicheren Anleitungen zu jedem Modus.</p>
-      <h2>Installation mit einem Befehl</h2>
+      <section class="sheet"><h2>Installation mit einem Befehl</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Was du brauchst</p><ul><li>Einen Rechner mit Terminal unter macOS, Linux oder Windows. Vorgebaute Binaries gibt es für alle drei, jeweils für x86-64 und arm64.</li><li>curl für die Ein-Zeilen-Installation unter macOS und Linux — curl --version gibt eine Version aus. Unter Windows lädst du stattdessen das .zip von der Releases-Seite.</li><li>Ein beschreibbares Installationsverzeichnis. Das Skript nimmt /usr/local/bin, wenn es dort schreiben darf, sonst ~/.local/bin, und seine letzten Zeilen nennen das gewählte.</li><li>Für push, pull und daemon-direct sonst nichts. Ein kostenloses Relayium-Konto brauchen nur das Erzeugen eines Pairing-Codes mit send oder text und das Hochladen mit up.</li></ul></div>
       <p>Unter macOS oder Linux lädt ein Befehl ein vorkompiliertes Binary für dein Betriebssystem herunter und legt es in deinen PATH:</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>Möchtest du die Datei lieber selbst auswählen? Lade ein Binary von der Releases-Seite herunter.</li><li>Go installiert? Clone das Repository und führe go build -o relayium ./cmd/relayium im server-Verzeichnis aus.</li><li>Führe dann relayium --help aus, um alle Befehle zu sehen, und relayium version, um den Build zu prüfen.</li></ul>
-      <h2>Die drei Wege, Dateien zu bewegen</h2>
+      <ul><li>Möchtest du die Datei lieber selbst auswählen? Lade ein Binary von der Releases-Seite herunter.</li><li>Go installiert? Clone das Repository und führe go build -o relayium ./cmd/relayium im server-Verzeichnis aus.</li><li>Führe dann relayium --help aus, um alle Befehle zu sehen, und relayium version, um den Build zu prüfen.</li></ul></section>
+      <section class="sheet"><h2>Die drei Wege, Dateien zu bewegen</h2>
       <p>Relayium bewegt Dateien auf drei Arten. Du wählst danach, wo sich die Gegenstelle befindet, nicht indem du drei verschiedene Werkzeuge lernst — sie teilen sich eine Übertragungs-Engine, die jede bewegte Datei per SHA-256-Hash prüft. Was sie sich nicht teilen, ist das Fortsetzen: sync ist der Modus, der eine Teildatei in einem späteren Lauf weiterführt, und push, pull, send und receive setzen gar nicht fort.</p>
-      <ul><li>push / pull — zu einem Server, in den du dich bereits per SSH einloggen kannst. Die Bytes laufen über deine SSH-Verbindung; kein Relayium-Konto nötig.</li><li>send / receive — an eine andere Person netzwerkübergreifend, mit einem kurzen Pairing-Code, den die CLI des Absenders erzeugt (einmalig mit relayium login anmelden; der Empfänger nie). Ein erzeugter Code gilt fünf Minuten — starte den Befehl auf der empfangenden Maschine in diesem Fenster.</li><li>Relayium CLI send/receive und text sind direct-only P2P: Datei- oder Nachrichtenbytes werden weder über TURN noch über einen anderen Relayium-Server weitergeleitet. Können die beiden Endpunkte keine direkte Verbindung herstellen, schlägt die Sitzung fehl, statt auf ein Relay auszuweichen.</li><li>serve + push relayium:// (daemon-direct) — direkt zwischen zwei Servern, die dir gehören, über TLS mit Pinning. Kein Relay, kein SSH, kein Code.</li></ul>
-      <h2>Flüchtigen Text senden</h2>
+      <ul><li>push / pull — zu einem Server, in den du dich bereits per SSH einloggen kannst. Die Bytes laufen über deine SSH-Verbindung; kein Relayium-Konto nötig.</li><li>send / receive — an eine andere Person netzwerkübergreifend, mit einem kurzen Pairing-Code, den die CLI des Absenders erzeugt (einmalig mit relayium login anmelden; der Empfänger nie). Ein erzeugter Code gilt fünf Minuten — starte den Befehl auf der empfangenden Maschine in diesem Fenster.</li><li>Relayium CLI send/receive und text sind direct-only P2P: Datei- oder Nachrichtenbytes werden weder über TURN noch über einen anderen Relayium-Server weitergeleitet. Können die beiden Endpunkte keine direkte Verbindung herstellen, schlägt die Sitzung fehl, statt auf ein Relay auszuweichen.</li><li>serve + push relayium:// (daemon-direct) — direkt zwischen zwei Servern, die dir gehören, über TLS mit Pinning. Kein Relay, kein SSH, kein Code.</li></ul></section>
+      <section class="sheet"><h2>Flüchtigen Text senden</h2>
       <p>Führe auf einem Rechner relayium text aus, um einen Pairing-Code zu erzeugen; der andere tritt mit dem ausgegebenen Code bei:</p>
       <pre tabindex="0"><code>relayium text</code></pre>
       <pre tabindex="0"><code>relayium text 483920</code></pre>
-      <ul><li>Das Erzeugen des Codes braucht relayium login; der Beitritt mit einem Code braucht keine Anmeldung.</li><li>Beide Rechner müssen online bleiben. Nachrichten sind Ende-zu-Ende verschlüsselt; Relayium-Server speichern ihre Inhalte nicht.</li><li>Relayium CLI send/receive und text sind direct-only P2P: Datei- oder Nachrichtenbytes werden weder über TURN noch über einen anderen Relayium-Server weitergeleitet. Können die beiden Endpunkte keine direkte Verbindung herstellen, schlägt die Sitzung fehl, statt auf ein Relay auszuweichen.</li><li>Beide Endpunkte können empfangenen Text dennoch kopieren oder behalten.</li><li>Eine Nachricht umfasst höchstens 65.536 UTF-8-Bytes. Für größere Inhalte nutze relayium send.</li></ul>
-      <h2>Deine erste Übertragung</h2>
+      <ul><li>Das Erzeugen des Codes braucht relayium login; der Beitritt mit einem Code braucht keine Anmeldung.</li><li>Beide Rechner müssen online bleiben. Nachrichten sind Ende-zu-Ende verschlüsselt; Relayium-Server speichern ihre Inhalte nicht.</li><li>Relayium CLI send/receive und text sind direct-only P2P: Datei- oder Nachrichtenbytes werden weder über TURN noch über einen anderen Relayium-Server weitergeleitet. Können die beiden Endpunkte keine direkte Verbindung herstellen, schlägt die Sitzung fehl, statt auf ein Relay auszuweichen.</li><li>Beide Endpunkte können empfangenen Text dennoch kopieren oder behalten.</li><li>Eine Nachricht umfasst höchstens 65.536 UTF-8-Bytes. Für größere Inhalte nutze relayium send.</li></ul></section>
+      <section class="sheet"><h2>Deine erste Übertragung</h2>
       <p>Am schnellsten lässt sich ausprobieren, einen Ordner auf einen Server zu kopieren, in den du dich per SSH einloggen kannst. Relayium nutzt deinen bestehenden SSH-Zugang, es gibt also nichts auf der Gegenseite zu konfigurieren und kein Konto anzulegen:</p>
       <ol class="steps" data-block="steps"><li><p>Prüf, ob die CLI in deinem PATH liegt. Sie gibt eine Versionsnummer aus, nicht „command not found“.</p><pre tabindex="0"><code>relayium version</code></pre></li><li><p>Prüf, ob du den Server auf dem gewohnten Weg schon erreichst. push nutzt genau diesen Zugang wieder: klappt ssh, ist die Voraussetzung Verbindung und Authentifizierung erfüllt. Ein Versprechen für die Übertragung selbst ist das nicht — dafür braucht push weiterhin Schreibrechte und freien Platz unter user@your-server:backups/.</p><pre tabindex="0"><code>ssh user@your-server true</code></pre></li><li><p>Schieb den Ordner hoch. Das letzte Argument ist host:path — der Doppelpunkt macht es zur Gegenstelle, und ein Schrägstrich am Ende heißt „in dieses Verzeichnis hinein“.</p><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/</code></pre></li><li><p>Prüf, ob die Dateien dort gelandet sind, wo du sie erwartest. push ./photos legt photos/ unter dem Ziel wieder an, der Ordnername kommt also mit.</p><pre tabindex="0"><code>ssh user@your-server ls backups/photos</code></pre></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">So sieht ein erfolgreicher Lauf aus</p><p>Liegt relayium auf der Gegenseite, gibt push eine Zeile pro fertiger Datei aus und endet mit 0. Gegen einen nackten Server erscheint stattdessen die tar-Stream-Zusammenfassung — beides ist Erfolg.</p><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/
@@ -180,18 +224,18 @@ ol.steps>li>pre{margin:8px 0 0}
   photos/IMG_0414.jpg (1998233 bytes)
 echo $?
 # 0</code></pre></div>
-      <ul><li>Ist relayium auch auf der Gegenseite installiert, nutzt push das native Protokoll: Der Stapel wird auf Kollisionen geprüft, bevor ein Byte fließt, und jede Datei wird per SHA-256 verifiziert und zwischengelagert, bevor sie installiert wird. Fortgesetzt wird trotzdem nicht — ein erneuter Lauf nach einem Abbruch wird abgelehnt, weil die gelandeten Dateien nun existieren. Nimm relayium sync, wo du das brauchst.</li><li>Ist relayium dort nicht installiert, fällt push auf einen einfachen tar-Stream zurück, sodass es auch auf einem nackten Server funktioniert — dieser Fallback existiert nur bei push.</li><li>Hole dieselben Dateien mit folgendem Befehl zurück: relayium pull user@your-server:backups/ ./restore — pull braucht immer relayium auf der Gegenseite (keinen tar-Fallback), installiere es dort also zuerst.</li></ul>
-      <h2>Wenn der erste Befehl nicht durchgeht</h2>
+      <ul><li>Ist relayium auch auf der Gegenseite installiert, nutzt push das native Protokoll: Der Stapel wird auf Kollisionen geprüft, bevor ein Byte fließt, und jede Datei wird per SHA-256 verifiziert und zwischengelagert, bevor sie installiert wird. Fortgesetzt wird trotzdem nicht — ein erneuter Lauf nach einem Abbruch wird abgelehnt, weil die gelandeten Dateien nun existieren. Nimm relayium sync, wo du das brauchst.</li><li>Ist relayium dort nicht installiert, fällt push auf einen einfachen tar-Stream zurück, sodass es auch auf einem nackten Server funktioniert — dieser Fallback existiert nur bei push.</li><li>Hole dieselben Dateien mit folgendem Befehl zurück: relayium pull user@your-server:backups/ ./restore — pull braucht immer relayium auf der Gegenseite (keinen tar-Fallback), installiere es dort also zuerst.</li></ul></section>
+      <section class="sheet"><h2>Wenn der erste Befehl nicht durchgeht</h2>
       <p>Vier Dinge gehen beim ersten Lauf häufiger schief als alles andere zusammen. Keins davon musst du raten — zu jedem gibt es einen Befehl, dessen Ausgabe die Sache entscheidet.</p>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, Prüfung, Lösung</p><dl><dt>„relayium: command not found“, direkt nachdem das Installationsskript Erfolg gemeldet hat.</dt><dd><pre tabindex="0"><code>command -v relayium
 # (gibt nichts aus)</code></pre><p>Das Binary ist installiert, sein Verzeichnis liegt aber nicht im PATH. Die letzten Zeilen des Skripts nennen das verwendete Verzeichnis und geben die passende export-PATH-Zeile aus; führ sie aus, öffne eine neue Shell und probier relayium version noch einmal.</p></dd><dt>push endet sofort mit „push destination must be remote (host:path)“.</dt><dd><pre tabindex="0"><code>relayium push ./photos user@your-server backups/
 # push destination must be remote (host:path)</code></pre><p>Dem Ziel fehlt der Doppelpunkt, also hat relayium es als lokalen Pfad gelesen. Schreib es scp-artig, ohne Leerzeichen zwischen Host und Pfad: user@your-server:backups/</p></dd><dt>pull scheitert an einem Server, gegen den push problemlos lief.</dt><dd><pre tabindex="0"><code>ssh user@your-server command -v relayium
 # (gibt nichts aus)</code></pre><p>pull hat keinen tar-Fallback, denn in dieser Richtung ist die Gegenseite der Sender — dort muss relayium installiert sein. Installier es mit demselben Ein-Zeilen-Befehl auf dem Server und wiederhol das pull.</p></dd><dt>Zwei Rechner treten demselben Code bei und einer gibt „the other side is running `relayium text`, not `relayium send`/`relayium receive`“ aus.</dt><dd><pre tabindex="0"><code># Nachrichtensitzung: BEIDE Enden führen text aus
 relayium text
-relayium text 483920</code></pre><p>Die beiden Enden haben verschiedene Befehle ausgeführt. Für Nachrichten auf beiden Rechnern relayium text, für Dateien auf einem relayium send und auf dem anderen relayium receive. Die Nichtübereinstimmung wird abgelehnt, bevor überhaupt gewählt wird, es wurde also nichts gesendet.</p></dd></dl></div>
-      <h2>Kostenlos und von Grund auf privat</h2>
+relayium text 483920</code></pre><p>Die beiden Enden haben verschiedene Befehle ausgeführt. Für Nachrichten auf beiden Rechnern relayium text, für Dateien auf einem relayium send und auf dem anderen relayium receive. Die Nichtübereinstimmung wird abgelehnt, bevor überhaupt gewählt wird, es wurde also nichts gesendet.</p></dd></dl></div></section>
+      <section class="sheet"><h2>Kostenlos und von Grund auf privat</h2>
       <p>Es gibt nichts zu bezahlen. Von den drei Wegen oben erfordert nur der Absender im send-/receive-Modus eine Anmeldung, damit dessen CLI einen Pairing-Code erzeugen kann (auch Cloud-up nutzt dein Konto, um die Datei zu speichern). Die CLI verbindet die beiden Enden direkt, sodass deine Dateien nie auf einen Server dazwischen hochgeladen werden — das Einzige, was Relayium jemals berührt, ist ein winziger Rendezvous-Handshake im send-/receive-Modus, der die beiden Enden einander vorstellt, niemals die Datei selbst.</p>
-      <p>Jede Übertragung ist Ende-zu-Ende verschlüsselt, und im nativen Protokoll wird jede Datei, die ein Lauf überträgt, bei Ankunft mit einem SHA-256-Hash geprüft — die Ausnahme ist der abhängigkeitsfreie tar-Fallback, der je Datei nichts prüft. Fortsetzen ist enger gefasst: relayium sync führt eine Teildatei in einem späteren Lauf weiter, relayium down verbindet sich innerhalb des laufenden Vorgangs neu und macht dort weiter, und push, pull, send und receive setzen gar nicht fort. Sie läuft unter macOS, Linux und Windows, und das Ganze ist Open Source und selbst hostbar.</p>
+      <p>Jede Übertragung ist Ende-zu-Ende verschlüsselt, und im nativen Protokoll wird jede Datei, die ein Lauf überträgt, bei Ankunft mit einem SHA-256-Hash geprüft — die Ausnahme ist der abhängigkeitsfreie tar-Fallback, der je Datei nichts prüft. Fortsetzen ist enger gefasst: relayium sync führt eine Teildatei in einem späteren Lauf weiter, relayium down verbindet sich innerhalb des laufenden Vorgangs neu und macht dort weiter, und push, pull, send und receive setzen gar nicht fort. Sie läuft unter macOS, Linux und Windows, und das Ganze ist Open Source und selbst hostbar.</p></section>
       <h2>Häufige Fragen</h2>
       <h3>Kostet die CLI etwas?</h3>
       <p>Nein. Die CLI ist völlig kostenlos. Direkt übertragene Datei- und Textbytes laufen nie über ein Relayium-Relay, also gibt es nichts zu messen und nichts zu bezahlen.</p>
@@ -216,6 +260,8 @@ relayium text 483920</code></pre><p>Die beiden Enden haben verschiedene Befehle 
         <a href="/pricing">Preise</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

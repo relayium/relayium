@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"端末間でテキスト、リンク、コマンドを送る","description":"Relayium でテキスト、リンク、コマンド、複数行コードを端末間転送。エンドツーエンド暗号化かつ同時オンライン限定で、Relayium サーバーはメッセージ本文やサーバー側履歴を保存しませんが、各端末は受信テキストを保持できます。","inLanguage":"ja","datePublished":"2026-07-30","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"端末間でテキスト、リンク、コマンドを送る"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"Relayium はメッセージを読んだり復元できますか？","acceptedAnswer":{"@type":"Answer","text":"できません。内容は端末間でエンドツーエンド暗号化され、Relayium サーバーは本文やサーバー側履歴を保存しません。各端末は受信テキストを保持できますが、セッション終了後に Relayium から復元できるサーバーコピーはありません。"}},{"@type":"Question","name":"片方をブラウザ、片方を CLI にできますか？","acceptedAnswer":{"@type":"Answer","text":"できません。転送方式とペアリング方式が異なります。ブラウザ同士、または CLI 同士で使ってください。"}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ja/guides/" aria-current="true">ガイド</a><a href="/ja/apps/">アプリ</a><a href="/pricing">料金</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="メインナビゲーション"><a class="row" href="/">LAN</a><a class="row" href="/ja/cross-network/">ネットワーク間</a><a class="row" href="/ja/offline-transfer/">非同期</a><a class="row" href="/device-inbox">デバイス受信箱</a><a class="row" href="/cli">CLI</a><a class="row" href="/ja/apps/">アプリ</a><a class="row" href="/pricing">料金</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">端末間でテキスト、リンク、コマンドを送る</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,16 +203,16 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links archived-pricing">このページに記載されている料金プランや利用上限は古くなっている可能性があります。現在の内容は<a href="/pricing">料金</a>のページでご確認ください。</p><p class="archived-links">最新版：<a href="/how-to/send-text-between-devices/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/how-to/send-text-between-devices/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Relayium はファイルだけでなく、スマートフォンの URL、別の PC で使うコマンド、複数行のコードなど、クリップボード向けの内容も運べます。メッセージはエンドツーエンド暗号化され、Relayium サーバーは本文やサーバー側履歴を保存しませんが、各端末は受信テキストをコピーまたは保持できます。</p>
       <p class="lead">ブラウザと CLI の両方がテキストに対応しますが、別々の転送方式であり、互いのペアリングコードには参加できません。両端で同じ方式を選んでください。</p>
-      <h2>ブラウザ：オンライン端末へメッセージを送る</h2>
+      <section class="sheet"><h2>ブラウザ：オンライン端末へメッセージを送る</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">始める前に</p><ul><li>2台が同時にオンラインで、どちらもブラウザでページを開いていること。受信箱はありません。メッセージは双方が開いたままにしているセッションの中にだけ存在します。</li><li>両端で同じ転送方式を選ぶこと。同一ネットワークなら準備は何も要りません。別のネットワークならブラウザ用のペアリングコードが必要で、作成側がサインインし、寿命は5分です。</li><li>1メッセージに収まる分量、つまり UTF-8 で 65,536 バイトまで。入力に応じてカウンターが増え、超えるとファイルとして送るよう案内されます。</li><li>届いたものを置く場所。受信メッセージは開いているセッションの中に留まるので、残したいものはセッションが終わる前、ページを再読み込みする前にコピーしてください。</li></ul></div>
       <p>両方の端末で relayium.com を開きます。違うのは「どう出会うか」だけです。同じネットワークなら相手は「近くのデバイス」に自動表示され、ネットワークをまたぐ場合はクロスネットワーク画面でブラウザ用のペアリングコードを作り、もう一方のブラウザで参加します。出会ったあとに得られるものはどちらも同じです。相手のカードの操作は「ワークスペースを開く」の一つだけで、入力欄はそのワークスペースの中、ファイルとフォルダの添付の隣にあり、同じ1本の暗号化接続を使います。ネットワークをまたぐ場合、その接続を運ぶのは暗号化された TURN リレーで、リレーが転送するのは暗号文だけです。さらに時間の上限があり、ワークスペースは上限に達する前に知らせます。唯一の例外は最新のブラウザではない相手——古いブラウザ、ネイティブアプリ、CLI——で、その場合はファイルとメッセージを一度に片方ずつ使う以前の流れが残ります。</p>
       <ol class="steps" data-block="steps"><li><p>両方の端末で転送ページを開きます。同一ネットワークのページは相手を自動的に見つけ、別ネットワークならペアリングコードをリアルタイム転送のページで使います。</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>相手のカードで「ワークスペースを開く」を押し、ワークスペースが出す入力欄に打ち込みます。どちらの経路でも操作は同じ一つです。同じネットワークなら「近くのデバイス」の中、ネットワークをまたぐならペアリングコードの部屋の相手のカードにあります。既定では両端でそのまま入力欄が開きます。いずれの場合も接続は暗号化されています。</p></li><li><p>テキストを入力または貼り付けます。入力欄の下のカウンターは、1メッセージ分の枠をどれだけ使ったかを文字数ではなくバイト数で示します。絵文字や日本語の1文字は数バイトを消費するためです。</p><pre tabindex="0"><code>1,024 / 65,536 バイト</code></pre></li><li><p>⌘/Ctrl+Enter で送信します。Enter 単体は改行なので、複数行のスニペットを貼り付けてそのまま送れます。その割り当ては入力欄の下のヒントに書かれています。</p><pre tabindex="0"><code>Enter で改行 · ⌘/Ctrl+Enter で送信</code></pre></li><li><p>セッションを開いたままにすれば双方向に何度でも送れ、残したいものは「コピー」を押します。先に検証コード（SAS）を照合したい場合は、セッションを開く前に「高度な検証」をオンにしてください。増えるのはコードと明示的な承認の一手間で、暗号化そのものではありません。</p></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">セッションが正常なときの画面</p><p>両端でセッションが開いていると表示され、送ったメッセージが相手の端末の履歴に現れ、バイトカウンターは次の1通のためにゼロへ戻ります。</p><p>その履歴が Relayium の関わる唯一のコピーです。開いている2つのページの中だけに存在し、再読み込みやセッション終了で消えます。また「コピー」はその端末のクリップボードにテキストを置くため、ほかのアプリからも読める状態になります。</p><pre tabindex="0"><code>セッション接続中
-1,024 / 65,536 バイト</code></pre></div>
-      <h2>メッセージが送れないとき</h2>
+1,024 / 65,536 バイト</code></pre></div></section>
+      <section class="sheet"><h2>メッセージが送れないとき</h2>
       <p>テキストはファイル転送と同じ接続を使うため、失敗のほとんどはメッセージではなく接続の問題です。例外は2つだけで具体的であり、どちらも画面に表示されます。サイズ上限を超えたメッセージと、一度に送りすぎて閉じられたセッションです。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>相手の端末がいつまでも現れず、メッセージセッションを開くカードがない。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 両方の端末のステータス表示にあるグローバル IP を比べる</code></pre><p>同一ネットワークの検出は接続元のグローバル IP でグループ化するため、アドレスが2つ違えばルームも2つです。VPN や iCloud プライベートリレーを切る、あるいは同じ Wi-Fi に参加してください。本当に別のネットワークにいる場合は、https://relayium.com/cross-network のペアリングコードを使います。</p></dd><dt>入力欄がテキストを受け付けず、メッセージが長すぎると出る。</dt><dd><pre tabindex="0"><code>1,024 / 65,536 バイト   # カウンターは文字数ではなく UTF-8 のバイト数</code></pre><p>1メッセージは UTF-8 で 65,536 バイトまでで、非ラテン文字は1文字あたり2〜4バイトを使うため、長い日本語や絵文字の多い貼り付けは、文字数から想像するよりずっと手前でそのバイト上限に達します。分割するか、ファイルとして送ってください。入力欄がまさにそれを案内します。</p></dd><dt>セッションが自ら閉じ、メッセージが多すぎたと告げる。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # セッションの行が失敗ではなく終了と表示する</code></pre><p>片側が人の入力を大きく超える数のメッセージを送ると、洪水対策がセッションを閉じます。スクリプトや押されたままのキーがこれを起こします。開いたときと同じやり方でセッションを開き直し——相手のカードで「ワークスペースを開く」、同じネットワークでもペアリングコードの部屋でも同じです——残りのテキストは少ない回数でまとめて送ってください。</p></dd><dt>うまくいっていたのに、再読み込みしたら会話が空になっている。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # このページを再読み込みすると履歴のない新しいセッションになる</code></pre><p>これは不具合ではなく設計です。Relayium はサーバー側の履歴を保存しないので、復元するものはなく、取り寄せられるサーバーのコピーもありません。セッションを離れる前に必要な内容をメモへコピーしてください。履歴の寿命は、そのページが開いている間だけです。</p></dd><dt>ブラウザと CLI が互いのコードで参加できない。</dt><dd><pre tabindex="0"><code>relayium text 483920   # CLI のコードは CLI 同士しかペアにしない</code></pre><p>ブラウザと CLI のテキストセッションは転送方式もペアリング手順も異なるため、一方が発行した6桁コードは他方には無意味です。ブラウザ2つ、または両端で CLI を使ってください。relayium text は2台目が実行すべきコマンドをそのまま表示します。</p></dd></dl></div>
-      <h2>CLI：片方でコードを発行し、もう片方が参加する</h2>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>相手の端末がいつまでも現れず、メッセージセッションを開くカードがない。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 両方の端末のステータス表示にあるグローバル IP を比べる</code></pre><p>同一ネットワークの検出は接続元のグローバル IP でグループ化するため、アドレスが2つ違えばルームも2つです。VPN や iCloud プライベートリレーを切る、あるいは同じ Wi-Fi に参加してください。本当に別のネットワークにいる場合は、https://relayium.com/cross-network のペアリングコードを使います。</p></dd><dt>入力欄がテキストを受け付けず、メッセージが長すぎると出る。</dt><dd><pre tabindex="0"><code>1,024 / 65,536 バイト   # カウンターは文字数ではなく UTF-8 のバイト数</code></pre><p>1メッセージは UTF-8 で 65,536 バイトまでで、非ラテン文字は1文字あたり2〜4バイトを使うため、長い日本語や絵文字の多い貼り付けは、文字数から想像するよりずっと手前でそのバイト上限に達します。分割するか、ファイルとして送ってください。入力欄がまさにそれを案内します。</p></dd><dt>セッションが自ら閉じ、メッセージが多すぎたと告げる。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # セッションの行が失敗ではなく終了と表示する</code></pre><p>片側が人の入力を大きく超える数のメッセージを送ると、洪水対策がセッションを閉じます。スクリプトや押されたままのキーがこれを起こします。開いたときと同じやり方でセッションを開き直し——相手のカードで「ワークスペースを開く」、同じネットワークでもペアリングコードの部屋でも同じです——残りのテキストは少ない回数でまとめて送ってください。</p></dd><dt>うまくいっていたのに、再読み込みしたら会話が空になっている。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # このページを再読み込みすると履歴のない新しいセッションになる</code></pre><p>これは不具合ではなく設計です。Relayium はサーバー側の履歴を保存しないので、復元するものはなく、取り寄せられるサーバーのコピーもありません。セッションを離れる前に必要な内容をメモへコピーしてください。履歴の寿命は、そのページが開いている間だけです。</p></dd><dt>ブラウザと CLI が互いのコードで参加できない。</dt><dd><pre tabindex="0"><code>relayium text 483920   # CLI のコードは CLI 同士しかペアにしない</code></pre><p>ブラウザと CLI のテキストセッションは転送方式もペアリング手順も異なるため、一方が発行した6桁コードは他方には無意味です。ブラウザ2つ、または両端で CLI を使ってください。relayium text は2台目が実行すべきコマンドをそのまま表示します。</p></dd></dl></div></section>
+      <section class="sheet"><h2>CLI：片方でコードを発行し、もう片方が参加する</h2>
       <p>片方のマシンでコードを付けずに relayium text を実行します。アカウントで 6 桁の数字コードを発行し、もう一方が実行すべきコマンドをそのまま表示し、相手の参加を待ちます。一時ファイルも、止めるべき別プロセスもありません。</p>
       <p>もう一方のマシンではそのコードを指定して relayium text を実行します。対話モードは 1 行を 1 メッセージとして送り、こちらから求めない限りコード照合で止まることはありません。複数行や正確な stdin はパイプで 1 メッセージとして送れます。パイプ実行に追加のフラグは不要です。</p>
       <pre tabindex="0"><code># One machine mints the code and waits (relayium login is required once)
@@ -187,10 +231,10 @@ cat snippet.txt | relayium text 483920
 
 # Optional: stop to compare the verification code (SAS) first
 relayium text 483920 --verify</code></pre>
-      <ul><li>CLI コードは 5 分有効で CLI 同士専用です。ブラウザと CLI は接続できません。</li><li>ログイン済みアカウントが必要なのはコードを発行する側だけです。表示されたコードで参加する側はログイン不要です。</li><li>--verify は SAS 照合を有効にするオプションで、応答するには端末が必要です。そのためパイプ実行に --verify を付けると、確認済みとして続行せずに拒否します。--yes も引き続き使え、意味は「決してプロンプトを出さない」で、--verify より優先されます。</li></ul>
-      <h2>テキスト転送の範囲</h2>
+      <ul><li>CLI コードは 5 分有効で CLI 同士専用です。ブラウザと CLI は接続できません。</li><li>ログイン済みアカウントが必要なのはコードを発行する側だけです。表示されたコードで参加する側はログイン不要です。</li><li>--verify は SAS 照合を有効にするオプションで、応答するには端末が必要です。そのためパイプ実行に --verify を付けると、確認済みとして続行せずに拒否します。--yes も引き続き使え、意味は「決してプロンプトを出さない」で、--verify より優先されます。</li></ul></section>
+      <section class="sheet"><h2>テキスト転送の範囲</h2>
       <p>本文は UTF-8 のプレーンテキストです。空白、タブ、空行、改行を保持し、実行、Markdown 描画、リンク化、プレビューはしません。</p>
-      <ul><li>両端が同時にオンラインである必要があります。オフライン配信、受信箱、連絡先、同期チャット履歴はありません。</li><li>履歴は開いているローカルセッションだけにあり、終了や再読み込みで消えます。サーバーは本文を保存しません。</li><li>1 メッセージは UTF-8 で 65,536 バイトまで。それ以上はファイルとして送ってください。</li></ul>
+      <ul><li>両端が同時にオンラインである必要があります。オフライン配信、受信箱、連絡先、同期チャット履歴はありません。</li><li>履歴は開いているローカルセッションだけにあり、終了や再読み込みで消えます。サーバーは本文を保存しません。</li><li>1 メッセージは UTF-8 で 65,536 バイトまで。それ以上はファイルとして送ってください。</li></ul></section>
       <h2>よくある質問</h2>
       <h3>Relayium はメッセージを読んだり復元できますか？</h3>
       <p>できません。内容は端末間でエンドツーエンド暗号化され、Relayium サーバーは本文やサーバー側履歴を保存しません。各端末は受信テキストを保持できますが、セッション終了後に Relayium から復元できるサーバーコピーはありません。</p>
@@ -211,6 +255,8 @@ relayium text 483920 --verify</code></pre>
         <a href="/pricing">料金</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

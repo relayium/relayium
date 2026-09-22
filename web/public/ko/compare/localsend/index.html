@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs LocalSend: 로컬 파일 전송, 무엇을 쓸까","description":"Relayium과 LocalSend를 공정하게 비교합니다. LocalSend는 각 기기에 설치하는 훌륭한 오픈소스 앱이고, Relayium은 같은 LAN 전송을 브라우저에서(설치 없이) 해내며 네트워크를 넘나드는 전송과 CLI까지 제공합니다.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/compare/localsend/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs LocalSend: 로컬 파일 전송, 무엇을 쓸까"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"같은 네트워크에서 Relayium을 쓰려면 뭔가 설치해야 하나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 두 기기가 같은 네트워크에 있는 동안 양쪽 브라우저에서 relayium.com을 열면 자동으로 서로를 찾습니다 — 앱도, 계정도, 페어링 코드도 필요 없습니다."}},{"@type":"Question","name":"LocalSend는 인터넷 연결이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"아니요 — 그것이 강점 중 하나입니다. LocalSend는 서버를 전혀 거치지 않고 로컬 네트워크만으로 동작하므로 인터넷이 전혀 없어도 계속 작동합니다."}},{"@type":"Question","name":"Relayium은 다른 네트워크에 있는 사람에게 파일을 보낼 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"네. 페어링 코드(또는 그것이 생성하는 참여 링크)를 만들면 상대는 어디서든 연결할 수 있습니다. 브라우저에서 이 네트워크 간 연결은 설계상 암호화된 TURN 릴레이가 담당합니다. 덕분에 가정용 네트워크 사이에서는 좀처럼 성공하지 않는 직접 연결 시도를 기다리지 않고 1~2초 만에 연결됩니다. 릴레이는 암호문만 전달하므로 파일을 읽을 수 없습니다. 코드를 만들려면 로그인이 필요하고, 코드를 건네받은 쪽은 필요 없습니다."}},{"@type":"Question","name":"Relayium은 오픈소스인가요?","acceptedAnswer":{"@type":"Answer","text":"네, AGPL-3.0 라이선스이며 프로토콜과 코드 전체가 github.com/relayium/relayium에 공개되어 있습니다 — LocalSend를 신뢰할 수 있게 만든 것과 같은 종류의 개방성입니다."}},{"@type":"Question","name":"어느 쪽이 더 사적인가요?","acceptedAnswer":{"@type":"Answer","text":"둘 다 동일 네트워크 전송을 공개 서버 밖에 둡니다. LAN에서는 Relayium의 두 기기가 서로 직접 주고받습니다. LocalSend는 로컬 전송 자체를 보호합니다. Relayium은 LAN이든 네트워크를 넘나들든 양쪽에서 확인할 수 있는 SAS 코드가 붙은 독립적인 애플리케이션 계층 암호화 채널을 추가로 제공합니다 — 그래서 네트워크 간 경로의 릴레이에는 암호문만 보입니다."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -119,8 +161,10 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ko/guides/" aria-current="true">가이드</a><a href="/ko/apps/">앱</a><a href="/pricing">요금제</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="기본 탐색"><a class="row" href="/">LAN 전송</a><a class="row" href="/ko/cross-network/">네트워크 간 전송</a><a class="row" href="/ko/offline-transfer/">비동기 전송</a><a class="row" href="/device-inbox">기기 수신함</a><a class="row" href="/cli">CLI</a><a class="row" href="/ko/apps/">앱</a><a class="row" href="/pricing">요금제</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs LocalSend: 로컬 파일 전송, 무엇을 쓸까</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -142,22 +186,22 @@ pre code{background:none;padding:0;border-radius:0}
       <aside class="archived" aria-label="보관된 번역"><p class="archived-label">보관된 번역</p><p>이 페이지는 기록으로 보관 중인 한국어 번역입니다. Relayium 제품과 최신 문서는 영어와 중국어 간체로 관리되며, 앱 자체도 더 이상 한국어를 제공하지 않습니다. 여기에 적힌 화면과 세부 사항은 현재 동작과 다를 수 있습니다.</p><p class="archived-links archived-pricing">이 페이지에 적혀 있는 요금제와 사용 한도는 오래된 내용일 수 있습니다. 현재 내용은 <a href="/pricing">요금제</a> 페이지에서 확인하세요.</p><p class="archived-links">최신 버전: <a href="/compare/localsend/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/compare/localsend/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">LocalSend는 정말 훌륭하고 사랑받는 앱입니다. 무료, 오픈소스, 크로스플랫폼이며 같은 로컬 네트워크의 기기 사이에서 파일을 옮기도록 만들어졌고, 서버도 계정도 전혀 필요 없습니다. Windows, Linux, Android용 AirDrop 같은 도구로 많은 사람이 의지하고 있습니다.</p>
       <p class="lead">이 글은 이를 Relayium과 공정하게 비교합니다. Relayium은 같은 ‘동일 네트워크’ 문제를 다른 방식으로 풉니다. 설치할 앱이 없고 브라우저 안에서 바로 동작합니다. 그리고 한 걸음 더 나아가 네트워크를 넘나드는 전송과, LocalSend에는 없는 CLI 도구까지 제공합니다.</p>
-      <h2>LocalSend가 잘하는 것</h2>
+      <section class="sheet"><h2>LocalSend가 잘하는 것</h2>
       <p>LocalSend는 Windows, macOS, Linux, Android, iOS용 무료 오픈소스 앱입니다. 각 기기에 한 번 설치하면 암호화된 로컬 전송을 사용해 같은 Wi-Fi나 LAN에 있는 다른 LocalSend 인스턴스를 자동으로 찾습니다. 어디에도 서버가 없고, 인터넷 연결도 계정도 필요 없습니다.</p>
       <p>드래그 앤 드롭, 폴더 통째 전송을 지원하며, 완전히 신뢰하지 않는 네트워크에서 보낼 때는 선택적 PIN 보호도 쓸 수 있습니다.</p>
-      <ul><li>Windows, macOS, Linux, Android, iOS용 크로스플랫폼 네이티브 앱 — 한 번 설치하면 바로 쓸 수 있음.</li><li>설계상 완전 오프라인: 서버 없음, 인터넷 연결 불필요, 계정 불필요 — 같은 로컬 네트워크의 기기만 있으면 됨.</li><li>신뢰하지 않는 네트워크에서 보낼 때 선택적 PIN 보호, 드래그 앤 드롭과 폴더 통째 전송 지원.</li><li>전용 앱 아이콘과 OS 수준 공유 시트 통합 — 브라우저 탭으로는 얻을 수 없는 부분.</li></ul>
-      <h2>Relayium의 차이: 설치 없이, 브라우저에서 바로</h2>
+      <ul><li>Windows, macOS, Linux, Android, iOS용 크로스플랫폼 네이티브 앱 — 한 번 설치하면 바로 쓸 수 있음.</li><li>설계상 완전 오프라인: 서버 없음, 인터넷 연결 불필요, 계정 불필요 — 같은 로컬 네트워크의 기기만 있으면 됨.</li><li>신뢰하지 않는 네트워크에서 보낼 때 선택적 PIN 보호, 드래그 앤 드롭과 폴더 통째 전송 지원.</li><li>전용 앱 아이콘과 OS 수준 공유 시트 통합 — 브라우저 탭으로는 얻을 수 없는 부분.</li></ul></section>
+      <section class="sheet"><h2>Relayium의 차이: 설치 없이, 브라우저에서 바로</h2>
       <p>Relayium은 같은 ‘동일 네트워크’ 문제에 정반대로 접근합니다. 모든 기기에 앱을 설치하는 대신, 이미 가지고 있는 브라우저로 relayium.com을 엽니다. 같은 네트워크의 두 기기는 자동으로 같은 방에 들어갑니다 — 서버가 공유 네트워크로부터 방을 판단하므로 양쪽 모두 페어링 코드도 계정도 필요 없습니다.</p>
-      <p>이 LAN 방은 한 쌍뿐 아니라 몇 대든 동시에 수용하며, 드래그 앤 드롭이나 폴더 선택도 네이티브 앱과 똑같이 동작합니다 — 설치 단계만 없을 뿐입니다.</p>
-      <h2>LAN을 넘어서: 네트워크 간 전송과 CLI</h2>
+      <p>이 LAN 방은 한 쌍뿐 아니라 몇 대든 동시에 수용하며, 드래그 앤 드롭이나 폴더 선택도 네이티브 앱과 똑같이 동작합니다 — 설치 단계만 없을 뿐입니다.</p></section>
+      <section class="sheet"><h2>LAN을 넘어서: 네트워크 간 전송과 CLI</h2>
       <p>LocalSend는 설계상 로컬 네트워크 전용입니다 — 다른 네트워크나 인터넷 너머의 기기에 닿을 방법이 없습니다. Relayium은 이를 더합니다. 페어링 코드(또는 그것이 생성하는 참여 링크)를 만들면 상대는 어디서든 연결할 수 있습니다. 브라우저에서 이 네트워크 간 경로는 직접 경로를 찾아 헤매는 대신 일부러 암호화된 TURN 릴레이를 거칩니다. ICE를 릴레이 전용으로 고정하면, 거의 실패할 수밖에 없는 NAT 너머 직접 후보 검사에 약 20초를 쓰는 대신 1~2초 만에 연결이 올라옵니다.</p>
       <p>네트워크를 넘나드는 페어링 코드를 만들려면 보내는 쪽의 로그인이 필요합니다. 받는 쪽은 계정이 전혀 필요 없습니다. LAN이든 네트워크를 넘나들든 모든 실시간 전송은 애플리케이션 계층에서 종단간 암호화됩니다. X25519 키 교환으로 AES-256-GCM에 쓸 키를 유도하며, 양쪽 기기가 대역 외에서 동일한 6자리 SAS 코드를 비교하면 엔드포인트 공개 키가 바뀌지 않았음을 확인하고 엔드포인트를 사칭하는 시그널링 서비스나 TURN 엔드포인트를 탐지할 수 있습니다. SAS 확인은 TURN이 네트워크 경로에 없다는 사실을 증명하지 않습니다. 브라우저의 네트워크 간 전송은 여전히 릴레이를 거치지만 릴레이는 암호문만 전달하므로 파일 내용은 한 바이트도 읽지 못합니다. 각 파일은 SHA-256 해시로도 검증됩니다. 같은 네트워크의 전송은 두 기기가 곧바로 연결됩니다.</p>
-      <p>서버로의 전송을 스크립트화하려는 사람을 위한 CLI도 있습니다 — SSH 또는 데몬 다이렉트로 push/pull, 폴더 증분 동기화, 페어링 코드로 송수신 — LAN 전용 앱에는 없는 기능입니다. CLI는 항상 직접 연결하며 릴레이를 쓰지 않습니다.</p>
-      <h2>LocalSend가 더 나은 선택일 때</h2>
-      <p>브라우저를 아예 열고 싶지 않다면 — 예를 들어 정말로 인터넷 접속이 전혀 없는 네트워크에서 파일을 옮기거나, 그냥 상시 앱 아이콘과 OS 공유 시트 통합을 원한다면 — LocalSend의 전용 앱이 더 적합합니다. 성숙하고, 가장 엄격한 의미에서 완전히 오프라인으로 동작하며, PIN 모드는 완전히 신뢰하지 않는 네트워크에서 좋은 추가 보호층이 됩니다.</p>
-      <h2>기능 한눈에 비교</h2>
+      <p>서버로의 전송을 스크립트화하려는 사람을 위한 CLI도 있습니다 — SSH 또는 데몬 다이렉트로 push/pull, 폴더 증분 동기화, 페어링 코드로 송수신 — LAN 전용 앱에는 없는 기능입니다. CLI는 항상 직접 연결하며 릴레이를 쓰지 않습니다.</p></section>
+      <section class="sheet"><h2>LocalSend가 더 나은 선택일 때</h2>
+      <p>브라우저를 아예 열고 싶지 않다면 — 예를 들어 정말로 인터넷 접속이 전혀 없는 네트워크에서 파일을 옮기거나, 그냥 상시 앱 아이콘과 OS 공유 시트 통합을 원한다면 — LocalSend의 전용 앱이 더 적합합니다. 성숙하고, 가장 엄격한 의미에서 완전히 오프라인으로 동작하며, PIN 모드는 완전히 신뢰하지 않는 네트워크에서 좋은 추가 보호층이 됩니다.</p></section>
+      <section class="sheet"><h2>기능 한눈에 비교</h2>
       <p>가장 중요한 차이를 나란히 정리하면:</p>
-      <ul><li>설치: LocalSend는 모든 기기에 앱이 필요함. Relayium의 동일 네트워크 모드는 브라우저 외에 아무것도 필요 없음.</li><li>네트워크 도달 범위: LocalSend는 로컬 네트워크 전용임. Relayium은 페어링 코드로 다른 네트워크에도 연결됨 — 브라우저에서는 그 구간이 암호화된 릴레이를 거치고, CLI는 항상 직접 연결함.</li><li>암호화: LocalSend는 로컬 전송 자체를 보호함. Relayium은 LAN에서도 독립적인 애플리케이션 계층 X25519 + AES-256-GCM 채널과 SAS 검증 코드를 추가함.</li><li>계정: LocalSend는 절대 필요 없음. Relayium의 LAN 모드도 마찬가지 — 페어링 코드를 만드는 쪽만, 코드를 만들기 위해 로그인함.</li><li>자동화: Relayium은 SSH push/pull, 증분 동기화, 상시 수신 서비스를 위한 CLI를 제공함. LocalSend는 앱뿐임.</li></ul>
+      <ul><li>설치: LocalSend는 모든 기기에 앱이 필요함. Relayium의 동일 네트워크 모드는 브라우저 외에 아무것도 필요 없음.</li><li>네트워크 도달 범위: LocalSend는 로컬 네트워크 전용임. Relayium은 페어링 코드로 다른 네트워크에도 연결됨 — 브라우저에서는 그 구간이 암호화된 릴레이를 거치고, CLI는 항상 직접 연결함.</li><li>암호화: LocalSend는 로컬 전송 자체를 보호함. Relayium은 LAN에서도 독립적인 애플리케이션 계층 X25519 + AES-256-GCM 채널과 SAS 검증 코드를 추가함.</li><li>계정: LocalSend는 절대 필요 없음. Relayium의 LAN 모드도 마찬가지 — 페어링 코드를 만드는 쪽만, 코드를 만들기 위해 로그인함.</li><li>자동화: Relayium은 SSH push/pull, 증분 동기화, 상시 수신 서비스를 위한 CLI를 제공함. LocalSend는 앱뿐임.</li></ul></section>
       <h2>자주 묻는 질문</h2>
       <h3>같은 네트워크에서 Relayium을 쓰려면 뭔가 설치해야 하나요?</h3>
       <p>아니요. 두 기기가 같은 네트워크에 있는 동안 양쪽 브라우저에서 relayium.com을 열면 자동으로 서로를 찾습니다 — 앱도, 계정도, 페어링 코드도 필요 없습니다.</p>
@@ -184,6 +228,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/pricing">요금제</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

@@ -36,9 +36,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Run Relayium as an always-on receive service","description":"Keep relayium serve running so any peer can push to you at any time — daemon-direct over pinned TLS. Covers first-push approval, pre-authorizing fingerprints, running it at boot under systemd (Linux) or launchd (macOS), and --allow-delete.","inLanguage":"en","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/guides/run-relayium-as-an-always-on-service/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/guides/"},{"@type":"ListItem","position":3,"name":"Run Relayium as an always-on receive service"}]},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"What port does serve listen on by default?","acceptedAnswer":{"@type":"Answer","text":"9031. Change it with --port on both the listener (serve --port N) and the pusher's target (relayium://host:N)."}},{"@type":"Question","name":"Do I have to approve every single push by hand?","acceptedAnswer":{"@type":"Answer","text":"Only the first push from a given fingerprint, and only when serve is running with a terminal attached. It's remembered after that. Running serve non-interactively (systemd, a pipe) skips the prompt entirely and rejects unknown peers — pre-authorize them with relayium authorize instead."}},{"@type":"Question","name":"Can a sender delete files on my always-on receiver?","acceptedAnswer":{"@type":"Answer","text":"Only if you started serve with --allow-delete and the sender is running sync --delete. Without --allow-delete, deletions are silently skipped and everything else still transfers."}},{"@type":"Question","name":"Is running an always-on receiver free?","acceptedAnswer":{"@type":"Answer","text":"Yes. relayium serve is part of the free, self-hostable CLI — no account, no paid tier, on either side of the connection."}},{"@type":"Question","name":"Where does serve keep its identity and peer list?","acceptedAnswer":{"@type":"Answer","text":"In ~/.config/relayium by default (id.key/id.crt for this host's identity, authorized_fingerprints for the allow-list). Point --config-dir somewhere fixed, like /etc/relayium, for a systemd service."}},{"@type":"Question","name":"How do I run serve at boot on macOS?","acceptedAnswer":{"@type":"Answer","text":"macOS has no systemd — use launchd. Install serve as a LaunchDaemon in /Library/LaunchDaemons (starts at boot; set UserName to run as you), or as a LaunchAgent in ~/Library/LaunchAgents (starts at login). This guide has a ready-to-edit plist; there's no Homebrew service. Pre-authorize pushers with relayium authorize first, since launchd gives serve no terminal to prompt on."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -60,24 +60,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -103,6 +89,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -134,8 +176,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/guides/" aria-current="true">Guides</a><a href="/apps">Apps</a><a href="/pricing">Pricing</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Main"><span class="rail-group">Live transfer</span><a class="row" href="/">LAN</a><a class="row" href="/cross-network" aria-label="Cross-network transfer">Cross-network</a><span class="rail-group">Links</span><a class="row" href="/offline-transfer" aria-label="Share a link">Share</a><span class="rail-group">Your devices</span><a class="row" href="/device-inbox" aria-label="Device Inbox">Inbox</a><span class="rail-group">Downloads and tools</span><a class="row" href="/cli">CLI</a><a class="row" href="/apps">Apps</a><a class="row" href="/pricing">Pricing</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service/" aria-current="true">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service/">中文</a></nav></div></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Relayium</a> <span aria-hidden="true">›</span> <a href="/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Run Relayium as an always-on receive service</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -154,14 +198,14 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Last updated: <bdi>2026-08-06</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service/" aria-current="true">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service/">中文</a></nav>
+      
       <p class="lead">relayium serve --once handles a single incoming transfer and exits — fine for a one-off pull. But if you want a machine to be a standing drop point — a home server that backups land on overnight, a build box that CI pushes artifacts to, a NAS your phone can send photos to whenever — you want serve running all the time, not started by hand for each transfer.</p>
       <p class="lead">This guide covers starting a long-running listener, approving who&#39;s allowed to push to it, pre-authorizing peers for the cases where no one&#39;s at the terminal, running it under systemd, and letting a sync --delete sender mirror deletions.</p>
-      <h2>Before you start</h2>
+      <section class="sheet"><h2>Before you start</h2>
       <p>Everything below is the relayium CLI, so install it first if you haven&#39;t. On macOS or Linux, one command drops a prebuilt binary on your PATH:</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build -o relayium ./cmd/relayium if you have Go).</li><li>relayium --version confirms it&#39;s installed. Skip this and the commands below just print &#39;command not found&#39;.</li></ul>
-      <h2>Start the listener</h2>
+      <ul><li>Prefer to pick the file yourself, or on Windows? Grab a binary from the releases page — relayium.com/cli lists every install option (or go build -o relayium ./cmd/relayium if you have Go).</li><li>relayium --version confirms it&#39;s installed. Skip this and the commands below just print &#39;command not found&#39;.</li></ul></section>
+      <section class="sheet"><h2>Start the listener</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">What you need before step 1</p><ul><li>The CLI on both machines. relayium version prints a version string on each; a shell that answers command not found means it is not installed there yet.</li><li>A directory for incoming files on this machine, and the disk to hold what will land in it.</li><li>An address the sender can reach and an open inbound port. serve listens on 9031 unless you pass --port.</li><li>If this machine will run without a terminal — which is the whole point of a service — the pusher&#39;s fingerprint, ahead of time. There is a section on that below, and it is the single most common reason an always-on receiver rejects everything.</li></ul></div>
       <p>serve listens for daemon-direct pushes (relayium://host:port) over a pinned TLS 1.3 connection and writes what it receives into a directory. Nothing needs to be pre-shared to start it — no fingerprints to copy, no server to register:</p>
       <pre tabindex="0"><code>relayium serve --dir ~/inbox
@@ -173,14 +217,14 @@ no authorized peers yet — you&#39;ll be asked to approve each new peer on its 
 Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
 Accept and remember this peer? [y/N] y</code></pre></div>
-      <ul><li>--dir sets where files land (defaults to the current directory).</li><li>--port sets the listening port (defaults to 9031); open it on your firewall if the sender is elsewhere.</li><li>With no --once, serve keeps running and accepting pushes until you stop it or a process manager restarts it — that&#39;s what makes it an always-on service.</li></ul>
-      <h2>Approve who&#39;s allowed to push</h2>
+      <ul><li>--dir sets where files land (defaults to the current directory).</li><li>--port sets the listening port (defaults to 9031); open it on your firewall if the sender is elsewhere.</li><li>With no --once, serve keeps running and accepting pushes until you stop it or a process manager restarts it — that&#39;s what makes it an always-on service.</li></ul></section>
+      <section class="sheet"><h2>Approve who&#39;s allowed to push</h2>
       <p>The first time a new peer pushes, serve — if it&#39;s running in a terminal — shows you where the push came from and its fingerprint and asks you to approve it, the same way SSH asks about an unknown host on first connect:</p>
       <pre tabindex="0"><code>Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
 Accept and remember this peer? [y/N] y</code></pre>
-      <ul><li>Answer y once and that fingerprint is written to authorized_fingerprints; every later push from the same machine goes through with no prompt.</li><li>A fingerprint identifies a machine, not a network address, so it survives the sender&#39;s IP changing.</li><li>This is interactive by design — it needs someone at the keyboard, which won&#39;t be true once serve moves to systemd (next).</li></ul>
-      <h2>Pre-authorize peers for non-interactive setups</h2>
+      <ul><li>Answer y once and that fingerprint is written to authorized_fingerprints; every later push from the same machine goes through with no prompt.</li><li>A fingerprint identifies a machine, not a network address, so it survives the sender&#39;s IP changing.</li><li>This is interactive by design — it needs someone at the keyboard, which won&#39;t be true once serve moves to systemd (next).</li></ul></section>
+      <section class="sheet"><h2>Pre-authorize peers for non-interactive setups</h2>
       <p>When serve has no terminal to prompt on — a systemd service, a background process, a pipe — it can&#39;t ask, so it rejects any fingerprint it doesn&#39;t already recognize. Authorize peers ahead of time instead. On the machine that will push, run relayium id to print its fingerprint; on the receiver, add it before the first push arrives:</p>
       <pre tabindex="0"><code># on the machine that will PUSH: print its fingerprint
 relayium id
@@ -188,8 +232,8 @@ relayium id
 # on this always-on RECEIVER: authorize it in advance
 relayium authorize 74318e3b...</code></pre>
       <ol class="steps" data-block="steps"><li><p>On the machine that will push, print its fingerprint. It is 64 hex characters and identifies that machine, not its address.</p><pre tabindex="0"><code>relayium id</code></pre></li><li><p>On this receiver, authorize it — with the same --config-dir the service will run under. Authorize as the wrong user, or with the default path while the unit uses another, and the fingerprint lands in a file the service never reads.</p><pre tabindex="0"><code>relayium authorize 74318e3b… --config-dir /etc/relayium</code></pre></li></ol>
-      <ul><li>authorize is idempotent — running it again for a fingerprint you already trust does nothing.</li><li>Identity and trust files live under --config-dir, defaulting to ~/.config/relayium (id.key/id.crt is this host&#39;s identity, authorized_fingerprints is the peer allow-list).</li></ul>
-      <h2>Run it under systemd</h2>
+      <ul><li>authorize is idempotent — running it again for a fingerprint you already trust does nothing.</li><li>Identity and trust files live under --config-dir, defaulting to ~/.config/relayium (id.key/id.crt is this host&#39;s identity, authorized_fingerprints is the peer allow-list).</li></ul></section>
+      <section class="sheet"><h2>Run it under systemd</h2>
       <p>For a service that survives reboots and crashes, hand serve to systemd. Point --config-dir at a fixed path so the host&#39;s identity and its authorized-peer list stay put across restarts:</p>
       <pre tabindex="0"><code># /etc/systemd/system/relayium-serve.service
 [Unit]
@@ -208,8 +252,8 @@ WantedBy=multi-user.target</code></pre>
 active
 $ journalctl -u relayium-serve -n 20 --no-pager | grep -c &#39;all pushes will be rejected&#39;
 0</code></pre></div>
-      <ul><li>Before enabling the service, run relayium authorize &lt;fingerprint&gt; for every peer that should be able to push — the service itself can&#39;t prompt.</li><li>systemctl enable --now relayium-serve starts it and brings it back on every boot.</li><li>/etc/relayium/id.key must be mode 0600 exactly, owned by the unit&#39;s User=. relayium refuses anything else — including 0400, so hardening it past 0600 stops the service just as surely as leaving it world-readable.</li></ul>
-      <h2>Run it at boot on macOS (launchd)</h2>
+      <ul><li>Before enabling the service, run relayium authorize &lt;fingerprint&gt; for every peer that should be able to push — the service itself can&#39;t prompt.</li><li>systemctl enable --now relayium-serve starts it and brings it back on every boot.</li><li>/etc/relayium/id.key must be mode 0600 exactly, owned by the unit&#39;s User=. relayium refuses anything else — including 0400, so hardening it past 0600 stops the service just as surely as leaving it world-readable.</li></ul></section>
+      <section class="sheet"><h2>Run it at boot on macOS (launchd)</h2>
       <p>macOS has no systemd — its service manager is launchd. To keep serve running on a Mac (a Mac mini left on as a drop point, say), install it as a LaunchDaemon so it starts at boot, before anyone logs in. Set UserName so it runs as you rather than root, and give --dir and --config-dir absolute paths so its identity and trust files stay in your own ~/.config/relayium:</p>
       <pre tabindex="0"><code>&lt;!-- /Library/LaunchDaemons/com.relayium.serve.plist  (replace YOU with your macOS username) --&gt;
 &lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
@@ -244,17 +288,17 @@ sudo launchctl bootstrap system /Library/LaunchDaemons/com.relayium.serve.plist
 sudo launchctl print system/com.relayium.serve | grep state
 tail -f ~/relayium-serve.log
 sudo launchctl bootout system/com.relayium.serve</code></pre>
-      <ul><li>launchd gives serve no terminal, so it can&#39;t prompt — run relayium authorize &lt;fingerprint&gt; for each pusher first, the same as with systemd. The fingerprint comes from that machine&#39;s relayium id.</li><li>KeepAlive restarts serve if it crashes; RunAtLoad plus a LaunchDaemon in /Library/LaunchDaemons starts it at boot without a login — the right fit for a headless Mac mini.</li><li>Want a login-scoped service instead? Put the same plist (drop the UserName key) in ~/Library/LaunchAgents/ and load it with launchctl bootstrap gui/$(id -u) &lt;path&gt; — it starts when you log in rather than at boot.</li><li>If the macOS application firewall is on, allow incoming connections for relayium (System Settings → Network → Firewall), or pushes to your port are blocked.</li></ul>
-      <h2>Let a sync --delete sender mirror deletions</h2>
+      <ul><li>launchd gives serve no terminal, so it can&#39;t prompt — run relayium authorize &lt;fingerprint&gt; for each pusher first, the same as with systemd. The fingerprint comes from that machine&#39;s relayium id.</li><li>KeepAlive restarts serve if it crashes; RunAtLoad plus a LaunchDaemon in /Library/LaunchDaemons starts it at boot without a login — the right fit for a headless Mac mini.</li><li>Want a login-scoped service instead? Put the same plist (drop the UserName key) in ~/Library/LaunchAgents/ and load it with launchctl bootstrap gui/$(id -u) &lt;path&gt; — it starts when you log in rather than at boot.</li><li>If the macOS application firewall is on, allow incoming connections for relayium (System Settings → Network → Firewall), or pushes to your port are blocked.</li></ul></section>
+      <section class="sheet"><h2>Let a sync --delete sender mirror deletions</h2>
       <p>By default serve only ever adds or updates files — a sender running sync --delete against it still copies new and changed files, but any deletions it asks for are skipped, with a warning logged on the receiver. Start serve with --allow-delete to opt in to true mirroring, where files removed on the sender&#39;s side are removed here too:</p>
       <pre tabindex="0"><code>relayium serve --dir /srv/mirror --allow-delete</code></pre>
-      <ul><li>--allow-delete is a receiver-side opt-in; the sender still has to ask for it with sync --delete.</li><li>Without it, nothing is ever deleted on this machine, no matter what a sender requests.</li></ul>
-      <h2>When it doesn&#39;t work</h2>
+      <ul><li>--allow-delete is a receiver-side opt-in; the sender still has to ask for it with sync --delete.</li><li>Without it, nothing is ever deleted on this machine, no matter what a sender requests.</li></ul></section>
+      <section class="sheet"><h2>When it doesn&#39;t work</h2>
       <p>Four of these five failures leave the service running and looking healthy — a listener that rejects everything is still a listener. Each has a line to read or a command to run that settles it.</p>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, check, fix</p><dl><dt>The service starts and stays up, but every push is rejected.</dt><dd><pre tabindex="0"><code>journalctl -u relayium-serve -n 20 --no-pager
 # warning: no authorized peers and no terminal to approve on; all pushes will be rejected.</code></pre><p>A service has no terminal, so it can never run the first-push approval prompt, and an unknown fingerprint is all it can see. Pre-authorize each sender: relayium id on the sending machine, relayium authorize &lt;fingerprint&gt; here — with the same --config-dir the unit uses. That warning is printed at startup, so it is in the log from the first line.</p></dd><dt>The service will not start at all, complaining about insecure permissions on id.key.</dt><dd><pre tabindex="0"><code>stat -c &#39;%a %U %n&#39; /etc/relayium/id.key
 # 400 relayium /etc/relayium/id.key</code></pre><p>The key must be exactly 0600. Not 0644, and — the part that catches people — not 0400 either, so tightening it further breaks the service just as surely as loosening it. chmod 600 the key and make sure it is owned by the unit&#39;s User=.</p></dd><dt>The sender reports that the connection was refused.</dt><dd><pre tabindex="0"><code>relayium push ./build relayium://drop.example.com:9031
-# hint: if the peer refused the connection, it may not have authorized this host.</code></pre><p>The receiver did not recognise this sender. Run relayium id on the sender and relayium authorize that fingerprint on the receiver. If you already did, check you did it under the unit&#39;s --config-dir: the trust file is per-directory, and a fingerprint authorized into ~/.config/relayium is invisible to a service reading /etc/relayium.</p></dd><dt>Pushes work when you run serve by hand, but not through the service or not from another machine.</dt><dd><pre tabindex="0"><code>sudo ss -tlnp | grep 9031</code></pre><p>Two separate causes with one check. If nothing is listening, the unit is not enabled — systemctl is-enabled relayium-serve. If it is listening, the port is blocked: open 9031 on the host firewall and in any cloud security group. A non-default --port must match the port in the sender&#39;s relayium://host:N.</p></dd><dt>A sync --delete sender&#39;s deletions never happen on this machine.</dt><dd><pre tabindex="0"><code>journalctl -u relayium-serve | grep -i delete</code></pre><p>Deletion is a receiver-side opt-in and is off by default: new and changed files still copy, and each skipped deletion is logged here as a warning. Add --allow-delete to the unit&#39;s ExecStart and restart. The sender asking for it is not enough, and that asymmetry is deliberate — a receiver never loses files because of a flag typed somewhere else.</p></dd></dl></div>
+# hint: if the peer refused the connection, it may not have authorized this host.</code></pre><p>The receiver did not recognise this sender. Run relayium id on the sender and relayium authorize that fingerprint on the receiver. If you already did, check you did it under the unit&#39;s --config-dir: the trust file is per-directory, and a fingerprint authorized into ~/.config/relayium is invisible to a service reading /etc/relayium.</p></dd><dt>Pushes work when you run serve by hand, but not through the service or not from another machine.</dt><dd><pre tabindex="0"><code>sudo ss -tlnp | grep 9031</code></pre><p>Two separate causes with one check. If nothing is listening, the unit is not enabled — systemctl is-enabled relayium-serve. If it is listening, the port is blocked: open 9031 on the host firewall and in any cloud security group. A non-default --port must match the port in the sender&#39;s relayium://host:N.</p></dd><dt>A sync --delete sender&#39;s deletions never happen on this machine.</dt><dd><pre tabindex="0"><code>journalctl -u relayium-serve | grep -i delete</code></pre><p>Deletion is a receiver-side opt-in and is off by default: new and changed files still copy, and each skipped deletion is logged here as a warning. Add --allow-delete to the unit&#39;s ExecStart and restart. The sender asking for it is not enough, and that asymmetry is deliberate — a receiver never loses files because of a flag typed somewhere else.</p></dd></dl></div></section>
       <h2>Frequently asked questions</h2>
       <h3>What port does serve listen on by default?</h3>
       <p>9031. Change it with --port on both the listener (serve --port N) and the pusher&#39;s target (relayium://host:N).</p>
@@ -283,6 +327,8 @@ sudo launchctl bootout system/com.relayium.serve</code></pre>
         <a href="/pricing">Pricing</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

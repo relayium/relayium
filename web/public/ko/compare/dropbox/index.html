@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs Dropbox: 파일 하나 보내기","description":"공정한 비교입니다. Dropbox는 영구 동기화와 공유 링크에 강하고, Relayium은 서버 측 내용 복사본이나 기록을 남기지 않는 실시간 경로 또는 만료되는 영지식 저장 링크를 제공합니다.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/compare/dropbox/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs Dropbox: 파일 하나 보내기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"Dropbox처럼 파일이 계정 안에 남나요?","acceptedAnswer":{"@type":"Answer","text":"서버 측 실시간 복사본이나 기록은 남지 않습니다. 같은 LAN은 WebRTC 직접 연결, 네트워크 간 TURN은 읽거나 복호화할 수 없는 종단간 암호문을 운반합니다. 저장 링크는 복호화할 수 없는 영지식 암호문을 저장하고 만료되거나 첫 다운로드 후 삭제됩니다."}},{"@type":"Question","name":"받는 사람이 뭔가에 가입해야 하나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 같은 LAN은 양쪽 모두 계정이 필요 없습니다. 코드나 저장 링크 생성자는 로그인하지만 실시간 참가자나 링크 다운로드자는 계정이 필요 없습니다."}},{"@type":"Question","name":"파일 크기 제한이 있나요?","acceptedAnswer":{"@type":"Answer","text":"실시간 전송은 한 번에 최대 1,000개 파일을 처리할 수 있고 서버 측 크기 제한이 없습니다. Chrome과 Edge는 수십 기가바이트까지 곧바로 디스크로 스트리밍합니다. 디스크로 흘려보낼 경로가 하나도 적용되지 않아 브라우저가 메모리에 담아야 할 때는 Relayium이 약 256 MB를 넘으면 경고합니다. 이 수치는 일부러 보수적으로 잡은 추정치이지 하드 한계가 아닙니다. 저장 링크는 보내는 쪽 계정에 연결된 용량 한도에 포함됩니다."}},{"@type":"Question","name":"Dropbox 요금제 대신 Relayium을 쓰는 건 무료인가요?","acceptedAnswer":{"@type":"Answer","text":"네. Relayium은 AGPL-3.0 라이선스의 무료 오픈소스이며, 프로토콜과 코드 전체가 github.com/relayium/relayium에 있습니다. 더 크거나 빠른 전송을 여는 유료 등급은 없습니다."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -119,8 +161,10 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ko/guides/" aria-current="true">가이드</a><a href="/ko/apps/">앱</a><a href="/pricing">요금제</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="기본 탐색"><a class="row" href="/">LAN 전송</a><a class="row" href="/ko/cross-network/">네트워크 간 전송</a><a class="row" href="/ko/offline-transfer/">비동기 전송</a><a class="row" href="/device-inbox">기기 수신함</a><a class="row" href="/cli">CLI</a><a class="row" href="/ko/apps/">앱</a><a class="row" href="/pricing">요금제</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs Dropbox: 파일 하나 보내기</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -142,21 +186,21 @@ pre code{background:none;padding:0;border-radius:0}
       <aside class="archived" aria-label="보관된 번역"><p class="archived-label">보관된 번역</p><p>이 페이지는 기록으로 보관 중인 한국어 번역입니다. Relayium 제품과 최신 문서는 영어와 중국어 간체로 관리되며, 앱 자체도 더 이상 한국어를 제공하지 않습니다. 여기에 적힌 화면과 세부 사항은 현재 동작과 다를 수 있습니다.</p><p class="archived-links archived-pricing">이 페이지에 적혀 있는 요금제와 사용 한도는 오래된 내용일 수 있습니다. 현재 내용은 <a href="/pricing">요금제</a> 페이지에서 확인하세요.</p><p class="archived-links">최신 버전: <a href="/compare/dropbox/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/compare/dropbox/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Dropbox의 평판에는 이유가 있습니다. 소유한 모든 기기에서 폴더를 동기화하고, 실수로 덮어써도 버전 기록으로 되돌릴 수 있으며, 프로젝트 폴더 전체를 공유 링크로 클라이언트에게 넘기는 것도 수월합니다. 계속 동기화 상태를 유지하는 작업 폴더가 필요하다면 Dropbox는 그 역할을 잘 해내며, 이 글은 그런 용도로 쓰지 말라고 설득하려는 것이 아닙니다.</p>
       <p class="lead">파일 하나를 넘길 때도 Dropbox는 먼저 계정에 넣습니다. Relayium은 같은 LAN에서 WebRTC 직접 연결, 네트워크 간에는 설계상 TURN으로 종단간 암호문을 운반하는 실시간 전송, 또는 상대 브라우저에서만 복호화되고 만료되는 링크를 사용합니다.</p>
-      <h2>Dropbox가 정말 잘하는 것</h2>
+      <section class="sheet"><h2>Dropbox가 정말 잘하는 것</h2>
       <p>Dropbox의 핵심 강점은 의지하는 폴더가 어디서나 항상 최신 상태라는 점입니다. 노트북에서 파일을 편집하면 휴대폰을 확인할 때쯤엔 이미 업데이트되어 있습니다. 선택적 동기화, 대용량 로컬 전송을 위한 LAN 동기화, 파일 복구·버전 기록 모두 같은 목표, 즉 계속 다시 찾게 되는 영구적이고 신뢰할 수 있는 보관 장소를 위한 것입니다.</p>
-      <p>공유 폴더와 Dropbox Paper는 지속적인 협업에도 적합하고, 링크 공유는 이미 매일 Dropbox를 쓰는 소규모 팀에게는 정말 편리합니다. 이런 것들은 Relayium이 되려는 대상이 아닙니다. Relayium은 폴더를 동기화하지 않고, 무언가의 작업용 사본을 보관하지도 않습니다.</p>
-      <h2>차이의 핵심: 공유 링크 뒤에는 여전히 계정이 파일을 쥐고 있다</h2>
+      <p>공유 폴더와 Dropbox Paper는 지속적인 협업에도 적합하고, 링크 공유는 이미 매일 Dropbox를 쓰는 소규모 팀에게는 정말 편리합니다. 이런 것들은 Relayium이 되려는 대상이 아닙니다. Relayium은 폴더를 동기화하지 않고, 무언가의 작업용 사본을 보관하지도 않습니다.</p></section>
+      <section class="sheet"><h2>차이의 핵심: 공유 링크 뒤에는 여전히 계정이 파일을 쥐고 있다</h2>
       <p>Dropbox로 파일 하나를 보내려면 먼저 그것이 Dropbox 안에 있어야 합니다. 계정에 업로드되어 폴더에 놓인 뒤에야 공유 가능한 링크를 만들 수 있습니다. 그 링크가 가리키는 것은 Dropbox가 대신 보관하는 사본이며, Dropbox 자체 인프라가 이를 읽을 수 있고, 직접 돌아가 파일을 삭제하거나 링크를 취소할 때까지 그대로 남아 있습니다.</p>
-      <p>Relayium의 실시간 모드는 서버 측 내용 복사본이나 기록을 남기지 않습니다. 같은 LAN은 WebRTC 직접 연결, 네트워크 간 브라우저는 설계상 TURN으로 릴레이가 읽거나 복호화할 수 없는 종단간 암호문을 운반합니다. 상대가 오프라인이면 브라우저가 무작위 AES-256-GCM 키로 업로드 전에 암호화하고 키를 # 뒤 URL 조각에만 두는 저장 링크를 사용합니다. Dropbox는 계정 파일을 기술적으로 읽을 수 있지만 Relayium 저장 링크 서버는 복호화할 수 없는 암호문만 보관합니다.</p>
-      <h2>실시간 전송: 서버 측 내용 복사본이나 기록 없음</h2>
+      <p>Relayium의 실시간 모드는 서버 측 내용 복사본이나 기록을 남기지 않습니다. 같은 LAN은 WebRTC 직접 연결, 네트워크 간 브라우저는 설계상 TURN으로 릴레이가 읽거나 복호화할 수 없는 종단간 암호문을 운반합니다. 상대가 오프라인이면 브라우저가 무작위 AES-256-GCM 키로 업로드 전에 암호화하고 키를 # 뒤 URL 조각에만 두는 저장 링크를 사용합니다. Dropbox는 계정 파일을 기술적으로 읽을 수 있지만 Relayium 저장 링크 서버는 복호화할 수 없는 암호문만 보관합니다.</p></section>
+      <section class="sheet"><h2>실시간 전송: 서버 측 내용 복사본이나 기록 없음</h2>
       <p>양쪽이 온라인이면 실시간 전송은 선택된 경로로 최대 1,000개 파일을 스트리밍합니다. 같은 LAN은 WebRTC 직접 연결, 네트워크 간은 설계상 TURN입니다. 저장용 업로드나 서버 측 실시간 기록은 없고 6자리 코드, SHA-256 검증, 재개를 지원합니다.</p>
-      <p>서버 측 저장 크기 제한은 없고 실제 한계는 받는 브라우저입니다. Chrome/Edge는 디스크로 스트리밍하고 Firefox/Safari는 메모리에 버퍼링할 수 있어 약 256 MB 이상에서 경고합니다. 같은 LAN은 계정 없이 WebRTC로 직접 연결합니다. 네트워크 간에는 코드 생성자가 로그인하고 TURN이 읽거나 복호화할 수 없는 종단간 암호문만 운반하며 참가자는 계정이 필요 없습니다.</p>
-      <h2>링크가 필요할 때: 영지식이며 자동 만료</h2>
+      <p>서버 측 저장 크기 제한은 없고 실제 한계는 받는 브라우저입니다. Chrome/Edge는 디스크로 스트리밍하고 Firefox/Safari는 메모리에 버퍼링할 수 있어 약 256 MB 이상에서 경고합니다. 같은 LAN은 계정 없이 WebRTC로 직접 연결합니다. 네트워크 간에는 코드 생성자가 로그인하고 TURN이 읽거나 복호화할 수 없는 종단간 암호문만 운반하며 참가자는 계정이 필요 없습니다.</p></section>
+      <section class="sheet"><h2>링크가 필요할 때: 영지식이며 자동 만료</h2>
       <p>받는 사람이 다른 시간대에서 자고 있거나, 실시간 세션을 조율하는 대신 이메일에 붙여넣을 URL 하나가 필요할 때가 있습니다. 그럴 때는 링크가 정말로 맞는 도구입니다. Relayium의 저장 링크 모드는 실시간 모드의 프라이버시를 포기하지 않고 바로 그 경우를 위해 만들어졌습니다.</p>
-      <p>링크가 얼마나 유지될지 1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름) 중에서 선택하거나, 첫 다운로드 완료 후 삭제되도록 설정할 수 있어 나중에 정리해야 할 사본이 남지 않습니다. 링크 생성에는 보내는 쪽의 로그인이 필요하지만(계정의 저장 용량 한도에 포함됩니다), 받는 쪽은 링크를 열어 다운로드하기만 하면 되고 Dropbox 같은 계정 가입은 필요 없습니다. 복호화 키가 URL 프래그먼트를 벗어나는 일이 없기 때문에, Relayium 저장 링크의 서버는 구조적으로 내용을 읽을 수 없습니다. 이는 Dropbox 공유 링크와는 다른 보장입니다. Dropbox 자체 인프라는 호스팅하는 파일을 기술적으로 복호화할 수 있습니다.</p>
-      <h2>나란히 비교</h2>
+      <p>링크가 얼마나 유지될지 1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름) 중에서 선택하거나, 첫 다운로드 완료 후 삭제되도록 설정할 수 있어 나중에 정리해야 할 사본이 남지 않습니다. 링크 생성에는 보내는 쪽의 로그인이 필요하지만(계정의 저장 용량 한도에 포함됩니다), 받는 쪽은 링크를 열어 다운로드하기만 하면 되고 Dropbox 같은 계정 가입은 필요 없습니다. 복호화 키가 URL 프래그먼트를 벗어나는 일이 없기 때문에, Relayium 저장 링크의 서버는 구조적으로 내용을 읽을 수 없습니다. 이는 Dropbox 공유 링크와는 다른 보장입니다. Dropbox 자체 인프라는 호스팅하는 파일을 기술적으로 복호화할 수 있습니다.</p></section>
+      <section class="sheet"><h2>나란히 비교</h2>
       <p>일회성 전송에 가장 관련 있는 차이:</p>
-      <ul><li>목적: Dropbox는 영구 동기화 저장소이고, Relayium은 적절한 LAN/TURN 경로의 실시간 전달 또는 자동 만료 저장 링크용입니다.</li><li>파일 위치: Dropbox는 삭제할 때까지 계정 사본을 보관합니다. Relayium은 서버 측 실시간 내용 복사본이나 기록을 남기지 않고, 저장 링크는 만료되거나 첫 다운로드 후 삭제됩니다.</li><li>누가 읽을 수 있는가: Dropbox의 인프라는 기술적으로 계정 내 파일을 복호화할 수 있음. Relayium의 저장 링크는 영지식으로, 키가 URL 프래그먼트에만 있어 서버는 읽을 수 없는 암호문을 보관함.</li><li>계정: Dropbox는 계정을 요구합니다. Relayium은 같은 LAN에서 필요 없고 코드나 링크 생성자만 로그인하며 참가자나 다운로드자는 필요 없습니다.</li><li>크기 제한: Dropbox는 요금제의 저장 용량 한도에 제약됨. Relayium 실시간은 서버 측 제한 없음(Chrome/Edge는 수십 GB까지 디스크로 스트리밍하고, 브라우저가 메모리에 담을 수밖에 없을 때는 약 256 MB를 넘으면 경고).</li><li>비용과 개방성: Relayium은 무료이며 AGPL-3.0 라이선스로 github.com/relayium/relayium에 있고, 브라우저에서 Windows·macOS·Linux·Android·iOS로 동작하며 설치가 필요 없음.</li></ul>
+      <ul><li>목적: Dropbox는 영구 동기화 저장소이고, Relayium은 적절한 LAN/TURN 경로의 실시간 전달 또는 자동 만료 저장 링크용입니다.</li><li>파일 위치: Dropbox는 삭제할 때까지 계정 사본을 보관합니다. Relayium은 서버 측 실시간 내용 복사본이나 기록을 남기지 않고, 저장 링크는 만료되거나 첫 다운로드 후 삭제됩니다.</li><li>누가 읽을 수 있는가: Dropbox의 인프라는 기술적으로 계정 내 파일을 복호화할 수 있음. Relayium의 저장 링크는 영지식으로, 키가 URL 프래그먼트에만 있어 서버는 읽을 수 없는 암호문을 보관함.</li><li>계정: Dropbox는 계정을 요구합니다. Relayium은 같은 LAN에서 필요 없고 코드나 링크 생성자만 로그인하며 참가자나 다운로드자는 필요 없습니다.</li><li>크기 제한: Dropbox는 요금제의 저장 용량 한도에 제약됨. Relayium 실시간은 서버 측 제한 없음(Chrome/Edge는 수십 GB까지 디스크로 스트리밍하고, 브라우저가 메모리에 담을 수밖에 없을 때는 약 256 MB를 넘으면 경고).</li><li>비용과 개방성: Relayium은 무료이며 AGPL-3.0 라이선스로 github.com/relayium/relayium에 있고, 브라우저에서 Windows·macOS·Linux·Android·iOS로 동작하며 설치가 필요 없음.</li></ul></section>
       <h2>자주 묻는 질문</h2>
       <h3>Dropbox처럼 파일이 계정 안에 남나요?</h3>
       <p>서버 측 실시간 복사본이나 기록은 남지 않습니다. 같은 LAN은 WebRTC 직접 연결, 네트워크 간 TURN은 읽거나 복호화할 수 없는 종단간 암호문을 운반합니다. 저장 링크는 복호화할 수 없는 영지식 암호문을 저장하고 만료되거나 첫 다운로드 후 삭제됩니다.</p>
@@ -181,6 +225,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/pricing">요금제</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

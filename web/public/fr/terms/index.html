@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Conditions d'utilisation · Relayium","description":"Les conditions d'utilisation de Relayium — un service open source de transfert de fichiers et de texte en temps réel entre appareils, chiffré de bout en bout. Le service de base est gratuit ; des offres payantes optionnelles sont disponibles.","url":"https://relayium.com/fr/terms/","inLanguage":"fr","dateModified":"2026-08-13","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 /* The release list is the app's settings-row shape: 1px separators inside one
    card, no line under the last row (设计规范 §4). */
 .releases{list-style:none;margin:18px 0 0;padding:0;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);overflow:clip}
@@ -116,13 +158,16 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/fr/guides/">Guides</a><a href="/fr/apps/">Applis</a><a href="/pricing">Tarifs</a></nav></header>
-      <!-- The legal text is the main landmark. The site header and footer are
-           outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. On an
-           archived page that slot holds the archived-translation notice, a
-           labelled <aside>, which is a landmark in its own right too. -->
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Navigation principale"><a class="row" href="/">LAN</a><a class="row" href="/fr/cross-network/">Entre réseaux</a><a class="row" href="/fr/offline-transfer/">Asynchrone</a><a class="row" href="/device-inbox">Boîte appareil</a><a class="row" href="/cli">CLI</a><a class="row" href="/fr/apps/">Applis</a><a class="row" href="/pricing">Tarifs</a></nav></header>
+      <div class="pane"><div class="wrap">
+
+      <!-- The legal text is the main landmark; the rail and the footer are
+           outside it. The language bar now lives in the rail's foot slot, with
+           the rest of the navigation. An ARCHIVED page keeps its notice here
+           instead: it is a paragraph of explanation, not a selector, and it has
+           no business in a 216px rail. It is a labelled <aside>, so it is still
+           a landmark of its own. -->
       <main>
       <h1>Conditions d&#39;utilisation</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO
@@ -134,20 +179,20 @@ pre code{background:none;padding:0;border-radius:0}
       <p class="updated">Dernière mise à jour: <bdi>2026-08-13</bdi></p>
       <aside class="archived" aria-label="Traduction archivée"><p class="archived-label">Traduction archivée</p><p>Cette page est une traduction française archivée. Le produit Relayium et sa documentation à jour sont maintenus en anglais et en chinois simplifié ; l&#39;application elle-même ne propose plus le français. Les écrans et les détails décrits ici peuvent donc différer du comportement actuel.</p><p class="archived-links archived-pricing">Les offres et les limites d&#39;utilisation citées ici peuvent être obsolètes ; les actuelles figurent sur la page <a href="/pricing">Tarifs</a>.</p><p class="archived-links">Version à jour : <a href="/terms/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/terms/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p>En utilisant Relayium, vous acceptez ces conditions. Relayium est un service open source qui vous permet d&#39;envoyer des fichiers et du texte en temps réel entre appareils, chiffrés de bout en bout. Le service de base est gratuit ; certaines offres optionnelles sont payantes — voir Abonnements et facturation.</p>
-      <h2>Le service</h2><p>Relayium transfère des fichiers et du texte en temps réel entre appareils, chiffrés de bout en bout. Le service de base est gratuit et son code source est open source sous licence AGPL-3.0. Les offres payantes optionnelles augmentent les limites de stockage, de transfert et de conservation — voir Abonnements et facturation.</p>
-      <h2>Éligibilité</h2><p>Vous devez avoir l&#39;âge requis pour conclure un contrat contraignant et pour consentir au traitement de vos données là où vous vivez — au moins 13 ans, ou plus si votre pays l&#39;exige. Relayium ne s&#39;adresse pas aux enfants, et nous ne permettons pas sciemment aux enfants de créer des comptes.</p>
-      <h2>Utilisation acceptable</h2><p>Vous acceptez de ne pas utiliser Relayium pour :</p><ul><li>Enfreindre la loi ou porter atteinte aux droits d&#39;autrui, notamment en envoyant des contenus que vous n&#39;avez pas le droit de partager.</li><li>Distribuer des logiciels malveillants, ou tenter de perturber, de surcharger ou d&#39;abuser du service ou de son infrastructure.</li><li>Contourner les mesures de sécurité ou tenter d&#39;accéder à des données qui ne vous appartiennent pas.</li></ul>
-      <h2>Comptes</h2><p>Les transferts sur le même réseau (local) ne nécessitent aucun compte. La création d&#39;un code d&#39;appairage pour un transfert de fichier ou de texte entre réseaux exige une connexion ; rejoindre avec un code d&#39;appairage ne nécessite aucun compte. La création d&#39;un lien de téléchargement stocké exige elle aussi un compte. Vous êtes responsable de la sécurisation de l&#39;accès à votre adresse e-mail et à votre compte. Vous pouvez supprimer votre compte et ses données à tout moment depuis les paramètres de votre compte, dans l&#39;application ou sur le web. La suppression déclenche un délai de grâce de 30 jours pendant lequel vous pouvez l&#39;annuler en vous reconnectant ; passé ce délai, votre compte et vos données personnelles sont définitivement supprimés.</p>
-      <h2>Abonnements et facturation</h2><p>Relayium propose un niveau gratuit et des offres payantes optionnelles. Les offres payantes sont facturées à l&#39;avance de façon récurrente — mensuellement ou annuellement, selon votre choix — et se renouvellent automatiquement jusqu&#39;à ce que vous annuliez.</p><p>Qui vend et facture un abonnement dépend de l&#39;endroit où vous l&#39;achetez. Sur le web, Relayium le vend et Stripe traite le paiement : la présente section s&#39;applique. Dans une application Relayium installée depuis l&#39;Apple App Store — y compris le Mac App Store —, Apple le vend et le facture, et c&#39;est la section suivante qui s&#39;applique.</p><ul><li>Le passage à une offre supérieure prend effet immédiatement et est facturé au prorata pour le reste de la période en cours.</li><li>Le passage à une offre inférieure, ou à un cycle de facturation plus court, prend effet à la fin de la période en cours ; nous ne remboursons ni ne créditons la partie inutilisée d&#39;une période.</li><li>Vous pouvez annuler à tout moment. Les fonctionnalités payantes restent actives jusqu&#39;à la fin de la période déjà payée.</li><li>Nous ne remboursons pas les périodes partielles, sauf lorsque la loi l&#39;exige.</li><li>Nous pouvons modifier les prix ou les fonctionnalités des offres. Nous vous préviendrons avant qu&#39;un changement de prix ne s&#39;applique à votre prochain renouvellement, et vous pourrez annuler si vous n&#39;êtes pas d&#39;accord.</li><li>Sur le web, les paiements sont traités par Stripe. Dans une version App Store de l&#39;application Relayium, les abonnements sont vendus et facturés par Apple — voir la section suivante.</li></ul>
-      <h2>Apple App Store et achats intégrés</h2><p>Si vous téléchargez Relayium depuis l&#39;Apple App Store — y compris le Mac App Store —, le contrat de licence utilisateur final standard d&#39;Apple pour les applications sous licence (« Licensed Application End User License Agreement ») s&#39;applique également à votre utilisation de l&#39;application, et Apple est un bénéficiaire tiers des présentes conditions, avec le droit de les faire appliquer à votre encontre.</p><ul><li>Les abonnements achetés dans une version App Store de l&#39;application Relayium, y compris la version Mac App Store, sont vendus et facturés par Apple via un achat intégré, débité sur votre identifiant Apple.</li><li>Ils se renouvellent automatiquement sauf si vous désactivez le renouvellement automatique au moins 24 heures avant la fin de la période en cours.</li><li>Gérez ou annulez un abonnement facturé par Apple dans les paramètres de votre compte identifiant Apple — nous ne pouvons pas l&#39;annuler à votre place. Les remboursements des achats sur l&#39;App Store se demandent auprès d&#39;Apple et sont décidés par Apple ; nous ne pouvons pas les effectuer.</li><li>Nous pouvons tout de même vous aider : si votre offre Relayium ne correspond pas à ce que vous avez acheté, ou si un prélèvement vous est inconnu, écrivez à support@relayium.com et nous vérifierons ce qu&#39;Apple nous a communiqué sur votre abonnement.</li></ul>
-      <h2>Texte en temps réel</h2><p>Le transfert de texte en temps réel fonctionne uniquement lorsque les deux appareils sont en ligne. Les messages sont chiffrés de bout en bout, sans livraison hors ligne ni historique côté serveur. Sur le web, les sessions entre réseaux peuvent faire transiter leur trafic chiffré par un relais TURN ; ce relais ne peut pas lire le contenu des messages.</p>
-      <h2>Contenu stocké</h2><p>Lorsque vous utilisez le mode optionnel de liens de téléchargement stockés, votre navigateur chiffre les fichiers avant l&#39;envoi et le serveur ne stocke que du chiffré. Comme nous ne pouvons pas déchiffrer le contenu stocké (à divulgation nulle), nous ne pouvons pas en faire une présélection. Vous acceptez d&#39;utiliser les transferts stockés uniquement pour du contenu que vous avez le droit de partager et qui ne viole pas la loi applicable.</p><p>Les transferts stockés sont un moyen temporaire de livrer des fichiers, pas une sauvegarde. Comme les liens expirent et que les fichiers sont supprimés après le téléchargement ou à l&#39;expiration, conservez votre propre copie de tout ce qui compte pour vous — nous ne pouvons pas récupérer un contenu stocké une fois qu&#39;il a disparu.</p><ul><li>Vous pouvez demander la suppression d&#39;un lien de téléchargement spécifique en signalant l&#39;id du fichier à support@relayium.com.</li><li>Le chiffré stocké est automatiquement supprimé à l&#39;expiration ou lors du premier téléchargement complet (lecture unique), selon ce qui survient en premier.</li><li>Nous nous réservons le droit de suspendre ou de supprimer du contenu stocké qui est signalé de manière crédible comme illégal.</li></ul>
-      <h2>Absence de garantie</h2><p>Le service est fourni « tel quel » et « selon disponibilité », sans garantie d&#39;aucune sorte, expresse ou implicite. Nous ne garantissons pas que les transferts aboutiront toujours ni que le service sera ininterrompu ou exempt d&#39;erreurs.</p>
-      <h2>Limitation de responsabilité</h2><p>Dans toute la mesure permise par la loi, Relayium et ses contributeurs ne sont pas responsables des dommages indirects, accessoires ou consécutifs, ni de toute perte de données résultant de votre utilisation du service.</p>
-      <h2>Open source et licences</h2><p>Le code source de Relayium est disponible sous licence AGPL-3.0. Votre utilisation du code source est régie par cette licence.</p>
-      <h2>Droit applicable</h2><p>Ces conditions sont régies par le droit applicable là où l&#39;opérateur du service est établi, sans que cela ne supprime les droits impératifs de protection des consommateurs dont vous bénéficiez là où vous vivez. Si une disposition est jugée inapplicable, les autres dispositions restent en vigueur.</p>
-      <h2>Modifications des présentes conditions</h2><p>Nous pouvons mettre à jour ces conditions au fur et à mesure de l&#39;évolution du service. Dans ce cas, nous modifierons la date « Dernière mise à jour » ci-dessus. La poursuite de l&#39;utilisation après une modification signifie que vous acceptez les conditions mises à jour.</p>
-      <h2>Contact</h2><p>Des questions sur ces conditions ? Écrivez-nous à support@relayium.com.</p>
+      <section class="sheet"><h2>Le service</h2><p>Relayium transfère des fichiers et du texte en temps réel entre appareils, chiffrés de bout en bout. Le service de base est gratuit et son code source est open source sous licence AGPL-3.0. Les offres payantes optionnelles augmentent les limites de stockage, de transfert et de conservation — voir Abonnements et facturation.</p></section>
+      <section class="sheet"><h2>Éligibilité</h2><p>Vous devez avoir l&#39;âge requis pour conclure un contrat contraignant et pour consentir au traitement de vos données là où vous vivez — au moins 13 ans, ou plus si votre pays l&#39;exige. Relayium ne s&#39;adresse pas aux enfants, et nous ne permettons pas sciemment aux enfants de créer des comptes.</p></section>
+      <section class="sheet"><h2>Utilisation acceptable</h2><p>Vous acceptez de ne pas utiliser Relayium pour :</p><ul><li>Enfreindre la loi ou porter atteinte aux droits d&#39;autrui, notamment en envoyant des contenus que vous n&#39;avez pas le droit de partager.</li><li>Distribuer des logiciels malveillants, ou tenter de perturber, de surcharger ou d&#39;abuser du service ou de son infrastructure.</li><li>Contourner les mesures de sécurité ou tenter d&#39;accéder à des données qui ne vous appartiennent pas.</li></ul></section>
+      <section class="sheet"><h2>Comptes</h2><p>Les transferts sur le même réseau (local) ne nécessitent aucun compte. La création d&#39;un code d&#39;appairage pour un transfert de fichier ou de texte entre réseaux exige une connexion ; rejoindre avec un code d&#39;appairage ne nécessite aucun compte. La création d&#39;un lien de téléchargement stocké exige elle aussi un compte. Vous êtes responsable de la sécurisation de l&#39;accès à votre adresse e-mail et à votre compte. Vous pouvez supprimer votre compte et ses données à tout moment depuis les paramètres de votre compte, dans l&#39;application ou sur le web. La suppression déclenche un délai de grâce de 30 jours pendant lequel vous pouvez l&#39;annuler en vous reconnectant ; passé ce délai, votre compte et vos données personnelles sont définitivement supprimés.</p></section>
+      <section class="sheet"><h2>Abonnements et facturation</h2><p>Relayium propose un niveau gratuit et des offres payantes optionnelles. Les offres payantes sont facturées à l&#39;avance de façon récurrente — mensuellement ou annuellement, selon votre choix — et se renouvellent automatiquement jusqu&#39;à ce que vous annuliez.</p><p>Qui vend et facture un abonnement dépend de l&#39;endroit où vous l&#39;achetez. Sur le web, Relayium le vend et Stripe traite le paiement : la présente section s&#39;applique. Dans une application Relayium installée depuis l&#39;Apple App Store — y compris le Mac App Store —, Apple le vend et le facture, et c&#39;est la section suivante qui s&#39;applique.</p><ul><li>Le passage à une offre supérieure prend effet immédiatement et est facturé au prorata pour le reste de la période en cours.</li><li>Le passage à une offre inférieure, ou à un cycle de facturation plus court, prend effet à la fin de la période en cours ; nous ne remboursons ni ne créditons la partie inutilisée d&#39;une période.</li><li>Vous pouvez annuler à tout moment. Les fonctionnalités payantes restent actives jusqu&#39;à la fin de la période déjà payée.</li><li>Nous ne remboursons pas les périodes partielles, sauf lorsque la loi l&#39;exige.</li><li>Nous pouvons modifier les prix ou les fonctionnalités des offres. Nous vous préviendrons avant qu&#39;un changement de prix ne s&#39;applique à votre prochain renouvellement, et vous pourrez annuler si vous n&#39;êtes pas d&#39;accord.</li><li>Sur le web, les paiements sont traités par Stripe. Dans une version App Store de l&#39;application Relayium, les abonnements sont vendus et facturés par Apple — voir la section suivante.</li></ul></section>
+      <section class="sheet"><h2>Apple App Store et achats intégrés</h2><p>Si vous téléchargez Relayium depuis l&#39;Apple App Store — y compris le Mac App Store —, le contrat de licence utilisateur final standard d&#39;Apple pour les applications sous licence (« Licensed Application End User License Agreement ») s&#39;applique également à votre utilisation de l&#39;application, et Apple est un bénéficiaire tiers des présentes conditions, avec le droit de les faire appliquer à votre encontre.</p><ul><li>Les abonnements achetés dans une version App Store de l&#39;application Relayium, y compris la version Mac App Store, sont vendus et facturés par Apple via un achat intégré, débité sur votre identifiant Apple.</li><li>Ils se renouvellent automatiquement sauf si vous désactivez le renouvellement automatique au moins 24 heures avant la fin de la période en cours.</li><li>Gérez ou annulez un abonnement facturé par Apple dans les paramètres de votre compte identifiant Apple — nous ne pouvons pas l&#39;annuler à votre place. Les remboursements des achats sur l&#39;App Store se demandent auprès d&#39;Apple et sont décidés par Apple ; nous ne pouvons pas les effectuer.</li><li>Nous pouvons tout de même vous aider : si votre offre Relayium ne correspond pas à ce que vous avez acheté, ou si un prélèvement vous est inconnu, écrivez à support@relayium.com et nous vérifierons ce qu&#39;Apple nous a communiqué sur votre abonnement.</li></ul></section>
+      <section class="sheet"><h2>Texte en temps réel</h2><p>Le transfert de texte en temps réel fonctionne uniquement lorsque les deux appareils sont en ligne. Les messages sont chiffrés de bout en bout, sans livraison hors ligne ni historique côté serveur. Sur le web, les sessions entre réseaux peuvent faire transiter leur trafic chiffré par un relais TURN ; ce relais ne peut pas lire le contenu des messages.</p></section>
+      <section class="sheet"><h2>Contenu stocké</h2><p>Lorsque vous utilisez le mode optionnel de liens de téléchargement stockés, votre navigateur chiffre les fichiers avant l&#39;envoi et le serveur ne stocke que du chiffré. Comme nous ne pouvons pas déchiffrer le contenu stocké (à divulgation nulle), nous ne pouvons pas en faire une présélection. Vous acceptez d&#39;utiliser les transferts stockés uniquement pour du contenu que vous avez le droit de partager et qui ne viole pas la loi applicable.</p><p>Les transferts stockés sont un moyen temporaire de livrer des fichiers, pas une sauvegarde. Comme les liens expirent et que les fichiers sont supprimés après le téléchargement ou à l&#39;expiration, conservez votre propre copie de tout ce qui compte pour vous — nous ne pouvons pas récupérer un contenu stocké une fois qu&#39;il a disparu.</p><ul><li>Vous pouvez demander la suppression d&#39;un lien de téléchargement spécifique en signalant l&#39;id du fichier à support@relayium.com.</li><li>Le chiffré stocké est automatiquement supprimé à l&#39;expiration ou lors du premier téléchargement complet (lecture unique), selon ce qui survient en premier.</li><li>Nous nous réservons le droit de suspendre ou de supprimer du contenu stocké qui est signalé de manière crédible comme illégal.</li></ul></section>
+      <section class="sheet"><h2>Absence de garantie</h2><p>Le service est fourni « tel quel » et « selon disponibilité », sans garantie d&#39;aucune sorte, expresse ou implicite. Nous ne garantissons pas que les transferts aboutiront toujours ni que le service sera ininterrompu ou exempt d&#39;erreurs.</p></section>
+      <section class="sheet"><h2>Limitation de responsabilité</h2><p>Dans toute la mesure permise par la loi, Relayium et ses contributeurs ne sont pas responsables des dommages indirects, accessoires ou consécutifs, ni de toute perte de données résultant de votre utilisation du service.</p></section>
+      <section class="sheet"><h2>Open source et licences</h2><p>Le code source de Relayium est disponible sous licence AGPL-3.0. Votre utilisation du code source est régie par cette licence.</p></section>
+      <section class="sheet"><h2>Droit applicable</h2><p>Ces conditions sont régies par le droit applicable là où l&#39;opérateur du service est établi, sans que cela ne supprime les droits impératifs de protection des consommateurs dont vous bénéficiez là où vous vivez. Si une disposition est jugée inapplicable, les autres dispositions restent en vigueur.</p></section>
+      <section class="sheet"><h2>Modifications des présentes conditions</h2><p>Nous pouvons mettre à jour ces conditions au fur et à mesure de l&#39;évolution du service. Dans ce cas, nous modifierons la date « Dernière mise à jour » ci-dessus. La poursuite de l&#39;utilisation après une modification signifie que vous acceptez les conditions mises à jour.</p></section>
+      <section class="sheet"><h2>Contact</h2><p>Des questions sur ces conditions ? Écrivez-nous à support@relayium.com.</p></section>
       </main>
       <footer>
         <a href="/">← Relayium</a>
@@ -157,6 +202,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/fr/releases/">Versions</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

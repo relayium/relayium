@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"P2P（ピアツーピア）ファイル転送とは？","description":"P2P ファイル転送を平易に解説。サーバーへのアップロードとの違い、WebRTC が直接接続を見つける仕組み、プライベートかつ高速である理由まで。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/what-is-peer-to-peer-file-transfer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"P2P（ピアツーピア）ファイル転送とは？"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"P2P とエンドツーエンド暗号化は同じことですか？","acceptedAnswer":{"@type":"Answer","text":"関連はしていますが同じではありません。P2P は端点間の通信を表し、全ホップが直接とは限りません。TURN がトラフィックを運ぶこともあります。暗号化は中間者が読めるかを表します。Relayium は同じ LAN で WebRTC 直結、ネットワークをまたぐ場合はエンドツーエンド暗号化 TURN を使い、リレーは読み取りも復号もできません。"}},{"@type":"Question","name":"P2P 転送はそもそもサーバーに触れることがあるのですか？","acceptedAnswer":{"@type":"Answer","text":"小さなシグナリングサーバーが2台のデバイスが互いのアドレスを見つけるのを助けますが、それが見るのは接続確立の情報だけで、ファイルのバイトは一切見ません。ブラウザでネットワークをまたぐ場合は、設計上つねに TURN リレーが暗号化されたファイルデータを転送しますが、それでも扱うのは復号できない暗号文だけです。"}},{"@type":"Question","name":"そもそもなぜ直接接続が失敗することがあるのですか？","acceptedAnswer":{"@type":"Answer","text":"一部のネットワーク——厳しい企業ファイアウォールや一部の通信キャリアの NAT に多い——は、外部から得られる情報だけでは到達可能なアドレスを発見できないような構造になっています。それを毎回20秒前後かけて確かめるより、Relayium のブラウザ版はネットワークをまたぐ転送を最初からすべてリレー経由にしています——つまりそれらを運ぶのは、失敗した直接接続の試行ではなくリレーです。"}},{"@type":"Question","name":"リレーを経由すると P2P 転送は遅くなりますか？","acceptedAnswer":{"@type":"Answer","text":"リレーはデータが通過する余分な1ホップであり、専用サーバーではなく共有サーバーであるため、多少の遅延は増える可能性があります。それでも一般には、アップロードしてからダウンロードする流れより速いです。ファイルが完全にサーバーに届くのを待たずにダウンロード側が開始できるからです。"}},{"@type":"Question","name":"P2P 転送には双方ともアカウントが必要ですか？","acceptedAnswer":{"@type":"Answer","text":"同じネットワーク上の2台であればアカウントはまったく不要です。ペアリングコードで異なるネットワーク間に送る場合は送信者のサインインが必要ですが、どちらの経路でも受信者はアカウント不要です。"}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ja/guides/" aria-current="true">ガイド</a><a href="/ja/apps/">アプリ</a><a href="/pricing">料金</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="メインナビゲーション"><a class="row" href="/">LAN</a><a class="row" href="/ja/cross-network/">ネットワーク間</a><a class="row" href="/ja/offline-transfer/">非同期</a><a class="row" href="/device-inbox">デバイス受信箱</a><a class="row" href="/cli">CLI</a><a class="row" href="/ja/apps/">アプリ</a><a class="row" href="/pricing">料金</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">P2P（ピアツーピア）ファイル転送とは？</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,30 +203,30 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links archived-pricing">このページに記載されている料金プランや利用上限は古くなっている可能性があります。現在の内容は<a href="/pricing">料金</a>のページでご確認ください。</p><p class="archived-links">最新版：<a href="/guides/what-is-peer-to-peer-file-transfer/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/what-is-peer-to-peer-file-transfer/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">「P2P」という言葉はあいまいに使われがちですが、ファイル転送における本当の意味はこうです。ファイルは会社のサーバーに一度アップロードされてからダウンロードされるのではなく、一台のデバイスからもう一台へ直接送られます。途中にコピーが留まりうる寄り道はありません。</p>
       <p class="lead">単純に聞こえますが、実際の経路は同じではありません。このページではまず TURN が予備になり得る一般的な WebRTC/ICE を説明し、そのうえで Relayium の実装を区別します。同じ LAN のブラウザは WebRTC 直結、ネットワーク間ブラウザは設計上 TURN、CLI は直接接続専用です。</p>
-      <h2>P2P と一般的な方式の違い：中間の寄り道を省く</h2>
+      <section class="sheet"><h2>P2P と一般的な方式の違い：中間の寄り道を省く</h2>
       <p>ほとんどの「ファイルを送る」ツールはアップロード方式で動きます。手元のデバイスから会社のサーバーへファイルが送られ、そこに保存され、相手はそれをダウンロードします。これは2ホップであり、しばらくの間、そのファイルの完全なコピーが他者のストレージ上に存在します——後で削除されるとしてもです。</p>
       <p>P2P 転送はこの寄り道を省きます。手元のデバイスと相手のデバイスの間に接続が開けば、ファイルのバイトはその1ホップだけを直接流れ、他のどこも経由しません。保存すべきサーバー側のコピーも、守るべき対象も、いずれ削除すべきものもありません。そもそもアップロードされていないからです。</p>
-      <ul><li>アップロード方式：手元のデバイス → サーバー → 相手のデバイス——2ホップで、途中に保存されたコピーがある。</li><li>P2P 方式：手元のデバイス → 相手のデバイス——1ホップで、何も保存されない。</li><li>Relayium のリアルタイムブラウザモードには2つの経路があります。同じ LAN では WebRTC が直接接続し、ネットワークをまたぐ場合は設計上 TURN でエンドツーエンド暗号文を運び、サーバー側の内容コピーや履歴は残しません。</li></ul>
-      <h2>2台のデバイスが実際にどう見つけ合うか：STUN</h2>
+      <ul><li>アップロード方式：手元のデバイス → サーバー → 相手のデバイス——2ホップで、途中に保存されたコピーがある。</li><li>P2P 方式：手元のデバイス → 相手のデバイス——1ホップで、何も保存されない。</li><li>Relayium のリアルタイムブラウザモードには2つの経路があります。同じ LAN では WebRTC が直接接続し、ネットワークをまたぐ場合は設計上 TURN でエンドツーエンド暗号文を運び、サーバー側の内容コピーや履歴は残しません。</li></ul></section>
+      <section class="sheet"><h2>2台のデバイスが実際にどう見つけ合うか：STUN</h2>
       <p>ここが直感的ではない部分です。手元のデバイスは、外部インターネットから自分がどう見えているかをほぼ確実に知りません——家庭用ルーターや通信キャリアのネットワークアドレス変換（NAT）の内側にあり、共有のグローバル IP の裏に隠され、ポートも動的に割り当てられます。相手のデバイスも同じ状況です。どちらも、実際に到達できるアドレスをまず知らなければ、相手に直接「電話」をかけることはできません。</p>
       <p>そこで使われるのが STUN（NAT 越え用セッション走査ユーティリティ）です。各デバイスは軽量な STUN サーバーに短く一つの質問をします。「私はどのアドレス・ポートから来ているように見えますか？」その答えが、自分の外部向けアドレスを教えてくれます——ファイルでも、コンテンツでもなく、そこへの経路を示すのに十分なネットワーク情報だけです。両デバイスはこの情報を（接続確立の詳細だけを運び、ファイルのバイトは一切運ばないシグナリングの手順を通じて）交換し、互いのアドレスへ直接経路を開こうとします。多くの現実のケース——特に同じ Wi-Fi 上の2台や、挙動が予測可能な NAT——では、これだけで成功し、完全な直接接続が開きます。</p>
-      <ul><li>STUN が扱うのはネットワークアドレスの取得と交換のみです——ファイルの中身やファイル名、暗号鍵は一切扱いません。</li><li>Relayium は同じ LAN のブラウザセッションで WebRTC を直接使用します。ネットワークをまたぐブラウザ経路は意図的にリレーされます。</li><li>Relayium CLI の send/receive と text は P2P 直接接続専用です。ファイルやメッセージのバイトを TURN やその他の Relayium サーバーで中継することはありません。2 つの端末が直接接続を確立できなければ、リレーへフォールバックせずにセッションは失敗します。</li><li>同じネットワーク上の2台（コード不要）は、多くの場合そもそも間に NAT がないため、最も直接的につながる傾向があります。</li></ul>
-      <h2>直接経路が見つからないとき：TURN リレー</h2>
+      <ul><li>STUN が扱うのはネットワークアドレスの取得と交換のみです——ファイルの中身やファイル名、暗号鍵は一切扱いません。</li><li>Relayium は同じ LAN のブラウザセッションで WebRTC を直接使用します。ネットワークをまたぐブラウザ経路は意図的にリレーされます。</li><li>Relayium CLI の send/receive と text は P2P 直接接続専用です。ファイルやメッセージのバイトを TURN やその他の Relayium サーバーで中継することはありません。2 つの端末が直接接続を確立できなければ、リレーへフォールバックせずにセッションは失敗します。</li><li>同じネットワーク上の2台（コード不要）は、多くの場合そもそも間に NAT がないため、最も直接的につながる傾向があります。</li></ul></section>
+      <section class="sheet"><h2>直接経路が見つからないとき：TURN リレー</h2>
       <p>STUN だけでは足りないこともあります。一部の NAT——特に厳しい企業ネットワークや一部の通信キャリア——は挙動が予測できず、外部から得られる情報だけでは到達可能なアドレスを発見できないことがあります。両方のデバイスがそうした NAT の内側にある場合、本当の意味での直接接続は不可能で、何かが間でトラフィックを中継する必要があります。</p>
       <p>一般的な WebRTC/ICE では、TURN は直接経路が失敗した際の予備リレーになり得ます。Relayium のブラウザアプリはより明示的で、同じ LAN は WebRTC で直接、ネットワークをまたぐ全セッションは最初から TURN を使います。ファイルはリレー到達前にエンドツーエンド暗号化されるため、リレーは暗号文だけを運び、読み取りも復号もできません。</p>
-      <ul><li>同一ネットワークでは Relayium はデバイス同士を直接つなぎます。ネットワークをまたぐ場合は、直接経路が見つからないことが多いため、既定で TURN リレーを使います。</li><li>リレーは暗号文だけを転送します。復号鍵を持つことは決してなく、ファイルの中身もファイル名も、中に含まれる他の情報も読めません。</li><li>Relayium CLI の send/receive と text は P2P 直接接続専用です。ファイルやメッセージのバイトを TURN やその他の Relayium サーバーで中継することはありません。2 つの端末が直接接続を確立できなければ、リレーへフォールバックせずにセッションは失敗します。</li></ul>
-      <h2>なぜこれが重要か：プライバシーと速度</h2>
+      <ul><li>同一ネットワークでは Relayium はデバイス同士を直接つなぎます。ネットワークをまたぐ場合は、直接経路が見つからないことが多いため、既定で TURN リレーを使います。</li><li>リレーは暗号文だけを転送します。復号鍵を持つことは決してなく、ファイルの中身もファイル名も、中に含まれる他の情報も読めません。</li><li>Relayium CLI の send/receive と text は P2P 直接接続専用です。ファイルやメッセージのバイトを TURN やその他の Relayium サーバーで中継することはありません。2 つの端末が直接接続を確立できなければ、リレーへフォールバックせずにセッションは失敗します。</li></ul></section>
+      <section class="sheet"><h2>なぜこれが重要か：プライバシーと速度</h2>
       <p>プライバシー面の理屈はシンプルです。ファイルのバイトが1ホップだけ、2台のデバイス間を直接横切るとき、コピーが留まったり記録されたり他人にアクセスされたりし得るサーバー側の保存段階そのものが存在しません——そもそもそこに置かれたことがないからです。これは「いずれ削除すると約束します」とは構造的にまったく異なる保証です。</p>
-      <p>速度面の理屈も同じ論理です。アップロードしてからダウンロードする転送は、ネットワークを2回——上りと下り——横切らねばならず、送信側が完全に完了するまで受信側が開始できないこともよくあります。直接接続はネットワークを1回だけ横切り、間にスループットを制限したり独自の遅延を加えたりするサーバーがないまま、両デバイス間で遅い方の接続が許す速さでデータが連続的にストリーミングされます。</p>
-      <h2>Relayium はこれをどう組み合わせているか</h2>
+      <p>速度面の理屈も同じ論理です。アップロードしてからダウンロードする転送は、ネットワークを2回——上りと下り——横切らねばならず、送信側が完全に完了するまで受信側が開始できないこともよくあります。直接接続はネットワークを1回だけ横切り、間にスループットを制限したり独自の遅延を加えたりするサーバーがないまま、両デバイス間で遅い方の接続が許す速さでデータが連続的にストリーミングされます。</p></section>
+      <section class="sheet"><h2>Relayium はこれをどう組み合わせているか</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">自分で確かめるために必要なもの</p><ul><li>同時に画面を見られる2台の端末——ノートパソコンとスマートフォンの組み合わせが最適です。</li><li>小さなファイル1つ。ここで見るのは接続がどの経路を通ったかであって、速度ではありません。</li><li>2台が同じ Wi-Fi にある時間と、別々のネットワークにある時間。スマートフォンの Wi-Fi を切ってモバイル回線にするだけで足ります。</li></ul></div>
       <p>同じネットワーク上の2台で relayium.com を開くと、たいていは自動的に見つけ合います——アカウントもコードも不要、インストールするものも何もありません。これがローカルネットワークのケースで、多くの場合 STUN すら不要です。異なるネットワーク上の相手にインターネット越しに送る場合はペアリングコードを使います。送信者がサインインしてコードを生成する（または QR コードのオプション付きでリンクを共有する）と、相手が参加した時点で、転送は暗号化 TURN リレー経由で行われます——予測しづらい NAT を越える最も確実な経路で、リレーが扱うのは暗号文だけです。受信者はアカウント不要のままです。</p>
       <p>リアルタイム経路が開けば、最大1,000ファイルが選択された経路を継続的に流れ、各ファイルを SHA-256 で検証します。Relayium はサーバー側のリアルタイム内容コピーや転送履歴を保持しません。相手がオフラインなら、ゼロ知識の保存リンクという別モードを使います。</p>
       <ol class="steps" data-block="steps"><li><p>2台を同じ Wi-Fi につないだ状態で、それぞれ Relayium を開いてファイルを送ります。</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>アプリが接続に付けるラベルを読みます。同じネットワークなら「LAN直結」と表示されます。</p></li><li><p>次に2台を別々のネットワークに置き、今度はペアリングコードを使ってもう一度送ります。</p><pre tabindex="0"><code>https://relayium.com/cross-network</code></pre></li><li><p>もう一度ラベルを読みます。「P2P直結」はインターネット越しに直接の経路が見つかったこと、「中継」は見つからず、暗号化されたリレーがバイトを運んだことを意味します。</p></li><li><p>どちらが出たか、そのときどのネットワークの組み合わせだったかを控えておきます。それが、この記事の冒頭の問いに対する、当社の説明ではなく自分の目で確かめた答えです。</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">ラベルが教えてくれること</p><p>同じネットワークなら「LAN直結」になります。ネットワークをまたぐと「P2P直結」か「中継」のどちらかになり、どちらになるかは設定した何かではなく、その2つのネットワーク次第です。</p><p>「中継」は失敗ではありません。フォールバックが存在して機能しているということであり、リレーは終始暗号文しか運びません——この記事の TURN の節が説明している状況を、内側から見たものです。</p></div>
-      <h2>ラベルが思っていたものと違うとき</h2>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">ラベルが教えてくれること</p><p>同じネットワークなら「LAN直結」になります。ネットワークをまたぐと「P2P直結」か「中継」のどちらかになり、どちらになるかは設定した何かではなく、その2つのネットワーク次第です。</p><p>「中継」は失敗ではありません。フォールバックが存在して機能しているということであり、リレーは終始暗号文しか運びません——この記事の TURN の節が説明している状況を、内側から見たものです。</p></div></section>
+      <section class="sheet"><h2>ラベルが思っていたものと違うとき</h2>
       <p>初めて見る人が意外に思うのは、たいてい次の3つです。どれも直すべき不具合ではありませんが、どれも名前を言えるようにしておく価値があります。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">見えるもの、確認すること、その意味</p><dl><dt>ネットワークをまたぐと必ず「中継」で、「P2P直結」にならない。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # the path label reads the same on both ends</code></pre><p>両端がモバイル回線か、キャリアグレード NAT の内側にないかを確認してください。直接の経路が見つからない最も一般的な理由です。直すべきものはありません。これは設計どおりのフォールバックで、リレーは暗号文しか運ばず、同じ2台でも同一ネットワーク上なら引き続き直結で、無料のままです。</p></dd><dt>同じ Wi-Fi なのに「LAN直結」にならない。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct</code></pre><p>そのネットワークがクライアント同士を分離していないか確認してください。ゲスト用 Wi-Fi や、多くのホテル・オフィスのネットワークは端末間の通信をそもそも遮断します。そこでは2台は互いをまったく見つけられないため、ローカルでの到達性に依存しないネットワーク越しのペアリングコード方式を使ってください。</p></dd><dt>経路ラベルがまったく表示されない。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # there is no path label until the two ends have connected</code></pre><p>このラベルは接続に名前を付けるものなので、接続が成立して初めて現れます。両端が互いを見つける前は名付ける対象がなく、「そもそも始まらない転送」は「予想外の経路を通った転送」とは別の問題です。</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">見えるもの、確認すること、その意味</p><dl><dt>ネットワークをまたぐと必ず「中継」で、「P2P直結」にならない。</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # the path label reads the same on both ends</code></pre><p>両端がモバイル回線か、キャリアグレード NAT の内側にないかを確認してください。直接の経路が見つからない最も一般的な理由です。直すべきものはありません。これは設計どおりのフォールバックで、リレーは暗号文しか運ばず、同じ2台でも同一ネットワーク上なら引き続き直結で、無料のままです。</p></dd><dt>同じ Wi-Fi なのに「LAN直結」にならない。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct</code></pre><p>そのネットワークがクライアント同士を分離していないか確認してください。ゲスト用 Wi-Fi や、多くのホテル・オフィスのネットワークは端末間の通信をそもそも遮断します。そこでは2台は互いをまったく見つけられないため、ローカルでの到達性に依存しないネットワーク越しのペアリングコード方式を使ってください。</p></dd><dt>経路ラベルがまったく表示されない。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # there is no path label until the two ends have connected</code></pre><p>このラベルは接続に名前を付けるものなので、接続が成立して初めて現れます。両端が互いを見つける前は名付ける対象がなく、「そもそも始まらない転送」は「予想外の経路を通った転送」とは別の問題です。</p></dd></dl></div></section>
       <h2>よくある質問</h2>
       <h3>P2P とエンドツーエンド暗号化は同じことですか？</h3>
       <p>関連はしていますが同じではありません。P2P は端点間の通信を表し、全ホップが直接とは限りません。TURN がトラフィックを運ぶこともあります。暗号化は中間者が読めるかを表します。Relayium は同じ LAN で WebRTC 直結、ネットワークをまたぐ場合はエンドツーエンド暗号化 TURN を使い、リレーは読み取りも復号もできません。</p>
@@ -209,6 +253,8 @@ ol.steps>li>pre{margin:8px 0 0}
         <a href="/pricing">料金</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

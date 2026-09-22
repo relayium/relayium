@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف","description":"كيف يحمي Relayium ملفاتك: X25519 وAES-256-GCM للنقل الفوري، ورمز من ست خانات يكشف الخادم غير النزيه، وروابط مُخزَّنة بمعرفة صفرية.","inLanguage":"ar","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/guides/how-relayium-encrypts-your-files/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل يستطيع Relayium قراءة ملفاتي؟","acceptedAnswer":{"@type":"Answer","text":"لا. في الوضع الفوري، يُشتَقّ مفتاح التشفير بشكل مستقل على كلا الجهازين ولا يغادرهما أبدًا — ولا ترى خوادم Relayium المفتاح ولا محتوى الملفات. أما بالنسبة للروابط المُخزَّنة، فيوجد المفتاح فقط في جزء العنوان (URL fragment)، الذي لا ترسله المتصفحات إلى أي خادم أبدًا، لذا لا يحتفظ الخادم إلا بنص مُشفَّر لا يستطيع فك تشفيره."}},{"@type":"Question","name":"ماذا يرى الخادم فعلًا؟","acceptedAnswer":{"@type":"Answer","text":"في الوضع الفوري على نفس الشبكة، لا يرى سوى معلومات إعداد الاتصال اللازمة لتعريف الجهازين أحدهما بالآخر — ولا يرى بايتات الملف أبدًا. أما عبر الشبكات فيَنقل مُرحِّل TURN بايتات الملف فعلًا، لكن كنص مُشفَّر لا يملك مفتاحه. أما بالنسبة للروابط المُخزَّنة، فيرى النص المُشفَّر إضافة إلى بيانات إدارية مثل الحجم ووقت انتهاء الصلاحية — دون أن يرى النص الصريح أو أسماء الملفات أو مفتاح فك التشفير أبدًا."}},{"@type":"Question","name":"هل مُرحِّل TURN نقطة ضعف؟","acceptedAnswer":{"@type":"Answer","text":"في المتصفح يحمل بحكم التصميم كل عمليات النقل عبر الشبكات، لا تلك التي فشل فيها المسار المباشر فحسب — لكنه لا يتعامل إلا مع النص المُشفَّر، وليس لديه مفتاح، ولذلك لا يستطيع قراءة ما يُرحّله. يَعُدّ Relayium البايتات التي يُرحّلها ضمن الحصة الشهرية لحسابك، لكنه لا يفحص محتواها أبدًا."}},{"@type":"Question","name":"هل Relayium مفتوح المصدر؟","acceptedAnswer":{"@type":"Answer","text":"نعم. تصميم البروتوكول وكامل شيفرة العميل والخادم متاحة علنًا على GitHub بموجب رخصة AGPL-3.0، لذا يمكن تدقيق التعمية الموصوفة هنا بشكل مستقل بدلًا من تصديقها على عِلّاتها."}},{"@type":"Question","name":"ماذا لو لم يتطابق رمزا التحقق على الشاشة؟","acceptedAnswer":{"@type":"Answer","text":"أوقِف النقل. اختلاف الرمزين يعني أن الجهازين لا يريان الاتصال نفسه — وهذا بالضبط ما يحدث عند استبدال المفاتيح أو وجود وسيط، لا خللًا بسيطًا غير مؤذٍ. (أما فشل مصافحة «الالتزام ثم الكشف» فهو عطل مختلف وأسبق: يُنهي الاتصال نفسه قبل عرض أي رمز.) لا تُكمِل حتى تفهم السبب."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ar/guides/" aria-current="true">الأدلة</a><a href="/ar/apps/">التطبيقات</a><a href="/pricing">الأسعار</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="التنقل الرئيسي"><a class="row" href="/">LAN</a><a class="row" href="/ar/cross-network/">عبر الشبكات</a><a class="row" href="/ar/offline-transfer/">غير متزامن</a><a class="row" href="/device-inbox">بريد الأجهزة</a><a class="row" href="/cli">CLI</a><a class="row" href="/ar/apps/">التطبيقات</a><a class="row" href="/pricing">الأسعار</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ar/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ar/guides/">الأدلة</a> <span aria-hidden="true">›</span> <span aria-current="page">كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,29 +203,29 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="ترجمة مؤرشفة"><p class="archived-label">ترجمة مؤرشفة</p><p>هذه الصفحة ترجمة عربية محفوظة للأرشيف. يجري صيانة منتج Relayium وتوثيقه الحالي بالإنجليزية والصينية المبسّطة، ولم يعد التطبيق نفسه يوفّر العربية. لذلك قد تختلف الشاشات والتفاصيل الموصوفة هنا عن السلوك الحالي.</p><p class="archived-links archived-pricing">قد تكون الباقات وحدود الاستخدام المذكورة هنا قديمة؛ والحالية منها موجودة في صفحة <a href="/pricing">الأسعار</a>.</p><p class="archived-links">النسخة الحالية: <a href="/guides/how-relayium-encrypts-your-files/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/how-relayium-encrypts-your-files/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">«هل Relayium آمن؟» سؤال وجيه — فكل أداة لنقل الملفات تدّعي أنها تحمي الخصوصية. تشرح هذه الصفحة بلغة بسيطة كيف يحافظ Relayium على خصوصية ملفاتك بالضبط، حتى تحكم على هذا الادّعاء بنفسك بدلًا من تصديقه على عِلّاته.</p>
       <p class="lead">هناك نظامان مختلفان للتشفير يعملان هنا، لأن هناك موقفين مختلفين: إرسال ملف بشكل فوري إلى شخص متصل بالإنترنت الآن، وترك رابط تنزيل ليأخذه شخص ما لاحقًا. كلاهما يُبقي الخادم بعيدًا عن ملفك، لكنهما يصلان إلى ذلك بطرق مختلفة — ومن المفيد أن تعرف أيّهما ينطبق ومتى.</p>
-      <h2>النقل الفوري: جهازان يتفقان على سِرٍّ لا يراه الخادم أبدًا</h2>
+      <section class="sheet"><h2>النقل الفوري: جهازان يتفقان على سِرٍّ لا يراه الخادم أبدًا</h2>
       <p>عندما ترسل ملفًا بشكل فوري — وكلا الطرفين متصل، من متصفح إلى متصفح — يبدأ Relayium بجعل كل جهاز يولّد زوج مفاتيح جديدًا باستخدام X25519، وهو نفس تبادل المفاتيح القائم على المنحنيات الإهليلجية المُستخدَم في المراسلة الآمنة الحديثة (تقنيًا، crypto_kx من libsodium). يحتفظ كل جهاز بمفتاحه الخاص لنفسه ويرسل مفتاحه العام فقط إلى الطرف الآخر.</p>
       <p>من هذين المفتاحين العامّين، يحسب كل جهاز بشكل مستقل السرَّ المشترك نفسه — وهي عملية تنجح تحديدًا بسبب طريقة بناء تبادل المفاتيح القائم على المنحنيات الإهليلجية، لا لأن السرّ أُرسِل إلى أي مكان. يصبح ذلك السرُّ المشترك مفتاح AES-256-GCM موجودًا فقط داخل المتصفحَين. تُختَم كل كتلة من الملف بهذا المفتاح وبرقم عشوائي فريد (nonce) قبل أن يغادر جهاز المُرسِل أصلًا، بحيث لا يرى أيُّ شيء يعبر الشبكة — بما في ذلك خادم الإشارة الذي ساعد المتصفحَين على إيجاد أحدهما الآخر — سوى النص المُشفَّر.</p>
-      <ul><li>يُولَّد زوج مفاتيح جديد لكل عملية نقل — لا يُعاد استخدام أي شيء عبر الجلسات.</li><li>يُشتَقّ مفتاح AES-256-GCM المشترك بشكل مستقل على كل جهاز؛ ولا يُرسَل أبدًا إلى أي مكان، بما في ذلك خوادم Relayium نفسها.</li><li>يحدث التشفير في طبقة التطبيق، فوق أمان النقل الخاص بـWebRTC، لذا يبقى صامدًا حتى لو تعرّضت طبقة النقل تلك للاختراق يومًا ما.</li></ul>
-      <h2>رمز الخانات الست الذي يكشف الخادم غير النزيه</h2>
+      <ul><li>يُولَّد زوج مفاتيح جديد لكل عملية نقل — لا يُعاد استخدام أي شيء عبر الجلسات.</li><li>يُشتَقّ مفتاح AES-256-GCM المشترك بشكل مستقل على كل جهاز؛ ولا يُرسَل أبدًا إلى أي مكان، بما في ذلك خوادم Relayium نفسها.</li><li>يحدث التشفير في طبقة التطبيق، فوق أمان النقل الخاص بـWebRTC، لذا يبقى صامدًا حتى لو تعرّضت طبقة النقل تلك للاختراق يومًا ما.</li></ul></section>
+      <section class="sheet"><h2>رمز الخانات الست الذي يكشف الخادم غير النزيه</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">ما تحتاجه لإجراء هذه المقارنة</p><ul><li>أن يكون الجهازان أمامك، أو أن يكون هناك شخص آخر جالسًا أمام جهازه الآن.</li><li>قناة ليست هي هذا النقل — مكالمة هاتفية، أو الغرفة التي تجلسان فيها معًا. أما لصق الرمز في المحادثة نفسها التي تقلق بشأنها فلا يثبت شيئًا.</li><li>عشر ثوانٍ. هذه هي كامل كلفة الفحص الوحيد الذي يكشف خادمًا غير أمين.</li></ul></div>
       <p>هناك دقيقة تستحق الصراحة بشأنها. يتبادل التشفير المدمج في WebRTC (DTLS) بصمات المفاتيح عبر خادم الإشارة الذي يُعرّف الجهازين أحدهما بالآخر. لو كان ذلك الخادم غير نزيه، لأمكنه نظريًا أن يتوسّط ويستبدل مفاتيحه الخاصة — هجوم وسيط كلاسيكي — دون أن يلاحظ أيٌّ من المتصفحَين ذلك فورًا.</p>
       <p>يسدّ Relayium هذه الثغرة برمز تحقق قصير. يشتقّ كلا الجهازين نفس سلسلة المصادقة القصيرة (SAS) المكوَّنة من ست خانات من مفتاحيهما العامّين، ويمكنهما عرضها على الشاشة. أما عرضها والتوقّف لمقارنتها فهو «التحقّق المتقدّم» المعطَّل افتراضيًا — أي أن عملية النقل الافتراضية لا تعرض أي رمز. وأما بقية ما هو موضَّح هنا فيسري على كل عملية نقل كما هو: المفاتيح الجديدة في كل مرة، والتشفير، ومصافحة «الالتزام ثم الكشف»، والتحقق من كل جزء. ما ينقص عملية النقل الافتراضية هو هذه المقارنة نفسها — فاكتشاف استبدال المفاتيح، أو أن الطرف الآخر شخص غير الذي تقصده، يتطلّب تفعيل التحقّق المتقدّم ومقارنة الرمز فعليًا عبر قناة أخرى. إذا تطابق الرمزان، فهذا يؤكد أن المفاتيح العامة لم تُستبدَل، وأن خادم الإشارة أو الترحيل لم ينتحل شخصية أيٍّ من الطرفين ولم يُنهِ التشفير من طرف إلى طرف في طبقة التطبيق. ولا يعني ذلك غياب الخوادم عن مسار الشبكة — فقد تظل البيانات المشفرة بين الشبكات تمر عبر TURN وفق التصميم. لكن الرمز البسيط المكوَّن من ست خانات لا يتجاوز نحو 20 بت، وهو ما قد يحاول مهاجم في موقع مناسب مبدئيًا أن يخمّنه بالقوة الغاشمة ليطابقه بعد رؤية المفتاحين الحقيقيين. لمنع ذلك، يستخدم Relayium مصافحة «الالتزام ثم الكشف»: يرسل كل طرف أولًا تجزئة (hash) تلتزم بمفتاحه، ولا يكشف عن المفتاح الحقيقي إلا بعد تلقّي التزام الطرف الآخر. يعني هذا الترتيب أن الخادم الخبيث عليه أن يلتزم بمفتاح مزيّف على العمياء، قبل أن يكون قد رأى المفتاح الحقيقي — فلا يستطيع اختيار مفتاح متصادم بعد وقوع الأمر، وهكذا يبقى الرمز القصير جديرًا بالثقة.</p>
       <ol class="steps" data-block="steps"><li><p>ابدأ نقلًا بين الجهازين وانتظر حتى يظهر رمز التحقّق على كل شاشة.</p><pre tabindex="0" dir="ltr"><code>https://relayium.com/</code></pre></li><li><p>اقرأ أحدهما بصوت مسموع رقمًا رقمًا عبر القناة الخارجة عن المسار — لا تنسخه داخل التطبيق ولا في خيط المحادثة نفسه.</p></li><li><p>قارن الأرقام الستة كلها. فالتطابق الجزئي هو عدم تطابق.</p></li><li><p>لا تقبل إلا إذا تطابقا. وإن اختلفا فارفض، واعرف على أي جهاز يجلس الطرف الآخر فعلًا قبل أن تعيد المحاولة.</p></li><li><p>في سطر الأوامر اجعل المقارنة حاجزة لا اختيارية: يوقف ‎--verify‎ النقل عند تلك النقطة وينتظر تأكيدك، فلا يتحرك بايت واحد قبل أن ينظر أحدهم فعلًا.</p><pre tabindex="0" dir="ltr"><code>relayium send --verify ./report.pdf</code></pre></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">ماذا تثبت المقارنة المتطابقة وماذا لا تثبت</p><p>ظهور الأرقام الستة نفسها على الشاشتين يعني أن بصمات الشهادات التي ثبّتها الطرفان متطابقة، أي أن خادم اللقاء لم يستبدل طرفًا ولم ينتحل شخصية أيٍّ منهما. وهذا بالضبط هو الهجوم الذي يتناوله هذا القسم.</p><p>إنها تُوثّق الطرفين. ولا تثبت شيئًا عن كل قفزة شبكية بينهما، ولا تثبت شيئًا على الإطلاق إن لم يقارنها أحد — ولهذا وُجد ‎--verify‎.</p></div>
-      <ul><li>لأقوى ضمان، فعِّل التحقّق المتقدّم أولًا، ثم اقرأ الرمز بصوت عالٍ عبر مكالمة أو قارِنه وجهًا لوجه، لا بمجرد النظر إلى شاشتين متجاورتين.</li><li>إذا لم يتطابق الرمزان، توقّف — واعتبر ذلك علامة على أن أحدهم قد يعترض الاتصال.</li></ul>
-      <h2>التأكد من أن ما يصل هو تمامًا ما أُرسِل</h2>
-      <p>يحمي التشفير السرية، لكنه لا يُثبِت تلقائيًا أن شيئًا لم يتلف أو يُعبَث به في الطريق. يتحقق Relayium من ذلك على حدة: تحمل كل كتلة وسم مصادقة AES-GCM الخاص بها، فيفشل فك تشفير أي كتلة مُعدَّلة من الأساس. علاوة على ذلك، مع إرسال كل ملف، يحسب الطرفان تجزئة SHA-256 جارية على محتواه الصريح؛ وعند انتهاء الملف، تُقارَن تجزئة المُرسِل بتجزئة المُستقبِل. إذا تطابقتا، فما استقرّ على القرص مطابق بايتًا ببايت لما أُرسِل — وإن لم تتطابقا، يُوسَم الملف بدلًا من قبوله بصمت.</p>
-      <h2>الروابط المُخزَّنة: مفتاح مختلف، يُولَّد مرة واحدة، ولا يوجد إلا في الرابط</h2>
+      <ul><li>لأقوى ضمان، فعِّل التحقّق المتقدّم أولًا، ثم اقرأ الرمز بصوت عالٍ عبر مكالمة أو قارِنه وجهًا لوجه، لا بمجرد النظر إلى شاشتين متجاورتين.</li><li>إذا لم يتطابق الرمزان، توقّف — واعتبر ذلك علامة على أن أحدهم قد يعترض الاتصال.</li></ul></section>
+      <section class="sheet"><h2>التأكد من أن ما يصل هو تمامًا ما أُرسِل</h2>
+      <p>يحمي التشفير السرية، لكنه لا يُثبِت تلقائيًا أن شيئًا لم يتلف أو يُعبَث به في الطريق. يتحقق Relayium من ذلك على حدة: تحمل كل كتلة وسم مصادقة AES-GCM الخاص بها، فيفشل فك تشفير أي كتلة مُعدَّلة من الأساس. علاوة على ذلك، مع إرسال كل ملف، يحسب الطرفان تجزئة SHA-256 جارية على محتواه الصريح؛ وعند انتهاء الملف، تُقارَن تجزئة المُرسِل بتجزئة المُستقبِل. إذا تطابقتا، فما استقرّ على القرص مطابق بايتًا ببايت لما أُرسِل — وإن لم تتطابقا، يُوسَم الملف بدلًا من قبوله بصمت.</p></section>
+      <section class="sheet"><h2>الروابط المُخزَّنة: مفتاح مختلف، يُولَّد مرة واحدة، ولا يوجد إلا في الرابط</h2>
       <p>يحتاج النقل الفوري إلى وجود الطرفين متصلَين في الوقت نفسه. حين يتعذّر ذلك، يقدّم Relayium بدلًا منه رابط تنزيل مُخزَّن — وهذا يستخدم آلية مختلفة فعلًا، يُستحسَن عدم الخلط بينها وبين آلية النقل الفوري أعلاه.</p>
       <p>لا يوجد هنا تبادل مفاتيح، لأنه لا يوجد بعدُ جهاز ثانٍ للتبادل معه. بدلًا من ذلك، يولّد متصفحك مفتاح AES-256-GCM عشوائيًا واحدًا ويستخدمه لتشفير الملفات قبل رفع أي شيء. لا يُرسَل هذا المفتاح إلى الخادم إطلاقًا — بل يُلحَق برابط التنزيل بعد الرمز #، فيما يُسمّى جزء العنوان (URL fragment)، وهو جزء من العنوان تتعمّد المتصفحات ألّا ترسله إلى أي خادم أبدًا. ينتهي الأمر بالخادم مُخزِّنًا نصًا مُشفَّرًا فقط لا سبيل له إلى فك تشفيره، إضافة إلى بيانات إدارية مثل حجم النص المُشفَّر وطابع زمني لانتهاء الصلاحية. أي شخص يفتح الرابط الكامل — بما فيه الجزء — يستطيع فك تشفير الملف محليًا في متصفحه؛ ومن لا يملكه لا يرى سوى كتلة مبهمة على الخادم. هذا هو جزء المعرفة الصفرية: يحتفظ الخادم بالملف المُشفَّر دون أن يملك يومًا وسيلة قراءته.</p>
-      <ul><li>يتطلّب إنشاء رابط مُخزَّن تسجيل دخول المُرسِل؛ أما فتحه للتنزيل فلا يتطلّب ذلك أبدًا.</li><li>يمكن ضبط الروابط لتنتهي صلاحيتها بعد ساعة واحدة أو يوم واحد أو 3 أيام أو 7 أيام أو حتى 14 يومًا حسب باقتك، أو لتتلاشى بعد أول تنزيل مكتمل.</li><li>تعامل مع الرابط الكامل كأنه الملف نفسه — فأي شخص يملكه يستطيع فك تشفيره، لذا شاركه كما تشارك الملف.</li></ul>
-      <h2>ما يمكن للخادم رؤيته — وما لا يمكنه</h2>
+      <ul><li>يتطلّب إنشاء رابط مُخزَّن تسجيل دخول المُرسِل؛ أما فتحه للتنزيل فلا يتطلّب ذلك أبدًا.</li><li>يمكن ضبط الروابط لتنتهي صلاحيتها بعد ساعة واحدة أو يوم واحد أو 3 أيام أو 7 أيام أو حتى 14 يومًا حسب باقتك، أو لتتلاشى بعد أول تنزيل مكتمل.</li><li>تعامل مع الرابط الكامل كأنه الملف نفسه — فأي شخص يملكه يستطيع فك تشفيره، لذا شاركه كما تشارك الملف.</li></ul></section>
+      <section class="sheet"><h2>ما يمكن للخادم رؤيته — وما لا يمكنه</h2>
       <p>من المفيد أن نوضّح بالضبط أين يقف الخادم من كل هذا، لأن «التشفير من الطرف إلى الطرف» ادّعاء يسهل قوله ويصعب قوله بدقة. في الوضع الفوري على نفس الشبكة، لا يلمس الملف نفسه خوادم Relayium إطلاقًا — بل يُبَثّ مباشرة بين المتصفحَين. تقتصر مهمة خادم الإشارة على تمرير رسائل إعداد الاتصال (معلومات SDP/ICE التقنية التي يحتاجها WebRTC لإنشاء رابط مباشر) حتى يتمكن الجهازان من إيجاد أحدهما الآخر؛ فهو لا يرى أبدًا محتوى الملفات أو أسماءها أو المفاتيح.</p>
-      <p>عبر الشبكات — حيث تستبعد أنظمة NAT وجدران الحماية المقيِّدة المسار المباشر في الغالب — يمرّ التدفق المُشفَّر على خادم مُرحِّل TURN. لا يمرّر المُرحِّل سوى النص المُشفَّر؛ فليس لديه مفتاح ولا يمكنه فك تشفير ما يمرّ عبره. أما ما يفعله فهو عدّ البايتات التي يُرحّلها ضمن حصة الترحيل الشهرية لحساب المُرسِل، لغرض القياس ومنع إساءة الاستخدام فقط — دون أن يفحص ما بداخلها أبدًا.</p>
-      <h2>حين تسوء المقارنة</h2>
+      <p>عبر الشبكات — حيث تستبعد أنظمة NAT وجدران الحماية المقيِّدة المسار المباشر في الغالب — يمرّ التدفق المُشفَّر على خادم مُرحِّل TURN. لا يمرّر المُرحِّل سوى النص المُشفَّر؛ فليس لديه مفتاح ولا يمكنه فك تشفير ما يمرّ عبره. أما ما يفعله فهو عدّ البايتات التي يُرحّلها ضمن حصة الترحيل الشهرية لحساب المُرسِل، لغرض القياس ومنع إساءة الاستخدام فقط — دون أن يفحص ما بداخلها أبدًا.</p></section>
+      <section class="sheet"><h2>حين تسوء المقارنة</h2>
       <p>ثلاث نتائج، والأولى وحدها حالة طارئة. ومعرفة أيَّها أمامك هي معظم الفائدة.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">ما تراه، وما تفحصه، وماذا يعني</p><dl><dt>تعرض الشاشتان رمزين مختلفين.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/   # the two screens show different verification codes</code></pre><p>توقّف ولا ترسل الملف. فاختلاف الرمزين يعني أن الطرفين ثبّتا بصمتي شهادة مختلفتين، أي أن الطرف البعيد ليس الجهاز الذي تظنه. تأكّد خارج المسار من الجهاز الذي يجلس عليه الطرف الآخر ثم ابدأ من جديد. وإعادة التشغيل مع ‎--verify‎ تجعل النقل ينتظر عند تلك المقارنة بدل تركها لانتباهك.</p></dd><dt>لم يظهر أي رمز تحقّق بعد.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/   # no verification code on screen yet</code></pre><p>الرمز مشتقّ من اتصال، فهو يوجد متى اتصل الطرفان. وقبل ذلك لا شيء يُقارَن، و«نقل لا يتصل أبدًا» مشكلة مختلفة عن «نقل اختلف رمزاه».</p></dd><dt>قارنت الرمزين بلصق أحدهما في المحادثة التي تستخدمها أصلًا.</dt><dd><pre tabindex="0" dir="ltr"><code>relayium send --verify ./report.pdf   # holds the transfer at the comparison</code></pre><p>هذا لا يختبر ما أردت اختباره. فإن كانت تلك القناة نفسها هي مصدر قلقك، فالمهاجم القادر على تغيير النقل قادر أيضًا على تغيير الرمز الملصوق. اقرأه بصوت مسموع، أو استخدم قناة يختلف نمط إخفاقها عن القناة التي تفحصها الآن.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">ما تراه، وما تفحصه، وماذا يعني</p><dl><dt>تعرض الشاشتان رمزين مختلفين.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/   # the two screens show different verification codes</code></pre><p>توقّف ولا ترسل الملف. فاختلاف الرمزين يعني أن الطرفين ثبّتا بصمتي شهادة مختلفتين، أي أن الطرف البعيد ليس الجهاز الذي تظنه. تأكّد خارج المسار من الجهاز الذي يجلس عليه الطرف الآخر ثم ابدأ من جديد. وإعادة التشغيل مع ‎--verify‎ تجعل النقل ينتظر عند تلك المقارنة بدل تركها لانتباهك.</p></dd><dt>لم يظهر أي رمز تحقّق بعد.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/   # no verification code on screen yet</code></pre><p>الرمز مشتقّ من اتصال، فهو يوجد متى اتصل الطرفان. وقبل ذلك لا شيء يُقارَن، و«نقل لا يتصل أبدًا» مشكلة مختلفة عن «نقل اختلف رمزاه».</p></dd><dt>قارنت الرمزين بلصق أحدهما في المحادثة التي تستخدمها أصلًا.</dt><dd><pre tabindex="0" dir="ltr"><code>relayium send --verify ./report.pdf   # holds the transfer at the comparison</code></pre><p>هذا لا يختبر ما أردت اختباره. فإن كانت تلك القناة نفسها هي مصدر قلقك، فالمهاجم القادر على تغيير النقل قادر أيضًا على تغيير الرمز الملصوق. اقرأه بصوت مسموع، أو استخدم قناة يختلف نمط إخفاقها عن القناة التي تفحصها الآن.</p></dd></dl></div></section>
       <h2>الأسئلة الشائعة</h2>
       <h3>هل يستطيع Relayium قراءة ملفاتي؟</h3>
       <p>لا. في الوضع الفوري، يُشتَقّ مفتاح التشفير بشكل مستقل على كلا الجهازين ولا يغادرهما أبدًا — ولا ترى خوادم Relayium المفتاح ولا محتوى الملفات. أما بالنسبة للروابط المُخزَّنة، فيوجد المفتاح فقط في جزء العنوان (URL fragment)، الذي لا ترسله المتصفحات إلى أي خادم أبدًا، لذا لا يحتفظ الخادم إلا بنص مُشفَّر لا يستطيع فك تشفيره.</p>
@@ -208,6 +252,8 @@ ol.steps>li>pre{margin:8px 0 0}
         <a href="/pricing">الأسعار</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"항상 켜진 Linux 서버에 Device Inbox 설정","description":"낮은 권한의 systemd 서비스로 Device Inbox를 설치해 재부팅 뒤에도 브라우저에서 내 서버로 파일을 받습니다.","inLanguage":"ko","datePublished":"2026-08-09","dateModified":"2026-08-09","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/device-inbox-server/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"항상 켜진 Linux 서버에 Device Inbox 설정"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"Relayium이 파일 이름이나 평문을 볼 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 브라우저가 매니페스트와 파일을 암호화하고 콘텐츠 키를 대상 기기에만 봉인합니다. 중앙에는 암호문과 라우팅 상태만 저장됩니다."}},{"@type":"Question","name":"왜 /root/inbox를 사용하지 않나요?","acceptedAnswer":{"@type":"Answer","text":"권장 서비스는 의도적으로 root가 아니며 홈 디렉터리 접근도 차단합니다. /srv/relayium-inbox만 제한된 쓰기 영역으로 사용합니다."}},{"@type":"Question","name":"수동으로 설치할 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"예. relayium inbox service systemd-user 또는 systemd-system이 기기별 unit과 명령을 출력하며 launchd와 container 설명도 제공합니다."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -119,8 +161,10 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ko/guides/" aria-current="true">가이드</a><a href="/ko/apps/">앱</a><a href="/pricing">요금제</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="기본 탐색"><a class="row" href="/">LAN 전송</a><a class="row" href="/ko/cross-network/">네트워크 간 전송</a><a class="row" href="/ko/offline-transfer/">비동기 전송</a><a class="row" href="/device-inbox">기기 수신함</a><a class="row" href="/cli">CLI</a><a class="row" href="/ko/apps/">앱</a><a class="row" href="/pricing">요금제</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">항상 켜진 Linux 서버에 Device Inbox 설정</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -142,7 +186,7 @@ pre code{background:none;padding:0;border-radius:0}
       <aside class="archived" aria-label="보관된 번역"><p class="archived-label">보관된 번역</p><p>이 페이지는 기록으로 보관 중인 한국어 번역입니다. Relayium 제품과 최신 문서는 영어와 중국어 간체로 관리되며, 앱 자체도 더 이상 한국어를 제공하지 않습니다. 여기에 적힌 화면과 세부 사항은 현재 동작과 다를 수 있습니다.</p><p class="archived-links archived-pricing">이 페이지에 적혀 있는 요금제와 사용 한도는 오래된 내용일 수 있습니다. 현재 내용은 <a href="/pricing">요금제</a> 페이지에서 확인하세요.</p><p class="archived-links">최신 버전: <a href="/guides/device-inbox-server/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/device-inbox-server/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Device Inbox는 브라우저의 Device Inbox 페이지에서 내가 소유한 서버, NAS 또는 워크스테이션으로 파일을 보냅니다. 브라우저가 암호화하며 대상 기기만 복호화하고 저장합니다.</p>
       <p class="lead">서버 수신기는 SSH 창을 닫거나 재부팅해도 계속 동작해야 합니다. 권장 설치 프로그램은 폴더와 실제 systemd 서비스를 만듭니다. inbox run은 전경 진단 또는 컨테이너 진입점입니다.</p>
-      <h2>상주 수신 서비스 설치</h2>
+      <section class="sheet"><h2>상주 수신 서비스 설치</h2>
       <p>운영자 계정으로 한 번 로그인한 뒤 짧은 스크립트를 내려받아 검토하고 root 권한으로 실행하세요. 자격 증명을 출력하지 않고 전용 relayium 계정으로 복사하며 수신 키를 등록하고 강화된 unit을 즉시 시작해 재부팅 후에도 활성화합니다.</p>
       <pre tabindex="0"><code>relayium update
 relayium login --device-name prod-backup-1
@@ -151,23 +195,23 @@ relayium login --device-name prod-backup-1
 curl -fsSLO https://relayium.com/inbox-server-install.sh
 less inbox-server-install.sh
 sudo sh inbox-server-install.sh --dir /srv/relayium-inbox</code></pre>
-      <ul><li>권장 수신 경로는 /srv/relayium-inbox입니다. 강화된 서비스는 /root나 다른 사용자의 홈에 접근할 수 없습니다.</li><li>수신 파일과 개인 키는 root가 아니라 전용 저권한 계정이 소유합니다.</li><li>기존 전경 수신 상태는 새 서비스가 성공적으로 시작된 뒤에만 시간 표시가 있는 복구 가능한 보관 경로로 이동합니다.</li></ul>
-      <h2>서비스·로그·파일 확인</h2>
+      <ul><li>권장 수신 경로는 /srv/relayium-inbox입니다. 강화된 서비스는 /root나 다른 사용자의 홈에 접근할 수 없습니다.</li><li>수신 파일과 개인 키는 root가 아니라 전용 저권한 계정이 소유합니다.</li><li>기존 전경 수신 상태는 새 서비스가 성공적으로 시작된 뒤에만 시간 표시가 있는 복구 가능한 보관 경로로 이동합니다.</li></ul></section>
+      <section class="sheet"><h2>서비스·로그·파일 확인</h2>
       <p>아래 명령은 프로세스, 최근 로그, Relayium의 로컬/서버 상태, 실제 디렉터리를 각각 확인합니다. systemd가 정상이라고 해서 계정, 키, 폴더가 모두 사용 가능하다는 뜻은 아닙니다.</p>
       <pre tabindex="0"><code>sudo systemctl status relayium-inbox.service
 sudo journalctl -u relayium-inbox.service -f
 sudo -u relayium relayium inbox status --config-dir /var/lib/relayium-inbox/config
 ls -la /srv/relayium-inbox</code></pre>
-      <ul><li>다른 --dir을 지정하지 않으면 파일은 /srv/relayium-inbox에 저장됩니다.</li><li>기존 파일을 덮어쓰지 않습니다. 이름이 겹치면 안전한 번호를 붙이며 받은 내용을 자동으로 열거나 실행하거나 압축 해제하지 않습니다.</li><li>내 기기에는 수정 가능한 이름과 서버가 마지막으로 확인한 IP가 표시됩니다. NAT 또는 VPN 주소일 수 있습니다.</li></ul>
-      <h2>오프라인 또는 충돌 시 동작</h2>
+      <ul><li>다른 --dir을 지정하지 않으면 파일은 /srv/relayium-inbox에 저장됩니다.</li><li>기존 파일을 덮어쓰지 않습니다. 이름이 겹치면 안전한 번호를 붙이며 받은 내용을 자동으로 열거나 실행하거나 압축 해제하지 않습니다.</li><li>내 기기에는 수정 가능한 이름과 서버가 마지막으로 확인한 IP가 표시됩니다. NAT 또는 VPN 주소일 수 있습니다.</li></ul></section>
+      <section class="sheet"><h2>오프라인 또는 충돌 시 동작</h2>
       <p>서버가 오프라인이면 암호화된 작업은 Relayium에서 기다립니다. 업로드와 저장 완료는 다르며 인증 복호화, 검증, 영구 저장 뒤에만 저장됨으로 표시됩니다.</p>
-      <ul><li>프로세스 오류 뒤 systemd가 worker를 다시 시작하고 서버 재부팅 후에도 시작합니다.</li><li>부분 다운로드는 비공개 준비 영역에만 남고 완료 파일로 노출되지 않습니다.</li><li>영구 저널 덕분에 커밋 직후 충돌해도 재시작 시 같은 저장을 보고하며 파일을 중복 만들지 않습니다.</li><li>수신 폴더가 나중에 사라지면 마운트 해제된 경로 아래에 쓰지 않도록 worker가 다시 만들지 않고 조치 필요 상태를 보고합니다.</li></ul>
-      <h2>일시 중지·재개·제거</h2>
+      <ul><li>프로세스 오류 뒤 systemd가 worker를 다시 시작하고 서버 재부팅 후에도 시작합니다.</li><li>부분 다운로드는 비공개 준비 영역에만 남고 완료 파일로 노출되지 않습니다.</li><li>영구 저널 덕분에 커밋 직후 충돌해도 재시작 시 같은 저장을 보고하며 파일을 중복 만들지 않습니다.</li><li>수신 폴더가 나중에 사라지면 마운트 해제된 경로 아래에 쓰지 않도록 worker가 다시 만들지 않고 조치 필요 상태를 보고합니다.</li></ul></section>
+      <section class="sheet"><h2>일시 중지·재개·제거</h2>
       <p>관리 명령은 같은 서비스 계정과 설정 디렉터리로 실행합니다. pause는 키와 대기 작업을 유지하고 resume은 계속하며 disable은 중앙 상태를 먼저 지운 뒤 개인 키를 삭제합니다.</p>
       <pre tabindex="0"><code>sudo -u relayium relayium inbox pause --config-dir /var/lib/relayium-inbox/config
 sudo -u relayium relayium inbox resume --config-dir /var/lib/relayium-inbox/config
 sudo -u relayium relayium inbox disable --config-dir /var/lib/relayium-inbox/config</code></pre>
-      <ul><li>SSH 창의 inbox run을 영구 설정으로 사용하지 마세요. 창을 닫으면 중지됩니다.</li><li>systemctl disable --now는 프로세스만 중지합니다. 수신함과 키도 해지하려면 inbox disable을 사용하세요.</li></ul>
+      <ul><li>SSH 창의 inbox run을 영구 설정으로 사용하지 마세요. 창을 닫으면 중지됩니다.</li><li>systemctl disable --now는 프로세스만 중지합니다. 수신함과 키도 해지하려면 inbox disable을 사용하세요.</li></ul></section>
       <h2>자주 묻는 질문</h2>
       <h3>Relayium이 파일 이름이나 평문을 볼 수 있나요?</h3>
       <p>아니요. 브라우저가 매니페스트와 파일을 암호화하고 콘텐츠 키를 대상 기기에만 봉인합니다. 중앙에는 암호문과 라우팅 상태만 저장됩니다.</p>
@@ -190,6 +234,8 @@ sudo -u relayium relayium inbox disable --config-dir /var/lib/relayium-inbox/con
         <a href="/pricing">요금제</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

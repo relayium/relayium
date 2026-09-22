@@ -36,9 +36,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Windows、Linux、Android 的隔空投送替代方案","description":"Windows、Linux、Android 都没有官方版 AirDrop——这是最接近的做法：在浏览器里同一 Wi-Fi 即时互传，无需账号、无需安装，还能做到 AirDrop 做不到的跨网络传输。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/airdrop-for-windows-and-android/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"Windows、Linux、Android 的隔空投送替代方案"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Windows 或 Android 有官方版 AirDrop 吗？","acceptedAnswer":{"@type":"Answer","text":"没有——AirDrop 是 Apple 设备专属，Apple 从未推出过 Windows 或 Android 客户端。Relayium 是基于浏览器的替代方案：在两台设备上打开 relayium.com，无论平台组合如何都能一样使用，包括 Apple 与非 Apple 混搭的情况。"}},{"@type":"Question","name":"需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"同一 Wi-Fi 下的流程不需要——两端打开网页就能互相发现，完全无需登录。跨不同网络用配对码发送时需要发送方登录；无论哪种网络模式，接收方都始终无需账号。"}},{"@type":"Question","name":"需要安装什么吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。它在每个平台上都是一个网页——Windows、Linux、macOS、Android 和 iOS——所以不用从应用商店下载，也不用操心更新。"}},{"@type":"Question","name":"这和「Relayium 对比 AirDrop」那篇有什么不同？","acceptedAnswer":{"@type":"Answer","text":"那篇文章是客观的正面对比，讲清 AirDrop 真正更好的地方（纯 Apple 家庭）以及它的短板。本文则是操作指南，教你在至少一台设备不是 Apple 产品时，如何真正获得类似 AirDrop 的体验。"}},{"@type":"Question","name":"能像 AirDrop 一样发给一群人吗？","acceptedAnswer":{"@type":"Answer","text":"不能一次发完。本地房间不限于两台设备，所以从该网络打开页面的每台设备都会同时列出来——但一次传输是一对一的：你和某一个接收方打开工作区，这批文件就发给它。要把同一批文件分给房间里的好几个人，就依次和他们各开一次工作区。而跨网络的配对码模式只连接两台设备，且经由加密中继完成。"}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -60,24 +60,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -103,6 +89,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -134,8 +176,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/?lang=zh"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="主导航"><span class="rail-group">实时传输</span><a class="row" href="/?lang=zh" aria-label="局域网传输">局域网</a><a class="row" href="/zh/cross-network/" aria-label="跨网络传输">跨网络</a><span class="rail-group">链接</span><a class="row" href="/zh/offline-transfer/" aria-label="分享链接">链接</a><span class="rail-group">我的设备</span><a class="row" href="/device-inbox" aria-label="设备收件箱">收件箱</a><span class="rail-group">下载与工具</span><a class="row" href="/cli">CLI</a><a class="row" href="/zh/apps/">应用</a><a class="row" href="/pricing">定价</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/how-to/airdrop-for-windows-and-android/">English</a><a href="/zh/how-to/airdrop-for-windows-and-android/" aria-current="true">中文</a></nav></div></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">Windows、Linux、Android 的隔空投送替代方案</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -154,27 +198,27 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-08-07</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/airdrop-for-windows-and-android/">English</a><a href="/zh/how-to/airdrop-for-windows-and-android/" aria-current="true">中文</a></nav>
+      
       <p class="lead">AirDrop 只活在 Apple 的世界里，这让 Windows、Linux、Android 用户，以及任何混用多种设备的家庭都没有对应的内置方案。本文展示非 Apple 设备最接近 AirDrop 的做法：两端各打开一个网页，文件就传过去了。</p>
       <p class="lead">这种方式不区分平台，因此也覆盖了 AirDrop 一向处理不好的场景：同一个房间里有 Windows 笔记本、Linux 台式机和 Android 手机，或者这三者再加一台 iPhone。</p>
-      <h2>类 AirDrop 流程：同一 Wi-Fi，浏览器内完成</h2>
+      <section class="sheet"><h2>类 AirDrop 流程：同一 Wi-Fi，浏览器内完成</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">你需要准备</p><ul><li>每台设备上都有一个较新的浏览器——Windows 上用 Chrome 或 Edge，Linux 上用 Firefox 或 Chrome，Android 上用 Chrome。不用去应用商店，也没有要安装的东西。</li><li>两台设备在同一个 Wi-Fi 里。和 AirDrop 不同，判断依据不是「挨得近」：设备发现是按连接过来的公网 IP 分组的，所以一台还挂在移动数据上的手机，即使摆在同一张桌子上也不会出现。</li><li>两台都能正常联网，并且是通过 https://relayium.com/ 打开页面。AirDrop 完全不需要互联网；而这两个浏览器确实需要连上会合服务器才能找到彼此，所以完全隔离的局域网应改用自托管实例。</li><li>同网络场景下不需要账号，也不需要配对码——这正是这套流程和 AirDrop 相同的地方。</li></ul></div>
       <p>这正是 AirDrop 为之设计的日常场景，而 Relayium 无需从任何应用商店下载 App 就能做到同样效果。</p>
       <ol class="steps" data-block="steps"><li><p>在每台设备上用浏览器打开传输页面。</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>对比两台设备上状态条里的公网 IP。共享同一个地址才能让两台设备互相可见，而这也是最快识别出「那台手机根本没离开移动数据」的办法。</p><pre tabindex="0"><code>已连接 · 本机 ThinkPad · 公网 IP 203.0.113.9</code></pre></li><li><p>在发送方设备上，于「附近的设备」里找到另一台，选中它的卡片，然后按「打开工作区」。在当前浏览器上，这是卡片提供的唯一一个动作——因为接下来文件、文件夹和消息都走它打开的那一条加密连接。房间里可能列出好几台设备；打开工作区正是你挑定这次传输的那一个接收方的方式，轮到下一个人时再开一个。</p></li><li><p>工作区会取代那张卡片。发送用它标题栏下面的控件：「发送文件」发一批（最多 1,000 个），浏览器支持选目录时用「发送文件夹」发整棵树，或者直接在消息框里打字——「回车换行 · ⌘/Ctrl+回车发送」——然后按「发送」。在接收方设备上，先看请求下面那行再决定接收——它会说明浏览器是要问你存到哪，还是直接写进它自己的下载目录——然后按「接收」。如果想先核对校验码（SAS），开始前在两台设备上打开「高级验证」。</p></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">传输成功时是什么样</p><p>这时对方设备的卡片已经不在了——工作区取代了它——所以状态要从工作区标题栏上读：你连到了哪台设备、连接状态是「已连接」，以及唯一一个路径标签显示「局域网直连」。两块屏幕上的文件计数都走到这一批的最后一个文件。</p><p>文件夹以什么形式落地取决于接收方浏览器，所以要看结果而不要想当然：电脑上的 Chrome 和 Edge 会把目录树写进你挑好的目录，而 Firefox、Safari 和所有手机浏览器会给你一个 .zip，解开后是同样的结构。确认这一点要看那个浏览器自己的下载列表——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。</p><pre tabindex="0"><code>已连接到 Pixel · 已连接 · 局域网直连
-文件 8/8</code></pre></div>
-      <h2>另一台设备没有出现时</h2>
+文件 8/8</code></pre></div></section>
+      <section class="sheet"><h2>另一台设备没有出现时</h2>
       <p>先从这套流程与 AirDrop 不同的那一点入手：让两台设备互相可见的是它们从哪个网络连过来，而不是它们离得多近。下面这些检查是常见的首轮排查，而不是穷尽清单，而且每一项都能从页面上读出答案，不用靠猜。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>另一台设备就在你旁边，「附近的设备」里却还是没有它。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 对比两台设备上状态条里的公网 IP</code></pre><p>两个不同的公网 IP 就是两个房间，靠得再近也不管用。先把两台设备接到同一个 Wi-Fi，并关掉手机上的移动数据。任一侧的 VPN 或 iCloud 专用代理是造成两个地址的另一个常见原因；如果你愿意改这些设置，就断开 VPN，或只对这一个网络关闭专用代理，然后在那台设备上重新加载 https://relayium.com/。如果你更想保留它们，用 https://relayium.com/cross-network 上的配对码也能连到另一台设备，两个设置都不用动。</p></dd><dt>两台设备显示的公网 IP 相同，却都不出现卡片。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关</code></pre><p>路由器把自己的客户端隔开了。在它的 Wi-Fi 设置里关闭「AP 隔离 / 客户端隔离」；如果路由器不由你改，就改用 https://relayium.com/cross-network 上的配对码。</p></dd><dt>在一个没有互联网出口的网络里，页面本身就打不开。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 如果这个地址始终打不开，说明该网络没有通往会合服务器的路</code></pre><p>这才是相对 AirDrop 真正的差距——AirDrop 完全不需要互联网。两个浏览器仍然需要连上会合服务器才能互相介绍，所以在物理隔离的局域网里，请在那个网络内运行你自己的实例（Relayium 按 AGPL-3.0 开源在 github.com/relayium/relayium），或者退回到用 U 盘。</p></dd><dt>还没点接收，接收方就警告说这一批必须放在内存里。</dt><dd><pre tabindex="0"><code>chrome://downloads   # Chrome 用这个 / Edge 用 edge://downloads / Firefox 用 about:downloads</code></pre><p>Firefox、Safari 和所有手机浏览器都没有 File System Access API，所以它们会把整批内容在内存里拼装，超过大约 256 MiB 时 Relayium 就会警告。请改用电脑上的 Chrome 或 Edge 接收，或者一次少发几个文件，然后在那个浏览器自己的下载列表里逐个确认到达情况，而不是想当然认为已经保存——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。</p></dd><dt>文件夹变成了一个 .zip，而不是一个文件夹。</dt><dd><pre tabindex="0"><code>chrome://downloads   # Chrome 里看；浏览器没有目录选择器时，这里的条目就是一个 .zip</code></pre><p>在没有目录选择器的浏览器里这是预期结果，而且解开压缩包后结构一致，相对路径完整保留。解压它即可；或者换用电脑上的 Chrome 或 Edge 接收同一个文件夹——它会先问你要写入哪个目标目录，然后把目录树原位写进去。</p></dd></dl></div>
-      <h2>跨网络：配对与中继</h2>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>另一台设备就在你旁边，「附近的设备」里却还是没有它。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 对比两台设备上状态条里的公网 IP</code></pre><p>两个不同的公网 IP 就是两个房间，靠得再近也不管用。先把两台设备接到同一个 Wi-Fi，并关掉手机上的移动数据。任一侧的 VPN 或 iCloud 专用代理是造成两个地址的另一个常见原因；如果你愿意改这些设置，就断开 VPN，或只对这一个网络关闭专用代理，然后在那台设备上重新加载 https://relayium.com/。如果你更想保留它们，用 https://relayium.com/cross-network 上的配对码也能连到另一台设备，两个设置都不用动。</p></dd><dt>两台设备显示的公网 IP 相同，却都不出现卡片。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关</code></pre><p>路由器把自己的客户端隔开了。在它的 Wi-Fi 设置里关闭「AP 隔离 / 客户端隔离」；如果路由器不由你改，就改用 https://relayium.com/cross-network 上的配对码。</p></dd><dt>在一个没有互联网出口的网络里，页面本身就打不开。</dt><dd><pre tabindex="0"><code>https://relayium.com/   # 如果这个地址始终打不开，说明该网络没有通往会合服务器的路</code></pre><p>这才是相对 AirDrop 真正的差距——AirDrop 完全不需要互联网。两个浏览器仍然需要连上会合服务器才能互相介绍，所以在物理隔离的局域网里，请在那个网络内运行你自己的实例（Relayium 按 AGPL-3.0 开源在 github.com/relayium/relayium），或者退回到用 U 盘。</p></dd><dt>还没点接收，接收方就警告说这一批必须放在内存里。</dt><dd><pre tabindex="0"><code>chrome://downloads   # Chrome 用这个 / Edge 用 edge://downloads / Firefox 用 about:downloads</code></pre><p>Firefox、Safari 和所有手机浏览器都没有 File System Access API，所以它们会把整批内容在内存里拼装，超过大约 256 MiB 时 Relayium 就会警告。请改用电脑上的 Chrome 或 Edge 接收，或者一次少发几个文件，然后在那个浏览器自己的下载列表里逐个确认到达情况，而不是想当然认为已经保存——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。</p></dd><dt>文件夹变成了一个 .zip，而不是一个文件夹。</dt><dd><pre tabindex="0"><code>chrome://downloads   # Chrome 里看；浏览器没有目录选择器时，这里的条目就是一个 .zip</code></pre><p>在没有目录选择器的浏览器里这是预期结果，而且解开压缩包后结构一致，相对路径完整保留。解压它即可；或者换用电脑上的 Chrome 或 Edge 接收同一个文件夹——它会先问你要写入哪个目标目录，然后把目录树原位写进去。</p></dd></dl></div></section>
+      <section class="sheet"><h2>跨网络：配对与中继</h2>
       <p>配对码由服务器生成，固定为 6 位十进制数字（0–9，可以 0 开头）。发送方登录后创建配对码；通过配对码、链接或二维码加入的人始终无需账号。它可在 5 分钟内用于新设备加入；倒计时结束不会中断已经连上的传输。</p>
-      <p>跨网络时，浏览器按设计直接使用加密的 TURN 中继，不会先尝试直连。密钥始终留在两台设备上，因此中继只转发端到端加密后的密文，无法读取文件，也不保留实时内容副本或历史。</p>
-      <h2>真正保护文件的是什么</h2>
+      <p>跨网络时，浏览器按设计直接使用加密的 TURN 中继，不会先尝试直连。密钥始终留在两台设备上，因此中继只转发端到端加密后的密文，无法读取文件，也不保留实时内容副本或历史。</p></section>
+      <section class="sheet"><h2>真正保护文件的是什么</h2>
       <p>上面两种模式都是实时传输，用的是同一套加密：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，只在两台设备之间协商完成。打开默认关闭的「高级验证」后，两端会显示同一段 6 位校验码（SAS），你可据此确认协商出的密钥未被替换：信令服务器或 TURN 中继没有冒充任一端点，也没有终止应用层端到端加密。跨网络传输时 TURN 仍在数据路径中，但只承载密文，并不是加密端点。每个文件还会用 SHA-256 做端到端校验。</p>
-      <p>这种模式下服务器不会保存任何东西——一切只在传输期间存在。Relayium 采用 AGPL-3.0 许可开源，代码公开在 github.com/relayium/relayium，机制可审计，而非黑箱。</p>
-      <h2>诚实说说实际限制</h2>
+      <p>这种模式下服务器不会保存任何东西——一切只在传输期间存在。Relayium 采用 AGPL-3.0 许可开源，代码公开在 github.com/relayium/relayium，机制可审计，而非黑箱。</p></section>
+      <section class="sheet"><h2>诚实说说实际限制</h2>
       <p>因为文件从不落到服务器上，所以没有上传配额——真正的限制取决于用哪个浏览器接收。桌面端支持 File System Access API 的浏览器（Windows 或 Linux 上的 Chrome、Edge）会把收到的数据直接流式写入磁盘，几个 GB 的文件也没问题。Firefox、Safari 以及所有手机浏览器（包括 Android 上的 Chrome）都没有这个 API，这时整批文件只能先攒在内存里，因此一旦超过约 256 MB，Relayium 会在接收方点「接收」之前先提示一次。这个数字要当成刻意取的保守估计，而不是硬上限：真正撑不住的临界点取决于设备内存、系统以及开了多少标签页。</p>
-      <p>文件夹也支持：在桌面端（非 iOS）选择一个文件夹，相对路径会被保留。如果接收方浏览器能直接写入选定目录（桌面版 Chrome、Edge），文件会各就各位；否则（Firefox、Safari 以及手机浏览器）整个文件夹会作为一个 .zip 到达，解压后结构不变。</p>
+      <p>文件夹也支持：在桌面端（非 iOS）选择一个文件夹，相对路径会被保留。如果接收方浏览器能直接写入选定目录（桌面版 Chrome、Edge），文件会各就各位；否则（Firefox、Safari 以及手机浏览器）整个文件夹会作为一个 .zip 到达，解压后结构不变。</p></section>
       <h2>常见问题</h2>
       <h3>Windows 或 Android 有官方版 AirDrop 吗？</h3>
       <p>没有——AirDrop 是 Apple 设备专属，Apple 从未推出过 Windows 或 Android 客户端。Relayium 是基于浏览器的替代方案：在两台设备上打开 relayium.com，无论平台组合如何都能一样使用，包括 Apple 与非 Apple 混搭的情况。</p>
@@ -201,6 +245,8 @@ ol.steps>li>pre{margin:8px 0 0}
         <a href="/pricing">定价</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

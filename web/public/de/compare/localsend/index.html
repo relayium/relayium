@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs. LocalSend: welche lokale Dateiübertragung?","description":"Ein ehrlicher Vergleich von Relayium und LocalSend. LocalSend ist eine großartige Open-Source-App, die auf jedem Gerät installiert wird; Relayium erledigt dieselbe LAN-Übertragung im Browser — ohne Installation — plus netzwerkübergreifend und mit CLI.","inLanguage":"de","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/de/compare/localsend/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/de/"},{"@type":"ListItem","position":2,"name":"Anleitungen","item":"https://relayium.com/de/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs. LocalSend: welche lokale Dateiübertragung?"}]},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Muss ich etwas installieren, um Relayium im selben Netz zu nutzen?","acceptedAnswer":{"@type":"Answer","text":"Nein. Öffne relayium.com im Browser auf beiden Geräten, während sie im selben Netz sind — sie sehen sich automatisch, ohne App, ohne Konto, ohne Pairing-Code."}},{"@type":"Question","name":"Braucht LocalSend eine Internetverbindung?","acceptedAnswer":{"@type":"Answer","text":"Nein — das ist eine seiner Stärken. LocalSend funktioniert vollständig über das lokale Netz, ganz ohne Server, und läuft daher auch ohne jeden Internetzugang weiter."}},{"@type":"Question","name":"Kann Relayium Dateien an jemanden in einem anderen Netzwerk senden?","acceptedAnswer":{"@type":"Answer","text":"Ja. Erstelle einen Pairing-Code (oder teile den daraus erzeugten Beitrittslink), und das andere Gerät verbindet sich von überall. Im Browser übernimmt diese netzwerkübergreifende Verbindung planmäßig ein verschlüsseltes TURN-Relay: Sie steht damit in ein bis zwei Sekunden, statt auf Direktverbindungsversuche zu warten, die zwischen zwei Heimnetzen selten gelingen. Das Relay leitet nur Chiffretext weiter und kann deine Dateien nicht lesen. Zum Erstellen des Codes musst du angemeldet sein; wer den Code bekommt, nie."}},{"@type":"Question","name":"Ist Relayium quelloffen?","acceptedAnswer":{"@type":"Answer","text":"Ja, AGPL-3.0-lizenziert, das vollständige Protokoll samt Code ist öffentlich unter github.com/relayium/relayium — dieselbe Art von Offenheit, die LocalSend vertrauenswürdig macht."}},{"@type":"Question","name":"Welches ist privater?","acceptedAnswer":{"@type":"Answer","text":"Beide halten Übertragungen im selben Netz von einem öffentlichen Server fern — im LAN sprechen Relayiums zwei Geräte direkt miteinander. LocalSend sichert seinen lokalen Transport selbst. Relayium fügt zusätzlich, im LAN wie netzwerkübergreifend, einen unabhängigen Verschlüsselungskanal auf Anwendungsebene mit einem beidseitig prüfbaren SAS-Code hinzu — deshalb sieht das Relay auf dem netzwerkübergreifenden Weg ausschließlich Chiffretext."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -119,8 +161,10 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/de/guides/" aria-current="true">Anleitungen</a><a href="/de/apps/">Apps</a><a href="/pricing">Preise</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Hauptnavigation"><a class="row" href="/">LAN</a><a class="row" href="/de/cross-network/">Netzwerkübergreifend</a><a class="row" href="/de/offline-transfer/">Asynchron</a><a class="row" href="/device-inbox">Geräte-Posteingang</a><a class="row" href="/cli">CLI</a><a class="row" href="/de/apps/">Apps</a><a class="row" href="/pricing">Preise</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/de/">Relayium</a> <span aria-hidden="true">›</span> <a href="/de/guides/">Anleitungen</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs. LocalSend: welche lokale Dateiübertragung?</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -142,22 +186,22 @@ pre code{background:none;padding:0;border-radius:0}
       <aside class="archived" aria-label="Archivierte Übersetzung"><p class="archived-label">Archivierte Übersetzung</p><p>Diese Seite ist eine archivierte deutsche Übersetzung. Produkt und aktuelle Dokumentation von Relayium werden auf Englisch und in vereinfachtem Chinesisch gepflegt; die App selbst bietet kein Deutsch mehr an. Beschriebene Bildschirme und Details können deshalb vom heutigen Verhalten abweichen.</p><p class="archived-links archived-pricing">Die hier genannten Tarife und Nutzungsgrenzen können veraltet sein; die aktuellen stehen auf der Seite <a href="/pricing">Preise</a>.</p><p class="archived-links">Aktuelle Fassung: <a href="/compare/localsend/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/compare/localsend/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">LocalSend ist eine wirklich gute, beliebte App: kostenlos, quelloffen, plattformübergreifend und dafür gebaut, Dateien zwischen Geräten im selben lokalen Netz zu übertragen — ganz ohne Server und ganz ohne Konto. Viele nutzen sie als AirDrop-ähnliches Werkzeug für Windows, Linux und Android.</p>
       <p class="lead">Dieser Artikel vergleicht sie fair mit Relayium, das dasselbe Problem — dieselbe Netzwerkverbindung — anders löst: keine App zu installieren, läuft direkt im Browser — und geht dann weiter, indem es netzwerkübergreifend funktioniert und ein Kommandozeilen-Tool bietet, das LocalSend nicht hat.</p>
-      <h2>Was LocalSend gut macht</h2>
+      <section class="sheet"><h2>Was LocalSend gut macht</h2>
       <p>LocalSend ist eine kostenlose Open-Source-App für Windows, macOS, Linux, Android und iOS. Einmal auf jedem Gerät installiert, entdeckt sie automatisch andere LocalSend-Instanzen im selben WLAN oder LAN über einen verschlüsselten lokalen Transport — kein Server irgendwo, keine Internetverbindung nötig, kein Konto.</p>
       <p>Sie unterstützt Drag-and-Drop, das Senden ganzer Ordner sowie einen optionalen PIN-Schutz beim Senden in Netzwerken, denen man nicht vollständig vertraut.</p>
-      <ul><li>Plattformübergreifende native Apps für Windows, macOS, Linux, Android und iOS — einmal installiert, funktioniert es einfach.</li><li>Von Grund auf offline: kein Server, keine Internetverbindung, kein Konto — nötig sind nur Geräte im selben lokalen Netz.</li><li>Optionaler PIN-Schutz beim Senden in nicht vertrauenswürdigen Netzwerken, plus Drag-and-Drop und Übertragung ganzer Ordner.</li><li>Ein eigenes App-Symbol und OS-seitige Share-Sheet-Integration, die ein Browser-Tab nicht bieten kann.</li></ul>
-      <h2>Worin sich Relayium unterscheidet: nichts zu installieren, direkt im Browser</h2>
+      <ul><li>Plattformübergreifende native Apps für Windows, macOS, Linux, Android und iOS — einmal installiert, funktioniert es einfach.</li><li>Von Grund auf offline: kein Server, keine Internetverbindung, kein Konto — nötig sind nur Geräte im selben lokalen Netz.</li><li>Optionaler PIN-Schutz beim Senden in nicht vertrauenswürdigen Netzwerken, plus Drag-and-Drop und Übertragung ganzer Ordner.</li><li>Ein eigenes App-Symbol und OS-seitige Share-Sheet-Integration, die ein Browser-Tab nicht bieten kann.</li></ul></section>
+      <section class="sheet"><h2>Worin sich Relayium unterscheidet: nichts zu installieren, direkt im Browser</h2>
       <p>Relayium geht das gleiche Netzwerkproblem genau umgekehrt an: Statt auf jedem Gerät eine App zu installieren, öffnest du relayium.com in einem Browser, den du bereits hast. Zwei Geräte im selben Netz landen automatisch im selben Raum — der Server leitet den Raum aus dem gemeinsamen Netzwerk ab, ganz ohne Pairing-Code und ohne Konto auf beiden Seiten.</p>
-      <p>Dieser LAN-Raum fasst beliebig viele Geräte gleichzeitig, nicht nur ein Paar, und Drag-and-Drop oder Ordnerauswahl funktionieren genauso wie bei einer nativen App — nur ohne den Installationsschritt.</p>
-      <h2>Über das LAN hinaus: netzwerkübergreifende Übertragung und eine CLI</h2>
+      <p>Dieser LAN-Raum fasst beliebig viele Geräte gleichzeitig, nicht nur ein Paar, und Drag-and-Drop oder Ordnerauswahl funktionieren genauso wie bei einer nativen App — nur ohne den Installationsschritt.</p></section>
+      <section class="sheet"><h2>Über das LAN hinaus: netzwerkübergreifende Übertragung und eine CLI</h2>
       <p>LocalSend ist von Grund auf nur fürs lokale Netz gedacht — es gibt keine Möglichkeit, ein Gerät in einem anderen Netzwerk oder über das Internet zu erreichen. Relayium fügt das hinzu: Erstelle einen Pairing-Code (oder teile den daraus erzeugten Beitrittslink), und die Gegenseite verbindet sich von überall. Im Browser läuft dieser netzwerkübergreifende Weg bewusst über ein verschlüsseltes TURN-Relay, statt nach einer Direktverbindung zu suchen: Auf reines Relay-ICE festgelegt, steht die Verbindung in ein bis zwei Sekunden, statt rund 20 Sekunden für Direktkandidaten-Prüfungen über NAT-Grenzen hinweg zu verbrauchen, die ohnehin fast immer scheitern.</p>
       <p>Für einen netzwerkübergreifenden Pairing-Code muss sich der Absender anmelden; die empfangende Person braucht nie ein Konto. Jede Echtzeitübertragung — im LAN oder netzwerkübergreifend — ist auf Anwendungsebene Ende-zu-Ende-verschlüsselt: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM ab. Wenn beide Seiten den sechsstelligen SAS-Code über einen separaten Kanal abgleichen, bestätigt das, dass die öffentlichen Schlüssel der Endpunkte nicht ersetzt wurden, und erkennt einen Signalisierungsdienst oder TURN-Endpunkt, der sich als Gegenstelle ausgibt. Die SAS-Prüfung beweist nicht, dass TURN außerhalb des Netzwerkpfads liegt; bei netzwerkübergreifenden Browserübertragungen trägt das Relay weiterhin ausschließlich Chiffretext und kann kein Byte deiner Datei lesen. Jede Datei wird außerdem per SHA-256-Hash geprüft. Übertragungen im selben Netz laufen direkt zwischen den beiden Geräten.</p>
-      <p>Für alle, die Übertragungen zu einem Server skripten wollen, gibt es außerdem eine CLI — push/pull über SSH oder daemon-direct, inkrementelle Ordnersynchronisation und Senden/Empfangen per Pairing-Code — etwas, das eine reine LAN-App nicht bietet. Die CLI verbindet sich immer direkt und nutzt nie ein Relay.</p>
-      <h2>Wann LocalSend die bessere Wahl ist</h2>
-      <p>Wenn du überhaupt keinen Browser öffnen willst — etwa weil du Dateien in einem Netz ohne jeglichen Internetzugang bewegst, oder du einfach ein dauerhaftes App-Symbol und OS-Share-Sheet-Integration möchtest — passt LocalSends eigene App besser. Sie ist ausgereift, funktioniert im striktesten Sinn vollständig offline, und ihr PIN-Modus ist eine nette zusätzliche Schicht in Netzwerken, denen du nicht vollständig vertraust.</p>
-      <h2>Funktionsvergleich auf einen Blick</h2>
+      <p>Für alle, die Übertragungen zu einem Server skripten wollen, gibt es außerdem eine CLI — push/pull über SSH oder daemon-direct, inkrementelle Ordnersynchronisation und Senden/Empfangen per Pairing-Code — etwas, das eine reine LAN-App nicht bietet. Die CLI verbindet sich immer direkt und nutzt nie ein Relay.</p></section>
+      <section class="sheet"><h2>Wann LocalSend die bessere Wahl ist</h2>
+      <p>Wenn du überhaupt keinen Browser öffnen willst — etwa weil du Dateien in einem Netz ohne jeglichen Internetzugang bewegst, oder du einfach ein dauerhaftes App-Symbol und OS-Share-Sheet-Integration möchtest — passt LocalSends eigene App besser. Sie ist ausgereift, funktioniert im striktesten Sinn vollständig offline, und ihr PIN-Modus ist eine nette zusätzliche Schicht in Netzwerken, denen du nicht vollständig vertraust.</p></section>
+      <section class="sheet"><h2>Funktionsvergleich auf einen Blick</h2>
       <p>Die wichtigsten Unterschiede nebeneinander:</p>
-      <ul><li>Installation: LocalSend braucht eine App auf jedem Gerät; Relayiums Modus im selben Netz braucht nichts außer einem Browser.</li><li>Netzwerkreichweite: LocalSend ist rein lokal; Relayium verbindet auch über verschiedene Netzwerke hinweg per Pairing-Code — im Browser läuft diese Strecke über ein verschlüsseltes Relay, die CLI verbindet immer direkt.</li><li>Verschlüsselung: LocalSend sichert seinen lokalen Transport; Relayium fügt selbst im LAN einen unabhängigen Kanal auf Anwendungsebene mit X25519 + AES-256-GCM und einem SAS-Verifizierungscode hinzu.</li><li>Konten: LocalSend braucht nie eines; Relayiums LAN-Modus ebenso wenig — nur wer den Pairing-Code erstellt, meldet sich an, und auch nur dafür.</li><li>Automatisierung: Relayium bietet eine CLI für SSH-push/pull, inkrementelle Synchronisation und einen dauerhaften Empfangsdienst; LocalSend gibt es nur als App.</li></ul>
+      <ul><li>Installation: LocalSend braucht eine App auf jedem Gerät; Relayiums Modus im selben Netz braucht nichts außer einem Browser.</li><li>Netzwerkreichweite: LocalSend ist rein lokal; Relayium verbindet auch über verschiedene Netzwerke hinweg per Pairing-Code — im Browser läuft diese Strecke über ein verschlüsseltes Relay, die CLI verbindet immer direkt.</li><li>Verschlüsselung: LocalSend sichert seinen lokalen Transport; Relayium fügt selbst im LAN einen unabhängigen Kanal auf Anwendungsebene mit X25519 + AES-256-GCM und einem SAS-Verifizierungscode hinzu.</li><li>Konten: LocalSend braucht nie eines; Relayiums LAN-Modus ebenso wenig — nur wer den Pairing-Code erstellt, meldet sich an, und auch nur dafür.</li><li>Automatisierung: Relayium bietet eine CLI für SSH-push/pull, inkrementelle Synchronisation und einen dauerhaften Empfangsdienst; LocalSend gibt es nur als App.</li></ul></section>
       <h2>Häufige Fragen</h2>
       <h3>Muss ich etwas installieren, um Relayium im selben Netz zu nutzen?</h3>
       <p>Nein. Öffne relayium.com im Browser auf beiden Geräten, während sie im selben Netz sind — sie sehen sich automatisch, ohne App, ohne Konto, ohne Pairing-Code.</p>
@@ -184,6 +228,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/pricing">Preise</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

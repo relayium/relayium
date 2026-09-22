@@ -36,9 +36,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":["WebApplication","SoftwareApplication"],"name":"Relayium","url":"https://relayium.com/zh/","description":"Relayium 是开源、无需安装的端到端加密文件与文本传输工具。文件在同一网络内直接传输；跨网络浏览器会按设计使用 TURN 中继，而中继只见端到端加密的密文。临时文本要求双方同时在线；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。同一网络无需账号；创建跨网络配对码需登录，持码加入无需账号。","applicationCategory":"UtilitiesApplication","operatingSystem":"Web","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"inLanguage":"zh-Hans"},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"免费吗？","acceptedAnswer":{"@type":"Answer","text":"软件本身免费开源（AGPL-3.0 许可），无需安装，你也可以自行部署。relayium.com 托管服务提供的是免费档位，而不是无限量的免费托管。同一网络下的实时文件与文本传输免费且无需登录，持配对码加入也始终不需要账号。创建跨网络配对码或存储下载链接需要登录，并会占用你所在档位的额度：每月流量额度（托管上传、托管下载与计费中继字节合并计算）、同时存放的加密数据上限、留存时长上限、每日上传上限——这四项各自独立。免费档位每项都有额度，Plus、Pro、Max 付费档位可以提高。"}},{"@type":"Question","name":"文件会上传到服务器吗？","acceptedAnswer":{"@type":"Answer","text":"同一网络下实时直传的文件根本不经过服务器；跨网络时经加密中继转发，中继也只能看到密文。仅当你改用可选的下载链接时，浏览器会先加密再上传，服务器只保存无法解密的密文，密钥只存在于链接里。"}},{"@type":"Question","name":"是端到端加密的吗？","acceptedAnswer":{"@type":"Answer","text":"是。采用 X25519 密钥交换加每块 AES-256-GCM 加密，密钥只在两台设备之间协商，服务器无法解密任何内容。"}},{"@type":"Question","name":"能跨系统传吗？","acceptedAnswer":{"@type":"Answer","text":"能。只要有现代浏览器，Windows、macOS、Linux、Android、iOS 之间都能互传，无需安装 App。"}},{"@type":"Question","name":"文件有大小限制吗？","acceptedAnswer":{"@type":"Answer","text":"实时传输采用流式传输，Relayium 本身不设硬性大小上限（桌面版 Chrome、Edge 直接流式落盘；Firefox、Safari 以及所有手机浏览器只能把文件攒在内存里，因此超过约 256 MB 时页面会先给出提示——这是一个刻意保守的估计值，不是实测出来的硬上限）。每批最多 1,000 个文件。"}},{"@type":"Question","name":"能发文字，而不只是文件吗？","acceptedAnswer":{"@type":"Answer","text":"双方同时在线时，可发送链接、命令或多行代码。每条消息最多 65,536 字节（UTF-8）；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。没有离线投递，更大的内容请作为文件发送。"}},{"@type":"Question","name":"和 Snapdrop 有什么区别？","acceptedAnswer":{"@type":"Answer","text":"Relayium 在同类思路上增加了应用层端到端加密与 SAS 校验码。经带外核对后，SAS 可检测 X25519 端点公钥替换，或被入侵的信令服务器冒充端点并终止应用层端到端加密；它不证明网络路径中没有服务器或 TURN 中继。Relayium 还支持跨网络传输与可选的零知识下载链接。"}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -60,24 +60,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -103,6 +89,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .pitch{font-size:calc(var(--fs-body) + 3px);line-height:1.6;margin:0 0 22px;max-inline-size:42em}
 h1{font-size:var(--fs-hero)}
 .shots{display:grid;gap:18px;margin:22px 0 4px}
@@ -139,9 +181,11 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
-      <nav class="langbar" aria-label="Language"><a href="/">English</a><a href="/zh/" aria-current="true">中文</a></nav>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/?lang=zh"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="主导航"><span class="rail-group">实时传输</span><a class="row" href="/?lang=zh" aria-label="局域网传输">局域网</a><a class="row" href="/zh/cross-network/" aria-label="跨网络传输">跨网络</a><span class="rail-group">链接</span><a class="row" href="/zh/offline-transfer/" aria-label="分享链接">链接</a><span class="rail-group">我的设备</span><a class="row" href="/device-inbox" aria-label="设备收件箱">收件箱</a><span class="rail-group">下载与工具</span><a class="row" href="/cli">CLI</a><a class="row" href="/zh/apps/">应用</a><a class="row" href="/pricing">定价</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/">English</a><a href="/zh/" aria-current="true">中文</a></nav></div></header>
+      <div class="pane"><div class="wrap">
+
+      
       <!-- The language bar and the footer are navigation, so the main landmark
            starts after them: a screen-reader user jumping to the main content
            should land on this page's own words, not on a row of language links.
@@ -154,7 +198,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <p class="pitch">Relayium 是开源、无需安装的端到端加密文件与文本传输工具。文件在同一网络内直接传输；跨网络浏览器会按设计使用 TURN 中继，而中继只见端到端加密的密文。临时文本要求双方同时在线；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。同一网络无需账号；创建跨网络配对码需登录，持码加入无需账号。</p>
       <a class="cta" href="/?lang=zh">开始传输</a>
 
-      <section class="reveal">
+      <section class="reveal sheet">
       <h2>四步完成一次传输</h2>
       <ol class="steps">
         <li>两台设备用现代浏览器打开 relayium.com。</li>
@@ -165,7 +209,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <div class="shots"><figure><img src="/shots/zh/01-devices.png" width="892" height="355" loading="lazy" decoding="async" alt="两台设备在同一网络上自己出现，无需登录，也无需配对码。" /><figcaption>两台设备在同一网络上自己出现，无需登录，也无需配对码。</figcaption></figure><figure><img src="/shots/zh/02-confirm.png" width="892" height="620" loading="lazy" decoding="async" alt="对方屏幕上出现接收请求和一段可比对的校验码，接受之前什么都不会保存。" /><figcaption>对方屏幕上出现接收请求和一段可比对的校验码，接受之前什么都不会保存。</figcaption></figure><figure><img src="/shots/zh/03-done.png" width="892" height="148" loading="lazy" decoding="async" alt="文件已收到——整条路径是「局域网直连」，字节没有经过任何服务器。" /><figcaption>文件已收到——整条路径是「局域网直连」，字节没有经过任何服务器。</figcaption></figure></div>
       </section>
 
-      <section class="reveal">
+      <section class="reveal sheet">
       <h2>为什么选择 Relayium</h2>
       <ul class="why">
         <li><b>端到端加密</b> — X25519 密钥交换 + 每块 AES-256-GCM 加密，密钥只在两台设备间协商，服务器无从解密。</li>
@@ -177,7 +221,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       </ul>
       </section>
 
-      <section class="reveal">
+      <section class="reveal sheet">
       <h2>与其他方式相比</h2>
       <div class="compare">
       <h3>对比 AirDrop</h3>
@@ -189,7 +233,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       </div>
       </section>
 
-      <section class="reveal">
+      <section class="reveal sheet">
       <h2>常见问题</h2>
       <h3>免费吗？</h3>
       <p>软件本身免费开源（AGPL-3.0 许可），无需安装，你也可以自行部署。relayium.com 托管服务提供的是免费档位，而不是无限量的免费托管。同一网络下的实时文件与文本传输免费且无需登录，持配对码加入也始终不需要账号。创建跨网络配对码或存储下载链接需要登录，并会占用你所在档位的额度：每月流量额度（托管上传、托管下载与计费中继字节合并计算）、同时存放的加密数据上限、留存时长上限、每日上传上限——这四项各自独立。免费档位每项都有额度，Plus、Pro、Max 付费档位可以提高。</p>
@@ -207,7 +251,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <p>Relayium 在同类思路上增加了应用层端到端加密与 SAS 校验码。经带外核对后，SAS 可检测 X25519 端点公钥替换，或被入侵的信令服务器冒充端点并终止应用层端到端加密；它不证明网络路径中没有服务器或 TURN 中继。Relayium 还支持跨网络传输与可选的零知识下载链接。</p>
       </section>
 
-      <section class="reveal"><h2>深入了解</h2>
+      <section class="reveal sheet"><h2>深入了解</h2>
       <div class="learn-groups"><div><h3>教程</h3><ul class="learn"><li><a href="/zh/guides/transfer-files-from-terminal/">用 Relayium CLI 从终端传输文件与文本</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh/">用 Relayium CLI 通过 SSH 在自己的服务器上留一份异地副本</a></li><li><a href="/zh/guides/send-a-file-to-someone/">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers/">用 Relayium CLI 实现服务器到服务器直传（daemon 直连）</a></li><li><a href="/zh/guides/sync-a-large-folder-between-servers/">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li></ul></div><div><h3>操作指南</h3><ul class="learn"><li><a href="/zh/how-to/transfer-files-android-to-iphone/">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly/">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud/">如何不用网盘传输大文件</a></li><li><a href="/zh/how-to/share-a-file-with-an-expiring-link/">用会过期的安全链接分享文件</a></li><li><a href="/zh/how-to/send-files-between-two-computers-over-the-internet/">如何通过互联网在两台电脑之间传文件</a></li></ul></div><div><h3>横向对比</h3><ul class="learn"><li><a href="/zh/compare/snapdrop/">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop/">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer/">Relayium 对比 WeTransfer：加密下载链接与实时递送</a></li><li><a href="/zh/compare/croc/">Relayium 对比 croc：从终端加密传输文件</a></li><li><a href="/zh/compare/google-drive/">Relayium 对比 Google Drive：发送文件更直接</a></li></ul></div></div>
       <p class="learn-all"><a href="/zh/guides/">使用指南</a></p>
       <p class="close-cta"><a class="cta" href="/?lang=zh">开始传输</a></p></section>
@@ -223,6 +267,8 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
         <a href="/zh/releases/">版本发布记录</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

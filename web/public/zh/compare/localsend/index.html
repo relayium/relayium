@@ -36,9 +36,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 LocalSend：局域网传输该选哪个","description":"客观对比 Relayium 与 LocalSend。LocalSend 是一款优秀的开源应用，需要在每台设备上安装；Relayium 在浏览器里完成同样的局域网传输——无需安装——还支持跨网络与命令行工具。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/compare/localsend/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"Relayium 对比 LocalSend：局域网传输该选哪个"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"在同一网络下使用 Relayium 需要安装什么吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。两台设备处于同一网络时，分别用浏览器打开 relayium.com，它们会自动互相看到——无需应用、无需账号、无需配对码。"}},{"@type":"Question","name":"LocalSend 需要联网吗？","acceptedAnswer":{"@type":"Answer","text":"不需要——这正是它的优势之一。LocalSend 完全通过局域网工作，不经过任何服务器，因此即使完全没有互联网连接也能正常使用。"}},{"@type":"Question","name":"Relayium 能给不同网络的人发送文件吗？","acceptedAnswer":{"@type":"Answer","text":"可以。创建一个配对码（或分享它生成的加入链接），对方就能从任何地方连接进来。在浏览器里，这条跨网络连接刻意由加密 TURN 中继承载，因此一两秒就能接通，不必去等两个家庭网络之间很难成功的直连尝试；中继转发的是密文，读不到你的文件。创建配对码需要登录，拿到配对码的一方始终不需要。"}},{"@type":"Question","name":"Relayium 是开源的吗？","acceptedAnswer":{"@type":"Answer","text":"是的，采用 AGPL-3.0 许可证，完整的协议与代码都公开在 github.com/relayium/relayium——这正是让 LocalSend 值得信任的同一种开放。"}},{"@type":"Question","name":"哪一个更私密？","acceptedAnswer":{"@type":"Answer","text":"两者都能让同网络传输不经过公网服务器：在局域网内，Relayium 的两台设备是彼此直连的。LocalSend 保护的是它的本地传输通道；Relayium 则无论是在局域网还是跨网络，都额外加了一层独立的应用层加密通道，并带有双方可核对的 SAS 校验码——也正因如此，跨网络路径上的中继只能看到密文。"}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -60,24 +60,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -103,6 +89,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -117,8 +159,10 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/?lang=zh"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="主导航"><span class="rail-group">实时传输</span><a class="row" href="/?lang=zh" aria-label="局域网传输">局域网</a><a class="row" href="/zh/cross-network/" aria-label="跨网络传输">跨网络</a><span class="rail-group">链接</span><a class="row" href="/zh/offline-transfer/" aria-label="分享链接">链接</a><span class="rail-group">我的设备</span><a class="row" href="/device-inbox" aria-label="设备收件箱">收件箱</a><span class="rail-group">下载与工具</span><a class="row" href="/cli">CLI</a><a class="row" href="/zh/apps/">应用</a><a class="row" href="/pricing">定价</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/compare/localsend/">English</a><a href="/zh/compare/localsend/" aria-current="true">中文</a></nav></div></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium 对比 LocalSend：局域网传输该选哪个</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -137,25 +181,25 @@ pre code{background:none;padding:0;border-radius:0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/localsend/">English</a><a href="/zh/compare/localsend/" aria-current="true">中文</a></nav>
+      
       <p class="lead">LocalSend 是一款真正优秀、深受喜爱的应用：免费、开源、跨平台，专为在同一局域网设备间传输文件而生，始终无需服务器、无需账号。不少人把它当作 Windows、Linux、Android 上的 AirDrop 替代品来用。</p>
       <p class="lead">本文客观地把它和 Relayium 比一比。Relayium 用不同的方式解决同样的同网络传输问题——无需安装任何应用，直接在浏览器里运行——并且走得更远：能跨网络传输，还提供 LocalSend 没有的命令行工具。</p>
-      <h2>LocalSend 做得好的地方</h2>
+      <section class="sheet"><h2>LocalSend 做得好的地方</h2>
       <p>LocalSend 是一款面向 Windows、macOS、Linux、Android 和 iOS 的免费开源应用。在每台设备上安装一次后，它就能通过加密的本地传输协议自动发现同一 Wi-Fi 或局域网里的其他 LocalSend 实例——不经过任何服务器，不需要联网，也不需要账号。</p>
       <p>它支持拖拽发送、整个文件夹发送，还能在不完全信任的网络上开启 PIN 码保护。</p>
-      <ul><li>跨平台原生应用，覆盖 Windows、macOS、Linux、Android 和 iOS——装一次，之后就能直接用。</li><li>设计上完全离线：始终无需服务器、无需联网、无需账号——只要设备在同一局域网即可。</li><li>在不信任的网络上可开启 PIN 码保护，同时支持拖拽发送与整文件夹传输。</li><li>有独立的应用图标和系统级分享菜单集成，这是浏览器标签页给不了的。</li></ul>
-      <h2>Relayium 的不同之处：无需安装，直接在浏览器里用</h2>
+      <ul><li>跨平台原生应用，覆盖 Windows、macOS、Linux、Android 和 iOS——装一次，之后就能直接用。</li><li>设计上完全离线：始终无需服务器、无需联网、无需账号——只要设备在同一局域网即可。</li><li>在不信任的网络上可开启 PIN 码保护，同时支持拖拽发送与整文件夹传输。</li><li>有独立的应用图标和系统级分享菜单集成，这是浏览器标签页给不了的。</li></ul></section>
+      <section class="sheet"><h2>Relayium 的不同之处：无需安装，直接在浏览器里用</h2>
       <p>面对同样的同网络传输问题，Relayium 走了相反的路：不必在每台设备上装应用，直接用手头已有的浏览器打开 relayium.com 即可。同一网络下的两台设备会自动落入同一个房间——服务器根据共享的网络判定房间，双方都无需配对码、也无需账号。</p>
-      <p>这个局域网房间可以容纳任意数量的设备，不只是一对一；拖拽或选择文件夹的体验和原生应用一样，只是省去了安装这一步。</p>
-      <h2>走出局域网：跨网络传输与命令行工具</h2>
+      <p>这个局域网房间可以容纳任意数量的设备，不只是一对一；拖拽或选择文件夹的体验和原生应用一样，只是省去了安装这一步。</p></section>
+      <section class="sheet"><h2>走出局域网：跨网络传输与命令行工具</h2>
       <p>LocalSend 在设计上只面向局域网——它没有办法连到不同网络或跨互联网的设备。Relayium 补上了这一块：创建一个配对码（或分享它生成的加入链接），对方就能从任何地方连接进来。在浏览器里，这条跨网络通道是刻意走加密 TURN 中继的，而不是先去碰运气试直连：把 ICE 限定为 relay-only，连接一两秒就能建立，省下大约 20 秒——那段时间本来会耗在几乎注定失败的跨 NAT 直连候选探测上。</p>
       <p>创建跨网络配对码需要发送方登录；接收方始终无需账号。每一次实时传输——无论局域网还是跨网络——都在应用层做端到端加密：X25519 密钥交换协商出用于 AES-256-GCM 的密钥，双方通过带外方式核对相同的 6 位 SAS 校验码，可以确认端点公钥未被替换，并检测冒充端点的信令服务或 TURN 端点。SAS 校验并不能证明 TURN 不在网络路径上；浏览器跨网络传输仍会经过中继，但中继只承载密文，读不到文件里的任何一个字节。每个文件还会用 SHA-256 做校验。同一网络内的传输是两台设备直连。</p>
-      <p>如果你需要把传输写进脚本发往服务器，Relayium 还提供命令行工具——通过 SSH 或 daemon 直连做 push/pull、增量同步文件夹、用配对码 send/receive——这些都是纯局域网应用做不到的。命令行工具始终直连，从不走中继。</p>
-      <h2>什么时候 LocalSend 是更好的选择</h2>
-      <p>如果你完全不想打开浏览器——比如在真正没有互联网接入的网络里传文件，或者就是想要一个常驻的应用图标和系统分享菜单集成——LocalSend 的专用应用会更合适。它足够成熟，在最严格意义上也能完全离线工作，而它的 PIN 模式在不完全信任的网络上也是不错的额外保障。</p>
-      <h2>功能一览对比</h2>
+      <p>如果你需要把传输写进脚本发往服务器，Relayium 还提供命令行工具——通过 SSH 或 daemon 直连做 push/pull、增量同步文件夹、用配对码 send/receive——这些都是纯局域网应用做不到的。命令行工具始终直连，从不走中继。</p></section>
+      <section class="sheet"><h2>什么时候 LocalSend 是更好的选择</h2>
+      <p>如果你完全不想打开浏览器——比如在真正没有互联网接入的网络里传文件，或者就是想要一个常驻的应用图标和系统分享菜单集成——LocalSend 的专用应用会更合适。它足够成熟，在最严格意义上也能完全离线工作，而它的 PIN 模式在不完全信任的网络上也是不错的额外保障。</p></section>
+      <section class="sheet"><h2>功能一览对比</h2>
       <p>把最关键的差别并排列出：</p>
-      <ul><li>安装：LocalSend 需要在每台设备上装应用；Relayium 的同网络模式除了浏览器什么都不需要。</li><li>网络覆盖：LocalSend 只能在局域网内使用；Relayium 还能用配对码连接不同网络——浏览器里这一跳走的是加密中继，命令行工具则始终直连。</li><li>加密：LocalSend 保护的是本地传输通道；Relayium 即便在局域网内也会额外加一层独立的应用层 X25519 + AES-256-GCM 通道，并带 SAS 校验码。</li><li>账号：LocalSend 从不需要账号；Relayium 的局域网模式同样无需账号——只有创建配对码的一方需要登录，而且仅为创建配对码。</li><li>自动化：Relayium 提供命令行工具支持 SSH push/pull、增量同步和常驻接收服务；LocalSend 只有应用形态。</li></ul>
+      <ul><li>安装：LocalSend 需要在每台设备上装应用；Relayium 的同网络模式除了浏览器什么都不需要。</li><li>网络覆盖：LocalSend 只能在局域网内使用；Relayium 还能用配对码连接不同网络——浏览器里这一跳走的是加密中继，命令行工具则始终直连。</li><li>加密：LocalSend 保护的是本地传输通道；Relayium 即便在局域网内也会额外加一层独立的应用层 X25519 + AES-256-GCM 通道，并带 SAS 校验码。</li><li>账号：LocalSend 从不需要账号；Relayium 的局域网模式同样无需账号——只有创建配对码的一方需要登录，而且仅为创建配对码。</li><li>自动化：Relayium 提供命令行工具支持 SSH push/pull、增量同步和常驻接收服务；LocalSend 只有应用形态。</li></ul></section>
       <h2>常见问题</h2>
       <h3>在同一网络下使用 Relayium 需要安装什么吗？</h3>
       <p>不需要。两台设备处于同一网络时，分别用浏览器打开 relayium.com，它们会自动互相看到——无需应用、无需账号、无需配对码。</p>
@@ -182,6 +226,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/pricing">定价</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

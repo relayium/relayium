@@ -2,7 +2,8 @@
 // to a self-contained static HTML string. Same inlined-style, no-JS approach as
 // article-template.mjs so it is crawlable and independent of the Vite asset graph.
 import { MAINTAINED_LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, ctaHref, dirAttr, rtlHead, isFrozen, archiveNotice, ARCHIVE_STYLE } from "./shared.mjs";
-import { pageStyle, siteHeader, THEME_HEAD } from "./page-chrome.mjs";
+import { pageStyle, THEME_HEAD } from "./page-chrome.mjs";
+import { appShell } from "./page-shell.mjs";
 
 // Copy this verbatim from article-template.mjs:7-10 (same six labels).
 const PRIVACY_LABELS = {
@@ -151,14 +152,13 @@ export function renderGuidesIndexPage({ lang, doc, groups, slug = "guides", only
     <style>${STYLE}${archived ? ARCHIVE_STYLE : ""}</style>
   </head>
   <body>
-    <div class="wrap wide">
-      ${siteHeader({ lang, home: ctaHref(lang), self: urlPath(slug, lang), section: "guides" })}
+    ${appShell({ lang, home: ctaHref(lang), wide: true, foot: archived ? "" : langBar(lang, slug), content: `
       <!-- Everything between the site header and the footer is this page's own
            content, so it belongs to one main landmark. -->
       <main>
       <h1>${esc(doc.heading)}</h1>
       <p class="lead">${esc(doc.intro)}</p>
-      ${langBar(lang, slug)}
+      ${archived ? langBar(lang, slug) : ""}
       ${sections}
       </main>
       <footer>
@@ -168,7 +168,7 @@ export function renderGuidesIndexPage({ lang, doc, groups, slug = "guides", only
         <a href="${PRICING_URL}">${esc(pricingLabel(lang))}</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
-    </div>
+` })}
   </body>
 </html>
 `;

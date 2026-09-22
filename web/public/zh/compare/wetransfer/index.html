@@ -36,9 +36,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 WeTransfer：加密下载链接与实时递送","description":"客观对比 Relayium 与 WeTransfer。WeTransfer 擅长异步链接分享；Relayium 的实时模式不在服务端保留文件副本或传输历史，另有零知识加密的存储下载链接。","inLanguage":"zh-Hans","datePublished":"2026-07-03","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/compare/wetransfer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"Relayium 对比 WeTransfer：加密下载链接与实时递送"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"真的没有文件大小限制吗？","acceptedAnswer":{"@type":"Answer","text":"实时模式没有服务端上限，因为 Relayium 不保留服务端文件副本或历史；同一局域网内直连，跨网络经 TURN 承载端到端密文。Chrome 或 Edge 能把实时文件流式写盘，但双方页面必须保持在线，因此大文件更适合使用存储下载链接。链接的单文件上限与账号额度会在上传前显示；Firefox 或 Safari 实时接收放在内存中，超过约 256 MB 时会给出保守提示。"}},{"@type":"Question","name":"对方不在线怎么办？","acceptedAnswer":{"@type":"Answer","text":"用存储下载链接。你的浏览器会用 AES-256-GCM 加密文件，密钥只留在 URL 片段里，服务器保存的是零知识密文，收件方稍后即可取回。生成链接需要发送方登录，并可设为到期失效或首次下载后即焚。"}},{"@type":"Question","name":"Relayium 免费吗？","acceptedAnswer":{"@type":"Answer","text":"软件采用 AGPL-3.0 许可、免费开源，完整的协议与代码都在 github.com/relayium/relayium，同一网络内的传输免费。没有哪个套餐能解锁更大的实时传输——大文件的空间来自浏览器的流式写盘，而不是订阅。套餐覆盖的是托管容量：跨网络中继与存储下载链接会占用每个账号都有的每月流量额度，以及一项独立的同时存放数据量上限，付费档位两者都更高。"}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -60,24 +60,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -103,6 +89,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -117,8 +159,10 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/?lang=zh"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="主导航"><span class="rail-group">实时传输</span><a class="row" href="/?lang=zh" aria-label="局域网传输">局域网</a><a class="row" href="/zh/cross-network/" aria-label="跨网络传输">跨网络</a><span class="rail-group">链接</span><a class="row" href="/zh/offline-transfer/" aria-label="分享链接">链接</a><span class="rail-group">我的设备</span><a class="row" href="/device-inbox" aria-label="设备收件箱">收件箱</a><span class="rail-group">下载与工具</span><a class="row" href="/cli">CLI</a><a class="row" href="/zh/apps/">应用</a><a class="row" href="/pricing">定价</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/compare/wetransfer/">English</a><a href="/zh/compare/wetransfer/" aria-current="true">中文</a></nav></div></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium 对比 WeTransfer：加密下载链接与实时递送</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -137,24 +181,24 @@ pre code{background:none;padding:0;border-radius:0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/wetransfer/">English</a><a href="/zh/compare/wetransfer/" aria-current="true">中文</a></nav>
+      
       <p class="lead">WeTransfer 让发送大文件变得轻松：拖入文件、拿到链接，对方随时下载——哪怕你发送时对方并不在线。这种异步、收件方无需账号的体验确实很好，也正是许多人选择它的原因。</p>
       <p class="lead">本文客观对比这两者。大文件或稍后再取时，Relayium 同样推荐存储链接；不同之处是服务器只保存零知识密文。实时模式是另一项能力，适合双方保持在线时快速递送小文件和文本：同一局域网内直连，跨网络经 TURN 承载端到端密文。</p>
-      <h2>WeTransfer 做得好的地方</h2>
+      <section class="sheet"><h2>WeTransfer 做得好的地方</h2>
       <p>WeTransfer 的核心思路是异步：发送方上传一次、拿到链接，收件方稍后再下载。两个人不必同时在线——当你把一段视频发给明天才会打开它的客户时，这正是你想要的。</p>
-      <p>它也成熟、顺滑。无需安装任何软件，免费档不用账号即可发送，界面以简洁著称。在大小上限之内做偶尔的链接分享，它确实好用。</p>
-      <h2>差异所在：文件存在服务器上</h2>
+      <p>它也成熟、顺滑。无需安装任何软件，免费档不用账号即可发送，界面以简洁著称。在大小上限之内做偶尔的链接分享，它确实好用。</p></section>
+      <section class="sheet"><h2>差异所在：文件存在服务器上</h2>
       <p>用 WeTransfer 时，你的文件会上传到它的服务器、在那里存放一段时间，再从那里下载。免费档每次传输上限 2 GB，链接指向的是放在你无法掌控的基础设施上的一份副本。传输在通道内和静态存储时都有加密，但它不是零知识的：服务方持有密钥，原则上可以读取文件。</p>
-      <p>Relayium 的实时模式不在服务端保留文件副本或传输历史，因此不存在服务端大小上限。同一局域网内浏览器直连；跨网络浏览器按设计使用 TURN 中继，TURN 承载端到端加密的密文，但无法读取或解密明文。在 WebRTC 传输之上，Relayium 再加一层：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密；两台设备通过带外渠道核对一致的 6 位校验码（SAS），以检测端点公钥替换或端点冒充；每个文件都用 SHA-256 做端到端校验。</p>
-      <h2>无大小上限的实时传输</h2>
+      <p>Relayium 的实时模式不在服务端保留文件副本或传输历史，因此不存在服务端大小上限。同一局域网内浏览器直连；跨网络浏览器按设计使用 TURN 中继，TURN 承载端到端加密的密文，但无法读取或解密明文。在 WebRTC 传输之上，Relayium 再加一层：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密；两台设备通过带外渠道核对一致的 6 位校验码（SAS），以检测端点公钥替换或端点冒充；每个文件都用 SHA-256 做端到端校验。</p></section>
+      <section class="sheet"><h2>无大小上限的实时传输</h2>
       <p>因为实时模式不在服务端保留文件副本或传输历史，实际的文件大小上限取决于你自己的浏览器。在 Chrome 或 Edge 中，Relayium 会把接收的数据直接流式写入磁盘，所以基本没有大小上限——几 GB 的视频和工程压缩包都没问题。</p>
-      <p>Firefox 和 Safari 没有同样的 File System Access 流式下载，因此当所有流式写盘路径都不适用时，浏览器只能把文件攒在内存里；Relayium 会在超过约 256 MB 时给出提示，这是刻意取的保守估计，而不是实测出来的硬上限。同一局域网下实时传输无需账号，两台设备直连：在两台设备上打开 relayium.com，最多选 1,000 个文件，核对校验码，然后发送。跨网络时，创建配对码的一方登录，浏览器会话按设计使用加密 TURN 中继；使用配对码或链接加入者无需账号。TURN 承载端到端加密的密文，但无法读取或解密明文。若连接中途断开，传输会断点续传而非从头再来。</p>
-      <h2>对方不在线时：零知识存储链接</h2>
+      <p>Firefox 和 Safari 没有同样的 File System Access 流式下载，因此当所有流式写盘路径都不适用时，浏览器只能把文件攒在内存里；Relayium 会在超过约 256 MB 时给出提示，这是刻意取的保守估计，而不是实测出来的硬上限。同一局域网下实时传输无需账号，两台设备直连：在两台设备上打开 relayium.com，最多选 1,000 个文件，核对校验码，然后发送。跨网络时，创建配对码的一方登录，浏览器会话按设计使用加密 TURN 中继；使用配对码或链接加入者无需账号。TURN 承载端到端加密的密文，但无法读取或解密明文。若连接中途断开，传输会断点续传而非从头再来。</p></section>
+      <section class="sheet"><h2>对方不在线时：零知识存储链接</h2>
       <p>实时传输需要双方都在场，而这恰是 WeTransfer 的链接模式做得更好的一点。所以 Relayium 提供了同样的异步便利，又不牺牲隐私：一个存储下载链接。</p>
-      <p>你的浏览器会在上传前用 AES-256-GCM 加密文件，解密密钥只存在于 URL 片段里——也就是 # 之后、浏览器从不发送给服务器的那部分。因此服务器只保存无法解读的零知识密文，收件方也无需账号即可下载。生成这样的链接需要发送方登录，且每个链接都可设为到期失效或首次下载后即焚。</p>
-      <h2>功能一览对比</h2>
+      <p>你的浏览器会在上传前用 AES-256-GCM 加密文件，解密密钥只存在于 URL 片段里——也就是 # 之后、浏览器从不发送给服务器的那部分。因此服务器只保存无法解读的零知识密文，收件方也无需账号即可下载。生成这样的链接需要发送方登录，且每个链接都可设为到期失效或首次下载后即焚。</p></section>
+      <section class="sheet"><h2>功能一览对比</h2>
       <p>把最关键的差别并排列出：</p>
-      <ul><li>大小上限：WeTransfer 免费档每次传输上限 2 GB；Relayium 实时模式无服务器端上限（Chrome/Edge 流式写盘；浏览器只能攒内存时，Relayium 会在超过约 256 MB 时给出提示）。</li><li>文件存放：WeTransfer 把文件存在它的服务器上；Relayium 实时模式不在服务端保留文件副本或传输历史。同一局域网内浏览器直连，跨网络浏览器按设计使用 TURN 承载其无法读取或解密的端到端密文。</li><li>加密：WeTransfer 在传输与静态存储时加密，但密钥由它持有；Relayium 端到端加密并带 6 位 SAS 校验码，存储链接为零知识，密钥只在 URL 片段里。</li><li>收件方离线：两者都能应对——WeTransfer 靠它的存储链接，Relayium 靠零知识存储下载链接，可设到期或下载后即焚。</li><li>完整性与续传：Relayium 用 SHA-256 校验每个文件，并可在传输中断后续传而非重来。</li><li>费用与开放：Relayium 采用 AGPL-3.0 许可开源，代码在 github.com/relayium/relayium；在浏览器中运行，覆盖 Windows、macOS、Linux、Android 和 iOS，无需安装。同一网络内的传输免费；跨网络中继与存储链接会占用套餐的每月流量额度，同时存放的数据量另有一项独立上限，付费套餐两者都更高。</li></ul>
+      <ul><li>大小上限：WeTransfer 免费档每次传输上限 2 GB；Relayium 实时模式无服务器端上限（Chrome/Edge 流式写盘；浏览器只能攒内存时，Relayium 会在超过约 256 MB 时给出提示）。</li><li>文件存放：WeTransfer 把文件存在它的服务器上；Relayium 实时模式不在服务端保留文件副本或传输历史。同一局域网内浏览器直连，跨网络浏览器按设计使用 TURN 承载其无法读取或解密的端到端密文。</li><li>加密：WeTransfer 在传输与静态存储时加密，但密钥由它持有；Relayium 端到端加密并带 6 位 SAS 校验码，存储链接为零知识，密钥只在 URL 片段里。</li><li>收件方离线：两者都能应对——WeTransfer 靠它的存储链接，Relayium 靠零知识存储下载链接，可设到期或下载后即焚。</li><li>完整性与续传：Relayium 用 SHA-256 校验每个文件，并可在传输中断后续传而非重来。</li><li>费用与开放：Relayium 采用 AGPL-3.0 许可开源，代码在 github.com/relayium/relayium；在浏览器中运行，覆盖 Windows、macOS、Linux、Android 和 iOS，无需安装。同一网络内的传输免费；跨网络中继与存储链接会占用套餐的每月流量额度，同时存放的数据量另有一项独立上限，付费套餐两者都更高。</li></ul></section>
       <h2>常见问题</h2>
       <h3>真的没有文件大小限制吗？</h3>
       <p>实时模式没有服务端上限，因为 Relayium 不保留服务端文件副本或历史；同一局域网内直连，跨网络经 TURN 承载端到端密文。Chrome 或 Edge 能把实时文件流式写盘，但双方页面必须保持在线，因此大文件更适合使用存储下载链接。链接的单文件上限与账号额度会在上传前显示；Firefox 或 Safari 实时接收放在内存中，超过约 256 MB 时会给出保守提示。</p>
@@ -177,6 +221,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/pricing">定价</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

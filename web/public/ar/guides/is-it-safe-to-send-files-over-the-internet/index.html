@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"هل من الآمن إرسال الملفات عبر الإنترنت؟","description":"ما الذي يحدث فعلًا من مشكلات مع البريد الإلكتروني وروابط السحابة ومحركات USB — وما الذي يعنيه حقًا «التشفير من الطرف إلى الطرف» و«المعرفة الصفرية»، وما الذي ينبغي التحقق منه قبل الوثوق بأداة نقل.","inLanguage":"ar","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/guides/is-it-safe-to-send-files-over-the-internet/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"هل من الآمن إرسال الملفات عبر الإنترنت؟"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل من الآمن إرسال ملف حسّاس بالبريد الإلكتروني؟","acceptedAnswer":{"@type":"Answer","text":"لم يُصمَّم البريد الإلكتروني لنقل الملفات السرية — فالمرفقات عادةً تُحتفَظ بها خوادم البريد على الطرفين وتُفحَص وتُنسَخ احتياطيًا، ويمكن لرسالة معاد توجيهها أن تضع الملف أمام أشخاص لم تقصدهم قط. لا بأس بذلك للملفات قليلة الأهمية؛ أما لأي شيء حسّاس، فأداة تعتمد التشفير من الطرف إلى الطرف تُزيل هذا الانكشاف."}},{"@type":"Question","name":"ما الذي تعنيه «المعرفة الصفرية» فعلًا؟","acceptedAnswer":{"@type":"Answer","text":"تعني أن الطرف الذي يخزّن بياناتك لم يُعطَ قط المفتاح اللازم لقراءتها. يحدث التشفير على جهازك قبل رفع أي شيء، ويوجد المفتاح فقط في مكان لا يراه الخادم أبدًا — مثل جزء عنوان الرابط (URL fragment) — فيكون ما يقبع على الخادم نصًا مُشفَّرًا لا يستطيع فك تشفيره بنيويًا، لا مجرد بيانات يَعِد بألّا ينظر إليها."}},{"@type":"Question","name":"هل يكفي ملف مضغوط محميّ بكلمة مرور؟","acceptedAnswer":{"@type":"Answer","text":"هذا أفضل من لا شيء، لكن كلمة المرور غالبًا ما تسير بالطريق نفسه الذي يسير به الملف — في سلسلة رسائل البريد الإلكتروني نفسها مثلًا — وهو ما يُبطِل الحماية، كما أن قوة تطبيقات تشفير الملفات المضغوطة تتفاوت تفاوتًا كبيرًا. أما أداة مبنية على التشفير من الطرف إلى الطرف فتُزيل هذه الحلقة الضعيفة بعدم حاجتها إلى كلمة مرور مشتركة من الأساس."}},{"@type":"Question","name":"هل يحتفظ Relayium بنسخة من ملفاتي؟","acceptedAnswer":{"@type":"Answer","text":"في الوضع الفوري لا يحتفظ Relayium بنسخة على الخادم أو بسجل للنقل: داخل شبكة LAN نفسها يتصل WebRTC مباشرةً، أما جلسات المتصفح عبر الشبكات فتستخدم TURN حسب التصميم لنقل نص مشفّر من الطرف إلى الطرف لا يستطيع المُرحِّل قراءته أو فك تشفيره. أما بالنسبة لرابط مُخزَّن، فيحتفظ الخادم فقط بنص مُشفَّر لا يستطيع قراءته، إلى أن تنتهي صلاحية الرابط أو يُنزَّل مرة واحدة إذا اخترت الحذف بعد القراءة."}},{"@type":"Question","name":"هل أحتاج إلى حساب لإرسال ملف أو استقباله؟","acceptedAnswer":{"@type":"Answer","text":"على الشبكة نفسها، لا يحتاج أيٌّ من الطرفين إلى حساب. أما الإرسال عبر الشبكات برمز الاقتران، أو إنشاء رابط مُخزَّن، فيتطلّب تسجيل دخول المُرسِل — لكن الشخص المُستقبِل لا يحتاج إلى حساب أبدًا، أيًا كان الوضع المُستخدَم."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ar/guides/" aria-current="true">الأدلة</a><a href="/ar/apps/">التطبيقات</a><a href="/pricing">الأسعار</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="التنقل الرئيسي"><a class="row" href="/">LAN</a><a class="row" href="/ar/cross-network/">عبر الشبكات</a><a class="row" href="/ar/offline-transfer/">غير متزامن</a><a class="row" href="/device-inbox">بريد الأجهزة</a><a class="row" href="/cli">CLI</a><a class="row" href="/ar/apps/">التطبيقات</a><a class="row" href="/pricing">الأسعار</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ar/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ar/guides/">الأدلة</a> <span aria-hidden="true">›</span> <span aria-current="page">هل من الآمن إرسال الملفات عبر الإنترنت؟</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,36 +203,36 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="ترجمة مؤرشفة"><p class="archived-label">ترجمة مؤرشفة</p><p>هذه الصفحة ترجمة عربية محفوظة للأرشيف. يجري صيانة منتج Relayium وتوثيقه الحالي بالإنجليزية والصينية المبسّطة، ولم يعد التطبيق نفسه يوفّر العربية. لذلك قد تختلف الشاشات والتفاصيل الموصوفة هنا عن السلوك الحالي.</p><p class="archived-links archived-pricing">قد تكون الباقات وحدود الاستخدام المذكورة هنا قديمة؛ والحالية منها موجودة في صفحة <a href="/pricing">الأسعار</a>.</p><p class="archived-links">النسخة الحالية: <a href="/guides/is-it-safe-to-send-files-over-the-internet/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/is-it-safe-to-send-files-over-the-internet/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">«هل من الآمن إرسال هذا الملف؟» سؤال معقول يستحق أن تتوقف وتطرحه، سواء أكان إقرارًا ضريبيًا أم عقدًا أم مجرد صور تفضّل أن تبقى خاصة. لا تهدف هذه المقالة إلى تنفيرك من الأدوات الشائعة — بل إلى أن تستعرض بوضوح ما الذي يحدث فعلًا لملف حين ترسله بالبريد الإلكتروني، أو تضعه في مجلد سحابي، أو تحمله على ذاكرة USB، وما الذي تَعِد به عبارتا «التشفير من الطرف إلى الطرف» و«المعرفة الصفرية» فعلًا، وما الذي ينبغي التحقق منه قبل أن تأتمن أي أداة على شيء يهمّك.</p>
       <p class="lead">لا يتطلّب أيٌّ من هذا خلفية تقنية. وبحلول النهاية، ستعرف ما الأسئلة التي ينبغي طرحها — على أي طريقة نقل، بما فيها هذه الطريقة.</p>
-      <h2>أين تتعرّض الملفات للخطر فعلًا: المخاطر اليومية</h2>
+      <section class="sheet"><h2>أين تتعرّض الملفات للخطر فعلًا: المخاطر اليومية</h2>
       <p>تمرّ مرفقات البريد الإلكتروني عبر خوادم مزوّد بريدك وخوادم المُستقبِل، وكلاهما عادةً يفحص الرسائل ويفهرسها وينشئ نسخًا احتياطية منها لغرض تصفية البريد المزعج والتعافي من الكوارث — بعد وقت طويل من نسيانك أنك أرسلتها. أعد توجيه البريد مرة واحدة، ويصبح الملف أمام شخص لم تقصده قط، دون أي وسيلة للتأكد من أن كل نسخة قد زالت.</p>
       <p>روابط التخزين السحابي مريحة، لكن الرابط عادةً يظل يعمل حتى تتذكّر إبطاله، و«أي شخص لديه الرابط» ليس خاصًا إلا بقدر عنوان URL يصعب تخمينه — وهو ما قد تُبطِله خدمة اختصار روابط أو إعادة توجيه غير مبالية. كما يرث الملف أمان الحساب كله الذي يقبع فيه، لا أمان المشاركة نفسها فقط.</p>
       <p>تبدو ذاكرة USB آمنة لأنها غير متصلة بالإنترنت، لكن هذا بالضبط هو مكمن الثغرة: معظم المحركات غير مشفّرة افتراضيًا، فذاكرة تُركت في حقيبة حاسوب محمول أو في سيارة مستأجرة تسلّم النص الصريح لمن يجدها، دون الحاجة إلى أي كلمة مرور.</p>
       <p>تحلّ مواقع الرفع العامة المجانية المشكلة الآنية — نقل ملف من ألف إلى باء — لكنها نادرًا ما تقول ما الذي يحدث بعد ذلك: كم يُحتفَظ به، وهل يُفحَص، ومن قد يعثر عليه مصادفةً، وكيف يغطّي الموقع نفقاته (مواقع استضافة الملفات المموَّلة بالإعلانات لها سجلّ في تضمين أدوات التتبّع أو ما هو أسوأ).</p>
-      <ul><li>البريد الإلكتروني: تحتفظ به خوادم البريد وتفحصه، ويسهل إعادة توجيهه خارج نطاق سيطرتك</li><li>روابط السحابة: تظل تعمل حتى إبطالها، وترث أمان الحساب كله</li><li>محركات USB: غير مشفّرة افتراضيًا، ويسهل فقدانها أو نسيانها</li><li>مواقع الرفع المجانية: ممارسات الاحتفاظ والفحص عادةً غير واضحة</li></ul>
-      <h2>ما الذي يعنيه فعلًا «التشفير من الطرف إلى الطرف» و«المعرفة الصفرية»</h2>
+      <ul><li>البريد الإلكتروني: تحتفظ به خوادم البريد وتفحصه، ويسهل إعادة توجيهه خارج نطاق سيطرتك</li><li>روابط السحابة: تظل تعمل حتى إبطالها، وترث أمان الحساب كله</li><li>محركات USB: غير مشفّرة افتراضيًا، ويسهل فقدانها أو نسيانها</li><li>مواقع الرفع المجانية: ممارسات الاحتفاظ والفحص عادةً غير واضحة</li></ul></section>
+      <section class="sheet"><h2>ما الذي يعنيه فعلًا «التشفير من الطرف إلى الطرف» و«المعرفة الصفرية»</h2>
       <p>كثير من الخدمات تقول «مشفّر» ولا تعني بذلك سوى أن الاتصال بخادمها مشفّر — أي HTTPS/TLS القياسي، نفس أيقونة القفل التي يستخدمها مصرفك. هذه حماية حقيقية ضد من يتنصّت على الشبكة، لكنها تتوقف عند الخادم: ما إن يصل ملفك، حتى تستطيع الخدمة نفسها قراءته، لأنها تملك المفتاح. وكثير من الأدوات اليومية تتوقف عند هذا الحد بالضبط.</p>
       <p>يعني التشفير من الطرف إلى الطرف شيئًا أقوى: يُشفَّر الملف قبل أن يغادر جهازك، بمفتاح لا يملكه سوى المُرسِل والمُستقبِل المقصود. أما الخدمة التي تحمله — الخادم، المُرحِّل، وأي شيء بينهما — فلا تملك المفتاح أبدًا، ولذلك لا تملك النص الصريح أبدًا، مهما طُلِب منها ذلك.</p>
       <p>«المعرفة الصفرية» فكرة ذات صلة تُطبَّق عادةً على شيء مُخزَّن لا مُرسَل بشكل فوري: حتى البيانات القابعة على خادم شُفِّرت بمفتاح لم يُعطَ للخادم نفسه قط، فلا سبيل للمشغّل إلى قراءتها أبدًا، مهما طالت مدة بقائها هناك.</p>
-      <ul><li>كلمة «مشفّر» وحدها كثيرًا ما تعني مجرد TLS حتى الخادم — ولا يزال بإمكان المزوّد قراءة الملف.</li><li>«التشفير من الطرف إلى الطرف» يعني أن المُرسِل والمُستقبِل وحدهما يملكان المفتاح.</li><li>«المعرفة الصفرية» تعني أن الخادم يحمل بيانات لا يستطيع فك تشفيرها بنيويًا، حتى وهي قابعة.</li></ul>
-      <h2>ما الذي ينبغي التحقق منه فعلًا قبل الوثوق بأداة نقل</h2>
+      <ul><li>كلمة «مشفّر» وحدها كثيرًا ما تعني مجرد TLS حتى الخادم — ولا يزال بإمكان المزوّد قراءة الملف.</li><li>«التشفير من الطرف إلى الطرف» يعني أن المُرسِل والمُستقبِل وحدهما يملكان المفتاح.</li><li>«المعرفة الصفرية» تعني أن الخادم يحمل بيانات لا يستطيع فك تشفيرها بنيويًا، حتى وهي قابعة.</li></ul></section>
+      <section class="sheet"><h2>ما الذي ينبغي التحقق منه فعلًا قبل الوثوق بأداة نقل</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">ما تحتاجه لتنفيذ قائمة الفحص هذه</p><ul><li>عشر دقائق ومتصفّح. فالبندان الأولان قراءة لا تدقيق.</li><li>جهازان للبنود الحيّة. فالبندان الثالث والرابع لا يمكن إجراؤهما من صفحة تسويقية، وهذا بالضبط ما يجعلهما جديرين بالتنفيذ.</li><li>لا حاجة إلى خبرة أمنية. فكل بند أدناه إمّا شيء تستطيع قراءته وإمّا شيء تستطيع أن تراه يحدث.</li></ul></div>
       <p>لغة التسويق على أي موقع أقل قيمة من بضعة أسئلة ملموسة:</p>
       <ol class="steps" data-block="steps"><li><p>ابحث عن جواب المزوّد نفسه عن سؤال «هل تستطيعون قراءة ملفاتي؟» داخل شفرته المصدرية، لا في صفحة الأسعار. وإن لم تكن هناك شفرة مصدرية فذلك في حد ذاته جواب.</p><pre tabindex="0" dir="ltr"><code>https://github.com/relayium/relayium</code></pre></li><li><p>تحقّق من الرخصة، ومن أن المستودع يقابل ما هو منشور فعلًا. فالادّعاء الذي يمكنك فحصه نوع مختلف عن الادّعاء الذي يُطلب منك قبوله.</p></li><li><p>في نقل حيّ، قارن رمز التحقّق على الشاشتين. فهذه هي الخطوة التي تحوّل «التشفير من الطرف إلى الطرف» من جملة إلى شيء يُطبَّق فعلًا بين هذين الطرفين تحديدًا.</p><pre tabindex="0" dir="ltr"><code>https://relayium.com/</code></pre></li><li><p>وأثناء ذلك النقل، افتح أدوات المطوّر في متصفّحك وراقب لوحة الشبكة. وابحث عن محتوى ملفك داخل ما يجري رفعه. فألّا تجده هو المقصود، وأن تجده هو النتيجة.</p></li><li><p>تحقّق مما يبقى بعد ذلك: هل ينتهي الرابط من تلقاء نفسه، وهل تستطيع الخدمة إخراج الملف مرة أخرى لاحقًا لو طُلب منها ذلك.</p></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">ماذا يخبرك اجتياز هذه القائمة فعلًا</p><p>البندان الأولان رخيصان ويستبعدان معظم الأدوات في دقائق. أما البنود الثلاثة الأخيرة فلا تستطيع صفحة هبوط تزييفها، لأنك تراها تحدث على جهازيك أنت.</p><p>ولا شيء من هذا يجعل أداةً جديرة بالثقة على نحو مجرَّد. إنه يجعل ادّعاءات محدَّدة قابلة للفحص، وهذا أقصى ما يستطيعه أيٌّ منا دون قراءة كل سطر بنفسه.</p></div>
-      <ul><li>هل تقول «مشفّر» (قد تعني مجرد TLS) أم تقول تحديدًا «التشفير من الطرف إلى الطرف» (المُرسِل والمُستقبِل وحدهما يملكان المفتاح)؟</li><li>هل هناك طريقة للتحقق من أن الاتصال لم يُعبَث به — رمز تقارنه، لا مجرد أيقونة قفل عليك أن تثق بها؟</li><li>هل يُتحقَّق من سلامة الملف، بحيث لا يصل ملف تالف أو مُعدَّل خاطئًا بصمت؟</li><li>هل الشيفرة مفتوحة المصدر وقابلة للتدقيق، أم أن الادّعاءات مجرد تسويق عليك تصديقه على عِلّاته؟</li><li>هل يتطلّب الإرسال أو الاستقبال تسليم هوية أكثر مما تحتاجه عملية النقل فعلًا؟</li><li>إذا خُزِّن أي شيء، فهل له عمر واضح ومحدود — انتهاء صلاحية أو حذف بعد التنزيل — بدلًا من بقائه هناك إلى أجل غير مسمّى؟</li></ul>
-      <h2>كيف يجيب Relayium عن كلٍّ من هذه</h2>
+      <ul><li>هل تقول «مشفّر» (قد تعني مجرد TLS) أم تقول تحديدًا «التشفير من الطرف إلى الطرف» (المُرسِل والمُستقبِل وحدهما يملكان المفتاح)؟</li><li>هل هناك طريقة للتحقق من أن الاتصال لم يُعبَث به — رمز تقارنه، لا مجرد أيقونة قفل عليك أن تثق بها؟</li><li>هل يُتحقَّق من سلامة الملف، بحيث لا يصل ملف تالف أو مُعدَّل خاطئًا بصمت؟</li><li>هل الشيفرة مفتوحة المصدر وقابلة للتدقيق، أم أن الادّعاءات مجرد تسويق عليك تصديقه على عِلّاته؟</li><li>هل يتطلّب الإرسال أو الاستقبال تسليم هوية أكثر مما تحتاجه عملية النقل فعلًا؟</li><li>إذا خُزِّن أي شيء، فهل له عمر واضح ومحدود — انتهاء صلاحية أو حذف بعد التنزيل — بدلًا من بقائه هناك إلى أجل غير مسمّى؟</li></ul></section>
+      <section class="sheet"><h2>كيف يجيب Relayium عن كلٍّ من هذه</h2>
       <p>في النقل الفوري، مع وجود الطرفين متصلَين في آن واحد، يولّد Relayium زوج مفاتيح X25519 جديدًا على كل جهاز ويشتقّ مفتاح AES-256-GCM مشتركًا موجودًا فقط داخل المتصفحَين — ولا يُرسَل أبدًا إلى خوادم Relayium نفسها. ويتيح رمز تحقق قصير اختياري (SAS) — يظهر عند تفعيل «التحقّق المتقدّم» المعطَّل افتراضيًا — للطرفين تأكيد أن المفاتيح لم تُستبدَل من قِبَل خادم غير نزيه في المنتصف، وتُفحَص تجزئة SHA-256 لكل ملف من الطرف إلى الطرف حتى لا يصل نقل تالف وهو يبدو سليمًا. أما تفاصيل كيفية عمل ذلك بالضبط فتُشرَح بعمق أكبر في «كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف»، إن أردت التعمّق أكثر من هذه الصفحة.</p>
       <p>حين لا يكون المُستقبِل متصلًا بعد، يستخدم رابط التنزيل المُخزَّن تصميمًا مختلفًا فعلًا بمعرفة صفرية: يولّد متصفحك مفتاح AES-256-GCM عشوائيًا ويشفّر به الملفات قبل رفع أي شيء. لا يُرسَل هذا المفتاح إلى الخادم أبدًا — بل يوجد فقط في جزء عنوان الرابط (URL fragment)، وهو الجزء الذي يلي #، والذي لا ترسله المتصفحات أبدًا. ينتهي الأمر بالخادم حاملًا نصًا مُشفَّرًا لا سبيل له إلى فك تشفيره، إضافة إلى مدة انتهاء صلاحية تختارها أنت: ساعة واحدة، أو يوم واحد، أو 3 أيام، أو 7 أيام، أو حتى 14 يومًا حسب باقتك، أو الحذف بعد أول تنزيل مكتمل.</p>
       <p>عبر الشبكات يستخدم تطبيق Relayium في المتصفح TURN حسب التصميم: ينقل المُرحِّل نصًا مشفّرًا من الطرف إلى الطرف، لكنه لا يتلقى المفتاح أبدًا ولا يستطيع قراءة الملف أو فك تشفيره.</p>
       <p>لا يطلب أيٌّ من هذا أن تصدّق ادّعاءً على عِلّاته: شيفرة عميل Relayium وخادمه مفتوحة المصدر بموجب رخصة AGPL-3.0، فيمكن قراءتها وتدقيقها بدلًا من تصديقها على عِلّاته.</p>
-      <ul><li>لا تحتاج عمليات النقل داخل الشبكة نفسها إلى أي حساب على الإطلاق.</li><li>الإرسال عبر الشبكات برمز الاقتران، أو إنشاء رابط مُخزَّن، يتطلّب تسجيل دخول المُرسِل — أما المُستقبِل فلا يحتاج إلى حساب أبدًا.</li></ul>
-      <h2>التشفير ليس القصة كلها — لا تزال بعض العادات مهمة</h2>
+      <ul><li>لا تحتاج عمليات النقل داخل الشبكة نفسها إلى أي حساب على الإطلاق.</li><li>الإرسال عبر الشبكات برمز الاقتران، أو إنشاء رابط مُخزَّن، يتطلّب تسجيل دخول المُرسِل — أما المُستقبِل فلا يحتاج إلى حساب أبدًا.</li></ul></section>
+      <section class="sheet"><h2>التشفير ليس القصة كلها — لا تزال بعض العادات مهمة</h2>
       <p>يحمي التشفير القوي الملف أثناء نقله وأثناء تخزينه، لكنه لا يمنعك من إرسال رابط إلى العنوان الخطأ — تعامل مع رابط المشاركة كأنه الملف نفسه، ولا تنشره في مكان عام.</p>
       <p>بالنسبة لأي شيء حسّاس فعلًا، فعِّل التحقّق المتقدّم وخصّص بضع ثوانٍ إضافية لمقارنة رمز التحقق بصوت عالٍ عبر مكالمة، أو وجهًا لوجه، بدلًا من الثقة بأن شاشتين متطابقتين متجاورتين لم تُخدَعا كلتاهما.</p>
-      <p>ولا توجد أداة نقل، مهما بلغت جودة تشفيرها، تحمي ملفًا منكشفًا أصلًا على جهاز مُخترَق — فالتشفير الجيد يفترض أن الطرفين نفسيهما جديران بالثقة. لا شيء من هذا سبب للإصابة بجنون الارتياب من إرسال الملفات؛ إنما من المفيد فقط أن تعرف ما الذي يغطّيه التشفير وما لا يغطّيه.</p>
-      <h2>حين لا يعطيك الفحص جوابًا واضحًا</h2>
+      <p>ولا توجد أداة نقل، مهما بلغت جودة تشفيرها، تحمي ملفًا منكشفًا أصلًا على جهاز مُخترَق — فالتشفير الجيد يفترض أن الطرفين نفسيهما جديران بالثقة. لا شيء من هذا سبب للإصابة بجنون الارتياب من إرسال الملفات؛ إنما من المفيد فقط أن تعرف ما الذي يغطّيه التشفير وما لا يغطّيه.</p></section>
+      <section class="sheet"><h2>حين لا يعطيك الفحص جوابًا واضحًا</h2>
       <p>ثلاثة مواضع يتعثّر الناس عندها. وفي كل حالة منها يكون الغموض نفسه ذا دلالة.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">ما تصادفه، وما تفحصه، وماذا يعني</p><dl><dt>تُظهر لوحة الشبكة رفعًا كبيرًا ولا تستطيع معرفة ما بداخله.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/   # developer tools, Network panel, during a transfer</code></pre><p>هذه هي النتيجة المتوقَّعة لا طريقًا مسدودًا. فما تبحث عنه هو غياب أي شيء يمكن التعرّف عليه من ملفك — اسم ملف اخترته أنت، أو نص تعرف أنه موجود في المستند. فإن استطعت قراءة محتواك داخل الحمولة فتلك هي النتيجة، وهي حاسمة.</p></dd><dt>لا يوجد رمز تحقّق، فلا يمكن تنفيذ البند الثالث.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/   # a stored link has no second live endpoint to compare against</code></pre><p>أنت في نقل عبر رابط مخزَّن لا في نقل حيّ. فلا يوجد طرف ثانٍ متصل لتقارن معه، ومن ثمّ فشكل الضمان مختلف: المفتاح يعيش في جزء الرابط ولا يصل إلى الخادم إطلاقًا. قارن الرموز في عمليات النقل الحيّة، وتحقّق من انتهاء صلاحية الرابط في المخزَّنة.</p></dd><dt>الشفرة مفتوحة لكنك لا تقرأ اللغة المكتوبة بها.</dt><dd><pre tabindex="0" dir="ltr"><code>https://github.com/relayium/relayium   # is the claim falsifiable at all</code></pre><p>لست مضطرًا. فالسؤال الذي يجيب عنه هذا الفحص هو: هل الادّعاء قابل للدحض أصلًا؟ هل هناك مستودع، وهل يقابل ما هو منشور، وهل يستطيع من يقرأ تلك اللغة أن يناقضه. والادّعاء الذي لا أحد في موضع يتيح له فحصه هو نفسه النتيجة.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">ما تصادفه، وما تفحصه، وماذا يعني</p><dl><dt>تُظهر لوحة الشبكة رفعًا كبيرًا ولا تستطيع معرفة ما بداخله.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/   # developer tools, Network panel, during a transfer</code></pre><p>هذه هي النتيجة المتوقَّعة لا طريقًا مسدودًا. فما تبحث عنه هو غياب أي شيء يمكن التعرّف عليه من ملفك — اسم ملف اخترته أنت، أو نص تعرف أنه موجود في المستند. فإن استطعت قراءة محتواك داخل الحمولة فتلك هي النتيجة، وهي حاسمة.</p></dd><dt>لا يوجد رمز تحقّق، فلا يمكن تنفيذ البند الثالث.</dt><dd><pre tabindex="0" dir="ltr"><code>https://relayium.com/   # a stored link has no second live endpoint to compare against</code></pre><p>أنت في نقل عبر رابط مخزَّن لا في نقل حيّ. فلا يوجد طرف ثانٍ متصل لتقارن معه، ومن ثمّ فشكل الضمان مختلف: المفتاح يعيش في جزء الرابط ولا يصل إلى الخادم إطلاقًا. قارن الرموز في عمليات النقل الحيّة، وتحقّق من انتهاء صلاحية الرابط في المخزَّنة.</p></dd><dt>الشفرة مفتوحة لكنك لا تقرأ اللغة المكتوبة بها.</dt><dd><pre tabindex="0" dir="ltr"><code>https://github.com/relayium/relayium   # is the claim falsifiable at all</code></pre><p>لست مضطرًا. فالسؤال الذي يجيب عنه هذا الفحص هو: هل الادّعاء قابل للدحض أصلًا؟ هل هناك مستودع، وهل يقابل ما هو منشور، وهل يستطيع من يقرأ تلك اللغة أن يناقضه. والادّعاء الذي لا أحد في موضع يتيح له فحصه هو نفسه النتيجة.</p></dd></dl></div></section>
       <h2>الأسئلة الشائعة</h2>
       <h3>هل من الآمن إرسال ملف حسّاس بالبريد الإلكتروني؟</h3>
       <p>لم يُصمَّم البريد الإلكتروني لنقل الملفات السرية — فالمرفقات عادةً تُحتفَظ بها خوادم البريد على الطرفين وتُفحَص وتُنسَخ احتياطيًا، ويمكن لرسالة معاد توجيهها أن تضع الملف أمام أشخاص لم تقصدهم قط. لا بأس بذلك للملفات قليلة الأهمية؛ أما لأي شيء حسّاس، فأداة تعتمد التشفير من الطرف إلى الطرف تُزيل هذا الانكشاف.</p>
@@ -215,6 +259,8 @@ ol.steps>li>pre{margin:8px 0 0}
         <a href="/pricing">الأسعار</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs. rsync: Ordner synchronisieren ohne SSH-Setup","description":"Ein fairer Vergleich: rsync ist der ausgereifte, mächtige Standard zum Spiegeln von Ordnern; Relayium sync tauscht einen Teil dieser Macht gegen weniger Einrichtungsaufwand und funktioniert netzwerkübergreifend ohne SSH-Server.","inLanguage":"de","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/de/compare/rsync/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/de/"},{"@type":"ListItem","position":2,"name":"Anleitungen","item":"https://relayium.com/de/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs. rsync: Ordner synchronisieren ohne SSH-Setup"}]},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Kann sync rsync vollständig ersetzen?","acceptedAnswer":{"@type":"Answer","text":"Nein. Es macht nur einseitiges Spiegeln und hat keinen blockweisen Delta-Algorithmus wie rsync — eine Datei mit anderer Größe oder anderem Zeitstempel wird komplett neu übertragen, und es gibt deutlich weniger Flags als bei rsync. Wenn du bidirektionale Synchronisation, feingranulare Filterkontrolle brauchst oder dich auf rsyncs ausgereiftes Ökosystem verlassen willst, ist rsync weiterhin das bessere Werkzeug."}},{"@type":"Question","name":"Braucht sync einen SSH-Server?","acceptedAnswer":{"@type":"Answer","text":"Nein. daemon-direct (relayium://host:port) überspringt SSH komplett: eine TLS-Verbindung mit Pinning, authentifiziert über den Fingerprint des Empfängers, einmal genehmigt und danach gemerkt. Du kannst auch über SSH gehen (user@host:path), dann muss relayium aber auf der Gegenseite installiert sein — und anders als bei push gibt es für sync keinen tar-Fallback."}},{"@type":"Question","name":"Löscht sync Dateien, die ich aus der Quelle entfernt habe?","acceptedAnswer":{"@type":"Answer","text":"Nur wenn du --delete übergibst und der Empfänger sein serve mit --allow-delete betreibt. Andernfalls wird die Löschanfrage abgelehnt und an den Sender zurückgemeldet, statt stillschweigend ignoriert zu werden."}},{"@type":"Question","name":"Kann ich in Echtzeit fortlaufend synchronisieren?","acceptedAnswer":{"@type":"Answer","text":"Ja, mit --watch. Nach dem ersten Spiegeln läuft sync weiter und spiegelt (entprellt) erneut, sobald sich eine Datei unter der Quelle ändert."}},{"@type":"Question","name":"Ist das kostenlos?","acceptedAnswer":{"@type":"Answer","text":"Ja. Die Relayium-CLI ist vollständig kostenlos. sync, push/pull und daemon-direct brauchen kein Konto. send braucht eines, damit der Server seinen Pairing-Code erzeugen kann, und Cloud-up eines, um die Datei zu speichern."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -119,8 +161,10 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/de/guides/" aria-current="true">Anleitungen</a><a href="/de/apps/">Apps</a><a href="/pricing">Preise</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Hauptnavigation"><a class="row" href="/">LAN</a><a class="row" href="/de/cross-network/">Netzwerkübergreifend</a><a class="row" href="/de/offline-transfer/">Asynchron</a><a class="row" href="/device-inbox">Geräte-Posteingang</a><a class="row" href="/cli">CLI</a><a class="row" href="/de/apps/">Apps</a><a class="row" href="/pricing">Preise</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/de/">Relayium</a> <span aria-hidden="true">›</span> <a href="/de/guides/">Anleitungen</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs. rsync: Ordner synchronisieren ohne SSH-Setup</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -142,29 +186,29 @@ pre code{background:none;padding:0;border-radius:0}
       <aside class="archived" aria-label="Archivierte Übersetzung"><p class="archived-label">Archivierte Übersetzung</p><p>Diese Seite ist eine archivierte deutsche Übersetzung. Produkt und aktuelle Dokumentation von Relayium werden auf Englisch und in vereinfachtem Chinesisch gepflegt; die App selbst bietet kein Deutsch mehr an. Beschriebene Bildschirme und Details können deshalb vom heutigen Verhalten abweichen.</p><p class="archived-links archived-pricing">Die hier genannten Tarife und Nutzungsgrenzen können veraltet sein; die aktuellen stehen auf der Seite <a href="/pricing">Preise</a>.</p><p class="archived-links">Aktuelle Fassung: <a href="/compare/rsync/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/compare/rsync/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">rsync spiegelt seit 1996 Ordner, und das aus gutem Grund: bidirektionale Synchronisation, ein Delta-Algorithmus mit Rolling-Checksum, der nur die tatsächlich veränderten Bytes innerhalb einer Datei überträgt, und Jahrzehnte an Flags für jeden Grenzfall. Wenn du schon SSH-Zugang hast und rsync kennst, ist es sehr schwer zu schlagen.</p>
       <p class="lead">Relayiums sync-Befehl deckt eine engere Aufgabe ab — einen einseitigen inkrementellen Spiegel —, entfernt aber einen Schritt, den rsync als bereits erledigt voraussetzt: das Einrichten von SSH. sync läuft über SSH, falls vorhanden, oder verbindet zwei Maschinen direkt, ganz ohne SSH-Server. Dieser Artikel vergleicht beide ehrlich: sync ist kein vollständiger Ersatz für rsync, und die FAQ sagt das unumwunden.</p>
-      <h2>Was rsync richtig macht</h2>
+      <section class="sheet"><h2>Was rsync richtig macht</h2>
       <p>rsync ist bidirektional — jede Seite kann die Quelle sein — und sein Delta-Transfer-Algorithmus vergleicht Blöcke einer Datei per Rolling-Checksum, sodass eine kleine Änderung an einer riesigen Datei nur die veränderten Blöcke sendet, nicht die ganze Datei erneut. Zusammen mit Jahrzehnten an Flags (--exclude, --link-dest für Hardlink-Snapshots, Kompression, Bandbreitenlimits und mehr) macht das rsync zum richtigen Werkzeug für sehr viele Aufgaben.</p>
-      <p>Es ist außerdem überall vorhanden: Die meisten Linux- und macOS-Systeme bringen es mit, und es läuft über eine SSH-Verbindung, die wahrscheinlich schon konfiguriert ist. Nichts davon versucht Relayium sync zu ersetzen.</p>
-      <h2>Bevor du loslegst</h2>
+      <p>Es ist außerdem überall vorhanden: Die meisten Linux- und macOS-Systeme bringen es mit, und es läuft über eine SSH-Verbindung, die wahrscheinlich schon konfiguriert ist. Nichts davon versucht Relayium sync zu ersetzen.</p></section>
+      <section class="sheet"><h2>Bevor du loslegst</h2>
       <p>Alles unten ist die relayium-CLI, installiere sie also zuerst, falls noch nicht geschehen. Unter macOS oder Linux legt ein Befehl ein vorgebautes Binary in deinen PATH:</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>Willst du die Datei lieber selbst wählen, oder unter Windows? Hol dir ein Binary von der Releases-Seite — relayium.com/cli listet alle Installationswege (mit Go auch go build -o relayium ./cmd/relayium).</li><li>relayium --version bestätigt die Installation. Ohne das geben die Befehle unten nur „command not found“ aus.</li></ul>
-      <h2>Was Relayium sync stattdessen macht</h2>
+      <ul><li>Willst du die Datei lieber selbst wählen, oder unter Windows? Hol dir ein Binary von der Releases-Seite — relayium.com/cli listet alle Installationswege (mit Go auch go build -o relayium ./cmd/relayium).</li><li>relayium --version bestätigt die Installation. Ohne das geben die Befehle unten nur „command not found“ aus.</li></ul></section>
+      <section class="sheet"><h2>Was Relayium sync stattdessen macht</h2>
       <p>relayium sync &lt;Quelle...&gt; &lt;Ziel&gt; [--delete] [--watch] ist ein einseitiger inkrementeller Spiegel: Er vergleicht Größe und Änderungszeit jeder Datei, überspringt, was schon übereinstimmt, und sendet den Rest.</p>
       <p>Es funktioniert über zwei Transportwege. Zeigst du auf user@host:/dest, läuft es über SSH — relayium muss dafür aber schon auf der Gegenseite installiert sein; anders als bei push gibt es für sync keinen tar-Fallback. Zeigst du stattdessen auf relayium://host[:port], wird SSH komplett übersprungen: eine TLS-1.3-Verbindung mit Pinning direkt zu einem relayium serve-Listener auf der anderen Maschine, authentifiziert über deren Fingerprint (einmal genehmigt, danach gemerkt). Dieser zweite Weg ist der eigentliche Komfort: kein sshd einzurichten, keine SSH-Schlüssel zu verwalten — nur zwei Maschinen mit installiertem relayium und einem offenen Port dazwischen.</p>
       <pre tabindex="0"><code>relayium sync ./photos user@host:/backup/photos       # über SSH</code></pre>
-      <pre tabindex="0"><code>relayium sync ./photos relayium://203.0.113.9:9031    # daemon-direct, ohne SSH</code></pre>
-      <h2>Löschungen und fortlaufende Synchronisation</h2>
+      <pre tabindex="0"><code>relayium sync ./photos relayium://203.0.113.9:9031    # daemon-direct, ohne SSH</code></pre></section>
+      <section class="sheet"><h2>Löschungen und fortlaufende Synchronisation</h2>
       <p>Standardmäßig fügt sync nur hinzu und aktualisiert — es löscht nie von sich aus etwas. Übergib --delete, um auch Löschungen zu spiegeln, aber der Empfänger muss dem zustimmen: Er muss mit relayium serve --allow-delete laufen. Ist das nicht der Fall, wird die Löschanfrage abgelehnt und an den Sender zurückgemeldet, statt sie stillschweigend zu ignorieren.</p>
       <p>Für einen Ordner, der sich fortlaufend ändert, hält --watch sync nach dem ersten Durchlauf am Laufen und spiegelt erneut, sobald sich eine Datei unter der Quelle ändert — dafür hat rsync nichts Eingebautes; normalerweise greift man zu einem Cron-Job oder einem Wrapper wie lsyncd.</p>
       <pre tabindex="0"><code>relayium serve --dir /backup --port 9031 --allow-delete</code></pre>
-      <pre tabindex="0"><code>relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch</code></pre>
-      <h2>Integrität, Fortsetzung und die ehrlichen Grenzen</h2>
+      <pre tabindex="0"><code>relayium sync ./photos relayium://203.0.113.9:9031 --delete --watch</code></pre></section>
+      <section class="sheet"><h2>Integrität, Fortsetzung und die ehrlichen Grenzen</h2>
       <p>Jede Datei wird Ende-zu-Ende mit einem SHA-256-Hash geprüft, und eine mitten in einer Datei abgebrochene Übertragung setzt beim bereits auf der Platte liegenden Byte-Offset fort, statt neu zu beginnen — aus denselben Gründen nützlich wie bei rsync.</p>
-      <p>Klar sein sollte, was Fortsetzen nicht ist: nicht rsyncs Delta-Algorithmus. Ist eine Datei bereits vollständig vorhanden, hat aber eine andere Größe oder einen anderen Zeitstempel, überträgt sync sie komplett erneut, statt veränderte Blöcke darin zu diffen. Bei einer einzelnen riesigen Datei, die sich häufig geringfügig ändert, bewegt rsyncs Delta-Transfer weniger Daten. sync behandelt außerdem nur reguläre Dateien — Symlinks und Spezialdateien werden übersprungen, wer darauf angewiesen ist, muss das separat handhaben.</p>
-      <h2>Wann rsync noch immer das bessere Werkzeug ist</h2>
+      <p>Klar sein sollte, was Fortsetzen nicht ist: nicht rsyncs Delta-Algorithmus. Ist eine Datei bereits vollständig vorhanden, hat aber eine andere Größe oder einen anderen Zeitstempel, überträgt sync sie komplett erneut, statt veränderte Blöcke darin zu diffen. Bei einer einzelnen riesigen Datei, die sich häufig geringfügig ändert, bewegt rsyncs Delta-Transfer weniger Daten. sync behandelt außerdem nur reguläre Dateien — Symlinks und Spezialdateien werden übersprungen, wer darauf angewiesen ist, muss das separat handhaben.</p></section>
+      <section class="sheet"><h2>Wann rsync noch immer das bessere Werkzeug ist</h2>
       <p>Wähle rsync, wenn die Synchronisation in beide Richtungen gehen muss, wenn SSH bereits eingerichtet ist und du keinen weiteren Daemon willst, wenn du feingranulare Kontrolle brauchst (Ausschlüsse, Filter, Hardlink-Snapshots, Bandbreitenlimits, Kompression), oder wenn sich eine Datei häufig geringfügig ändert und Delta-Transfer echte Bandbreite spart. Relayium sync versucht nichts davon abzudecken.</p>
-      <ul><li>Nur einseitig: sync spiegelt Quelle → Ziel; rsync kann in beide Richtungen.</li><li>Kein Delta-Transfer: sync sendet eine veränderte Datei komplett neu; rsyncs Rolling-Checksum sendet nur veränderte Blöcke.</li><li>Weniger Optionen: rsync hat Jahrzehnte an Flags für Filterung, Kompression und Snapshots; sync hat --delete und --watch.</li><li>Wo Relayium sync gewinnt: kein SSH-Server nötig (daemon-direct), TLS mit Pinning und Fingerprint-Authentifizierung, Echtzeit-Resync mit --watch, und es ist für jeden Übertragungsmodus kostenlos — sync selbst braucht überhaupt kein Konto.</li></ul>
+      <ul><li>Nur einseitig: sync spiegelt Quelle → Ziel; rsync kann in beide Richtungen.</li><li>Kein Delta-Transfer: sync sendet eine veränderte Datei komplett neu; rsyncs Rolling-Checksum sendet nur veränderte Blöcke.</li><li>Weniger Optionen: rsync hat Jahrzehnte an Flags für Filterung, Kompression und Snapshots; sync hat --delete und --watch.</li><li>Wo Relayium sync gewinnt: kein SSH-Server nötig (daemon-direct), TLS mit Pinning und Fingerprint-Authentifizierung, Echtzeit-Resync mit --watch, und es ist für jeden Übertragungsmodus kostenlos — sync selbst braucht überhaupt kein Konto.</li></ul></section>
       <h2>Häufige Fragen</h2>
       <h3>Kann sync rsync vollständig ersetzen?</h3>
       <p>Nein. Es macht nur einseitiges Spiegeln und hat keinen blockweisen Delta-Algorithmus wie rsync — eine Datei mit anderer Größe oder anderem Zeitstempel wird komplett neu übertragen, und es gibt deutlich weniger Flags als bei rsync. Wenn du bidirektionale Synchronisation, feingranulare Filterkontrolle brauchst oder dich auf rsyncs ausgereiftes Ökosystem verlassen willst, ist rsync weiterhin das bessere Werkzeug.</p>
@@ -191,6 +235,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/pricing">Preise</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

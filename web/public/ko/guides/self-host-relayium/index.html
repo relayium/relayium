@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 셀프 호스팅: 나만의 파일·텍스트 전송 서버 운영하기","description":"Docker 명령어 하나로 Relayium 전체 스택을 직접 운영하세요 — 자신의 도메인, 자신의 데이터, 제3자 계정 불필요. 파일과 임시 텍스트 페어링, 환경 변수, 선택적 브라우저 TURN 릴레이, CLI를 서버로 연결하는 방법까지 다룹니다.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/self-host-relayium/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Relayium 셀프 호스팅: 나만의 파일·텍스트 전송 서버 운영하기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"TURN을 설정해야 하나요?","acceptedAnswer":{"@type":"Answer","text":"네트워크를 넘나드는 실시간 전송이 엄격한 NAT 환경에서도 동작하길 원할 때만 필요합니다. 같은 네트워크 전송, SSH 기반 push/pull, 데몬 다이렉트는 모두 TURN 없이 동작합니다 — TURN은 네트워크 간 페어링 코드 경로의 NAT 통과에만 쓰입니다."}},{"@type":"Question","name":"자체 호스팅해도 CLI는 여전히 무료인가요?","acceptedAnswer":{"@type":"Answer","text":"네. relayium.com이든 직접 운영하는 서버든 CLI는 완전히 무료입니다. 코드 없는 send나 text로 코드를 발급할 때와 up으로 파일을 저장할 때는 대상 서버 계정이 필요합니다. receive, down, 출력된 코드로 참여하는 text는 로그인이 필요 없습니다."}},{"@type":"Question","name":"자신의 도메인과 TLS 인증서를 쓸 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"네. Docker 이미지 자체는 :8080에서 평문 HTTP로 대기합니다. 앞단에 nginx나 Caddy를 두고 자신의 도메인과 인증서(예: certbot/Let's Encrypt)를 설정하세요. docs/self-hosting.md에 프록시해야 할 경로가 설명되어 있습니다. Relayium이 실제 운영에 쓰는 nginx 설정은 공개되어 있지 않으므로 직접 작성해야 합니다."}},{"@type":"Question","name":"자체 호스팅한 서버는 어떤 데이터를 저장하나요?","acceptedAnswer":{"@type":"Answer","text":"RELAYIUM_DB에 있는 SQLite 데이터베이스(계정, 세션)와, 저장형/링크형 전송의 경우 RELAYIUM_BLOB_DIR에 있는 암호화된 블롭 — 이는 서버 자신도 복호화할 수 없습니다. 서버는 실시간 파일이나 메시지 본문을 저장하지 않고 시그널링 핸드셰이크만 중계하지만, 수신 기기는 파일이나 텍스트를 보관할 수 있습니다."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ko/guides/" aria-current="true">가이드</a><a href="/ko/apps/">앱</a><a href="/pricing">요금제</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="기본 탐색"><a class="row" href="/">LAN 전송</a><a class="row" href="/ko/cross-network/">네트워크 간 전송</a><a class="row" href="/ko/offline-transfer/">비동기 전송</a><a class="row" href="/device-inbox">기기 수신함</a><a class="row" href="/cli">CLI</a><a class="row" href="/ko/apps/">앱</a><a class="row" href="/pricing">요금제</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium 셀프 호스팅: 나만의 파일·텍스트 전송 서버 운영하기</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,10 +203,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="보관된 번역"><p class="archived-label">보관된 번역</p><p>이 페이지는 기록으로 보관 중인 한국어 번역입니다. Relayium 제품과 최신 문서는 영어와 중국어 간체로 관리되며, 앱 자체도 더 이상 한국어를 제공하지 않습니다. 여기에 적힌 화면과 세부 사항은 현재 동작과 다를 수 있습니다.</p><p class="archived-links archived-pricing">이 페이지에 적혀 있는 요금제와 사용 한도는 오래된 내용일 수 있습니다. 현재 내용은 <a href="/pricing">요금제</a> 페이지에서 확인하세요.</p><p class="archived-links">최신 버전: <a href="/guides/self-host-relayium/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/self-host-relayium/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Relayium은 AGPL-3.0 라이선스 오픈소스이며, 서버는 단일한 자체 완결형 이미지입니다 — 외부 데이터베이스도, 서드파티 스토리지 버킷도 필요 없고, 가입할 것도 없습니다. relayium.com에 의존하는 대신 전체를 직접 운영하고 싶다면, 이 가이드는 Docker로 서버를 띄우고 CLI를 그 서버로 연결하는 방법을 안내합니다.</p>
       <p class="lead">자체 호스팅을 하면 데이터가 어디에 저장되는지 완전히 통제할 수 있고, 자신의 도메인과 TLS 인증서를 쓸 수 있으며, 다른 누구의 운영 판단에도 의존하지 않습니다. 아래 내용은 모두 저장소에 실제로 존재하는 파일 — docker-compose.yml, server/.env.example, docs/self-hosting.md — 을 근거로 하므로, 실제로 존재하지 않는 플래그나 설정은 등장하지 않습니다.</p>
-      <h2>왜 자체 호스팅을 하나</h2>
+      <section class="sheet"><h2>왜 자체 호스팅을 하나</h2>
       <p>Relayium의 실시간 전송은 종단간 암호화됩니다. 자체 호스팅한 TURN 릴레이는 암호문 바이트를 운반할 수 있고 서버는 시그널링 메타데이터를 처리하지만, 어느 쪽도 파일 평문을 읽거나 복호화할 수 없습니다. 서버와 릴레이 모두 실시간 내용의 서버 측 사본이나 기록을 저장하지 않습니다. 서버는 계정을 보관하며, 저장형/링크형 전송의 경우 암호화된 블롭과 작은 SQLite 데이터베이스도 보관합니다. 자체 호스팅이란 그 데이터가 직접 통제하는 인프라 위에, 자신의 도메인 아래 놓이고, 다른 누구의 운영 판단도 개입하지 않는다는 뜻입니다.</p>
-      <p>이 프로젝트는 AGPL-3.0 라이선스로 오픈소스(github.com/relayium/relayium)이므로, 무언가를 맡기기 전에 서버가 정확히 무엇을 하는지 직접 읽어볼 수 있고, 자유롭게 fork하거나 수정할 수도 있습니다.</p>
-      <h2>Docker로 빠르게 시작하기</h2>
+      <p>이 프로젝트는 AGPL-3.0 라이선스로 오픈소스(github.com/relayium/relayium)이므로, 무언가를 맡기기 전에 서버가 정확히 무엇을 하는지 직접 읽어볼 수 있고, 자유롭게 fork하거나 수정할 수도 있습니다.</p></section>
+      <section class="sheet"><h2>Docker로 빠르게 시작하기</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">1단계 전에 필요한 것</p><ul><li>Docker Engine과 Compose 플러그인이 설치된 호스트. docker compose version은 버전 문자열을 출력합니다. &quot;docker: &#39;compose&#39; is not a docker command&quot;가 나오면 플러그인이 없는 것입니다.</li><li>저장소 클론. compose 파일은 이 소스 트리에서 이미지를 빌드하므로 옆에 Dockerfile과 web/이 있어야 합니다 — 받아올 미리 빌드된 이미지는 없습니다.</li><li>이름 있는 볼륨 relayium-data를 위한 디스크 공간. SQLite 데이터베이스와 보관하는 저장형 전송 암호문이 들어갑니다.</li><li>본인 외에 다른 사람도 쓸 예정이라면 도메인과 TLS를 종료하는 리버스 프록시. 컨테이너는 평문 HTTP만 사용하며 기본적으로 루프백 인터페이스에만 게시됩니다.</li><li>그 밖에는 아무것도 필요 없습니다. 외부 데이터베이스도, 오브젝트 스토리지 버킷도, 제3자 계정도 필요하지 않습니다.</li></ul></div>
       <p>저장소 루트에는 Dockerfile과 docker-compose.yml이 있으며, 이들은 단일한 자체 완결형 이미지 — 미리 빌드된 웹 앱을 제공하는 정적 Go 바이너리 — 를 빌드합니다. 그저 실행만 하는 데는 별도의 Node, Go 툴체인, nginx가 필요 없습니다.</p>
       <ol class="steps" data-block="steps"><li><p>저장소를 클론하고 그 디렉터리로 이동합니다.</p><pre tabindex="0"><code>git clone https://github.com/relayium/relayium.git</code></pre><pre tabindex="0"><code>cd relayium</code></pre></li><li><p>빌드하고 시작합니다. 릴레이가 꺼져 있어도 이 자리표시자 비밀값은 생략할 수 없습니다. Compose는 파일을 파싱하는 시점에 프로필로 꺼둔 coturn 서비스의 필수 변수까지 검증하므로, 맨 docker compose up은 거부됩니다.</p><pre tabindex="0"><code>RELAYIUM_TURN_SECRET=placeholder docker compose up -d --build</code></pre></li><li><p>컨테이너가 재시작을 반복하지 않고 계속 떠 있는지 확인합니다.</p><pre tabindex="0"><code>docker compose ps</code></pre></li><li><p>이 인스턴스가 실제로 서비스할 수 있는 상태인지 물어봅니다. /healthz가 아니라 /readyz를 쓰세요 — 둘의 차이가 이 확인의 핵심이며, 아래 예상 결과 상자가 그 이유를 설명합니다.</p><pre tabindex="0"><code>curl -s http://127.0.0.1:8080/readyz</code></pre></li><li><p>설정 템플릿을 복사하고 공개 주소를 설정합니다. RELAYIUM_BASE_URL은 발송 메일의 링크를 만들고 세션 쿠키에 Secure 플래그를 붙일지도 결정하므로, 실제 https:// 주소여야 합니다.</p><pre tabindex="0"><code>cp server/.env.example server/.env</code></pre><pre tabindex="0"><code>chmod 600 server/.env</code></pre></li><li><p>앞단에 nginx나 Caddy를 두어 자신의 도메인으로 TLS를 종료하고 모든 경로 — /, /api, /ws, /admin — 를 8080 포트로 프록시합니다. 그런 다음 server/.env를 반영하도록 재시작합니다.</p><pre tabindex="0"><code>docker compose up -d</code></pre></li></ol>
@@ -174,8 +218,8 @@ $ curl -s http://127.0.0.1:8080/healthz
 ok
 $ curl -s http://127.0.0.1:8080/readyz
 ready</code></pre></div>
-      <ul><li>이것이 서버 전체이며, :8080에서 대기합니다. 운영 환경에서는 앞단에 nginx나 Caddy를 두어 TLS를 처리하세요 — docs/self-hosting.md에 Docker 배포 경로와 프록시해야 할 경로가 설명되어 있습니다. Relayium이 실제 운영에 쓰는 nginx 설정 자체는 공개되어 있지 않습니다.</li><li>앱 설정은 선택적인 server/.env 파일과 docker-compose.yml의 environment: 블록에서 옵니다. 모든 설정 항목에는 대응하는 RELAYIUM_* 키가 있습니다 — 시작점으로 server/.env.example을 복사하세요.</li><li>기본 배포에서 중요한 4가지 키는 RELAYIUM_ADDR(리스닝 주소), RELAYIUM_STATIC(빌드된 웹 앱 경로), RELAYIUM_DB(SQLite 파일 경로), RELAYIUM_BLOB_DIR(저장형 링크 암호문이 기록되는 위치)입니다. docker-compose.yml은 이미 이 4가지 모두에 합리적인 기본값을 설정해 두었고, 명명된 볼륨에 영속화합니다.</li></ul>
-      <h2>네트워크 간 전송을 위한 TURN 릴레이 추가하기</h2>
+      <ul><li>이것이 서버 전체이며, :8080에서 대기합니다. 운영 환경에서는 앞단에 nginx나 Caddy를 두어 TLS를 처리하세요 — docs/self-hosting.md에 Docker 배포 경로와 프록시해야 할 경로가 설명되어 있습니다. Relayium이 실제 운영에 쓰는 nginx 설정 자체는 공개되어 있지 않습니다.</li><li>앱 설정은 선택적인 server/.env 파일과 docker-compose.yml의 environment: 블록에서 옵니다. 모든 설정 항목에는 대응하는 RELAYIUM_* 키가 있습니다 — 시작점으로 server/.env.example을 복사하세요.</li><li>기본 배포에서 중요한 4가지 키는 RELAYIUM_ADDR(리스닝 주소), RELAYIUM_STATIC(빌드된 웹 앱 경로), RELAYIUM_DB(SQLite 파일 경로), RELAYIUM_BLOB_DIR(저장형 링크 암호문이 기록되는 위치)입니다. docker-compose.yml은 이미 이 4가지 모두에 합리적인 기본값을 설정해 두었고, 명명된 볼륨에 영속화합니다.</li></ul></section>
+      <section class="sheet"><h2>네트워크 간 전송을 위한 TURN 릴레이 추가하기</h2>
       <p>같은 네트워크(LAN) 전송과 SSH 기반 push/pull은 별도 설정 없이 동작합니다. 네트워크를 넘나드는 실시간 전송(서로 다른 NAT 뒤에 있는 두 기기)은 경로를 확보하기 위해 TURN 릴레이가 필요할 때가 있습니다 — 릴레이는 언제나 암호문만 볼 뿐, 파일 내용을 보는 일은 결코 없습니다.</p>
       <p>docker-compose.yml에는 선택적인 relay 프로필이 있어, 메인 서버와 함께 coturn(TURN 서버)과 릴레이 바이트 계량용 소형 Redis 인스턴스를 시작할 수 있습니다.</p>
       <p>이 비밀값은 서로 다른 두 곳에 도달해야 하며, 잘못하면 아무 소리 없이 실패합니다. coturn은 Compose 변수 치환으로 받는데, 이 치환은 셸이나 프로젝트 루트의 .env에서만 해석됩니다. 서버는 자신의 환경 — 즉 server/.env — 에서 읽으며, 비밀값이 비어 있으면 TURN이 아예 꺼집니다. 한쪽만 설정하면 돌아가고는 있지만 서버가 자격 증명을 전혀 발급해 주지 않는 coturn이 남습니다. 모든 컨테이너는 정상이라고 보고하고, 로그에는 아무것도 남지 않으며, 엄격한 NAT를 넘는 전송은 릴레이를 추가하기 전과 똑같이 계속 실패합니다.</p>
@@ -184,12 +228,12 @@ RELAYIUM_TURN_URLS=turn:example.com:3478,turns:example.com:5349</code></pre></li
       <div class="cbox ok" data-block="success"><p class="cbox-t">정상적인 릴레이의 모습</p><p>서버 컨테이너 안에서 두 키가 모두 비어 있지 않은 값으로 돌아옵니다. coturn이 떠 있다는 사실만으로는 아무것도 증명되지 않습니다 — 브라우저가 받는 릴레이 자격 증명은 오직 서버가 발급한 것뿐입니다.</p><pre tabindex="0"><code>$ docker compose exec server env | grep RELAYIUM_TURN
 RELAYIUM_TURN_SECRET=3f7a…
 RELAYIUM_TURN_URLS=turn:example.com:3478,turns:example.com:5349</code></pre></div>
-      <ul><li>coturn이 동작하려면 호스트의 실제 공인 IP와 열려 있는 UDP 포트 범위가 필요합니다 — docs/self-hosting.md에 Docker의 relay 프로필로 실행하는 방법이 설명되어 있습니다. Relayium이 실제 운영에 쓰는 coturn 설정(설치 스크립트 포함)은 공개되어 있지 않습니다.</li><li>--profile relay와 RELAYIUM_TURN_SECRET 없이도 서버 자체는 문제없이 동작합니다 — 다만 네트워크 간 전송이 STUN만 사용하는 방식으로 대체되며, 이는 비교적 느슨한 NAT 유형에서는 동작하지만 가장 엄격한 유형에서는 동작하지 않습니다.</li></ul>
-      <h2>내 컴퓨터에 CLI 설치</h2>
+      <ul><li>coturn이 동작하려면 호스트의 실제 공인 IP와 열려 있는 UDP 포트 범위가 필요합니다 — docs/self-hosting.md에 Docker의 relay 프로필로 실행하는 방법이 설명되어 있습니다. Relayium이 실제 운영에 쓰는 coturn 설정(설치 스크립트 포함)은 공개되어 있지 않습니다.</li><li>--profile relay와 RELAYIUM_TURN_SECRET 없이도 서버 자체는 문제없이 동작합니다 — 다만 네트워크 간 전송이 STUN만 사용하는 방식으로 대체되며, 이는 비교적 느슨한 NAT 유형에서는 동작하지만 가장 엄격한 유형에서는 동작하지 않습니다.</li></ul></section>
+      <section class="sheet"><h2>내 컴퓨터에 CLI 설치</h2>
       <p>이 마지막 단계는 서버가 아니라 내 컴퓨터에서 relayium CLI를 실행합니다. 설치하지 않았다면 먼저 설치하세요. macOS나 Linux:</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>relayium.com/cli 에 모든 설치 방법이 있습니다 — Windows 바이너리, 릴리스 페이지, 또는 Go가 있으면 go build.</li><li>relayium --version 으로 확인합니다. CLI가 없으면 아래 명령은 “command not found”만 출력합니다.</li></ul>
-      <h2>CLI를 자신의 서버로 연결하기</h2>
+      <ul><li>relayium.com/cli 에 모든 설치 방법이 있습니다 — Windows 바이너리, 릴리스 페이지, 또는 Go가 있으면 go build.</li><li>relayium --version 으로 확인합니다. CLI가 없으면 아래 명령은 “command not found”만 출력합니다.</li></ul></section>
+      <section class="sheet"><h2>CLI를 자신의 서버로 연결하기</h2>
       <p>Relayium CLI는 네트워크 간 send/receive와 text에서 기본적으로 relayium.com의 랑데부 서버를 사용합니다. --server를 전달하면 대신 자신의 서버를 사용할 수 있습니다.</p>
       <ol class="steps" data-block="steps"><li><p>앞 절에서 CLI를 설치한 기기에서 relayium.com이 아니라 자신의 서버로 로그인합니다. URL과 코드가 출력되며, 자신의 인스턴스에 로그인된 브라우저에서 승인합니다.</p><pre tabindex="0"><code>relayium login --server https://your-domain</code></pre></li><li><p>저장된 자격 증명이 어느 서버에 묶여 있는지 확인합니다. whoami는 플래그를 받지 않습니다 — 로그인이 실제로 기록한 내용을 그대로 보고하며, 그래서 실행해 볼 가치가 있습니다.</p><pre tabindex="0"><code>relayium whoami</code></pre></li><li><p>보낼 때도 같은 --server를 전달합니다. 빠뜨리면 CLI가 relayium.com에서 페어링 코드를 발급하고, 상대는 자신의 인스턴스에서 그 코드를 영영 찾지 못합니다.</p><pre tabindex="0"><code>relayium send ./report.pdf --server https://your-domain</code></pre></li><li><p>다른 기기에서 출력된 코드와 같은 --server로 받습니다. 텍스트 세션도 방식이 같습니다.</p><pre tabindex="0"><code>relayium receive 483920 --server https://your-domain</code></pre><pre tabindex="0"><code>relayium text --server https://your-domain</code></pre><pre tabindex="0"><code>relayium text 483920 --server https://your-domain</code></pre></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">자신의 인스턴스와 통신하고 있음을 확인하는 방법</p><p>whoami는 계정을 출력하고 괄호 안에 묶여 있는 서버를 함께 보여줍니다. 거기에 relayium.com이 아니라 자신의 도메인이 있으면 확인된 것입니다.</p><pre tabindex="0"><code>$ relayium login --server https://your-domain
@@ -198,15 +242,15 @@ logged in as you@example.com
 
 $ relayium whoami
 you@example.com (https://your-domain)</code></pre></div>
-      <ul><li>어느 서버를 쓰든 CLI는 무료입니다 — --server는 페어링 코드 핸드셰이크 서버만 바꿉니다. send나 text를 코드 없이 실행하면 그 서버에서 코드를 발급하고, 클라우드 up도 그 서버 계정에 저장하므로 먼저 relayium login --server https://your-domain으로 로그인하세요. receive, down, 출력된 코드로 참여하는 text는 로그인이 필요 없습니다.</li><li>text 양쪽은 동시에 온라인이어야 합니다. 메시지는 별도의 종단간 암호화 P2P 직접 연결 세션을 사용합니다. CLI text는 직접 연결 전용이며 브라우저의 TURN 릴레이를 사용하지 않습니다. Relayium과 자체 호스팅 서버는 메시지 본문이나 서버 측 기록을 저장하지 않지만, 어느 터미널이나 수신자든 받은 텍스트를 복사하거나 보관할 수 있습니다.</li><li>push/pull(자신의 SSH를 통한)과 serve + 데몬 다이렉트의 push relayium://host는 자체 호스팅 여부와 무관하게 relayium.com에 전혀 닿지 않습니다 — 지정한 원격지에 직접 연결됩니다.</li></ul>
-      <h2>잘 안 될 때</h2>
+      <ul><li>어느 서버를 쓰든 CLI는 무료입니다 — --server는 페어링 코드 핸드셰이크 서버만 바꿉니다. send나 text를 코드 없이 실행하면 그 서버에서 코드를 발급하고, 클라우드 up도 그 서버 계정에 저장하므로 먼저 relayium login --server https://your-domain으로 로그인하세요. receive, down, 출력된 코드로 참여하는 text는 로그인이 필요 없습니다.</li><li>text 양쪽은 동시에 온라인이어야 합니다. 메시지는 별도의 종단간 암호화 P2P 직접 연결 세션을 사용합니다. CLI text는 직접 연결 전용이며 브라우저의 TURN 릴레이를 사용하지 않습니다. Relayium과 자체 호스팅 서버는 메시지 본문이나 서버 측 기록을 저장하지 않지만, 어느 터미널이나 수신자든 받은 텍스트를 복사하거나 보관할 수 있습니다.</li><li>push/pull(자신의 SSH를 통한)과 serve + 데몬 다이렉트의 push relayium://host는 자체 호스팅 여부와 무관하게 relayium.com에 전혀 닿지 않습니다 — 지정한 원격지에 직접 연결됩니다.</li></ul></section>
+      <section class="sheet"><h2>잘 안 될 때</h2>
       <p>실패하는 자체 호스팅은 거의 모두 다섯 가지 중 하나입니다. 각각 읽어서 판단할 수 있는 한 줄이나 실행해서 결론을 내는 명령이 있으며, 다섯 중 셋은 그 확인을 돌려보기 전까지는 성공한 것처럼 보입니다.</p>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 해결</p><dl><dt>빌드가 시작되기도 전에 docker compose up이 아예 시작을 거부합니다.</dt><dd><pre tabindex="0"><code>docker compose up -d --build
 # required variable RELAYIUM_TURN_SECRET is missing a value</code></pre><p>Compose는 프로필로 걸러내기 전에 파일 전체를 치환하므로, 릴레이가 꺼져 있어도 꺼둔 coturn 서비스의 필수 변수까지 검증합니다. 아무 자리표시자나 앞에 붙이세요 — RELAYIUM_TURN_SECRET=placeholder docker compose up -d --build — 실제로 relay 프로필을 켤 때 진짜 비밀값으로 바꾸면 됩니다.</p></dd><dt>컨테이너는 Up인데 다른 기기의 브라우저에서 접근되지 않습니다.</dt><dd><pre tabindex="0"><code>docker compose ps
 # PORTS  127.0.0.1:8080-&gt;8080/tcp</code></pre><p>그 루프백 바인딩은 기본 동작으로, 공개 호스트가 평문 HTTP를 인터넷에 노출하지 않게 합니다. 운영에서는 그대로 두고 같은 호스트의 리버스 프록시에서 TLS를 종료하세요. 프록시가 없는 LAN 전용 장비라면 RELAYIUM_BIND=0.0.0.0 docker compose up -d로 더 넓게 게시합니다 — 이 변수는 서버가 아니라 compose가 읽습니다.</p></dd><dt>/healthz는 ok라는데 가입이 실패하고 저장형 링크가 끝내 나타나지 않습니다.</dt><dd><pre tabindex="0"><code>curl -s -o /dev/null -w &#39;%{http_code}\n&#39; http://127.0.0.1:8080/readyz
 # 503</code></pre><p>/healthz는 무조건 ok를 반환하며 프로세스가 대기 중이라는 것만 증명합니다. /readyz는 SQLite 데이터베이스와 블롭 디렉터리에 핑을 보내므로 503은 둘 중 하나를 쓸 수 없다는 뜻입니다 — relayium-data 볼륨이 마운트되었는지, RELAYIUM_DB와 RELAYIUM_BLOB_DIR이 그 안쪽을 가리키는지 확인하세요.</p></dd><dt>relayium login이 열 수 없는 localhost 확인 URL을 출력합니다.</dt><dd><pre tabindex="0"><code>relayium login --server https://your-domain
 # Open http://localhost:8080/device and enter code: WDJB-MJHT</code></pre><p>그 URL은 서버가 RELAYIUM_BASE_URL로 만들며, 기본값이 http://localhost:8080입니다. server/.env에서 실제 https:// 주소로 설정하고 재시작하세요. 이 값은 세션 쿠키에 Secure 플래그를 붙일지도 결정하므로, 잘못 둔 채로 두는 것은 보기 나쁜 정도의 문제가 아닙니다.</p></dd><dt>coturn은 돌아가는데 엄격한 NAT를 넘는 전송이 계속 실패합니다 — 로그에는 아무것도 없습니다.</dt><dd><pre tabindex="0"><code>docker compose exec server env | grep RELAYIUM_TURN
-# 출력 없음</code></pre><p>비밀값이 Compose 치환으로 coturn에는 닿았지만 서버에는 한 번도 닿지 않았고, 서버는 비밀값이 비어 있어 TURN이 아예 꺼져 있습니다. RELAYIUM_TURN_SECRET과 RELAYIUM_TURN_URLS를 server/.env에 적고, set -a; . ./server/.env; set +a로 셸에 불러와 치환도 같은 값을 보게 한 뒤 relay 프로필을 재시작하세요. 그 확인에서 두 키가 모두 비어 있지 않아야 합니다.</p></dd></dl></div>
+# 출력 없음</code></pre><p>비밀값이 Compose 치환으로 coturn에는 닿았지만 서버에는 한 번도 닿지 않았고, 서버는 비밀값이 비어 있어 TURN이 아예 꺼져 있습니다. RELAYIUM_TURN_SECRET과 RELAYIUM_TURN_URLS를 server/.env에 적고, set -a; . ./server/.env; set +a로 셸에 불러와 치환도 같은 값을 보게 한 뒤 relay 프로필을 재시작하세요. 그 확인에서 두 키가 모두 비어 있지 않아야 합니다.</p></dd></dl></div></section>
       <h2>자주 묻는 질문</h2>
       <h3>TURN을 설정해야 하나요?</h3>
       <p>네트워크를 넘나드는 실시간 전송이 엄격한 NAT 환경에서도 동작하길 원할 때만 필요합니다. 같은 네트워크 전송, SSH 기반 push/pull, 데몬 다이렉트는 모두 TURN 없이 동작합니다 — TURN은 네트워크 간 페어링 코드 경로의 NAT 통과에만 쓰입니다.</p>
@@ -231,6 +275,8 @@ you@example.com (https://your-domain)</code></pre></div>
         <a href="/pricing">요금제</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

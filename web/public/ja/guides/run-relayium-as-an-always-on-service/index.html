@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium を常時稼働の受信サービスとして実行する","description":"relayium serve を起動したままにして、どのピアからでもいつでもプッシュを受け取れるようにします——証明書ピンニング付き TLS 上でのデーモン直結です。初回プッシュの承認、フィンガープリントの事前認可、systemd (Linux) または launchd (macOS) による起動時の自動実行、そして --allow-delete について解説します。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/run-relayium-as-an-always-on-service/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium を常時稼働の受信サービスとして実行する"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"serve はデフォルトでどのポートを待ち受けますか?","acceptedAnswer":{"@type":"Answer","text":"9031 です。リスナー側(serve --port N)と送信側の宛先(relayium://host:N)の両方を --port で変更できます。"}},{"@type":"Question","name":"すべてのプッシュを手動で承認する必要がありますか?","acceptedAnswer":{"@type":"Answer","text":"あるフィンガープリントの最初のプッシュだけです。しかもそれは serve が端末付きで動いているときだけ表示されます。それ以降は記憶されます。serve を非対話的(systemd、パイプ)に動かす場合、プロンプトはまったく出ず未知のピアは拒否されます——その場合は relayium authorize で事前に承認してください。"}},{"@type":"Question","name":"送信側は私の常時稼働の受信機上のファイルを削除できますか?","acceptedAnswer":{"@type":"Answer","text":"serve を --allow-delete 付きで起動し、かつ送信側が sync --delete を実行している場合に限ります。--allow-delete がなければ削除は静かにスキップされ、それ以外は通常どおり転送されます。"}},{"@type":"Question","name":"常時稼働の受信サービスを動かすのは無料ですか?","acceptedAnswer":{"@type":"Answer","text":"はい。relayium serve は無料でセルフホスト可能な CLI の一部です——接続のどちら側もアカウントは不要で、有料プランもありません。"}},{"@type":"Question","name":"serve はアイデンティティとピアリストをどこに保存しますか?","acceptedAnswer":{"@type":"Answer","text":"デフォルトでは ~/.config/relayium です(id.key/id.crt はこのホストのアイデンティティ、authorized_fingerprints は許可リスト)。systemd サービスの場合は --config-dir を /etc/relayium のような固定の場所に向けてください。"}},{"@type":"Question","name":"macOS で起動時に serve を実行するには?","acceptedAnswer":{"@type":"Answer","text":"macOS に systemd はありません——launchd を使います。serve を /Library/LaunchDaemons に LaunchDaemon としてインストールする(起動時に開始。UserName を設定して自分のユーザーとして実行)か、~/Library/LaunchAgents に LaunchAgent としてインストールします(ログイン時に開始)。このガイドには編集してすぐ使える plist があります。Homebrew サービスはありません。launchd は serve にプロンプト用のターミナルを与えないため、先に relayium authorize でプッシュ元を事前認可してください。"}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ja/guides/" aria-current="true">ガイド</a><a href="/ja/apps/">アプリ</a><a href="/pricing">料金</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="メインナビゲーション"><a class="row" href="/">LAN</a><a class="row" href="/ja/cross-network/">ネットワーク間</a><a class="row" href="/ja/offline-transfer/">非同期</a><a class="row" href="/device-inbox">デバイス受信箱</a><a class="row" href="/cli">CLI</a><a class="row" href="/ja/apps/">アプリ</a><a class="row" href="/pricing">料金</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium を常時稼働の受信サービスとして実行する</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,11 +203,11 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links archived-pricing">このページに記載されている料金プランや利用上限は古くなっている可能性があります。現在の内容は<a href="/pricing">料金</a>のページでご確認ください。</p><p class="archived-links">最新版：<a href="/guides/run-relayium-as-an-always-on-service/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/run-relayium-as-an-always-on-service/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">relayium serve --once は1回の受信を処理して終了します——たまに1回だけ pull する用途には十分です。しかし、あるマシンを常駐の受け皿にしたい場合——毎晩バックアップが届くホームサーバー、CI がビルド成果物をプッシュするビルドマシン、スマートフォンからいつでも写真を送れる NAS——には、毎回手動で起動するのではなく、serve をずっと動かし続けたいはずです。</p>
       <p class="lead">本ガイドでは、長時間稼働するリスナーの起動、誰にプッシュを許可するかの承認、端末の前に誰もいない場合のためのピア事前承認、systemd 下での実行、そして sync --delete を使う送信側に削除をミラーさせる方法を扱います。</p>
-      <h2>始める前に</h2>
+      <section class="sheet"><h2>始める前に</h2>
       <p>以下はすべて relayium CLI なので、未インストールならまず入れてください。macOS または Linux では、1つのコマンドでビルド済みバイナリが PATH に入ります：</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>自分でファイルを選びたい、または Windows の場合は、リリースページからバイナリを取得してください——relayium.com/cli にすべてのインストール方法があります（Go があれば go build -o relayium ./cmd/relayium も可）。</li><li>relayium --version でインストールを確認できます。これをしないと以下のコマンドは「command not found」と出るだけです。</li></ul>
-      <h2>リスナーを起動する</h2>
+      <ul><li>自分でファイルを選びたい、または Windows の場合は、リリースページからバイナリを取得してください——relayium.com/cli にすべてのインストール方法があります（Go があれば go build -o relayium ./cmd/relayium も可）。</li><li>relayium --version でインストールを確認できます。これをしないと以下のコマンドは「command not found」と出るだけです。</li></ul></section>
+      <section class="sheet"><h2>リスナーを起動する</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">手順1の前に必要なもの</p><ul><li>両方のマシンに CLI。relayium version はそれぞれでバージョン文字列を表示します。command not found と返るなら、そのマシンにはまだ入っていません。</li><li>このマシン上の受信用ディレクトリと、そこに届くものを収めるだけのディスク容量。</li><li>送信側から到達できるアドレスと、開いた受信ポート。--port を渡さない限り serve は 9031 で待ち受けます。</li><li>このマシンを端末なしで動かすつもりなら——サービス化の目的はまさにそこです——送信側のフィンガープリントを事前に用意してください。専用の節が下にあります。常時稼働の受信側がすべてを拒否する原因として、これが群を抜いて多いものです。</li></ul></div>
       <p>serve は証明書ピンニング付き TLS 1.3 接続上でデーモン直結のプッシュ(relayium://host:port)を待ち受け、受け取った内容をあるディレクトリへ書き込みます。起動するのに事前共有は何も必要ありません——コピーしておくフィンガープリントも、登録しておくサーバーもありません:</p>
       <pre tabindex="0"><code>relayium serve --dir ~/inbox
@@ -175,14 +219,14 @@ no authorized peers yet — you&#39;ll be asked to approve each new peer on its 
 Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
 Accept and remember this peer? [y/N] y</code></pre></div>
-      <ul><li>--dir はファイルの置き場所を設定します(デフォルトはカレントディレクトリ)。</li><li>--port は待ち受けポートを設定します(デフォルトは 9031)。送信側が別の場所にいる場合はファイアウォールで開放してください。</li><li>--once を付けなければ、serve は停止させるかプロセスマネージャーが再起動するまで動き続け、プッシュを受け入れ続けます——これが常時稼働サービスたる所以です。</li></ul>
-      <h2>誰にプッシュを許可するか承認する</h2>
+      <ul><li>--dir はファイルの置き場所を設定します(デフォルトはカレントディレクトリ)。</li><li>--port は待ち受けポートを設定します(デフォルトは 9031)。送信側が別の場所にいる場合はファイアウォールで開放してください。</li><li>--once を付けなければ、serve は停止させるかプロセスマネージャーが再起動するまで動き続け、プッシュを受け入れ続けます——これが常時稼働サービスたる所以です。</li></ul></section>
+      <section class="sheet"><h2>誰にプッシュを許可するか承認する</h2>
       <p>新しいピアが初めてプッシュすると、serve がターミナルで動いていれば、そのプッシュがどこから来たか、フィンガープリントは何かを表示し、承認するかどうかを尋ねます——SSH が初めての接続先を尋ねるのと同じ要領です:</p>
       <pre tabindex="0"><code>Incoming push from 203.0.113.7:54021
   fingerprint: 74318e3b…
 Accept and remember this peer? [y/N] y</code></pre>
-      <ul><li>一度 y と答えれば、そのフィンガープリントは authorized_fingerprints に書き込まれます。以降、同じマシンからのプッシュはプロンプトなしで通過します。</li><li>フィンガープリントはネットワークアドレスではなくマシンそのものを識別するため、送信側の IP が変わっても有効です。</li><li>この手順は設計上、対話的です——キーボードの前に誰かが必要ですが、serve が systemd に移行すると(次の項目)それは成り立たなくなります。</li></ul>
-      <h2>非対話的な環境のためにピアを事前承認する</h2>
+      <ul><li>一度 y と答えれば、そのフィンガープリントは authorized_fingerprints に書き込まれます。以降、同じマシンからのプッシュはプロンプトなしで通過します。</li><li>フィンガープリントはネットワークアドレスではなくマシンそのものを識別するため、送信側の IP が変わっても有効です。</li><li>この手順は設計上、対話的です——キーボードの前に誰かが必要ですが、serve が systemd に移行すると(次の項目)それは成り立たなくなります。</li></ul></section>
+      <section class="sheet"><h2>非対話的な環境のためにピアを事前承認する</h2>
       <p>serve がプロンプトを出せる端末を持たない場合——systemd サービス、バックグラウンドプロセス、パイプなど——尋ねることができないため、まだ認識していないフィンガープリントはすべて拒否します。代わりに事前にピアを承認しておきます。プッシュする側のマシンで relayium id を実行してフィンガープリントを表示し、受信側では最初のプッシュが届く前にそれを追加します:</p>
       <pre tabindex="0"><code># プッシュする側のマシンで: フィンガープリントを表示する
 relayium id
@@ -190,8 +234,8 @@ relayium id
 # この常時稼働の受信側で: 事前に承認しておく
 relayium authorize 74318e3b...</code></pre>
       <ol class="steps" data-block="steps"><li><p>push する側のマシンでフィンガープリントを表示します。64桁の16進数で、アドレスではなくそのマシンを識別します。</p><pre tabindex="0"><code>relayium id</code></pre></li><li><p>この受信側で承認します。サービスが動くときと同じ --config-dir を使ってください。別のユーザーで実行したり、ユニットが別のパスを使っているのに既定のパスで承認したりすると、フィンガープリントはサービスが決して読まないファイルに書かれます。</p><pre tabindex="0"><code>relayium authorize 74318e3b… --config-dir /etc/relayium</code></pre></li></ol>
-      <ul><li>authorize は冪等です——すでに信頼しているフィンガープリントに対して再度実行しても何も起きません。</li><li>アイデンティティと信頼のファイルは --config-dir で指定したディレクトリにあり、デフォルトは ~/.config/relayium です(id.key/id.crt はこのホストのアイデンティティ、authorized_fingerprints はピアの許可リスト)。</li></ul>
-      <h2>systemd の下で実行する</h2>
+      <ul><li>authorize は冪等です——すでに信頼しているフィンガープリントに対して再度実行しても何も起きません。</li><li>アイデンティティと信頼のファイルは --config-dir で指定したディレクトリにあり、デフォルトは ~/.config/relayium です(id.key/id.crt はこのホストのアイデンティティ、authorized_fingerprints はピアの許可リスト)。</li></ul></section>
+      <section class="sheet"><h2>systemd の下で実行する</h2>
       <p>再起動やクラッシュをまたいで生き残るサービスにするには、serve を systemd に任せます。--config-dir を固定パスに向けて、ホストのアイデンティティとピア許可リストが再起動をまたいでも維持されるようにします:</p>
       <pre tabindex="0"><code># /etc/systemd/system/relayium-serve.service
 [Unit]
@@ -210,8 +254,8 @@ WantedBy=multi-user.target</code></pre>
 active
 $ journalctl -u relayium-serve -n 20 --no-pager | grep -c &#39;all pushes will be rejected&#39;
 0</code></pre></div>
-      <ul><li>このサービスを有効化する前に、プッシュを許可すべきすべてのピアに対して relayium authorize &lt;fingerprint&gt; を実行しておいてください——サービス自体はプロンプトを出せません。</li><li>systemctl enable --now relayium-serve で起動し、起動のたびに復帰するようにします。</li><li>/etc/relayium/id.key のパーミッションはちょうど 0600 でなければならず、所有者はユニットの User= です。それ以外は relayium が拒否します——0400 も含まれるので、0600 より厳しくすることも、誰でも読める状態にしておくことと同じくらい確実にサービスを止めます。</li></ul>
-      <h2>macOS で起動時に実行する (launchd)</h2>
+      <ul><li>このサービスを有効化する前に、プッシュを許可すべきすべてのピアに対して relayium authorize &lt;fingerprint&gt; を実行しておいてください——サービス自体はプロンプトを出せません。</li><li>systemctl enable --now relayium-serve で起動し、起動のたびに復帰するようにします。</li><li>/etc/relayium/id.key のパーミッションはちょうど 0600 でなければならず、所有者はユニットの User= です。それ以外は relayium が拒否します——0400 も含まれるので、0600 より厳しくすることも、誰でも読める状態にしておくことと同じくらい確実にサービスを止めます。</li></ul></section>
+      <section class="sheet"><h2>macOS で起動時に実行する (launchd)</h2>
       <p>macOS に systemd はありません——サービスマネージャーは launchd です。Mac 上で serve を動かし続けるには(受け取り口として常時稼働させる Mac mini など)、LaunchDaemon としてインストールし、誰もログインしていない起動時から開始させます。UserName を設定して root ではなく自分のユーザーとして実行し、--dir と --config-dir には絶対パスを指定して、アイデンティティと信頼のファイルが自分の ~/.config/relayium に残るようにします:</p>
       <pre tabindex="0"><code>&lt;!-- /Library/LaunchDaemons/com.relayium.serve.plist  (replace YOU with your macOS username) --&gt;
 &lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
@@ -246,17 +290,17 @@ sudo launchctl bootstrap system /Library/LaunchDaemons/com.relayium.serve.plist
 sudo launchctl print system/com.relayium.serve | grep state
 tail -f ~/relayium-serve.log
 sudo launchctl bootout system/com.relayium.serve</code></pre>
-      <ul><li>launchd は serve にターミナルを与えないため、プロンプトを出せません——systemd のときと同様に、各プッシュ元について先に relayium authorize &lt;fingerprint&gt; を実行してください。フィンガープリントはそのマシンの relayium id から得られます。</li><li>KeepAlive は serve がクラッシュしたときに再起動します。RunAtLoad と /Library/LaunchDaemons 内の LaunchDaemon を組み合わせれば、ログインなしで起動時に開始します——ヘッドレスの Mac mini にぴったりです。</li><li>ログイン時だけ動くサービスにしたい場合は、同じ plist(UserName キーは削除)を ~/Library/LaunchAgents/ に置き、launchctl bootstrap gui/$(id -u) &lt;path&gt; で読み込みます——起動時ではなくログイン時に開始します。</li><li>macOS のアプリケーションファイアウォールが有効な場合は、relayium の受信接続を許可してください(システム設定 → ネットワーク → ファイアウォール)。そうしないと、待ち受けポートへのプッシュがブロックされます。</li></ul>
-      <h2>sync --delete を使う送信側に削除をミラーさせる</h2>
+      <ul><li>launchd は serve にターミナルを与えないため、プロンプトを出せません——systemd のときと同様に、各プッシュ元について先に relayium authorize &lt;fingerprint&gt; を実行してください。フィンガープリントはそのマシンの relayium id から得られます。</li><li>KeepAlive は serve がクラッシュしたときに再起動します。RunAtLoad と /Library/LaunchDaemons 内の LaunchDaemon を組み合わせれば、ログインなしで起動時に開始します——ヘッドレスの Mac mini にぴったりです。</li><li>ログイン時だけ動くサービスにしたい場合は、同じ plist(UserName キーは削除)を ~/Library/LaunchAgents/ に置き、launchctl bootstrap gui/$(id -u) &lt;path&gt; で読み込みます——起動時ではなくログイン時に開始します。</li><li>macOS のアプリケーションファイアウォールが有効な場合は、relayium の受信接続を許可してください(システム設定 → ネットワーク → ファイアウォール)。そうしないと、待ち受けポートへのプッシュがブロックされます。</li></ul></section>
+      <section class="sheet"><h2>sync --delete を使う送信側に削除をミラーさせる</h2>
       <p>デフォルトでは serve はファイルの追加・更新しか行いません——送信側が sync --delete を実行しても、新規・変更ファイルはコピーされますが、要求された削除はスキップされ、受信側に警告がログ出力されます。真のミラーリングを有効にするには --allow-delete を付けて serve を起動します。これにより送信側で削除されたファイルはこちらでも削除されます:</p>
       <pre tabindex="0"><code>relayium serve --dir /srv/mirror --allow-delete</code></pre>
-      <ul><li>--allow-delete は受信側で有効にするオプトインです。送信側は引き続き sync --delete で削除を要求する必要があります。</li><li>このオプションを付けなければ、送信側が何を要求しても、このマシン上のファイルが削除されることはありません。</li></ul>
-      <h2>うまくいかないとき</h2>
+      <ul><li>--allow-delete は受信側で有効にするオプトインです。送信側は引き続き sync --delete で削除を要求する必要があります。</li><li>このオプションを付けなければ、送信側が何を要求しても、このマシン上のファイルが削除されることはありません。</li></ul></section>
+      <section class="sheet"><h2>うまくいかないとき</h2>
       <p>この5つのうち4つは、サービスが動いたまま健全に見えます——すべてを拒否するリスナーもまたリスナーです。どれにも、読めば分かる1行か、実行すれば決着がつくコマンドがあります。</p>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状、確認、対処</p><dl><dt>サービスは起動して動き続けているのに、push がすべて拒否される。</dt><dd><pre tabindex="0"><code>journalctl -u relayium-serve -n 20 --no-pager
 # warning: no authorized peers and no terminal to approve on; all pushes will be rejected.</code></pre><p>サービスには端末がないため、初回 push の承認プロンプトを実行することができず、見えるのは見知らぬフィンガープリントだけです。各送信側を事前に承認してください。送信側で relayium id、こちらで relayium authorize &lt;フィンガープリント&gt; を、ユニットと同じ --config-dir で実行します。この警告は起動時に出るので、ログの最初から載っています。</p></dd><dt>id.key の権限が安全でないと言われ、サービスがまったく起動しない。</dt><dd><pre tabindex="0"><code>stat -c &#39;%a %U %n&#39; /etc/relayium/id.key
 # 400 relayium /etc/relayium/id.key</code></pre><p>鍵の権限はちょうど 0600 でなければなりません。0644 は当然として、見落としがちなのは 0400 も駄目だという点です。緩めるのと同じくらい確実に、締めすぎてもサービスは起動しません。鍵に chmod 600 を当て、ユニットの User= が所有者になっていることを確認してください。</p></dd><dt>送信側が「接続を拒否された」と報告する。</dt><dd><pre tabindex="0"><code>relayium push ./build relayium://drop.example.com:9031
-# hint: if the peer refused the connection, it may not have authorized this host.</code></pre><p>受信側がこの送信側を認識していません。送信側で relayium id を実行し、そのフィンガープリントを受信側で relayium authorize してください。すでに実行済みなら、ユニットの --config-dir の下で行ったかを確認します。信頼ファイルはディレクトリごとなので、~/.config/relayium に承認したフィンガープリントは /etc/relayium を読むサービスからは存在しないのと同じです。</p></dd><dt>手で serve を動かすと push できるのに、サービス経由や別マシンからだとできない。</dt><dd><pre tabindex="0"><code>sudo ss -tlnp | grep 9031</code></pre><p>原因は2つですが、確認は1つで足ります。何も待ち受けていなければユニットが有効化されていません——systemctl is-enabled relayium-serve で確認します。待ち受けているならポートが塞がれています。ホストのファイアウォールとクラウドのセキュリティグループで 9031 を開けてください。既定以外の --port を使う場合は、送信側の relayium://host:N のポートと一致している必要があります。</p></dd><dt>sync --delete の送信側が求めた削除が、このマシンでは決して起きない。</dt><dd><pre tabindex="0"><code>journalctl -u relayium-serve | grep -i delete</code></pre><p>削除は受信側のオプトインで、既定では無効です。新規・変更されたファイルは通常どおりコピーされ、スキップされた削除はこちらに警告として記録されます。ユニットの ExecStart に --allow-delete を足して再起動してください。送信側が求めるだけでは足りず、この非対称は意図的です——受信側が、よそで打たれたフラグのせいでファイルを失うことはありません。</p></dd></dl></div>
+# hint: if the peer refused the connection, it may not have authorized this host.</code></pre><p>受信側がこの送信側を認識していません。送信側で relayium id を実行し、そのフィンガープリントを受信側で relayium authorize してください。すでに実行済みなら、ユニットの --config-dir の下で行ったかを確認します。信頼ファイルはディレクトリごとなので、~/.config/relayium に承認したフィンガープリントは /etc/relayium を読むサービスからは存在しないのと同じです。</p></dd><dt>手で serve を動かすと push できるのに、サービス経由や別マシンからだとできない。</dt><dd><pre tabindex="0"><code>sudo ss -tlnp | grep 9031</code></pre><p>原因は2つですが、確認は1つで足ります。何も待ち受けていなければユニットが有効化されていません——systemctl is-enabled relayium-serve で確認します。待ち受けているならポートが塞がれています。ホストのファイアウォールとクラウドのセキュリティグループで 9031 を開けてください。既定以外の --port を使う場合は、送信側の relayium://host:N のポートと一致している必要があります。</p></dd><dt>sync --delete の送信側が求めた削除が、このマシンでは決して起きない。</dt><dd><pre tabindex="0"><code>journalctl -u relayium-serve | grep -i delete</code></pre><p>削除は受信側のオプトインで、既定では無効です。新規・変更されたファイルは通常どおりコピーされ、スキップされた削除はこちらに警告として記録されます。ユニットの ExecStart に --allow-delete を足して再起動してください。送信側が求めるだけでは足りず、この非対称は意図的です——受信側が、よそで打たれたフラグのせいでファイルを失うことはありません。</p></dd></dl></div></section>
       <h2>よくある質問</h2>
       <h3>serve はデフォルトでどのポートを待ち受けますか?</h3>
       <p>9031 です。リスナー側(serve --port N)と送信側の宛先(relayium://host:N)の両方を --port で変更できます。</p>
@@ -285,6 +329,8 @@ sudo launchctl bootout system/com.relayium.serve</code></pre>
         <a href="/pricing">料金</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

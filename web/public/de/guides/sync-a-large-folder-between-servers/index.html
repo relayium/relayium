@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Einen großen Ordner zwischen zwei Servern synchronisieren (fortsetzbar, im Hintergrund)","description":"Spiegle ein großes Verzeichnis von einem Server auf einen anderen mit relayium sync — inkrementell, nach einem Verbindungsabbruch fortsetzbar und sicher unbeaufsichtigt auszuführen. Eine Retry-Schleife unter tmux bewegt Gigabytes, ohne ein Terminal zu bewachen.","inLanguage":"de","datePublished":"2026-07-08","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/de/guides/sync-a-large-folder-between-servers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/de/"},{"@type":"ListItem","position":2,"name":"Anleitungen","item":"https://relayium.com/de/guides/"},{"@type":"ListItem","position":3,"name":"Einen großen Ordner zwischen zwei Servern synchronisieren (fortsetzbar, im Hintergrund)"}]},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Was passiert, wenn die Übertragung auf halbem Weg unterbrochen wird?","acceptedAnswer":{"@type":"Answer","text":"Nichts geht verloren. Führe relayium sync erneut aus — es überspringt bereits auf dem Empfänger vorhandene Dateien und setzt eine halb gesendete Datei beim bereits auf der Platte liegenden Byte-Offset fort. Die until-Schleife in dieser Anleitung tut das automatisch, bis der ganze Ordner gespiegelt ist."}},{"@type":"Question","name":"Wie unterscheidet sich das von rsync?","acceptedAnswer":{"@type":"Answer","text":"Beide machen inkrementelles einseitiges Spiegeln, aber relayium sync läuft über eine TLS-Verbindung mit Pinning ohne SSH-Konto (daemon-direct), authentifiziert die beiden Maschinen per Zertifikats-Fingerprint und prüft jede übertragene Datei mit SHA-256. Wie bei rsync in der Voreinstellung wird eine Datei, deren Größe und mtime auf dem Empfänger schon übereinstimmen, übersprungen statt neu gehasht. Es ist dieselbe Übertragungs-Engine wie die anderen Modi von relayium."}},{"@type":"Question","name":"Löscht sync auf dem Empfänger Dateien, die ich aus der Quelle entfernt habe?","acceptedAnswer":{"@type":"Answer","text":"Nur wenn du es verlangst. Standardmäßig fügt sync nur hinzu und aktualisiert. Übergib --delete, um Löschungen zu spiegeln, und der Empfänger muss serve mit --allow-delete betreiben, damit es befolgt wird — sonst wird die Löschung ignoriert und zurückgemeldet."}},{"@type":"Question","name":"Kann ich zwei Ordner dauerhaft synchron halten?","acceptedAnswer":{"@type":"Answer","text":"Ja. Füge --watch hinzu, und sync läuft weiter und spiegelt bei jeder Änderung unter der Quelle neu. Für ein einmaliges Verschieben eines großen Ordners brauchst du es nicht — die Retry-Schleife plus ein schlichtes sync genügen."}},{"@type":"Question","name":"Muss ich einen Port öffnen?","acceptedAnswer":{"@type":"Answer","text":"Für daemon-direct ja — der Port des Listeners (Standard 9031) muss vom Sender erreichbar sein. Willst du keinen Port öffnen und hast bereits SSH zwischen den Servern, funktioniert sync auch über SSH: relayium sync /path user@host:/path (relayium muss auf der Gegenseite installiert sein)."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/de/guides/" aria-current="true">Anleitungen</a><a href="/de/apps/">Apps</a><a href="/pricing">Preise</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Hauptnavigation"><a class="row" href="/">LAN</a><a class="row" href="/de/cross-network/">Netzwerkübergreifend</a><a class="row" href="/de/offline-transfer/">Asynchron</a><a class="row" href="/device-inbox">Geräte-Posteingang</a><a class="row" href="/cli">CLI</a><a class="row" href="/de/apps/">Apps</a><a class="row" href="/pricing">Preise</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/de/">Relayium</a> <span aria-hidden="true">›</span> <a href="/de/guides/">Anleitungen</a> <span aria-hidden="true">›</span> <span aria-current="page">Einen großen Ordner zwischen zwei Servern synchronisieren (fortsetzbar, im Hintergrund)</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,15 +203,15 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="Archivierte Übersetzung"><p class="archived-label">Archivierte Übersetzung</p><p>Diese Seite ist eine archivierte deutsche Übersetzung. Produkt und aktuelle Dokumentation von Relayium werden auf Englisch und in vereinfachtem Chinesisch gepflegt; die App selbst bietet kein Deutsch mehr an. Beschriebene Bildschirme und Details können deshalb vom heutigen Verhalten abweichen.</p><p class="archived-links archived-pricing">Die hier genannten Tarife und Nutzungsgrenzen können veraltet sein; die aktuellen stehen auf der Seite <a href="/pricing">Preise</a>.</p><p class="archived-links">Aktuelle Fassung: <a href="/guides/sync-a-large-folder-between-servers/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/sync-a-large-folder-between-servers/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Du hast einen großen Ordner — zig Gigabyte — auf einem Server und willst eine exakte Kopie auf einem anderen. Du kannst kein Terminal stundenlang bewachen, und eine Übertragung, die auf halbem Weg abbricht, sollte nicht bei null neu beginnen. relayium sync ist genau dafür gebaut: ein einseitiger inkrementeller Spiegel, der überspringt, was schon da ist, eine halb gesendete Datei dort fortsetzt, wo sie stehen blieb, und jede Datei, die er sendet, Ende-zu-Ende prüft.</p>
       <p class="lead">Diese Anleitung richtet eine unbeaufsichtigte, selbstheilende Übertragung ein: genehmige den Sender einmal, betreibe den Listener im Hintergrund und treibe relayium sync aus einer Retry-Schleife in tmux an, sodass es über Verbindungsabbrüche hinweg weiterläuft, bis der ganze Ordner angekommen ist.</p>
-      <h2>Warum relayium sync für diese Aufgabe passt</h2>
+      <section class="sheet"><h2>Warum relayium sync für diese Aufgabe passt</h2>
       <p>sync ist ein einseitiger inkrementeller Spiegel über das native Protokoll (installiere relayium an beiden Enden). Drei Eigenschaften machen es sicher, es unbeaufsichtigt auszuführen und erneut auszuführen:</p>
-      <ul><li>Überspringt bereits vorhandene Dateien: Eine Datei, deren Kopie auf dem Empfänger in Größe und Änderungszeit übereinstimmt, wird nicht erneut gesendet.</li><li>Setzt Teildateien fort: War eine Datei beim Verbindungsabbruch halb übertragen, setzt der nächste Lauf beim bereits auf der Platte liegenden Byte-Offset fort, statt neu zu beginnen.</li><li>Prüft, was er sendet: Jede übertragene Datei — auch eine fortgesetzte — wird Ende-zu-Ende gegen die SHA-256 des Senders geprüft, und eine Abweichung wird als Fehler gemeldet. Übersprungene Dateien werden allein über Größe und mtime entschieden und nicht neu gehasht; über Inhalte, die er nicht gesendet hat, sagt sync nichts aus.</li><li>Deshalb ist der Befehl idempotent — ein erneuter Lauf erledigt nur die verbleibende Arbeit, und genau das lässt eine Retry-Schleife eine riesige Übertragung abschließen.</li></ul>
-      <h2>Voraussetzungen</h2>
+      <ul><li>Überspringt bereits vorhandene Dateien: Eine Datei, deren Kopie auf dem Empfänger in Größe und Änderungszeit übereinstimmt, wird nicht erneut gesendet.</li><li>Setzt Teildateien fort: War eine Datei beim Verbindungsabbruch halb übertragen, setzt der nächste Lauf beim bereits auf der Platte liegenden Byte-Offset fort, statt neu zu beginnen.</li><li>Prüft, was er sendet: Jede übertragene Datei — auch eine fortgesetzte — wird Ende-zu-Ende gegen die SHA-256 des Senders geprüft, und eine Abweichung wird als Fehler gemeldet. Übersprungene Dateien werden allein über Größe und mtime entschieden und nicht neu gehasht; über Inhalte, die er nicht gesendet hat, sagt sync nichts aus.</li><li>Deshalb ist der Befehl idempotent — ein erneuter Lauf erledigt nur die verbleibende Arbeit, und genau das lässt eine Retry-Schleife eine riesige Übertragung abschließen.</li></ul></section>
+      <section class="sheet"><h2>Voraussetzungen</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Was du brauchst</p><ul><li>Diese Anleitung nutzt daemon-direct (relayium://), die beiden Server brauchen also keinen SSH-Zugang zueinander.</li><li>Öffne den Port des Listeners (Standard 9031) für den Sender in Firewall oder Security-Group des Empfängers.</li><li>Platz für den ganzen Ordner auf dem Empfänger. Vergleich du -sh /root/workspace auf dem Sender mit df -h /root auf dem Empfänger, bevor du eine mehrstündige Übertragung startest.</li></ul></div>
       <p>Installiere relayium auf beiden Servern (sync spricht das native Protokoll, muss also an jedem Ende vorhanden sein):</p>
       <pre tabindex="0"><code># auf BEIDEN Servern
-curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <h2>Den Sender einmal genehmigen (auf dem Empfänger)</h2>
+curl -fsSL https://relayium.com/install.sh | sh</code></pre></section>
+      <section class="sheet"><h2>Den Sender einmal genehmigen (auf dem Empfänger)</h2>
       <p>Der Empfänger genehmigt die sendende Maschine einmal; die Genehmigung wird auf die Platte geschrieben und bleibt über Neustarts hinweg gültig, du wiederholst sie also nie. Starte den Listener zuerst in einem Terminal und richte --dir auf das übergeordnete Verzeichnis — relayium sync /root/workspace reproduziert workspace/... auf dem Empfänger, sodass --dir /root die Dateien in /root/workspace/ landen lässt.</p>
       <p>Bei der ersten Verbindung des Senders (nächster Abschnitt) zeigt serve dessen Adresse und Fingerprint und bittet dich um Genehmigung; antworte mit y, und er wird dauerhaft gespeichert:</p>
       <pre tabindex="0"><code># auf dem EMPFÄNGER (im Vordergrund, zum interaktiven Genehmigen)
@@ -176,13 +220,13 @@ relayium serve --dir /root --port 9031</code></pre>
 Incoming push from 203.0.113.9:52140
   fingerprint: 9f2c41ab…
 Accept and remember this peer? [y/N] y</code></pre>
-      <ul><li>Für ein vollständig unbeaufsichtigtes Setup überspringst du die Abfrage: Führe relayium id auf dem Sender aus, um seinen Fingerprint auszugeben, dann relayium authorize &lt;Fingerprint&gt; auf dem Empfänger.</li><li>--dir ist das übergeordnete Verzeichnis des zu synchronisierenden Ordners, nicht der Ordner selbst — sonst landen die Dateien eine Ebene zu tief (z. B. /root/workspace/workspace).</li></ul>
-      <h2>Den Listener im Hintergrund betreiben (auf dem Empfänger)</h2>
+      <ul><li>Für ein vollständig unbeaufsichtigtes Setup überspringst du die Abfrage: Führe relayium id auf dem Sender aus, um seinen Fingerprint auszugeben, dann relayium authorize &lt;Fingerprint&gt; auf dem Empfänger.</li><li>--dir ist das übergeordnete Verzeichnis des zu synchronisierenden Ordners, nicht der Ordner selbst — sonst landen die Dateien eine Ebene zu tief (z. B. /root/workspace/workspace).</li></ul></section>
+      <section class="sheet"><h2>Den Listener im Hintergrund betreiben (auf dem Empfänger)</h2>
       <p>Ist der Fingerprint genehmigt, beende das serve im Vordergrund (Ctrl-C) und starte es abgekoppelt neu, damit es dein Ausloggen übersteht. Es lädt den gespeicherten Fingerprint und akzeptiert den Sender stillschweigend — diesmal ohne Abfrage. Dieselbe Zeile schreibt die PID des neuen Prozesses nach ~/relayium-serve.pid, und damit beendet der letzte Schritt dieser Anleitung den Listener, den er selbst gestartet hat, statt jeden relayium-Befehl auf der Maschine:</p>
       <pre tabindex="0"><code># auf dem EMPFÄNGER
 nohup relayium serve --dir /root --port 9031 &gt; ~/relayium-serve.log 2&gt;&amp;1 &amp; echo $! &gt; ~/relayium-serve.pid</code></pre>
-      <ul><li>serve verarbeitet Verbindungen nacheinander und läuft weiter, ist also für jede erneute Verbindung der Retry-Schleife unten bereit.</li><li>Für einen dauerhaft laufenden Posteingang betreibe es stattdessen unter systemd (Restart=always, --config-dir /etc/relayium).</li></ul>
-      <h2>sync in einer Retry-Schleife unter tmux ausführen (auf dem Sender)</h2>
+      <ul><li>serve verarbeitet Verbindungen nacheinander und läuft weiter, ist also für jede erneute Verbindung der Retry-Schleife unten bereit.</li><li>Für einen dauerhaft laufenden Posteingang betreibe es stattdessen unter systemd (Restart=always, --config-dir /etc/relayium).</li></ul></section>
+      <section class="sheet"><h2>sync in einer Retry-Schleife unter tmux ausführen (auf dem Sender)</h2>
       <p>Lange Übertragungen werden unterbrochen — eine abgebrochene Sitzung, ein wackeliges Netz, ein Neustart. Die Lösung ist kein raffiniertes Werkzeug, sondern eine Schleife, die sync erneut ausführt, bis es gelingt, plus ein Terminal-Multiplexer, damit es dein Ausloggen übersteht. tmux ist hier sauberer als nohup: keine Ausgabe-Umleitung, die man falsch machen kann, und du kannst dich wieder verbinden, um den Fortschritt zu sehen.</p>
       <p>Starte eine tmux-Sitzung und führe den Spiegel in einer until-Schleife aus — sie versucht es alle 10 Sekunden erneut, bis sync Erfolg meldet, und beendet sich dann von selbst:</p>
       <ol class="steps" data-block="steps"><li><p>Starte auf dem Sender eine tmux-Sitzung, damit die Schleife die ssh-Sitzung überlebt, aus der du sie gestartet hast.</p><pre tabindex="0"><code># auf dem SENDER
@@ -190,8 +234,8 @@ tmux new -s xfer      # apt install -y tmux, falls es fehlt</code></pre></li><li
       <div class="cbox ok" data-block="success"><p class="cbox-t">So sieht ein erfolgreicher Durchlauf aus</p><p>Jeder Durchlauf gibt eine Zeile pro tatsächlich gesendeter Datei aus, dann eine Zusammenfassung, die Gesendetes gegen das stellt, was der Empfänger schon hatte. Die Schleife endet, sobald sync das erste Mal Erfolg meldet, und diese Zusammenfassung ist der Stand des Spiegels.</p><pre tabindex="0"><code>relayium sync /root/workspace relayium://203.0.113.43:9031
   workspace/data/part-004.bin (1073741824 bytes)
 synced: 1 sent, 812 unchanged</code></pre></div>
-      <ul><li>Jeder Versuch tut weniger: bereits übertragene Dateien werden übersprungen, eine halb gesendete Datei wird fortgesetzt — so konvergiert die Schleife und ist fertig.</li><li>Der Fortschritt gibt pro fertiger Datei eine Zeile aus, eine große Datei überträgt also still, bis sie fertig ist. Stille ist kein Stillstand (siehe Fehlerbehebung).</li></ul>
-      <h2>Prüfen und abschließen</h2>
+      <ul><li>Jeder Versuch tut weniger: bereits übertragene Dateien werden übersprungen, eine halb gesendete Datei wird fortgesetzt — so konvergiert die Schleife und ist fertig.</li><li>Der Fortschritt gibt pro fertiger Datei eine Zeile aus, eine große Datei überträgt also still, bis sie fertig ist. Stille ist kein Stillstand (siehe Fehlerbehebung).</li></ul></section>
+      <section class="sheet"><h2>Prüfen und abschließen</h2>
       <p>Die Übertragung ist abgeschlossen, wenn die until-Schleife endet und du wieder an einer normalen Shell-Eingabe bist. Prüfe, dass beide Seiten übereinstimmen, und stoppe dann den Listener:</p>
       <ol class="steps" data-block="steps"><li><p>Warte, bis die until-Schleife von allein endet. Wieder an einer gewöhnlichen Shell-Eingabe zu sein heißt, dass die Übertragung fertig ist, nicht dass du sie abgebrochen hast.</p></li><li><p>Vergleich die Gesamtgrößen auf beiden Servern.</p><pre tabindex="0"><code># Gesamtgrößen auf BEIDEN Servern vergleichen
 du -sh /root/workspace</code></pre></li><li><p>Stopp den Listener auf dem Empfänger, sobald die Größen übereinstimmen. Das Signal geht an die PID, die du beim Start notiert hast, statt per Textsuche an jeden relayium-Befehl auf der Maschine, und die PID-Datei verschwindet nur, wenn das Signal geglückt ist. Eine PID-Datei aus einem früheren Lauf kann eine PID nennen, die das System längst neu vergeben hat — bist du dir also nicht sicher, dass die Datei noch deine ist, lass dir erst die Kommandozeile dieser PID ausgeben und töte sie nur, wenn serve zurückkommt.</p><pre tabindex="0"><code># auf dem EMPFÄNGER, sobald geprüft
@@ -199,8 +243,8 @@ ps -p &quot;$(cat ~/relayium-serve.pid)&quot; -o command=
 kill &quot;$(cat ~/relayium-serve.pid)&quot; &amp;&amp; rm ~/relayium-serve.pid</code></pre></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">So sieht ein fertiger Spiegel aus</p><p>du -sh meldet auf beiden Servern dieselbe Gesamtgröße, und die until-Schleife hat dich an einen gewöhnlichen Shell-Prompt zurückgegeben, statt erneut zu versuchen. Gleiche Summen sind eine grobe Vollständigkeitsprobe und kein Integritätsbeweis: sync hat über Größe und mtime entschieden, welche Dateien gar nicht erst gehen, also sagt die Summe nichts über den Inhalt der übersprungenen Dateien.</p><pre tabindex="0"><code># the same total, on BOTH servers
 46G	/root/workspace</code></pre></div>
-      <ul><li>Was sync gesendet hat, ist geprüft: Jede übertragene Datei wurde beim Eintreffen mit SHA-256 kontrolliert, und ein sauberes Ende heißt, dass keine dieser Prüfungen fehlgeschlagen ist. Was übersprungen wurde, wurde nur über Größe und mtime abgeglichen; gleiche du -sh-Summen sind deshalb eine Plausibilitätsprobe auf Vollständigkeit und kein Beweis, dass die übersprungenen Inhalte noch übereinstimmen. Brauchst du diesen Beweis, vergleiche Prüfsummen pro Datei auf beiden Servern.</li></ul>
-      <h2>Fehlerbehebung</h2>
+      <ul><li>Was sync gesendet hat, ist geprüft: Jede übertragene Datei wurde beim Eintreffen mit SHA-256 kontrolliert, und ein sauberes Ende heißt, dass keine dieser Prüfungen fehlgeschlagen ist. Was übersprungen wurde, wurde nur über Größe und mtime abgeglichen; gleiche du -sh-Summen sind deshalb eine Plausibilitätsprobe auf Vollständigkeit und kein Beweis, dass die übersprungenen Inhalte noch übereinstimmen. Brauchst du diesen Beweis, vergleiche Prüfsummen pro Datei auf beiden Servern.</li></ul></section>
+      <section class="sheet"><h2>Fehlerbehebung</h2>
       <p>Bei einem mehrstündigen Spiegel kommen sechs Dinge vor. Drei davon sehen wie Fehler aus und sind keine, die anderen drei sind echt — und zu jedem gibt es einen Befehl, der sagt, welches du gerade vor dir hast.</p>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, Prüfung, Lösung</p><dl><dt>Lange Zeit erscheint nichts, und die Übertragung sieht aus, als stünde sie.</dt><dd><pre tabindex="0"><code># auf dem SENDER, zweimal im Abstand einiger Sekunden
 ss -tinp dst :9031
@@ -212,7 +256,7 @@ until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;
 ps -p &quot;$(cat ~/relayium-serve.pid)&quot; -o command=
 tmux kill-session -t xfer
 kill &quot;$(cat ~/relayium-serve.pid)&quot; &amp;&amp; rm ~/relayium-serve.pid</code></pre><p>Über ein Kommandozeilen-Muster zu töten schickt das Signal an jeden Prozess, dessen Kommandozeile diesen Text enthält — auf einer Maschine mit mehr als einer Übertragung also nicht an den gemeinten. Es stoppt den Spiegel auch nicht: die until-Schleife besitzt das sync, ein getötetes Kind wird zehn Sekunden später einfach neu gestartet. Sieh mit pgrep -af nach und beende dann, was diese Anleitung wirklich besitzt — tmux kill-session -t xfer beendet die Schleife, und ein kill auf die PID in ~/relayium-serve.pid beendet den Listener, den du gestartet hast. Liegt die PID-Datei noch von einem früheren Lauf herum, lass dir vor dem Signal ihre Kommandozeile ausgeben: eine vom System neu vergebene PID gehört zu etwas ganz anderem.</p></dd><dt>Du willst ein Unterverzeichnis auslassen, und es gibt keine exclude-Option.</dt><dd><pre tabindex="0"><code>relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031</code></pre><p>sync nimmt -i und -p, --delete, --watch und --config-dir — nichts, was mitten im Baum einen Pfad herausfiltert. Nenn stattdessen die Unterverzeichnisse, die du willst: Jede Quelle landet unter dem --dir des Empfängers unter ihrem eigenen Namen, gegen serve --dir /root/workspace entstehen so wieder /root/workspace/src und /root/workspace/data, und ein neu erzeugbares venv wird nie durchlaufen.</p></dd><dt>Eine Quelle, die gespiegelt werden sollte, kommt leer an.</dt><dd><pre tabindex="0"><code>relayium sync ./links relayium://203.0.113.43:9031
-# warning: no regular files to send (symlinks and special files are skipped)</code></pre><p>sync überträgt nur reguläre Dateien, und genau so sieht ein Baum aus, der nur aus Symlinks besteht. Richte sync auf die Verzeichnisse, auf die die Links zeigen, und leg die benötigten Symlinks auf dem Empfänger getrennt an.</p></dd></dl></div>
+# warning: no regular files to send (symlinks and special files are skipped)</code></pre><p>sync überträgt nur reguläre Dateien, und genau so sieht ein Baum aus, der nur aus Symlinks besteht. Richte sync auf die Verzeichnisse, auf die die Links zeigen, und leg die benötigten Symlinks auf dem Empfänger getrennt an.</p></dd></dl></div></section>
       <h2>Häufige Fragen</h2>
       <h3>Was passiert, wenn die Übertragung auf halbem Weg unterbrochen wird?</h3>
       <p>Nichts geht verloren. Führe relayium sync erneut aus — es überspringt bereits auf dem Empfänger vorhandene Dateien und setzt eine halb gesendete Datei beim bereits auf der Platte liegenden Byte-Offset fort. Die until-Schleife in dieser Anleitung tut das automatisch, bis der ganze Ordner gespiegelt ist.</p>
@@ -239,6 +283,8 @@ kill &quot;$(cat ~/relayium-serve.pid)&quot; &amp;&amp; rm ~/relayium-serve.pid<
         <a href="/pricing">Preise</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

@@ -36,9 +36,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Is it safe to send files over the internet?","description":"What actually goes wrong with email, cloud links, and USB drives — what \"end-to-end encrypted\" and \"zero-knowledge\" really mean, and what to check before trusting a transfer tool.","inLanguage":"en","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/guides/is-it-safe-to-send-files-over-the-internet/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/guides/"},{"@type":"ListItem","position":3,"name":"Is it safe to send files over the internet?"}]},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Is it safe to email a sensitive file?","acceptedAnswer":{"@type":"Answer","text":"Email isn't designed for confidential file transfer — attachments are commonly retained, scanned, and backed up by mail servers on both ends, and a forwarded message can put the file in front of people you never intended. It's fine for low-stakes files; for anything sensitive, a tool with end-to-end encryption removes that exposure."}},{"@type":"Question","name":"What does \"zero-knowledge\" actually mean?","acceptedAnswer":{"@type":"Answer","text":"That the party storing your data was never given the key to read it. The encryption happens on your device before anything uploads, and the key lives only somewhere the server never sees — like a URL fragment — so what sits on the server is ciphertext it structurally cannot decrypt, not just data it promises not to look at."}},{"@type":"Question","name":"Is a password-protected zip file good enough?","acceptedAnswer":{"@type":"Answer","text":"It's better than nothing, but the password often travels the same way as the file — in the same email thread, for instance — which undoes the protection, and zip encryption implementations vary widely in strength. A tool built around end-to-end encryption removes that weak link by never needing a shared password at all."}},{"@type":"Question","name":"Does Relayium keep a copy of my files?","acceptedAnswer":{"@type":"Answer","text":"In realtime mode, Relayium keeps no server-side copy or transfer history: WebRTC is direct on the same LAN, while cross-network browser sessions use TURN by design to carry end-to-end encrypted ciphertext the relay cannot read or decrypt. For a stored link, the server holds only encrypted ciphertext it cannot read, until the link expires or is downloaded once if you chose burn-after-read."}},{"@type":"Question","name":"Do I need an account to send or receive a file?","acceptedAnswer":{"@type":"Answer","text":"On the same network, neither side needs an account. Sending across networks by pairing code, or creating a stored link, requires the sender to sign in — but the person receiving never needs an account, whichever mode is used."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -60,24 +60,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -103,6 +89,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -134,8 +176,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/guides/" aria-current="true">Guides</a><a href="/apps">Apps</a><a href="/pricing">Pricing</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Main"><span class="rail-group">Live transfer</span><a class="row" href="/">LAN</a><a class="row" href="/cross-network" aria-label="Cross-network transfer">Cross-network</a><span class="rail-group">Links</span><a class="row" href="/offline-transfer" aria-label="Share a link">Share</a><span class="rail-group">Your devices</span><a class="row" href="/device-inbox" aria-label="Device Inbox">Inbox</a><span class="rail-group">Downloads and tools</span><a class="row" href="/cli">CLI</a><a class="row" href="/apps">Apps</a><a class="row" href="/pricing">Pricing</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/guides/is-it-safe-to-send-files-over-the-internet/" aria-current="true">English</a><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet/">中文</a></nav></div></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Relayium</a> <span aria-hidden="true">›</span> <a href="/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Is it safe to send files over the internet?</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -154,39 +198,39 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Last updated: <bdi>2026-08-06</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/is-it-safe-to-send-files-over-the-internet/" aria-current="true">English</a><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet/">中文</a></nav>
+      
       <p class="lead">&quot;Is it safe to send this file?&quot; is a reasonable question to stop and ask, whether it&#39;s a tax return, a contract, or just photos you&#39;d rather stayed private. This guide isn&#39;t about scaring you off common tools — it&#39;s about walking through, plainly, what actually happens to a file when you email it, drop it in a cloud folder, or carry it on a USB stick, what the phrases &quot;end-to-end encrypted&quot; and &quot;zero-knowledge&quot; actually promise, and what to check before you trust any tool with something you care about.</p>
       <p class="lead">None of this requires a technical background. By the end, you&#39;ll know what questions to ask — of any transfer method, including this one.</p>
-      <h2>Where files actually go wrong: the everyday risks</h2>
+      <section class="sheet"><h2>Where files actually go wrong: the everyday risks</h2>
       <p>Email attachments pass through your mail provider&#39;s servers and the recipient&#39;s, both of which commonly scan, index, and back up messages for spam filtering and disaster recovery — long after you&#39;ve forgotten you sent it. Forward the email once, and the file is in front of someone you never intended, with no way to know every copy is gone.</p>
       <p>Cloud storage links are convenient, but a link usually keeps working until you remember to revoke it, and &quot;anyone with the link&quot; is only as private as an unguessable URL — which a link-shortening service or a careless forward can undo. The file also inherits the security of the whole account it sits in, not just the share itself.</p>
       <p>A USB stick feels safe because it&#39;s offline, but that&#39;s exactly the gap: most drives aren&#39;t encrypted by default, so a stick left in a laptop bag or a rental car hands over the plaintext to whoever finds it, no password required.</p>
       <p>Free public upload sites solve the immediate problem — get a file from A to B — but rarely say what happens next: how long it&#39;s kept, whether it&#39;s scanned, who might stumble on it, or how the site pays its bills (ad-funded file hosts have a track record of bundling trackers or worse).</p>
-      <ul><li>Email: retained and scanned by mail servers, easy to forward beyond your control</li><li>Cloud links: keep working until revoked, and inherit the whole account&#39;s security</li><li>USB drives: unencrypted by default, easy to lose or leave behind</li><li>Free upload sites: retention and scanning practices are usually unclear</li></ul>
-      <h2>What &quot;end-to-end encrypted&quot; and &quot;zero-knowledge&quot; actually mean</h2>
+      <ul><li>Email: retained and scanned by mail servers, easy to forward beyond your control</li><li>Cloud links: keep working until revoked, and inherit the whole account&#39;s security</li><li>USB drives: unencrypted by default, easy to lose or leave behind</li><li>Free upload sites: retention and scanning practices are usually unclear</li></ul></section>
+      <section class="sheet"><h2>What &quot;end-to-end encrypted&quot; and &quot;zero-knowledge&quot; actually mean</h2>
       <p>Plenty of services say &quot;encrypted&quot; and mean only that the connection to their server is encrypted — standard HTTPS/TLS, the same padlock icon your bank uses. That&#39;s real protection against someone eavesdropping on the network, but it stops at the server: once your file arrives, the service itself can read it, because it holds the key. A lot of everyday tools stop exactly there.</p>
       <p>End-to-end encryption means something stronger: the file is encrypted before it leaves your device, with a key that only the sender and the intended recipient ever hold. The service that carries it — the server, the relay, anything in between — never has the key, so it never has the plaintext, no matter how it&#39;s asked.</p>
       <p>&quot;Zero-knowledge&quot; is a related idea usually applied to something stored rather than sent live: even data sitting at rest on a server was encrypted with a key the server itself was never given, so the operator has no way to read it, ever, no matter how long it stays there.</p>
-      <ul><li>&quot;Encrypted&quot; alone often just means TLS to the server — the provider can still read the file.</li><li>&quot;End-to-end encrypted&quot; means only sender and recipient hold the key.</li><li>&quot;Zero-knowledge&quot; means the server holds data it structurally cannot decrypt, even at rest.</li></ul>
-      <h2>What to actually check before trusting a transfer tool</h2>
+      <ul><li>&quot;Encrypted&quot; alone often just means TLS to the server — the provider can still read the file.</li><li>&quot;End-to-end encrypted&quot; means only sender and recipient hold the key.</li><li>&quot;Zero-knowledge&quot; means the server holds data it structurally cannot decrypt, even at rest.</li></ul></section>
+      <section class="sheet"><h2>What to actually check before trusting a transfer tool</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">What you need to run this checklist</p><ul><li>Ten minutes and a browser. The first two checks are reading, not auditing.</li><li>Two devices for the live checks. Three and four cannot be done from a marketing page, which is exactly why they are worth doing.</li><li>No security expertise. Each item below is either something you can read or something you can see happen.</li></ul></div>
       <p>The marketing language on a website is worth less than a few concrete questions:</p>
       <ol class="steps" data-block="steps"><li><p>Find the vendor&#39;s own answer to &quot;can you read my files?&quot; in their source, not on their pricing page. If there is no source, that is already an answer.</p><pre tabindex="0"><code>https://github.com/relayium/relayium</code></pre></li><li><p>Check the licence and whether the repository is the thing that is actually deployed. A claim you can inspect is a different kind of claim from one you are asked to accept.</p></li><li><p>On a live transfer, compare the verification code on both screens. This is the step that turns &quot;end-to-end encrypted&quot; from a sentence into something being enforced between these two particular endpoints.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>While that transfer runs, open your browser&#39;s developer tools and watch the network panel. Look for your file&#39;s contents in what is being uploaded. Not finding them is the point; finding them would be the finding.</p></li><li><p>Check what is left afterwards: whether a link expires on its own, and whether the service could produce the file again later if someone asked it to.</p></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">What passing this checklist actually tells you</p><p>The first two checks are cheap and rule out most tools in minutes. The last three cannot be faked by a landing page, because they are things you watch happen on your own two devices.</p><p>None of it makes a tool trustworthy in the abstract. It makes specific claims checkable, which is the most any of us can do without reading every line ourselves.</p></div>
-      <ul><li>Does it say &quot;encrypted&quot; (could mean just TLS) or specifically &quot;end-to-end encrypted&quot; (only sender and recipient hold the key)?</li><li>Is there a way to verify the connection wasn&#39;t tampered with — a code you compare, not just a padlock icon you have to trust?</li><li>Is the file&#39;s integrity checked, so a corrupted or altered file doesn&#39;t arrive silently wrong?</li><li>Is the code open source and auditable, or are the claims just marketing you have to take on faith?</li><li>Does sending or receiving require handing over more identity than the transfer actually needs?</li><li>If anything is stored, does it have a clear, finite lifetime — an expiry or delete-after-download — instead of sitting there indefinitely?</li></ul>
-      <h2>How Relayium answers each of these</h2>
+      <ul><li>Does it say &quot;encrypted&quot; (could mean just TLS) or specifically &quot;end-to-end encrypted&quot; (only sender and recipient hold the key)?</li><li>Is there a way to verify the connection wasn&#39;t tampered with — a code you compare, not just a padlock icon you have to trust?</li><li>Is the file&#39;s integrity checked, so a corrupted or altered file doesn&#39;t arrive silently wrong?</li><li>Is the code open source and auditable, or are the claims just marketing you have to take on faith?</li><li>Does sending or receiving require handing over more identity than the transfer actually needs?</li><li>If anything is stored, does it have a clear, finite lifetime — an expiry or delete-after-download — instead of sitting there indefinitely?</li></ul></section>
+      <section class="sheet"><h2>How Relayium answers each of these</h2>
       <p>For a live transfer, with both people online at once, Relayium generates a fresh X25519 key pair on each device and derives a shared AES-256-GCM key that exists only inside the two browsers — it&#39;s never sent to Relayium&#39;s own servers. An optional short verification code (a SAS) — shown when you turn on advanced verification, which is off by default — lets both sides confirm the keys weren&#39;t swapped by a dishonest server in the middle, and each file&#39;s SHA-256 hash is checked end to end so a corrupted transfer doesn&#39;t arrive looking fine. The mechanics of exactly how that works are covered in more depth in &quot;How Relayium encrypts your files end-to-end&quot;, if you want to go further than this page.</p>
       <p>When the recipient isn&#39;t online yet, a stored download link uses a genuinely different, zero-knowledge design: your browser generates a random AES-256-GCM key and encrypts the files with it before anything uploads. That key is never sent to the server — it lives only in the link&#39;s URL fragment, the part after #, which browsers never transmit. The server ends up holding ciphertext it has no way to decrypt, plus an expiry you choose: 1 hour, 1 day, 3 days, 7 days, or up to 14 days depending on your plan, or burn after the first completed download.</p>
       <p>Across networks, Relayium&#39;s browser app uses TURN by design: the relay carries end-to-end encrypted ciphertext, but it never receives the key and cannot read or decrypt the file.</p>
       <p>None of this asks you to trust a claim on faith: Relayium&#39;s client and server code is open source under the AGPL-3.0 license, so it can be read and audited rather than taken on faith.</p>
-      <ul><li>Same-network transfers need no account at all.</li><li>Sending across networks by pairing code, or creating a stored link, needs the sender to sign in — the recipient never needs an account.</li></ul>
-      <h2>Encryption isn&#39;t the whole story — a few habits still matter</h2>
+      <ul><li>Same-network transfers need no account at all.</li><li>Sending across networks by pairing code, or creating a stored link, needs the sender to sign in — the recipient never needs an account.</li></ul></section>
+      <section class="sheet"><h2>Encryption isn&#39;t the whole story — a few habits still matter</h2>
       <p>Strong encryption protects a file in transit and at rest, but it can&#39;t stop you from sending a link to the wrong address — treat a share link like the file itself, and don&#39;t post it somewhere public.</p>
       <p>For anything genuinely sensitive, turn on advanced verification and take the extra few seconds to compare the verification code out loud on a call, or in person, rather than trusting that two matching screens next to each other haven&#39;t both been fooled.</p>
-      <p>And no transfer tool, however well encrypted, protects a file that&#39;s already exposed on a device that&#39;s compromised — good encryption assumes the two ends themselves are trustworthy. None of this is a reason to be paranoid about sending files; it&#39;s just worth knowing what encryption does and doesn&#39;t cover.</p>
-      <h2>When a check does not give you a clean answer</h2>
+      <p>And no transfer tool, however well encrypted, protects a file that&#39;s already exposed on a device that&#39;s compromised — good encryption assumes the two ends themselves are trustworthy. None of this is a reason to be paranoid about sending files; it&#39;s just worth knowing what encryption does and doesn&#39;t cover.</p></section>
+      <section class="sheet"><h2>When a check does not give you a clean answer</h2>
       <p>Three places people get stuck. In each case the ambiguity is itself informative.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">What you run into, what to check, what it means</p><dl><dt>The network panel shows a large upload and you cannot tell what is in it.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # developer tools, Network panel, during a transfer</code></pre><p>That is the expected result, not a dead end. What you are looking for is the absence of anything recognisable from your file — a filename you chose, a string you know is in the document. If you can read your own content in the payload, that is the finding, and it is a decisive one.</p></dd><dt>There is no verification code, so the third check cannot be done.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # a stored link has no second live endpoint to compare against</code></pre><p>You are on a stored-link transfer rather than a live one. There is no second endpoint online to compare against, so the guarantee has a different shape: the key lives in the link fragment and never reaches the server at all. Compare codes on live transfers, and check link expiry on stored ones.</p></dd><dt>The source is open but you cannot read the language it is written in.</dt><dd><pre tabindex="0"><code>https://github.com/relayium/relayium   # is the claim falsifiable at all</code></pre><p>You do not have to. The question this check answers is whether the claim is falsifiable at all: is there a repository, does it correspond to what is deployed, could someone who does read that language contradict it. A claim nobody is in a position to check is the finding.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">What you run into, what to check, what it means</p><dl><dt>The network panel shows a large upload and you cannot tell what is in it.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # developer tools, Network panel, during a transfer</code></pre><p>That is the expected result, not a dead end. What you are looking for is the absence of anything recognisable from your file — a filename you chose, a string you know is in the document. If you can read your own content in the payload, that is the finding, and it is a decisive one.</p></dd><dt>There is no verification code, so the third check cannot be done.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # a stored link has no second live endpoint to compare against</code></pre><p>You are on a stored-link transfer rather than a live one. There is no second endpoint online to compare against, so the guarantee has a different shape: the key lives in the link fragment and never reaches the server at all. Compare codes on live transfers, and check link expiry on stored ones.</p></dd><dt>The source is open but you cannot read the language it is written in.</dt><dd><pre tabindex="0"><code>https://github.com/relayium/relayium   # is the claim falsifiable at all</code></pre><p>You do not have to. The question this check answers is whether the claim is falsifiable at all: is there a repository, does it correspond to what is deployed, could someone who does read that language contradict it. A claim nobody is in a position to check is the finding.</p></dd></dl></div></section>
       <h2>Frequently asked questions</h2>
       <h3>Is it safe to email a sensitive file?</h3>
       <p>Email isn&#39;t designed for confidential file transfer — attachments are commonly retained, scanned, and backed up by mail servers on both ends, and a forwarded message can put the file in front of people you never intended. It&#39;s fine for low-stakes files; for anything sensitive, a tool with end-to-end encryption removes that exposure.</p>
@@ -213,6 +257,8 @@ ol.steps>li>pre{margin:8px 0 0}
         <a href="/pricing">Pricing</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

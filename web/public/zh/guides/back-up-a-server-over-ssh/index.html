@@ -36,9 +36,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 通过 SSH 在自己的服务器上留一份异地副本","description":"用 relayium push、pull 和 sync 把目录复制到你已经能 ssh 上去的服务器——两端都装了 relayium 时逐文件校验，而且免费。字节走你自己的 SSH 连接，从不经过 Relayium 的服务器。它做出来的是一份异地副本，不是带版本历史的备份。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/back-up-a-server-over-ssh/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"用 Relayium CLI 通过 SSH 在自己的服务器上留一份异地副本"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"文件会经过 Relayium 的服务器吗？","acceptedAnswer":{"@type":"Answer","text":"不会。push 和 pull 完全跑在你自己的 SSH 连接上。Relayium 的服务器全程不参与，也不需要账号。"}},{"@type":"Question","name":"服务器需要装 relayium 吗？","acceptedAnswer":{"@type":"Answer","text":"要看方向。对 push 来说是可选的：远端装了 relayium 就能走原生协议——发送前对整批做冲突预检，并对它传输的每个文件做 SHA-256 校验；没装的话，push 会退回到通过 SSH 传输 tar 流，依然可用，只是逐文件什么都不校验。对 pull 来说则是必须的：pull 始终需要远端装有 relayium（它没有 tar 兜底方案），请先在远端装好。sync 同理，也必须装。"}},{"@type":"Question","name":"它怎么决定用哪个 SSH 密钥和端口？","acceptedAnswer":{"@type":"Answer","text":"它会像 ssh 一样读取你的 ~/.ssh/config，所以主机别名、密钥和端口都会被自动识别。你也可以在单条命令里用 -i 指定身份文件、用 -p 指定端口来覆盖它们。"}},{"@type":"Question","name":"这比 rsync 快吗？","acceptedAnswer":{"@type":"Answer","text":"在推送到自己服务器这件事上，速度和走 SSH 的 rsync 差不多。重点不是跑赢 rsync，而是让你只用一个工具，就能顺带做跨网络传输和服务器之间的传输，并且沿用同一套逐文件完整性校验。在历史这件事上两者也一样：rsync 和 relayium sync 都不保留文件的旧版本，所以都是副本，而不是备份。"}},{"@type":"Question","name":"这算备份吗？","acceptedAnswer":{"@type":"Answer","text":"它是一份异地副本——那是备份的一部分，但不是全部。push 写下的是文件此刻的样子，而定时 sync 让这份副本保持最新，这也意味着它会在下一次运行时把源端的删除或原地损坏一起带过去，加上 --delete 更是把删除这一半明确打开。这里没有任何东西会保留旧版本，所以如果你需要恢复到上周的样子，请在目标端保留快照，或者改用会做版本管理的工具。"}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -60,24 +60,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -103,6 +89,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -134,8 +176,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/?lang=zh"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/" aria-current="true">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/?lang=zh"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="主导航"><span class="rail-group">实时传输</span><a class="row" href="/?lang=zh" aria-label="局域网传输">局域网</a><a class="row" href="/zh/cross-network/" aria-label="跨网络传输">跨网络</a><span class="rail-group">链接</span><a class="row" href="/zh/offline-transfer/" aria-label="分享链接">链接</a><span class="rail-group">我的设备</span><a class="row" href="/device-inbox" aria-label="设备收件箱">收件箱</a><span class="rail-group">下载与工具</span><a class="row" href="/cli">CLI</a><a class="row" href="/zh/apps/">应用</a><a class="row" href="/pricing">定价</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh/">English</a><a href="/zh/guides/back-up-a-server-over-ssh/" aria-current="true">中文</a></nav></div></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">用 Relayium CLI 通过 SSH 在自己的服务器上留一份异地副本</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -154,15 +198,15 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-09-01</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh/">English</a><a href="/zh/guides/back-up-a-server-over-ssh/" aria-current="true">中文</a></nav>
+      
       <p class="lead">如果你已经能 ssh 到某台机器上——VPS、家庭服务器、NAS、工作站都算——那就可以用 Relayium CLI 把文件的一份副本放过去，不用搭同步服务，也不用注册账号。传输走的是你现有的 SSH 连接，字节直接进你的服务器，从不经过 Relayium。</p>
       <p class="lead">先把它能给你什么说清楚：一份此刻状态的异地副本。它不是有版本历史的备份。你覆盖掉的文件，这里不会保留昨天那一版；而定时跑的镜像，会在下一次运行时把源端的删除或损坏一起带过去。如果你需要恢复到上周的样子，请再配一层快照或者会保留历史的备份工具。</p>
       <p class="lead">本文介绍怎么 push 和 pull 目录、完整性校验覆盖到哪里、为什么 push 不会往同一个目标跑第二次，以及如何用 cron 让这份副本保持最新。</p>
-      <h2>开始之前</h2>
+      <section class="sheet"><h2>开始之前</h2>
       <p>下面用到的都是 relayium CLI，所以没装的话先装上。在 macOS 或 Linux 上，一条命令就能把预编译二进制放进你的 PATH：</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul>
-      <h2>把一个目录 push 到你的服务器</h2>
+      <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul></section>
+      <section class="sheet"><h2>把一个目录 push 到你的服务器</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">你需要准备</p><ul><li>你已经在用的 SSH 访问权限。ssh user@your-server true 必须静默返回——push 复用的就是这条连接，它自己不做任何额外配置。</li><li>服务器上一个可写的落点。目标路径的上一级目录必须存在，且那个 SSH 用户对它有写权限。</li><li>服务器上可选装 relayium，它换来的是发送前的冲突预检和逐文件 SHA-256。不装 push 也能用，走一条什么都不校验的普通 tar 流。</li><li>不需要 Relayium 账号，两端也都不需要跑守护进程。这里的一切都不会与 Relayium 的服务器通信。</li></ul></div>
       <p>push 接受一个或多个源，以及一个 scp 风格的目标地址。Relayium 会用你平常的密钥和配置通过 SSH 连过去，再把文件流式写入目标目录：</p>
       <ol class="steps" data-block="steps"><li><p>确认 push 将要复用的那条 SSH 访问。静默返回就说明你的密钥、主机别名和端口都已正确。</p><pre tabindex="0"><code>ssh user@your-server true</code></pre></li><li><p>查清你会走哪条协议。打印出路径就是原生协议——发送前的冲突预检加逐文件 SHA-256；什么都不打印就是走 tar 流兜底，那条路逐文件什么都不校验。</p><pre tabindex="0"><code>ssh user@your-server command -v relayium</code></pre></li><li><p>把目录 push 上去。目标是 scp 风格的写法，末尾的斜杠表示“放进这个目录里”。</p><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/</code></pre></li><li><p>如果你的 ssh 配置里还没有这台主机，就为这一条命令临时指定密钥或端口。</p><pre tabindex="0"><code>relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</code></pre></li><li><p>确认落地结果。push ./photos 会在目标下重建 photos/，所以文件夹名会一起带过去。</p><pre tabindex="0"><code>ssh user@your-server ls backups/photos</code></pre></li></ol>
@@ -172,23 +216,23 @@ ol.steps>li>pre{margin:8px 0 0}
 
 # against a server with no relayium installed, one summary line instead:
 sent 2 file(s) (zero-dependency mode)</code></pre></div>
-      <ul><li>它会复用你的 ~/.ssh/config，所以你早就配好的主机别名、密钥和端口都能直接生效。</li><li>如果服务器上装了 relayium，就走原生协议：发送任何字节之前先对整批做冲突预检，传输的每个文件都做 SHA-256 校验并先落到暂存区再安装。</li><li>如果没装，就退回到把 tar 流通过管道送给远端自己的 tar -x -k，所以一台没有 relayium 的裸服务器也能收——但那条路逐文件什么都不校验，而且可能让一批文件只装了一半。</li></ul>
-      <h2>把文件 pull 回来</h2>
+      <ul><li>它会复用你的 ~/.ssh/config，所以你早就配好的主机别名、密钥和端口都能直接生效。</li><li>如果服务器上装了 relayium，就走原生协议：发送任何字节之前先对整批做冲突预检，传输的每个文件都做 SHA-256 校验并先落到暂存区再安装。</li><li>如果没装，就退回到把 tar 流通过管道送给远端自己的 tar -x -k，所以一台没有 relayium 的裸服务器也能收——但那条路逐文件什么都不校验，而且可能让一批文件只装了一半。</li></ul></section>
+      <section class="sheet"><h2>把文件 pull 回来</h2>
       <p>恢复就是把同一条命令反过来写：给出一个远程源和一个本地目标目录。恢复备份，或者把服务器上的产物同步回笔记本，都用它：</p>
       <pre tabindex="0"><code>relayium pull user@your-server:backups/ ./restore</code></pre>
-      <ul><li>和 push 不同，pull 始终需要远端已经装好 relayium——它没有 tar 兜底方案，远端要是没装，请先装好。</li></ul>
-      <h2>完整性校验是内置的，续传不是</h2>
+      <ul><li>和 push 不同，pull 始终需要远端已经装好 relayium——它没有 tar 兜底方案，远端要是没装，请先装好。</li></ul></section>
+      <section class="sheet"><h2>完整性校验是内置的，续传不是</h2>
       <p>两端都装了 relayium 时，push 传输的每个文件都会用 SHA-256 哈希做端到端校验，并先落到暂存区再安装——落到服务器上的内容，和你发出去的逐字节一致。这一半是真的，也正是值得在目标端装上 relayium 的理由。</p>
       <p>push 不做的事情是续传。它也不是事务：文件是一个一个装上去的，所以中途断线会把已经落地的文件留在原地——而正因为这些文件现在存在了，重跑同一条 push 会被冲突检查拒绝，而不是接着传。请显式补传缺失的路径，或者改用 relayium sync：它才是会跳过已匹配文件、并在下次运行时接着传半截文件的那个模式。</p>
       <p>--no-resume 在 push 和 pull 上能被接受，但什么也不做。它只在接收 sync 的 serve 监听端上才是真的有效——那里才可能出现半截文件。</p>
-      <ul><li>SHA-256 校验会自动进行；一旦对不上就会报出来，该文件被标记为失败。</li><li>它覆盖的是这一次真正传输的内容。tar 兜底路径不做任何哈希；而 sync 的 size+mtime 跳过意味着看起来没变的文件根本不会被读取，也就不会被哈希。</li><li>push 和 pull 在两条协议下都不续传。预计会被中断的目录，请用 sync。</li></ul>
-      <h2>用 cron 让这份副本保持最新</h2>
+      <ul><li>SHA-256 校验会自动进行；一旦对不上就会报出来，该文件被标记为失败。</li><li>它覆盖的是这一次真正传输的内容。tar 兜底路径不做任何哈希；而 sync 的 size+mtime 跳过意味着看起来没变的文件根本不会被读取，也就不会被哈希。</li><li>push 和 pull 在两条协议下都不续传。预计会被中断的目录，请用 sync。</li></ul></section>
+      <section class="sheet"><h2>用 cron 让这份副本保持最新</h2>
       <p>要放进 cron 的是 sync，不是 push。push 会拒绝已存在的目标，所以每晚往同一个目录 push，只有第一晚会成功，之后每晚都被拒。sync 才是为反复运行设计的：它跳过大小与修改时间都没变的文件，只发变化的部分，并接着传上一次中断留下的半截文件。</p>
       <p>它是一条用你自己 SSH 密钥的非交互式命令，所以可以原样放进 cron。给它指定一个没有口令的密钥（或者用 agent），并把输出记下来，好让失败能被看见：</p>
       <pre tabindex="0"><code># 每晚 2 点备份——加到你的 crontab 里（crontab -e）
 0 2 * * * relayium sync -i ~/.ssh/backup_key ~/documents user@your-server:backups/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1</code></pre>
-      <ul><li>一个被中断的夜间 sync，下一晚会接着来：已经匹配的会被跳过，半截的文件会接着传而不是重头来。</li><li>sync 没有 tar 兜底，所以服务器上必须装有 relayium。那是一次响亮的失败，而不是悄悄降级。</li><li>只要有文件没通过完整性校验，命令就会以非零状态退出，cron 的失败邮件通知就能发现问题。</li><li>它保持的是副本的最新状态，不保存历史。只有当你确实希望源端的删除也在服务器上生效时才加 --delete——那就是镜像，而如果你可能误删东西，这恰恰是你不想要的。</li></ul>
-      <h2>定时副本没落地的时候</h2>
+      <ul><li>一个被中断的夜间 sync，下一晚会接着来：已经匹配的会被跳过，半截的文件会接着传而不是重头来。</li><li>sync 没有 tar 兜底，所以服务器上必须装有 relayium。那是一次响亮的失败，而不是悄悄降级。</li><li>只要有文件没通过完整性校验，命令就会以非零状态退出，cron 的失败邮件通知就能发现问题。</li><li>它保持的是副本的最新状态，不保存历史。只有当你确实希望源端的删除也在服务器上生效时才加 --delete——那就是镜像，而如果你可能误删东西，这恰恰是你不想要的。</li></ul></section>
+      <section class="sheet"><h2>定时副本没落地的时候</h2>
       <p>定时任务天生就是悄无声息地失败的——没人盯着终端。下面四种是真正会发生的，而且每一种都能用一条你现在就能跑的命令定性。它们并不是全部：目标端也可能磁盘满了，或者那个 SSH 用户没有写权限。</p>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>cron 任务卡住，或者日志停在一个输入密码的提示上。</dt><dd><pre tabindex="0"><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@your-server true
 # Permission denied (publickey).</code></pre><p>BatchMode=yes 会拒绝弹出提示，于是把静默的卡死变成了这一行。把这把密钥的公钥加到服务器的 ~/.ssh/authorized_keys 里，或者让任务改用 agent 已经持有的那把密钥。</p></dd><dt>crontab 那行跑了，日志却始终是空的。</dt><dd><pre tabindex="0"><code>command -v relayium
@@ -196,7 +240,7 @@ sent 2 file(s) (zero-dependency mode)</code></pre></div>
 # （什么都不打印）</code></pre><p>远端没有 relayium，就意味着 push 走了 tar 流兜底：它逐文件不做任何哈希，而且在解压中途遇到重名时可能让一批文件只装了一半。在服务器上装好 CLI，就能把发送前的冲突预检和逐文件 SHA-256 拿回来。装好之后你还可以把这个任务改成 relayium sync——它根本没有兜底路径，会响亮地失败而不是悄悄降级。</p></dd><dt>出现 “N file(s) failed integrity check”，并以非 0 退出。</dt><dd><pre tabindex="0"><code>relayium push ./photos user@your-server:backups/
 # 1 file(s) failed integrity check: [photos/IMG_0413.jpg]
 echo $?
-# 1</code></pre><p>落地时算出的 SHA-256 与发送时的不一致；原生协议会先把每个文件写到暂存区，只有校验一致才安装，所以那个路径根本没写到服务器上，接收端没有东西需要删。整批重跑仍然会被冲突检查拒绝——同一批里其他文件已经落地了——所以单独 push 那一个路径。如果它反复失败，就不是一次偶发的链路错误：去查源文件（读取时是否正被写入）和两端的存储。</p></dd></dl></div>
+# 1</code></pre><p>落地时算出的 SHA-256 与发送时的不一致；原生协议会先把每个文件写到暂存区，只有校验一致才安装，所以那个路径根本没写到服务器上，接收端没有东西需要删。整批重跑仍然会被冲突检查拒绝——同一批里其他文件已经落地了——所以单独 push 那一个路径。如果它反复失败，就不是一次偶发的链路错误：去查源文件（读取时是否正被写入）和两端的存储。</p></dd></dl></div></section>
       <h2>常见问题</h2>
       <h3>文件会经过 Relayium 的服务器吗？</h3>
       <p>不会。push 和 pull 完全跑在你自己的 SSH 连接上。Relayium 的服务器全程不参与，也不需要账号。</p>
@@ -223,6 +267,8 @@ echo $?
         <a href="/pricing">定价</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

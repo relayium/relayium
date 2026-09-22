@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"인터넷으로 파일을 보내도 안전할까요?","description":"이메일 첨부파일, 클라우드 링크, USB 드라이브 각각의 실제 위험, \"종단간 암호화\"와 \"영지식\"이 실제로 의미하는 것, 그리고 전송 도구를 신뢰하기 전에 확인해야 할 것을 쉽게 설명합니다.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/is-it-safe-to-send-files-over-the-internet/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"인터넷으로 파일을 보내도 안전할까요?"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"민감한 파일을 이메일로 보내도 안전한가요?","acceptedAnswer":{"@type":"Answer","text":"이메일은 기밀 파일 전송을 위해 설계된 것이 아닙니다. 첨부파일은 양쪽 메일 서버에 일상적으로 보관·스캔·백업되며, 전달된 메시지는 의도하지 않은 사람 앞에 놓일 수 있습니다. 중요하지 않은 파일이라면 괜찮지만, 민감한 내용이라면 종단간 암호화를 갖춘 도구가 이런 노출을 없애줍니다."}},{"@type":"Question","name":"\"영지식\"이 실제로 무엇을 의미하나요?","acceptedAnswer":{"@type":"Answer","text":"내 데이터를 저장하는 쪽이 그것을 읽을 수 있는 키를 한 번도 받은 적이 없다는 뜻입니다. 암호화는 업로드되기 전에 내 기기에서 이루어지며, 키는 서버가 절대 보지 못하는 곳——예를 들어 URL 프래그먼트——에만 존재합니다. 그래서 서버에 있는 것은 구조적으로 복호화할 수 없는 암호문일 뿐, 단순히 '보지 않겠다고 약속한' 데이터가 아닙니다."}},{"@type":"Question","name":"비밀번호로 보호된 압축 파일이면 충분한가요?","acceptedAnswer":{"@type":"Answer","text":"아예 안 하는 것보다는 낫지만, 그 비밀번호가 흔히 파일과 같은 경로로——예를 들어 같은 이메일 스레드로——전달되어 보호 효과가 사라지는 경우가 많고, 압축 파일의 암호화 구현 강도도 제품마다 크게 다릅니다. 종단간 암호화를 기반으로 한 도구는 애초에 공유 비밀번호가 필요 없어서 이런 약점 자체를 없애줍니다."}},{"@type":"Question","name":"Relayium이 제 파일 사본을 보관하나요?","acceptedAnswer":{"@type":"Answer","text":"실시간 모드에서 Relayium은 서버 측 복사본이나 전송 기록을 보관하지 않습니다. 같은 LAN에서는 WebRTC로 직접 연결하고, 네트워크를 넘는 브라우저 세션은 설계상 TURN으로 릴레이가 읽거나 복호화할 수 없는 종단간 암호문을 운반합니다. 저장 링크의 경우, 서버는 읽을 수 없는 암호문만 가지고 있으며, 링크가 만료되거나 '열람 후 삭제'를 선택했다면 한 번 다운로드된 후까지만 보관합니다."}},{"@type":"Question","name":"파일을 보내거나 받으려면 계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"같은 네트워크 안에서는 양쪽 다 계정이 필요 없습니다. 페어링 코드로 네트워크를 넘어 보내거나 저장 링크를 만들 때는 발신자의 로그인이 필요하지만, 어느 방식이든 수신자는 계정이 전혀 필요 없습니다."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ko/guides/" aria-current="true">가이드</a><a href="/ko/apps/">앱</a><a href="/pricing">요금제</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="기본 탐색"><a class="row" href="/">LAN 전송</a><a class="row" href="/ko/cross-network/">네트워크 간 전송</a><a class="row" href="/ko/offline-transfer/">비동기 전송</a><a class="row" href="/device-inbox">기기 수신함</a><a class="row" href="/cli">CLI</a><a class="row" href="/ko/apps/">앱</a><a class="row" href="/pricing">요금제</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">인터넷으로 파일을 보내도 안전할까요?</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,36 +203,36 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="보관된 번역"><p class="archived-label">보관된 번역</p><p>이 페이지는 기록으로 보관 중인 한국어 번역입니다. Relayium 제품과 최신 문서는 영어와 중국어 간체로 관리되며, 앱 자체도 더 이상 한국어를 제공하지 않습니다. 여기에 적힌 화면과 세부 사항은 현재 동작과 다를 수 있습니다.</p><p class="archived-links archived-pricing">이 페이지에 적혀 있는 요금제와 사용 한도는 오래된 내용일 수 있습니다. 현재 내용은 <a href="/pricing">요금제</a> 페이지에서 확인하세요.</p><p class="archived-links">최신 버전: <a href="/guides/is-it-safe-to-send-files-over-the-internet/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/is-it-safe-to-send-files-over-the-internet/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">&quot;이 파일을 보내도 안전할까?&quot;는 잠시 멈춰 생각해볼 만한 합리적인 질문입니다. 세금 신고서든, 계약서든, 그냥 남에게 보이고 싶지 않은 사진이든 말이죠. 이 글은 흔히 쓰는 도구들을 겁주려는 것이 아닙니다. 이메일로 파일을 보낼 때, 클라우드 폴더에 넣을 때, USB 드라이브에 담아 다닐 때 실제로 무슨 일이 일어나는지, &quot;종단간 암호화&quot;와 &quot;영지식&quot;이라는 말이 실제로 무엇을 약속하는지, 그리고 소중한 것을 어떤 도구에 맡기기 전에 무엇을 확인해야 하는지를 담담하게 짚어보려는 것입니다.</p>
       <p class="lead">기술적인 배경지식은 전혀 필요하지 않습니다. 다 읽고 나면, 어떤 전송 방식에든——이 글에서 소개하는 방식을 포함해서——어떤 질문을 던져야 할지 알게 될 것입니다.</p>
-      <h2>파일이 실제로 새는 지점: 일상적인 위험들</h2>
+      <section class="sheet"><h2>파일이 실제로 새는 지점: 일상적인 위험들</h2>
       <p>이메일 첨부파일은 발신자와 수신자 각각의 메일 서버를 거치는데, 두 서버 모두 스팸 필터링과 재해 복구를 위해 메시지를 일상적으로 스캔하고 색인하고 백업합니다——그 파일을 보냈다는 사실조차 잊어버린 훨씬 뒤에도요. 이메일이 한 번이라도 전달되면, 파일은 의도하지 않은 사람 앞에 놓이게 되고, 모든 사본이 사라졌는지 확인할 방법은 없습니다.</p>
       <p>클라우드 저장소 링크는 편리하지만, 보통 취소해야겠다고 떠올리기 전까지는 계속 작동합니다. &quot;링크를 가진 누구나&quot;라는 말의 프라이버시 수준은 그 URL을 추측하기 얼마나 어려운가에 달려 있으며, 단축 링크나 부주의한 전달 한 번으로 그 조건이 깨질 수 있습니다. 파일은 그 공유 자체뿐 아니라 그것이 속한 계정 전체의 보안 수준도 물려받습니다.</p>
       <p>USB 드라이브는 오프라인이라 안전하게 느껴지지만, 바로 그 지점이 함정입니다. 대부분의 드라이브는 기본적으로 암호화되어 있지 않아서, 노트북 가방이나 렌터카에 두고 내리면 발견한 사람이 비밀번호 없이 평문 그대로를 손에 넣게 됩니다.</p>
       <p>무료 공개 업로드 사이트는 당장 눈앞의 문제——파일을 A에서 B로 옮기는 것——는 해결해주지만, 그다음에 무슨 일이 일어나는지는 거의 설명하지 않습니다. 얼마나 보관되는지, 스캔되는지, 누군가 우연히 발견할 수 있는지, 그 사이트가 어떻게 운영비를 충당하는지(광고로 운영되는 파일 호스팅 사이트들은 트래커나 그보다 더한 것을 끼워 넣어온 전례가 있습니다).</p>
-      <ul><li>이메일: 메일 서버에 보관·스캔되며, 통제할 수 없는 범위로 쉽게 전달됨</li><li>클라우드 링크: 취소하기 전까지 계속 작동하며, 계정 전체의 보안 수준을 물려받음</li><li>USB 드라이브: 기본적으로 암호화되어 있지 않고 분실하거나 두고 오기 쉬움</li><li>무료 업로드 사이트: 보관 및 스캔 방침이 대체로 불투명함</li></ul>
-      <h2>&quot;종단간 암호화&quot;와 &quot;영지식&quot;이 실제로 의미하는 것</h2>
+      <ul><li>이메일: 메일 서버에 보관·스캔되며, 통제할 수 없는 범위로 쉽게 전달됨</li><li>클라우드 링크: 취소하기 전까지 계속 작동하며, 계정 전체의 보안 수준을 물려받음</li><li>USB 드라이브: 기본적으로 암호화되어 있지 않고 분실하거나 두고 오기 쉬움</li><li>무료 업로드 사이트: 보관 및 스캔 방침이 대체로 불투명함</li></ul></section>
+      <section class="sheet"><h2>&quot;종단간 암호화&quot;와 &quot;영지식&quot;이 실제로 의미하는 것</h2>
       <p>많은 서비스가 &quot;암호화됨&quot;이라고 말하지만, 실제로는 서버로의 연결만 암호화되어 있다는 뜻일 때가 많습니다——은행 사이트에서 보는 것과 같은 자물쇠 아이콘, 즉 표준 HTTPS/TLS입니다. 이는 네트워크 상의 도청을 막는 실질적인 보호이지만, 서버에서 멈춥니다. 파일이 도착하는 순간, 서비스 자체는 그것을 읽을 수 있습니다. 키를 가지고 있으니까요. 많은 일상적인 도구들이 정확히 이 지점에서 멈춥니다.</p>
       <p>종단간 암호화는 더 강한 것을 의미합니다. 파일은 기기를 떠나기 전에 암호화되고, 그 키는 오직 발신자와 의도된 수신자만 갖습니다. 그것을 나르는 서비스——서버, 릴레이, 그 사이의 무엇이든——는 그 키를 한 번도 갖지 않으므로, 어떻게 요구받든 평문을 가질 수 없습니다.</p>
       <p>&quot;영지식&quot;은 관련된 개념으로, 보통 실시간으로 보내는 것이 아니라 저장되는 것에 적용됩니다. 서버에 조용히 놓여 있는 데이터조차, 그것을 암호화하는 데 쓰인 키는 서버 자신에게 한 번도 주어지지 않았습니다. 그래서 운영자는 데이터가 얼마나 오래 놓여 있든 그것을 읽을 방법이 전혀 없습니다.</p>
-      <ul><li>그냥 &quot;암호화됨&quot;이라는 말은 흔히 서버까지의 TLS만을 뜻하며, 제공업체는 여전히 파일을 읽을 수 있습니다.</li><li>&quot;종단간 암호화&quot;는 발신자와 수신자만이 키를 가진다는 뜻입니다.</li><li>&quot;영지식&quot;은 서버가 보관 중에도 구조적으로 복호화할 수 없는 데이터만 갖고 있다는 뜻입니다.</li></ul>
-      <h2>전송 도구를 신뢰하기 전에 실제로 확인해야 할 것</h2>
+      <ul><li>그냥 &quot;암호화됨&quot;이라는 말은 흔히 서버까지의 TLS만을 뜻하며, 제공업체는 여전히 파일을 읽을 수 있습니다.</li><li>&quot;종단간 암호화&quot;는 발신자와 수신자만이 키를 가진다는 뜻입니다.</li><li>&quot;영지식&quot;은 서버가 보관 중에도 구조적으로 복호화할 수 없는 데이터만 갖고 있다는 뜻입니다.</li></ul></section>
+      <section class="sheet"><h2>전송 도구를 신뢰하기 전에 실제로 확인해야 할 것</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">이 점검 목록을 돌리려면 필요한 것</p><ul><li>10분과 브라우저 하나. 앞의 두 항목은 읽는 일이지 감사가 아닙니다.</li><li>실시간 항목을 위한 기기 두 대. 세 번째와 네 번째는 마케팅 페이지에서는 할 수 없고, 그래서 할 가치가 있습니다.</li><li>보안 전문 지식은 필요 없습니다. 아래 각 항목은 읽을 수 있는 것이거나, 벌어지는 것을 볼 수 있는 것입니다.</li></ul></div>
       <p>웹사이트의 마케팅 문구보다 몇 가지 구체적인 질문이 훨씬 더 값어치가 있습니다.</p>
       <ol class="steps" data-block="steps"><li><p>&quot;내 파일을 읽을 수 있느냐&quot;에 대한 공급자 자신의 답을 요금 페이지가 아니라 소스에서 찾으세요. 소스가 없다면 그것 자체가 이미 답입니다.</p><pre tabindex="0"><code>https://github.com/relayium/relayium</code></pre></li><li><p>라이선스를 확인하고, 그 저장소가 실제로 배포된 것과 대응하는지 보세요. 직접 살펴볼 수 있는 주장과 받아들이라고 요구되는 주장은 종류가 다릅니다.</p></li><li><p>실시간 전송에서 두 화면의 검증 코드를 대조하세요. 「종단간 암호화」를 한 문장에서, 바로 이 두 종단 사이에 실제로 적용되고 있는 것으로 바꾸는 단계가 이것입니다.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>그 전송이 도는 동안 브라우저 개발자 도구를 열고 네트워크 패널을 보세요. 올라가는 내용에서 자기 파일의 내용을 찾아보세요. 찾지 못하는 것이 핵심이고, 찾는다면 그것이 결론입니다.</p></li><li><p>끝난 뒤에 무엇이 남는지 확인하세요. 링크가 스스로 만료되는지, 그리고 나중에 누군가 요구하면 서비스가 그 파일을 다시 내놓을 수 있는지.</p></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">이 목록을 통과한다는 것이 실제로 알려 주는 것</p><p>앞의 두 항목은 값이 싸고 몇 분이면 대부분의 도구를 걸러 냅니다. 뒤의 셋은 랜딩 페이지가 흉내 낼 수 없습니다. 자기 기기 두 대에서 벌어지는 것을 직접 보기 때문입니다.</p><p>이것으로 어떤 도구가 추상적으로 신뢰할 만해지지는 않습니다. 구체적인 주장을 확인 가능하게 만들 뿐이며, 모든 줄을 직접 읽지 않는 한 그것이 누구에게나 최선입니다.</p></div>
-      <ul><li>&quot;암호화됨&quot;이라고만 말하는지(단순 TLS일 수 있음), 아니면 명확히 &quot;종단간 암호화&quot;라고 말하는지(발신자와 수신자만 키를 가짐)?</li><li>연결이 변조되지 않았는지 확인할 방법이 있는지——그냥 믿어야 하는 자물쇠 아이콘이 아니라, 직접 대조할 수 있는 코드가 있는지?</li><li>파일의 무결성이 검증되어, 손상되거나 변조된 파일이 아무 문제 없어 보이게 조용히 도착하지 않는지?</li><li>코드가 오픈 소스이고 감사 가능한지, 아니면 그 주장들이 그냥 믿을 수밖에 없는 마케팅 문구인지?</li><li>보내거나 받을 때, 그 전송에 실제로 필요한 것보다 더 많은 신원 정보를 요구받지는 않는지?</li><li>무언가가 저장된다면, 그것이 명확하고 한정된 수명——만료 기한이나 다운로드 후 삭제——을 가지는지, 아니면 무기한 그대로 남아 있는지?</li></ul>
-      <h2>Relayium이 이 각각에 답하는 방식</h2>
+      <ul><li>&quot;암호화됨&quot;이라고만 말하는지(단순 TLS일 수 있음), 아니면 명확히 &quot;종단간 암호화&quot;라고 말하는지(발신자와 수신자만 키를 가짐)?</li><li>연결이 변조되지 않았는지 확인할 방법이 있는지——그냥 믿어야 하는 자물쇠 아이콘이 아니라, 직접 대조할 수 있는 코드가 있는지?</li><li>파일의 무결성이 검증되어, 손상되거나 변조된 파일이 아무 문제 없어 보이게 조용히 도착하지 않는지?</li><li>코드가 오픈 소스이고 감사 가능한지, 아니면 그 주장들이 그냥 믿을 수밖에 없는 마케팅 문구인지?</li><li>보내거나 받을 때, 그 전송에 실제로 필요한 것보다 더 많은 신원 정보를 요구받지는 않는지?</li><li>무언가가 저장된다면, 그것이 명확하고 한정된 수명——만료 기한이나 다운로드 후 삭제——을 가지는지, 아니면 무기한 그대로 남아 있는지?</li></ul></section>
+      <section class="sheet"><h2>Relayium이 이 각각에 답하는 방식</h2>
       <p>양쪽이 동시에 온라인 상태인 실시간 전송에서, Relayium은 각 기기에서 새로운 X25519 키 쌍을 만들고, 두 브라우저 내부에만 존재하는 공유 AES-256-GCM 키를 도출합니다——이 키는 Relayium 자체 서버로 전송되는 일이 없습니다. 선택적인 짧은 검증 코드(SAS)——기본값이 꺼짐인 고급 검증을 켜면 표시됩니다——를 통해 양쪽 모두 중간의 부정직한 서버가 키를 바꿔치기하지 않았음을 확인할 수 있고, 각 파일의 SHA-256 해시가 종단간으로 대조되므로 손상된 전송이 문제없어 보이게 도착하는 일이 없습니다. 이 원리가 정확히 어떻게 작동하는지 더 깊이 알고 싶다면 &quot;Relayium이 파일을 종단간 암호화하는 방식&quot;에서 더 자세히 다룹니다.</p>
       <p>수신자가 아직 온라인이 아닐 때, 저장형 다운로드 링크는 진짜로 다른 영지식 방식을 사용합니다. 브라우저는 무작위 AES-256-GCM 키를 생성하고, 무언가 업로드되기 전에 그것으로 파일을 암호화합니다. 이 키는 서버로 전혀 전송되지 않습니다——링크의 URL 프래그먼트, 즉 # 뒤의 부분에만 존재하며, 브라우저는 이 부분을 절대 전송하지 않습니다. 결국 서버가 갖게 되는 것은 복호화할 방법이 없는 암호문과, 직접 선택한 만료 기한(1시간, 1일, 3일, 7일, 요금제에 따라 최대 14일, 또는 첫 다운로드 완료 후 삭제)뿐입니다.</p>
       <p>네트워크를 넘을 때 Relayium 브라우저 앱은 설계상 TURN을 사용합니다. 릴레이는 종단간 암호문을 운반하지만 키를 받지 않으므로 파일을 읽거나 복호화할 수 없습니다.</p>
       <p>이 중 어느 것도 주장을 그냥 믿으라고 요구하지 않습니다. Relayium의 클라이언트와 서버 코드는 AGPL-3.0 라이선스로 공개되어 있어, 홍보 문구를 믿는 대신 누구나 읽고 감사할 수 있습니다.</p>
-      <ul><li>같은 네트워크 내의 전송은 계정이 전혀 필요 없습니다.</li><li>페어링 코드로 네트워크를 넘어 보내거나 저장 링크를 만들 때는 발신자의 로그인이 필요합니다——수신자는 어떤 경우든 계정이 전혀 필요 없습니다.</li></ul>
-      <h2>암호화가 전부는 아닙니다 — 여전히 중요한 몇 가지 습관</h2>
+      <ul><li>같은 네트워크 내의 전송은 계정이 전혀 필요 없습니다.</li><li>페어링 코드로 네트워크를 넘어 보내거나 저장 링크를 만들 때는 발신자의 로그인이 필요합니다——수신자는 어떤 경우든 계정이 전혀 필요 없습니다.</li></ul></section>
+      <section class="sheet"><h2>암호화가 전부는 아닙니다 — 여전히 중요한 몇 가지 습관</h2>
       <p>강력한 암호화는 전송 중과 저장 중인 파일을 보호하지만, 링크를 잘못된 주소로 보내는 것까지 막아주지는 못합니다. 공유 링크를 파일 그 자체처럼 다루고, 어딘가 공개된 곳에 게시하지 마세요.</p>
       <p>정말로 민감한 내용에 대해서는 고급 검증을 켠 다음, 몇 초를 더 들여 통화로 검증 코드를 소리 내어 읽어 대조하거나 직접 만나서 확인하세요. 나란히 놓인 두 화면이 둘 다 속지 않았을 것이라고 그냥 믿는 것만으로는 부족합니다.</p>
-      <p>그리고 아무리 암호화가 잘 되어 있어도, 이미 손상된 기기에서 노출된 파일을 어떤 전송 도구도 보호해줄 수는 없습니다. 좋은 암호화는 양쪽 끝 자체가 신뢰할 수 있다는 것을 전제로 합니다. 이것이 파일을 보내는 일 자체에 대해 지나치게 예민해질 이유는 아닙니다. 다만 암호화가 어디까지 커버하고 어디부터는 커버하지 않는지 알아둘 가치가 있다는 것입니다.</p>
-      <h2>확인이 깔끔한 답을 주지 않을 때</h2>
+      <p>그리고 아무리 암호화가 잘 되어 있어도, 이미 손상된 기기에서 노출된 파일을 어떤 전송 도구도 보호해줄 수는 없습니다. 좋은 암호화는 양쪽 끝 자체가 신뢰할 수 있다는 것을 전제로 합니다. 이것이 파일을 보내는 일 자체에 대해 지나치게 예민해질 이유는 아닙니다. 다만 암호화가 어디까지 커버하고 어디부터는 커버하지 않는지 알아둘 가치가 있다는 것입니다.</p></section>
+      <section class="sheet"><h2>확인이 깔끔한 답을 주지 않을 때</h2>
       <p>막히는 지점은 세 군데입니다. 어느 경우든 그 모호함 자체가 정보를 담고 있습니다.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">부딪히는 것, 확인할 것, 그 의미</p><dl><dt>네트워크 패널에 큰 업로드가 보이는데 안에 무엇이 있는지 알 수 없습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # developer tools, Network panel, during a transfer</code></pre><p>그것이 기대한 결과이지 막다른 길이 아닙니다. 찾는 것은 알아볼 만한 것이 하나도 없다는 사실입니다 — 직접 붙인 파일 이름이나, 문서에 있다고 아는 문자열 같은 것. 업로드 내용에서 자기 것이 읽힌다면 그것이 결론이고, 결정적인 결론입니다.</p></dd><dt>검증 코드가 없어서 세 번째를 할 수 없습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # a stored link has no second live endpoint to compare against</code></pre><p>실시간 전송이 아니라 저장형 링크 전송입니다. 대조할 상대 종단이 온라인에 없으므로 보장의 모양이 다릅니다. 키는 링크의 프래그먼트에 있고 서버에는 전혀 닿지 않습니다. 실시간 전송에서는 코드를 대조하고, 저장형에서는 링크 만료를 확인하세요.</p></dd><dt>소스는 공개되어 있는데 쓰인 언어를 읽지 못합니다.</dt><dd><pre tabindex="0"><code>https://github.com/relayium/relayium   # is the claim falsifiable at all</code></pre><p>읽을 필요는 없습니다. 이 확인이 답하는 질문은 그 주장이 애초에 반증 가능한가입니다. 저장소가 있는가, 배포된 것과 대응하는가, 그 언어를 읽는 사람이 반박할 수 있는 상태인가. 아무도 확인할 처지가 못 되는 주장이야말로 결론입니다.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">부딪히는 것, 확인할 것, 그 의미</p><dl><dt>네트워크 패널에 큰 업로드가 보이는데 안에 무엇이 있는지 알 수 없습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # developer tools, Network panel, during a transfer</code></pre><p>그것이 기대한 결과이지 막다른 길이 아닙니다. 찾는 것은 알아볼 만한 것이 하나도 없다는 사실입니다 — 직접 붙인 파일 이름이나, 문서에 있다고 아는 문자열 같은 것. 업로드 내용에서 자기 것이 읽힌다면 그것이 결론이고, 결정적인 결론입니다.</p></dd><dt>검증 코드가 없어서 세 번째를 할 수 없습니다.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # a stored link has no second live endpoint to compare against</code></pre><p>실시간 전송이 아니라 저장형 링크 전송입니다. 대조할 상대 종단이 온라인에 없으므로 보장의 모양이 다릅니다. 키는 링크의 프래그먼트에 있고 서버에는 전혀 닿지 않습니다. 실시간 전송에서는 코드를 대조하고, 저장형에서는 링크 만료를 확인하세요.</p></dd><dt>소스는 공개되어 있는데 쓰인 언어를 읽지 못합니다.</dt><dd><pre tabindex="0"><code>https://github.com/relayium/relayium   # is the claim falsifiable at all</code></pre><p>읽을 필요는 없습니다. 이 확인이 답하는 질문은 그 주장이 애초에 반증 가능한가입니다. 저장소가 있는가, 배포된 것과 대응하는가, 그 언어를 읽는 사람이 반박할 수 있는 상태인가. 아무도 확인할 처지가 못 되는 주장이야말로 결론입니다.</p></dd></dl></div></section>
       <h2>자주 묻는 질문</h2>
       <h3>민감한 파일을 이메일로 보내도 안전한가요?</h3>
       <p>이메일은 기밀 파일 전송을 위해 설계된 것이 아닙니다. 첨부파일은 양쪽 메일 서버에 일상적으로 보관·스캔·백업되며, 전달된 메시지는 의도하지 않은 사람 앞에 놓일 수 있습니다. 중요하지 않은 파일이라면 괜찮지만, 민감한 내용이라면 종단간 암호화를 갖춘 도구가 이런 노출을 없애줍니다.</p>
@@ -215,6 +259,8 @@ ol.steps>li>pre{margin:8px 0 0}
         <a href="/pricing">요금제</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

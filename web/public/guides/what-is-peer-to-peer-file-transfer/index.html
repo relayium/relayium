@@ -36,9 +36,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"What is peer-to-peer file transfer?","description":"A plain-language explainer of P2P file transfer: how it differs from uploading to a server, how a direct WebRTC connection is found, and why it's private and fast.","inLanguage":"en","datePublished":"2026-07-09","dateModified":"2026-08-07","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/guides/what-is-peer-to-peer-file-transfer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/guides/"},{"@type":"ListItem","position":3,"name":"What is peer-to-peer file transfer?"}]},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Is peer-to-peer the same as end-to-end encrypted?","acceptedAnswer":{"@type":"Answer","text":"They're related but not identical. P2P describes communication between endpoints, but it does not guarantee that every network hop is direct; TURN may carry the traffic. Encryption describes whether intermediaries can read it. Relayium uses direct WebRTC on the same LAN and end-to-end encrypted TURN across networks, where the relay cannot read or decrypt the content."}},{"@type":"Question","name":"Does a P2P transfer ever touch a server at all?","acceptedAnswer":{"@type":"Answer","text":"A small signaling server helps the two devices find each other's address — but it only ever sees connection-setup information, never file bytes. Across networks in the browser, a TURN relay forwards the encrypted file data as a matter of design, but even then it only handles ciphertext it can't decrypt."}},{"@type":"Question","name":"Why would a direct connection fail in the first place?","acceptedAnswer":{"@type":"Answer","text":"Some networks — often strict corporate firewalls or certain mobile carrier NATs — are built in a way that makes it impossible to discover a reachable address from outside information alone. Rather than spend twenty-odd seconds finding that out on every transfer, Relayium's browser app sends all cross-network transfers over the relay from the start — so a relay, not a failed direct attempt, is what carries them."}},{"@type":"Question","name":"Is P2P transfer slower when it goes over a relay?","acceptedAnswer":{"@type":"Answer","text":"It can add some latency, since the relay is an extra hop the data passes through and it's a shared server rather than a dedicated one. But it's still generally faster than an upload-then-download flow, since there's no wait for the file to fully land on a server before the download side can start."}},{"@type":"Question","name":"Do both people need an account for a P2P transfer?","acceptedAnswer":{"@type":"Answer","text":"Two devices on the same network need no account at all. Sending across networks by pairing code needs the sender to sign in, but the person receiving never needs an account either way."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -60,24 +60,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -103,6 +89,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -134,8 +176,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/guides/" aria-current="true">Guides</a><a href="/apps">Apps</a><a href="/pricing">Pricing</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Main"><span class="rail-group">Live transfer</span><a class="row" href="/">LAN</a><a class="row" href="/cross-network" aria-label="Cross-network transfer">Cross-network</a><span class="rail-group">Links</span><a class="row" href="/offline-transfer" aria-label="Share a link">Share</a><span class="rail-group">Your devices</span><a class="row" href="/device-inbox" aria-label="Device Inbox">Inbox</a><span class="rail-group">Downloads and tools</span><a class="row" href="/cli">CLI</a><a class="row" href="/apps">Apps</a><a class="row" href="/pricing">Pricing</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/guides/what-is-peer-to-peer-file-transfer/" aria-current="true">English</a><a href="/zh/guides/what-is-peer-to-peer-file-transfer/">中文</a></nav></div></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Relayium</a> <span aria-hidden="true">›</span> <a href="/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">What is peer-to-peer file transfer?</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -154,33 +198,33 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Last updated: <bdi>2026-08-07</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/what-is-peer-to-peer-file-transfer/" aria-current="true">English</a><a href="/zh/guides/what-is-peer-to-peer-file-transfer/">中文</a></nav>
+      
       <p class="lead">&quot;Peer-to-peer&quot; gets used loosely, so here&#39;s what it actually means for a file transfer: your file goes straight from one device to the other, not up to a company&#39;s server and back down. No stop in the middle where a copy could sit.</p>
       <p class="lead">That sounds simple, but routes differ in practice. This page first explains generic WebRTC/ICE, where TURN can be a fallback, then separates Relayium&#39;s actual choices: LAN browser WebRTC is direct, cross-network browser sessions use TURN by design, and the CLI&#39;s transfer modes — push, pull, sync, serve, send and receive — are direct and never relayed.</p>
-      <h2>P2P vs. the usual way: cutting out the middle stop</h2>
+      <section class="sheet"><h2>P2P vs. the usual way: cutting out the middle stop</h2>
       <p>Most &quot;send a file&quot; tools work by uploading: your file goes from your device up to the company&#39;s server, gets stored there, and the other person downloads it back down. That&#39;s two hops, and for a while, a full copy of your file sits on someone else&#39;s storage — even if it&#39;s deleted later.</p>
       <p>Peer-to-peer transfer skips that stop. Once a connection is open between your device and the other person&#39;s, the file&#39;s bytes flow directly across that one hop and nowhere else. There&#39;s no server-side copy to store, to secure, or to eventually delete, because it was never uploaded in the first place.</p>
-      <ul><li>Upload-based transfer: your device to a server to their device — two hops, a stored copy in between.</li><li>Peer-to-peer transfer: your device straight to their device — one hop, nothing stored.</li><li>Relayium&#39;s realtime browser mode has two paths: WebRTC is direct on the same LAN, while cross-network sessions use TURN by design to carry end-to-end encrypted ciphertext without keeping a server-side content copy or history.</li></ul>
-      <h2>How two devices actually find each other: STUN</h2>
+      <ul><li>Upload-based transfer: your device to a server to their device — two hops, a stored copy in between.</li><li>Peer-to-peer transfer: your device straight to their device — one hop, nothing stored.</li><li>Relayium&#39;s realtime browser mode has two paths: WebRTC is direct on the same LAN, while cross-network sessions use TURN by design to carry end-to-end encrypted ciphertext without keeping a server-side content copy or history.</li></ul></section>
+      <section class="sheet"><h2>How two devices actually find each other: STUN</h2>
       <p>Here&#39;s the part that isn&#39;t obvious: your device almost certainly doesn&#39;t know its own address as seen from the outside internet — it sits behind a home router or a mobile carrier&#39;s network address translation (NAT), which hides it behind a shared public IP and reassigns ports on the fly. The other device is in the same situation. Neither one can just &quot;dial&quot; the other directly without first figuring out what address would actually reach it.</p>
       <p>That&#39;s what STUN (Session Traversal Utilities for NAT) is for. Each device briefly asks a small, lightweight STUN server one question: &quot;what address and port do you see me coming from?&quot; The answer tells it its own public-facing address — not the file, not any content, just enough network information to describe a path back to it. Both devices exchange this information (via a signaling step that only carries connection-setup details, never file bytes) and then try to open a direct path to each other&#39;s address. In a large share of real-world cases — especially two devices on the same Wi-Fi, or NATs that behave predictably — this works, and a fully direct connection opens.</p>
-      <ul><li>STUN only ever learns and shares network addresses — never file contents, filenames, or encryption keys.</li><li>Relayium uses WebRTC directly for same-LAN browser sessions. Its cross-network browser path is deliberately relayed.</li><li>Relayium CLI send/receive and text are direct-only P2P: they never relay file or message bytes through TURN or any other Relayium server. If the two ends cannot establish a direct connection, the session fails rather than falling back to a relay.</li><li>Two devices on the same network (no code needed) typically connect the most directly of all, since there&#39;s often no NAT in the way at all.</li></ul>
-      <h2>When a direct path can&#39;t be found: the TURN relay</h2>
+      <ul><li>STUN only ever learns and shares network addresses — never file contents, filenames, or encryption keys.</li><li>Relayium uses WebRTC directly for same-LAN browser sessions. Its cross-network browser path is deliberately relayed.</li><li>Relayium CLI send/receive and text are direct-only P2P: they never relay file or message bytes through TURN or any other Relayium server. If the two ends cannot establish a direct connection, the session fails rather than falling back to a relay.</li><li>Two devices on the same network (no code needed) typically connect the most directly of all, since there&#39;s often no NAT in the way at all.</li></ul></section>
+      <section class="sheet"><h2>When a direct path can&#39;t be found: the TURN relay</h2>
       <p>Sometimes STUN isn&#39;t enough. Some NATs — especially on stricter corporate networks or certain mobile carriers — are unpredictable enough that no direct path can be discovered from outside information alone. If both devices are behind that kind of NAT, a genuinely direct connection just isn&#39;t possible; something has to relay the traffic in between.</p>
       <p>In a general WebRTC/ICE design, TURN (Traversal Using Relays around NAT) can be the fallback relay when a direct path fails. Relayium&#39;s browser app makes a more deliberate choice: same-LAN sessions use direct WebRTC, while every cross-network session uses TURN from the start. The file is encrypted end-to-end before reaching the relay, so it carries only ciphertext and cannot read or decrypt the content.</p>
-      <ul><li>On the same network Relayium connects devices directly; across networks it uses the TURN relay by default, because a direct path so often can&#39;t be found there.</li><li>The relay forwards ciphertext only; it never has the decryption key and can&#39;t read file contents, filenames, or anything else about what&#39;s inside.</li><li>Relayium CLI send/receive and text are direct-only P2P: they never relay file or message bytes through TURN or any other Relayium server. If the two ends cannot establish a direct connection, the session fails rather than falling back to a relay.</li></ul>
-      <h2>Why this matters: privacy and speed</h2>
+      <ul><li>On the same network Relayium connects devices directly; across networks it uses the TURN relay by default, because a direct path so often can&#39;t be found there.</li><li>The relay forwards ciphertext only; it never has the decryption key and can&#39;t read file contents, filenames, or anything else about what&#39;s inside.</li><li>Relayium CLI send/receive and text are direct-only P2P: they never relay file or message bytes through TURN or any other Relayium server. If the two ends cannot establish a direct connection, the session fails rather than falling back to a relay.</li></ul></section>
+      <section class="sheet"><h2>Why this matters: privacy and speed</h2>
       <p>The privacy case is straightforward: when the file&#39;s bytes only ever cross one hop, straight between two devices, there&#39;s no server-side storage step where a copy could sit, get logged, or get accessed by anyone else — because it was never put there. That&#39;s a structurally different guarantee than &quot;we promise to delete it eventually.&quot;</p>
-      <p>The speed case follows the same logic. An upload-then-download transfer has to cross the network twice — once up, once down — and often waits on the sending side to fully finish before the receiving side can start. A direct connection crosses the network once, and data can stream continuously between the two devices as fast as the slower connection allows, without a server in the middle limiting throughput or adding its own latency.</p>
-      <h2>How Relayium puts this together</h2>
+      <p>The speed case follows the same logic. An upload-then-download transfer has to cross the network twice — once up, once down — and often waits on the sending side to fully finish before the receiving side can start. A direct connection crosses the network once, and data can stream continuously between the two devices as fast as the slower connection allows, without a server in the middle limiting throughput or adding its own latency.</p></section>
+      <section class="sheet"><h2>How Relayium puts this together</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">What you need to check this yourself</p><ul><li>Two devices you can watch at the same time — a laptop and a phone is ideal.</li><li>A small file. This is about which path the connection takes, not about throughput.</li><li>A moment with both on the same Wi-Fi, and a moment with them on different networks — turning the phone&#39;s Wi-Fi off for mobile data is enough.</li></ul></div>
       <p>Open relayium.com on two devices on the same network and they typically find each other automatically — no account, no code, nothing to install; that&#39;s the LAN case where STUN often isn&#39;t even needed. Sending across the internet to someone on a different network uses a pairing code: the sender signs in, generates a code (or shares a link, with an optional QR code to scan), and once the other person joins, the transfer runs over an encrypted TURN relay — the reliable path across unpredictable NATs, and it only ever carries ciphertext — while the receiver never needs an account.</p>
       <p>Once the realtime path is open, up to 1,000 files stream continuously over the selected route, each independently verified with a SHA-256 hash. Relayium keeps no server-side realtime content copy or transfer history. If the other person is offline, a zero-knowledge stored link is a genuinely different mode, not a realtime P2P session.</p>
       <ol class="steps" data-block="steps"><li><p>With both devices on the same Wi-Fi, open Relayium on each and send the file.</p><pre tabindex="0"><code>https://relayium.com/</code></pre></li><li><p>Read the label the app puts on the connection. On one network it says LAN direct.</p></li><li><p>Now put the two devices on different networks and send again, this time using a pairing code.</p><pre tabindex="0"><code>https://relayium.com/cross-network</code></pre></li><li><p>Read the label again. Across networks in the browser it reads Relayed, every time. That is the design and not a failed attempt: the app asks ICE for a relay-only path from the start, so no direct candidate is ever gathered for it to prefer.</p></li><li><p>Note which you got, and on which pair of networks. That is your own answer to the question this article opened with, rather than ours.</p></li></ol>
-      <div class="cbox ok" data-block="success"><p class="cbox-t">What the labels tell you</p><p>On one network you get LAN direct. Across networks, in the browser, you get Relayed — not sometimes, and not depending on your two networks. That is the one place Relayium departs from the generic ICE ladder this article described above.</p><p>Relayed is not a failure, and here it is not a fallback either: nothing direct was tried and lost. Relayium makes the choice up front because on a cross-network path the direct candidates usually fail anyway, and waiting out their checks costs about twenty seconds before ICE reaches the relay it was going to use. The relay only ever carries ciphertext.</p></div>
-      <h2>When the label is not what you expected</h2>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">What the labels tell you</p><p>On one network you get LAN direct. Across networks, in the browser, you get Relayed — not sometimes, and not depending on your two networks. That is the one place Relayium departs from the generic ICE ladder this article described above.</p><p>Relayed is not a failure, and here it is not a fallback either: nothing direct was tried and lost. Relayium makes the choice up front because on a cross-network path the direct candidates usually fail anyway, and waiting out their checks costs about twenty seconds before ICE reaches the relay it was going to use. The relay only ever carries ciphertext.</p></div></section>
+      <section class="sheet"><h2>When the label is not what you expected</h2>
       <p>Three things surprise people the first time they look. None of them is a fault to fix, but each is worth being able to name.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">What you see, what to check, what it means</p><dl><dt>Across networks it always says Relayed, never P2P direct.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # the path label reads the same on both ends</code></pre><p>Nothing is wrong, and there is nothing to check — that is the only label this flow can show. Relayium&#39;s browser app requests a relay-only ICE path for every cross-network session, so a direct one is never attempted and never reported. The relay carries ciphertext only, and the same two devices on one network still transfer directly, and free.</p></dd><dt>On one Wi-Fi it never says LAN direct.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct</code></pre><p>Check whether the network isolates its clients — guest Wi-Fi, and many hotel and office networks, block device-to-device traffic outright. The two devices cannot see each other at all there, so use the cross-network pairing flow instead, which does not depend on them reaching each other locally.</p></dd><dt>There is no path label at all.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # there is no path label until the two ends have connected</code></pre><p>The label names a connection, so it appears once one exists. Before the two ends have found each other there is nothing to name, and a transfer that never starts is a different problem from a transfer that took an unexpected path.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">What you see, what to check, what it means</p><dl><dt>Across networks it always says Relayed, never P2P direct.</dt><dd><pre tabindex="0"><code>https://relayium.com/cross-network   # the path label reads the same on both ends</code></pre><p>Nothing is wrong, and there is nothing to check — that is the only label this flow can show. Relayium&#39;s browser app requests a relay-only ICE path for every cross-network session, so a direct one is never attempted and never reported. The relay carries ciphertext only, and the same two devices on one network still transfer directly, and free.</p></dd><dt>On one Wi-Fi it never says LAN direct.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct</code></pre><p>Check whether the network isolates its clients — guest Wi-Fi, and many hotel and office networks, block device-to-device traffic outright. The two devices cannot see each other at all there, so use the cross-network pairing flow instead, which does not depend on them reaching each other locally.</p></dd><dt>There is no path label at all.</dt><dd><pre tabindex="0"><code>https://relayium.com/   # there is no path label until the two ends have connected</code></pre><p>The label names a connection, so it appears once one exists. Before the two ends have found each other there is nothing to name, and a transfer that never starts is a different problem from a transfer that took an unexpected path.</p></dd></dl></div></section>
       <h2>Frequently asked questions</h2>
       <h3>Is peer-to-peer the same as end-to-end encrypted?</h3>
       <p>They&#39;re related but not identical. P2P describes communication between endpoints, but it does not guarantee that every network hop is direct; TURN may carry the traffic. Encryption describes whether intermediaries can read it. Relayium uses direct WebRTC on the same LAN and end-to-end encrypted TURN across networks, where the relay cannot read or decrypt the content.</p>
@@ -207,6 +251,8 @@ ol.steps>li>pre{margin:8px 0 0}
         <a href="/pricing">Pricing</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

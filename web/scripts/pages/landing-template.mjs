@@ -6,7 +6,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { MAINTAINED_LANGS, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, RELEASES_LABELS, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, landingUrl, ctaHref, urlPath, absUrl, esc, dirAttr, rtlHead, isFrozen, archiveNotice, ARCHIVE_STYLE } from "./shared.mjs";
-import { pageStyle, siteHeader, THEME_HEAD } from "./page-chrome.mjs";
+import { pageStyle, THEME_HEAD } from "./page-chrome.mjs";
+import { appShell } from "./page-shell.mjs";
 
 // Exported so mode-template.mjs (and any other landing-style page) can reuse the
 // exact same inline stylesheet + page-shell classes instead of forking them.
@@ -217,9 +218,8 @@ export function renderLandingPage({ lang, doc, articleLinks = [], categories = n
     <style>${STYLE}${archived ? ARCHIVE_STYLE : ""}</style>
   </head>
   <body>
-    <div class="wrap">
-      ${siteHeader({ lang, home: ctaHref(lang) })}
-      ${langBar(lang)}
+    ${appShell({ lang, home: ctaHref(lang), foot: archived ? "" : langBar(lang), content: `
+      ${archived ? langBar(lang) : ""}
       <!-- The language bar and the footer are navigation, so the main landmark
            starts after them: a screen-reader user jumping to the main content
            should land on this page's own words, not on a row of language links.
@@ -232,33 +232,33 @@ export function renderLandingPage({ lang, doc, articleLinks = [], categories = n
       <p class="pitch">${esc(doc.hero.pitch)}</p>
       <a class="cta" href="${ctaHref(lang)}">${esc(doc.hero.cta)}</a>
 
-      <section class="reveal">
+      <section class="reveal sheet">
       <h2>${esc(doc.how.heading)}</h2>
       <ol class="steps">
         ${steps}
       </ol>${shotsHtml(lang, doc.how.shots)}
       </section>
 
-      <section class="reveal">
+      <section class="reveal sheet">
       <h2>${esc(doc.why.heading)}</h2>
       <ul class="why">
         ${why}
       </ul>
       </section>
 
-      <section class="reveal">
+      <section class="reveal sheet">
       <h2>${esc(doc.compare.heading)}</h2>
       <div class="compare">
       ${compare}
       </div>
       </section>
 
-      <section class="reveal">
+      <section class="reveal sheet">
       <h2>${esc(doc.faq.heading)}</h2>
       ${faq}
       </section>
 
-      ${learn ? `<section class="reveal">${learn}</section>` : ""}
+      ${learn ? `<section class="reveal sheet">${learn}</section>` : ""}
       </main>
       <footer>
         <a href="${ctaHref(lang)}">← ${esc(SITE.name)}</a>
@@ -271,7 +271,7 @@ export function renderLandingPage({ lang, doc, articleLinks = [], categories = n
         <a href="${urlPath("releases", lang)}">${esc(RELEASES_LABELS[lang])}</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
-    </div>
+` })}
   </body>
 </html>
 `;

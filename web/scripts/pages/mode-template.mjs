@@ -28,7 +28,8 @@ import {
   ARCHIVE_STYLE,
 } from "./shared.mjs";
 import { STYLE } from "./landing-template.mjs";
-import { siteHeader, THEME_HEAD } from "./page-chrome.mjs";
+import { THEME_HEAD } from "./page-chrome.mjs";
+import { appShell } from "./page-shell.mjs";
 
 // The maintained cluster only — en (the SPA route), zh, x-default at en.
 // Archived mode pages emit none; see article-template.mjs's alternates() for the
@@ -110,30 +111,30 @@ function body(slug, lang, doc, articleLinks, notice) {
       <p class="pitch">${esc(doc.hero.pitch)}</p>${notice ? "\n      " + notice : ""}
       <a class="cta" href="${openHref}">${esc(doc.hero.cta)}</a>${nativeDownload}
 
-      <section class="reveal">
+      <section class="reveal sheet">
       <h2>${esc(doc.how.heading)}</h2>
       <ol class="steps">
         ${steps}
       </ol>
       </section>
 
-      <section class="reveal">
+      <section class="reveal sheet">
       <h2>${esc(doc.why.heading)}</h2>
       <ul class="why">
         ${why}
       </ul>
       </section>
 
-      <section class="reveal">
+      <section class="reveal sheet">
       <h2>${esc(doc.compare.heading)}</h2>
       <div class="compare">
       ${compare}
       </div>
       </section>
 
-      ${doc.faq ? `<section class="reveal"><h2>${esc(doc.faq.heading)}</h2>\n      ${faq}</section>` : ""}
+      ${doc.faq ? `<section class="reveal sheet"><h2>${esc(doc.faq.heading)}</h2>\n      ${faq}</section>` : ""}
 
-      ${learn ? `<section class="reveal">${learn}</section>` : ""}`;
+      ${learn ? `<section class="reveal sheet">${learn}</section>` : ""}`;
 }
 
 export function renderModePage({ slug, lang, doc, updated, articleLinks = [] }) {
@@ -175,8 +176,7 @@ export function renderModePage({ slug, lang, doc, updated, articleLinks = [] }) 
     <style>${STYLE}${archived ? ARCHIVE_STYLE : ""}</style>
   </head>
   <body>
-    <div class="wrap">
-      ${siteHeader({ lang, home: ctaHref(lang), self: urlPath(slug, lang) })}
+    ${appShell({ lang, home: ctaHref(lang), current: slug === "apps" ? "apps" : slug === "cross-network" ? "cross" : "offline", content: `
       <main>${body(slug, lang, doc, articleLinks, notice)}</main>
       <footer>
         <a href="${ctaHref(lang)}">← ${esc(SITE.name)}</a>
@@ -187,7 +187,7 @@ export function renderModePage({ slug, lang, doc, updated, articleLinks = [] }) 
         <a href="${PRICING_URL}">${esc(pricingLabel(lang))}</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
-    </div>
+` })}
   </body>
 </html>
 `;

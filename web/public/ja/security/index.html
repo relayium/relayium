@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"セキュリティと脅威モデル · Relayium","description":"Relayium がファイルと一時テキストを保護する仕組み：セッションごとの鍵、認証付き暗号、SAS 検証、直接・中継経路、ゼロ知識ダウンロードリンク、そして何を守り何を守らないかの率直な説明。","url":"https://relayium.com/ja/security/","inLanguage":"ja","dateModified":"2026-08-02","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 /* The release list is the app's settings-row shape: 1px separators inside one
    card, no line under the last row (设计规范 §4). */
 .releases{list-style:none;margin:18px 0 0;padding:0;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);overflow:clip}
@@ -116,13 +158,16 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ja/guides/">ガイド</a><a href="/ja/apps/">アプリ</a><a href="/pricing">料金</a></nav></header>
-      <!-- The legal text is the main landmark. The site header and footer are
-           outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. On an
-           archived page that slot holds the archived-translation notice, a
-           labelled <aside>, which is a landmark in its own right too. -->
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="メインナビゲーション"><a class="row" href="/">LAN</a><a class="row" href="/ja/cross-network/">ネットワーク間</a><a class="row" href="/ja/offline-transfer/">非同期</a><a class="row" href="/device-inbox">デバイス受信箱</a><a class="row" href="/cli">CLI</a><a class="row" href="/ja/apps/">アプリ</a><a class="row" href="/pricing">料金</a></nav></header>
+      <div class="pane"><div class="wrap">
+
+      <!-- The legal text is the main landmark; the rail and the footer are
+           outside it. The language bar now lives in the rail's foot slot, with
+           the rest of the navigation. An ARCHIVED page keeps its notice here
+           instead: it is a paragraph of explanation, not a selector, and it has
+           no business in a 216px rail. It is a labelled <aside>, so it is still
+           a landmark of its own. -->
       <main>
       <h1>セキュリティと脅威モデル</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO
@@ -135,16 +180,16 @@ pre code{background:none;padding:0;border-radius:0}
       <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links archived-pricing">このページに記載されている料金プランや利用上限は古くなっている可能性があります。現在の内容は<a href="/pricing">料金</a>のページでご確認ください。</p><p class="archived-links">最新版：<a href="/security/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/security/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p>Relayium は、鍵を握るのはサーバーではなくファイルや一時テキストを転送する当事者であるように設計されています。このページでは、何がどのように保護されるのか、そしてその保護の限界を説明します。</p>
       <p>要点：同一ネットワークではリアルタイムのファイルとメッセージがデバイス間を直接流れます。ネットワークをまたぐブラウザセッションは、エンドツーエンド暗号化された暗号文だけを運びコンテンツ鍵を持たないリレーを使います。セッションごとの新しい鍵は常に使われます。加えて任意の検証コードがあり、帯域外で照合すればシグナリングの傍受も検出できます。以下に詳細を記します。</p>
-      <h2>ブラウザのリアルタイムファイル暗号化（X25519 + AES-256-GCM）</h2><p>ブラウザのリアルタイムファイル転送では、転送ごとに各デバイスで新しい一時的な X25519 鍵ペアが生成されます。2 つのブラウザは鍵交換を行い、共有 AES-256-GCM 鍵を導出します。各ファイルチャンクはその鍵と一意のノンスで暗号化されるため、シグナリングサーバーや中継が目にするのはファイルの平文ではなく暗号文です。CLI 転送は後述する別の直接 TLS 1.3 プロトコルを使用します。</p><ul><li>鍵は一時的で転送ごとに独立しており、セッションをまたいで再利用されることはありません。</li><li>共有鍵は 2 台のデバイス上で導出され、いかなるサーバーにも送信・保存されません。</li><li>暗号化は WebRTC 自身のトランスポート層セキュリティの上のアプリケーション層で適用されるため、トランスポート層が侵害されても有効性を保ちます。</li></ul>
-      <h2>検証コード（SAS）——悪意あるサーバーの検出</h2><p>WebRTC 標準の暗号化（DTLS）は鍵のフィンガープリントをシグナリングサーバー経由で交換するため、不正なサーバーが中間に入り鍵をすり替える可能性があります。これを検出するため、Relayium は双方の公開鍵から 6 桁の Short Authentication String（SAS）を導出し、両方の画面に表示できます。一致するコードが最も強い傍受検出保証を与えるのは、両者が帯域外で照合した場合だけです。 このコードを表示して照合のために止まるかどうかは設定です——ウェブでは「高度な検証」（既定はオフ）、CLI では `--verify`。オフにして変わるのは、画面に何を表示するかと、どの手順が確認のために止まるかだけで、暗号化は変わりません。下記のコミット後開示ハンドシェイクはすべての接続で実行され、開示が一致しなければ接続を拒否します。鍵は端末上で生成され当社に送られることはなく、リレーが運ぶのは暗号文だけで、ブラウザではファイルの受信時に保存前の確認があります——ネイティブの macOS アプリは、設定された保存先（既定はダウンロードフォルダー）へ確認なしで書き込みます。この確認は勝手な書き込みを防ぐためのもので、相手が誰かを保証するものではありません。それを確かめられるのはコードの照合だけです。</p><p>単純な 6 桁のコード（約 20 ビット）は、原理的には中継サーバーが一致するコードを総当たりで作り出す余地があります。Relayium はコミット後開示ハンドシェイクでこの隙を塞ぎます。各側はまず鍵のハッシュを送ってコミットし、相手のコミットメントを受け取ってから鍵を開示します。CLI 転送は、ピン留めされた TLS 証明書のフィンガープリントをコミット後開示で交換して導出する別の SAS を使用します。これも実際に誰かが帯域外で照合したときにだけ意味を持ち、そのために止まるのが `--verify` です。</p><ul><li>最も強い保証を得るには、まず高度な検証をオンにし、コードを帯域外——対面または音声通話——で照合してください。</li><li>2 つのコードが異なる場合は転送を中止してください。誰かが接続を傍受している可能性があります。</li></ul>
-      <h2>サーバーが見たり復号したりできない平文</h2><p>本サービスは、サーバーが以下の平文を見たり復号したりできないように設計されています：</p><p>ブラウザのリアルタイムモードでは、同一ネットワークのファイルとメッセージの実体は 2 台のデバイス間を直接流れます。ネットワークをまたぐ場合は暗号文として TURN を経由し、リレーはコンテンツ鍵を持ちません。一方、シグナリングサービスは接続確立データを扱い、公開 IP、ルーム所属、時刻、選択したデバイス名、在席状況などのメタデータを見ることができます。</p><ul><li>ファイルの内容。</li><li>ファイルの名前。</li><li>テキストメッセージの平文。</li><li>お客様の暗号鍵。</li></ul>
-      <h2>ブラウザのファイルとテキストが中継される場合（TURN）</h2><p>ブラウザでネットワークをまたぐファイルとテキストの転送——ペアリングコードのセッション（その参加リンクを含む）——は、フォールバックではなく設計上 TURN サーバー経由で中継されます。制限の厳しい NAT やファイアウォールのため、アプリは最初からリレー経路を強制します。同一ネットワークのブラウザセッションには中継用資格情報が発行されず、直接接続します。CLI のファイルとテキスト転送は TURN を使わず、直接接続のみで、直接の経路が見つからなければ失敗します。</p><ul><li>中継サーバーは暗号文のみを転送します。ファイルやメッセージを読むことはできず、エンドツーエンド暗号化が維持されます。</li><li>月間中継割り当ての管理と不正利用の防止のため、中継バイト数はアカウントごとに記録します——中継内容を検査することはなく、記録するのはバイト数のみです。</li><li>中継されたコンテンツを検査することはありません。</li></ul>
-      <h2>一時テキスト転送</h2><p>ブラウザのテキストセッションは Web プロトコルを使用します。ピアは一時的な X25519 鍵交換を行い、ファイル転送鍵とは別のドメインで方向ごとに分離された AES-256-GCM サブ鍵を導出します。有効な UTF-8 メッセージはそれぞれ独立したフレームとして認証・暗号化されます。ネットワークをまたぐブラウザセッションは設計上 TURN を使用し、リレーは暗号文のみを運びメッセージ鍵を持ちません。高度な検証をオンにして SAS を帯域外で照合すれば、シグナリングの傍受も検出できます。</p><p>CLI テキストは、証明書をピン留めした TLS 1.3 上の別の直接接続専用プロトコルです。ブラウザの X25519/AES メッセージフレームや TURN は使わず、直接経路を確立できなければ失敗します。Relayium はメッセージ本文を保存しませんが、受信後はいずれのエンドポイントもテキストをコピー、記録、スクリーンショットその他の方法で保持できます。</p><ul><li>双方が同時にオンラインである必要があります。Relayium はテキストのオフライン配信もサーバー側のメッセージ履歴も提供しません。</li><li>サーバーは接続に必要なメタデータを処理します。これには IP アドレス、ルーム所属、時刻、ブラウザセッションのデバイス名と在席状況、および該当する場合はペアリングコード作成に使われたアカウントとの関連付けが含まれます。</li><li>TURN セッションでは、割り当ての管理と不正利用防止のために中継バイト数を記録する場合がありますが、メッセージの平文を検査することはありません。</li></ul>
-      <h2>一時保存ダウンロードリンク——鍵はブラウザから出ない</h2><p>オプションのダウンロードリンクモードは、受信者がオンラインでない場合のためのものです。ブラウザは何かがアップロードされる前にファイルを AES-256-GCM で暗号化し、復号鍵は URL フラグメント——# より後ろの部分——にのみ置かれます。ブラウザはこれをサーバーに送信しません。</p><ul><li>サーバーが保存するのは暗号文と、クォータおよびクリーンアップのための暗号文サイズとタイムスタンプだけで、平文・ファイル名・鍵は決して保存しません。</li><li>完全なリンクを持つ人は誰でも復号できるため、リンクをファイルそのものと同様に扱い、信頼できる経路で共有してください。</li><li>リンクには有効期限（1 時間から最長 14 日、プランにより異なります）を設定するか、最初の完全なダウンロード後に消える設定にできます。</li></ul>
-      <h2>ファイル整合性（SHA-256）</h2><p>機密性に加えて、各ファイルの整合性も検証されます。各チャンクには AES-GCM の認証タグが付き、受信側ではファイルごとの SHA-256 ハッシュがエンドツーエンドで照合されるため、破損・改ざんされたファイルは黙って受け入れられるのではなく検出されます。</p>
-      <h2>Relayium が防げないこと</h2><p>エンドツーエンド暗号化は、2 つの誠実なエンドポイント間の転送中のデータを保護します。設計上、次のものは防げません：</p><ul><li>いずれかの端末側のデバイスやブラウザの侵害——マルウェア、悪意ある拡張機能、あるいは画面を覗き見る人。</li><li>サーバーが必然的に扱うメタデータ：セッション時刻、中継バイト数、そして（保存型ダウンロードリンクまたはペアリングコードのセッションでは）リンクやコードを作成したアカウント。</li><li>受信者がファイルやメッセージを受け取った後に保持、コピー、転送することを選ぶこと。</li><li>復号鍵がリンク内に含まれるため、信頼できない経路でダウンロードリンクを共有すること。</li></ul>
-      <h2>ブラウザ対応とその限界</h2><p>Relayium は、HTTPS 経由で WebRTC が使える最新ブラウザで動作します。一部の機能はブラウザによって異なります：</p><ul><li>デスクトップ版の Chrome と Edge は File System Access API を備えており、大きなファイルをディスクへ直接ストリーミングするため、実質的なメモリ上限はありません。</li><li>Firefox と Safari、そしてすべてのモバイルブラウザ（iOS ではどのブラウザも WebKit です）はこの API を持たず、リアルタイム受信の経路ではファイルをメモリ上で組み立てます。そのため、およそ 256 MB を超えるとアプリが事前に警告します——これは実測した上限ではなく、意図的に控えめに置いた見積もりです。その規模のファイルにはデスクトップ版の Chrome/Edge を使うか、ダウンロードリンクモードをご利用ください。後者のダウンロードページは service worker 経由でディスクへ流し込むこともできます。</li><li>WebRTC はセキュアコンテキスト（HTTPS）を必要とします。アプリは平文の HTTP では接続しません。</li></ul>
-      <h2>オープンソースと問題の報告</h2><p>プロトコル設計とクライアント・サーバーの全コードは GitHub で公開されており、誰でも暗号方式を監査し、自分のサーバーを運用し、貢献できます。セキュリティ上の問題を見つけた場合は、公開の issue を作成するのではなく、リポジトリの GitHub 非公開脆弱性報告を通じて非公開でご報告ください。</p>
+      <section class="sheet"><h2>ブラウザのリアルタイムファイル暗号化（X25519 + AES-256-GCM）</h2><p>ブラウザのリアルタイムファイル転送では、転送ごとに各デバイスで新しい一時的な X25519 鍵ペアが生成されます。2 つのブラウザは鍵交換を行い、共有 AES-256-GCM 鍵を導出します。各ファイルチャンクはその鍵と一意のノンスで暗号化されるため、シグナリングサーバーや中継が目にするのはファイルの平文ではなく暗号文です。CLI 転送は後述する別の直接 TLS 1.3 プロトコルを使用します。</p><ul><li>鍵は一時的で転送ごとに独立しており、セッションをまたいで再利用されることはありません。</li><li>共有鍵は 2 台のデバイス上で導出され、いかなるサーバーにも送信・保存されません。</li><li>暗号化は WebRTC 自身のトランスポート層セキュリティの上のアプリケーション層で適用されるため、トランスポート層が侵害されても有効性を保ちます。</li></ul></section>
+      <section class="sheet"><h2>検証コード（SAS）——悪意あるサーバーの検出</h2><p>WebRTC 標準の暗号化（DTLS）は鍵のフィンガープリントをシグナリングサーバー経由で交換するため、不正なサーバーが中間に入り鍵をすり替える可能性があります。これを検出するため、Relayium は双方の公開鍵から 6 桁の Short Authentication String（SAS）を導出し、両方の画面に表示できます。一致するコードが最も強い傍受検出保証を与えるのは、両者が帯域外で照合した場合だけです。 このコードを表示して照合のために止まるかどうかは設定です——ウェブでは「高度な検証」（既定はオフ）、CLI では `--verify`。オフにして変わるのは、画面に何を表示するかと、どの手順が確認のために止まるかだけで、暗号化は変わりません。下記のコミット後開示ハンドシェイクはすべての接続で実行され、開示が一致しなければ接続を拒否します。鍵は端末上で生成され当社に送られることはなく、リレーが運ぶのは暗号文だけで、ブラウザではファイルの受信時に保存前の確認があります——ネイティブの macOS アプリは、設定された保存先（既定はダウンロードフォルダー）へ確認なしで書き込みます。この確認は勝手な書き込みを防ぐためのもので、相手が誰かを保証するものではありません。それを確かめられるのはコードの照合だけです。</p><p>単純な 6 桁のコード（約 20 ビット）は、原理的には中継サーバーが一致するコードを総当たりで作り出す余地があります。Relayium はコミット後開示ハンドシェイクでこの隙を塞ぎます。各側はまず鍵のハッシュを送ってコミットし、相手のコミットメントを受け取ってから鍵を開示します。CLI 転送は、ピン留めされた TLS 証明書のフィンガープリントをコミット後開示で交換して導出する別の SAS を使用します。これも実際に誰かが帯域外で照合したときにだけ意味を持ち、そのために止まるのが `--verify` です。</p><ul><li>最も強い保証を得るには、まず高度な検証をオンにし、コードを帯域外——対面または音声通話——で照合してください。</li><li>2 つのコードが異なる場合は転送を中止してください。誰かが接続を傍受している可能性があります。</li></ul></section>
+      <section class="sheet"><h2>サーバーが見たり復号したりできない平文</h2><p>本サービスは、サーバーが以下の平文を見たり復号したりできないように設計されています：</p><p>ブラウザのリアルタイムモードでは、同一ネットワークのファイルとメッセージの実体は 2 台のデバイス間を直接流れます。ネットワークをまたぐ場合は暗号文として TURN を経由し、リレーはコンテンツ鍵を持ちません。一方、シグナリングサービスは接続確立データを扱い、公開 IP、ルーム所属、時刻、選択したデバイス名、在席状況などのメタデータを見ることができます。</p><ul><li>ファイルの内容。</li><li>ファイルの名前。</li><li>テキストメッセージの平文。</li><li>お客様の暗号鍵。</li></ul></section>
+      <section class="sheet"><h2>ブラウザのファイルとテキストが中継される場合（TURN）</h2><p>ブラウザでネットワークをまたぐファイルとテキストの転送——ペアリングコードのセッション（その参加リンクを含む）——は、フォールバックではなく設計上 TURN サーバー経由で中継されます。制限の厳しい NAT やファイアウォールのため、アプリは最初からリレー経路を強制します。同一ネットワークのブラウザセッションには中継用資格情報が発行されず、直接接続します。CLI のファイルとテキスト転送は TURN を使わず、直接接続のみで、直接の経路が見つからなければ失敗します。</p><ul><li>中継サーバーは暗号文のみを転送します。ファイルやメッセージを読むことはできず、エンドツーエンド暗号化が維持されます。</li><li>月間中継割り当ての管理と不正利用の防止のため、中継バイト数はアカウントごとに記録します——中継内容を検査することはなく、記録するのはバイト数のみです。</li><li>中継されたコンテンツを検査することはありません。</li></ul></section>
+      <section class="sheet"><h2>一時テキスト転送</h2><p>ブラウザのテキストセッションは Web プロトコルを使用します。ピアは一時的な X25519 鍵交換を行い、ファイル転送鍵とは別のドメインで方向ごとに分離された AES-256-GCM サブ鍵を導出します。有効な UTF-8 メッセージはそれぞれ独立したフレームとして認証・暗号化されます。ネットワークをまたぐブラウザセッションは設計上 TURN を使用し、リレーは暗号文のみを運びメッセージ鍵を持ちません。高度な検証をオンにして SAS を帯域外で照合すれば、シグナリングの傍受も検出できます。</p><p>CLI テキストは、証明書をピン留めした TLS 1.3 上の別の直接接続専用プロトコルです。ブラウザの X25519/AES メッセージフレームや TURN は使わず、直接経路を確立できなければ失敗します。Relayium はメッセージ本文を保存しませんが、受信後はいずれのエンドポイントもテキストをコピー、記録、スクリーンショットその他の方法で保持できます。</p><ul><li>双方が同時にオンラインである必要があります。Relayium はテキストのオフライン配信もサーバー側のメッセージ履歴も提供しません。</li><li>サーバーは接続に必要なメタデータを処理します。これには IP アドレス、ルーム所属、時刻、ブラウザセッションのデバイス名と在席状況、および該当する場合はペアリングコード作成に使われたアカウントとの関連付けが含まれます。</li><li>TURN セッションでは、割り当ての管理と不正利用防止のために中継バイト数を記録する場合がありますが、メッセージの平文を検査することはありません。</li></ul></section>
+      <section class="sheet"><h2>一時保存ダウンロードリンク——鍵はブラウザから出ない</h2><p>オプションのダウンロードリンクモードは、受信者がオンラインでない場合のためのものです。ブラウザは何かがアップロードされる前にファイルを AES-256-GCM で暗号化し、復号鍵は URL フラグメント——# より後ろの部分——にのみ置かれます。ブラウザはこれをサーバーに送信しません。</p><ul><li>サーバーが保存するのは暗号文と、クォータおよびクリーンアップのための暗号文サイズとタイムスタンプだけで、平文・ファイル名・鍵は決して保存しません。</li><li>完全なリンクを持つ人は誰でも復号できるため、リンクをファイルそのものと同様に扱い、信頼できる経路で共有してください。</li><li>リンクには有効期限（1 時間から最長 14 日、プランにより異なります）を設定するか、最初の完全なダウンロード後に消える設定にできます。</li></ul></section>
+      <section class="sheet"><h2>ファイル整合性（SHA-256）</h2><p>機密性に加えて、各ファイルの整合性も検証されます。各チャンクには AES-GCM の認証タグが付き、受信側ではファイルごとの SHA-256 ハッシュがエンドツーエンドで照合されるため、破損・改ざんされたファイルは黙って受け入れられるのではなく検出されます。</p></section>
+      <section class="sheet"><h2>Relayium が防げないこと</h2><p>エンドツーエンド暗号化は、2 つの誠実なエンドポイント間の転送中のデータを保護します。設計上、次のものは防げません：</p><ul><li>いずれかの端末側のデバイスやブラウザの侵害——マルウェア、悪意ある拡張機能、あるいは画面を覗き見る人。</li><li>サーバーが必然的に扱うメタデータ：セッション時刻、中継バイト数、そして（保存型ダウンロードリンクまたはペアリングコードのセッションでは）リンクやコードを作成したアカウント。</li><li>受信者がファイルやメッセージを受け取った後に保持、コピー、転送することを選ぶこと。</li><li>復号鍵がリンク内に含まれるため、信頼できない経路でダウンロードリンクを共有すること。</li></ul></section>
+      <section class="sheet"><h2>ブラウザ対応とその限界</h2><p>Relayium は、HTTPS 経由で WebRTC が使える最新ブラウザで動作します。一部の機能はブラウザによって異なります：</p><ul><li>デスクトップ版の Chrome と Edge は File System Access API を備えており、大きなファイルをディスクへ直接ストリーミングするため、実質的なメモリ上限はありません。</li><li>Firefox と Safari、そしてすべてのモバイルブラウザ（iOS ではどのブラウザも WebKit です）はこの API を持たず、リアルタイム受信の経路ではファイルをメモリ上で組み立てます。そのため、およそ 256 MB を超えるとアプリが事前に警告します——これは実測した上限ではなく、意図的に控えめに置いた見積もりです。その規模のファイルにはデスクトップ版の Chrome/Edge を使うか、ダウンロードリンクモードをご利用ください。後者のダウンロードページは service worker 経由でディスクへ流し込むこともできます。</li><li>WebRTC はセキュアコンテキスト（HTTPS）を必要とします。アプリは平文の HTTP では接続しません。</li></ul></section>
+      <section class="sheet"><h2>オープンソースと問題の報告</h2><p>プロトコル設計とクライアント・サーバーの全コードは GitHub で公開されており、誰でも暗号方式を監査し、自分のサーバーを運用し、貢献できます。セキュリティ上の問題を見つけた場合は、公開の issue を作成するのではなく、リポジトリの GitHub 非公開脆弱性報告を通じて非公開でご報告ください。</p></section>
       </main>
       <footer>
         <a href="/">← Relayium</a>
@@ -154,6 +199,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/ja/releases/">リリース</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

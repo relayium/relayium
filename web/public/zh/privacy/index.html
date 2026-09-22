@@ -36,9 +36,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"隐私政策 · Relayium","description":"Relayium 如何处理文件与临时文本：内容采用端到端加密，Relayium 不存储实时消息正文，暂存下载链接中的文件保持零知识加密。","url":"https://relayium.com/zh/privacy/","inLanguage":"zh-Hans","dateModified":"2026-09-03","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -60,24 +60,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -103,6 +89,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 /* The release list is the app's settings-row shape: 1px separators inside one
    card, no line under the last row (设计规范 §4). */
 .releases{list-style:none;margin:18px 0 0;padding:0;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);overflow:clip}
@@ -114,13 +156,16 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/zh/guides/">使用指南</a><a href="/zh/apps/">应用</a><a href="/pricing">定价</a></nav></header>
-      <!-- The legal text is the main landmark. The site header and footer are
-           outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. On an
-           archived page that slot holds the archived-translation notice, a
-           labelled <aside>, which is a landmark in its own right too. -->
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="主导航"><span class="rail-group">实时传输</span><a class="row" href="/?lang=zh" aria-label="局域网传输">局域网</a><a class="row" href="/zh/cross-network/" aria-label="跨网络传输">跨网络</a><span class="rail-group">链接</span><a class="row" href="/zh/offline-transfer/" aria-label="分享链接">链接</a><span class="rail-group">我的设备</span><a class="row" href="/device-inbox" aria-label="设备收件箱">收件箱</a><span class="rail-group">下载与工具</span><a class="row" href="/cli">CLI</a><a class="row" href="/zh/apps/">应用</a><a class="row" href="/pricing">定价</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/privacy/">English</a><a href="/zh/privacy/" aria-current="true">中文</a></nav></div></header>
+      <div class="pane"><div class="wrap">
+
+      <!-- The legal text is the main landmark; the rail and the footer are
+           outside it. The language bar now lives in the rail's foot slot, with
+           the rest of the navigation. An ARCHIVED page keeps its notice here
+           instead: it is a paragraph of explanation, not a selector, and it has
+           no business in a 216px rail. It is a labelled <aside>, so it is still
+           a landmark of its own. -->
       <main>
       <h1>隐私政策</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO
@@ -130,24 +175,24 @@ pre code{background:none;padding:0;border-radius:0}
            a browser, not deduced. <bdi> resolves LTR (no strong character
            inside) and pins the order. -->
       <p class="updated">最后更新: <bdi>2026-09-03</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/privacy/">English</a><a href="/zh/privacy/" aria-current="true">中文</a></nav>
+      
       <p>Relayium 的设计宗旨是让你的文件与临时文本始终属于你。浏览器局域网会话直接连接；跨网络浏览器会话可能通过 TURN 传输端到端加密的密文；CLI 文本仅直连；暂存下载链接只保存零知识加密的文件密文。</p>
       <p>本页说明本服务确实会处理的少量数据，以及它刻意从不接触的数据。</p>
-      <h2>局域网内容不会被存储</h2><p>在同一网络下的设备之间传输文件或交换文本时，无需账号，Relayium 也不会存储内容。为帮助设备直接连接，信令服务会临时处理 IP 地址、房间成员、设备名、在线状态、能力信息及 WebRTC 协商等连接元数据。</p>
-      <h2>账号会存储什么（仅在你登录时）</h2><p>同一网络（局域网）内的会话无需账号。为浏览器或 CLI 跨网络会话创建配对码时，创建端必须登录；持码加入的一端无需账号。创建暂存下载链接同样需要登录。如果你登录，我们只存储运行账号所必需的最少信息：</p><ul><li>你的邮箱地址和显示名。</li><li>你使用的登录方式（通过 Apple 登录、Google、邮箱魔法链接，或邮箱+密码）。魔法链接令牌只以哈希形式存储，绝不明文保存；如果你设置了密码，我们只存储其 bcrypt 哈希值，绝不存储密码本身。如果你使用「通过 Apple 登录」并选择 Apple 的私密邮件转发，我们只会看到该转发地址。</li><li>登录会话，保存在安全的 httpOnly cookie 中。</li><li>你注册的设备，以一个随机设备 id 和设备名（例如你的平台名称）的形式。</li></ul>
-      <h2>暂存传输（下载链接）</h2><p>使用可选的暂存下载链接功能时，文件在离开你的设备之前就已在本机以 AES-256-GCM 加密。所有能创建或打开这类链接的客户端都是如此：浏览器、命令行工具，以及我们的 macOS 与 iOS 原生 App，都在本地完成加解密，没有任何一方会上传服务器可读的内容。解密密钥仅存在于链接的 URL 片段（# 部分）中，绝不发送至服务器。这意味着：</p><ul><li>服务器仅存储密文，无法读取你的文件内容、文件名或密钥。</li><li>我们记录密文大小和时间戳（上传时间、有效期）用于配额管理和清理。</li><li>密文在到期或首次完整下载（阅后即焚）时自动删除，以较早发生者为准。</li></ul>
-      <h2>我们无法读取的内容</h2><p>以下内容不会以明文到达 Relayium 服务器，服务器也无法解密：</p><ul><li>你的文件内容。</li><li>你的文件名。</li><li>你的实时文本消息正文。</li><li>你的加密密钥。</li></ul>
-      <h2>跨网络中继（TURN）</h2><p>浏览器的跨网络文件与文本会话按设计使用 TURN。TURN 只承载端到端加密的密文和传输元数据。为执行配额并防止滥用，我们把中继字节总量与时间戳归属到配对码创建端的账号，但不检查消息或文件明文。CLI 文本仅直连，不使用 TURN，也不计入 TURN 用量。实时文本要求双方同时在线；Relayium 不提供离线投递或服务器端消息历史，但任一端都可能复制或保留收到的内容。</p>
-      <h2>用量计量与配额</h2><p>有付费套餐，服务就必须统计每个账号用了多少。在你登录期间，我们会按账号持续记录你经由 Relayium 上传和下载的字节量、你的暂存链接当前占用的密文大小，以及归属到你所创建配对码的中继字节总量。这些计数会在产生它们的那次传输结束后继续保留——我们按月以账号为单位保存这些累计值——因为正是它们在执行你套餐所含的用量、存储与中继配额，也是我们计费与账户记录的依据。付费订阅按套餐收取固定价格，不是按字节计费。</p><ul><li>会记录的：字节量、暂存对象大小，以及测量发生的时间，并与你的账号关联。</li><li>不会记录的：你的文件内容、文件名与消息正文始终加密，我们无法读取。除账号用量计量外，我们还保存三项第一方、无标识符的跨网络配对月度聚合动作数：成功铸码、某个有效码首次接纳连接，以及首次变为两个已接纳端。每项聚合只包含 UTC 月份、上述三个固定阶段之一和非负整数计数，绝不包含标识符、事件明细、精确时间戳或内容元数据。</li><li>这三项产品交互总数是有界、尽力写入的动作数下界，不是独立用户数、同期群或精确转化率。页面上的比率只用同月动作总数相除，并不是同期群转化。我们的 App 与网站不含任何广告或第三方分析 SDK；这些聚合与账号用量计数都绝不会用于跨其他 App 或网站追踪你。</li><li>你随时可以在 App 或网页的账号页面查看与自己账号关联的用量。无标识符聚合只显示在管理员总览中；数据库不按账号保存这些聚合，也不含将其连接到账号的字段。</li></ul>
-      <h2>Cookie 与本地存储</h2><p>我们使用一个会话 cookie 来保持你的登录状态。在你浏览器的本地存储中，我们保存一个随机设备 id，以便识别你注册过的设备。我们不使用广告或追踪 cookie。</p>
-      <h2>第三方服务</h2><p>只有在你选择使用时，才会涉及少数第三方：</p><ul><li>Google——如果你用 Google 登录，我们会获取你的邮箱和基本资料以创建账号。</li><li>Apple——如果你使用「通过 Apple 登录」，我们会获取一个稳定标识符，以及你选择分享的邮箱（或 Apple 的私密转发地址）。</li><li>Stripe——我们在网页端订阅的支付处理方，详见「支付」。</li><li>Apple——通过 Apple 的 App Store 购买订阅时的处理方，详见「支付」。</li><li>邮件发送服务商——用于发送账号邮件，如魔法链接登录与验证邮件。</li></ul>
-      <h2>支付</h2><p>只有在你购买付费套餐时才会涉及支付数据。我们绝不接收或存储你的完整卡号。</p><ul><li>在网页端，支付由 Stripe 处理。卡片信息提交给 Stripe，而非我们；我们只拿到一个客户标识和由此产生的订阅状态。</li><li>在原生 App 内，订阅是通过 Apple 的 App Store 购买的，而不是向我们购买。Apple 从你的 Apple ID 处理支付，我们绝不会看到你的支付方式。App 会把 Apple 签名的交易记录发给我们，我们保存其中关于这笔购买的内容：你购买的订阅商品、Apple 为该订阅分配的标识符，以及订阅状态、计费周期与续订或到期日期。我们还会生成一个随机令牌，把 App Store 购买与你的 Relayium 账号关联起来；App 在购买时把该令牌交给 Apple，它再随签名交易回到我们这里——两边的记录就此对上，而这一匹配过程不会额外引入任何指向你个人的标识符。</li><li>就你的账号而言，我们只存储你当前的套餐、订阅状态、计费周期、周期起止日期，以及支付服务商为该订阅提供的引用标识——绝不存储卡片数据。</li></ul>
-      <h2>macOS 与 iOS 上的 Relayium App</h2><p>我们的原生 App 会处理少量网站不涉及的设备级数据，而且两个平台处理的数据并不相同。下面每一条都写明它描述的是哪个平台。</p><ul><li>本设备在你账号中显示的标签。在 macOS 上，App 会读取 Mac「共享」设置中的电脑名称并作为该标签——使用邮箱与密码登录时随请求发送，便于你在账号中区分各台设备并注销其中一台；在同一网络配对时，也会公布给同一房间内的其他设备。macOS 通常会以你的全名生成该名称，因此重命名这台 Mac 就会改变发送出去的内容。在 iOS 上，这个标签是通用的，绝不会是你自己起的名字：App 读取硬件型号后只发送设备族——「iPhone」「iPad」或「iPod touch」——除此之外别无内容，发送场合与上述两处相同。因此不会有任何个人姓名经由这条路径从 iPhone 或 iPad 到达我们。</li><li>安装标识符，仅限 macOS。它是 App 在那台 Mac 上生成的 32 字节随机值，保存在本机钥匙串中，通过浏览器登录时发送，使你重新登录后回到这台 Mac 已有的设备条目，而不是新增一条。它是随机的，绝不由硬件推导——不含序列号、MAC 地址或主机名——因此它只标识某一次安装，而不透露这台机器的任何信息。iOS App 没有需要接续的浏览器登录流程，因此不会生成这样的标识符：目前它既不向我们发送安装标识符，也不发送任何从设备本身读取的标识符。你账号设备列表中的随机设备 id 是我们为你的账号签发的（见上文），并非由你的手机推导而来。</li><li>这些 App 不做的事。两者都不注册推送令牌，也都不接收推送通知：在 macOS 上，传输完成或收件箱有新投递，都由 macOS 在那台 Mac 本地提示，且这些横幅刻意不含文件名、链接或配对码；而 iOS App 根本不具备推送能力，也不会向 Apple 的推送服务注册任何东西。iOS App 申请摄像头只有一个用途——读取另一台设备正在显示的配对二维码，免得你手动输入加入码——而且这完全发生在你的设备上：画面及其中的配对码当场用于加入这次配对，摄像头看到的任何内容都不会被 App 保存，也不会作为摄像头数据发送给我们。macOS App 完全不申请摄像头权限；两个 App 也都没有你相册的访问权限：在 iOS 上选择要发送的照片时，是系统自带的选择器在 App 之外运行，只把你选中的项目交给 App。两个 App 都不会跨其他 App 或网站追踪你，也都不含广告或第三方分析 SDK。</li></ul>
-      <h2>数据保留与删除</h2><p>账号数据在你的账号存在期间保留。你可以随时在账号设置中（网页或 App 内）删除你的账号及其数据。删除会进入 30 天宽限期，期间你可重新登录撤销；之后你的账号及个人数据将被永久移除。因计费和防滥用而必须保留的汇总用量计数会被匿名化，不再与你关联。</p>
-      <h2>你的权利</h2><p>你可以访问、更正、导出或删除你的账号数据，并可反对或限制某些处理。其中大部分你可以自行在账号设置中完成；其他事项请发邮件至 support@relayium.com。我们不出售你的个人数据。在适用 GDPR 或类似法律的情况下，我们处理这少量数据的依据是履行你所请求的服务，以及我们在保障其安全、防止滥用方面的合法利益。</p>
-      <h2>儿童</h2><p>Relayium 并非面向儿童。我们不会在知情的情况下收集 13 岁以下（或你所在地数字同意最低年龄以下）任何人的个人数据。如果你认为有儿童向我们提供了数据，请联系 support@relayium.com，我们会将其删除。</p>
-      <h2>本政策的变更</h2><p>随着服务演进，我们可能会更新本政策。届时我们会更新上方的「最后更新」日期。</p>
-      <h2>联系我们</h2><p>有隐私方面的疑问？请发邮件至 support@relayium.com。</p>
+      <section class="sheet"><h2>局域网内容不会被存储</h2><p>在同一网络下的设备之间传输文件或交换文本时，无需账号，Relayium 也不会存储内容。为帮助设备直接连接，信令服务会临时处理 IP 地址、房间成员、设备名、在线状态、能力信息及 WebRTC 协商等连接元数据。</p></section>
+      <section class="sheet"><h2>账号会存储什么（仅在你登录时）</h2><p>同一网络（局域网）内的会话无需账号。为浏览器或 CLI 跨网络会话创建配对码时，创建端必须登录；持码加入的一端无需账号。创建暂存下载链接同样需要登录。如果你登录，我们只存储运行账号所必需的最少信息：</p><ul><li>你的邮箱地址和显示名。</li><li>你使用的登录方式（通过 Apple 登录、Google、邮箱魔法链接，或邮箱+密码）。魔法链接令牌只以哈希形式存储，绝不明文保存；如果你设置了密码，我们只存储其 bcrypt 哈希值，绝不存储密码本身。如果你使用「通过 Apple 登录」并选择 Apple 的私密邮件转发，我们只会看到该转发地址。</li><li>登录会话，保存在安全的 httpOnly cookie 中。</li><li>你注册的设备，以一个随机设备 id 和设备名（例如你的平台名称）的形式。</li></ul></section>
+      <section class="sheet"><h2>暂存传输（下载链接）</h2><p>使用可选的暂存下载链接功能时，文件在离开你的设备之前就已在本机以 AES-256-GCM 加密。所有能创建或打开这类链接的客户端都是如此：浏览器、命令行工具，以及我们的 macOS 与 iOS 原生 App，都在本地完成加解密，没有任何一方会上传服务器可读的内容。解密密钥仅存在于链接的 URL 片段（# 部分）中，绝不发送至服务器。这意味着：</p><ul><li>服务器仅存储密文，无法读取你的文件内容、文件名或密钥。</li><li>我们记录密文大小和时间戳（上传时间、有效期）用于配额管理和清理。</li><li>密文在到期或首次完整下载（阅后即焚）时自动删除，以较早发生者为准。</li></ul></section>
+      <section class="sheet"><h2>我们无法读取的内容</h2><p>以下内容不会以明文到达 Relayium 服务器，服务器也无法解密：</p><ul><li>你的文件内容。</li><li>你的文件名。</li><li>你的实时文本消息正文。</li><li>你的加密密钥。</li></ul></section>
+      <section class="sheet"><h2>跨网络中继（TURN）</h2><p>浏览器的跨网络文件与文本会话按设计使用 TURN。TURN 只承载端到端加密的密文和传输元数据。为执行配额并防止滥用，我们把中继字节总量与时间戳归属到配对码创建端的账号，但不检查消息或文件明文。CLI 文本仅直连，不使用 TURN，也不计入 TURN 用量。实时文本要求双方同时在线；Relayium 不提供离线投递或服务器端消息历史，但任一端都可能复制或保留收到的内容。</p></section>
+      <section class="sheet"><h2>用量计量与配额</h2><p>有付费套餐，服务就必须统计每个账号用了多少。在你登录期间，我们会按账号持续记录你经由 Relayium 上传和下载的字节量、你的暂存链接当前占用的密文大小，以及归属到你所创建配对码的中继字节总量。这些计数会在产生它们的那次传输结束后继续保留——我们按月以账号为单位保存这些累计值——因为正是它们在执行你套餐所含的用量、存储与中继配额，也是我们计费与账户记录的依据。付费订阅按套餐收取固定价格，不是按字节计费。</p><ul><li>会记录的：字节量、暂存对象大小，以及测量发生的时间，并与你的账号关联。</li><li>不会记录的：你的文件内容、文件名与消息正文始终加密，我们无法读取。除账号用量计量外，我们还保存三项第一方、无标识符的跨网络配对月度聚合动作数：成功铸码、某个有效码首次接纳连接，以及首次变为两个已接纳端。每项聚合只包含 UTC 月份、上述三个固定阶段之一和非负整数计数，绝不包含标识符、事件明细、精确时间戳或内容元数据。</li><li>这三项产品交互总数是有界、尽力写入的动作数下界，不是独立用户数、同期群或精确转化率。页面上的比率只用同月动作总数相除，并不是同期群转化。我们的 App 与网站不含任何广告或第三方分析 SDK；这些聚合与账号用量计数都绝不会用于跨其他 App 或网站追踪你。</li><li>你随时可以在 App 或网页的账号页面查看与自己账号关联的用量。无标识符聚合只显示在管理员总览中；数据库不按账号保存这些聚合，也不含将其连接到账号的字段。</li></ul></section>
+      <section class="sheet"><h2>Cookie 与本地存储</h2><p>我们使用一个会话 cookie 来保持你的登录状态。在你浏览器的本地存储中，我们保存一个随机设备 id，以便识别你注册过的设备。我们不使用广告或追踪 cookie。</p></section>
+      <section class="sheet"><h2>第三方服务</h2><p>只有在你选择使用时，才会涉及少数第三方：</p><ul><li>Google——如果你用 Google 登录，我们会获取你的邮箱和基本资料以创建账号。</li><li>Apple——如果你使用「通过 Apple 登录」，我们会获取一个稳定标识符，以及你选择分享的邮箱（或 Apple 的私密转发地址）。</li><li>Stripe——我们在网页端订阅的支付处理方，详见「支付」。</li><li>Apple——通过 Apple 的 App Store 购买订阅时的处理方，详见「支付」。</li><li>邮件发送服务商——用于发送账号邮件，如魔法链接登录与验证邮件。</li></ul></section>
+      <section class="sheet"><h2>支付</h2><p>只有在你购买付费套餐时才会涉及支付数据。我们绝不接收或存储你的完整卡号。</p><ul><li>在网页端，支付由 Stripe 处理。卡片信息提交给 Stripe，而非我们；我们只拿到一个客户标识和由此产生的订阅状态。</li><li>在原生 App 内，订阅是通过 Apple 的 App Store 购买的，而不是向我们购买。Apple 从你的 Apple ID 处理支付，我们绝不会看到你的支付方式。App 会把 Apple 签名的交易记录发给我们，我们保存其中关于这笔购买的内容：你购买的订阅商品、Apple 为该订阅分配的标识符，以及订阅状态、计费周期与续订或到期日期。我们还会生成一个随机令牌，把 App Store 购买与你的 Relayium 账号关联起来；App 在购买时把该令牌交给 Apple，它再随签名交易回到我们这里——两边的记录就此对上，而这一匹配过程不会额外引入任何指向你个人的标识符。</li><li>就你的账号而言，我们只存储你当前的套餐、订阅状态、计费周期、周期起止日期，以及支付服务商为该订阅提供的引用标识——绝不存储卡片数据。</li></ul></section>
+      <section class="sheet"><h2>macOS 与 iOS 上的 Relayium App</h2><p>我们的原生 App 会处理少量网站不涉及的设备级数据，而且两个平台处理的数据并不相同。下面每一条都写明它描述的是哪个平台。</p><ul><li>本设备在你账号中显示的标签。在 macOS 上，App 会读取 Mac「共享」设置中的电脑名称并作为该标签——使用邮箱与密码登录时随请求发送，便于你在账号中区分各台设备并注销其中一台；在同一网络配对时，也会公布给同一房间内的其他设备。macOS 通常会以你的全名生成该名称，因此重命名这台 Mac 就会改变发送出去的内容。在 iOS 上，这个标签是通用的，绝不会是你自己起的名字：App 读取硬件型号后只发送设备族——「iPhone」「iPad」或「iPod touch」——除此之外别无内容，发送场合与上述两处相同。因此不会有任何个人姓名经由这条路径从 iPhone 或 iPad 到达我们。</li><li>安装标识符，仅限 macOS。它是 App 在那台 Mac 上生成的 32 字节随机值，保存在本机钥匙串中，通过浏览器登录时发送，使你重新登录后回到这台 Mac 已有的设备条目，而不是新增一条。它是随机的，绝不由硬件推导——不含序列号、MAC 地址或主机名——因此它只标识某一次安装，而不透露这台机器的任何信息。iOS App 没有需要接续的浏览器登录流程，因此不会生成这样的标识符：目前它既不向我们发送安装标识符，也不发送任何从设备本身读取的标识符。你账号设备列表中的随机设备 id 是我们为你的账号签发的（见上文），并非由你的手机推导而来。</li><li>这些 App 不做的事。两者都不注册推送令牌，也都不接收推送通知：在 macOS 上，传输完成或收件箱有新投递，都由 macOS 在那台 Mac 本地提示，且这些横幅刻意不含文件名、链接或配对码；而 iOS App 根本不具备推送能力，也不会向 Apple 的推送服务注册任何东西。iOS App 申请摄像头只有一个用途——读取另一台设备正在显示的配对二维码，免得你手动输入加入码——而且这完全发生在你的设备上：画面及其中的配对码当场用于加入这次配对，摄像头看到的任何内容都不会被 App 保存，也不会作为摄像头数据发送给我们。macOS App 完全不申请摄像头权限；两个 App 也都没有你相册的访问权限：在 iOS 上选择要发送的照片时，是系统自带的选择器在 App 之外运行，只把你选中的项目交给 App。两个 App 都不会跨其他 App 或网站追踪你，也都不含广告或第三方分析 SDK。</li></ul></section>
+      <section class="sheet"><h2>数据保留与删除</h2><p>账号数据在你的账号存在期间保留。你可以随时在账号设置中（网页或 App 内）删除你的账号及其数据。删除会进入 30 天宽限期，期间你可重新登录撤销；之后你的账号及个人数据将被永久移除。因计费和防滥用而必须保留的汇总用量计数会被匿名化，不再与你关联。</p></section>
+      <section class="sheet"><h2>你的权利</h2><p>你可以访问、更正、导出或删除你的账号数据，并可反对或限制某些处理。其中大部分你可以自行在账号设置中完成；其他事项请发邮件至 support@relayium.com。我们不出售你的个人数据。在适用 GDPR 或类似法律的情况下，我们处理这少量数据的依据是履行你所请求的服务，以及我们在保障其安全、防止滥用方面的合法利益。</p></section>
+      <section class="sheet"><h2>儿童</h2><p>Relayium 并非面向儿童。我们不会在知情的情况下收集 13 岁以下（或你所在地数字同意最低年龄以下）任何人的个人数据。如果你认为有儿童向我们提供了数据，请联系 support@relayium.com，我们会将其删除。</p></section>
+      <section class="sheet"><h2>本政策的变更</h2><p>随着服务演进，我们可能会更新本政策。届时我们会更新上方的「最后更新」日期。</p></section>
+      <section class="sheet"><h2>联系我们</h2><p>有隐私方面的疑问？请发邮件至 support@relayium.com。</p></section>
       </main>
       <footer>
         <a href="/">← Relayium</a>
@@ -157,6 +202,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/zh/releases/">版本发布记录</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

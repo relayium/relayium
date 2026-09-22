@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"クラウドにアップロードし、別のコンピュータで取得する","description":"Relayium アカウントを使った非同期ファイル転送。relayium up で一方のマシンからアップロードし、都合のよいときに relayium down で別のマシンからダウンロード。エンドツーエンド暗号化で、アカウントが要るのはアップロードだけ。","inLanguage":"ja","datePublished":"2026-07-12","dateModified":"2026-09-01","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/push-to-cloud-pull-on-another-computer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"クラウドにアップロードし、別のコンピュータで取得する"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"アカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"アップロードのときと、コードを発行しなければならない送信のときです。relayium up は常に relayium login が必要で、ファイルを自分のアカウントに保存するためです。relayium send が必要なのは、サーバーが新しいペアリングコードを発行しなければならないときだけです。誰かから渡されたコードで send を実行する場合は何も発行されないため、ログインは要りません。relayium down と relayium receive にアカウントは不要で、push/pull、デーモン直結、sync もアカウントなしで動きます。"}},{"@type":"Question","name":"ファイルは暗号化されますか？","acceptedAnswer":{"@type":"Answer","text":"はい、エンドツーエンドで。アップロード前に自分のマシンで暗号化され、鍵はリンクの #k= 断片にのみ存在し、サーバーには決して送られません。Relayium は読めない暗号文を、ファイル名も含めて保存します。"}},{"@type":"Question","name":"リンクを失ったら？","acceptedAnswer":{"@type":"Answer","text":"リンクは復号鍵の唯一の控えを運びます。失えばファイルは復旧不能です。サーバー側に復元できるものは何もありません。"}},{"@type":"Question","name":"誰がダウンロードできるか制限できますか？","acceptedAnswer":{"@type":"Answer","text":"リンクを持つ誰もがダウンロードできるので、非公開で共有してください。--burn で一度だけ、--max-downloads \u003cn> で回数を制限し、--ttl \u003c期間> で一定時間後に失効させられます。"}},{"@type":"Question","name":"ウェブサイトと連携しますか？","acceptedAnswer":{"@type":"Answer","text":"はい。relayium up のリンクはブラウザで開け、relayium.com で作った共有リンクは別のマシンで relayium down から取得できます。"}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -146,8 +188,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/ja/guides/" aria-current="true">ガイド</a><a href="/ja/apps/">アプリ</a><a href="/pricing">料金</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="メインナビゲーション"><a class="row" href="/">LAN</a><a class="row" href="/ja/cross-network/">ネットワーク間</a><a class="row" href="/ja/offline-transfer/">非同期</a><a class="row" href="/device-inbox">デバイス受信箱</a><a class="row" href="/cli">CLI</a><a class="row" href="/ja/apps/">アプリ</a><a class="row" href="/pricing">料金</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">クラウドにアップロードし、別のコンピュータで取得する</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -169,18 +213,18 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links archived-pricing">このページに記載されている料金プランや利用上限は古くなっている可能性があります。現在の内容は<a href="/pricing">料金</a>のページでご確認ください。</p><p class="archived-links">最新版：<a href="/guides/push-to-cloud-pull-on-another-computer/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/push-to-cloud-pull-on-another-computer/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">二台のコンピュータが同時に起きていることは決してない、という場面があります。今夜は仕事用ノートからファイルを置いておき、明日は自宅のデスクトップから取りたい。ライブ接続を待つ人は誰もいません。relayium up と relayium down はまさにそれです。up はローカルで暗号化してアカウントにアップロードし、down は後から任意のマシンで取得・復号します。P2P ハンドシェイクも、双方が ssh できるサーバーも不要です。</p>
       <p class="lead">これは CLI の中で Relayium アカウントを使う主な部分です。もう一つはペアリングコードの発行にアカウントを必要とする send です。残りのバインドは任意で、push/pull、デーモン直結、sync はログインなしで動き続け、receive も同様です。ダウンロードにはアカウントは一切不要で、リンクさえあれば十分です。</p>
-      <h2>どんなときに使うか</h2>
+      <section class="sheet"><h2>どんなときに使うか</h2>
       <p>相手側がオンラインかどうか、二台がどう到達し合うかでモードを選びます：</p>
-      <ul><li>up / down（このガイド）：二台が同時にオンラインになりません。今アップロードし、後で自分（または別のマシン）がダウンロードします。アカウント経由です。</li><li>send / receive：両端が今オンラインで、使い捨てコードで直接 P2P 転送したいときです。</li><li>push / pull：相手のマシンに既に ssh できます。</li><li>relayium login が要るのは up と send の二つ。up はファイルをアカウントに保存するため、send はペアリングコードを発行しなければならないときだけ（コードを渡されていれば不要）。down、receive、push/pull、デーモン直結、sync はアカウント不要です。</li></ul>
-      <h2>始める前に</h2>
+      <ul><li>up / down（このガイド）：二台が同時にオンラインになりません。今アップロードし、後で自分（または別のマシン）がダウンロードします。アカウント経由です。</li><li>send / receive：両端が今オンラインで、使い捨てコードで直接 P2P 転送したいときです。</li><li>push / pull：相手のマシンに既に ssh できます。</li><li>relayium login が要るのは up と send の二つ。up はファイルをアカウントに保存するため、send はペアリングコードを発行しなければならないときだけ（コードを渡されていれば不要）。down、receive、push/pull、デーモン直結、sync はアカウント不要です。</li></ul></section>
+      <section class="sheet"><h2>始める前に</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">必要なもの</p><ul><li>まず CLI をインストールして relayium コマンドが存在するようにします。下の一行でビルド済みバイナリが PATH に入ります（macOS と Linux。Windows は releases ページから .zip を取得）。relayium --version でインストールを確認でき、relayium.com/cli にすべてのインストール方法があります。これをしないと relayium login は「command not found」と出るだけです。</li><li>無料の Relayium アカウントを用意します。ブラウザでの手順は自分のアカウントに対してログインを承認するので、承認する前にアカウントが必要です。まず relayium.com でサインインし、なければそこで作成してください。アカウントが要るのはアップロードだけで、ダウンロードには不要です。</li><li>リンクをもう一台へ移す手段。メモアプリ、チャットの窓、パスワードマネージャーなど何でも構いません。リンクを持つ誰もがダウンロードできるので、パスワードのように扱ってください。</li></ul></div>
       <p>最初の up の前に、一度だけ済ませることが二つあります。CLI のインストールと、アカウントの用意です。両方そろっていれば読み飛ばしてください。</p>
-      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <h2>このマシンをアカウントにバインドする（一度だけ）</h2>
+      <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre></section>
+      <section class="sheet"><h2>このマシンをアカウントにバインドする（一度だけ）</h2>
       <p>up は誰のアカウントに保存するかを知る必要があるため、マシンごとに一度サインインします。ブラウザで承認するデバイスログインで、ターミナルには確認するコード以外は何も入力しません：</p>
       <pre tabindex="0"><code>relayium login</code></pre>
-      <ul><li>CLI が短いコードと URL（relayium.com/device）を表示します。relayium.com にサインイン済みのブラウザで開き（未サインインならまずそこでサインイン）、コードを入力して承認すると、このマシンがバインドされます。</li><li>ログイン情報は ~/.config/relayium/ に保存されるので、マシンごとに一度で済みます。relayium whoami でバインド先を表示し、relayium logout で解除します。</li><li>後でマシンを取り消すには、ブラウザのアカウントの「デバイス」ページから該当デバイスを削除します。</li></ul>
-      <h2>一台目のコンピュータからアップロード</h2>
+      <ul><li>CLI が短いコードと URL（relayium.com/device）を表示します。relayium.com にサインイン済みのブラウザで開き（未サインインならまずそこでサインイン）、コードを入力して承認すると、このマシンがバインドされます。</li><li>ログイン情報は ~/.config/relayium/ に保存されるので、マシンごとに一度で済みます。relayium whoami でバインド先を表示し、relayium logout で解除します。</li><li>後でマシンを取り消すには、ブラウザのアカウントの「デバイス」ページから該当デバイスを削除します。</li></ul></section>
+      <section class="sheet"><h2>一台目のコンピュータからアップロード</h2>
       <p>up は渡したファイルをたどり、ローカルで暗号化し、暗号文をアップロードして、取得用リンクを表示します：</p>
       <ol class="steps" data-block="steps"><li><p>このマシンがまだアカウントに結び付いているかを確認します。アカウントと結び付き先のサーバーが表示されます。未ログインと出たら、先に上のログイン手順を済ませてください。</p><pre tabindex="0"><code>relayium whoami</code></pre></li><li><p>ファイルをアップロードします。up はローカルで暗号化し、暗号文だけを送り、取得用リンクを標準出力に表示します。</p><pre tabindex="0"><code>relayium up ./report.pdf</code></pre></li><li><p>既定の24時間が望みと違うなら、保持のフラグを足します。サーバーが実際にどれだけ保持するかの上限はプランが決めます。</p><pre tabindex="0"><code># 保持期間を選ぶ（既定は24時間）：
 relayium up ./report.pdf --burn              # 一度ダウンロードすると削除
@@ -189,28 +233,28 @@ relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除</cod
       <div class="cbox ok" data-block="success"><p class="cbox-t">アップロードが成功したときの表示</p><p>アップロード中は標準エラー出力に進捗バーが出て、終わると消えます。リンクは標準出力に単独の行として出て、人向けのヒント（および保持期間の注記があればそれ）は標準エラー出力に続きます。</p><pre tabindex="0"><code>relayium up ./report.pdf
 https://relayium.com/d/7fK2p…#k=Xr8s…
 opens in a browser, or fetch it with `relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39;`</code></pre></div>
-      <ul><li>保持：--burn は一度のダウンロードで削除。--ttl &lt;期間&gt; は一定時間保持。--max-downloads &lt;n&gt; は一定回数まで。どれも指定しなければリンクは24時間保持されます。これが --ttl を付けないときの既定です。</li><li>--ttl は単位付きの期間（30m、12h、7d、2w）のほか、単なる秒数も受け取ります。つまり --ttl 3600 と --ttl 1h は同じ指定です。上限はプランで決まります：Free は1日、Plus は3日、Pro は7日、Max は14日。上限より長く要求すると、サーバーは黙って上限までしか保持しません。その場合 up が後から、実際に保持される期間を1行で知らせます。</li></ul>
-      <h2>二台目のコンピュータでダウンロード</h2>
+      <ul><li>保持：--burn は一度のダウンロードで削除。--ttl &lt;期間&gt; は一定時間保持。--max-downloads &lt;n&gt; は一定回数まで。どれも指定しなければリンクは24時間保持されます。これが --ttl を付けないときの既定です。</li><li>--ttl は単位付きの期間（30m、12h、7d、2w）のほか、単なる秒数も受け取ります。つまり --ttl 3600 と --ttl 1h は同じ指定です。上限はプランで決まります：Free は1日、Plus は3日、Pro は7日、Max は14日。上限より長く要求すると、サーバーは黙って上限までしか保持しません。その場合 up が後から、実際に保持される期間を1行で知らせます。</li></ul></section>
+      <section class="sheet"><h2>二台目のコンピュータでダウンロード</h2>
       <p>別のマシンでは、リンクを down に渡します。ログインも設定も不要。ファイルを復号する鍵はリンクの中にあるので、down はアカウントから何も必要としません：</p>
       <div class="builder" data-download-builder><label class="bf"><span>共有リンク</span><input data-link type="text" placeholder="https://relayium.com/d/…#k=…" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" data-token="自分のリンク" /></label><label class="bf"><span>保存先（pwd の出力を貼り付け）</span><input data-dest type="text" placeholder="/home/you/downloads" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" /></label><div class="bcmd"><pre tabindex="0"><code data-cmd>relayium down &#39;&lt;自分のリンク&gt;&#39; &lt;保存先ディレクトリ&gt;</code></pre><button type="button" class="bcopy" data-copy data-copied="コピーしました" hidden>コマンドをコピー</button></div></div>
       <ol class="steps" data-block="steps"><li><p>都合のよい方法でリンクを二台目に持っていきます。あちらには CLI 本体のほかに、インストールもログインも要りません。</p></li><li><p>シングルクォートで囲んだリンクと、ファイルを置きたいディレクトリを down に渡します。</p><pre tabindex="0"><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads</code></pre></li><li><p>ディレクトリを省くと現在のディレクトリに置かれます。</p><pre tabindex="0"><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39;</code></pre></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">ダウンロードが成功したときの表示</p><p>書き出したファイルが1行ずつ標準出力に並び、件数と保存先が標準エラー出力で確認されます。</p><pre tabindex="0"><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads
 downloads/report.pdf
 ✓ downloaded 1 file(s) to ./downloads</code></pre></div>
-      <ul><li>ファイルがバーン設定、ダウンロード上限到達、または期限切れの場合、リンクは使い切られており、down はもう存在しないと報告します。</li></ul>
-      <h2>ウェブサイトとも連携</h2>
+      <ul><li>ファイルがバーン設定、ダウンロード上限到達、または期限切れの場合、リンクは使い切られており、down はもう存在しないと報告します。</li></ul></section>
+      <section class="sheet"><h2>ウェブサイトとも連携</h2>
       <p>このリンクはウェブサイトが使うものと同じなので、CLI とブラウザは自由に連携します：</p>
-      <ul><li>relayium up のリンクはブラウザで開けます。CLI を持たない人に渡せば、その人はウェブからダウンロードできます。</li><li>relayium.com で作った共有リンクは、別のマシンで relayium down から取得できます。</li></ul>
-      <h2>サーバーに見えるもの・見えないもの</h2>
+      <ul><li>relayium up のリンクはブラウザで開けます。CLI を持たない人に渡せば、その人はウェブからダウンロードできます。</li><li>relayium.com で作った共有リンクは、別のマシンで relayium down から取得できます。</li></ul></section>
+      <section class="sheet"><h2>サーバーに見えるもの・見えないもの</h2>
       <p>クラウド転送はエンドツーエンドで暗号化されたままです：</p>
-      <ul><li>ファイルはアップロード前に自分のマシンで暗号化されます。復号鍵はリンクの #k= 断片にのみ存在し、サーバーには決して送られません。Relayium は読めない暗号文を、ファイル名も含めて保存します。</li><li>つまりリンクだけがファイルへ戻る唯一の手段です。失えばファイルは復旧できません。自分でも当社でも同じです。</li></ul>
-      <h2>リンクが働かないとき</h2>
+      <ul><li>ファイルはアップロード前に自分のマシンで暗号化されます。復号鍵はリンクの #k= 断片にのみ存在し、サーバーには決して送られません。Relayium は読めない暗号文を、ファイル名も含めて保存します。</li><li>つまりリンクだけがファイルへ戻る唯一の手段です。失えばファイルは復旧できません。自分でも当社でも同じです。</li></ul></section>
+      <section class="sheet"><h2>リンクが働かないとき</h2>
       <p>失敗する up と down のほとんどは次の4つで尽きます。どれも当て推量は要りません。判定を決める状態は、コマンドが表示するか、自分が打ったコマンドの中に見えています。</p>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>up が「run relayium login first」と出て断る。</dt><dd><pre tabindex="0"><code>relayium whoami
 # not logged in (run `relayium login`)</code></pre><p>アップロードはファイルをアカウントの下に保管するので、このマシンに資格情報が必要です。relayium login を実行し、ブラウザーの relayium.com/device で承認してください。以後 whoami はアカウントと結び付き先のサーバーを表示します。</p></dd><dt>down がリンクを解釈できず、鍵が消えたように見える。</dt><dd><pre tabindex="0"><code>echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
 # relayium down https://relayium.com/d/7fK2p</code></pre><p>多くのシェルでは引用符のない # がコメントを始めるため、#k= 以降はコマンドに届いていません。echo が、生き残った部分をそのまま見せてくれます。リンク全体をシングルクォートで囲めば、復号鍵であるその断片も無傷で届きます。</p></dd><dt>指定した --ttl より早くリンクが切れる。</dt><dd><pre tabindex="0"><code>relayium up ./report.pdf --ttl 7d
 # note: your plan caps retention, so this link is kept 1d, not the 7d you asked for</code></pre><p>プランの上限を超える要求を、サーバーは黙って上限に切り詰めます（Free は1日、Plus は3日、Pro は7日、Max は14日）。そのあと up がこの注記を出して、実際に得られた期間を伝えます。--burn や --max-downloads でもリンクは早く終わります。新しいものが必要ならもう一度アップロードしてください。</p></dd><dt>ログイン済みなのに、up が別の場所にログインしていると言う。</dt><dd><pre tabindex="0"><code>relayium whoami
-# you@example.com (https://relayium.com)</code></pre><p>トークンを発行していない --server には、資格情報を送らずに拒否します。送れば漏らすことになり、しかもそちらでは認証もできないからです。--server を外して whoami が今表示した結び付き先を使うか、先に相手のホストに対して relayium login を実行してください。</p></dd></dl></div>
+# you@example.com (https://relayium.com)</code></pre><p>トークンを発行していない --server には、資格情報を送らずに拒否します。送れば漏らすことになり、しかもそちらでは認証もできないからです。--server を外して whoami が今表示した結び付き先を使うか、先に相手のホストに対して relayium login を実行してください。</p></dd></dl></div></section>
       <h2>よくある質問</h2>
       <h3>アカウントは必要ですか？</h3>
       <p>アップロードのときと、コードを発行しなければならない送信のときです。relayium up は常に relayium login が必要で、ファイルを自分のアカウントに保存するためです。relayium send が必要なのは、サーバーが新しいペアリングコードを発行しなければならないときだけです。誰かから渡されたコードで send を実行する場合は何も発行されないため、ログインは要りません。relayium down と relayium receive にアカウントは不要で、push/pull、デーモン直結、sync もアカウントなしで動きます。</p>
@@ -237,6 +281,8 @@ downloads/report.pdf
         <a href="/pricing">料金</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
     <script>
 (function(){

@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Hospede o Relayium por conta própria: rode seu servidor de transferência de arquivos e texto","description":"Rode toda a pilha do Relayium por conta própria com um único comando Docker — seu próprio domínio, seus próprios dados, sem conta de terceiros. Cobre o emparelhamento de arquivos e texto efêmero, as chaves de ambiente, o retransmissor TURN opcional do navegador e como apontar a CLI para ele.","inLanguage":"pt","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/pt/guides/self-host-relayium/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/pt/"},{"@type":"ListItem","position":2,"name":"Guias","item":"https://relayium.com/pt/guides/"},{"@type":"ListItem","position":3,"name":"Hospede o Relayium por conta própria: rode seu servidor de transferência de arquivos e texto"}]},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"Preciso configurar o TURN?","acceptedAnswer":{"@type":"Answer","text":"Só se você quiser que as transferências em tempo real entre redes funcionem através de NATs rígidos. Transferências na mesma rede, o push/pull baseado em SSH e o daemon direto funcionam todos sem ele — o TURN serve puramente para a travessia de NAT no caminho do código de emparelhamento entre redes."}},{"@type":"Question","name":"A CLI continua gratuita se eu auto-hospedar?","acceptedAnswer":{"@type":"Answer","text":"Sim. A CLI continua gratuita com relayium.com ou com o seu servidor. send ou text sem código precisam de uma conta no servidor de destino para gerar um, e up precisa dela para guardar um arquivo. receive, down e text com o código impresso não exigem login."}},{"@type":"Question","name":"Posso usar meu próprio domínio e certificado TLS?","acceptedAnswer":{"@type":"Answer","text":"Sim. A imagem Docker escuta em HTTP simples na :8080; coloque nginx ou Caddy na frente com seu próprio domínio e certificado (por exemplo, via certbot/Let's Encrypt). docs/self-hosting.md cobre o que precisa ser redirecionado; a configuração nginx de produção da própria Relayium não é publicada, então você vai escrever a sua."}},{"@type":"Question","name":"Quais dados o meu servidor auto-hospedado armazena?","acceptedAnswer":{"@type":"Answer","text":"Um banco de dados SQLite (contas, sessões) em RELAYIUM_DB e, para transferências armazenadas/baseadas em link, blobs criptografados em RELAYIUM_BLOB_DIR que o próprio servidor não consegue descriptografar. O servidor não guarda arquivos em tempo real nem corpos de mensagens e apenas retransmite o handshake de sinalização; os destinatários ainda podem salvar arquivos ou reter texto."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -136,8 +178,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/pt/guides/" aria-current="true">Guias</a><a href="/pt/apps/">Apps</a><a href="/pricing">Preços</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Navegação principal"><a class="row" href="/">LAN</a><a class="row" href="/pt/cross-network/">Entre redes</a><a class="row" href="/pt/offline-transfer/">Assíncrono</a><a class="row" href="/device-inbox">Caixa de dispositivo</a><a class="row" href="/cli">CLI</a><a class="row" href="/pt/apps/">Apps</a><a class="row" href="/pricing">Preços</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/pt/">Relayium</a> <span aria-hidden="true">›</span> <a href="/pt/guides/">Guias</a> <span aria-hidden="true">›</span> <span aria-current="page">Hospede o Relayium por conta própria: rode seu servidor de transferência de arquivos e texto</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -159,10 +203,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <aside class="archived" aria-label="Tradução arquivada"><p class="archived-label">Tradução arquivada</p><p>Esta página é uma tradução em português arquivada. O produto Relayium e sua documentação atual são mantidos em inglês e em chinês simplificado; o próprio aplicativo não oferece mais português. Por isso as telas e os detalhes descritos aqui podem diferir do comportamento atual.</p><p class="archived-links archived-pricing">Os planos e os limites de uso mencionados aqui podem estar desatualizados; os atuais estão na página <a href="/pricing">Preços</a>.</p><p class="archived-links">Versão atual: <a href="/guides/self-host-relayium/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/self-host-relayium/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">O Relayium tem licença AGPL-3.0 e é de código aberto, e o servidor é uma única imagem autocontida — sem banco de dados externo, sem bucket de armazenamento de terceiros, nada para se cadastrar. Se você prefere rodar tudo por conta própria em vez de depender do relayium.com, este guia coloca um servidor no ar com Docker e aponta a CLI para ele.</p>
       <p class="lead">Auto-hospedar dá a você controle total sobre onde seus dados ficam, seu próprio domínio e certificado TLS, e nenhuma dependência da infraestrutura de mais ninguém. Tudo a seguir se baseia nos arquivos que acompanham o repositório — docker-compose.yml, server/.env.example e docs/self-hosting.md — então nada aqui é uma flag ou configuração que não exista de verdade.</p>
-      <h2>Por que auto-hospedar</h2>
+      <section class="sheet"><h2>Por que auto-hospedar</h2>
       <p>As transferências em tempo real do Relayium têm criptografia de ponta a ponta. Um retransmissor TURN auto-hospedado pode transportar bytes cifrados e o servidor processa metadados de sinalização, mas nenhum deles pode ler ou descriptografar o texto simples dos arquivos; nem o servidor nem o retransmissor armazenam uma cópia ou histórico do conteúdo em tempo real no servidor. O servidor guarda sua conta e — para transferências armazenadas/baseadas em link — blobs de texto cifrado e um pequeno banco de dados SQLite. Auto-hospedar significa que esses dados ficam em infraestrutura que você controla, sob seu próprio domínio, sem as decisões operacionais de mais ninguém envolvidas.</p>
-      <p>Como o projeto tem licença AGPL-3.0 e é de código aberto (github.com/relayium/relayium), você pode ler exatamente o que o servidor faz antes de confiar qualquer coisa a ele, e fazer fork ou modificá-lo livremente.</p>
-      <h2>Início rápido com Docker</h2>
+      <p>Como o projeto tem licença AGPL-3.0 e é de código aberto (github.com/relayium/relayium), você pode ler exatamente o que o servidor faz antes de confiar qualquer coisa a ele, e fazer fork ou modificá-lo livremente.</p></section>
+      <section class="sheet"><h2>Início rápido com Docker</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">O que você precisa antes do passo 1</p><ul><li>Um host com o Docker Engine e o plugin do Compose. docker compose version imprime uma linha de versão; se aparecer «docker: &#39;compose&#39; is not a docker command», o plugin não está instalado.</li><li>Um clone do repositório. O arquivo compose constrói a imagem a partir desta árvore de fontes, então precisa do Dockerfile e de web/ ao lado dele — não existe imagem pronta para baixar.</li><li>Espaço em disco para o volume nomeado relayium-data: o banco SQLite mais o texto cifrado das transferências armazenadas que você mantiver.</li><li>Um domínio e um proxy reverso que termine TLS, caso alguém além de você vá usar. O contêiner só fala HTTP em claro e, por padrão, publica apenas na interface de loopback.</li><li>Nada mais. Sem banco de dados externo, sem bucket de armazenamento de objetos, sem conta de terceiros.</li></ul></div>
       <p>A raiz do repositório traz um Dockerfile e um docker-compose.yml que constroem uma única imagem autocontida — um binário Go estático que serve o aplicativo web pré-compilado, então não é preciso um Node, uma cadeia de ferramentas Go ou nginx separados só para executá-lo.</p>
       <ol class="steps" data-block="steps"><li><p>Clone o repositório e entre nele.</p><pre tabindex="0"><code>git clone https://github.com/relayium/relayium.git</code></pre><pre tabindex="0"><code>cd relayium</code></pre></li><li><p>Construa e suba. O segredo de espaço reservado é obrigatório mesmo com o retransmissor desligado: o Compose valida a variável exigida pelo serviço coturn desativado por perfil já na hora de analisar o arquivo, de modo que um docker compose up puro se recusa a iniciar.</p><pre tabindex="0"><code>RELAYIUM_TURN_SECRET=placeholder docker compose up -d --build</code></pre></li><li><p>Confirme que o contêiner continuou de pé em vez de entrar em ciclo de reinício.</p><pre tabindex="0"><code>docker compose ps</code></pre></li><li><p>Pergunte à instância se ela realmente consegue servir. Use /readyz, não /healthz: a diferença entre os dois é todo o sentido dessa checagem, e a caixa de resultado esperado abaixo explica por quê.</p><pre tabindex="0"><code>curl -s http://127.0.0.1:8080/readyz</code></pre></li><li><p>Copie o modelo de configuração e defina sua URL pública. RELAYIUM_BASE_URL monta os links dos e-mails enviados e decide se os cookies de sessão levam o atributo Secure, então precisa ser seu endereço https:// de verdade.</p><pre tabindex="0"><code>cp server/.env.example server/.env</code></pre><pre tabindex="0"><code>chmod 600 server/.env</code></pre></li><li><p>Coloque nginx ou Caddy na frente, terminando TLS para o seu domínio e encaminhando tudo — /, /api, /ws, /admin — para a porta 8080. Depois reinicie para que server/.env valha.</p><pre tabindex="0"><code>docker compose up -d</code></pre></li></ol>
@@ -174,8 +218,8 @@ $ curl -s http://127.0.0.1:8080/healthz
 ok
 $ curl -s http://127.0.0.1:8080/readyz
 ready</code></pre></div>
-      <ul><li>Esse é o servidor inteiro, escutando em :8080. Coloque nginx ou Caddy na frente para o TLS em produção — docs/self-hosting.md cobre o caminho Docker e o que precisa ser redirecionado (proxy); a configuração nginx de produção da própria Relayium não é publicada.</li><li>A configuração do aplicativo vem de um arquivo server/.env opcional mais o bloco environment: no docker-compose.yml. Cada configuração tem uma chave RELAYIUM_* — copie server/.env.example como ponto de partida.</li><li>As quatro chaves que importam para uma implantação básica: RELAYIUM_ADDR (endereço de escuta), RELAYIUM_STATIC (caminho para o aplicativo web compilado), RELAYIUM_DB (caminho do arquivo SQLite) e RELAYIUM_BLOB_DIR (onde o texto cifrado dos links armazenados é escrito). O docker-compose.yml já define valores padrão sensatos para as quatro e as persiste em um volume nomeado.</li></ul>
-      <h2>Adicione um retransmissor TURN para transferências entre redes</h2>
+      <ul><li>Esse é o servidor inteiro, escutando em :8080. Coloque nginx ou Caddy na frente para o TLS em produção — docs/self-hosting.md cobre o caminho Docker e o que precisa ser redirecionado (proxy); a configuração nginx de produção da própria Relayium não é publicada.</li><li>A configuração do aplicativo vem de um arquivo server/.env opcional mais o bloco environment: no docker-compose.yml. Cada configuração tem uma chave RELAYIUM_* — copie server/.env.example como ponto de partida.</li><li>As quatro chaves que importam para uma implantação básica: RELAYIUM_ADDR (endereço de escuta), RELAYIUM_STATIC (caminho para o aplicativo web compilado), RELAYIUM_DB (caminho do arquivo SQLite) e RELAYIUM_BLOB_DIR (onde o texto cifrado dos links armazenados é escrito). O docker-compose.yml já define valores padrão sensatos para as quatro e as persiste em um volume nomeado.</li></ul></section>
+      <section class="sheet"><h2>Adicione um retransmissor TURN para transferências entre redes</h2>
       <p>Transferências na mesma rede (rede local) e o push/pull baseado em SSH funcionam sem nada a mais. Transferências em tempo real entre redes (dois dispositivos atrás de NATs diferentes) às vezes precisam de um retransmissor TURN para estabelecer um caminho — o retransmissor só vê texto cifrado, nunca o conteúdo dos seus arquivos.</p>
       <p>O docker-compose.yml tem um perfil relay opcional que inicia o coturn (o servidor TURN) e uma pequena instância Redis para a medição de bytes retransmitidos, ao lado do servidor principal:</p>
       <p>O segredo precisa chegar a dois lugares diferentes, e errar isso falha em silêncio. O coturn o recebe pela substituição de variáveis do Compose, que só é resolvida a partir do shell ou de um .env na raiz do projeto. Já o servidor o lê do próprio ambiente — ou seja, de server/.env — e um segredo vazio desliga o TURN por completo. Se você definir só um dos dois, fica com um coturn rodando para o qual o servidor nunca emite credenciais: todos os contêineres se declaram saudáveis, nada é registrado, e as transferências através de NAT estrito continuam falhando exatamente como antes.</p>
@@ -184,12 +228,12 @@ RELAYIUM_TURN_URLS=turn:example.com:3478,turns:example.com:5349</code></pre></li
       <div class="cbox ok" data-block="success"><p class="cbox-t">Como é um retransmissor que funciona</p><p>As duas chaves voltam não vazias de dentro do contêiner do servidor. O coturn estar no ar não prova nada sozinho: o navegador só recebe credenciais de retransmissão emitidas pelo servidor.</p><pre tabindex="0"><code>$ docker compose exec server env | grep RELAYIUM_TURN
 RELAYIUM_TURN_SECRET=3f7a…
 RELAYIUM_TURN_URLS=turn:example.com:3478,turns:example.com:5349</code></pre></div>
-      <ul><li>O coturn precisa do IP público real do host e de uma faixa de portas UDP aberta para funcionar — docs/self-hosting.md cobre como executá-lo com o perfil relay do Docker; a configuração coturn de produção da própria Relayium (incluindo o script de instalação) não é publicada.</li><li>Sem --profile relay e RELAYIUM_TURN_SECRET, o servidor ainda funciona bem — as transferências entre redes apenas recorrem a só STUN, que funciona para os tipos de NAT mais fáceis, mas não para os mais rígidos.</li></ul>
-      <h2>Instale a CLI na sua máquina</h2>
+      <ul><li>O coturn precisa do IP público real do host e de uma faixa de portas UDP aberta para funcionar — docs/self-hosting.md cobre como executá-lo com o perfil relay do Docker; a configuração coturn de produção da própria Relayium (incluindo o script de instalação) não é publicada.</li><li>Sem --profile relay e RELAYIUM_TURN_SECRET, o servidor ainda funciona bem — as transferências entre redes apenas recorrem a só STUN, que funciona para os tipos de NAT mais fáceis, mas não para os mais rígidos.</li></ul></section>
+      <section class="sheet"><h2>Instale a CLI na sua máquina</h2>
       <p>Este último passo roda a CLI do relayium no seu próprio computador (não no servidor), então instale-a ali se ainda não tiver. No macOS ou Linux:</p>
       <pre tabindex="0"><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>relayium.com/cli lista todas as opções de instalação — um binário para Windows, a página de releases, ou go build se você tiver Go.</li><li>relayium --version confirma. Sem a CLI, o comando abaixo imprime “command not found”.</li></ul>
-      <h2>Aponte a CLI para o seu servidor</h2>
+      <ul><li>relayium.com/cli lista todas as opções de instalação — um binário para Windows, a página de releases, ou go build se você tiver Go.</li><li>relayium --version confirma. Sem a CLI, o comando abaixo imprime “command not found”.</li></ul></section>
+      <section class="sheet"><h2>Aponte a CLI para o seu servidor</h2>
       <p>A CLI do Relayium usa por padrão o servidor de encontro do relayium.com para send/receive e text entre redes. Passe --server para usar o seu em vez dele:</p>
       <ol class="steps" data-block="steps"><li><p>Numa máquina que já tenha a CLI da seção anterior, entre no seu servidor em vez de no relayium.com. Ele imprime uma URL e um código; aprove no navegador com sessão iniciada na sua instância.</p><pre tabindex="0"><code>relayium login --server https://your-domain</code></pre></li><li><p>Confirme a qual servidor as credenciais salvas estão vinculadas. whoami não aceita flags: ele relata o que o login de fato gravou, e é justamente isso que faz valer a pena rodá-lo.</p><pre tabindex="0"><code>relayium whoami</code></pre></li><li><p>Passe o mesmo --server ao enviar. Sem ele, a CLI cunha o código de emparelhamento no relayium.com e o outro lado nunca vai encontrá-lo na sua instância.</p><pre tabindex="0"><code>relayium send ./report.pdf --server https://your-domain</code></pre></li><li><p>Receba na outra máquina com o código impresso e o mesmo --server. As sessões de texto funcionam do mesmo jeito.</p><pre tabindex="0"><code>relayium receive 483920 --server https://your-domain</code></pre><pre tabindex="0"><code>relayium text --server https://your-domain</code></pre><pre tabindex="0"><code>relayium text 483920 --server https://your-domain</code></pre></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">Como saber que ela está falando com a sua instância</p><p>whoami imprime a conta e, entre parênteses, o servidor a que ela está vinculada. Seu próprio domínio ali — e não relayium.com — é a confirmação.</p><pre tabindex="0"><code>$ relayium login --server https://your-domain
@@ -198,15 +242,15 @@ logged in as you@example.com
 
 $ relayium whoami
 you@example.com (https://your-domain)</code></pre></div>
-      <ul><li>A CLI é gratuita em qualquer dos casos — --server apenas muda o servidor de encontro. send ou text sem código geram um código nele, e up guarda sob uma conta nesse servidor, então entre primeiro com relayium login --server https://your-domain. receive, down e text com o código impresso não precisam de login.</li><li>As duas pontas de text precisam permanecer online. As mensagens usam uma sessão P2P direta própria, criptografada de ponta a ponta. text na CLI é apenas direto e não usa o retransmissor TURN do app web. Nem o Relayium nem o servidor auto-hospedado armazenam o corpo das mensagens ou um histórico no servidor, mas qualquer terminal ou destinatário pode copiar ou guardar o texto depois de recebê-lo.</li><li>push/pull (pelo seu próprio SSH) e serve + o push daemon direto relayium://host não tocam o relayium.com em nada, com ou sem auto-hospedagem — eles se conectam diretamente ao remoto que você especificar.</li></ul>
-      <h2>Quando não funciona</h2>
+      <ul><li>A CLI é gratuita em qualquer dos casos — --server apenas muda o servidor de encontro. send ou text sem código geram um código nele, e up guarda sob uma conta nesse servidor, então entre primeiro com relayium login --server https://your-domain. receive, down e text com o código impresso não precisam de login.</li><li>As duas pontas de text precisam permanecer online. As mensagens usam uma sessão P2P direta própria, criptografada de ponta a ponta. text na CLI é apenas direto e não usa o retransmissor TURN do app web. Nem o Relayium nem o servidor auto-hospedado armazenam o corpo das mensagens ou um histórico no servidor, mas qualquer terminal ou destinatário pode copiar ou guardar o texto depois de recebê-lo.</li><li>push/pull (pelo seu próprio SSH) e serve + o push daemon direto relayium://host não tocam o relayium.com em nada, com ou sem auto-hospedagem — eles se conectam diretamente ao remoto que você especificar.</li></ul></section>
+      <section class="sheet"><h2>Quando não funciona</h2>
       <p>Cinco falhas cobrem quase toda auto-hospedagem malsucedida. Cada uma tem uma linha para ler ou um comando para rodar que resolve a questão, e três das cinco parecem sucesso até você rodar a checagem.</p>
       <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Sintoma, checagem, correção</p><dl><dt>O docker compose up se recusa a iniciar, antes mesmo de construir qualquer coisa.</dt><dd><pre tabindex="0"><code>docker compose up -d --build
 # required variable RELAYIUM_TURN_SECRET is missing a value</code></pre><p>O Compose substitui as variáveis do arquivo inteiro antes de filtrar por perfis, então a variável exigida pelo serviço coturn desativado é validada mesmo com o retransmissor desligado. Prefixe qualquer valor de espaço reservado — RELAYIUM_TURN_SECRET=placeholder docker compose up -d --build — e troque por um segredo real só quando de fato ativar o perfil relay.</p></dd><dt>O contêiner está Up, mas um navegador em outra máquina não chega nele.</dt><dd><pre tabindex="0"><code>docker compose ps
 # PORTS  127.0.0.1:8080-&gt;8080/tcp</code></pre><p>Esse vínculo com o loopback é o padrão, para que um host público não exponha HTTP em claro na internet. Em produção, deixe assim e termine TLS num proxy reverso no mesmo host. Para uma máquina só de LAN sem proxy, publique de forma mais ampla com RELAYIUM_BIND=0.0.0.0 docker compose up -d: essa variável é lida pelo compose, não pelo servidor.</p></dd><dt>O /healthz diz ok, mas o cadastro falha e os links armazenados nunca aparecem.</dt><dd><pre tabindex="0"><code>curl -s -o /dev/null -w &#39;%{http_code}\n&#39; http://127.0.0.1:8080/readyz
 # 503</code></pre><p>O /healthz devolve ok incondicionalmente e só prova que o processo está escutando. O /readyz faz ping no banco SQLite e no diretório de blobs, então um 503 significa que um dos dois está inutilizável: verifique se o volume relayium-data está montado e se RELAYIUM_DB e RELAYIUM_BLOB_DIR apontam para dentro dele.</p></dd><dt>O relayium login imprime uma URL de verificação em localhost que você não consegue abrir.</dt><dd><pre tabindex="0"><code>relayium login --server https://your-domain
 # Open http://localhost:8080/device and enter code: WDJB-MJHT</code></pre><p>O servidor monta essa URL a partir de RELAYIUM_BASE_URL, cujo padrão é http://localhost:8080. Defina em server/.env o seu endereço https:// real e reinicie. Ela também decide se os cookies de sessão levam o atributo Secure, então deixá-la errada não é só questão de aparência.</p></dd><dt>O coturn está rodando, mas as transferências entre redes através de NAT estrito continuam falhando — e sem nada nos registros.</dt><dd><pre tabindex="0"><code>docker compose exec server env | grep RELAYIUM_TURN
-# nenhuma saída</code></pre><p>O segredo chegou ao coturn pela substituição do Compose, mas nunca chegou ao servidor, cujo segredo vazio desliga o TURN por completo. Coloque RELAYIUM_TURN_SECRET e RELAYIUM_TURN_URLS em server/.env, dê source com set -a; . ./server/.env; set +a para que a substituição enxergue o mesmo valor, e reinicie o perfil relay. As duas chaves precisam voltar não vazias nessa checagem.</p></dd></dl></div>
+# nenhuma saída</code></pre><p>O segredo chegou ao coturn pela substituição do Compose, mas nunca chegou ao servidor, cujo segredo vazio desliga o TURN por completo. Coloque RELAYIUM_TURN_SECRET e RELAYIUM_TURN_URLS em server/.env, dê source com set -a; . ./server/.env; set +a para que a substituição enxergue o mesmo valor, e reinicie o perfil relay. As duas chaves precisam voltar não vazias nessa checagem.</p></dd></dl></div></section>
       <h2>Perguntas frequentes</h2>
       <h3>Preciso configurar o TURN?</h3>
       <p>Só se você quiser que as transferências em tempo real entre redes funcionem através de NATs rígidos. Transferências na mesma rede, o push/pull baseado em SSH e o daemon direto funcionam todos sem ele — o TURN serve puramente para a travessia de NAT no caminho do código de emparelhamento entre redes.</p>
@@ -231,6 +275,8 @@ you@example.com (https://your-domain)</code></pre></div>
         <a href="/pricing">Preços</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

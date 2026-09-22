@@ -36,9 +36,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"How to send large files without the cloud","description":"For large videos and project archives, create an end-to-end encrypted download link so the recipient can fetch later; realtime remains a live alternative when both sides can stay online.","inLanguage":"en","datePublished":"2026-07-03","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/how-to/send-large-files-without-cloud/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/guides/"},{"@type":"ListItem","position":3,"name":"How to send large files without the cloud"}]},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"What is the largest file I can send?","acceptedAnswer":{"@type":"Answer","text":"For large files, use a stored download link; its per-file limit and quota are shown before upload. Realtime has no server-side limit, and desktop Chrome or Edge can stream to disk, but both pages must stay active. Firefox and Safari assemble a realtime receive in memory and Relayium warns above roughly 256 MB — a conservative estimate, not a hard limit."}},{"@type":"Question","name":"What happens if the transfer is interrupted?","acceptedAnswer":{"@type":"Answer","text":"A temporary connection drop can resume from a durable checkpoint while both pages remain active. Closing or reloading a page, or ending the app session, ends the live transfer. A stored link avoids requiring the recipient to remain online, but the sender must keep its page open until upload completes."}},{"@type":"Question","name":"How is my privacy protected for large files?","acceptedAnswer":{"@type":"Answer","text":"Realtime transfers are end-to-end encrypted with an X25519 key exchange and per-chunk AES-256-GCM, and that key never reaches any server. With advanced verification on (off by default), both devices show a 6-digit verification code; each file is checked with a SHA-256 hash. LAN WebRTC is direct; cross-network browser sessions use TURN by design, and the relay carries only ciphertext it cannot read or decrypt."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -60,24 +60,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -103,6 +89,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -134,8 +176,10 @@ ol.steps>li>pre{margin:8px 0 0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/guides/" aria-current="true">Guides</a><a href="/apps">Apps</a><a href="/pricing">Pricing</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Main"><span class="rail-group">Live transfer</span><a class="row" href="/">LAN</a><a class="row" href="/cross-network" aria-label="Cross-network transfer">Cross-network</a><span class="rail-group">Links</span><a class="row" href="/offline-transfer" aria-label="Share a link">Share</a><span class="rail-group">Your devices</span><a class="row" href="/device-inbox" aria-label="Device Inbox">Inbox</a><span class="rail-group">Downloads and tools</span><a class="row" href="/cli">CLI</a><a class="row" href="/apps">Apps</a><a class="row" href="/pricing">Pricing</a></nav><div class="rail-foot"><nav class="langbar" aria-label="Language"><a href="/how-to/send-large-files-without-cloud/" aria-current="true">English</a><a href="/zh/how-to/send-large-files-without-cloud/">中文</a></nav></div></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Relayium</a> <span aria-hidden="true">›</span> <a href="/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">How to send large files without the cloud</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -154,21 +198,21 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Last updated: <bdi>2026-08-05</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/send-large-files-without-cloud/" aria-current="true">English</a><a href="/zh/how-to/send-large-files-without-cloud/">中文</a></nav>
+      
       <p class="lead">A 20 GB video export or a heavy project archive is exactly where cloud storage feels slowest: you upload the whole file once, wait, then the other person downloads it again — two full transfers plus whatever your storage quota allows. For a one-time hand-off, that is a lot of copying and waiting for bytes that only ever needed to go from A to B.</p>
       <p class="lead">For a large file, Relayium&#39;s recommended path is an end-to-end encrypted stored download link: the recipient need not be online while you upload and can fetch it later. Keep the sender page open until upload completes; after that the link remains available until expiry. If both people can stay online, realtime is the live alternative: LAN WebRTC is direct, while cross-network browser sessions carry end-to-end ciphertext over TURN. Relayium stores no realtime content or history.</p>
-      <h2>Why a stored link is the default for big files</h2>
+      <section class="sheet"><h2>Why a stored link is the default for big files</h2>
       <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">Before you start</p><ul><li>A signed-in account on the sending side. Creating a stored download link needs one; the person who opens the link never signs in.</li><li>Headroom for the file in two separate limits: the per-file ceiling the upload page prints next to the picker, and your plan&#39;s storage allowance. Both are read off the page rather than guessed.</li><li>A retention window you can live with. The expiry list only offers what your plan allows, and the server enforces that same cap on its own side, so a window you can pick is a window you get — and none of these links is a backup.</li><li>The sender page kept open until the upload finishes. After that the link stands on its own until it expires, so the sending laptop can close; the recipient still has to let their own download run to the end.</li></ul></div>
       <p>A Relayium download link stores only browser-encrypted ciphertext. The recipient can be offline during upload and fetch later; once upload completes, closing the sender page does not remove the link. The trade-offs are the displayed per-file limit, account quota and expiry.</p>
-      <p>Realtime is the alternative when both sides are ready now. On the same LAN, WebRTC connects directly with no account; across networks, browsers use TURN to carry end-to-end encrypted ciphertext and the code creator signs in. Both pages must remain active, so this path is better suited to quick small-file and text handoff than long large-file delivery.</p>
-      <h2>No size cap in realtime mode</h2>
+      <p>Realtime is the alternative when both sides are ready now. On the same LAN, WebRTC connects directly with no account; across networks, browsers use TURN to carry end-to-end encrypted ciphertext and the code creator signs in. Both pages must remain active, so this path is better suited to quick small-file and text handoff than long large-file delivery.</p></section>
+      <section class="sheet"><h2>No size cap in realtime mode</h2>
       <p>Realtime transfers have no server-side storage-size limit because Relayium does not retain a content copy. A TURN relay may carry cross-network ciphertext while both sides are online, but it cannot read, decrypt, or retain it as transfer history. The practical ceiling is set by the receiving browser, not by us.</p>
       <p>On Chrome and Edge an incoming realtime file can stream straight to disk, so the protocol can technically carry tens of gigabytes. That capability is not the default recommendation for large files: the live session still needs both pages active. A batch can hold up to 1,000 files, and each one is verified end-to-end with a SHA-256 hash.</p>
-      <ul><li>Chrome or Edge on the receiving desktop: files stream straight to disk, so there is effectively no size cap.</li><li>Firefox and Safari have no File System Access API, so a realtime batch is held in memory there — Relayium warns above roughly 256 MB, a deliberately cautious estimate rather than a hard limit.</li><li>Up to 1,000 files per batch, each checked with its own SHA-256 hash on arrival.</li></ul>
-      <h2>Resume instead of restarting</h2>
+      <ul><li>Chrome or Edge on the receiving desktop: files stream straight to disk, so there is effectively no size cap.</li><li>Firefox and Safari have no File System Access API, so a realtime batch is held in memory there — Relayium warns above roughly 256 MB, a deliberately cautious estimate rather than a hard limit.</li><li>Up to 1,000 files per batch, each checked with its own SHA-256 hash on arrival.</li></ul></section>
+      <section class="sheet"><h2>Resume instead of restarting</h2>
       <p>A temporary transport drop can resume from a durable checkpoint while both live pages remain active. Closing or reloading either page, or ending the app session, is different: it ends the live transfer and requires a new handoff. This is another reason to prefer a stored link for large files.</p>
-      <p>Connectivity is handled the same way. On one network the transfer goes directly device-to-device; across networks the encrypted stream travels over a TURN relay. The relay only ever sees ciphertext, so that path stays end-to-end encrypted too.</p>
-      <h2>Send now, or leave a link for later</h2>
+      <p>Connectivity is handled the same way. On one network the transfer goes directly device-to-device; across networks the encrypted stream travels over a TURN relay. The relay only ever sees ciphertext, so that path stays end-to-end encrypted too.</p></section>
+      <section class="sheet"><h2>Send now, or leave a link for later</h2>
       <p>Realtime transfer needs both people online at the same time, which is ideal when you can coordinate — a call, a shared moment, a colleague at their desk. If the other person is not available right now, you can create a stored download link instead.</p>
       <p>A stored link is zero-knowledge: your browser encrypts the files with AES-256-GCM before upload and the decryption key lives only in the URL fragment, so the server keeps ciphertext it cannot read. Be aware of the trade-offs — creating a link requires the sender to sign in, links count against a storage quota, and they expire (or can be single-use, spending their one slot as soon as a download starts receiving ciphertext). Its download page can stream a single file to disk through a service worker even in Firefox and Safari. For the biggest files, reach for the stored link first: the recipient need not be online during upload; keep the sender page open until upload completes, after which that page can close and the recipient can fetch any time before expiry — their own download still has to run to the end. Keep the live path for when you are both at your desks and want the bytes to land now.</p>
       <ol class="steps" data-block="steps"><li><p>Open the Share a link page and sign in.</p><pre tabindex="0"><code>https://relayium.com/offline-transfer</code></pre></li><li><p>Choose the files, or drag them in. The figure next to the picker is the live per-file ceiling for your account — check the big one against it before you start rather than after the upload fails.</p><pre tabindex="0"><code>Choose files to upload
@@ -177,7 +221,7 @@ Max 512 MiB</code></pre></li><li><p>Set “Expires in”, and turn on “Burn af
 https://relayium.com/d/8f3c2a1b#k=hQ2r…</code></pre></li><li><p>Send the whole link. Everything after #k= is the decryption key, it never reaches the server, and a link that arrives without that fragment cannot be decrypted by anyone — including us.</p></li></ol>
       <div class="cbox ok" data-block="success"><p class="cbox-t">What a finished upload looks like</p><p>Your page shows the link, the expiry date it will keep, and the reminder that this is temporary delivery and not a backup. From that moment the upload no longer depends on your page staying open.</p><p>On the recipient&#39;s side the link opens the encrypted download page with the file count and total size, and “Download &amp; decrypt” ends at “Download complete ✓”. Where the file lands is their browser&#39;s decision, so their downloads list is the place to confirm it.</p><pre tabindex="0"><code>Encrypted download link
 Download complete ✓</code></pre></div>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, check, fix</p><dl><dt>The upload is refused with a message that the file exceeds the single-file size limit.</dt><dd><pre tabindex="0"><code>https://relayium.com/offline-transfer   # the picker prints the ceiling as Max &lt;size&gt;</code></pre><p>That ceiling is per file, not per batch, so splitting a 40 GB export into parts that each fit is the way through — or send it in realtime instead while you are both online, which has no server-side size limit because nothing is stored.</p></dd><dt>The upload is refused for today&#39;s quota rather than for the file&#39;s size.</dt><dd><pre tabindex="0"><code>https://relayium.com/offline-transfer   # the upload flow is what reports a daily-quota refusal</code></pre><p>The daily upload quota is separate from the per-file ceiling and from storage, and the upload flow is what reports it — https://relayium.com/me shows monthly account usage, not a live remaining daily counter. Wait for the rolling daily window to recover as earlier uploads age out of it, upgrade the plan if that is available to you, or hand the file over in realtime while both sides are online — a realtime transfer stores nothing and so spends no upload quota.</p></dd><dt>The expiry list does not offer the 7 or 14 days you expected.</dt><dd><pre tabindex="0"><code>https://relayium.com/pricing   # retention is a per-plan figure</code></pre><p>The list only shows windows your plan&#39;s retention cap allows, and the server enforces the same cap defensively on its own side, so nothing you can actually pick gets shortened behind your back. Pick the longest one offered, or change plan — the cap is what decides it, not the file.</p></dd><dt>The recipient says the link is invalid, expired, or already downloaded and deleted.</dt><dd><pre tabindex="0"><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # one link, one id, one key</code></pre><p>All three end in the same place: there is nothing left to fetch. If “Burn after reading” was on, the single slot is spent as soon as a download starts receiving ciphertext — an attempt that broke off partway consumes it too, while one that delivered no bytes at all releases it. Upload again and send a new link, and leave burn off when more than one person needs the file.</p></dd><dt>The download page says there are too many requests, or that the sender&#39;s monthly transfer allowance is used up.</dt><dd><pre tabindex="0"><code>https://relayium.com/me   # this month&#39;s usage covers transfer, not just storage</code></pre><p>The file is still there — this is metering rather than loss. Waiting a few minutes clears a rate limit; an exhausted monthly transfer allowance needs the month to roll over, an upgrade, or your own node, and in the meantime a realtime transfer bypasses it entirely.</p></dd></dl></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">Symptom, check, fix</p><dl><dt>The upload is refused with a message that the file exceeds the single-file size limit.</dt><dd><pre tabindex="0"><code>https://relayium.com/offline-transfer   # the picker prints the ceiling as Max &lt;size&gt;</code></pre><p>That ceiling is per file, not per batch, so splitting a 40 GB export into parts that each fit is the way through — or send it in realtime instead while you are both online, which has no server-side size limit because nothing is stored.</p></dd><dt>The upload is refused for today&#39;s quota rather than for the file&#39;s size.</dt><dd><pre tabindex="0"><code>https://relayium.com/offline-transfer   # the upload flow is what reports a daily-quota refusal</code></pre><p>The daily upload quota is separate from the per-file ceiling and from storage, and the upload flow is what reports it — https://relayium.com/me shows monthly account usage, not a live remaining daily counter. Wait for the rolling daily window to recover as earlier uploads age out of it, upgrade the plan if that is available to you, or hand the file over in realtime while both sides are online — a realtime transfer stores nothing and so spends no upload quota.</p></dd><dt>The expiry list does not offer the 7 or 14 days you expected.</dt><dd><pre tabindex="0"><code>https://relayium.com/pricing   # retention is a per-plan figure</code></pre><p>The list only shows windows your plan&#39;s retention cap allows, and the server enforces the same cap defensively on its own side, so nothing you can actually pick gets shortened behind your back. Pick the longest one offered, or change plan — the cap is what decides it, not the file.</p></dd><dt>The recipient says the link is invalid, expired, or already downloaded and deleted.</dt><dd><pre tabindex="0"><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # one link, one id, one key</code></pre><p>All three end in the same place: there is nothing left to fetch. If “Burn after reading” was on, the single slot is spent as soon as a download starts receiving ciphertext — an attempt that broke off partway consumes it too, while one that delivered no bytes at all releases it. Upload again and send a new link, and leave burn off when more than one person needs the file.</p></dd><dt>The download page says there are too many requests, or that the sender&#39;s monthly transfer allowance is used up.</dt><dd><pre tabindex="0"><code>https://relayium.com/me   # this month&#39;s usage covers transfer, not just storage</code></pre><p>The file is still there — this is metering rather than loss. Waiting a few minutes clears a rate limit; an exhausted monthly transfer allowance needs the month to roll over, an upgrade, or your own node, and in the meantime a realtime transfer bypasses it entirely.</p></dd></dl></div></section>
       <h2>Frequently asked questions</h2>
       <h3>What is the largest file I can send?</h3>
       <p>For large files, use a stored download link; its per-file limit and quota are shown before upload. Realtime has no server-side limit, and desktop Chrome or Edge can stream to disk, but both pages must stay active. Firefox and Safari assemble a realtime receive in memory and Relayium warns above roughly 256 MB — a conservative estimate, not a hard limit.</p>
@@ -200,6 +244,8 @@ Download complete ✓</code></pre></div>
         <a href="/pricing">Pricing</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>

@@ -33,9 +33,9 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs Dropbox para enviar um arquivo","description":"Uma comparação justa: o Dropbox se destaca na sincronização duradoura e em links compartilhados; o Relayium oferece um caminho em tempo real sem cópia nem histórico de conteúdo no servidor, ou um link armazenado de conhecimento zero que expira.","inLanguage":"pt","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/pt/compare/dropbox/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/pt/"},{"@type":"ListItem","position":2,"name":"Guias","item":"https://relayium.com/pt/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs Dropbox para enviar um arquivo"}]},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"O arquivo fica em uma conta como ficaria com o Dropbox?","acceptedAnswer":{"@type":"Answer","text":"Não fica cópia nem histórico em tempo real no servidor. O WebRTC é direto na mesma LAN; entre redes, o TURN transporta texto cifrado que não consegue ler nem descriptografar. O link guarda apenas texto cifrado de conhecimento zero e expira ou se autodestrói após o primeiro download."}},{"@type":"Question","name":"Meu destinatário precisa se cadastrar em algo?","acceptedAnswer":{"@type":"Answer","text":"Não. Na mesma LAN ninguém precisa de conta. Entra quem cria o código ou link; quem participa da sessão ou baixa o link não precisa de uma."}},{"@type":"Question","name":"Existe um limite de tamanho de arquivo?","acceptedAnswer":{"@type":"Answer","text":"As transferências em tempo real lidam com até 1.000 arquivos por lote sem limite de tamanho do lado do servidor — Chrome e Edge gravam direto no disco para dezenas de gigabytes. Quando nenhum caminho de gravação em fluxo se aplica e o navegador precisa armazenar na memória, o Relayium avisa acima de cerca de 256 MB; esse número é uma estimativa deliberadamente conservadora, não um limite rígido. Os links armazenados contam contra uma cota vinculada à conta do remetente."}},{"@type":"Question","name":"É gratuito usar o Relayium no lugar de um plano do Dropbox?","acceptedAnswer":{"@type":"Answer","text":"Sim. O Relayium é gratuito e de código aberto sob a licença AGPL-3.0, com o protocolo e o código completos em github.com/relayium/relayium — não há nível pago que restrinja transferências maiores ou mais rápidas."}}]}]}</script>
     <style>
-:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
-:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
+:root{color-scheme:light dark;--text:#6b6375;--text-h:#08060d;--bg:#f8f8fa;--card:#ffffff;--shell-side:#ececed;--border:rgb(0 0 0/.09);--sep:rgb(0 0 0/.075);--row-hover:rgb(0 0 0/.05);--code-bg:#f2f2f5;--accent:#6d45f5;--accent-fg:#6640e6;--accent-action:#6640e6;--accent-border:rgb(109 69 245/.42);--radius:11px;--radius-sm:8px;--shell-side-w:216px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;--col:720px;--col-wide:1040px;--fs-h1:34px;--fs-hero:42px;--fs-h2:24px;--fs-h3:18px;--fs-body:17px;--fs-sm:14px;--fs-xs:13px}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}}
+:root[data-theme="dark"]{--text:#9ca3af;--text-h:#f3f4f6;--bg:#232326;--card:#2d2d30;--shell-side:#1a1a1c;--border:rgb(255 255 255/.075);--sep:rgb(255 255 255/.075);--row-hover:rgb(255 255 255/.05);--code-bg:#1e1e20;--accent:#8b6bff;--accent-fg:#bda4ff;--accent-action:#6d45f5;--accent-border:rgb(139 107 255/.42)}
 @media(max-width:1024px){:root{--fs-hero:34px;--fs-h1:29px;--fs-h2:21px;--fs-body:16px}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--fs-body)/1.65 system-ui,'Segoe UI',Roboto,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -57,24 +57,10 @@ a{color:var(--accent-fg)}
 main p>a,main li>a{text-underline-offset:2px}
 .updated{color:var(--text);font-size:var(--fs-sm);margin:0 0 8px}
 .lead{font-size:calc(var(--fs-body) + 2px);color:var(--text)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 20px;padding:14px 0;margin-block-end:8px;border-block-end:1px solid var(--sep)}
-.brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
-.brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
-.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
-/* Pushed to the far edge only while it shares the brand's row. Once the header
-   wraps — 320px, or a long wordmark in a long locale — the auto margin would park
-   the links against the opposite margin on a line of their own, which reads as
-   a layout accident rather than as a choice. */
-@media(min-width:560px){.sitenav{margin-inline-start:auto}}
-.sitenav a{color:var(--text);font-size:var(--fs-xs);text-decoration:underline 1px transparent;text-underline-offset:4px;transition:color .13s,text-decoration-color .13s}
-.sitenav a:hover{color:var(--text-h);text-decoration-color:var(--accent-border)}
-.sitenav a[aria-current]{color:var(--accent-fg);text-decoration-color:currentColor}
 footer{margin-block-start:56px;padding-block-start:20px;border-block-start:1px solid var(--sep);display:flex;gap:10px 16px;flex-wrap:wrap;font-size:12.5px}
 footer a{color:var(--text-h);text-decoration:none}
 footer a:hover{color:var(--accent-fg)}
-@media(pointer:coarse){.sitenav a,footer a{display:inline-flex;align-items:center;min-block-size:44px}}
-@media(prefers-reduced-motion:reduce){.brand svg,.brand:hover svg,.sitenav a{transition:none;transform:none}}
+@media(pointer:coarse){footer a{display:inline-flex;align-items:center;min-block-size:44px}}
 .card{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);padding:18px 22px}
 pre{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
@@ -100,6 +86,62 @@ pre code{background:none;padding:0;border-radius:0}
 .crumbs [aria-current]{color:var(--text)}
 @media(pointer:coarse){.langbar a,.crumbs a{display:inline-flex;align-items:center;min-block-size:44px}}
 @media(prefers-reduced-motion:reduce){.cta{transition:none}.cta:hover,.cta:active{filter:none;transform:none}}
+/* ── The rail, narrow: a wrapping top bar ─────────────────────────────────── */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 22px;border-block-end:1px solid var(--sep);background:var(--card)}
+.rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
+.rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
+.rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.rail-group{display:none}
+.row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
+.row:hover{background:var(--row-hover);color:var(--text-h)}
+.row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
+.rail-foot{display:flex;align-items:center;margin-inline-start:auto}
+.rail-foot .langbar{margin:0}
+@media(pointer:coarse){.row{min-block-size:44px}}
+@media(prefers-reduced-motion:reduce){.rail .brand svg,.rail .brand:hover svg,.row{transition:none;transform:none}}
+
+/* Between a phone and the rail breakpoint there is still more width than a line
+   of prose should use — the same reasoning, and the same 760px, as
+   App.svelte's `.appshell.shell .appshell-col` at this width. */
+@media(min-width:700px){.wrap{max-inline-size:760px}.wrap.wide{max-inline-size:var(--col-wide)}}
+
+/* ── The rail, wide: the reference's settings sidebar ─────────────────────── */
+@media(min-width:1180px){
+  .appshell{display:grid;grid-template-columns:var(--shell-side-w) minmax(0,1fr);align-items:start}
+  .rail{position:sticky;inset-block-start:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:2px;inline-size:var(--shell-side-w);block-size:100svh;overflow-y:auto;padding:var(--space-4) var(--space-3);border-block-end:0;border-inline-end:1px solid var(--sep);background:var(--shell-side)}
+  .rail .brand{gap:9px;padding-inline:10px;margin-block-end:var(--space-2);min-block-size:28px}
+  .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
+  .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+  .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
+  /* The content pane — the box that finally carries the pane surface, the same
+     role App.svelte gives `.appshell-main`. */
+  .pane{display:flex;flex-direction:column;min-inline-size:0;min-block-size:100svh;background:var(--bg)}
+  /* The reading and operating track. The window may be any width; this is not. */
+  .wrap{inline-size:100%;max-inline-size:calc(var(--col) + 44px);margin-inline:auto;padding:var(--space-5) 22px var(--space-8)}
+  .wrap.wide{max-inline-size:calc(var(--col-wide) + 44px)}
+}
+
+/* ── Content, grouped into cards ──────────────────────────────────────────────
+   The other half of the owner's answer. A section of a guide or a policy is a
+   card, the same card `.ui-card` is in the app — so the page reads as grouped
+   rows on a pane rather than as an unbroken wall of prose.
+
+   `.sheet` rather than `.card`: `.card` is already a page-chrome primitive that
+   a few blocks opt into, and a section wrapper has to be able to sit around one
+   of those without turning into a card inside a card. */
+.sheet{margin-block:14px;padding:18px 22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.sheet>:first-child{margin-block-start:0}
+.sheet>:last-child{margin-block-end:0}
+.sheet>h2{margin-block-start:0}
+/* A block that already draws its own surface flattens inside a sheet: its rim
+   and fill would otherwise repeat the sheet's one step further in, which reads
+   as depth that means nothing. Its reading-start accent rule stays — that is
+   what says "this is an aside", and it is the only thing the block needs. */
+.sheet .cbox,.sheet pre,.sheet .tw,.sheet .builder{background:var(--bg)}
+@media(min-width:1180px){.sheet{margin-block:16px}}
 .ctacard{margin:40px 0 8px;padding:22px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
 .ctacard p{margin:0 0 14px}
 /* Related reading is a row of destinations, not a paragraph of links: each one
@@ -119,8 +161,10 @@ pre code{background:none;padding:0;border-radius:0}
 </style>
   </head>
   <body>
-    <div class="wrap">
-      <header><a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="sitenav" aria-label="Site"><a href="/pt/guides/" aria-current="true">Guias</a><a href="/pt/apps/">Apps</a><a href="/pricing">Preços</a></nav></header>
+    <div class="appshell">
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="Navegação principal"><a class="row" href="/">LAN</a><a class="row" href="/pt/cross-network/">Entre redes</a><a class="row" href="/pt/offline-transfer/">Assíncrono</a><a class="row" href="/device-inbox">Caixa de dispositivo</a><a class="row" href="/cli">CLI</a><a class="row" href="/pt/apps/">Apps</a><a class="row" href="/pricing">Preços</a></nav></header>
+      <div class="pane"><div class="wrap">
+
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/pt/">Relayium</a> <span aria-hidden="true">›</span> <a href="/pt/guides/">Guias</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs Dropbox para enviar um arquivo</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
@@ -142,21 +186,21 @@ pre code{background:none;padding:0;border-radius:0}
       <aside class="archived" aria-label="Tradução arquivada"><p class="archived-label">Tradução arquivada</p><p>Esta página é uma tradução em português arquivada. O produto Relayium e sua documentação atual são mantidos em inglês e em chinês simplificado; o próprio aplicativo não oferece mais português. Por isso as telas e os detalhes descritos aqui podem diferir do comportamento atual.</p><p class="archived-links archived-pricing">Os planos e os limites de uso mencionados aqui podem estar desatualizados; os atuais estão na página <a href="/pricing">Preços</a>.</p><p class="archived-links">Versão atual: <a href="/compare/dropbox/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/compare/dropbox/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">O Dropbox merece sua reputação. Ele sincroniza uma pasta em todas as máquinas que você possui, mantém um histórico de versões quando você sobrescreve algo por acidente, e torna indolor entregar uma pasta de projeto inteira a um cliente com um convite por link de compartilhamento. Se você quer uma pasta de trabalho que simplesmente permaneça sincronizada, o Dropbox faz bem esse trabalho e isto não é um argumento contra usá-lo assim.</p>
       <p class="lead">Mesmo para entregar um arquivo, o Dropbox primeiro o coloca em uma conta. O Relayium o transmite em tempo real: WebRTC direto na mesma LAN ou texto cifrado de ponta a ponta por TURN entre redes por design; também pode criar um link que só é descriptografado no navegador e desaparece no prazo escolhido.</p>
-      <h2>Em que o Dropbox é genuinamente bom</h2>
+      <section class="sheet"><h2>Em que o Dropbox é genuinamente bom</h2>
       <p>A força central do Dropbox é que uma pasta da qual você depende está sempre atualizada em todo lugar: edite um arquivo no seu notebook e ele já está atualizado no seu telefone quando você for conferir. A sincronização seletiva, a sincronização por rede local para grandes transferências locais, e a recuperação de arquivos/histórico de versões servem todas ao mesmo objetivo — um lugar duradouro e confiável para os arquivos aos quais você volta sempre.</p>
-      <p>As pastas compartilhadas e o Dropbox Paper fazem dele uma escolha sólida para colaboração contínua, e seu compartilhamento por link é genuinamente conveniente para equipes pequenas que já vivem no Dropbox no dia a dia. Nada disso é o que o Relayium tenta ser — o Relayium não sincroniza uma pasta nem mantém uma cópia de trabalho de nada.</p>
-      <h2>A lacuna: um link de compartilhamento ainda significa que uma conta guarda o arquivo</h2>
+      <p>As pastas compartilhadas e o Dropbox Paper fazem dele uma escolha sólida para colaboração contínua, e seu compartilhamento por link é genuinamente conveniente para equipes pequenas que já vivem no Dropbox no dia a dia. Nada disso é o que o Relayium tenta ser — o Relayium não sincroniza uma pasta nem mantém uma cópia de trabalho de nada.</p></section>
+      <section class="sheet"><h2>A lacuna: um link de compartilhamento ainda significa que uma conta guarda o arquivo</h2>
       <p>Para enviar um arquivo pelo Dropbox, ele primeiro precisa estar dentro do Dropbox — enviado para a sua conta, parado em uma pasta, antes de você gerar um link compartilhável para ele. Esse link aponta para uma cópia que o Dropbox armazena em seu nome, legível pela própria infraestrutura do Dropbox e que fica lá até você voltar e apagar o arquivo ou revogar o link você mesmo.</p>
-      <p>O modo em tempo real do Relayium não deixa cópia nem histórico de conteúdo no servidor: o WebRTC é direto na mesma LAN; entre redes, o TURN transporta por design texto cifrado de ponta a ponta que o retransmissor não consegue ler nem descriptografar. Se a outra pessoa estiver offline, o link armazenado cifra antes do upload com AES-256-GCM e mantém a chave só depois de #. O Dropbox pode ler tecnicamente arquivos da conta; o servidor de links do Relayium guarda apenas texto cifrado que não consegue descriptografar.</p>
-      <h2>Envio em tempo real: sem cópia nem histórico no servidor</h2>
+      <p>O modo em tempo real do Relayium não deixa cópia nem histórico de conteúdo no servidor: o WebRTC é direto na mesma LAN; entre redes, o TURN transporta por design texto cifrado de ponta a ponta que o retransmissor não consegue ler nem descriptografar. Se a outra pessoa estiver offline, o link armazenado cifra antes do upload com AES-256-GCM e mantém a chave só depois de #. O Dropbox pode ler tecnicamente arquivos da conta; o servidor de links do Relayium guarda apenas texto cifrado que não consegue descriptografar.</p></section>
+      <section class="sheet"><h2>Envio em tempo real: sem cópia nem histórico no servidor</h2>
       <p>Quando as duas pessoas estão online, a transferência em tempo real transmite até 1.000 arquivos pelo caminho escolhido: WebRTC direto na mesma LAN ou TURN por design entre redes. Não há upload para armazenamento nem histórico em tempo real no servidor; mantém código de 6 dígitos, SHA-256 e retomada.</p>
-      <p>Não há limite de armazenamento no servidor; o navegador receptor define o teto prático. Chrome/Edge gravam no disco e Firefox/Safari podem manter na memória com aviso perto de 256 MB. Na mesma LAN não é preciso conta e o WebRTC é direto. Entre redes entra quem cria o código; o TURN transporta texto cifrado de ponta a ponta que não consegue ler nem descriptografar, e quem participa não precisa de conta.</p>
-      <h2>Quando você precisa de um link: conhecimento zero, com expiração automática</h2>
+      <p>Não há limite de armazenamento no servidor; o navegador receptor define o teto prático. Chrome/Edge gravam no disco e Firefox/Safari podem manter na memória com aviso perto de 256 MB. Na mesma LAN não é preciso conta e o WebRTC é direto. Entre redes entra quem cria o código; o TURN transporta texto cifrado de ponta a ponta que não consegue ler nem descriptografar, e quem participa não precisa de conta.</p></section>
+      <section class="sheet"><h2>Quando você precisa de um link: conhecimento zero, com expiração automática</h2>
       <p>Às vezes um link é genuinamente a ferramenta certa — o destinatário está dormindo em outro fuso horário, ou você quer uma única URL para colar em um e-mail em vez de coordenar uma sessão ao vivo. O modo de link armazenado do Relayium é feito exatamente para isso, sem abrir mão da privacidade do modo em tempo real.</p>
-      <p>Você escolhe quanto tempo ele vive — 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano — ou o configura para se autodestruir após o primeiro download concluído, então não sobra nenhuma cópia persistente para você lembrar de limpar. Criar o link exige que o remetente faça login (ele conta contra uma cota de armazenamento da conta), mas o destinatário apenas o abre e baixa — sem conta ao estilo Dropbox exigida do lado dele. Como a chave de descriptografia nunca deixa o fragmento da URL, o servidor do Relayium para um link armazenado é estruturalmente incapaz de ler o que há dentro dele, o que é uma garantia diferente de um link de compartilhamento do Dropbox, onde a própria infraestrutura do Dropbox pode tecnicamente descriptografar o arquivo que ela hospeda.</p>
-      <h2>Lado a lado</h2>
+      <p>Você escolhe quanto tempo ele vive — 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano — ou o configura para se autodestruir após o primeiro download concluído, então não sobra nenhuma cópia persistente para você lembrar de limpar. Criar o link exige que o remetente faça login (ele conta contra uma cota de armazenamento da conta), mas o destinatário apenas o abre e baixa — sem conta ao estilo Dropbox exigida do lado dele. Como a chave de descriptografia nunca deixa o fragmento da URL, o servidor do Relayium para um link armazenado é estruturalmente incapaz de ler o que há dentro dele, o que é uma garantia diferente de um link de compartilhamento do Dropbox, onde a própria infraestrutura do Dropbox pode tecnicamente descriptografar o arquivo que ela hospeda.</p></section>
+      <section class="sheet"><h2>Lado a lado</h2>
       <p>As diferenças mais relevantes para um envio pontual:</p>
-      <ul><li>Propósito: o Dropbox é armazenamento sincronizado duradouro; o Relayium entrega um arquivo em tempo real pelo caminho LAN/TURN adequado ou por um link armazenado que expira.</li><li>Onde termina: o Dropbox mantém uma cópia na conta até apagar; o Relayium não mantém cópia nem histórico de conteúdo em tempo real no servidor, e os links expiram ou se autodestroem após o primeiro download.</li><li>Quem pode lê-lo: a infraestrutura do Dropbox pode tecnicamente descriptografar arquivos na sua conta; os links armazenados do Relayium são de conhecimento zero — a chave existe apenas no fragmento da URL, então o servidor guarda texto cifrado que não consegue ler.</li><li>Contas: o Dropbox exige uma; o Relayium não na mesma LAN. Entra quem cria o código ou link; quem participa ou baixa não precisa de conta.</li><li>Limites de tamanho: o Dropbox é limitado pela cota de armazenamento do seu plano; o tempo real do Relayium não tem limite do lado do servidor (Chrome/Edge gravam no disco para dezenas de GB; quando o navegador precisa armazenar na memória, o Relayium avisa acima de cerca de 256 MB).</li><li>Custo e abertura: o Relayium é gratuito e licenciado sob AGPL-3.0 em github.com/relayium/relayium, e roda no navegador em Windows, macOS, Linux, Android e iOS sem nada para instalar.</li></ul>
+      <ul><li>Propósito: o Dropbox é armazenamento sincronizado duradouro; o Relayium entrega um arquivo em tempo real pelo caminho LAN/TURN adequado ou por um link armazenado que expira.</li><li>Onde termina: o Dropbox mantém uma cópia na conta até apagar; o Relayium não mantém cópia nem histórico de conteúdo em tempo real no servidor, e os links expiram ou se autodestroem após o primeiro download.</li><li>Quem pode lê-lo: a infraestrutura do Dropbox pode tecnicamente descriptografar arquivos na sua conta; os links armazenados do Relayium são de conhecimento zero — a chave existe apenas no fragmento da URL, então o servidor guarda texto cifrado que não consegue ler.</li><li>Contas: o Dropbox exige uma; o Relayium não na mesma LAN. Entra quem cria o código ou link; quem participa ou baixa não precisa de conta.</li><li>Limites de tamanho: o Dropbox é limitado pela cota de armazenamento do seu plano; o tempo real do Relayium não tem limite do lado do servidor (Chrome/Edge gravam no disco para dezenas de GB; quando o navegador precisa armazenar na memória, o Relayium avisa acima de cerca de 256 MB).</li><li>Custo e abertura: o Relayium é gratuito e licenciado sob AGPL-3.0 em github.com/relayium/relayium, e roda no navegador em Windows, macOS, Linux, Android e iOS sem nada para instalar.</li></ul></section>
       <h2>Perguntas frequentes</h2>
       <h3>O arquivo fica em uma conta como ficaria com o Dropbox?</h3>
       <p>Não fica cópia nem histórico em tempo real no servidor. O WebRTC é direto na mesma LAN; entre redes, o TURN transporta texto cifrado que não consegue ler nem descriptografar. O link guarda apenas texto cifrado de conhecimento zero e expira ou se autodestrói após o primeiro download.</p>
@@ -181,6 +225,8 @@ pre code{background:none;padding:0;border-radius:0}
         <a href="/pricing">Preços</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
+
+      </div></div>
     </div>
   </body>
 </html>
