@@ -59,9 +59,17 @@ describe("the room controller and the pair page", () => {
   it("states it at room level, not inside one of the two cards", () => {
     expect(page).toContain('data-test="pair-cli-peer"');
     expect(page).toContain('t("pairCliPeer")');
-    // Between the cards: after the first closes and before the second opens.
-    const afterFirstCard = page.split("</Card>")[1] ?? "";
-    expect(afterFirstCard).toContain("room.cliPeer");
+    // Anchored to the STRUCTURE, not to a count of `</Card>`: this page has a
+    // third card in the link-peer branch above, so an index into a split would
+    // point somewhere else entirely — as it did, which is how this test failed
+    // on CI having passed nowhere. Take the span between the last card that
+    // closes before the "enter a code" card and that card's own opening tag;
+    // the statement belongs to the room, so it has to live there.
+    const enterCard = page.indexOf('<Card title={t("pairEnterCode")}');
+    expect(enterCard).toBeGreaterThan(-1);
+    const before = page.slice(0, enterCard);
+    const between = before.slice(before.lastIndexOf("</Card>"));
+    expect(between).toContain("room.cliPeer");
   });
 
   it("has the sentence in both maintained catalogues, naming the two commands", () => {
