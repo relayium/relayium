@@ -447,13 +447,16 @@
               <input class="sr-only" type="text" name="username" autocomplete="username"
                      value={session().user!.email} readonly tabindex="-1" aria-hidden="true" />
               {#if session().user!.hasPassword}
-                <input type="password" name="current-password" autocomplete="current-password"
-                       bind:value={curPw} placeholder={t.account.currentPassword} use:focusOnMount />
+                <label class="field"><span>{t.account.currentPassword}</span>
+                  <input type="password" name="current-password" autocomplete="current-password"
+                         bind:value={curPw} use:focusOnMount /></label>
               {/if}
-              <input type="password" name="new-password" autocomplete="new-password"
-                     bind:value={newPw} placeholder={t.account.newPassword} />
-              <input type="password" name="confirm-password" autocomplete="new-password"
-                     bind:value={confirmPw} placeholder={t.account.confirmPassword} />
+              <label class="field"><span>{t.account.newPassword}</span>
+                <input type="password" name="new-password" autocomplete="new-password"
+                       bind:value={newPw} /></label>
+              <label class="field"><span>{t.account.confirmPassword}</span>
+                <input type="password" name="confirm-password" autocomplete="new-password"
+                       bind:value={confirmPw} /></label>
               {#if pwError}<p class="err">{pwError}</p>{/if}
               <button type="submit" class="btn btn-primary" disabled={pwBusy}>
                 {session().user!.hasPassword ? t.account.changePassword : t.account.setPassword}
@@ -504,8 +507,9 @@
             <p class="hint">{t.account.resetPasswordSent}</p>
             <p class="hint">{t.account.checkSpamHint}</p>
           {:else}
-            <input type="email" name="email" autocomplete="username"
-                   bind:value={email} placeholder={t.account.email} use:focusOnMount />
+            <label class="field"><span>{t.account.email}</span>
+              <input type="email" name="email" autocomplete="username"
+                     bind:value={email} use:focusOnMount /></label>
             <button type="submit" class="btn btn-primary" disabled={forgotBusy}>{t.account.resetPasswordSend}</button>
           {/if}
           <button type="button" class="btn-link" onclick={() => { mode = "login"; forgotSent = false; error = ""; }}>
@@ -514,11 +518,13 @@
         </form>
       {:else}
         <form class="menu" onsubmit={(e) => { e.preventDefault(); onSubmit(); }}>
-          <input type="email" name="email" autocomplete="username"
-                 bind:value={email} placeholder={t.account.email} use:focusOnMount />
-          <input type="password" name="password"
-                 autocomplete={mode === "register" ? "new-password" : "current-password"}
-                 bind:value={password} placeholder={t.account.password} />
+          <label class="field"><span>{t.account.email}</span>
+            <input type="email" name="email" autocomplete="username"
+                   bind:value={email} use:focusOnMount /></label>
+          <label class="field"><span>{t.account.password}</span>
+            <input type="password" name="password"
+                   autocomplete={mode === "register" ? "new-password" : "current-password"}
+                   bind:value={password} /></label>
           {#if unverifiedEmail}
             <p class="hint">{t.account.unverifiedNotice}</p>
             <p class="hint">{t.account.checkSpamHint}</p>
@@ -601,9 +607,24 @@
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
     overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
   }
+  /* A persistent label, not a placeholder. app.css's `.ui-field` says it in as
+     many words — "Placeholders may offer an example, but they are never the
+     field's only name: they disappear as soon as the user types" — and this
+     dialog was the one place in the product still doing it. The label text is
+     the string that used to BE the placeholder, so nothing new is written and
+     nothing needs translating; the placeholder is gone rather than repeated,
+     because a label and an identical placeholder are the same word twice.
+     Implicit association (the input inside its <label>) so no id has to be
+     minted for a field that already knows its own name. */
+  .menu .field { display: flex; flex-direction: column; gap: var(--space-1); text-align: start; }
+  .menu .field > span { color: var(--text-h); font-size: var(--fs-sm); font-weight: 600; }
   .menu input {
-    padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--border);
-    font: inherit; background: var(--social-bg); color: var(--text-h);
+    padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
+    /* --control-border, not --border: this is an interactive boundary and
+       --border is 1.27:1 in light, far under WCAG 1.4.11's 3:1 floor. Same
+       reasoning as `.btn` and `.ui-input` in app.css. */
+    border: 1px solid var(--control-border);
+    font: inherit; background: var(--control-bg); color: var(--text-h);
   }
   .menu .sep { text-align: center; color: var(--text); font-size: 12px; }
   /* Apple brand guidance: a solid black button, legible in both themes (fixed
