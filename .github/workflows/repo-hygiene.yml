@@ -255,6 +255,30 @@ jobs:
       - name: the transport-path claim is scoped to the mode, not to the product
         run: node scripts/test/transport-claim-test.mjs
 
+      # The App Store packet's two validators are pure Node over files in this
+      # repository, so they belong on the cheap unfiltered lane rather than in a
+      # macOS job: a metadata or screenshot edit in ANY commit is then checked,
+      # including one that never touches `apps/ios/**`. Both suites are mutation
+      # suites — they prove the validator says no, not merely that today's packet
+      # passes.
+      - name: the App Store metadata validator still refuses a bad packet
+        run: node scripts/test/ios-app-store-metadata-validate-test.mjs
+
+      - name: the App Store screenshot validator still refuses a bad set
+        run: node scripts/test/ios-app-store-screenshots-validate-test.mjs
+
+      # Platform-independent despite testing a SwiftPM argument: `swift` and `go`
+      # are stubs the suite puts on PATH to record their argv, so no toolchain is
+      # involved and ubuntu is the right home.
+      - name: acceptance_build's scratch-path contract holds both ways
+        run: bash scripts/test/local-acceptance-scratch-test.sh
+
+      # And the one that makes the four steps above impossible to forget again.
+      # Every `scripts/test/*-test.{mjs,sh}` must be named by some workflow; the
+      # four above had passed for months while being run by nothing.
+      - name: every policy test is actually run by a workflow
+        run: node scripts/test/ci-guard-coverage-test.mjs
+
   android-policy:
     runs-on: ubuntu-latest
     timeout-minutes: 5
