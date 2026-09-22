@@ -135,7 +135,22 @@ jobs:
       # the decision explicit instead of dependent on the image contents.
       RELAYIUM_GO_INTEROP: "0"
     steps:
+      # `fetch-tags` is not decoration. `releases.test.mjs`'s tag audits are the
+      # only thing tying the public /releases page to reality, and they are
+      # `skipIf(gitTags() === null)`. A default checkout has no tags, so on this
+      # runner they skipped — indistinguishable from a pass in the summary, and
+      # exactly how `v0.26.0` shipped while /releases still listed `v0.25.1`
+      # with every hosted check green (BACKLOG-TRIAGE W-N15).
+      #
+      # Depth stays 1. The audits read `git for-each-ref refs/tags` and
+      # `git tag --list` — tags, not history — and fetching a tag ref brings its
+      # commit in as a shallow boundary, so `creatordate:short` resolves even for
+      # this repository's 31 LIGHTWEIGHT tags. Measured on a real `--depth=1`
+      # clone with a tags refspec before this was written: 69/69 tags, every date
+      # present. A full clone would work too and is not needed.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-tags: true
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 24
