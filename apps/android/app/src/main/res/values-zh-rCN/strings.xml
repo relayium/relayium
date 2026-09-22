@@ -40,6 +40,7 @@
     <string name="error_transfer_failed">传输已中断，未能完成。</string>
     <string name="error_text_refused">对方拒绝了这次会话。</string>
     <string name="error_legacy_no_offer">对方设备始终没有发起连接。如果它也是加入这个配对码，就需要有一台设备改为创建配对码。</string>
+    <string name="error_cli_peer">这个配对码来自 relayium 命令行工具，它只能与另一个命令行工具连接。要在命令行和本应用之间传文件：在命令行运行 relayium up &lt;文件&gt;，然后打开它打印的链接；或者从这里分享一个链接，再用 relayium down 取回。</string>
     <string name="error_nearby_unavailable">无法在这个网络上搜索。请确认已开启 Wi-Fi，并且该网络允许设备互相发现。</string>
     <string name="error_integrity">收到的文件与发送的内容不一致，已丢弃。没有保存任何文件。</string>
     <!-- 不承诺"没有写入任何内容"：此键同样用于写入中途和清理受限的失败，

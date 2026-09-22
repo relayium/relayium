@@ -20,6 +20,7 @@ import com.relayium.protocol.Crypto
 import com.relayium.protocol.Envelope
 import com.relayium.protocol.FileLaneSession
 import com.relayium.protocol.FileMeta
+import com.relayium.protocol.CliPeerSignal
 import com.relayium.protocol.Json
 import com.relayium.protocol.LinkProtocol
 import com.relayium.protocol.LinkSession
@@ -1184,6 +1185,18 @@ class TransferController(
     private fun onSignalFrame(from: String, data: Json) {
         val registry = linkSession ?: return
         val mine = epoch
+
+        // The relayium CLI joined this code room. Recognised by SHAPE and
+        // CONSUMED here, before anything else looks at the frame, for the same
+        // reason the renewal envelope below is: `Signal.fromJson` would read the
+        // CLI's `commit` field as an app's commit and start a handshake that can
+        // never finish. Ended on the spot rather than waited out — the CLI exits
+        // on our own capability hello about 0.2 s from now, so the 35 s this
+        // used to spend produced no further evidence, only the wrong sentence.
+        if (CliPeerSignal.isHandshake(data)) {
+            endSession("error_cli_peer")
+            return
+        }
 
         // Caps may ride ANY frame — a bare hello, but also every conforming
         // offer and answer. Record them and keep routing; return early only for

@@ -1383,6 +1383,7 @@ internal fun errorText(key: String): Int = when (key) {
     "error_text_buffer_full" -> R.string.error_text_buffer_full
     "error_text_refused" -> R.string.error_text_refused
     "error_legacy_no_offer" -> R.string.error_legacy_no_offer
+    "error_cli_peer" -> R.string.error_cli_peer
     "error_nearby_unavailable" -> R.string.error_nearby_unavailable
     else -> R.string.error_transfer_failed
 }

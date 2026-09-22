@@ -48,6 +48,7 @@
     <string name="error_transfer_failed">The transfer stopped and was not completed.</string>
     <string name="error_text_refused">The other device declined the conversation.</string>
     <string name="error_legacy_no_offer">The other device never started the connection. If it also joined this code, one device has to create a code instead.</string>
+    <string name="error_cli_peer">That code is paired with the relayium command-line tool, which connects only to another CLI. To move a file between the CLI and this app, run relayium up &lt;file&gt; and open the link it prints, or share a link from here and fetch it with relayium down.</string>
     <string name="error_nearby_unavailable">Could not search this network. Check that Wi-Fi is on and that this network allows devices to see each other.</string>
     <string name="error_integrity">The received file did not match what was sent, so it was discarded. Nothing was saved.</string>
     <!-- No "nothing was written" claim: this key also covers mid-write and
