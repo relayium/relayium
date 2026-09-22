@@ -63,12 +63,15 @@
 
   // Every SPA route except the recipient's download page renders inside the
   // settings shell (App's `.appshell.shell`), so on a wide viewport this header
-  // IS that shell's 216px rail. /d/<id> keeps its own header: a recipient who
-  // opened a link is not inside the app and should not be handed its
-  // navigation. Below the breakpoint this stays the horizontal header.
+  // IS that shell's 216px rail. /d/<id> was the one route that kept its own
+  // header — a recipient who opened a link is not inside the app — until the
+  // owner reversed that on 2026-09-22; see the same set in App.svelte for the
+  // reasoning on both sides. Below the breakpoint this stays the horizontal
+  // header.
   const SHELL_ROUTES = new Set<Route>([
     "lan", "cross", "offline", "device-inbox",
     "pricing", "cli", "apps", "me", "verify-email", "reset-password", "magic-link",
+    "download",
   ]);
   const inShell = $derived(SHELL_ROUTES.has(currentRoute()));
   const activeTool = $derived(tools.find((tool) => tool.id === currentRoute()));

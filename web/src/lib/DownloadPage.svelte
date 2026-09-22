@@ -3,9 +3,8 @@
   import { fetchMeta, parseDownloadKey, keyFromFragment, DownloadNetworkError, InvalidStoredObjectIdError, StoredDownloadHttpError } from "./stored-file";
   import { decryptManifest, type StoredManifest } from "./store-crypto";
   import { pickSaveTarget, warnsAboutMemory, LARGE_DOWNLOAD_WARN_BYTES, SaveCancelledError, SinkCancelledError, SinkTransportError, type SaveOptions, type SaveTarget } from "./filesink";
-  import { lang, setLang, LANGS, messages, legalUrl, type Lang, type Messages } from "./i18n.svelte";
+  import { lang, messages, legalUrl, type Messages } from "./i18n.svelte";
   import { holdRefresh } from "./app-update.svelte";
-  import ThemeSelect from "./ThemeSelect.svelte";
   import { formatRemaining, formatSize } from "./format";
   import { storedSaveSpecs, writeStoredObject } from "./stored-download";
   import CommandBlock from "./CommandBlock.svelte";
@@ -379,22 +378,28 @@
 
 </script>
 
-<header class="dlnav">
-  <a class="brand" href="/"><span class="mark" aria-hidden="true">⇌</span><span class="word">Relayium</span></a>
-  <select
-    class="lang"
-    aria-label={t.langLabel}
-    value={lang()}
-    onchange={(e) => setLang((e.currentTarget as HTMLSelectElement).value as Lang)}
-  >
-    {#each LANGS as l (l.code)}
-      <option value={l.code}>{l.label}</option>
-    {/each}
-  </select>
-  <ThemeSelect />
-</header>
+<!-- No header of its own since 2026-09-22. This page used to carry a brand
+     wordmark, a language <select> and the theme control, because it rendered
+     outside the app shell; the owner brought it inside (see SHELL_ROUTES in
+     App.svelte), so Nav supplies all three — and the brand it supplies is the
+     drawn Logo rather than the `⇌` text glyph that used to sit here. Keeping
+     this header would have printed the wordmark and the language control
+     twice. -->
+<section class="dl" aria-labelledby="dl-title">
+  <!-- <section>, not <main>: App.svelte already opens the page's one <main>
+       around every route, so this was a SECOND main landmark nested inside the
+       first. It had been that way all along and nothing saw it, because
+       /d/<id> had no accessibility scan target until this page joined the
+       shell on 2026-09-22 — the first scan reported it immediately.
 
-<main class="dl">
+       The <h1> arrived with the same scan ("Page must have a level-one
+       heading"). It is `download.title`, the string this route's document
+       title is already built from in page-meta.ts, so the page now says on
+       screen what the tab has always said, and no new copy was written for
+       either maintained language. `.sr-only` because the visible hierarchy
+       starts at the file card's <h2> and a second visible title above it would
+       be the tab's words repeated at the top of the page. -->
+  <h1 id="dl-title" class="sr-only">{t.download.title}</h1>
   {#if pageState === "loading"}
     <p>{t.download.loading}</p>
   {:else if pageState === "error"}
@@ -549,32 +554,20 @@
     <a href={legalUrl("privacy", lang())}>{t.legal.privacy}</a>
     <a href={legalUrl("terms", lang())}>{t.legal.terms}</a>
   </footer>
-</main>
+</section>
 
 <style>
-  /* box-sizing 两处都要：默认 content-box 下 max-width: 100% 只压内容盒，左右各
-     24px 的 padding 还会加在外面，于是窄屏上整页被顶宽（375px 视口量到 403px），
-     主题下拉和下方卡片被挤出屏幕。border-box 让 100% 就是外宽。
-     flex-wrap 是同一个问题的第二半：320px 上三个控件一行放不下，不换行就只能靠
-     flex-shrink 压扁 <select>，把选项文字截断。 */
-  .dlnav {
-    width: 560px; max-width: 100%; box-sizing: border-box; margin: 0 auto;
-    display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3);
-    padding: var(--space-4) var(--space-5) 0;
+
+  /* Clipped, not `display: none`: the page's <h1> has to exist for the
+     document outline and for a screen reader, and `display: none` would take
+     it out of both. Local rather than global because app.css has no such
+     utility — only `.file-pick-input`, which is the same technique for a
+     different job — and inventing a site-wide one is a wider change than this
+     heading needs. */
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
   }
-  .brand { display: inline-flex; align-items: center; gap: var(--space-2); margin-inline-end: auto; text-decoration: none; color: var(--text-h); font-weight: 600; }
-  .brand .mark {
-    width: 28px; height: 28px; line-height: 28px; text-align: center;
-    border-radius: var(--radius-sm); color: #fff; font-size: var(--fs-body);
-    background: var(--grad-accent);
-  }
-  .brand .word { font-size: var(--fs-body); letter-spacing: -0.4px; }
-  .lang {
-    font: inherit; font-size: var(--fs-xs); padding: 5px 28px 5px 10px;
-    border-radius: var(--radius-sm); border: 1px solid var(--border);
-    background: var(--social-bg); color: var(--text-h); cursor: pointer;
-  }
-  .lang:hover { border-color: var(--accent-border); }
 
   /* 宽度声明的顺序别动：DownloadPage.test.ts 按 `.dl { width: 560px; max-width: 100%` 取匹配。 */
   .dl { width: 560px; max-width: 100%; box-sizing: border-box; margin: 0 auto; padding: var(--space-5) var(--space-5) var(--space-7); text-align: start; }

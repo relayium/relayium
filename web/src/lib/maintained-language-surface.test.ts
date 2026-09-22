@@ -36,10 +36,10 @@ afterEach(async () => {
   await setLang("en");
 });
 
-function render(Component: unknown): HTMLDivElement {
+function render(Component: unknown, props?: Record<string, unknown>): HTMLDivElement {
   target = document.createElement("div");
   document.body.appendChild(target);
-  app = mount(Component as never, { target });
+  app = mount(Component as never, props ? { target, props } : { target });
   flushSync();
   return target;
 }
@@ -49,9 +49,15 @@ describe("every language selector in the app", () => {
   // list, so a language cannot be offered on one surface and not the other. What
   // is asserted here is that both really do render it — a hardcoded <option>
   // added to either would be invisible to a LANGS-only check.
+  // The download page is deliberately NOT here any more. Until 2026-09-22 it
+  // rendered outside the app shell and carried its own brand, language and
+  // theme controls; the owner brought /d/<id> inside the shell, so Nav supplies
+  // all three and a second selector on that page would offer the same choice
+  // twice. The rule this file exists for has not been relaxed — it has ONE
+  // subject now instead of two, and the case below pins that the download page
+  // really has stopped rendering one rather than quietly keeping a stale copy.
   const SURFACES: [string, unknown][] = [
     ["the main nav", Nav],
-    ["the download page", DownloadPage],
   ];
 
   it.each(SURFACES.map(([name]) => name))("%s offers exactly English and 中文", async (name) => {
@@ -67,6 +73,18 @@ describe("every language selector in the app", () => {
     for (const frozen of FROZEN_LANGS) {
       expect(options.some((o) => o.value === frozen), `${name} still offers ${frozen}`).toBe(false);
     }
+  });
+
+  it("leaves the download page with no selector of its own", async () => {
+    // Not "it happens to have none": a reinstated selector there would be a
+    // second language control on one page, and — since it would be written by
+    // hand rather than shared with Nav — the one most likely to drift back to
+    // offering a frozen locale. That is exactly the defect this file was
+    // opened for, so its absence is asserted, not assumed.
+    await loadLang("en");
+    const el = render(DownloadPage, { id: "abc" });
+    expect(el.querySelector("select.lang"), "the download page must take Nav's selector, not render a second one").toBeNull();
+    expect(el.querySelector("header.dlnav"), "the download page's own header is gone with it").toBeNull();
   });
 
   it("switches the whole selector set with one click, not per surface", async () => {

@@ -78,6 +78,12 @@ export const TARGETS = [
     viewport: DESKTOP, scheme: "light", fixture: PRICING_ROUTES,
     note: "真档位网格：h1 之后的第一块内容，heading-order 只在这里才看得见" },
   { id: "spa/apps", url: "/apps", ready: ".apps", viewport: DESKTOP, scheme: "light" },
+  // /d/<id> 自 2026-09-22 起也在外壳里（owner 决定），此前它走自己的页头，从来
+  // 没有扫描目标。没有真链接时它停在 "缺少解密密钥" 分支——那正是收件人最可能
+  // 撞上的状态：链接被聊天软件截断、被转发时丢掉 fragment。扫的是这一格的外壳、
+  // 卡片、页脚和那句红色错误的对比度。
+  { id: "spa/download/no-key", url: "/d/zzz", ready: "section.dl", viewport: DESKTOP, scheme: "dark",
+    note: "收件人下载页：外壳 + 最常见的失败态，深色 token" },
   { id: "spa/cli", url: "/cli", ready: ".cli", viewport: DESKTOP, scheme: "light" },
   // /device-inbox waits for the LAST platform section, not for `.dinbox`: the
   // shell is present before the six sections are, and a target that is satisfied

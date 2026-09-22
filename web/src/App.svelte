@@ -908,19 +908,27 @@
         : !unsupported,
   );
 
-  // The four transfer destinations — and only those — render inside the
-  // settings-style shell. Every route except the recipient's download page:
-  // the first cut wrapped only the four transfer destinations, and the result
-  // was two products — a sidebar app on those four and the old top-bar site on
-  // /pricing, /cli, /apps and /me, with a "Back to Relayium" link to get out.
-  // The set is written out rather than derived from the route table because
-  // the exception is a PRODUCT statement: /d/<id> is what a recipient opens
-  // from a link, and it must not hand them the app's navigation. Nav keeps its
-  // own copy of the same set for the sidebar half; one list per component is
-  // what keeps the two halves from being wrong independently.
+  // EVERY route renders inside the settings-style shell. The first cut wrapped
+  // only the four transfer destinations and the result was two products — a
+  // sidebar app on those four and the old top-bar site on /pricing, /cli,
+  // /apps and /me, with a "Back to Relayium" link to get out.
+  //
+  // /d/<id> was the last exception, and it was a PRODUCT statement: a recipient
+  // who opened a link is not inside the app and should not be handed its
+  // navigation. The owner reversed it on 2026-09-22, having been shown the two
+  // layouts side by side — "所有页面统一" includes the page a recipient lands
+  // on. The reversal is the owner's; an executor may not quietly overrule a
+  // decision that is written down, and this one was.
+  //
+  // The set is still written out rather than derived from the route table: it
+  // is a statement about presentation, and a route appearing in it should be a
+  // deliberate line in a diff. Nav keeps its own copy for the sidebar half; one
+  // list per component is what keeps the two halves from being wrong
+  // independently.
   const SHELL_ROUTES = [
     "lan", "cross", "offline", "device-inbox",
     "pricing", "cli", "apps", "me", "verify-email", "reset-password", "magic-link",
+    "download",
   ] as const;
   const shellRoute = $derived((SHELL_ROUTES as readonly string[]).includes(currentRoute()));
   // Pages built for a decision width — four pricing tiers side by side, the CLI
@@ -2615,17 +2623,11 @@
     </div>
   {/if}
 
-  {#if currentRoute() === "download"}
-    {#await routePage("download") then { default: DownloadPage }}
-      <DownloadPage id={downloadId(location.pathname)} />
-    {/await}
-  {:else}
   <!-- The settings-style shell: a 216px sidebar (Nav, which becomes the rail on
        its own) and a 660px content track (1040px on the decision-width pages —
-       `shellWide`). It wraps every route but the recipient's download page —
-       `shellRoute` — and is `display: contents` there and at every width below
-       the breakpoint, so /d/<id> and every narrow viewport lay out exactly as
-       they did.
+       `shellWide`). It wraps EVERY route — `shellRoute` — and is
+       `display: contents` at every width below the breakpoint, so the narrow
+       layout is unchanged.
 
        There is no toolbar row between them. It carried the destination's name
        and nothing else, which is what the selected sidebar row and the page's
@@ -2644,7 +2646,11 @@
   <div class="appshell-main" inert={loginOpen() ? true : undefined}>
   <div class="appshell-col">
 
-  {#if currentRoute() === "cross"}
+  {#if currentRoute() === "download"}
+    {#await routePage("download") then { default: DownloadPage }}
+      <DownloadPage id={downloadId(location.pathname)} />
+    {/await}
+  {:else if currentRoute() === "cross"}
     {#await routePage("cross") then { default: CrossPage }}
       <CrossPage {roomCode} {linkDead} {showTransfer} {relayStatus} {transferSurface} />
     {/await}
@@ -2765,7 +2771,6 @@
   </div><!-- /.appshell-col -->
   </div><!-- /.appshell-main -->
   </div><!-- /.appshell -->
-  {/if}
 </main>
 
 <!-- Global and route-independent on purpose: it sits outside <main>'s route
