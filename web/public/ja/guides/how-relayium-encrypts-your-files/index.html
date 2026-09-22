@@ -91,8 +91,17 @@ pre code{background:none;padding:0;border-radius:0}
 .rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
 .rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
 .rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-inline-size:0}
 .rail-group{display:none}
+/* Two ranks, the same two Nav.svelte draws below its rail breakpoint: the four
+   destinations are pills, the three tools are text links. Seven links at one
+   rank read as one flat list and say nothing about what the product's main
+   surfaces are. No copy is involved — it is which element gets a border. */
+.row.dest{border-color:var(--border);background:var(--row-hover);border-radius:999px;padding:6px 14px;font-size:var(--fs-sm)}
+.row.dest:hover{border-color:var(--accent-border)}
+.row.tool{padding-inline:4px;text-decoration:underline 1px transparent;text-underline-offset:4px;font-size:var(--fs-xs)}
+.row.tool:hover{background:none;text-decoration-color:var(--accent-border)}
+.row.tool.is-current{background:none;color:var(--accent-fg);font-weight:600;text-decoration-color:currentColor}
 .row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
 .row:hover{background:var(--row-hover);color:var(--text-h)}
 .row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
@@ -114,7 +123,13 @@ pre code{background:none;padding:0;border-radius:0}
   .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
   .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
   .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  /* In the rail both ranks are rows again — the sidebar's grouping is what
+     carries the distinction there, exactly as it does in Nav.svelte, so the
+     pill and the underline are narrow-only. */
   .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .row.dest,.row.tool{border-color:transparent;background:none;border-radius:7px;padding:4px 10px;font-size:13px;text-decoration:none}
+  .row.dest:hover,.row.tool:hover{background:var(--row-hover)}
+  .row.is-current{color:#fff;background:var(--accent-action);font-weight:600}
   .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
   /* The content pane — the box that finally carries the pane surface, the same
      role App.svelte gives `.appshell-main`. */
@@ -179,7 +194,7 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="appshell">
-      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="メインナビゲーション"><a class="row" href="/">LAN</a><a class="row" href="/ja/cross-network/">ネットワーク間</a><a class="row" href="/ja/offline-transfer/">非同期</a><a class="row" href="/device-inbox">デバイス受信箱</a><a class="row" href="/cli">CLI</a><a class="row" href="/ja/apps/">アプリ</a><a class="row" href="/pricing">料金</a></nav></header>
+      <header class="rail"><a class="brand" href="/"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="bm" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a94bff" /><stop offset="1" stop-color="#635bff" /></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#bm)" /><path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Relayium</span></a><nav class="railnav" aria-label="メインナビゲーション"><a class="row dest" href="/">LAN</a><a class="row dest" href="/ja/cross-network/">ネットワーク間</a><a class="row dest" href="/ja/offline-transfer/">非同期</a><a class="row dest" href="/device-inbox">デバイス受信箱</a><a class="row tool" href="/cli">CLI</a><a class="row tool" href="/ja/apps/">アプリ</a><a class="row tool" href="/pricing">料金</a></nav></header>
       <div class="pane"><div class="wrap">
 
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium がファイルをエンドツーエンドで暗号化する仕組み</span></nav>

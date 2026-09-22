@@ -98,12 +98,13 @@ const GROUPS = [
  * locales have only one form, so they get no `aria-label` at all rather than
  * one that repeats the text.
  */
-function row(item, lang, t, current) {
+function row(item, lang, t, current, tool = false) {
   const short = item.short(t);
   const full = item.full(t);
   const named = full && full !== short ? ` aria-label="${esc(full)}"` : "";
   const now = item.id === current ? ' aria-current="page"' : "";
-  return `<a class="row${item.id === current ? " is-current" : ""}" href="${item.href(lang)}"${named}${now}>${esc(short)}</a>`;
+  const cls = ["row", tool ? "tool" : "dest", item.id === current ? "is-current" : ""].filter(Boolean).join(" ");
+  return `<a class="${cls}" href="${item.href(lang)}"${named}${now}>${esc(short)}</a>`;
 }
 
 /**
@@ -119,14 +120,19 @@ export function rail({ lang, home, current = null, foot = "" }) {
   const t = SHELL_NAV[lang];
   if (!t) throw new Error(`page-shell: no sidebar labels for ${lang}`);
   const flat = isFrozen(lang);
-  const body = GROUPS.map((g) => {
+  const body = GROUPS.map((g, gi) => {
     const title = g.title(t);
+    // The last group is "downloads and tools". Nav.svelte draws it as a
+    // different RANK from the destinations — "the destinations are pills, these
+    // are text links, so the header shows two ranks" — and the narrow header
+    // here has to say the same thing, or seven links read as one flat list.
+    const tools = gi === GROUPS.length - 1;
     // A group title exists only in en and zh. On the seven archived locales the
     // same destinations render as one ungrouped list rather than under an
     // English heading — see content/shell-nav.mjs for why that is the only
     // option the language freeze leaves.
     const head = !flat && title ? `<span class="rail-group">${esc(title)}</span>` : "";
-    return head + g.items.map((i) => row(i, lang, t, current)).join("");
+    return head + g.items.map((i) => row(i, lang, t, current, tools)).join("");
   }).join("");
   return `<header class="rail">`
     + `<a class="brand" href="${home}">${brandMark(26)}<span>Relayium</span></a>`
@@ -160,8 +166,17 @@ export const SHELL_CSS = `
 .rail .brand{display:inline-flex;align-items:center;gap:8px;flex:none;color:var(--text-h);text-decoration:none;font-weight:600;font-size:16px;letter-spacing:-.4px}
 .rail .brand svg{display:block;transition:transform .25s cubic-bezier(.22,1,.36,1)}
 .rail .brand:hover svg{transform:rotate(-8deg) scale(1.08)}
-.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-inline-size:0}
+.railnav{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-inline-size:0}
 .rail-group{display:none}
+/* Two ranks, the same two Nav.svelte draws below its rail breakpoint: the four
+   destinations are pills, the three tools are text links. Seven links at one
+   rank read as one flat list and say nothing about what the product's main
+   surfaces are. No copy is involved — it is which element gets a border. */
+.row.dest{border-color:var(--border);background:var(--row-hover);border-radius:999px;padding:6px 14px;font-size:var(--fs-sm)}
+.row.dest:hover{border-color:var(--accent-border)}
+.row.tool{padding-inline:4px;text-decoration:underline 1px transparent;text-underline-offset:4px;font-size:var(--fs-xs)}
+.row.tool:hover{background:none;text-decoration-color:var(--accent-border)}
+.row.tool.is-current{background:none;color:var(--accent-fg);font-weight:600;text-decoration-color:currentColor}
 .row{display:inline-flex;align-items:center;box-sizing:border-box;min-block-size:28px;padding:4px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);font-size:13px;line-height:1.3;text-decoration:none;white-space:nowrap;transition:background-color .12s ease,color .12s ease}
 .row:hover{background:var(--row-hover);color:var(--text-h)}
 .row.is-current{font-weight:600;color:#fff;background:var(--accent-action);border-color:transparent}
@@ -183,7 +198,13 @@ export const SHELL_CSS = `
   .railnav{flex-direction:column;align-items:stretch;gap:2px;inline-size:100%}
   .rail-group{display:block;margin-block:var(--space-3) 4px;padding-inline:10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text)}
   .railnav>.rail-group:first-child{margin-block-start:var(--space-2)}
+  /* In the rail both ranks are rows again — the sidebar's grouping is what
+     carries the distinction there, exactly as it does in Nav.svelte, so the
+     pill and the underline are narrow-only. */
   .row{justify-content:flex-start;inline-size:100%;white-space:normal;text-align:start}
+  .row.dest,.row.tool{border-color:transparent;background:none;border-radius:7px;padding:4px 10px;font-size:13px;text-decoration:none}
+  .row.dest:hover,.row.tool:hover{background:var(--row-hover)}
+  .row.is-current{color:#fff;background:var(--accent-action);font-weight:600}
   .rail-foot{margin-block-start:var(--space-4);margin-inline-start:0;padding-inline:10px}
   /* The content pane — the box that finally carries the pane surface, the same
      role App.svelte gives \`.appshell-main\`. */
