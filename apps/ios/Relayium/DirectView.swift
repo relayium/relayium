@@ -274,7 +274,7 @@ struct DirectView: View {
         // it names what would fix it.
         if link.unsupportedPairingPeer {
             VStack(alignment: .leading, spacing: Metrics.tight) {
-                failureLine(L10n.t(.errorRealtimeLegacyPeer))
+                failureLine(L10n.t(link.pairingPeerIsCli ? .errorRealtimeCliPeer : .errorRealtimeLegacyPeer))
                     .accessibilityIdentifier("pairing-peer-unsupported")
                 Button(L10n.t(.commonDismiss)) { module.cancelPairingCode() }
                     .textAction()

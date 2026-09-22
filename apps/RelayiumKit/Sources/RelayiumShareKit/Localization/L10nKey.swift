@@ -1556,6 +1556,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case errorRealtimeTamper = "error.realtime.tamper"
     case errorRealtimeDropped = "error.realtime.dropped"
     case errorRealtimeLegacyPeer = "error.realtime.legacyPeer"
+    case errorRealtimeCliPeer = "error.realtime.cliPeer"
     case errorSenderManifestTooLarge = "error.sender.manifestTooLarge"
     case errorSenderInvalidManifest = "error.sender.invalidManifest"
     /// %@ — a user's own file name, never translated.

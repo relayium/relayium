@@ -511,6 +511,7 @@
 "error.realtime.tamper" = "收到的数据与发送方所描述的不一致，因此已被丢弃。请让对方重新发送。";
 "error.realtime.dropped" = "连接丢失了传输中的一部分。什么都没有保存 — 请重试。";
 "error.realtime.legacyPeer" = "对方设备运行的是较旧的版本，无法完成这次传输。它需要更新。";
+"error.realtime.cliPeer" = "这个配对码来自 relayium 命令行工具，它只能与另一个命令行工具连接。要在命令行和本应用之间传文件：在命令行运行 relayium up <文件>，然后打开它打印的链接；或者从这里分享一个链接，再用 relayium down 取回。";
 "error.sender.manifestTooLarge" = "单次传输的文件太多了。请分成更小的批次发送。";
 "error.sender.invalidManifest" = "所选文件无法被安全地描述，因此传输没有开始。";
 "error.sender.sourceShorter" = "“%@”在发送过程中发生了变化，因此传输已停止。请重试。";

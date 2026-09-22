@@ -2992,6 +2992,19 @@ final class MacSurfaceGuardTests: XCTestCase {
                        + "the two actions that supersede it")
     }
 
+    /// **The refusal names the right cause on the Mac too.**
+    ///
+    /// Symmetric with `IOSSurfaceGuardTests`'s guard on the same decision. A
+    /// peer without `link/1` is an older build — except when it is the relayium
+    /// CLI, which shares the pairing-code namespace and can join a code minted
+    /// here. Telling a CLI user to update their app is wrong and names nothing
+    /// that would work, so what is pinned is the SELECTOR, not one key.
+    func testTheCrossNetworkRefusalDistinguishesACliPeer() throws {
+        let connect = try source(named: crossConnect)
+        XCTAssertTrue(connect.contains("L10n.t(link.pairingPeerIsCli ? .errorRealtimeCliPeer : .errorRealtimeLegacyPeer)"),
+                      "the Mac refusal no longer distinguishes a CLI peer from an out-of-date app")
+    }
+
     /// **Replacing an expired code is the SHARED action, not a Mac copy of it.**
     ///
     /// STRUCTURAL, and only structural: `swift test` cannot import the macOS app

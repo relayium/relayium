@@ -1250,18 +1250,24 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(root.contains("DirectView(module: crossNetwork, selection: crossNetworkSelection,"))
     }
 
-    /// **The refusal is drawn, and it is dismissed through the module.**
+    /// **The refusal is drawn, it names the RIGHT cause, and it is dismissed
+    /// through the module.**
     ///
-    /// After `0.4.0` a peer without `link/1` really is an older build, so the
-    /// sentence the owner was wrongly shown is now the truthful one — and this
-    /// screen is the side that has to say it, because the room is refused
-    /// without a session ever existing to carry an ending.
+    /// A peer without `link/1` is an older build — except when it is the
+    /// relayium CLI, which shares the pairing-code namespace and can join a code
+    /// minted here. Both are refused on this screen, because the room is refused
+    /// without a session ever existing to carry an ending, and the two need
+    /// DIFFERENT sentences: telling a CLI user to update their app is wrong and
+    /// tells them nothing that would work. So this pins the selector, not one
+    /// key — a surface that drops back to a single sentence fails here.
     func testTheCrossNetworkSurfaceDrawsTheUnsupportedPeerRefusal() throws {
         let view = try code(at: try iosRoot.appendingPathComponent("DirectView.swift"))
         let refusal = try XCTUnwrap(view.components(
             separatedBy: "if link.unsupportedPairingPeer {").dropFirst().first?
             .components(separatedBy: "switch code.state {").first)
-        XCTAssertTrue(refusal.contains("L10n.t(.errorRealtimeLegacyPeer)"))
+        XCTAssertTrue(refusal.contains("link.pairingPeerIsCli"),
+                      "the refusal no longer distinguishes a CLI peer from an out-of-date app")
+        XCTAssertTrue(refusal.contains("L10n.t(link.pairingPeerIsCli ? .errorRealtimeCliPeer : .errorRealtimeLegacyPeer)"))
         XCTAssertTrue(refusal.contains("module.cancelPairingCode()"))
         XCTAssertTrue(refusal.contains("\"pairing-peer-unsupported\""))
     }

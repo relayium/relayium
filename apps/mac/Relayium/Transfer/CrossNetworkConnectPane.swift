@@ -111,7 +111,7 @@ struct CrossNetworkConnectPane: View {
             // one, and it names what would actually fix it.
             if link.unsupportedPairingPeer {
                 VStack(alignment: .leading, spacing: 8) {
-                    InlineMessage(.warning, L10n.t(.errorRealtimeLegacyPeer))
+                    InlineMessage(.warning, L10n.t(link.pairingPeerIsCli ? .errorRealtimeCliPeer : .errorRealtimeLegacyPeer))
                         .accessibilityIdentifier("pairing-peer-unsupported")
                     Button(L10n.t(.commonDismiss)) { link.dismissUnsupportedPairingPeer() }
                         .buttonStyle(.referenceSecondary)

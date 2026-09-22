@@ -424,6 +424,17 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// `dismiss()` (the user has read it).
     @Published public private(set) var unsupportedPairingPeer = false
 
+    /// WHY the room was refused, when the reason is the relayium CLI rather than
+    /// an out-of-date app. Read only by the surfaces that already render
+    /// `unsupportedPairingPeer`, to choose the sentence; the refusal itself, its
+    /// lifecycle and every consumer of the flag above are unchanged.
+    ///
+    /// Separate from the flag rather than replacing it because "the room was
+    /// refused" and "here is why" have different audiences: a notification and a
+    /// destination only need the first, and neither should have to learn a new
+    /// vocabulary to keep working.
+    @Published public private(set) var pairingPeerIsCli = false
+
     /// The socket of the pairing room this object currently owns, for the ONE
     /// caller that needs it: the legacy connection the fallback builds.
     ///
@@ -1284,6 +1295,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // new code is a new question, and "the other device is too old" is an
         // answer about a peer that is not in this room.
         unsupportedPairingPeer = false
+        pairingPeerIsCli = false
         beginAttempt(peerLabel: code)
         if !files.isEmpty { armBatch(files: files, sources: sources) }
         connection = .watching(code: code)
@@ -1387,6 +1399,21 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
             // WebRTC signal on this socket. It routes to the negotiator when
             // there is one and holds the frame when there is not yet.
             inbox?.handleSignal(from: from, data: data)
+            // The relayium CLI joined this code room. Decided on the spot rather
+            // than waited out: the CLI exits on our own capability hello about
+            // 0.2 s from now, and every second of `pairingCapabilityWait` after
+            // that is spent to reach the same answer with the WRONG sentence —
+            // "the other device is running an older version" is about a peer
+            // that is not in this room. Placed after the relay inbox so no frame
+            // that reaches a handler today stops reaching it; a CLI handshake is
+            // not a relay map, so the inbox ignores it either way.
+            if CliPeerSignal.isHandshake(data) {
+                Task { @MainActor in
+                    guard let self, self.generation == mine else { return }
+                    self.refuseUnsupportedPairingPeer(peerId: from, generation: mine, isCli: true)
+                }
+                return
+            }
             guard let capabilities else { return }
             let announced = capabilities.record(peerId: from, signal: data)
             // Not a hello, but possibly proof of the same thing — see
@@ -2219,7 +2246,12 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// with the attempt that would have carried it, which is the same thing
     /// `leave()` does — it was never sent, and there is no lane left to hold it
     /// for.
-    private func refuseUnsupportedPairingPeer(peerId: String, generation mine: Int) {
+    ///
+    /// `isCli` only selects the sentence the surface shows. Everything this
+    /// function does — and, above, everything it deliberately does NOT do — is
+    /// identical for both reasons, because in both cases the peer speaks a
+    /// protocol this room cannot complete.
+    private func refuseUnsupportedPairingPeer(peerId: String, generation mine: Int, isCli: Bool = false) {
         guard generation == mine, let room = pairing, !room.resolved else { return }
         // Latched before the room is torn down, exactly as `fallBackToLegacy`
         // latches it: a second peer in the same room must not be able to reach a
@@ -2234,6 +2266,10 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         relayDeadline = nil
         relayExpiringSoon = false
         renewGrantDeadline = nil
+        // Set BEFORE the flag below, so a surface that redraws on that flag
+        // always reads the reason that belongs to it rather than the previous
+        // room's.
+        pairingPeerIsCli = isCli
         // Published LAST, after every piece of room state has been cleared, so a
         // surface that redraws on this flag cannot catch the room half torn
         // down — it is the one edge the connect screen switches on.
@@ -3372,6 +3408,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// permanently set on a surface whose Cancel appeared to do nothing.
     public func dismissUnsupportedPairingPeer() {
         unsupportedPairingPeer = false
+        pairingPeerIsCli = false
     }
 
     /// Whether the Workspace should be rendering this object at all: a live
