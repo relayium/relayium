@@ -16,11 +16,11 @@ import com.relayium.android.transport.SignalingFactory
 import com.relayium.android.transport.SignalingHandle
 import com.relayium.android.transport.TransportFactory
 import com.relayium.android.transport.TransportHandle
+import com.relayium.protocol.CliPeerSignal
 import com.relayium.protocol.Crypto
 import com.relayium.protocol.Envelope
 import com.relayium.protocol.FileLaneSession
 import com.relayium.protocol.FileMeta
-import com.relayium.protocol.CliPeerSignal
 import com.relayium.protocol.Json
 import com.relayium.protocol.LinkProtocol
 import com.relayium.protocol.LinkSession

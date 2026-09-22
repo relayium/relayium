@@ -708,20 +708,17 @@
     margin: 0; font-size: var(--fs-sm); line-height: 1.5; color: var(--text-h);
     text-align: center; max-width: 40ch;
   }
-  .quota-warn {
+  /* `.cli-peer` takes the waiting line's place, so it is shaped like the quota
+     note rather than like the spinner it replaces: both are statements about
+     this room, not progress. Only the measure differs — the CLI sentence names
+     two commands and reads badly at 34ch. */
+  .quota-warn, .cli-peer {
     margin: 0; font-size: var(--fs-xs); line-height: 1.5; text-align: center; max-width: 34ch;
     color: var(--text-h);
     border: 1px solid var(--accent-border); border-radius: var(--radius-sm);
     padding: var(--space-2) var(--space-3); background: var(--code-bg);
   }
-  /* Takes the waiting line's place, so it is shaped like the quota note rather
-     than the spinner it replaces: this is a terminal statement, not progress. */
-  .cli-peer {
-    margin: 0; font-size: var(--fs-xs); line-height: 1.5; text-align: center; max-width: 42ch;
-    color: var(--text-h);
-    border: 1px solid var(--accent-border); border-radius: var(--radius-sm);
-    padding: var(--space-2) var(--space-3); background: var(--code-bg);
-  }
+  .cli-peer { max-width: 42ch; }
 
   /* ── Settings-shell form ──────────────────────────────────────────────────
      Inside `.appshell.shell` the pairing room keeps every control, state and
