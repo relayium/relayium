@@ -30,8 +30,14 @@ type crossFlags struct {
 
 // crossnetConn joins the code room, runs the handshake, races a direct
 // connection, wraps it in pinned TLS, prints the SAS, and returns the conn.
-// The CLI is direct-only: file bytes never pass through Relayium's servers, so
-// if no direct connection can be raced the transfer fails (there is no relay).
+// The pairing-code modes are direct-only: they race a direct connection and fail
+// if they cannot get one, because this code path has no ICE and no TURN in it.
+// That is a property of THESE MODES as they are built today, not a promise about
+// Relayium — the apps and the web page relay a cross-network transfer, over
+// ciphertext the relay cannot read. What holds everywhere, and is the thing not
+// to trade away, is that nothing Relayium runs ever holds plaintext or a user's
+// keys; which wire the ciphertext takes is a separate question with a separate
+// answer per mode.
 // mode is what this side wants the connection for (rzvous.ModeFile / ModeText). A
 // mismatch is refused before anything is dialed.
 // modeCommand names a mode the way the user meets it: as a command. An unknown
@@ -115,8 +121,8 @@ func crossnetConn(ctx context.Context, code, name string, f crossFlags, stderr i
 	}
 
 	// Race a direct connection within the window. Reachable / server-to-server
-	// peers connect directly; if none can be raced, the transfer fails — the CLI
-	// never proxies file bytes through Relayium.
+	// peers connect directly; if none can be raced the transfer fails, because
+	// this path has no relay to fall back to.
 	dctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	// hs.PeerCandidates come from the untrusted peer — filter out loopback /
 	// link-local / unspecified so a malicious peer can't steer our dialer at our

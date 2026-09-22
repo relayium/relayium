@@ -24,9 +24,11 @@ usage:
   relayium send <src...> [code]
 
 Cross-network and direct: a short rendezvous handshake on Relayium's server
-introduces the two ends, then the files travel straight between them. If no
-direct connection can be made (both ends behind strict NAT), the transfer fails
-— the CLI never relays file bytes.
+introduces the two ends, then the files travel straight between them. This mode
+is direct-only, so if no direct path can be found (both ends behind strict NAT)
+the transfer fails rather than falling back to a relay. That is this mode's
+limit, not a promise about Relayium: the apps and the web page relay a
+cross-network transfer by design, over ciphertext the relay cannot read.
 
 Both machines must be online at the same time; this is not a mailbox. For a
 recipient who is not there right now, use "relayium up" (a stored link) or the
@@ -53,8 +55,9 @@ usage:
 
 The other side runs "relayium send" and reads out the 6-digit code. No Relayium
 account is needed to receive: the code is the introduction. Both machines must
-be online at the same time, and the bytes travel directly between them — if no
-direct connection can be made, the transfer fails rather than being relayed.
+be online at the same time, and the bytes travel directly between them. This
+mode is direct-only: if no direct path can be found the transfer fails rather
+than falling back to a relay.
 
 positional arguments:
   <code>      the 6-digit pairing code the sender printed
@@ -74,7 +77,9 @@ usage:
 
 Both ends run this command. The session is end-to-end encrypted over a direct
 pinned-TLS connection of its own; Relayium keeps no message body and no
-server-side history. Both machines must be online at the same time.
+server-side history. Both machines must be online at the same time, and this
+mode is direct-only like "send"/"receive": with no direct path between the two
+machines the session cannot open, rather than falling back to a relay.
 
 positional arguments:
   [code]   an existing 6-digit pairing code. Leave it out to mint one, which

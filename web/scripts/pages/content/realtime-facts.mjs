@@ -27,8 +27,8 @@ export const browserRelayFacts = {
 };
 
 export const cliDirectFacts = {
-  en: "Relayium CLI send/receive and text are direct-only P2P: they never relay file or message bytes through TURN or any other Relayium server. If the two ends cannot establish a direct connection, the session fails rather than falling back to a relay.",
-  zh: "Relayium CLI 的 send/receive 和 text 都只走 P2P 直连：文件或消息字节绝不会通过 TURN 或任何其他 Relayium 服务器中继。两端无法建立直连时，会话会直接失败，不会回退到中继。",
+  en: "Relayium's CLI send/receive and text modes are direct-only P2P: as they are built today they carry no ICE and no TURN, so if the two ends cannot establish a direct connection the session fails rather than falling back to a relay. That is a property of these modes rather than of Relayium as a whole — the apps and the web page relay a cross-network transfer by design, over ciphertext the relay cannot read.",
+  zh: "Relayium CLI 的 send/receive 和 text 模式只走 P2P 直连：按它们今天的实现，这条路径里没有 ICE 也没有 TURN，所以两端建立不了直连时，会话会直接失败，而不是回退到中继。这是这些模式的性质，不是 Relayium 整体的性质——App 和网页做跨网络传输时按设计就是走中继的，中继上流过的是它读不了的密文。",
   ja: "Relayium CLI の send/receive と text は P2P 直接接続専用です。ファイルやメッセージのバイトを TURN やその他の Relayium サーバーで中継することはありません。2 つの端末が直接接続を確立できなければ、リレーへフォールバックせずにセッションは失敗します。",
   ko: "Relayium CLI의 send/receive와 text는 P2P 직접 연결 전용입니다. 파일이나 메시지 바이트를 TURN 또는 다른 Relayium 서버로 릴레이하지 않습니다. 두 기기가 직접 연결을 맺지 못하면 릴레이로 대체하지 않고 세션이 실패합니다.",
   de: "Relayium CLI send/receive und text sind direct-only P2P: Datei- oder Nachrichtenbytes werden weder über TURN noch über einen anderen Relayium-Server weitergeleitet. Können die beiden Endpunkte keine direkte Verbindung herstellen, schlägt die Sitzung fehl, statt auf ein Relay auszuweichen.",

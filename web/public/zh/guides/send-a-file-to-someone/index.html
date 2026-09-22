@@ -238,7 +238,7 @@ path: direct</code></pre></div>
       <pre tabindex="0"><code>relayium send --verify ./release.zip</code></pre></section>
       <section class="sheet"><h2>只走直连——免费，否则失败</h2>
       <p>传输会在两端之间竞速建立直连。一旦能建立——这是常见情况，只要至少一方有可达地址——文件就会直接、加密地全速传输，不收费。</p>
-      <p>Relayium CLI 的 send/receive 和 text 都只走 P2P 直连：文件或消息字节绝不会通过 TURN 或任何其他 Relayium 服务器中继。两端无法建立直连时，会话会直接失败，不会回退到中继。</p>
+      <p>Relayium CLI 的 send/receive 和 text 模式只走 P2P 直连：按它们今天的实现，这条路径里没有 ICE 也没有 TURN，所以两端建立不了直连时，会话会直接失败，而不是回退到中继。这是这些模式的性质，不是 Relayium 整体的性质——App 和网页做跨网络传输时按设计就是走中继的，中继上流过的是它读不了的密文。</p>
       <p>如果遇到这种情况，可靠的办法是在两台可达的服务器之间用 daemon 直连、用 SSH push，或者通过 relayium up 创建存储链接。</p>
       <ul><li>直连成功 → 免费、全速、端到端加密。</li><li>两端在地理上可以在任何地方——发送方直接运行 send，接收方用它打印出来的码运行 receive。</li></ul></section>
       <section class="sheet"><h2>传不过去的时候</h2>

@@ -245,6 +245,16 @@ jobs:
       - name: the home page's trust block is still true of this repository
         run: node scripts/test/home-trust-claims-test.mjs
 
+      # How Relayium describes WHICH WIRE a transfer takes, across `server/`,
+      # `README.md`, `docs/` and `web/`. It pins the SHAPE of the claim, not its
+      # truth: the invariant stays absolute, the path fact stays attributed to
+      # the mode, and the retired product-level pledges stay retired. Owned here
+      # for the same reason as the two steps above — a CLI-only commit that
+      # re-absolutised the help text would start no web lane, and this workflow
+      # has no path filter.
+      - name: the transport-path claim is scoped to the mode, not to the product
+        run: node scripts/test/transport-claim-test.mjs
+
   android-policy:
     runs-on: ubuntu-latest
     timeout-minutes: 5

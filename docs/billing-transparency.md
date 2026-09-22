@@ -78,8 +78,13 @@ first" and the difference is what decides whether anything is billed:
   anyway, and waiting out their checks costs about 20 seconds before ICE reaches
   the relay it would have used. So **there is no STUN-P2P rung for the browser**,
   and a cross-network browser transfer is a metered transfer.
-- **CLI:** never relayed — there is no ICE or TURN code path in
-  `server/cmd/relayium/` at all. Its **direct** modes (`push`, `pull`, `sync`,
+- **CLI:** not relayed **as the CLI is built today** — there is no ICE or TURN
+  code path in `server/cmd/relayium/` at all. Stated as a fact about the current
+  binary rather than as a promise, because it is one: these modes were built
+  direct-only, and whether that stays true is a product decision, not an
+  invariant. What IS invariant, and what this document is really about, is that
+  no path lets relayium.com read a file — a relayed browser transfer is metered
+  precisely because the relay forwards ciphertext it cannot decrypt. Its **direct** modes (`push`, `pull`, `sync`,
   `serve` and daemon-direct, `send`/`receive`, `text`) therefore carry nothing
   relayium.com can meter. Its **hosted** modes are the exception, and they are
   not relayed either: `relayium up` and `relayium down` write and read the same

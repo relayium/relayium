@@ -903,7 +903,7 @@ const en: Messages = {
         lead: "Send files to another person across networks. relayium send mints a 6-digit pairing code, good for 5 minutes, and prints the exact command the other end runs.",
         notes: [
           "Minting the code needs relayium login; the receiver needs no account. You cannot choose the code — the server only accepts codes it issued — so pass it on out of band, over a call for instance.",
-          "Only a short rendezvous handshake passes through Relayium; the file bytes go straight between the two machines. If both ends are behind strict NAT and no direct connection can be made, the transfer fails rather than being relayed — the CLI never relays file bytes.",
+          "Only a short rendezvous handshake passes through Relayium; the file bytes go straight between the two machines. This mode is direct-only, so if both ends are behind strict NAT and no direct path can be found, the transfer fails rather than falling back to a relay. That is this mode's limit, not a claim about Relayium: the apps and this browser relay a cross-network transfer by design, over ciphertext the relay cannot read.",
           "Both terminals print a 6-digit verification code (SAS) derived from their pinned TLS certificate fingerprints — a different value from the pairing code. Comparing it out of band is optional (--verify stops for it) and confirms the fingerprints were not substituted and that the rendezvous service did not impersonate either endpoint. It authenticates the endpoints, not every network hop, and only when someone actually compares it.",
           "Both ends must be the CLI. For someone who only has a browser, use relayium up instead.",
         ],
