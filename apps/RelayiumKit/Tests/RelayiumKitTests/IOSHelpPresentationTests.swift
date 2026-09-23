@@ -124,6 +124,15 @@ final class IOSHelpPresentationTests: XCTestCase {
         XCTAssertTrue(workspace.contains("link.acceptInboundBatch()"))
         XCTAssertTrue(workspace.contains("link.rejectInboundBatch()"))
         XCTAssertTrue(en(lan.destination).contains("Accept"))
+        // "connects only after you tap Accept" — the inbound connection prompt
+        // (A23) — and "older versions cannot send to this device" (L1: the iOS
+        // app composes the listener-only receive model).
+        XCTAssertTrue(try RepoRoot.text("apps/ios/Relayium/NearbyView.swift").contains("link.acceptInboundAsk()"),
+                      "the connection prompt the help promises is gone")
+        let app = try RepoRoot.text("apps/ios/Relayium/RelayiumApp.swift")
+        XCTAssertTrue(app.contains("makeListeningOnlyNearbyReceiveModel"),
+                      "iOS admits legacy senders again, so the help's 'older versions cannot send' is false")
+        XCTAssertTrue(en(lan.destination).contains("Older versions of Relayium cannot send"))
     }
 
     /// Cross-network: creating needs an account because relayed bytes are billed
@@ -187,14 +196,14 @@ final class IOSHelpPresentationTests: XCTestCase {
         XCTAssertNil(try topic(.account).guide)
     }
 
-    /// Four destinations draw the card. The Account destination's help exists
-    /// in the table; drawing it is a one-line addition to the Account screen,
-    /// which another writer owned when this landed.
+    /// Every iOS destination draws its card exactly once, the Account tab
+    /// included.
     func testTheIOSDestinationsDrawTheirHelp() throws {
         for (file, surface) in [("NearbyView.swift", "lanTransfer"),
                                 ("DirectView.swift", "crossNetworkTransfer"),
                                 ("SendView.swift", "storedSend"),
-                                ("DeviceInboxView.swift", "deviceInbox")] {
+                                ("DeviceInboxView.swift", "deviceInbox"),
+                                ("AccountTab.swift", "account")] {
             let text = try RepoRoot.text("apps/ios/Relayium/" + file)
             XCTAssertEqual(text.components(separatedBy: "IOSHelpCard(surface: .\(surface))").count - 1,
                            1, "\(file) does not draw its help exactly once")

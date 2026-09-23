@@ -35,6 +35,8 @@ struct AccountTab: View {
             DestinationPage {
                 content
                 VersionSupportCard(model: versionSupport)
+                // A20: what this screen is for, last on the page and collapsed.
+                IOSHelpCard(surface: .account)
             }
             .navigationTitle(L10n.t(.tabAccount))
         }

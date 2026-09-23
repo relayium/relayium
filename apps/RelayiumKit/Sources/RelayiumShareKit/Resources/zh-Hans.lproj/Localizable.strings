@@ -909,7 +909,7 @@
 "help.ios.lan.step2" = "从列表中选择另一台设备——Relayium 从不替你选——然后连接，发送文件或消息。";
 "help.ios.lan.step3" = "若已开启高级验证，请先确认两边屏幕显示相同的代码，再发送任何内容。";
 "help.ios.lan.boundary" = "设备只通过这个本地网络上的 Bonjour 互相发现，不会去问 Relayium 的服务器附近有谁。连接在两台设备之间建立并加密，从不经过 Relayium 的中继——所以不占用你的套餐。共享网络中可能有陌生人，发送前请核对名称。";
-"help.ios.lan.where" = "收到的文件保存在「文件」App 的 Relayium/Received 文件夹中。来自当前版本设备的每一批文件，都会等你点“接受”；较旧的版本在接收开启时会直接送达。消息只留在这两台设备上，连接结束即消失。";
+"help.ios.lan.where" = "有其他设备请求连接时，Relayium 会显示它的名称，只有你点“接受”后才会连接；之后它发来的每一批文件，也都会等你点“接受”。收到的文件保存在「文件」App 的 Relayium/Received 文件夹中。旧版本的 Relayium 无法向这台设备发送。消息只留在这两台设备上，连接结束即消失。";
 "help.ios.lan.failure" = "另一台设备不在列表里。常见原因：Relayium 的本地网络访问已关闭、其中一台设备连着访客网络或 VPN、路由器隔离了设备，或者另一台设备上没有打开 Relayium。iPhone 和 iPad 上的 Relayium 只在打开时接收。";
 "help.ios.lan.recovery" = "在“设置 › 隐私与安全性 › 本地网络”中打开 Relayium，关闭 VPN，加入同一个网络，并在两台设备上都保持 Relayium 打开。若仍然互相看不到，改用“跨网络”界面的配对码。";
 
