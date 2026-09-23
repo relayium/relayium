@@ -73,6 +73,13 @@ jobs:
       # allowlists — do not delete this step because it "looks like noise."
       - name: Check for production identifiers
         run: scripts/check-production-identifiers.sh
+      # The checker's exact file+address exceptions for the vendored Pion TURN
+      # tests, proved narrow in throwaway git repositories: each exception
+      # passes and is load-bearing, the same address elsewhere or another
+      # address in those files still fails, and the denylist, paths and
+      # hostnames never consult them. Plain bash and git — no node required.
+      - name: production-identifier exceptions stay exact
+        run: bash scripts/test/production-identifiers-test.sh
 
   uninstall-node:
     runs-on: ubuntu-latest
