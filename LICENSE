@@ -9,6 +9,7 @@ the table below and the `LICENSE` file inside the relevant directory.
 | Directory            | License                                   | Full text                          |
 |-----------------------|-------------------------------------------|-------------------------------------|
 | `server/`             | GNU Affero General Public License v3.0 (AGPL-3.0-only) | [`server/LICENSE`](server/LICENSE) |
+| `server/third_party/pion-turn/` | MIT License (upstream `github.com/pion/turn`, The Pion community; Relayium's patches under the same license) | [`server/third_party/pion-turn/LICENSE`](server/third_party/pion-turn/LICENSE) |
 | `web/`                | GNU Affero General Public License v3.0 (AGPL-3.0-only) | [`web/LICENSE`](web/LICENSE)       |
 | `apps/`               | Apache License 2.0                        | [`apps/LICENSE`](apps/LICENSE)     |
 | `apps/windows/`       | GNU Affero General Public License v3.0 (AGPL-3.0-only) | [`apps/windows/LICENSE`](apps/windows/LICENSE) |

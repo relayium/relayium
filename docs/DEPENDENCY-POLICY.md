@@ -5,9 +5,21 @@ of those decisions are enforced automatically, and which are still a human's
 job. It covers GitHub Actions, the Swift packages behind the macOS and iOS
 apps, the Node major that CI runs, and the web lockfile.
 
-The Go module graph is governed by `server/go.mod` and `server/go.sum`, which
-the toolchain already verifies by hash on every build; it is deliberately not
-duplicated here.
+The Go module graph is governed by `server/go.mod` and `server/go.sum`: the
+toolchain checks every downloaded module against `go.sum`, so that graph is
+deliberately not duplicated here. One module is the exception.
+`github.com/pion/turn/v4` is replaced by the directory
+`server/third_party/pion-turn` — upstream v4.1.4 plus a Relayium patch, recorded
+in that directory's `PATCHES.md` — and a directory replace is neither
+downloaded nor listed in `go.sum`, so nothing in the build checks it. Its
+integrity check is a test instead: `TestPionTurnLocalCopyProvenance`
+(`server/cmd/relayium-node`) hashes every file in the copy against
+`RELAYIUM-BASELINE.sha256` (the pristine upstream files) and
+`RELAYIUM-PATCHED.sha256` (the patched and added ones), and pins the go.mod
+`require`/`replace` to the copy. It runs wherever the server tests run — the
+`test` job and `race-rest` in `.github/workflows/go.yml` — not on every
+build. The copy is its own module, which `./...` does not enter, so a separate
+`race-rest` step vets it and runs its tests under `-race`.
 
 ## The three layers
 
@@ -52,6 +64,18 @@ and **both block a pull request**. `govulncheck` runs in the `go` job of
 ./...`) and `npm audit --audit-level=high` runs in the `web` job of
 `.github/workflows/web.yml`. A new upstream advisory can therefore turn a pull
 request red without that pull request having changed anything.
+
+`govulncheck ./...` does not cover pion/turn: a directory replace has no
+version, so the scan silently skips it rather than reporting it clean. The next
+step in the same job closes that gap with a supplemental query,
+`govulncheck@v1.6.0 -mode=query -json github.com/pion/turn/v4@<version>`, where
+the version is read from `server/go.mod` (`go list -m`). Query mode exits 0
+even when it finds advisories, so the step parses the JSON stream with `jq`
+and fails on any advisory and on anything short of a well-formed, confirmed
+lookup of exactly that module and version — empty or unparseable output, a
+different scanner version or mode, an unknown message type. It asks about the
+upstream release the copy was taken from; an advisory about code the Relayium
+patch changed would still be reported, and is triaged against `PATCHES.md`.
 
 *Intended architecture, not yet implemented:* this question cannot honestly be
 answered offline — the answer changes without the repository changing, and a

@@ -169,6 +169,52 @@ jobs:
       - name: govulncheck
         working-directory: server
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+      # The step above cannot see pion/turn. server/go.mod replaces it with the
+      # directory server/third_party/pion-turn (see its PATCHES.md), and a
+      # directory replace has no version, so govulncheck reports nothing for it
+      # — not "clean", just unscanned. This asks the vulnerability database
+      # about the exact upstream version the copy was taken from instead.
+      #
+      # Query mode exits 0 whether or not it finds advisories; findings arrive
+      # only as `osv` entries in the JSON stream. So the stream is read, and
+      # everything short of a positive, well-formed "nothing found for exactly
+      # this module and version" fails: unparseable or empty output, a report
+      # from another scanner version or mode, no confirmation that this module
+      # at this version was looked up, an unknown message type, and any
+      # advisory at all. The version comes from go.mod (whose require
+      # TestPionTurnLocalCopyProvenance ties to the copy), never a second
+      # literal here.
+      - name: govulncheck (pion/turn, which the directory replace hides from the step above)
+        working-directory: server
+        shell: bash
+        run: |
+          set -euo pipefail
+          scanner=golang.org/x/vuln/cmd/govulncheck@v1.6.0
+          mod=github.com/pion/turn/v4
+          ver="$(go list -m -f '{{.Version}}' "$mod")"
+          if ! [[ "$ver" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::go.mod gives no release version for $mod (got '$ver')" >&2
+            exit 1
+          fi
+          report="$RUNNER_TEMP/govulncheck-pion-turn.json"
+          go run "$scanner" -mode=query -json "$mod@$ver" > "$report"
+          if ! jq -e -n -r \
+            --arg scanner_version "${scanner##*@}" \
+            --arg lookup "Looking up vulnerabilities in $mod at $ver..." '
+              [inputs] as $m
+              | if ($m | map(select(type != "object")) | length) > 0 then error("non-object message")
+                elif ($m | map(select(keys - ["config", "progress", "osv"] != [])) | length) > 0 then error("unknown message type")
+                elif ($m | map(select(has("config"))) | length) != 1 then error("expected exactly one config message")
+                elif ($m | map(select(.config.scanner_version == $scanner_version and .config.scan_mode == "query")) | length) != 1
+                  then error("not a govulncheck " + $scanner_version + " query-mode report")
+                elif ($m | map(select(.progress.message == $lookup)) | length) != 1 then error("no confirmation of: " + $lookup)
+                elif ($m | map(select(has("osv"))) | length) > 0
+                  then error("advisories: " + ($m | map(select(has("osv")) | "\(.osv.id) \(.osv.summary)") | join("; ")))
+                else "no advisories for " + $lookup end
+            ' < "$report"; then
+            echo "::error::$mod@$ver: the vulnerability query did not come back clean (see above)" >&2
+            exit 1
+          fi
 
   # Central runs concurrent goroutines against shared state by design — the GC
   # sweep, the metering worker, the node storage prober — and the failure mode
@@ -266,7 +312,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
+          # The second file is the nested pion-turn module's (last step), so
+          # its test-only downloads are cached with the rest.
+          cache-dependency-path: |
+            server/go.sum
+            server/third_party/pion-turn/go.sum
       - name: go test -race (every package except account)
         working-directory: server
         # Named explicitly because the last line DEPENDS on word splitting, and
@@ -288,6 +338,26 @@ jobs:
           # Word splitting is the point: this is a package list.
           # shellcheck disable=SC2086
           go test -race -count=1 -timeout 20m $PKGS
+      # server/third_party/pion-turn is pion/turn v4.1.4 plus Relayium's
+      # allocation identity patch (see its PATCHES.md), and it is its OWN
+      # module: the `go.mod` there is upstream's, byte for byte. `go list ./...`
+      # above, and every `./...` in `test`, therefore stop at that directory, so
+      # without this step the patched code's own tests — including the ones that
+      # fail on unpatched v4.1.4 — would never run anywhere. The relay node is
+      # built from this copy, so it is race-checked with everything else here,
+      # and vetted here because `test`'s `go vet ./...` cannot see it either.
+      #
+      # `.` and `./internal/...` rather than `./...`: those are the packages the
+      # node links. The rest is upstream's `examples/`, which Relayium does not
+      # build and which upstream's own code already fails `go vet` on. The
+      # module's go.sum is upstream's and verifies its test-only downloads.
+      - name: go vet and go test -race (the pion-turn local copy, a nested module)
+        working-directory: server/third_party/pion-turn
+        shell: bash
+        run: |
+          set -euo pipefail
+          go vet . ./internal/...
+          go test -race -count=1 -timeout 10m . ./internal/...
 
   # The one lane that runs an OLD server binary against a NEW database.
   #

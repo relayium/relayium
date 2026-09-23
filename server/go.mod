@@ -46,3 +46,11 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 	rsc.io/qr v0.2.0 // indirect
 )
+
+// Local copy of pion/turn v4.1.4 with one identity correction: an allocation's
+// own late relay-reader error or lifetime timer can no longer delete a newer
+// allocation that has since been created on the same 5-tuple. Provenance, the
+// exact patch and the removal trigger are in third_party/pion-turn/PATCHES.md;
+// TestPionTurnLocalCopyProvenance (cmd/relayium-node) fails if the require
+// version, this replace or the copy drift apart.
+replace github.com/pion/turn/v4 => ./third_party/pion-turn
