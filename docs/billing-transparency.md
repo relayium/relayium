@@ -99,7 +99,7 @@ relayium.com pays for, and between them they are what is metered. The direct
 paths — LAN browser, and the CLI's direct modes — run through neither.
 
 **Getting a relay credential at all requires being signed in and under quota.**
-`handleICE` (`account/turn.go:59`) is the endpoint that hands out
+`handleICE` (`account/turn.go:64`) is the endpoint that hands out
 ICE/TURN credentials for a pairing-code transfer. It:
 
 1. Resolves the pairing code to its owner account and that transfer's billing
@@ -113,7 +113,7 @@ ICE/TURN credentials for a pairing-code transfer. It:
    treats exactly zero remaining as spent). P2P direct still works in both
    cases; only relay is withheld.
 3. Embeds the owner's user ID and that transfer's **attribution tag** into the
-   TURN username as `<expiry>:<userID>.<tag>` (`account/turn.go:167`,
+   TURN username as `<expiry>:<userID>.<tag>` (`account/turn.go:236`,
    `turnCredentials` at `account/turn.go:236`) — this is the only mechanism
    that ties relay bytes back to an account.
 
@@ -199,7 +199,7 @@ migrations that follow it) — not a summary of intent, the actual columns.
 
 | Table | What's in it | Why |
 |---|---|---|
-| `users` (`sqlite.go:50`) | id, email, display name, creation time, plan tier, Stripe customer/subscription IDs and status, subscription period end, plan-change bookkeeping, and an upload-fence counter that account deletion increments (so an upload in flight across a deletion cannot be stored). **No card data** — Stripe Checkout is a hosted redirect (`account/stripe.go:311`, `EnsureCustomer`/`CreateCheckoutSession`); Relayium's server never sees a card number. |
+| `users` (`sqlite.go:50`) | id, email, display name, creation time, plan tier, Stripe customer/subscription IDs and status, subscription period end, plan-change bookkeeping, and an upload-fence counter that account deletion increments (so an upload in flight across a deletion cannot be stored). **No card data** — Stripe Checkout is a hosted redirect (`account/stripe.go:1344`, `EnsureCustomer`/`CreateCheckoutSession`); Relayium's server never sees a card number. |
 | `devices` (`sqlite.go:92`) | id, owning user, a **name** (nickname), creation and last-seen time, device kind (browser/CLI). This is the persistent paired-device list (settings page), not the realtime signaling room — see below. |
 | `usage_events` (`sqlite.go:105`) | per-TURN-allocation relayed-byte totals: alloc ID, token, user ID, bytes, timestamp, later `node_id` and `billable` (`sqlite.go:448`). |
 | `usage_periods` (`sqlite.go:1811`) | the same relay data bucketed by calendar month (`YYYYMM`), which is what billing/cap queries actually read (`account/plan_enforce.go:64`, `UserRelayedSince`). |
@@ -391,7 +391,7 @@ The dimensions actually checked, each fail-closed at write time:
   Resumable uploads (`/api/uploads`) do not use this header.
 - **Uploads in flight when an account is deleted** — every single-shot
   upload, with or without a key, is fenced against account deletion inside
-  the transaction that would store it (`UploadFence`, `account/store.go:799`):
+  the transaction that would store it (`UploadFence`, `account/store.go:812`):
   if the account was deleted after the upload was authorized — even if the
   deletion was then cancelled — it is refused with `401`, and nothing is
   stored and no daily-quota debit is written. The traffic it had already
@@ -446,7 +446,7 @@ The dimensions actually checked, each fail-closed at write time:
   expiry and/or a max-download count resolved from the request plus admin
   defaults (`account/settings.go:132-167`, `resolveRetention`/`clampTTL`),
   further capped by the owner's plan retention ceiling if lower
-  (`account/plan_enforce.go:311`, `planRetentionCap`). A file is deleted —
+  (`account/plan_enforce.go:449`, `planRetentionCap`). A file is deleted —
   ciphertext and row both — once either limit is hit; see
   [Retention](#retention-how-long-anything-is-kept).
 
@@ -479,7 +479,7 @@ gates).
 
 **Metered is not the same as paid.** What the gate actually checks is a
 verified email and *remaining allowance*, not a subscription:
-`s.trafficAllowanceSpent` (`account/plan_enforce.go:165`) withholds the TURN
+`s.trafficAllowanceSpent` (`account/plan_enforce.go:185`) withholds the TURN
 credential only once the month's traffic is exhausted. Free is a plan with an
 allowance like any other, so a signed-in Free account relays cross-network
 transfers until that allowance runs out and pays nothing. Paying is what you
@@ -517,9 +517,9 @@ including the admin-audit prune below — see the residual noted at
 | Data | Kept for | Where |
 |---|---|---|
 | Stored file (ciphertext + row) | Until its TTL/max-downloads is hit, whichever first | `ListExpiredStoredFiles` + `DeleteStoredFile`, `account/gc.go:129-141` |
-| Rolling daily-quota ledger (`upload_events`) | ~25 hours (a small margin past the 24h window it backs) | `pruneMargin`, `account/gc.go:13`, applied at `account/gc.go:130` |
-| Upload `Idempotency-Key` records (`upload_operations`) | While their file exists, then at least 24 hours after a sweep first finds the file gone (so a late retry still hears `410`); deleted with the account at a deletion request | `uploadOperationGoneRetention` (`account/sqlite.go:5942`), in the same prune as `upload_events` |
-| Download-receipt dedup rows | 24 hours | `receiptRetention`, `account/gc.go:17`, applied at `account/gc.go:135` |
+| Rolling daily-quota ledger (`upload_events`) | ~25 hours (a small margin past the 24h window it backs) | `pruneMargin`, `account/gc.go:16`, applied at `account/gc.go:160` |
+| Upload `Idempotency-Key` records (`upload_operations`) | While their file exists, then at least 24 hours after a sweep first finds the file gone (so a late retry still hears `410`); deleted with the account at a deletion request | `uploadOperationGoneRetention` (`account/sqlite.go:5946`), in the same prune as `upload_events` |
+| Download-receipt dedup rows | 24 hours | `receiptRetention`, `account/gc.go:20`, applied at `account/gc.go:135` |
 | Admin audit trail (`admin_audit`) | 2 years by default, admin-overridable (`-audit-retention-days` / `RELAYIUM_AUDIT_RETENTION_DAYS`, `main.go:350`) | `auditRetentionDefault`, `account/gc.go:64`, applied at `account/gc.go:169` |
 | Monthly relay/traffic history (`usage_events`, `usage_periods`, `usage_monthly`) | **Not pruned by age at all** while the account is active — this is the billing history the quota math depends on | No prune call for these tables exists in `GC.sweep`; confirmed by reading the full sweep function |
 | Abandoned chunked-upload session + its partial ciphertext (`upload_sessions`) | 1 hour idle, then the blob is re-read and the bytes it holds are billed. Only once that bill is recorded does one transaction remove the row and hand the partial blob to the durable pending-delete queue; the blob itself is deleted by the next GC sweep (every 10 minutes), which keeps retrying until the node accepts the delete — the reaper never deletes a blob itself. **Unreachable-node exception:** the row and partial blob are kept for as long as it takes, because the blob is the only exact byte count; it is re-probed hourly and settled when the node answers. **An upload that never became a stored object is billed for what its blob physically holds before the blob is deleted, capped at its authorized size, whether it was abandoned, refused at finalize, or its finalize crashed. This applies to uploads started after this change. Uploads already in progress when it was deployed keep the rules they started under: when such an upload is abandoned, refused at finalize, or its finalize crashed, only its acknowledged bytes are billed; if it belongs to a pairing room that ends, the room's existing rule still applies, and what its blob holds is billed, capped at its authorized size. Bytes a late append left past a completed object's size are never billed.** **Account-deletion exception:** an explicit deletion request overrides that evidence hold, removes the user-attributed row immediately, and deletes or queues deletion of the partial blob, and any residual not yet measured is forgiven | `ReapPendingUploads` / `claimUploadCleanup` / `recoverUnresolvedUploads` + `upload_sessions.unresolved_at`, `account/uploads_resumable.go`; `GC.drainPending`, `account/gc.go`; `PurgeTransientUserData`, `account/sqlite.go` |
