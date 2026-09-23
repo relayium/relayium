@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1045,15 +1046,9 @@ func TestLinkSinkDirectoryReplacementCannotRedirectCleanup(t *testing.T) {
 		sinkFill(t, k)
 		fire := once(func() { swap(t, dest) })
 		sinkHookBeforeLink = func(*linkSink, int) { fire() }
-		oldRename := sinkRename
-		renames := 0
-		sinkRename = func(r *os.Root, a, b string) error { renames++; return oldRename(r, a, b) }
-		t.Cleanup(func() { sinkHookBeforeLink, sinkRename = nil, oldRename })
+		t.Cleanup(func() { sinkHookBeforeLink = nil })
 		if err := k.install(); err != nil {
 			t.Fatal(err)
-		}
-		if renames != 0 {
-			t.Errorf("the hard link failed and the fallback ran (%d renames): this case tests the link itself", renames)
 		}
 		k.close()
 		unrelatedIntact(t, dest)
@@ -1079,78 +1074,189 @@ func TestLinkSinkDirectoryReplacementCannotRedirectCleanup(t *testing.T) {
 	})
 }
 
-// Where hard links are unsupported, the final name is reserved by creating it
-// new, recorded at once, and the staged file renamed onto it: a collision
-// gives " (1)", and a failure takes back exactly the reservation — never a
-// file under a name it did not create.
-func TestLinkSinkNoHardLinkFallback(t *testing.T) {
-	oldLink, oldRename := sinkLink, sinkRename
-	t.Cleanup(func() { sinkLink, sinkRename = oldLink, oldRename })
+// Where the no-replace hard link is unavailable, the batch is refused — never
+// installed by rename, which could overwrite a file swapped in under the
+// chosen name — and nothing is left: no final name, no staged file.
+func TestLinkSinkRefusesWithoutHardLinks(t *testing.T) {
+	old := sinkLink
+	t.Cleanup(func() { sinkLink = old })
 	sinkLink = func(*os.Root, string, string) error { return errors.New("injected: hard links unsupported") }
-	t.Run("collision", func(t *testing.T) {
-		dest := t.TempDir()
-		pairWriteFile(t, filepath.Join(dest, "f.txt"), 3)
-		k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("f.txt")})
-		if err != nil {
-			t.Fatal(err)
+	dest := t.TempDir()
+	pairWriteFile(t, filepath.Join(dest, "f.txt"), 3)
+	k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("f.txt"), sinkMeta("d/g.txt")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sinkFill(t, k)
+	err = k.install()
+	if !errors.Is(err, errSinkUnsafeFS) || !strings.Contains(err.Error(), "nothing was overwritten") {
+		t.Fatalf("install = %v, want the truthful refusal", err)
+	}
+	if err := k.discard(); err != nil {
+		t.Fatal(err)
+	}
+	if got := pairListTree(t, dest); strings.Join(got, "|") != "f.txt" {
+		t.Errorf("a refused batch left %v", got)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dest, "f.txt")); len(b) != 3 {
+		t.Error("the existing file was touched")
+	}
+}
+
+// Codex r3 #2: the install is recorded the moment the link succeeds, so a
+// verification that fails right after (an injected stat failure) still has
+// the installed name taken back.
+func TestLinkSinkPostInstallCheckFailureRollsBack(t *testing.T) {
+	old := sinkVerifyLstat
+	t.Cleanup(func() { sinkVerifyLstat = old })
+	n := 0
+	sinkVerifyLstat = func(r *os.Root, name string) (fs.FileInfo, error) {
+		if n++; n == 2 { // the second file's check
+			return nil, errors.New("injected: transient stat failure")
 		}
-		sinkFill(t, k)
-		if err := k.install(); err != nil {
-			t.Fatal(err)
-		}
-		k.close()
-		if k.rels[0] != "f (1).txt" {
-			t.Errorf("installed as %q", k.rels[0])
-		}
-		if b, _ := os.ReadFile(filepath.Join(dest, "f (1).txt")); string(b) != "a" {
-			t.Errorf("content %q", b)
-		}
-		if b, _ := os.ReadFile(filepath.Join(dest, "f.txt")); len(b) != 3 {
-			t.Error("the existing file was touched")
-		}
-		sinkNoStaging(t, dest)
-	})
-	t.Run("rename-fails", func(t *testing.T) {
-		sinkRename = func(*os.Root, string, string) error { return errors.New("injected: rename failed") }
-		t.Cleanup(func() { sinkRename = oldRename })
-		dest := t.TempDir()
-		pairWriteFile(t, filepath.Join(dest, "f.txt"), 3)
-		k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("f.txt"), sinkMeta("g.txt")})
-		if err != nil {
-			t.Fatal(err)
-		}
-		sinkFill(t, k)
-		if err := k.install(); err == nil {
-			t.Fatal("a failed rename was reported installed")
-		}
-		k.discard()
-		if got := pairListTree(t, dest); strings.Join(got, "|") != "f.txt" {
-			t.Errorf("a failed install left %v (want only the pre-existing f.txt)", got)
-		}
-	})
-	t.Run("second-file-fails-after-first-installed", func(t *testing.T) {
-		n := 0
-		sinkRename = func(r *os.Root, a, b string) error {
-			if n++; n == 2 {
-				return errors.New("injected: rename failed")
+		return r.Lstat(name)
+	}
+	dest := t.TempDir()
+	k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("d/one"), sinkMeta("d/two")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sinkFill(t, k)
+	if err := k.install(); err == nil {
+		t.Fatal("a failed check was reported installed")
+	}
+	if err := k.discard(); err != nil {
+		t.Fatal(err)
+	}
+	if got := pairListTree(t, dest); len(got) != 0 {
+		t.Errorf("a rolled-back install left %v", got)
+	}
+}
+
+// Codex r3 #4: a removal that fails is reported, naming what may be left,
+// and the ownership is kept — for a cancelled batch and for a failed install.
+func TestLinkSinkCleanupFailuresAreReported(t *testing.T) {
+	old := sinkRemove
+	t.Cleanup(func() { sinkRemove = old })
+	failFor := func(sub string) {
+		sinkRemove = func(r *os.Root, name string) error {
+			if strings.Contains(name, sub) {
+				return errors.New("injected: removal failed")
 			}
-			return r.Rename(a, b)
+			return r.Remove(name)
 		}
-		t.Cleanup(func() { sinkRename = oldRename })
+	}
+	t.Run("cancelled", func(t *testing.T) {
 		dest := t.TempDir()
-		k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("d/one"), sinkMeta("d/two")})
+		k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("d/one")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		failFor(sinkStagePrefix)
+		t.Cleanup(func() { sinkRemove = old })
+		err = k.discard()
+		if err == nil || !strings.Contains(err.Error(), "could not be removed") || !strings.Contains(err.Error(), sinkStagePrefix) {
+			t.Fatalf("discard = %v, want the leftover named", err)
+		}
+		var buf bytes.Buffer
+		(&linkUI{stderr: &buf}).discarded(nil, err)
+		if strings.Contains(buf.String(), "nothing from it was kept") || !strings.Contains(buf.String(), "could NOT be fully removed") {
+			t.Errorf("the report claims a clean removal: %q", buf.String())
+		}
+	})
+	t.Run("failed-install", func(t *testing.T) {
+		oldLstat := sinkVerifyLstat
+		t.Cleanup(func() { sinkVerifyLstat, sinkRemove = oldLstat, old })
+		sinkVerifyLstat = func(*os.Root, string) (fs.FileInfo, error) { return nil, errors.New("injected: stat failure") }
+		dest := t.TempDir()
+		k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("one")})
 		if err != nil {
 			t.Fatal(err)
 		}
 		sinkFill(t, k)
-		if err := k.install(); err == nil {
-			t.Fatal("a failed rename was reported installed")
+		failFor("one")
+		err = k.install()
+		if err == nil || !strings.Contains(err.Error(), "one could not be removed") {
+			t.Fatalf("install = %v, want the un-removable installed file named", err)
 		}
-		k.discard()
+		if k.finalName[0] != "one" {
+			t.Error("ownership of the file that could not be removed was dropped")
+		}
+		sinkRemove = old // the next attempt can remove it
+		if err := k.discard(); err != nil {
+			t.Fatal(err)
+		}
 		if got := pairListTree(t, dest); len(got) != 0 {
-			t.Errorf("a failed install left %v", got)
+			t.Errorf("left %v", got)
 		}
 	})
+}
+
+// openFDs counts this process's open descriptors.
+func openFDs(t *testing.T) int {
+	t.Helper()
+	for _, dir := range []string{"/proc/self/fd", "/dev/fd"} {
+		f, err := os.Open(dir)
+		if err != nil {
+			continue
+		}
+		names, err := f.Readdirnames(-1) // names only: stat-ing /dev/fd entries fails on macOS
+		f.Close()
+		if err == nil {
+			return len(names)
+		}
+	}
+	t.Skip("no descriptor listing here")
+	return 0
+}
+
+// Codex r3 #3: a saved batch's directory handles are released at once, so a
+// long session of folder batches keeps a bounded number of descriptors.
+func TestPairRepeatedFolderBatchesKeepDescriptorsBounded(t *testing.T) {
+	hub := startLinkDevHub(t)
+	src := t.TempDir()
+	for _, d := range []string{"a", "a/b", "a/b/c", "a/b/c/d", "a/e", "a/e/f"} {
+		pairWriteFile(t, filepath.Join(src, "tree", filepath.FromSlash(d), "x"), 10)
+	}
+	pr, pw := io.Pipe()
+	oldIn, oldTTY := pairStdin, pairStdinIsTTY
+	pairStdin = func() io.Reader { return pr }
+	pairStdinIsTTY = func() bool { return false }
+	t.Cleanup(func() { pairStdin, pairStdinIsTTY = oldIn, oldTTY; pw.Close() })
+	dest := t.TempDir()
+	var errb lockedBuf
+	done := make(chan int, 1)
+	go func() {
+		done <- Run([]string{"pair", "--server", hub.url, "--accept", "--dest", dest, ldCode}, io.Discard, &errb)
+	}()
+	<-hub.joins
+	b := startCLI(t, "B", nil, nil, "pair", "--server", hub.url, ldCode)
+	pairWaitFor(t, 30*time.Second, "admitted", func() bool { return strings.Contains(b.err.String(), "connected.") }, b)
+	const rounds = 12
+	var after3 int
+	for i := 1; i <= rounds; i++ {
+		b.line(t, "/send "+filepath.Join(src, "tree"))
+		pairWaitFor(t, 60*time.Second, fmt.Sprintf("batch %d saved", i), func() bool {
+			return strings.Count(errb.String(), "saved: every file") == i
+		}, b)
+		time.Sleep(50 * time.Millisecond) // let the loop finish the batch's bookkeeping
+		if i == 3 {
+			after3 = openFDs(t)
+		}
+	}
+	grown := openFDs(t) - after3
+	// 7 directories per batch: holding them would add ~63 descriptors over
+	// the last 9 batches.
+	if grown > 15 {
+		t.Errorf("descriptors grew by %d over %d saved folder batches: handles are kept", grown, rounds-3)
+	}
+	b.line(t, "/quit")
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatalf("A did not end\n%s", errb.String())
+	}
+	b.wait(t, 30*time.Second)
 }
 
 func TestSplitPairPaths(t *testing.T) {

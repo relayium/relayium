@@ -699,7 +699,11 @@ func (u *linkUI) recvFileDone(rel string, size uint64) {
 	}
 }
 
-func (u *linkUI) discarded(d *linkDevDriver) {
+func (u *linkUI) discarded(d *linkDevDriver, err error) {
+	if err != nil {
+		u.line("the incomplete batch could NOT be fully removed; these may still be on disk: %s", termSafe(err.Error()))
+		return
+	}
 	u.line("the partial files of that batch were removed; nothing from it was kept")
 }
 
@@ -1019,7 +1023,8 @@ var (
 	sinkHookBeforeLink    func(k *linkSink, i int)
 	sinkHookBeforeRemove  func(k *linkSink, dirPath, name string)
 	sinkLink              = func(r *os.Root, oldname, newname string) error { return r.Link(oldname, newname) }
-	sinkRename            = func(r *os.Root, oldname, newname string) error { return r.Rename(oldname, newname) }
+	sinkVerifyLstat       = func(r *os.Root, name string) (fs.FileInfo, error) { return r.Lstat(name) }
+	sinkRemove            = func(r *os.Root, name string) error { return r.Remove(name) }
 )
 
 func openLinkSink(dest string, files []linkwire.FileMeta) (*linkSink, error) {
@@ -1040,29 +1045,29 @@ func openLinkSink(dest string, files []linkwire.FileMeta) (*linkSink, error) {
 	k := &linkSink{absDest: abs, dirs: []*sinkDir{{root: top, parent: -1}}, byPath: map[string]int{"": 0}}
 	var rnd [8]byte
 	if _, err := rand.Read(rnd[:]); err != nil {
-		k.discard()
-		return nil, err
+		return nil, errors.Join(err, k.discard())
 	}
 	tag := hex.EncodeToString(rnd[:])
 	for i, f := range files {
 		segs := sinkSegments(f, i)
 		di, err := k.openDir(segs[:len(segs)-1])
 		if err != nil {
-			k.discard()
-			return nil, err
+			return nil, errors.Join(err, k.discard())
 		}
 		tmp := fmt.Sprintf("%s%s-%d", sinkStagePrefix, tag, i)
 		fh, err := k.dirs[di].root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if err != nil {
-			k.discard()
-			return nil, err
+			return nil, errors.Join(err, k.discard())
 		}
 		st, err := fh.Stat()
 		if err != nil {
 			fh.Close()
-			_ = k.dirs[di].root.Remove(tmp)
-			k.discard()
-			return nil, err
+			// Created by us a moment ago (O_EXCL); its identity is unknown,
+			// so it is removed by name and a failure reported.
+			if rerr := sinkRemove(k.dirs[di].root, tmp); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
+				err = errors.Join(err, fmt.Errorf("%s could not be removed: %w", termSafe(path.Join(k.dirs[di].path, tmp)), rerr))
+			}
+			return nil, errors.Join(err, k.discard())
 		}
 		k.fileDir = append(k.fileDir, di)
 		k.base = append(k.base, segs[len(segs)-1])
@@ -1182,13 +1187,19 @@ func (k *linkSink) install() error {
 	}
 	for i := range k.tmp {
 		if err := k.place(i); err != nil {
-			k.uninstall()
-			return err
+			return errors.Join(err, k.uninstall())
 		}
 	}
 	k.done = true
 	return nil
 }
+
+// errSinkUnsafeFS: the destination cannot install a file without the risk of
+// overwriting one (no hard links, so no atomic "create this name only if it
+// is free"). The batch is refused rather than installed by rename.
+var errSinkUnsafeFS = errors.New("this destination does not support safe installation (it has no hard links, " +
+	"which relayium needs to give a received file its name without any chance of overwriting another); " +
+	"nothing was overwritten, and the received files were not kept — choose a destination on another filesystem")
 
 // place installs file i inside its held directory.
 func (k *linkSink) place(i int) error {
@@ -1211,46 +1222,24 @@ func (k *linkSink) place(i int) error {
 		if errors.Is(err, fs.ErrExist) {
 			continue
 		}
-		if err == nil {
-			fi, err := d.root.Lstat(cand)
-			if err != nil || !os.SameFile(fi, k.staged[i]) {
-				return fmt.Errorf("%s in %s changed while it was being saved", termSafe(path.Join(d.path, cand)), termSafe(k.absDest))
-			}
-			k.finalName[i], k.finalInfo[i] = cand, fi
-			k.rels[i] = path.Join(d.path, cand)
-			k.removeOwned(k.fileDir[i], k.tmp[i], k.staged[i])
-			return nil
-		}
-		// No hard links here: reserve the final name by creating it new,
-		// record the reservation at once, then rename the staged file onto
-		// it. Nothing is copied.
-		ph, err := d.root.OpenFile(cand, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-		if errors.Is(err, fs.ErrExist) {
-			continue
-		}
 		if err != nil {
-			return err
+			// No atomic no-replace install here (link(2) is the one this
+			// uses). A rename onto a reserved name could overwrite a file
+			// swapped in under that name, so the batch is refused instead.
+			return fmt.Errorf("%w (%v)", errSinkUnsafeFS, err)
 		}
-		phInfo, err := ph.Stat()
-		if cerr := ph.Close(); err == nil {
-			err = cerr
-		}
-		if err != nil {
-			if phInfo != nil {
-				k.removeOwned(k.fileDir[i], cand, phInfo)
-			}
-			return err
-		}
-		k.finalName[i], k.finalInfo[i] = cand, phInfo
-		if err := sinkRename(d.root, k.tmp[i], cand); err != nil {
-			return err // uninstall takes back the reservation, the staged file stays owned
-		}
-		fi, err := d.root.Lstat(cand)
-		if err != nil || !os.SameFile(fi, k.staged[i]) {
-			return fmt.Errorf("%s in %s changed while it was being saved", termSafe(path.Join(d.path, cand)), termSafe(k.absDest))
-		}
-		k.finalInfo[i] = fi
+		// Installed: recorded at once, with the staged file's identity (a
+		// hard link is that very file), before any check that can fail — so
+		// a rollback always takes back what was installed.
+		k.finalName[i], k.finalInfo[i] = cand, k.staged[i]
 		k.rels[i] = path.Join(d.path, cand)
+		fi, err := sinkVerifyLstat(d.root, cand)
+		if err != nil || !os.SameFile(fi, k.staged[i]) {
+			return fmt.Errorf("%s in %s changed while it was being saved", termSafe(k.rels[i]), termSafe(k.absDest))
+		}
+		if err := k.removeOwned(k.fileDir[i], k.tmp[i], k.staged[i]); err != nil {
+			return err
+		}
 		return nil
 	}
 	return fmt.Errorf("no free name for %s in %s", termSafe(base), termSafe(k.absDest))
@@ -1258,28 +1247,68 @@ func (k *linkSink) place(i int) error {
 
 // removeOwned removes name from held directory di only while it still holds
 // the file (or directory) recorded as ours.
-func (k *linkSink) removeOwned(di int, name string, info fs.FileInfo) {
+//
+// It reports what it could not settle: a name it could not inspect, or could
+// not remove, is still (possibly) ours on disk. A name that is gone, or now
+// holds something else, is not ours to remove and is no failure.
+func (k *linkSink) removeOwned(di int, name string, info fs.FileInfo) error {
 	d := k.dirs[di]
-	if d.root == nil || info == nil {
-		return
+	if info == nil {
+		return nil
 	}
-	if fi, err := d.root.Lstat(name); err == nil && os.SameFile(fi, info) {
-		if sinkHookBeforeRemove != nil {
-			sinkHookBeforeRemove(k, d.path, name)
+	shown := termSafe(path.Join(d.path, name))
+	if d.root == nil {
+		return fmt.Errorf("%s could not be removed: its directory is no longer open", shown)
+	}
+	fi, err := d.root.Lstat(name)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil
+	case err != nil:
+		return fmt.Errorf("%s could not be checked for removal: %w", shown, err)
+	case !os.SameFile(fi, info):
+		return nil
+	}
+	if sinkHookBeforeRemove != nil {
+		sinkHookBeforeRemove(k, d.path, name)
+	}
+	if err := sinkRemove(d.root, name); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if fi.IsDir() && sinkDirNotEmpty(err) {
+			return nil // a directory of ours that now holds someone else's files stays
 		}
-		_ = d.root.Remove(name)
+		return fmt.Errorf("%s could not be removed: %w", shown, err)
 	}
+	return nil
+}
+
+// sinkDirNotEmpty: a directory removal refused because it is not empty.
+func sinkDirNotEmpty(err error) bool {
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		err = pe.Err
+	}
+	return errors.Is(err, syscall.ENOTEMPTY) || errors.Is(err, syscall.EEXIST) ||
+		strings.Contains(strings.ToLower(err.Error()), "not empty") // Windows: ERROR_DIR_NOT_EMPTY
 }
 
 // uninstall takes back every final name (installed or reserved) of ours.
-func (k *linkSink) uninstall() {
+//
+// A name it could not take back stays recorded as ours (a later attempt, and
+// the report, still know about it) and is returned in the error.
+func (k *linkSink) uninstall() error {
+	var errs []error
 	for i, name := range k.finalName {
-		if name != "" {
-			k.removeOwned(k.fileDir[i], name, k.finalInfo[i])
-			k.finalName[i], k.finalInfo[i] = "", nil
-			k.rels[i] = path.Join(k.dirs[k.fileDir[i]].path, k.base[i])
+		if name == "" {
+			continue
 		}
+		if err := k.removeOwned(k.fileDir[i], name, k.finalInfo[i]); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		k.finalName[i], k.finalInfo[i] = "", nil
+		k.rels[i] = path.Join(k.dirs[k.fileDir[i]].path, k.base[i])
 	}
+	return errors.Join(errs...)
 }
 
 // path is file i's (intended or final) location, for the finalize hook and
@@ -1295,13 +1324,13 @@ func (k *linkSink) show(i int) string {
 
 // close releases handles once the batch is installed; the files stay. An
 // uninstalled batch is discarded instead: nothing half-done is left.
-func (k *linkSink) close() {
+func (k *linkSink) close() error {
 	if !k.done {
-		k.discard()
-		return
+		return k.discard()
 	}
 	k.closeFiles()
 	k.closeDirs()
+	return nil
 }
 
 func (k *linkSink) closeFiles() {
@@ -1323,11 +1352,14 @@ func (k *linkSink) closeDirs() {
 }
 
 // discard removes exactly what this batch owns (see linkSink).
-func (k *linkSink) discard() {
+//
+// Whatever it could not remove is returned, naming each path, so the run can
+// say truthfully what was left behind.
+func (k *linkSink) discard() error {
 	k.closeFiles()
-	k.uninstall()
+	errs := []error{k.uninstall()}
 	for i, tmp := range k.tmp {
-		k.removeOwned(k.fileDir[i], tmp, k.staged[i])
+		errs = append(errs, k.removeOwned(k.fileDir[i], tmp, k.staged[i]))
 	}
 	// Created directories, deepest first, through their parents' handles,
 	// only when empty. A directory's own handle is closed before its entry
@@ -1339,8 +1371,9 @@ func (k *linkSink) discard() {
 			d.root = nil
 		}
 		if d.created {
-			k.removeOwned(d.parent, d.name, d.info)
+			errs = append(errs, k.removeOwned(d.parent, d.name, d.info))
 		}
 	}
 	k.closeDirs()
+	return errors.Join(errs...)
 }

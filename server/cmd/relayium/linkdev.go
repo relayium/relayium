@@ -1530,6 +1530,7 @@ func (d *linkDevDriver) report(lane, code string) {
 			d.finishCur()
 		case "saved(verified,durable)":
 			d.recvOK++
+			d.retireSaved()
 		case "peer-busy(batch-not-sent)":
 			if o := d.cur; o != nil && o.busy < linkDevBusyRetries && o.idx == 0 && o.off == 0 {
 				o.busy++
@@ -2481,8 +2482,25 @@ func (d *linkDevDriver) finalize(fh *os.File, name string) error {
 // closeSink releases a batch's handles and keeps its files (saved, or not
 // yet discarded).
 func (d *linkDevDriver) closeSink(prompt uint64) {
-	if k := d.sinks[prompt]; k != nil && k.out != nil {
-		k.out.close()
+	k := d.sinks[prompt]
+	if k == nil {
+		return
+	}
+	delete(d.sinks, prompt)
+	if k.out != nil {
+		if err := k.out.close(); err != nil {
+			d.fail("an incomplete batch could not be fully removed: " + err.Error())
+		}
+	}
+}
+
+// retireSaved closes every sink whose batch is installed, so a long session
+// of many folder batches does not keep every directory handle open.
+func (d *linkDevDriver) retireSaved() {
+	for p, k := range d.sinks {
+		if k.out != nil && k.out.done {
+			d.closeSink(p)
+		}
 	}
 }
 
@@ -2493,13 +2511,17 @@ func (d *linkDevDriver) discardSink(prompt uint64) {
 	if k == nil {
 		return
 	}
+	var err error
 	if k.out != nil {
-		k.out.discard()
+		err = k.out.discard()
 	}
 	delete(d.sinks, prompt)
 	d.logf("discarded a partial batch")
+	if err != nil {
+		d.record("an incomplete batch could not be fully removed: " + err.Error())
+	}
 	if d.ui != nil {
-		d.ui.discarded(d)
+		d.ui.discarded(d, err)
 	}
 }
 
