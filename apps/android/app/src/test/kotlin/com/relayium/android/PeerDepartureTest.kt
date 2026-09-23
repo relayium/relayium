@@ -430,6 +430,23 @@ class PeerDepartureTest {
         )
     }
 
+    @Test
+    fun `tearing the screen down tells a linked peer it left`() {
+        val rig = rig()
+        connect(rig)
+        val transport = rig.transport
+        rig.controller.shutdown()
+        assertTrue("both owners stopped", rig.controller.awaitShutdown(10_000))
+        assertNotNull(
+            "the peer is told with the authenticated leave, as on Disconnect",
+            transport.announcedLeave,
+        )
+        assertEquals(
+            "the announced leave first, then the teardown",
+            "local-leave", transport.closeCalls.firstOrNull(),
+        )
+    }
+
     // ── the Nearby surface ──────────────────────────────────────────────────
 
     @Test
