@@ -306,8 +306,8 @@ func rawJoin(ctx context.Context, t *testing.T, base, name string) (*websocket.C
 // The production race, on the real hub: peer1 is in the room and has just
 // caused a roster broadcast, so the hub's 200 ms debounce holds back the
 // roster that would tell us about it. peer1 learns our id and speaks at once
-// (an older CLI sends its commit as soon as its own roster names us). Join
-// throws those frames away; JoinRoom must hand them back, in order.
+// (an older CLI sends its commit as soon as its own roster names us). JoinRoom
+// must hand those frames back, in order.
 func TestJoinRoomCapturesSignalsThatBeatTheDebouncedRoster(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

@@ -1,8 +1,10 @@
 package rzvous
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/relayium/relayium/internal/secure"
 	"github.com/relayium/relayium/internal/signal"
 )
 
@@ -179,5 +182,130 @@ func TestJoinPairsTwoPeersAndRelaysSignals(t *testing.T) {
 	}
 	if strings.TrimSpace(string(got)) != `{"hi":1}` {
 		t.Fatalf("relayed data = %s", got)
+	}
+}
+
+// Join keeps what the peer said before the roster named it and replays it
+// through RecvSignal: in arrival order, only from the selected peer, and
+// before anything read off the wire afterwards (CI run 35877948854: a CLI
+// facing an app waited out its deadline for a commit it had already dropped).
+func TestJoinReplaysSignalsThatBeatTheRoster(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	joinFrame := make(chan []byte, 1)
+	base := startScriptedServer(t, func(ctx context.Context, c *websocket.Conn, join []byte) {
+		joinFrame <- join
+		for _, e := range []signal.Envelope{
+			{Type: signal.TypeSignal, From: "peer", Data: json.RawMessage(`{"i":1}`)},
+			{Type: signal.TypeWelcome, Name: "self"},
+			{Type: signal.TypeSignal, From: "gone", Data: json.RawMessage(`{"i":"x"}`)},
+			{Type: signal.TypeSignal, From: "peer", Data: json.RawMessage(`{"i":2}`)},
+			{Type: signal.TypePeers, Peers: []signal.Peer{{ID: "peer"}, {ID: "self"}}},
+			{Type: signal.TypeSignal, From: "peer", Data: json.RawMessage(`{"i":3}`)},
+		} {
+			if writeEnv(ctx, c, e) != nil {
+				return
+			}
+		}
+		_, _, _ = c.Read(ctx)
+	})
+	s, err := Join(ctx, base, "", "c")
+	if err != nil {
+		t.Fatalf("Join: %v", err)
+	}
+	defer s.Close()
+	if s.SelfID() != "self" || s.PeerID() != "peer" {
+		t.Fatalf("self %q peer %q", s.SelfID(), s.PeerID())
+	}
+	// The wire is unchanged: Join still sends no hint.
+	want, _ := signal.EncodeEnvelope(signal.Envelope{Type: signal.TypeJoin, Name: "c"})
+	if got := <-joinFrame; !bytes.Equal(got, want) {
+		t.Fatalf("join frame = %s, want %s", got, want)
+	}
+	for _, w := range []string{`{"i":1}`, `{"i":2}`, `{"i":3}`} {
+		got, err := s.RecvSignal(ctx)
+		if err != nil {
+			t.Fatalf("RecvSignal (want %s): %v", w, err)
+		}
+		if string(got) != w {
+			t.Fatalf("RecvSignal = %s, want %s", got, w)
+		}
+	}
+}
+
+// Join holds the early signals under JoinRoom's bounds and fails closed past
+// them rather than silently dropping a frame.
+func TestJoinCaptureOverflowFailsClosed(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	closed := make(chan error, 1)
+	base := startScriptedServer(t, func(ctx context.Context, c *websocket.Conn, _ []byte) {
+		_ = writeEnv(ctx, c, signal.Envelope{Type: signal.TypeWelcome, Name: "self"})
+		for i := 0; i <= MaxCapturedFrames; i++ {
+			if err := writeEnv(ctx, c, signal.Envelope{Type: signal.TypeSignal, From: "peer", Data: json.RawMessage(`{}`)}); err != nil {
+				closed <- err
+				return
+			}
+		}
+		_ = writeEnv(ctx, c, signal.Envelope{Type: signal.TypePeers, Peers: []signal.Peer{{ID: "self"}, {ID: "peer"}}})
+		_, _, err := c.Read(ctx)
+		closed <- err
+	})
+	s, err := Join(ctx, base, "", "c")
+	if !errors.Is(err, ErrCaptureOverflow) || s != nil {
+		if s != nil {
+			s.Close()
+		}
+		t.Fatalf("Join = %v, %v; want ErrCaptureOverflow", s, err)
+	}
+	if cerr := <-closed; websocket.CloseStatus(cerr) != websocket.StatusPolicyViolation {
+		t.Fatalf("server saw %v, want a policy-violation close", cerr)
+	}
+}
+
+// CLI to CLI on the real hub, with the race forced: one side's commit reaches
+// the other before the other's roster does. Both sides are the production
+// Join + DoHandshake; before Join kept early signals, the held side waited for
+// a commit it had discarded and the pairing hung.
+func TestJoinHandshakeSurvivesACommitThatBeatsTheRoster(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	hub := startHub(t)
+	held := startRosterHoldingProxy(t, hub)
+	idA, _ := secure.NewIdentity()
+	idB, _ := secure.NewIdentity()
+	type res struct {
+		h   *Handshake
+		err error
+	}
+	aCh := make(chan res, 1)
+	go func() {
+		s, err := Join(ctx, hub, "", "a")
+		if err != nil {
+			aCh <- res{err: err}
+			return
+		}
+		defer s.Close()
+		h, err := DoHandshake(ctx, s, idA, []string{"1.1.1.1:1"}, ModeText)
+		aCh <- res{h, err}
+	}()
+	s, err := Join(ctx, held, "", "b")
+	if err != nil {
+		t.Fatalf("held join: %v", err)
+	}
+	defer s.Close()
+	hb, err := DoHandshake(ctx, s, idB, []string{"2.2.2.2:2"}, ModeText)
+	if err != nil {
+		t.Fatalf("held side: %v", err)
+	}
+	ra := <-aCh
+	if ra.err != nil {
+		t.Fatalf("direct side: %v", ra.err)
+	}
+	if ra.h.SAS != hb.SAS || ra.h.IsServer == hb.IsServer {
+		t.Fatalf("SAS %s/%s, roles %v/%v", ra.h.SAS, hb.SAS, ra.h.IsServer, hb.IsServer)
+	}
+	if hb.PeerFingerprint != idA.Fingerprint || ra.h.PeerFingerprint != idB.Fingerprint {
+		t.Fatal("pinned fingerprints wrong")
 	}
 }
