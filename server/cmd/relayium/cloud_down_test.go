@@ -143,3 +143,31 @@ func TestRunDownMalformedClaim(t *testing.T) {
 		t.Fatalf("code=%d, want 2 (usage error); stderr=%q", code, errOut.String())
 	}
 }
+
+// TestRunDownCreatesMissingNestedDestDir is the CLI side of W-N27:
+// `relayium down <link> <new/nested/dir>` creates the folder it was told to
+// use, like `mkdir -p`, instead of failing after the download has streamed.
+func TestRunDownCreatesMissingNestedDestDir(t *testing.T) {
+	srv, raw := downFakeServer(t)
+	defer srv.Close()
+
+	link := srv.URL + "/d/abc123#k=" + storecrypto.EncodeKey(raw)
+	dest := filepath.Join(t.TempDir(), "new", "nested")
+
+	var out, errOut bytes.Buffer
+	code := runDown([]string{link, dest}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("runDown code=%d stdout=%q stderr=%q", code, out.String(), errOut.String())
+	}
+	wantPath := filepath.Join(dest, "hello.txt")
+	if strings.TrimSpace(out.String()) != wantPath {
+		t.Fatalf("stdout %q, want exactly %q", out.String(), wantPath)
+	}
+	if !strings.Contains(errOut.String(), "✓ downloaded 1 file(s) to "+dest+"\n") {
+		t.Fatalf("stderr %q lacks the success line for %q", errOut.String(), dest)
+	}
+	got, err := os.ReadFile(wantPath)
+	if err != nil || string(got) != "hello world" {
+		t.Fatalf("downloaded file: %q %v", got, err)
+	}
+}
