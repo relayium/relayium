@@ -3443,6 +3443,84 @@ func (s *SQLiteStore) UseEmailToken(ctx context.Context, tokenHash, purpose stri
 	return t, err == nil, err
 }
 
+// VerifyEmailWithToken spends a verify token and, in the same transaction,
+// drops an unconfirmed registration password when dropPassword is set, marks
+// the email verified and inserts sess (its ID is the raw session token).
+//
+// Every outcome other than VerifyApplied changed nothing and left the token
+// unspent, and so does a returned error: the transaction rolls back. The token
+// is spent by the same conditional UPDATE UseEmailToken runs, so of two
+// concurrent verifications with one link exactly one commits. The password
+// drop is guarded by email_verified = 0 so an already-verified account keeps
+// its password, and a pending-deletion account rolls back with the token still
+// unspent so the caller's frozen-account path can spend it.
+func (s *SQLiteStore) VerifyEmailWithToken(ctx context.Context, tokenHash string, now int64, dropPassword bool, sess Session) (VerifyOutcome, string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return VerifyTokenInvalid, "", err
+	}
+	defer tx.Rollback() // no-op after a successful Commit
+
+	res, err := tx.ExecContext(ctx,
+		`UPDATE email_tokens SET used_at = ?
+		 WHERE token_hash = ? AND purpose = 'verify' AND used_at = 0 AND expires_at > ?`,
+		now, tokenHash, now)
+	if err != nil {
+		return VerifyTokenInvalid, "", err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return VerifyTokenInvalid, "", nil
+	}
+	var userID string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT user_id FROM email_tokens WHERE token_hash = ?`, tokenHash,
+	).Scan(&userID); err != nil {
+		return VerifyTokenInvalid, "", err
+	}
+	if userID != sess.UserID {
+		return VerifyTokenInvalid, "", fmt.Errorf("account: verify token belongs to %q, session built for %q", userID, sess.UserID)
+	}
+	var deletedAt int64
+	if err := tx.QueryRowContext(ctx,
+		`SELECT deleted_at FROM users WHERE id = ?`, userID,
+	).Scan(&deletedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return VerifyTokenInvalid, "", ErrNotFound
+		}
+		return VerifyTokenInvalid, "", err
+	}
+	if deletedAt > 0 {
+		return VerifyAccountFrozen, userID, nil
+	}
+	if dropPassword {
+		res, err := tx.ExecContext(ctx,
+			`UPDATE users SET password_hash = NULL
+			 WHERE id = ? AND email_verified = 0 AND password_hash IS NOT NULL`, userID)
+		if err != nil {
+			return VerifyTokenInvalid, "", err
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			if _, err := tx.ExecContext(ctx,
+				`DELETE FROM identities WHERE provider = 'password' AND user_id = ?`, userID); err != nil {
+				return VerifyTokenInvalid, "", err
+			}
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE users SET email_verified = 1 WHERE id = ?`, userID); err != nil {
+		return VerifyTokenInvalid, "", err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO sessions (id, user_id, created_at, expires_at, revoked) VALUES (?, ?, ?, ?, 0)`,
+		authx.HashToken(sess.ID), userID, sess.CreatedAt, sess.ExpiresAt); err != nil {
+		return VerifyTokenInvalid, "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return VerifyTokenInvalid, "", err
+	}
+	return VerifyApplied, userID, nil
+}
+
 func (s *SQLiteStore) DeleteSpentEmailTokens(ctx context.Context, now int64) error {
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM email_tokens WHERE used_at <> 0 OR expires_at < ?`, now)

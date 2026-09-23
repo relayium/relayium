@@ -1064,6 +1064,12 @@ func (s *Service) handleEmailVerify(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_token"})
 		return
 	}
+	// A mistyped confirmation of the registration password changed nothing
+	// and left the link unspent, so the page can ask again.
+	if errors.Is(err, ErrVerifyPasswordMismatch) {
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "password_mismatch"})
+		return
+	}
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
