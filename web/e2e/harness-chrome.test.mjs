@@ -974,3 +974,170 @@ describe("waiting for the killed browser to release the debug port", () => {
     expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
   }, 30_000);
 });
+
+// ── closing the browser it spawned ──────────────────────────────────────────
+//
+// Measured 2026-09-23 after a real native pairing round: the old close sent one
+// SIGTERM, slept 500ms, deleted the profile and returned — and Chrome main was
+// still running with PPID 1. Chrome's first SIGTERM is a request for a graceful
+// shutdown that a live page can hold open. These stand-ins do that on purpose:
+// a real child that handles SIGTERM and stays up, so the escalation is proved
+// against a process that actually refuses, not against a mock.
+
+/** Is `pid` still a process? Signal 0 asks without sending anything. */
+const alive = (pid) => {
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === "EPERM"; }
+};
+
+/** Pids a close test observed, SIGKILLed afterwards so a failing assertion can
+ *  never leave a TERM-refusing stand-in running for the rest of the suite. */
+const closePids = [];
+afterEach(() => {
+  for (const pid of closePids.splice(0)) {
+    try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ }
+  }
+});
+
+/** The CDP stand-in, plus a marker that records its pid and every SIGTERM it
+ *  receives. `refuseTerm` keeps it running through SIGTERM, the real-session
+ *  shape; otherwise it exits on the first one. `exec` in the wrapper keeps the
+ *  recorded pid the one `launchBrowser` spawned. */
+const closeStandIn = (marker, { refuseTerm }) => nodeBrowserBinary(`${cdpServerSource()}
+import { appendFileSync } from "node:fs";
+appendFileSync(${JSON.stringify(marker)}, \`pid \${process.pid}\\n\`);
+process.on("SIGTERM", () => {
+  appendFileSync(${JSON.stringify(marker)}, "TERM\\n");
+  ${refuseTerm ? "" : "process.exit(0);"}
+});
+`);
+
+/** The stand-in's pid, as it recorded it. */
+const recordedPid = (marker) => {
+  const line = markerLines(marker).find((l) => l.startsWith("pid "));
+  const pid = Number(line?.slice(4));
+  if (!Number.isInteger(pid) || pid <= 0) throw new Error(`no pid in ${JSON.stringify(markerLines(marker))}`);
+  closePids.push(pid);
+  return pid;
+};
+const terms = (marker) => markerLines(marker).filter((l) => l === "TERM").length;
+
+describe("closing the browser it spawned", () => {
+  posixOnly("escalates to SIGKILL for a browser that ignores SIGTERM, and keeps its profile until it is gone", async () => {
+    const marker = markerPath();
+    process.env.CHROME_PATH = closeStandIn(marker, { refuseTerm: true });
+    const before = profileDirs();
+    const session = await withCapturedLog(() => launchBrowser({ debugPort: 9482 })).then((r) => r.value);
+    const pid = recordedPid(marker);
+    const mine = profileDirs().filter((n) => !before.includes(n));
+    expect(mine).toHaveLength(1);
+
+    const started = performance.now();
+    const closing = session.close();
+    for (let i = 0; i < 40 && terms(marker) === 0; i++) await sleep(25);
+    expect(terms(marker)).toBe(1);
+    // Well past the old fixed 500ms: a close that deletes the profile on a
+    // timer rather than on an observed exit would have done so by now, under a
+    // browser that is still running.
+    await sleep(1_000);
+    expect(alive(pid)).toBe(true);
+    expect(existsSync(join(tmpdir(), mine[0]))).toBe(true);
+
+    const result = await closing;
+    const elapsed = performance.now() - started;
+    // The claim is "observed", so no polling here: when close resolves, the
+    // process is already gone.
+    expect(alive(pid)).toBe(false);
+    expect(result).toEqual({ exited: true, via: "SIGKILL" });
+    expect(terms(marker)).toBe(1); // one TERM, then KILL — not a TERM loop
+    expect(elapsed).toBeGreaterThanOrEqual(1_500); // it did give TERM its grace
+    expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+  }, 30_000);
+
+  posixOnly("returns as soon as a cooperative browser exits on SIGTERM", async () => {
+    const marker = markerPath();
+    process.env.CHROME_PATH = closeStandIn(marker, { refuseTerm: false });
+    const before = profileDirs();
+    const session = await withCapturedLog(() => launchBrowser({ debugPort: 9483 })).then((r) => r.value);
+    const pid = recordedPid(marker);
+
+    const started = performance.now();
+    const result = await session.close();
+    expect(alive(pid)).toBe(false);
+    expect(result).toEqual({ exited: true, via: "SIGTERM" });
+    expect(terms(marker)).toBe(1);
+    expect(performance.now() - started).toBeLessThan(1_500); // no fixed sleep, no TERM grace spent
+    expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+  }, 30_000);
+
+  posixOnly("runs ONE close for concurrent and repeated callers", async () => {
+    const marker = markerPath();
+    process.env.CHROME_PATH = closeStandIn(marker, { refuseTerm: true });
+    const before = profileDirs();
+    const session = await withCapturedLog(() => launchBrowser({ debugPort: 9484 })).then((r) => r.value);
+    const pid = recordedPid(marker);
+
+    const first = session.close();
+    const second = session.close();
+    expect(second).toBe(first); // the same close, not a second one racing it
+    const [a, b] = await Promise.all([first, second]);
+    expect(a).toEqual({ exited: true, via: "SIGKILL" });
+    expect(b).toBe(a);
+    expect(alive(pid)).toBe(false);
+    expect(terms(marker)).toBe(1);
+
+    // After it finished: no new signal to a pid the kernel may already have
+    // handed to someone else, and the same answer.
+    expect(await session.close()).toBe(a);
+    expect(terms(marker)).toBe(1);
+    expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+  }, 30_000);
+
+  posixOnly("with keep, still stops the browser but leaves its profile", async () => {
+    const marker = markerPath();
+    process.env.CHROME_PATH = closeStandIn(marker, { refuseTerm: false });
+    const before = profileDirs();
+    const session = await withCapturedLog(() => launchBrowser({ debugPort: 9485, keep: true })).then((r) => r.value);
+    const pid = recordedPid(marker);
+
+    expect(await session.close()).toEqual({ exited: true, via: "SIGTERM" });
+    expect(alive(pid)).toBe(false);
+    const kept = profileDirs().filter((n) => !before.includes(n));
+    expect(kept).toHaveLength(1);
+    rmSync(join(tmpdir(), kept[0]), { recursive: true, force: true });
+  }, 30_000);
+
+  posixOnly("does not signal a browser that already exited, and still cleans up", async () => {
+    const marker = markerPath();
+    process.env.CHROME_PATH = closeStandIn(marker, { refuseTerm: true });
+    const before = profileDirs();
+    const session = await withCapturedLog(() => launchBrowser({ debugPort: 9486 })).then((r) => r.value);
+    const pid = recordedPid(marker);
+    process.kill(pid, "SIGKILL");
+    for (let i = 0; i < 40 && alive(pid); i++) await sleep(25);
+    expect(alive(pid)).toBe(false);
+    // A zombie still answers signal 0, so `alive` false already means Node
+    // reaped it and set its exit status in the same loop turn; this is margin.
+    await sleep(100);
+
+    const started = performance.now();
+    expect(await session.close()).toEqual({ exited: true, via: "already-exited" });
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(terms(marker)).toBe(0);
+    expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+  }, 30_000);
+
+  posixOnly("a readiness failure still reports itself, and the TERM-refusing child is reaped", async () => {
+    const marker = markerPath();
+    // Alive, silent, never opens the port, ignores SIGTERM. `exec` keeps $$.
+    process.env.CHROME_PATH = browserBinary(`echo "pid $$" >> ${JSON.stringify(marker)}\ntrap '' TERM\nexec sleep 60`);
+    const before = profileDirs();
+
+    const err = await launchFailure({ debugPort: 9487, cdpReadyTimeoutMs: 500 });
+    const pid = recordedPid(marker);
+    // The readiness diagnostic, unchanged — not something about teardown.
+    expect(err.message).toMatch(/Chrome is running but never answered on its debug port/);
+    expect(err.message).toMatch(/reached the configured 500ms readiness deadline/);
+    expect(alive(pid)).toBe(false);
+    expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+  }, 30_000);
+});

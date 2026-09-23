@@ -21,6 +21,7 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { watchChromeProcess } from "./chrome-process.mjs";
+import { closeOwnedBrowser } from "./chrome-close.mjs";
 import { cleanupStaleBrowsers } from "./stale-cleanup.mjs";
 
 export { sleep };
@@ -643,16 +644,23 @@ export async function launchBrowser({ debugPort, keep = false, cdpReadyTimeoutMs
   // arrive on the next one, and with no listener it is an uncaught exception.
   const watch = watchChromeProcess(chrome, { executable: chromeBin, debugPort });
 
-  const close = async (browser) => {
+  // One close per launch, however many callers ask: the readiness-failure path,
+  // a `finally`, and a signal handler can all reach it, and a second call must
+  // wait for the first rather than signal a pid that may already be reused.
+  let closing = null;
+  const close = (browser) => closing ??= (async () => {
     browser?.close();
-    chrome.kill();
-    watch.dispose();
-    await sleep(500); // 让 Chrome 先把 profile 目录里的文件句柄放掉
-    if (!keep) {
-      try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); }
-      catch { /* 临时目录，留着也无妨 */ }
-    }
-  };
+    // TERM, bounded wait, KILL, bounded wait — on this child only — and the
+    // profile goes only once the exit was observed (see chrome-close.mjs for
+    // the measured survivor a single TERM and a fixed 500ms sleep left behind).
+    return closeOwnedBrowser(chrome, {
+      dispose: () => watch.dispose(),
+      removeProfile: keep ? null : () => {
+        try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); }
+        catch { /* 临时目录，留着也无妨 */ }
+      },
+    });
+  })();
 
   let browser;
   // Monotonic, not `Date.now()`: this is a duration, and a wall-clock step (NTP
