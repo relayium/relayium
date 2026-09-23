@@ -3652,7 +3652,8 @@ class TransferController(
      * The caller is normally the MAIN thread (`onCleared`), and a provider
      * blocked inside a storage write can hold the storage thread for seconds —
      * awaiting that drain here was an ANR. Instead the session thread runs the
-     * whole ordered sequence: tear the transport and signalling down FIRST
+     * whole ordered sequence: announce the leave to a linked peer (best
+     * effort, as on Disconnect), tear the transport and signalling down FIRST
      * (never dependent on any storage drain), queue the final disk cleanup,
      * and only then ask both executors to stop. `shutdown()` on an executor
      * lets already-queued work finish, so the cleanup — and its truthful
@@ -3663,6 +3664,10 @@ class TransferController(
     fun shutdown() {
         val posted = runCatching {
             session.execute {
+                // The screen going away ends the link as surely as Disconnect
+                // does, so the peer is told the same way; without it a CLI or
+                // app peer can only report the link as lost (A12).
+                announceLeave()
                 closeOnSession()
                 session.shutdown()
                 storage.shutdown()
