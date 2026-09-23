@@ -1251,6 +1251,16 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case nearbyIncomingAccept = "nearby.incomingAccept"
     case nearbyIncomingDecline = "nearby.incomingDecline"
     // End A23-A25.
+    // A32: files the OS handed over wait instead of displacing a result or a session.
+    /// Shell indicator for a batch staged without navigating, because the
+    /// destination on screen holds a live transfer session.
+    case storedSendFilesWaiting = "storedSend.filesWaiting"
+    /// The indicator's one action: go to the send flow holding the batch.
+    case storedSendFilesWaitingShow = "storedSend.filesWaitingShow"
+    /// Beside a finished link or a failure: the waiting batch joins the next
+    /// selection, never this result.
+    case storedSendFilesWaitingNext = "storedSend.filesWaitingNext"
+    // End A32.
     /// The iOS drop banner. There is no rendezvous to lose here — what dropped
     /// is the local link — so `LanDiscoveryModel` renders this key instead of
     /// `nearbyReconnecting` when `LocalNearbyEnvironment` composed it.

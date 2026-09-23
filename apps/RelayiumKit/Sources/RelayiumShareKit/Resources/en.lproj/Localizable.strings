@@ -393,6 +393,11 @@
 "nearby.incomingAccept" = "Accept";
 "nearby.incomingDecline" = "Decline";
 /* End A23-A25. */
+/* A32: files the OS handed over wait instead of displacing a result or a session. */
+"storedSend.filesWaiting" = "Files are waiting to be sent as a link.";
+"storedSend.filesWaitingShow" = "Show";
+"storedSend.filesWaitingNext" = "More files are waiting. They’ll be added when you start the next send.";
+/* End A32. */
 "nearby.iosReconnecting" = "Lost the local network connection. Reconnecting…";
 
 /* MARK: drop zone, picker, received result, QR */

@@ -73,16 +73,30 @@ struct UploadPane: View {
         // `selection` is enough: the `onChange` above is what carries a staged
         // selection into the model, so this path does not — and must not — push
         // to the model itself, or an opened file would reach it by two routes.
-        .task(id: FileOpenAdoption(staged: fileOpenRouting.staged, busy: model.isBusy)) {
+        //
+        // `busy` here is "cannot take files now", which is wider than
+        // `model.isBusy` (A32 M1): a finished link or a failure is not busy, but
+        // adopting there would replace it. The batch waits for "Send another"
+        // or "Try again", and this key changes the moment either is pressed.
+        .task(id: FileOpenAdoption(staged: fileOpenRouting.staged, busy: !model.acceptsOpenedFiles)) {
             adoptOpenedFiles()
         }
+        // The model outlives this view; the store does not (A32 M2). This pane
+        // is drawn inside the shell's destination switch, so coming back to it
+        // builds an empty store beside a model still holding the selection —
+        // which hid Clear and let the next pick replace everything chosen
+        // before. On appear, and whenever the model moves on its own (a cancel,
+        // "Send another", an account change), the store takes the model's
+        // selection. `mirror` is silent, so this never pushes back.
+        .onAppear { selection.mirror(model.state) }
+        .onChange(of: model.state) { selection.mirror($0) }
     }
 
     /// Stage a batch the OS opened, if this pane is the one it was addressed to
     /// and is free to take it. `add`, not `replace` — the same call the drop
     /// zone makes.
     private func adoptOpenedFiles() {
-        guard let batch = fileOpenRouting.batch(for: .storedSend, busy: model.isBusy)
+        guard let batch = fileOpenRouting.batch(for: .storedSend, busy: !model.acceptsOpenedFiles)
         else { return }
         selection.add(batch.urls)
         fileOpenRouting.consume(batch)
@@ -166,7 +180,9 @@ struct UploadPane: View {
             HStack {
                 Button(L10n.t(.commonChooseFilesOrFolders)) { chooseFilesOrFolders(into: selection) }
                     .buttonStyle(.referenceSecondary)
-                if !selection.isEmpty {
+                // Either side having files is enough to offer Clear: `clear()`
+                // pushes an empty selection, which reaches `clearSelection`.
+                if !selection.isEmpty || !model.selectedFiles.isEmpty {
                     Button(L10n.t(.commonClear)) { selection.clear() }
                         .buttonStyle(.referenceSecondary)
                 }
@@ -294,6 +310,7 @@ struct UploadPane: View {
             ]))
                 .font(.subheadline).foregroundStyle(Palette.textTertiary)
             cliCommand(link: link)
+            waitingFilesNote
             Button(L10n.t(.uploadSendAnother)) {
                 copiedLink = nil
                 copiedCommand = nil
@@ -359,10 +376,22 @@ struct UploadPane: View {
         SectionCard(title: L10n.t(.uploadHeading)) {
             InlineMessage(.failure, message)
             PendingFileList(sessionFiles: model.sessionFiles)
+            waitingFilesNote
             // `reset` rather than `clearSelection`: a failure must not make the
             // user choose every file again.
             Button(L10n.t(.commonTryAgain)) { model.reset() }
                 .buttonStyle(.referencePrimary)
+        }
+    }
+
+    /// Said beside a result or a failure while a shared or opened batch waits
+    /// for the next selection (A32 M1), so files that did not appear are not
+    /// files the app ignored.
+    @ViewBuilder
+    private var waitingFilesNote: some View {
+        if fileOpenRouting.staged?.destination == .storedSend {
+            InlineMessage(.info, L10n.t(.storedSendFilesWaitingNext))
+                .accessibilityIdentifier("storedSend.filesWaitingNext")
         }
     }
 
