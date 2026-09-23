@@ -396,7 +396,10 @@ enum UITestMode {
                 SignalingClient(channel: UITestSilentWebSocketChannel(), name: "uitest")
             },
             legacyFallback: .terminateUnsupported,
-            localHello: linkOnlyCapsHello(linkRoomActive:))
+            localHello: linkOnlyCapsHello(linkRoomActive:),
+            // The production composition's rule, so a built-App run is evidence
+            // about the product rather than about the fixture.
+            pendingMessages: .refuseWhileWaiting)
     }
 
 

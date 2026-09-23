@@ -2263,6 +2263,11 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case sendMessageLabel = "send.messageLabel"
     case sendMessagePlaceholder = "send.messagePlaceholder"
     case sendMessageSize = "send.messageSize"
+    // The same bound as what is left or what is over, in exact bytes. The size
+    // line above rounds to one decimal of a KB, so at the limit and one byte
+    // past it both read "64.0 KB of 64.0 KB"; these are what tell them apart.
+    case sendMessageRemaining = "send.messageRemaining"
+    case sendMessageOverLimit = "send.messageOverLimit"
     case sendMessageAction = "send.messageAction"
 
     // Truthful qualifications on a send that IS allowed, said BEFORE the file is

@@ -977,6 +977,8 @@
 "send.messageLabel" = "要发送的消息";
 "send.messagePlaceholder" = "输入要发送到这台设备的消息";
 "send.messageSize" = "%1$@ / %2$@";
+"send.messageRemaining" = "剩余 %@";
+"send.messageOverLimit" = "超出上限 %@。请缩短消息，或改用文件发送。";
 "send.messageAction" = "发送消息";
 "send.caveatNeedsApproval" = "需要有人在那台设备上确认接收";
 "send.caveatDirectoryNotReady" = "它的接收文件夹需要处理，文件可能会在那里等待";
