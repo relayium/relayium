@@ -55,12 +55,25 @@ type Env struct {
 // cmd/relayium uses 1 MiB; multi-chunk tests need more).
 func New(t testing.TB, maxFile int64) *Env {
 	t.Helper()
-	return newEnv(t, maxFile)
+	return newEnvAt(t, maxFile, ":memory:", t.TempDir())
+}
+
+// NewAt is New on a SQLite file and blob directory the caller owns, so the
+// state a delivery leaves behind can be opened afterwards by another build of
+// the server (the W-N40 legacy-reader check).
+func NewAt(t testing.TB, maxFile int64, dbPath, blobDir string) *Env {
+	t.Helper()
+	return newEnvAt(t, maxFile, dbPath, blobDir)
 }
 
 func newEnv(t testing.TB, maxFile int64) *Env {
 	t.Helper()
-	store, err := account.OpenSQLite(":memory:")
+	return newEnvAt(t, maxFile, ":memory:", t.TempDir())
+}
+
+func newEnvAt(t testing.TB, maxFile int64, dbPath, blobDir string) *Env {
+	t.Helper()
+	store, err := account.OpenSQLite(dbPath)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -70,7 +83,7 @@ func newEnv(t testing.TB, maxFile int64) *Env {
 		DefaultTTL: 3600, MaxTTL: 7200, DefaultRetention: 1,
 		DefaultMaxDownloads: 5, MaxMaxDownloads: 100,
 	})
-	disk, err := storage.NewDiskStore(t.TempDir())
+	disk, err := storage.NewDiskStore(blobDir)
 	if err != nil {
 		t.Fatalf("disk store: %v", err)
 	}

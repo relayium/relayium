@@ -469,7 +469,104 @@ func TestDeviceListAdvertisesZeroLengthStoredObjects(t *testing.T) {
 	}
 	decodeJSON(t, resp, &out)
 	if len(out.ServerCapabilities) != 1 || out.ServerCapabilities[0] != CapZeroLengthStoredObject ||
-		CapZeroLengthStoredObject != "stored-object-zero-length-v1" {
+		CapZeroLengthStoredObject != "stored-object-zero-length-v2" {
 		t.Fatalf("serverCapabilities = %v", out.ServerCapabilities)
+	}
+}
+
+// Finalize materializes a real zero-byte blob for a zero-byte upload, so a
+// reader that predates openStoredObject (a rollback target, or an older build
+// beside this one) finds an object where the row says one is. The append that
+// creates it never truncates: bytes a node committed without the session
+// recording them stay on the blob as A01's residual evidence.
+func TestEmptyFinalizeMaterializesAZeroByteBlobWithoutTruncating(t *testing.T) {
+	ts, svc, store, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "empty-mat@example.com")
+	blobSize := func(id string) int64 {
+		t.Helper()
+		sf, err := store.GetStoredFile(context.Background(), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rc, err := svc.blobs.Get(context.Background(), sf.BlobKey)
+		if err != nil {
+			t.Fatalf("object %s has no blob: %v", id, err)
+		}
+		defer rc.Close()
+		b, _ := io.ReadAll(rc)
+		return int64(len(b))
+	}
+	c, id := finalizeOnce(t, ts, cookie, landEmptyUpload(t, ts, cookie))
+	if c != http.StatusOK {
+		t.Fatalf("finalize = %d", c)
+	}
+	if n := blobSize(id); n != 0 {
+		t.Fatalf("materialized blob holds %d bytes; want 0", n)
+	}
+
+	// Residual bytes on the blob that the session never recorded.
+	uploadID := landEmptyUpload(t, ts, cookie)
+	u, _ := store.UpsertUserByEmail(context.Background(), "empty-mat@example.com", "")
+	sess, ok, err := store.GetUploadSession(context.Background(), uploadID, u.ID)
+	if err != nil || !ok {
+		t.Fatal(err)
+	}
+	if _, err := svc.blobs.Append(context.Background(), sess.BlobKey, 0, bytes.NewReader([]byte("residual"))); err != nil {
+		t.Fatal(err)
+	}
+	c, id = finalizeOnce(t, ts, cookie, uploadID)
+	if c != http.StatusOK {
+		t.Fatalf("finalize with residual = %d", c)
+	}
+	if n := blobSize(id); n != int64(len("residual")) {
+		t.Fatalf("blob holds %d bytes after finalize; the materializing append must not truncate", n)
+	}
+	if code, b, _ := downloadFileResp(t, ts, id, nil); code != http.StatusOK || len(b) != 0 {
+		t.Fatalf("the committed object is empty: %d, %d bytes", code, len(b))
+	}
+}
+
+// If the empty blob cannot be created (its storage node is down), the finalize
+// is refused BEFORE the object exists: no row, no debit, and the terminal
+// claim answers every retry 409.
+func TestEmptyFinalizeWithStorageDownRefusesWithoutADebit(t *testing.T) {
+	ts, svc, store, mail := newFileServer(t)
+	cookie := loginCookie(t, ts, mail, "empty-down@example.com")
+	u, _ := store.UpsertUserByEmail(context.Background(), "empty-down@example.com", "")
+	var patches int64
+	var mu sync.Mutex
+	node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		if r.Method == http.MethodPatch {
+			patches++
+		}
+		mu.Unlock()
+		panic(http.ErrAbortHandler) // down: every request dropped
+	}))
+	t.Cleanup(node.Close)
+	if _, err := store.UpsertNode(context.Background(), Node{
+		ID: "downnode", OwnerType: "fleet", StorageEnabled: true, StorageURL: node.URL, StorageSecret: "s",
+		StorageTotal: 1 << 40, StorageFree: 1 << 39, CreatedAt: 1, LastSeenAt: svc.now().Unix(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	uploadID := landEmptyUpload(t, ts, cookie)
+	if c, _ := finalizeOnce(t, ts, cookie, uploadID); c != http.StatusServiceUnavailable {
+		t.Fatalf("finalize with the node down = %d; want 503", c)
+	}
+	mu.Lock()
+	if patches == 0 {
+		mu.Unlock()
+		t.Fatal("finalize never tried to create the empty blob on the node")
+	}
+	mu.Unlock()
+	if c, _ := finalizeOnce(t, ts, cookie, uploadID); c != http.StatusConflict {
+		t.Fatalf("retry = %d; want 409", c)
+	}
+	if n := storedFileCount(t, store, u.ID); n != 0 {
+		t.Fatalf("stored objects = %d; a refused finalize must leave none", n)
+	}
+	if q := quotaUsed(t, store, u.ID); q != 0 {
+		t.Fatalf("debit = %d; a refused finalize must leave none", q)
 	}
 }

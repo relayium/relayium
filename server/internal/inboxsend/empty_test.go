@@ -132,10 +132,13 @@ func TestEmptyDeliveriesArriveAsTheExactTree(t *testing.T) {
 					t.Fatalf("daily quota moved by %d; want exactly one %d floor", delta, quotaFloor)
 				}
 				if node != nil {
-					entries := 0
+					// Exactly one blob: the ciphertext for a delivery with bytes, or the
+					// zero-byte blob finalize materializes for an all-empty one, so a
+					// reader that predates the empty-object read path still finds it.
+					var sizes []int64
 					_ = filepath.Walk(node.Dir, func(_ string, fi os.FileInfo, _ error) error {
 						if fi != nil && !fi.IsDir() {
-							entries++
+							sizes = append(sizes, fi.Size())
 						}
 						return nil
 					})
@@ -145,11 +148,8 @@ func TestEmptyDeliveriesArriveAsTheExactTree(t *testing.T) {
 							allEmpty = false
 						}
 					}
-					if allEmpty && entries != 0 {
-						t.Fatalf("the node holds %d files for an all-empty delivery; nothing should be written", entries)
-					}
-					if !allEmpty && entries != 1 {
-						t.Fatalf("the node holds %d files; want the one non-empty blob", entries)
+					if len(sizes) != 1 || (allEmpty && sizes[0] != 0) || (!allEmpty && sizes[0] == 0) {
+						t.Fatalf("node blobs = %v; want exactly one (zero bytes iff all-empty)", sizes)
 					}
 				}
 			})
@@ -372,4 +372,147 @@ func TestAllEmptySendRequiresTheServerCapability(t *testing.T) {
 			t.Fatalf("quota = %d; want two floors", q)
 		}
 	})
+}
+
+// Codex r2 finding 1: `inbox retry` of an unfinished ALL-EMPTY send checks the
+// capability on its own fresh read. After a rollback it sends nothing — no
+// finalize, no create — keeps the record, and reports server_unsupported
+// without claiming that nothing was charged; after re-promotion the same
+// record finishes normally. Covered for every phase a record can be in,
+// including ones whose earlier request may already have committed.
+func TestRetryOfAnAllEmptySendIsGatedOnTheCapability(t *testing.T) {
+	type setup struct {
+		name  string
+		phase string
+		// prepare leaves one all-empty journal behind and returns its id and
+		// whether the object was already stored (and so charged) by then.
+		prepare func(t *testing.T, w *world, s *Session, root string) (string, bool)
+	}
+	sendExpectingJournal := func(t *testing.T, w *world, s *Session, root string) string {
+		t.Helper()
+		_, err := s.Send(context.Background(), SendRequest{To: w.target.id, Paths: []string{filepath.Join(root, "e")}})
+		e := AsError(err)
+		if e == nil || e.LocalSendID == "" {
+			t.Fatalf("send = %v; want a failure that kept its record", err)
+		}
+		return e.LocalSendID
+	}
+	finalize503 := func(w *world) {
+		w.env.Faults.Add(&sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.Status,
+			Code: http.StatusServiceUnavailable, Times: finalizeAttempts})
+	}
+	cases := []setup{
+		{name: "uploading", phase: PhaseUploading, prepare: func(t *testing.T, w *world, s *Session, root string) (string, bool) {
+			finalize503(w) // never reaches the handler: nothing was finalized
+			id := sendExpectingJournal(t, w, s, root)
+			j, err := s.store.load(id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			j.Phase = PhaseUploading // a process that died right after init
+			if err := s.store.save(j); err != nil {
+				t.Fatal(err)
+			}
+			return id, false
+		}},
+		{name: "finalizing, earlier finalize never arrived", phase: PhaseFinalizing,
+			prepare: func(t *testing.T, w *world, s *Session, root string) (string, bool) {
+				finalize503(w)
+				return sendExpectingJournal(t, w, s, root), false
+			}},
+		{name: "finalizing, earlier finalize committed but its answer was lost", phase: PhaseFinalizing,
+			prepare: func(t *testing.T, w *world, s *Session, root string) (string, bool) {
+				w.env.Faults.Add(&sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.DropResponse})
+				w.env.Faults.Add(&sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.Status,
+					Code: http.StatusServiceUnavailable, Times: finalizeAttempts})
+				return sendExpectingJournal(t, w, s, root), true
+			}},
+		{name: "finalized, create answers ambiguous", phase: PhaseFinalized,
+			prepare: func(t *testing.T, w *world, s *Session, root string) (string, bool) {
+				// Every create in this process is answered 503 (ambiguous: it may
+				// have landed) and the lookup finds nothing, so the record stays in
+				// finalized — the object stored and charged, the task unknown.
+				w.env.Faults.Add(&sendtest.Rule{Method: http.MethodPost, PathSuffix: "/inbox/tasks", Action: sendtest.Status,
+					Code: http.StatusServiceUnavailable, Times: createAttempts})
+				id := sendExpectingJournal(t, w, s, root)
+				if n := w.env.Faults.Hits(sendtest.KeyCreate); n != createAttempts {
+					t.Fatalf("creates = %d; the fault budget no longer matches the sender's", n)
+				}
+				return id, true
+			}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			fastBackoff(t)
+			w := newWorld(t, 4<<20)
+			root := writeTree(t, map[string][]byte{"e/a": {}, "e/b": {}})
+			s := w.session()
+			id, charged := c.prepare(t, w, s, root)
+			w.env.Faults.ReleaseAll()
+			j, err := s.store.load(id)
+			if err != nil || j.Phase != c.phase || j.CiphertextBytes != 0 {
+				t.Fatalf("journal = %+v (%v); want an all-empty record in %s", j, err, c.phase)
+			}
+			wantQuota := int64(0)
+			if charged {
+				wantQuota = quotaFloor
+			}
+			if q := w.env.QuotaBytes(w.uid); q != wantQuota {
+				t.Fatalf("quota before retry = %d; want %d", q, wantQuota)
+			}
+
+			// Rolled back: the retry sends nothing and keeps the record.
+			w.env.Faults.SetLegacyServer(true)
+			fins, creates := w.env.Faults.Hits(sendtest.KeyFinalize), w.env.Faults.Hits(sendtest.KeyCreate)
+			_, err = s.Retry(context.Background(), id)
+			e := AsError(err)
+			if e == nil || e.Code != CodeServerUnsupported || e.LocalSendID != id {
+				t.Fatalf("retry on a rolled-back server = %v; want server_unsupported with the record kept", err)
+			}
+			if strings.Contains(e.Msg, "nothing was charged") || strings.Contains(e.Msg, "not counted") {
+				t.Fatalf("the message claims nothing was charged: %s", e.Msg)
+			}
+			if c.phase == PhaseFinalized && !strings.Contains(e.Msg, "completed and counted") {
+				t.Fatalf("a finalized record must say its upload was counted: %s", e.Msg)
+			}
+			if c.phase == PhaseFinalizing && !strings.Contains(e.Msg, "may already have completed") {
+				t.Fatalf("a finalizing record must say an earlier attempt may have completed: %s", e.Msg)
+			}
+			if w.env.Faults.Hits(sendtest.KeyFinalize) != fins || w.env.Faults.Hits(sendtest.KeyCreate) != creates {
+				t.Fatal("the retry reached finalize or create on a server without the capability")
+			}
+			if _, err := s.store.load(id); err != nil {
+				t.Fatalf("the record was not kept: %v", err)
+			}
+			if q := w.env.QuotaBytes(w.uid); q != wantQuota {
+				t.Fatalf("quota after the refused retry = %d; want %d", q, wantQuota)
+			}
+
+			// Promoted again: the same record finishes (or, when an earlier
+			// finalize committed unseen, ends as the existing unknown outcome) —
+			// never a second upload and never a second floor.
+			w.env.Faults.SetLegacyServer(false)
+			inits := w.env.Faults.Hits(sendtest.KeyInit)
+			res, err := s.Retry(context.Background(), id)
+			if w.env.Faults.Hits(sendtest.KeyInit) != inits {
+				t.Fatal("a retry opened an upload")
+			}
+			if q := w.env.QuotaBytes(w.uid); q != quotaFloor && !(q == 0 && err != nil) {
+				t.Fatalf("quota after re-promotion = %d (err %v); want at most one floor", q, err)
+			}
+			if c.name == "finalizing, earlier finalize committed but its answer was lost" {
+				if e := AsError(err); e == nil || e.Code != CodeUnknownOutcome {
+					t.Fatalf("retry = %v; want the unchanged unknown outcome for a finalize that committed unseen", err)
+				}
+				return
+			}
+			if err != nil || res.State != "queued" {
+				t.Fatalf("retry after re-promotion = %+v, %v; want a queued task", res, err)
+			}
+			d := w.receive(res.TaskID)
+			if len(d.manifest.Items) != 2 || len(d.blob) != 0 {
+				t.Fatalf("delivered %d items, %d ciphertext bytes", len(d.manifest.Items), len(d.blob))
+			}
+		})
+	}
 }

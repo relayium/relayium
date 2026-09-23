@@ -122,6 +122,10 @@ const (
 	CodeStoredObjectUnavailable = "stored_object_unavailable"
 	CodeStoredObjectBound       = "stored_object_already_bound"
 	CodeInboxQueueFull          = "inbox_queue_full"
+	// CodeServerUnsupported: an unfinished all-empty send met a server that no
+	// longer advertises zero-length stored objects (a rollback). The record is
+	// kept for a later `inbox retry`.
+	CodeServerUnsupported = "server_unsupported"
 )
 
 // CodeUsage is a command line the CLI could not accept. This package never

@@ -1213,6 +1213,25 @@ func (s *Service) probeBlobSize(ctx context.Context, bs storage.BlobStore, sess 
 	return 0, false
 }
 
+// materializeEmptyBlob makes sure the blob of a zero-byte upload exists, so
+// every reader finds an object where the row says one is. It is the probe's
+// own zero-byte append at offset 0: it creates the key when nothing was ever
+// written and never truncates or overwrites anything — a blob that already
+// holds bytes (an append that committed on the node but not in the session)
+// answers with its real size, and those bytes stay as the evidence A01's
+// residual accounting reads. Either answer means the blob exists.
+func (s *Service) materializeEmptyBlob(ctx context.Context, sess UploadSessionRow) bool {
+	bs, err := s.blobFor(ctx, sess.NodeID)
+	if err != nil {
+		log.Printf("upload finalize %s: resolving storage for its empty blob: %v", sess.ID, err)
+		return false
+	}
+	empty := sess
+	empty.Received = 0
+	_, ok := s.probeBlobSize(ctx, bs, empty)
+	return ok
+}
+
 // blobProbeTimeout bounds one read-back probe against a node that is not
 // answering. Short: the answer is worth having, but never worth a request
 // goroutine.
@@ -1447,6 +1466,18 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 			Event: UploadEvent{ID: authx.NewID(), UserID: u.ID, Bytes: billed, UploadedAt: now},
 			Since: now - dayWindow, Quota: quota,
 		}
+	}
+
+	// A zero-byte upload sent no PATCH, so nothing ever created its blob. It is
+	// created here, empty, BEFORE the object exists (W-N40): a reader that
+	// predates openStoredObject — any build this server may be rolled back to,
+	// or run beside — goes to storage for every object, and without a blob it
+	// answers stored_object_unavailable and deletes the row of an object that
+	// was already stored and debited. A failure refuses this finalize through
+	// fail, so there is no object and no debit.
+	if size == 0 && !s.materializeEmptyBlob(r.Context(), sess) {
+		fail("storage unavailable", http.StatusServiceUnavailable)
+		return
 	}
 
 	fid := authx.NewID()
