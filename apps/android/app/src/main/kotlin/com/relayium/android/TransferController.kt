@@ -3666,8 +3666,9 @@ class TransferController(
             session.execute {
                 // The screen going away ends the link as surely as Disconnect
                 // does, so the peer is told the same way; without it a CLI or
-                // app peer can only report the link as lost (A12).
-                announceLeave()
+                // app peer can only report the link as lost (A12). Best effort:
+                // nothing here may keep the teardown below from running.
+                runCatching { announceLeave() }
                 closeOnSession()
                 session.shutdown()
                 storage.shutdown()
