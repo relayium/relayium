@@ -33,9 +33,12 @@ type sealer struct {
 	manifest bool
 	next     uint64
 	spent    bool
-	sealAt   func(seq uint64, pt []byte, framed bool) ([]byte, error)
-	wrap     func(pub *[32]byte) ([]byte, error)
-	wipe     func()
+	// sealed is true once closeSealing ran: the key can still be wrapped to a
+	// device key, but nothing can be sealed under it any more.
+	sealed bool
+	sealAt func(seq uint64, pt []byte, framed bool) ([]byte, error)
+	wrap   func(pub *[32]byte) ([]byte, error)
+	wipe   func()
 }
 
 // sealObserver is a TEST-ONLY hook: when set, it is told every (sealer
@@ -77,7 +80,7 @@ func (s *sealer) observe(seq uint64) {
 
 // sealManifest seals the manifest plaintext at seq 0. Callable once.
 func (s *sealer) sealManifest(pt []byte) ([]byte, error) {
-	if s.spent {
+	if s.spent || s.sealed {
 		return nil, errSealerSpent
 	}
 	if s.manifest {
@@ -91,7 +94,7 @@ func (s *sealer) sealManifest(pt []byte) ([]byte, error) {
 // frame seals the next plaintext chunk at the next seq and returns
 // uint32BE(len)||ct.
 func (s *sealer) frame(pt []byte) ([]byte, error) {
-	if s.spent {
+	if s.spent || s.sealed {
 		return nil, errSealerSpent
 	}
 	if !s.manifest {
@@ -101,6 +104,19 @@ func (s *sealer) frame(pt []byte) ([]byte, error) {
 	s.next++
 	s.observe(seq)
 	return s.sealAt(seq, pt, true)
+}
+
+// closeSealing ends every sealing use of the key while keeping wrapTo. A
+// resumable send calls it once its encrypted copy is complete: from then on
+// the process may still re-wrap the SAME key to a rotated device key (not a
+// nonce-bearing use), but no frame or manifest can be sealed again under it,
+// whatever the code path.
+func (s *sealer) closeSealing() {
+	if s == nil || s.spent {
+		return
+	}
+	s.sealed = true
+	s.sealAt = nil
 }
 
 // frames reports how many payload frames have been sealed.

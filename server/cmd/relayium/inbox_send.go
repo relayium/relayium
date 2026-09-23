@@ -66,7 +66,7 @@ flags:
 const inboxSendUsage = `relayium inbox send — send files or folders to one of your devices
 
 usage:
-  relayium inbox send --to <device> [--ttl D] [--wait[=D]] [--json] [--config-dir D] <path...>
+  relayium inbox send --to <device> [--ttl D] [--resumable] [--wait[=D]] [--json] [--config-dir D] <path...>
 
 Encrypts the files on this machine under a new key, uploads only the
 ciphertext, and queues it for the device you name. The key travels sealed to
@@ -94,6 +94,13 @@ flags:
                    devices"). Your own current device is a valid target.
   --ttl D          retention: 7d, 2w, 2h, 90m, or a number of seconds. The plan's
                    cap still applies.
+  --resumable      first encrypt the whole delivery into a local encrypted copy
+                   in the configuration directory, then upload from that copy,
+                   so an upload stopped part-way can be resumed with "relayium
+                   inbox retry <id>" (see below). Needs free disk space for the
+                   whole encrypted delivery (checked before anything is
+                   encrypted) and takes an extra pass before the upload starts.
+                   Available on macOS and Linux.
   --wait[=D]       after queueing, wait until the device reports the delivery
                    saved or it ends otherwise (default 10m; e.g. --wait=1h)
   --json           print one JSON document with the outcome
@@ -115,6 +122,16 @@ What happens when things go wrong:
     resumed: run "relayium inbox send" again, which is a new upload and is
     counted again. The partial upload becomes eligible for cleanup after about
     an hour; cleanup runs periodically and can be delayed.
+  - With --resumable, "relayium inbox retry <id>" instead continues a stopped
+    upload from the local encrypted copy, without encrypting again and without
+    reading your files again (changing them afterwards changes nothing that is
+    sent). It works while the server still holds the upload — one that
+    receives no data for about an hour is removed — and then the send fails
+    rather than being uploaded again. The copy is deleted once the send is
+    finished or has failed, with "relayium inbox retry --discard <id>", or
+    once it is older than 24 hours (the next time "relayium inbox sent" or
+    "relayium inbox send --resumable" runs). The encryption key is never written to disk, so a copy
+    alone cannot be read by anyone, including you.
   - If the device's receiving key changes while the command runs, the delivery
     is sealed to the new key. After a restart it cannot be, and the send fails
     — or, if an earlier attempt may already have queued it, the outcome is
@@ -168,12 +185,16 @@ const inboxRetryUsage = `relayium inbox retry — finish a send that was interru
 
 usage:
   relayium inbox retry <id> [--wait[=D]] [--json] [--config-dir D]
+  relayium inbox retry --discard <id> [--json] [--config-dir D]
 
 <id> is the local send id "relayium inbox send" printed when it could not
 finish (also listed by "relayium inbox sent"). Retry never encrypts and never
-uploads: it completes the send from what is already on the server, or says
-that it cannot. An upload stopped part-way cannot be resumed — run "relayium
-inbox send" again, which is a new upload and is counted again.
+uploads your files again: it completes the send from what is already on the
+server, or says that it cannot. An upload stopped part-way cannot be resumed
+— run "relayium inbox send" again, which is a new upload and is counted
+again — unless it was sent with --resumable: then retry uploads the rest of
+that send's local encrypted copy (all of it, if the upload never got under
+way). Retry never replaces an upload the server no longer has with a new one.
 
 It must run with the same login that started the send; logging in again
 creates a new device, which cannot finish another device's send.
@@ -182,6 +203,9 @@ Requires "relayium login" and network access.
 
 flags:
   --wait[=D]       after queueing, wait until the device reports it saved
+  --discard        do not finish it: remove the local record (and a resumable
+                   send's local encrypted copy) and say what the server still
+                   holds. Local only; it needs no network.
   --json           print one JSON document with the outcome
   --config-dir D   credential/state directory (default ~/.config/relayium)
 `
@@ -500,9 +524,10 @@ func runInboxSend(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("inbox send", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var configDir, to, ttlArg string
-	var asJSON bool
+	var asJSON, resumable bool
 	var wait waitFlag
 	fs.StringVar(&to, "to", "", "receiving device: id or unique name (required)")
+	fs.BoolVar(&resumable, "resumable", false, "encrypt into a local copy first, so an interrupted upload can be resumed")
 	fs.StringVar(&ttlArg, "ttl", "", "retention, as a duration (7d, 2h, 90m) or seconds")
 	fs.Var(&wait, "wait", "wait until the device saves the delivery (default 10m; --wait=D)")
 	fs.BoolVar(&asJSON, "json", false, "print one JSON document")
@@ -534,7 +559,7 @@ func runInboxSend(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, cancel := signalContext()
 	defer cancel()
-	res, err := s.Send(ctx, inboxsend.SendRequest{To: to, Paths: fs.Args(), TTL: ttl})
+	res, err := s.Send(ctx, inboxsend.SendRequest{To: to, Paths: fs.Args(), TTL: ttl, Resumable: resumable})
 	if err != nil {
 		return failure(err, asJSON, stdout, stderr)
 	}
@@ -550,9 +575,10 @@ func runInboxRetry(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("inbox retry", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var configDir string
-	var asJSON bool
+	var asJSON, discard bool
 	var wait waitFlag
 	fs.Var(&wait, "wait", "wait until the device saves the delivery (default 10m; --wait=D)")
+	fs.BoolVar(&discard, "discard", false, "remove the local record and encrypted copy instead of finishing")
 	fs.BoolVar(&asJSON, "json", false, "print one JSON document")
 	inboxConfigDirFlag(fs, &configDir)
 	if wantsHelpFS(fs, args) {
@@ -565,6 +591,12 @@ func runInboxRetry(args []string, stdout, stderr io.Writer) int {
 	if fs.NArg() != 1 {
 		return usageFailure(asJSON, stdout, stderr, "inbox retry needs exactly one local send id\n\n%s", inboxRetryUsage)
 	}
+	if discard {
+		if wait.on {
+			return usageFailure(asJSON, stdout, stderr, "--discard and --wait cannot be combined\n")
+		}
+		return runInboxDiscard(configDir, fs.Arg(0), asJSON, stdout, stderr)
+	}
 	s, rc := openSender(configDir, asJSON, stdout, stderr)
 	if s == nil {
 		return rc
@@ -576,6 +608,27 @@ func runInboxRetry(args []string, stdout, stderr io.Writer) int {
 		return failure(err, asJSON, stdout, stderr)
 	}
 	return reportQueued(ctx, s, res, wait, asJSON, stdout, stderr)
+}
+
+// runInboxDiscard is `inbox retry --discard <id>`: local only, no login.
+func runInboxDiscard(configDir, id string, asJSON bool, stdout, stderr io.Writer) int {
+	cfgDir, err := resolveConfigDir(configDir)
+	if err != nil {
+		e := &inboxsend.Error{Class: inboxsend.ClassFailed, Code: inboxsend.CodeLocalState,
+			Msg: "cannot find the configuration directory: " + termtext.Safe(err.Error())}
+		return failure(e, asJSON, stdout, stderr)
+	}
+	r, err := inboxsend.Discard(cfgDir, id)
+	if err != nil {
+		return failure(err, asJSON, stdout, stderr)
+	}
+	fmt.Fprintf(stderr, "Discarded the unfinished send %s (it was %s). %s\n", r.LocalSendID, r.Phase, r.Message)
+	if asJSON {
+		writeJSON(stdout, map[string]string{"localSendId": r.LocalSendID, "phase": r.Phase, "result": "discarded"})
+	} else {
+		fmt.Fprintf(stdout, "%s discarded\n", r.LocalSendID)
+	}
+	return 0
 }
 
 // ---------------------------------------------------------------- sent
@@ -651,7 +704,7 @@ func runInboxSent(args []string, stdout, stderr io.Writer) int {
 		ls := make([]map[string]any, 0, len(locals))
 		for _, l := range locals {
 			ls = append(ls, map[string]any{"localSendId": l.LocalSendID, "phase": l.Phase,
-				"targetDeviceId": l.TargetDeviceID, "createdAt": l.CreatedAt})
+				"targetDeviceId": l.TargetDeviceID, "createdAt": l.CreatedAt, "resumable": l.Resumable})
 		}
 		writeJSON(stdout, map[string]any{"tasks": ts, "localSends": ls})
 		return 0

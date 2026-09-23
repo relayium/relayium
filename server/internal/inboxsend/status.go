@@ -77,6 +77,8 @@ type LocalSend struct {
 	Phase          string
 	TargetDeviceID string
 	CreatedAt      int64
+	// Resumable is a `send --resumable` record with a local encrypted copy.
+	Resumable bool
 }
 
 // staleJournalAge is when an unfinished local record stops being useful: the
@@ -85,7 +87,10 @@ type LocalSend struct {
 const staleJournalAge = 7 * 24 * time.Hour
 
 // LocalSends lists unfinished local sends and removes records too old to be of
-// use (reported on Notice). It never creates the journal directory.
+// use (reported on Notice): any record after staleJournalAge, and a resumable
+// send's local encrypted copy after spoolMaxAge (spool.go), together with its
+// record while the record still needed it. Copies no record owns are removed
+// too. It never creates the journal directory.
 func (s *Session) LocalSends() []LocalSend {
 	ids, err := s.store.ids()
 	if err != nil {
@@ -99,16 +104,25 @@ func (s *Session) LocalSends() []LocalSend {
 			s.notef("warning: local send record %s is unreadable and was left untouched", id)
 			continue
 		}
+		if s.expireSpooled(j) {
+			continue
+		}
 		if s.now().Sub(time.Unix(j.CreatedAt, 0)) > staleJournalAge {
 			if lk, lerr := s.store.lock(id); lerr == nil {
-				_ = s.store.remove(id)
+				if s.store.remove(id) == nil && j.Spooled() {
+					_ = s.store.removeSpool(id)
+				}
 				lk.release()
 				s.notef("removed the local record of an unfinished send from %s (%s); it can no longer be completed",
 					time.Unix(j.CreatedAt, 0).UTC().Format(time.RFC3339), id)
 				continue
 			}
 		}
-		out = append(out, LocalSend{LocalSendID: id, Phase: j.Phase, TargetDeviceID: j.TargetDeviceID, CreatedAt: j.CreatedAt})
+		out = append(out, LocalSend{LocalSendID: id, Phase: j.Phase, TargetDeviceID: j.TargetDeviceID, CreatedAt: j.CreatedAt,
+			Resumable: j.Spooled()})
+	}
+	for _, id := range s.store.collectOrphanSpools() {
+		s.notef("removed a local encrypted copy no send record owns (%s)", id)
 	}
 	return out
 }

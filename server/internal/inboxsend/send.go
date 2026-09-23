@@ -75,6 +75,10 @@ type SendRequest struct {
 	To    string
 	Paths []string
 	TTL   int64 // requested retention in seconds; 0 = the server's default
+	// Resumable encrypts the whole delivery into a local encrypted copy before
+	// the upload starts, so `inbox retry` can resume an interrupted upload from
+	// it (spool.go). Off by default: the default streams.
+	Resumable bool
 }
 
 // readErr maps a failed READ (device list, keys) onto a report.
@@ -126,6 +130,21 @@ func (s *Session) Send(ctx context.Context, req SendRequest) (Result, error) {
 	}
 	for _, f := range plan.EmptyFolders {
 		s.notef("not sent (empty folder): %s", f)
+	}
+	if req.Resumable {
+		// Before any network request and before anything is encrypted: a copy
+		// that could not be kept safely, or would not fit, costs nothing.
+		if err := s.store.ensurePrivate(); err != nil {
+			return Result{}, localf(CodeSpoolUnavailable, "--resumable cannot keep a local encrypted copy: %s. Nothing was sent",
+				termtext.Safe(err.Error()))
+		}
+		s.collectSpools()
+		if 4+int64(len(plan.manifest))+gcmTag > maxSpoolHeader {
+			return Result{}, local(CodeUnsendableContent, "this delivery's file list is too large to send in one delivery")
+		}
+		if e := s.store.checkSpoolRoom(projectedSpoolBytes(plan)); e != nil {
+			return Result{}, e
+		}
 	}
 
 	devs, _, err := s.resolveSelf(ctx)
@@ -202,6 +221,9 @@ func (s *Session) Send(ctx context.Context, req SendRequest) (Result, error) {
 		return Result{}, failed(CodeLocalState, "cannot create the local send record: "+termtext.Safe(err.Error()))
 	}
 	defer lk.release()
+	if req.Resumable {
+		return s.sendSpooled(ctx, j, plan, sl, encManifest, target.Name)
+	}
 	// N6: the wrapped key is durable before any network write, let alone the
 	// first create.
 	if err := s.store.save(j); err != nil {
@@ -248,15 +270,29 @@ func (s *Session) Send(ctx context.Context, req SendRequest) (Result, error) {
 		return res, failed(CodeSourceChanged, "the files did not read back as planned")
 	}
 
+	if err := s.checkpointFinalizing(j); err != nil {
+		return res, err
+	}
+	return s.finish(ctx, j, sl, res)
+}
+
+// checkpointFinalizing records that every byte is acknowledged (N8: finalize
+// is not sent unless the record says it may have been).
+func (s *Session) checkpointFinalizing(j *Journal) error {
 	j.Phase = PhaseFinalizing
-	// N8: finalize is not sent unless the record says it may have been.
 	if err := s.checkpoint(j); err != nil {
 		e := recordFailed(err, fmt.Sprintf("so the upload was stopped before it was completed and nothing was queued. "+
 			"Every byte was uploaded: once the configuration directory can be written again, "+
 			"`relayium inbox retry %s` completes it without uploading again. Otherwise ", j.ID)+lowerFirst(msgOrphanPartial))
 		e.LocalSendID = j.ID
-		return res, e
+		return e
 	}
+	return nil
+}
+
+// finish completes a send whose record is durably in phase finalizing and
+// whose finalize has never been sent: finalize, record the object, queue.
+func (s *Session) finish(ctx context.Context, j *Journal, sl *sealer, res Result) (Result, error) {
 	storedID, expiresAt, err := s.finalize(ctx, j, false)
 	if err != nil {
 		return res, err
@@ -314,9 +350,19 @@ func lowerFirst(s string) string {
 	return string(s[0]|0x20) + s[1:]
 }
 
+// drop removes a finished or definitively failed record and then, only once
+// the record is gone, its local encrypted copy: a copy is never removed while
+// a record that could still use it remains.
 func (s *Session) drop(j *Journal) {
 	if err := s.store.remove(j.ID); err != nil {
 		s.notef("warning: cannot remove the local send record %s: %s", j.ID, termtext.Safe(err.Error()))
+		return
+	}
+	if j.Spooled() {
+		if err := s.store.removeSpool(j.ID); err != nil {
+			s.notef("warning: cannot remove the local encrypted copy of send %s (%s); it is removed later",
+				j.ID, termtext.Safe(err.Error()))
+		}
 	}
 }
 
@@ -754,7 +800,9 @@ func createRefusal(err error) *Error {
 }
 
 // Retry finishes an interrupted send from its journal WITHOUT encrypting and
-// WITHOUT uploading (N3/N5). Whatever would need an upload is refused.
+// WITHOUT uploading (N3/N5). Whatever would need an upload is refused — except
+// a resumable (spooled) send's own upload, which continues from its verified
+// local encrypted copy and never from the sources (spool.go, N4).
 func (s *Session) Retry(ctx context.Context, id string) (Result, error) {
 	if !ValidLocalSendID(id) {
 		return Result{}, local(CodeNoSuchSend, "not a local send id (32 lowercase hex characters, as printed by `inbox send`)")
@@ -801,6 +849,14 @@ func (s *Session) Retry(ctx context.Context, id string) (Result, error) {
 	// sent (N8 records that phase before the create).
 	finalizeMayHaveBeenSent := j.Phase == PhaseFinalizing
 	createMayHaveBeenSent := j.Phase == PhaseFinalized
+	if j.Spooled() && (j.Phase == PhasePlanned || j.Phase == PhaseUploading) {
+		// A resumable send: continue its upload from the local encrypted copy
+		// (never encrypting), up to a durable phase finalizing. No finalize
+		// was ever sent for it (N8), so the finalize below is its first.
+		if err := s.uploadSpooled(ctx, j); err != nil {
+			return res, err
+		}
+	}
 	switch j.Phase {
 	case PhasePlanned:
 		s.drop(j)

@@ -21,7 +21,8 @@ import (
 
 // The local send journal: the durable, NON-SECRET record that lets `inbox
 // retry` finish a send whose command was interrupted, without encrypting and
-// without uploading (invariant N3).
+// without uploading (invariant N3) — or, for a `--resumable` send (v2), by
+// continuing its upload from the local encrypted copy it names (spool.go).
 //
 //	<config-dir>/inbox-send/<local-send-id>.json   0600, dir 0700
 //
@@ -46,9 +47,14 @@ const (
 )
 
 const (
-	journalVersion  = 1
-	journalDirName  = "inbox-send"
-	maxJournalBytes = 16 << 10
+	journalVersion = 1
+	// journalVersionSpooled is a record made by `inbox send --resumable`: it
+	// names a local encrypted copy (spool.go) and may resume its upload. A
+	// binary that predates it refuses the record (unknown fields) and leaves it
+	// untouched instead of treating it as an ordinary send.
+	journalVersionSpooled = 2
+	journalDirName        = "inbox-send"
+	maxJournalBytes       = 16 << 10
 )
 
 var (
@@ -77,7 +83,18 @@ type Journal struct {
 	StoredFileID        string `json:"storedFileId,omitempty"`
 	ExpiresAt           int64  `json:"expiresAt,omitempty"`
 	CreatedAt           int64  `json:"createdAt"`
+	// Spooled records only (v2). The local encrypted copy is exactly
+	// SpoolBytes long: HeaderBytes of init body (uint32BE(len)||sealed
+	// manifest) followed by CiphertextBytes of upload body, with this SHA-256.
+	// ChunkSize is the server's append size, known once the upload is open.
+	SpoolBytes  int64  `json:"spoolBytes,omitempty"`
+	SpoolSHA256 string `json:"spoolSha256,omitempty"`
+	HeaderBytes int64  `json:"headerBytes,omitempty"`
+	ChunkSize   int64  `json:"chunkSize,omitempty"`
 }
+
+// Spooled reports whether the record owns a local encrypted copy.
+func (j *Journal) Spooled() bool { return j.V == journalVersionSpooled }
 
 // ValidLocalSendID reports whether id has the only spelling a local send id may
 // have. Checked before the id is ever joined into a path.
@@ -94,7 +111,7 @@ func newRandomHex() (string, error) {
 func (j *Journal) validate() error {
 	bad := func(what string) error { return fmt.Errorf("journal field %s is invalid", what) }
 	switch {
-	case j.V != journalVersion:
+	case j.V != journalVersion && j.V != journalVersionSpooled:
 		return bad("v")
 	case !ValidLocalSendID(j.ID):
 		return bad("id")
@@ -127,6 +144,21 @@ func (j *Journal) validate() error {
 	needObject := j.Phase == PhaseFinalized
 	if needObject != (j.StoredFileID != "") || (j.StoredFileID != "" && !isInertID(j.StoredFileID)) {
 		return bad("storedFileId")
+	}
+	if !j.Spooled() {
+		if j.SpoolBytes != 0 || j.SpoolSHA256 != "" || j.HeaderBytes != 0 || j.ChunkSize != 0 {
+			return bad("spool")
+		}
+		return nil
+	}
+	switch {
+	case j.HeaderBytes <= 4 || j.HeaderBytes > maxSpoolHeader || j.CiphertextBytes <= 0 ||
+		j.SpoolBytes != j.HeaderBytes+j.CiphertextBytes:
+		return bad("spool size")
+	case len(j.SpoolSHA256) != 64 || strings.Trim(j.SpoolSHA256, "0123456789abcdef") != "":
+		return bad("spoolSha256")
+	case needUpload != (j.ChunkSize != 0) || j.ChunkSize < 0 || j.ChunkSize > maxChunkSize:
+		return bad("chunkSize")
 	}
 	return nil
 }
