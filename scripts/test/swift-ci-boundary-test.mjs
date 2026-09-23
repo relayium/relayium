@@ -278,6 +278,11 @@ const FIXTURE_INPUTS = [
   {
     fixture: `${PACKAGE_FIXTURES_ROOT}/realtime-wire-vectors.json`,
     consumers: [
+      {
+        file: "server/internal/linkwire/vectors_test.go",
+        workflow: GO,
+        what: "the Go link-wire codec library's frozen-vector suite",
+      },
       { file: "web/src/lib/caps-vectors.test.ts", workflow: WEB, what: "the realtime wire frames" },
       { file: "web/src/lib/text-vectors.test.ts", workflow: WEB, what: "the text frame block" },
     ],
@@ -359,10 +364,11 @@ const OWNERSHIP = [
     "read by two Web suites, by the Swift one, and since W-N18 Phase 2a1 by the Go link-crypto "
     + "library's vector suite (`server/internal/linkcrypto/vectors_test.go`), so `go.yml` names it "
     + "one path at a time. No heavy Apple or pairing lane starts"],
-  [`${PACKAGE_FIXTURES_ROOT}/realtime-wire-vectors.json`, [SWIFT_PACKAGE, WEB],
-    "the same two Web suites and the Swift one. NOT by any Go test — no Go code speaks the realtime "
-    + "wire yet — which is why `go.yml` names the crypto fixture beside it and not this one: the "
-    + "fixture paths are per-consumer, not a block copied between workflows"],
+  [`${PACKAGE_FIXTURES_ROOT}/realtime-wire-vectors.json`, [GO, SWIFT_PACKAGE, WEB],
+    "the same two Web suites, the Swift one, and since W-N18 Phase 2a2 the Go link-wire codec "
+    + "library's vector suite (`server/internal/linkwire/vectors_test.go`), so `go.yml` names it "
+    + "one path at a time. That library is imported by no command yet. No heavy Apple or pairing "
+    + "lane starts"],
   [`${PACKAGE_FIXTURES_ROOT}/store-wire-vectors.json`, [SWIFT_PACKAGE],
     "the fixture in that same directory that NO filtered workflow but the package's own reads. "
     + "This row is what makes `web.yml`'s three named entries mean something: a directory glob "
@@ -2129,6 +2135,24 @@ const MUTATIONS = [
       return w;
     },
     expect: /the fixture consumer "server\/internal\/linkcrypto\/vectors_test\.go" could not be read/,
+  },
+  {
+    // The Go half of the realtime-wire contract, dropped. `linkwire/vectors_test.go`
+    // still reads the file, so a regenerated frame, bound or signal row would
+    // land with the Go codecs never judged against it.
+    name: "go.yml drops the realtime-wire fixture its link-wire suite reads",
+    mutate: (w) => withoutPath(w, GO, `${PACKAGE_FIXTURES_ROOT}/realtime-wire-vectors.json`),
+    expect: /go\.yml's path filter does not list "apps\/RelayiumKit\/Tests\/Fixtures\/realtime-wire-vectors\.json" verbatim/,
+  },
+  {
+    // The consumer the Go entry is justified by disappears while go.yml still
+    // names the fixture, charging the race lane for a file no Go test opens.
+    name: "the Go realtime-wire consumer is deleted while go.yml still names its fixture",
+    mutate: (w) => {
+      w.fixtureConsumers.set("server/internal/linkwire/vectors_test.go", null);
+      return w;
+    },
+    expect: /the fixture consumer "server\/internal\/linkwire\/vectors_test\.go" could not be read/,
   },
   {
     name: "web.yml drops one of the three fixtures its suite reads",

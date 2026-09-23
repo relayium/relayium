@@ -59,6 +59,19 @@ Consumers, precisely:
   (kind 9), `RealtimeFragmentationTests` and `RealtimeDurableResumeTests`
   (PART framing, the checkpoint grid), `LinkWebWorkspaceInteropTests` (the two
   hellos), all through `Support/RealtimeWireVectors.swift`.
+- A **Go codec library**, `server/internal/linkwire` (W-N18 Phase 2a2), reads
+  the whole fixture in `vectors_test.go`, top level plus the `link` and
+  `capability` blocks, and records per block whether it is consumed, pinned as a
+  constant only, or not applicable (the native legacy-lane fields). It drives
+  its own total classifier, frame codecs, sender and receiver, manifest, resume,
+  ACK, text, signalling and capability functions through the rows. It is **not**
+  a lane state machine: consent ordering, the realignment gate, the hello
+  cadence, deadlines, the leave budget and the text-session bounds are not
+  implemented there, so per §6.1 a green run is not conformance of any receive
+  path. No command imports it and it announces no capability; the CLI keeps its
+  own separate wire. The one `linkLeavePayload` row a Go string cannot hold (the
+  unpaired surrogate) is skipped by exact label and flag, and the package doc
+  records where it is deliberately stricter than the Web.
 
 **Do not hand-transcribe any of these bytes into a third implementation; read
 the fixture.**

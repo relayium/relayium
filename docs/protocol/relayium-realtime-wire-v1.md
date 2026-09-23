@@ -8,6 +8,12 @@ The transport that carries these frames — the two-lane `link/1` connection, it
 capability admission, lifecycle bytes, total frame-class partition and
 authenticated signalling — is `relayium-link-v1.md`.
 
+Consumers: the Web and Swift clients, and the Go codec library
+`server/internal/linkwire`, which is pinned to
+`apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json` but is imported by
+no command yet. The Go CLI's shipped transfers still use its own separate wire
+(see Ordering / errors below).
+
 ## Frame
 - `[kind: 1 byte][seq: uint32 BE][payload]`. CHUNK_OVERHEAD = 5 + 16 (header + GCM tag).
 
