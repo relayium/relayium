@@ -1738,6 +1738,39 @@ extension LinkWorkspaceModelTests {
     /// write a lagging copy back over what is being typed — and move for every
     /// replacement the model makes, or a sent, restored or discarded draft
     /// would stay on screen.
+    /// **A keystroke publishes nothing, and is still the draft.**
+    ///
+    /// The app root observes this model, so a publishing keystroke re-rendered
+    /// the whole iOS shell around the field being typed in, and on the CI
+    /// iOS 18.5 simulator that scrambled the typed text in two hosted runs
+    /// (35877967996, 35888861444). The mirror must stay silent — and must still
+    /// be what every reader of `draft` sees, or a Leave, a send or an inbound
+    /// prompt would act on stale text.
+    func testMirroringTheComposerPublishesNothingAndIsStillTheDraft() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        var publishes = 0
+        let watch = rig.model.objectWillChange.sink { _ in publishes += 1 }
+        defer { watch.cancel() }
+
+        for text in ["T", "T2b", "T2b-acc", "T2b-acceptance-peer"] {
+            rig.model.mirrorComposerDraft(text)
+        }
+        XCTAssertEqual(publishes, 0, "a keystroke re-renders every observer of the link")
+        XCTAssertEqual(rig.model.draft, "T2b-acceptance-peer")
+        XCTAssertTrue(rig.model.holdsLocalText,
+                      "a mirrored draft is invisible to the exit's confirmation")
+        XCTAssertTrue(rig.model.canSubmitDraft)
+
+        // The model's own writes still publish: macOS binds its editor to
+        // `draft`, and a send has to reach the field.
+        rig.model.draft = "typed on macOS"
+        XCTAssertEqual(publishes, 1, "the ordinary setter stopped publishing")
+        XCTAssertTrue(rig.model.submitDraft())
+        XCTAssertGreaterThan(publishes, 1, "a sent draft never told its observers")
+        XCTAssertEqual(rig.model.draft, "")
+    }
+
     func testOnlyTheModelsOwnDraftReplacementsAreCounted() async {
         let rig = rig(pendingMessages: .refuseWhileWaiting)
         _ = await openLink(rig)

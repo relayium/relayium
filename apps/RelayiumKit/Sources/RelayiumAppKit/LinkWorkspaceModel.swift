@@ -339,22 +339,50 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     ///
     /// One holder means one answer: Leave and Quit ask the same predicate, and a
     /// confirmed teardown clears it exactly once.
-    @Published public var draft: String = ""
+    ///
+    /// Published by hand rather than with `@Published`, for the one writer that
+    /// must NOT publish: `mirrorComposerDraft(_:)`.
+    public var draft: String {
+        get { draftStorage }
+        set {
+            objectWillChange.send()
+            draftStorage = newValue
+        }
+    }
+    private var draftStorage = ""
+
+    /// **Record what an iOS composer's field holds, without publishing.**
+    ///
+    /// This model is observed from the app root down (`RelayiumApp`'s
+    /// `@StateObject`, `RootView`, `NearbyView`), so publishing a keystroke
+    /// re-evaluates the whole app shell around the field being typed in —
+    /// measured: one `RootView` → `NearbyView` → workspace pass per keystroke.
+    /// With that happening on every key, the Nearby composer scrambled typed
+    /// text on the CI iOS 18.5 simulator — "T2b-acceptance-peer-…" arrived as
+    /// "Teptance-peer-…acc", i.e. the caret/selection put back to an earlier
+    /// position mid-typing — in two hosted runs (35877967996, 35888861444), with
+    /// the field bound to `draft` directly and then through a view buffer that
+    /// still mirrored every edit with a publishing write. `main`, whose composer
+    /// kept its text in view `@State` and published nothing per keystroke,
+    /// passed the same path on every run, and so does Cross-network on this
+    /// branch, whose model the app root does not observe.
+    ///
+    /// Nothing is lost by not publishing: the composer re-renders from its own
+    /// `@State`, and every reader of `draft` here (`holdsLocalText`,
+    /// `submitDraft`, `restoreReturnedDraft`, `inboundAskDiscardsLocalText`)
+    /// reads the current value at the moment it is asked.
+    public func mirrorComposerDraft(_ text: String) {
+        draftStorage = text
+    }
 
     /// **Counts the times the MODEL replaced `draft`, never the times a
     /// composer edited it.**
     ///
-    /// A text field must not be bound straight to `draft`. Bound that way, the
-    /// iOS composer lost and reordered keystrokes on the CI iOS 18.5 simulator
-    /// while a batch was in flight on this same object: "T2b-acceptance-peer-…"
-    /// arrived at the peer as "Teptance-peer-…acc" — the shape of earlier field
-    /// text written back over later keystrokes with a stale caret (run 35877967996,
-    /// `ios-transfer-acceptance`). The same composer bound to view `@State`
-    /// passed that path on every earlier `main` run. So the composer edits its
-    /// own `@State`, mirrors every edit here, and adopts `draft` back ONLY when
-    /// this counter moves — a send that took the text, a restored hand-back, a
-    /// new attempt, a confirmed discard. Typing never reads the model back, so
-    /// no published value can race it.
+    /// The iOS composer edits its own `@State`, mirrors every edit here with
+    /// `mirrorComposerDraft(_:)`, and adopts `draft` back ONLY when this counter
+    /// moves — a send that took the text, a restored hand-back, a new attempt,
+    /// a confirmed discard. Typing never reads the model back, so no published
+    /// value can race it.
     @Published public private(set) var draftReplacement = 0
 
     /// The one way the model changes the composer's text. Always counted, even
