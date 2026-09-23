@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -160,8 +161,12 @@ func TestWaitHealthyIgnoresHeartbeatFromBeforeRestart(t *testing.T) {
 }
 
 type fakeSvc struct {
-	restarts    int
-	failRestart bool
+	// heartbeaters counts the stamping goroutines Restart starts, so the test's
+	// cleanup can wait for them to stop before t.TempDir removes the state
+	// directory they write into.
+	heartbeaters *sync.WaitGroup
+	restarts     int
+	failRestart  bool
 	// heartbeatOnRestart, when non-empty, is a stateDir to stamp with a
 	// heartbeat as part of Restart() itself — simulating the OLD binary's
 	// in-flight heartbeat HTTP round trip completing while `systemctl restart`
@@ -187,8 +192,11 @@ type fakeSvc struct {
 func newHealthySvc(t *testing.T, stateDir, ver string) *fakeSvc {
 	t.Helper()
 	stop := make(chan struct{})
-	t.Cleanup(func() { close(stop) })
-	return &fakeSvc{healthyAfterRestart: stateDir, stopHeartbeat: stop, heartbeatVersion: ver}
+	var wg sync.WaitGroup
+	// Close AND wait: a goroutine still writing the health file when
+	// t.TempDir's cleanup runs makes the removal fail ("directory not empty").
+	t.Cleanup(func() { close(stop); wg.Wait() })
+	return &fakeSvc{healthyAfterRestart: stateDir, stopHeartbeat: stop, heartbeatVersion: ver, heartbeaters: &wg}
 }
 
 func (f *fakeSvc) Restart() error {
@@ -198,7 +206,13 @@ func (f *fakeSvc) Restart() error {
 	}
 	if f.healthyAfterRestart != "" {
 		dir, stop, ver := f.healthyAfterRestart, f.stopHeartbeat, f.heartbeatVersion
+		if f.heartbeaters != nil {
+			f.heartbeaters.Add(1)
+		}
 		go func() {
+			if f.heartbeaters != nil {
+				defer f.heartbeaters.Done()
+			}
 			for {
 				select {
 				case <-stop:
