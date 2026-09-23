@@ -172,6 +172,7 @@ scripts/test/db-rollback-harness.sh
 apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json
 apps/RelayiumKit/Tests/Fixtures/crypto-vectors.json
 apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json
+apps/RelayiumKit/Tests/Fixtures/link-session-vectors.json
 scripts/list-go-fuzz-targets.sh
 .github/workflows/go-fuzz-nightly.yml
 .github/workflows/go.yml

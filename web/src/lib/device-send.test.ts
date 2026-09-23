@@ -243,6 +243,24 @@ describe("sending to a device", () => {
     expect(creates()).toHaveLength(0);
   });
 
+  it("reports a revoked browser identity as sender_device_required before encrypting", async () => {
+    // Central answers browser_device_revoked AND expires the stale cookie, so the
+    // copy for this code promises that the next send re-registers the browser.
+    // The mapping is what makes that copy the one shown.
+    handlers.push((c) => c.url === "/api/devices/browser-install"
+      ? json({ error: "browser_device_revoked" }, 409)
+      : undefined);
+
+    await expect(sendFilesToDevice(targetSpec(), FILES(), sendOpts())).rejects.toMatchObject({
+      code: "sender_device_required",
+    });
+    await expect(sendTextToDevice(targetSpec(), "hello", sendOpts())).rejects.toMatchObject({
+      code: "sender_device_required",
+    });
+    expect(uploadInits()).toHaveLength(0);
+    expect(creates()).toHaveLength(0);
+  });
+
   it("uploads as purpose=device_task, unlimited-until-TTL, and never as a share", async () => {
     await sendFilesToDevice(targetSpec(), FILES(), sendOpts());
     const init = uploadInits();

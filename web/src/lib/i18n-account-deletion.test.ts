@@ -7,8 +7,9 @@
 // 两类断言：
 //
 //  * **必须说的**：确认弹窗必须说清楚「打开链接之前什么都不会删」、被撤销的是服务端
-//    会话和设备凭据、被抹除的是服务器上的文件和数据、账号会在 30 天宽限期后被永久
-//    删除、以及宽限期内重新登录就能开始恢复。「什么都还没删」这一句在**成功提示**里
+//    会话和设备凭据、被抹除的是服务器上的文件和数据、账号会在宽限期结束时被永久
+//    删除（宽限天数是管理员设置，所以不写死天数，改为指向随后那封写明日期的邮件）、
+//    以及宽限期内重新登录就能开始恢复。「什么都还没删」这一句在**成功提示**里
 //    也必须在——那句话会留在屏幕上，缺了它就会被读成「办完了」。
 //
 //  * **不能说的**：端点在真发了邮件、被节流吞掉、发信失败三种情况下回的是同一个 200，
@@ -39,8 +40,12 @@ type Claims = {
   revoked: string;
   /** 真正被抹除的东西：服务器上存的文件和数据。 */
   erased: string;
-  /** 宽限期的长度，带这门语言的「天」。 */
-  graceDays: RegExp;
+  /** 宽限期本身。天数是管理员设置（account_grace_days，默认 30），不能写死。 */
+  grace: string;
+  /** 日期从哪里来：确认之后的那封邮件。 */
+  dateSource: string;
+  /** 任何写死的天数。 */
+  dayCount: RegExp;
   /** 宽限期内被支持的恢复路径。 */
   reactivate: string;
   /** 产品做不到的承诺：终止已建立的对等传输、以及把确认邮件说成恢复邮件。 */
@@ -56,7 +61,9 @@ const claims: Record<Code, Claims> = {
     permanent: "permanent",
     revoked: "sessions and device access",
     erased: "stored on the server",
-    graceDays: /30-day grace period/,
+    grace: "grace period",
+    dateSource: "the email Relayium sends after you confirm gives the date",
+    dayCount: /\d+[- ]?days?\b/i,
     reactivate: "sign in again",
     overclaims: ["transfers in progress", "in-progress transfer", "same email"],
     doneClaim: /\bsent\b|\bdeleted\b|\bscheduled\b|\bcomplete/i,
@@ -67,7 +74,9 @@ const claims: Record<Code, Claims> = {
     permanent: "永久",
     revoked: "登录会话和设备访问权限",
     erased: "服务器上存储的文件和数据",
-    graceDays: /30 天宽限期/,
+    grace: "宽限期",
+    dateSource: "具体日期见确认后 Relayium 发送的邮件",
+    dayCount: /\d+\s*天/,
     reactivate: "重新登录",
     overclaims: ["进行中的传输", "同一封邮件"],
     doneClaim: /已发送|已删除|已排期|已完成/,
@@ -116,7 +125,9 @@ describe("account-deletion copy keeps its safety claims in every language", () =
       expect(confirm, `${code}: 没说被撤销的是服务端会话和设备访问权`).toContain(c.revoked);
       expect(confirm, `${code}: 没说服务器上的文件和数据会被抹除`).toContain(c.erased);
       expect(confirm, `${code}: 没说账号最终会被永久删除`).toContain(c.permanent);
-      expect(confirm, `${code}: 没说宽限期有多长`).toMatch(c.graceDays);
+      expect(confirm, `${code}: 没说有宽限期`).toContain(c.grace);
+      expect(confirm, `${code}: 没说宽限期截止日期在哪里看`).toContain(c.dateSource);
+      expect(confirm, `${code}: 写死了一个管理员可改的天数`).not.toMatch(c.dayCount);
       expect(confirm, `${code}: 没说宽限期内怎么恢复`).toContain(c.reactivate);
     });
 

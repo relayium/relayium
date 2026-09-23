@@ -165,7 +165,11 @@ describe("MePage 的注销账户入口", () => {
     // 弹窗的可访问名就是它在问的那句话，后果必须写在里面。
     const said = dialog!.textContent ?? "";
     expect(said).toContain("Nothing is removed until that link is opened");
-    expect(said).toContain("30-day grace period");
+    // The grace length is an admin setting (account_grace_days), so the dialog
+    // points at the follow-up email for the date instead of naming a number.
+    expect(said).toContain("when the grace period ends");
+    expect(said).toContain("gives the date");
+    expect(said).not.toMatch(/\d+-day/);
     expect(said).toContain("sign in again");
     // 肯定按钮说的是它真正会做的事：发一封邮件。
     expect(byText("Send the confirmation email"), "确认按钮没说自己会做什么").toBeTruthy();
