@@ -197,6 +197,38 @@ sys.exit(0 if got_message and got_file else 1)
 BARRIER
 }
 
+# **Wait for the browser to publish its observation while it still holds the
+# link.** `native-pairing-browser.mjs` writes its ready file only on success and
+# then keeps the link open until this script releases it, so the Mac's snapshot
+# is taken while the session the round is judging is still live. Before this
+# handshake the snapshot came after the browser had closed, and whether the Mac
+# still "had a session" was a race it lost in hosted run 35810579768.
+#
+# Fails closed on every way out other than a matching marker: the browser exiting
+# first, a marker naming a different code, or the bound running out. The bound
+# (ticks of 0.5s) defaults above the browser's own six-minute watchdog, so the
+# browser's more specific error normally surfaces first.
+#
+#   await_browser_ready READY_FILE CODE BROWSER_PID BROWSER_LOG [TICKS]
+await_browser_ready() {
+  local ready="$1" want="$2" pid="$3" log="$4" ticks="${5:-780}" tick got
+  for tick in $(seq 1 "$ticks"); do
+    if [ -f "$ready" ]; then
+      got="$(cat "$ready")"
+      [ "$got" = "$want" ] \
+        || fail "the browser's ready marker names code '$got', not this round's '$want'"
+      return 0
+    fi
+    kill -0 "$pid" 2>/dev/null \
+      || fail "the browser half exited before publishing its observation: $(tail -40 "$log")"
+    if [ $((tick % 20)) -eq 0 ]; then
+      say "-- still waiting for the browser to publish its observation ($((tick / 2))s)"
+    fi
+    sleep 0.5
+  done
+  fail "the browser never published its observation within $((ticks / 2))s: $(tail -40 "$log")"
+}
+
 acceptance_begin
 acceptance_build "$repo/server" "$repo/apps/RelayiumKit"
 
@@ -281,13 +313,24 @@ while [ "$round" -lt "$max_rounds" ]; do
   # are on and the one the regression lived on. Neither alone would be enough.
   verify_mode=default
   [ "$round" -eq 1 ] && verify_mode=on
+  # The handshake's markers: per round, inside the private run root, and absent
+  # before the browser starts so nothing but this round's browser can satisfy them.
+  browser_ready="$run_root/browser-$round.ready"
+  browser_release="$run_root/browser-$round.release"
+  browser_judged="$run_root/browser-$round.judged.json"
+  for marker in "$browser_out" "$browser_ready" "$browser_release" "$browser_judged"; do
+    [ ! -e "$marker" ] || fail "round $round's $marker exists before its browser started"
+  done
+  # `exec`, so the PID registered below IS node: the cleanup's TERM then reaches
+  # the process that owns Chrome rather than a subshell that would orphan it.
   (
-    cd "$repo/web" && node e2e/native-pairing-browser.mjs \
+    cd "$repo/web" && exec node e2e/native-pairing-browser.mjs \
       --origin "$origin" --code "$code" --out "$browser_out" \
       --debug-port "$((9460 + round))" --verify "$verify_mode" \
       --message "$web_message_text" \
       --file-name "$web_file_name" --file-body "$web_file_body_text" \
-      --expect-name "$mac_file_name" --expect-message "$mac_message_text"
+      --expect-name "$mac_file_name" --expect-message "$mac_message_text" \
+      --ready-file "$browser_ready" --release-file "$browser_release"
   ) >"$run_root/browser-$round.log" 2>&1 &
   browser_pid=$!
   register_child "browser-$round" "$browser_pid"
@@ -383,15 +426,23 @@ print(json.dumps({"command": "files", "name": sys.argv[1], "contents": sys.argv[
     || fail "the Mac refused to send a file"
   say "-- phase 3/3: the Mac sent a message and a file; the browser is waiting for both"
 
-  wait "$browser_pid" \
-    || fail "the browser half failed: $(tail -40 "$run_root/browser-$round.log")"
-  [ -f "$browser_out" ] || fail "the browser half wrote no observation"
-
-  # ── the comparisons ──────────────────────────────────────────────────────
+  # ── the comparisons, while the browser still holds the link ─────────────
+  #
+  # Order is the fix: ready, then the Mac's snapshot, then proof the browser was
+  # alive for all of it, then every judgement, and only THEN the release. The
+  # browser cannot close before the release, so a live PID after the snapshot
+  # means the session being judged was still up while it was read. A failure
+  # anywhere before the release leaves the browser to the cleanup, by PID.
+  await_browser_ready "$browser_ready" "$code" "$browser_pid" "$run_root/browser-$round.log"
+  maybe_fault browser-held
+  # Judged exactly as published: the browser rewrites its observation on exit.
+  cp "$browser_out" "$browser_judged"
   mac_observed="$(control "$mac_port" GET /observed)"
   printf '%s\n' "$mac_observed" >"$run_root/mac-$round.json"
+  kill -0 "$browser_pid" 2>/dev/null \
+    || fail "the browser half exited while holding the link, so the Mac's snapshot cannot be trusted: $(tail -40 "$run_root/browser-$round.log")"
 
-  python3 - "$browser_out" "$run_root/mac-$round.json" \
+  python3 - "$browser_judged" "$run_root/mac-$round.json" \
     "$mac_message_text" "$web_message_text" \
     "$mac_file_name" "$mac_file_hex" \
     "$web_file_name" "$web_file_sha" <<'PY' || fail "round $round did not agree"
@@ -409,6 +460,10 @@ if not browser.get("reachedWorkspace"):
     problems.append("the browser never reached the unified workspace")
 if not mac.get("hasSession"):
     problems.append("the Mac reports no live session")
+# The same predicate phase 1 waited for: a session that exists but is no longer
+# an OPEN workspace is not the live link this round claims to have judged.
+if not str(mac.get("linkPhase", "")).startswith("open("):
+    problems.append("the Mac's link is not open: %r" % (mac.get("linkPhase"),))
 if mac.get("legacyFallback"):
     problems.append("the Mac fell back to the legacy wire: %r" % (mac["legacyFallback"],))
 
@@ -454,15 +509,21 @@ print("-- round agreed: %s, both messages, both files byte-identical (browser wa
       file=sys.stderr)
 PY
 
-  if [ -n "$(json_field "$(cat "$browser_out")" sas)" ]; then
+  if [ -n "$(json_field "$(cat "$browser_judged")" sas)" ]; then
     compared_sas=1
   fi
-  role="$(json_field "$(cat "$browser_out")" role)"
+  role="$(json_field "$(cat "$browser_judged")" role)"
   case "$role" in
     initiator) seen_initiator=1 ;;
     responder) seen_responder=1 ;;
     *) fail "the browser could not name its role" ;;
   esac
+
+  # Judged; now let the browser close the link, and reap it.
+  : >"$browser_release"
+  wait "$browser_pid" \
+    || fail "the browser half failed after its release: $(tail -40 "$run_root/browser-$round.log")"
+  [ -f "$browser_out" ] || fail "the browser half wrote no observation"
 
   control "$mac_port" POST /shutdown >/dev/null || true
   say "-- round $round passed (browser was $role)"

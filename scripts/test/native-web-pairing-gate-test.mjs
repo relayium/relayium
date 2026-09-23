@@ -84,8 +84,10 @@
 // indentation-based and fails loudly if a file's shape changes.
 
 import { readFile, readdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -1610,6 +1612,319 @@ check(
   + ` the final comparison would reject`,
 );
 
+// ── 9. the Mac is judged while the browser still holds the link ─────────────
+//
+// Closing the browser ENDS the link, and the Mac then correctly reports no live
+// session. The script used to read the Mac only after `wait "$browser_pid"`, so
+// its liveness check was a race it lost whenever the Mac noticed the close first
+// (hosted run 35810579768, round 2: every byte agreed, the Mac was already idle).
+// The fix is an ORDER — ready, snapshot, proof of life, every judgement, release,
+// reap — and an order is exactly what survives every marker check above while
+// being quietly undone. So it is asserted here as an order, the check is a pure
+// function, and 9b breaks it one way at a time.
+
+const BROWSER_HALF = "web/e2e/native-pairing-browser.mjs";
+/** JS with its comment lines — `//` and JSDoc ` * ` — removed. */
+const stripJsDocComments = (text) =>
+  text.split("\n").filter((line) => !/^\s*(\/\/|\/\*\*|\*)/.test(line)).join("\n");
+
+/** Positions of `needles` in `text`, in order, or the first one missing. */
+function inOrder(text, needles) {
+  let from = 0;
+  for (const needle of needles) {
+    const at = text.indexOf(needle, from);
+    if (at < 0) return { ok: false, missing: needle, afterIndex: from };
+    from = at + needle.length;
+  }
+  return { ok: true };
+}
+
+/** `(shell source, browser source)` -> complaints. Both comment-stripped. */
+function lifecycleFailures(shell, browser) {
+  const out = [];
+  const say = (ok, message) => { if (!ok) out.push(message); };
+
+  // The round's handshake is wired, per round, and to the process that owns Chrome.
+  say(shell.includes('--ready-file "$browser_ready" --release-file "$browser_release"'),
+    `${ACCEPTANCE} no longer passes the browser its ready/release pair; without it the browser`
+    + ` closes the link before the Mac is read`);
+  say(shell.includes('browser_ready="$run_root/browser-$round.ready"')
+    && shell.includes('browser_release="$run_root/browser-$round.release"'),
+    `${ACCEPTANCE}'s handshake markers are no longer per round inside the private run root`);
+  say(/\|\|\s*fail "round \$round's \$marker exists before its browser started"/.test(shell),
+    `${ACCEPTANCE} no longer FAILS when a round's marker exists before its browser started`);
+  say(shell.includes("exec node e2e/native-pairing-browser.mjs"),
+    `${ACCEPTANCE} no longer execs the browser half, so the registered PID is a subshell and the`
+    + ` cleanup's TERM would orphan the node process that owns Chrome while it holds the link`);
+
+  // The order itself. Each needle is searched for AFTER the previous one.
+  const order = inOrder(shell, [
+    'await_browser_ready "$browser_ready" "$code" "$browser_pid"',
+    'cp "$browser_out" "$browser_judged"',
+    'mac_observed="$(control "$mac_port" GET /observed)"',
+    'fail "the browser half exited while holding the link',
+    'python3 - "$browser_judged" "$run_root/mac-$round.json"',
+    `<<'PY' || fail "round $round did not agree"`,
+    'role="$(json_field "$(cat "$browser_judged")" role)"',
+    '*) fail "the browser could not name its role"',
+    ': >"$browser_release"',
+    'wait "$browser_pid"',
+    'POST /shutdown',
+  ]);
+  say(order.ok,
+    `${ACCEPTANCE} no longer judges the Mac while the browser holds the link: expected ready ->`
+    + ` frozen observation -> Mac snapshot -> browser still alive -> comparison -> role -> release`
+    + ` -> reap -> shutdown, but "${order.missing}" is missing or out of order. A snapshot taken`
+    + ` after the release reads a session the browser has already legitimately closed`);
+  say(shell.split(': >"$browser_release"').length === 2,
+    `${ACCEPTANCE} writes the release marker more than once or not at all; exactly one release,`
+    + ` after every judgement, is the contract`);
+  say(!/wait "\$browser_pid"[\s\S]*wait "\$browser_pid"/.test(shell),
+    `${ACCEPTANCE} waits on the browser more than once; a second wait before the snapshot is the`
+    + ` old order back`);
+  say(shell.includes('if not mac.get("hasSession"):')
+    && shell.includes('str(mac.get("linkPhase", "")).startswith("open(")'),
+    `${ACCEPTANCE} no longer requires the Mac's live session AND an open link in its comparison;`
+    + ` the snapshot barrier exists so those can be asserted, not so they can be dropped`);
+
+  // The bounded wait fails closed on every way out but a matching marker.
+  const fn = shell.slice(shell.indexOf("await_browser_ready() {"));
+  const body = fn.slice(0, fn.indexOf("\n}\n") + 3);
+  say(/\|\|\s*fail "the browser half exited before publishing its observation/.test(body)
+    && /\|\|\s*fail "the browser's ready marker names code/.test(body)
+    && /\n\s*fail "the browser never published its observation within/.test(body),
+    `${ACCEPTANCE}'s ready wait no longer FAILS on an exited browser, a foreign marker AND a`
+    + ` timeout; a wait that falls through lets the snapshot race back in`);
+
+  // The browser: atomic publication, ready on success only, a bounded hold.
+  say(/renameSync\(tmp, path\)/.test(browser) && /writeAtomically\(OUT,/.test(browser),
+    `${BROWSER_HALF} no longer publishes its observation atomically; the shell reads it the`
+    + ` moment the ready marker appears`);
+  const hold = inOrder(browser, [
+    "async function publishReadyAndAwaitRelease() {",
+    "writeObservation();",
+    "writeAtomically(READY_FILE, CODE);",
+    "while (!existsSync(RELEASE_FILE)) {",
+    "if (Date.now() > deadline) {",
+    "throw new Error(",
+  ]);
+  say(hold.ok,
+    `${BROWSER_HALF} no longer publishes the observation, THEN the ready marker, THEN holds until`
+    + ` release under a deadline that throws ("${hold.missing}" missing or out of order)`);
+  say(browser.split("writeAtomically(READY_FILE").length === 2,
+    `${BROWSER_HALF} writes its ready marker from more than one place; only the success path may`);
+  const tail = browser.slice(browser.indexOf("async function run() {"));
+  const success = inOrder(tail, [
+    "observed.receivedFileHex = saved.hex;",
+    "if (EXPECT_NAME && saved.name !== EXPECT_NAME) {",
+    "await publishReadyAndAwaitRelease();",
+    "} finally {",
+  ]);
+  say(success.ok,
+    `${BROWSER_HALF} no longer declares ready only at the END of its success path, after its own`
+    + ` checks and before the finally that closes the browser ("${success.missing}")`);
+  say(!/READY_FILE/.test(tail.slice(tail.indexOf("} finally {"))),
+    `${BROWSER_HALF} touches its ready marker in or after the finally/failure path; a failed`
+    + ` browser must never look ready`);
+  return out;
+}
+
+const browserHalfSource = stripJsDocComments(await readFile(resolve(repoRoot, BROWSER_HALF), "utf8"));
+for (const message of lifecycleFailures(acceptanceSource, browserHalfSource)) check(false, message);
+
+// ── 9b. the proof that section 9 can fail ───────────────────────────────────
+//
+// Each mutation is a shape the fix could plausibly regress to, starting with the
+// source it replaced. Each must be reported by its own wording.
+
+/** Move the block `from..to` (inclusive of `from`, exclusive of `to`) to before `before`. */
+function moveBefore(text, from, to, before) {
+  const a = text.indexOf(from);
+  const b = text.indexOf(to, a);
+  if (a < 0 || b < 0) throw new Error(`anchor not found: ${JSON.stringify(a < 0 ? from : to)}`);
+  const block = text.slice(a, b);
+  const rest = text.slice(0, a) + text.slice(b);
+  const at = rest.indexOf(before);
+  if (at < 0) throw new Error(`anchor not found: ${JSON.stringify(before)}`);
+  return rest.slice(0, at) + block + rest.slice(at);
+}
+function replaced(text, from, to) {
+  if (!text.includes(from)) throw new Error(`anchor not found: ${JSON.stringify(from)}`);
+  return text.replace(from, to);
+}
+
+const RELEASE_AND_REAP = ': >"$browser_release"';
+const LIFECYCLE_MUTATIONS = [
+  {
+    name: "the old order: release and reap the browser, then read the Mac",
+    shell: (s) => moveBefore(s, RELEASE_AND_REAP, "\n  control \"$mac_port\" POST /shutdown",
+      "  await_browser_ready"),
+    expect: /no longer judges the Mac while the browser holds the link/,
+  },
+  {
+    name: "release after the snapshot but before the comparison's verdict",
+    shell: (s) => moveBefore(s, RELEASE_AND_REAP, "\n  wait \"$browser_pid\"", "  python3 - \"$browser_judged\""),
+    expect: /no longer judges the Mac while the browser holds the link/,
+  },
+  {
+    name: "release before the role is judged",
+    shell: (s) => moveBefore(s, RELEASE_AND_REAP, "\n  wait \"$browser_pid\"",
+      '  if [ -n "$(json_field "$(cat "$browser_judged")" sas)" ]'),
+    expect: /no longer judges the Mac while the browser holds the link/,
+  },
+  {
+    name: "no proof the browser was alive through the snapshot",
+    shell: (s) => replaced(s, 'fail "the browser half exited while holding the link', 'say "held'),
+    expect: /no longer judges the Mac while the browser holds the link/,
+  },
+  {
+    name: "the comparison reads the browser's post-release rewrite",
+    shell: (s) => replaced(s, 'python3 - "$browser_judged"', 'python3 - "$browser_out"'),
+    expect: /no longer judges the Mac while the browser holds the link/,
+  },
+  {
+    name: "the handshake is not passed to the browser",
+    shell: (s) => replaced(s, ' \\\n      --ready-file "$browser_ready" --release-file "$browser_release"', ""),
+    expect: /no longer passes the browser its ready\/release pair/,
+  },
+  {
+    name: "the browser runs under a subshell PID again",
+    shell: (s) => replaced(s, "exec node e2e/native-pairing-browser.mjs", "node e2e/native-pairing-browser.mjs"),
+    expect: /no longer execs the browser half/,
+  },
+  {
+    name: "one marker path shared by every round",
+    shell: (s) => replaced(s, 'browser_ready="$run_root/browser-$round.ready"', 'browser_ready="$run_root/browser.ready"'),
+    expect: /no longer per round/,
+  },
+  {
+    name: "the ready wait falls through on timeout",
+    shell: (s) => replaced(s, '  fail "the browser never published its observation within', '  say "the browser never published its observation within'),
+    expect: /ready wait no longer FAILS/,
+  },
+  {
+    name: "the liveness check is dropped from the comparison",
+    shell: (s) => replaced(s, 'if not mac.get("hasSession"):', 'if False:'),
+    expect: /no longer requires the Mac's live session AND an open link/,
+  },
+  {
+    name: "the browser declares ready before publishing its observation",
+    browser: (b) => replaced(b, "  writeObservation();\n  writeAtomically(READY_FILE, CODE);",
+      "  writeAtomically(READY_FILE, CODE);\n  writeObservation();"),
+    expect: /no longer publishes the observation, THEN the ready marker/,
+  },
+  {
+    name: "the browser's hold has no deadline",
+    browser: (b) => replaced(b, "    if (Date.now() > deadline) {", "    if (false) {"),
+    expect: /no longer publishes the observation, THEN the ready marker/,
+  },
+  {
+    name: "the browser declares ready from its finally too",
+    browser: (b) => replaced(b, "  } finally {\n", "  } finally {\n    writeAtomically(READY_FILE, CODE);\n"),
+    expect: /writes its ready marker from more than one place/,
+  },
+  {
+    name: "the browser writes its observation non-atomically",
+    browser: (b) => replaced(b, "writeAtomically(OUT,", "writeFileSync(OUT,"),
+    expect: /no longer publishes its observation atomically/,
+  },
+];
+
+for (const { name, shell, browser, expect } of LIFECYCLE_MUTATIONS) {
+  let got;
+  try {
+    got = lifecycleFailures(shell ? shell(acceptanceSource) : acceptanceSource,
+                            browser ? browser(browserHalfSource) : browserHalfSource);
+  } catch (err) {
+    check(false, `the lifecycle mutation "${name}" threw instead of reporting: ${err.message}`);
+    continue;
+  }
+  check(got.some((message) => expect.test(message)),
+    `the lifecycle order check did NOT complain about "${name}". Expected a message matching`
+    + ` ${expect}; got ${got.length ? `[\n    ${got.join("\n    ")}\n  ]` : "no failures at all"}`);
+}
+
+// ── 9c. the handshake's two refusals, executed ──────────────────────────────
+//
+// Text can say "fail" and still fall through; these run the real code. Neither
+// needs the Web project installed or a Chrome: the ready wait is plain bash, and
+// the browser refuses a half-configured handshake before it launches anything.
+
+const readyWaitFn = (() => {
+  const at = acceptanceSource.indexOf("await_browser_ready() {");
+  if (at < 0) return "";
+  const end = acceptanceSource.indexOf("\n}\n", at);
+  return end < 0 ? "" : acceptanceSource.slice(at, end + 3);
+})();
+check(readyWaitFn !== "", `${ACCEPTANCE} no longer defines await_browser_ready`);
+
+const scratch = mkdtempSync(join(tmpdir(), "native-lifecycle-gate-"));
+try {
+  // Under the acceptance's own shell options, with a stub browser whose stdio is
+  // detached (a live child holding the pipe would stall spawnSync) and which is
+  // killed however the snippet ends.
+  const runWait = (setup, args) => spawnSync("bash", ["-c", [
+    "set -Eeuo pipefail",
+    "p=''",
+    'trap \'[ -z "$p" ] || kill "$p" 2>/dev/null || true\' EXIT',
+    'fail() { printf "FAIL: %s\\n" "$*"; exit 1; }',
+    "say() { :; }",
+    readyWaitFn,
+    setup,
+    `await_browser_ready ${args}`,
+    'echo "READY"',
+  ].join("\n")], { cwd: scratch, encoding: "utf8", timeout: 30_000 });
+
+  const stub = "sleep 30 </dev/null >/dev/null 2>&1 & p=$!";
+  const cases = [
+    { name: "a matching marker", setup: `printf 123456 > r; ${stub}`,
+      args: 'r 123456 "$p" /dev/null 4', expect: /^READY$/m, status: 0 },
+    { name: "a marker that appears while waiting",
+      setup: `${stub}; (sleep 1; printf 123456 > late.tmp; mv late.tmp late) </dev/null >/dev/null 2>&1 &`,
+      args: 'late 123456 "$p" /dev/null 10', expect: /^READY$/m, status: 0 },
+    { name: "a marker naming another round's code", setup: `printf 654321 > r2; ${stub}`,
+      args: 'r2 123456 "$p" /dev/null 4', expect: /ready marker names code '654321'/, status: 1 },
+    // Exited and NOT waited for, as the browser is in the real round loop.
+    { name: "a browser that exited without ready", setup: 'sh -c "exit 3" </dev/null >/dev/null 2>&1 & p=$!; sleep 1',
+      args: 'absent 123456 "$p" /dev/null 20', expect: /exited before publishing its observation/, status: 1 },
+    { name: "a live browser that never publishes", setup: stub,
+      args: 'absent 123456 "$p" /dev/null 3', expect: /never published its observation within 1s/, status: 1 },
+  ];
+  for (const { name, setup, args, expect, status } of cases) {
+    const r = runWait(setup, args);
+    check(r.status === status && expect.test(r.stdout),
+      `await_browser_ready did not behave for ${name}: expected exit ${status} and ${expect},`
+      + ` got exit ${r.status} (${r.error?.message ?? ""}) stdout ${JSON.stringify(r.stdout)}`);
+    check(status === 1 ? !/READY/.test(r.stdout) : true,
+      `await_browser_ready fell through to READY for ${name}`);
+  }
+
+  // The browser refuses a half-configured handshake before launching anything,
+  // and writes no observation doing so. `CHROME_PATH` points at nothing, so a
+  // browser half that regressed into NOT refusing fails at Chrome resolution —
+  // loudly, and before it could kill or spawn a browser — instead of starting a
+  // real Chrome that this probe's timeout would then orphan.
+  const out = join(scratch, "out.json");
+  const noChrome = { ...process.env, CHROME_PATH: join(scratch, "no-chrome-here") };
+  for (const flags of [
+    ["--ready-file", join(scratch, "r")],
+    ["--release-file", join(scratch, "x")],
+    ["--release-ms", "5"],
+    ["--ready-file", join(scratch, "r"), "--release-file", join(scratch, "x"), "--release-ms", "0"],
+    ["--ready-file", join(scratch, "r"), "--release-file", join(scratch, "x"), "--release-ms", "soon"],
+  ]) {
+    rmSync(out, { force: true });
+    const r = spawnSync(process.execPath, [resolve(repoRoot, BROWSER_HALF),
+      "--origin", "http://127.0.0.1:9", "--code", "1", "--out", out, ...flags],
+    { encoding: "utf8", timeout: 20_000, env: noChrome });
+    check(r.status === 2 && /--ready-file and --release-file go together/.test(r.stderr) && !existsSync(out),
+      `${BROWSER_HALF} did not refuse ${flags.join(" ")} with exit 2 before launching:`
+      + ` exit ${r.status} (${r.error?.message ?? ""}) stderr ${JSON.stringify(r.stderr.slice(0, 300))}`);
+  }
+} finally {
+  rmSync(scratch, { recursive: true, force: true });
+}
+
 if (failures.length > 0) {
   for (const failure of failures) process.stderr.write(`FAIL: ${failure}\n`);
   process.stderr.write(`\n${failures.length} delivery-gate assertion(s) failed\n`);
@@ -1638,7 +1953,9 @@ process.stdout.write(
   + `${MUTATIONS.length} mutations prove each of those can fail (and one that a legitimate `
   + `\`--write\` step is not reported), and the acceptance still proves both role assignments, `
   + `the SAS agreement, a real browser against a real server, and a phase barrier that waits for `
-  + `the browser's exact message and file digest before the Mac is driven, and `
+  + `the browser's exact message and file digest before the Mac is driven, a Mac snapshot `
+  + `judged while the browser still holds the link (${LIFECYCLE_MUTATIONS.length} mutations `
+  + `prove that order can fail, and its ready wait and flag refusals are executed), and `
   + `${REQUIRED_VECTORS.length} vector registration(s) `
   + `(${REQUIRED_VECTORS.map((entry) => entry.fixture).join(", ")}) are still named in `
   + `${VECTOR_CHECKER}'s table in code rather than in prose, which `

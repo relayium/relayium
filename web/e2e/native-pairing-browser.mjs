@@ -32,8 +32,25 @@
  * --expect-body, --out. Everything it OBSERVED is written to `--out` as JSON, and
  * the shell script makes the comparisons — so a mistake in this file surfaces as
  * a failed comparison there rather than as a pass this file granted itself.
+ *
+ * ## The ready/release handshake (`--ready-file` + `--release-file`)
+ *
+ * Closing this browser ENDS the link, and the Mac then correctly reports no live
+ * session. The shell used to take the Mac's snapshot only after this process had
+ * exited, so its "the Mac reports a live session" check was a race it lost
+ * whenever the Mac noticed the close first (hosted run 35810579768, round 2: every
+ * byte agreed and the Mac was already idle). So when the shell passes both files:
+ *
+ *   1. on SUCCESS only, the observation is published, then the ready file (whose
+ *      content is `--code`, so a marker from another round cannot pass for it);
+ *   2. this process holds the link open until the release file exists, bounded by
+ *      `--release-ms`; running out of that bound is a failure, not a release;
+ *   3. only then does it close the browser.
+ *
+ * A failed run never writes the ready file. Neither flag alone is accepted, and
+ * with neither this runs standalone exactly as it always has.
  */
-import { writeFileSync } from "node:fs";
+import { existsSync, renameSync, writeFileSync } from "node:fs";
 import { argFlag, argPresent, launchBrowser, newTab, ok, sleep, SAVE_STUB, VERIFY_DEFAULT, VERIFY_ON, setWideViewport, withWatchdog } from "./harness.mjs";
 
 const ORIGIN = argFlag("--origin", "");
@@ -64,10 +81,22 @@ const DEBUG_PORT = Number(argFlag("--debug-port", "9461"));
  */
 const VERIFY = argFlag("--verify", "default");
 const KEEP = argPresent("--keep");
+const READY_FILE = argFlag("--ready-file", "");
+const RELEASE_FILE = argFlag("--release-file", "");
+const RELEASE_MS = Number(argFlag("--release-ms", "60000"));
 const GLOBAL_TIMEOUT_MS = 6 * 60_000;
 
 if (!ORIGIN || !CODE || !OUT) {
   console.error("usage: native-pairing-browser.mjs --origin URL --code CODE --out FILE [...]");
+  process.exit(2);
+}
+// A half-configured handshake would either never publish ready (and the shell
+// times out on something that is not slow) or never wait for release (and the
+// snapshot race comes back). Neither is a mode worth having.
+if (!READY_FILE !== !RELEASE_FILE
+    || (argPresent("--release-ms") && !READY_FILE)
+    || !(Number.isFinite(RELEASE_MS) && RELEASE_MS > 0)) {
+  console.error("usage: --ready-file and --release-file go together (with an optional positive --release-ms)");
   process.exit(2);
 }
 
@@ -95,8 +124,43 @@ const observed = {
   sentFileName: FILE_NAME,
 };
 
+/** Write-then-rename, so a reader never sees half a file. */
+function writeAtomically(path, text) {
+  const tmp = `${path}.${process.pid}.tmp`;
+  writeFileSync(tmp, text);
+  renameSync(tmp, path);
+}
+
 function writeObservation() {
-  writeFileSync(OUT, JSON.stringify(observed, null, 2) + "\n");
+  writeAtomically(OUT, JSON.stringify(observed, null, 2) + "\n");
+}
+
+/** Hold the link open until the shell has judged the Mac's live state. */
+async function publishReadyAndAwaitRelease() {
+  writeObservation();
+  writeAtomically(READY_FILE, CODE);
+  ok("observation published; holding the link open for the shell's snapshot");
+  const deadline = Date.now() + RELEASE_MS;
+  while (!existsSync(RELEASE_FILE)) {
+    if (Date.now() > deadline) {
+      throw new Error(`timed out after ${RELEASE_MS}ms waiting for the shell to release the link (${RELEASE_FILE})`);
+    }
+    await sleep(500);
+  }
+  ok("released by the shell");
+}
+
+/**
+ * The shell's cleanup reaches this process by PID. Without this, a TERM while
+ * the link is held would end node and orphan the Chrome it spawned.
+ */
+let closeBrowser = null;
+for (const [signal, code] of [["SIGTERM", 143], ["SIGINT", 130]]) {
+  process.once(signal, () => {
+    const done = () => process.exit(code);
+    if (KEEP || !closeBrowser) done();
+    else closeBrowser().then(done, done);
+  });
 }
 
 /**
@@ -149,6 +213,7 @@ const EXPOSE_IDS = `
 
 async function run() {
   const { browser, close } = await launchBrowser({ debugPort: DEBUG_PORT, keep: KEEP });
+  closeBrowser = close;
   try {
     const preference = VERIFY === "on" ? VERIFY_ON : VERIFY_DEFAULT;
     const tab = await newTab(browser, `${ORIGIN}/cross-network#c=${CODE}`,
@@ -264,9 +329,16 @@ async function run() {
       throw new Error(`expected ${EXPECT_NAME}, received ${saved.name}`);
     }
 
-    // Give the outbound batch a moment to be accepted and drained on the far
-    // side; the shell half asserts what the NATIVE peer actually wrote.
-    await sleep(2_000);
+    if (READY_FILE) {
+      // The shell already waited for this side's batch to land on the Mac before
+      // driving the Mac, so nothing is left to drain; what it needs now is the
+      // link still up while it reads the Mac's live state.
+      await publishReadyAndAwaitRelease();
+    } else {
+      // Give the outbound batch a moment to be accepted and drained on the far
+      // side; the shell half asserts what the NATIVE peer actually wrote.
+      await sleep(2_000);
+    }
   } finally {
     writeObservation();
     if (!KEEP) await close();
