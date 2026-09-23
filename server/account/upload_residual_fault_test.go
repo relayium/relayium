@@ -91,3 +91,57 @@ func TestARefusedFinalizeUnderADoubleFaultKeepsItsEvidenceThenBillsOnce(t *testi
 		t.Errorf("EXACTLY-ONCE: the tombstone's re-production charged again: metered %d, want %d", got, residualOnNode)
 	}
 }
+
+// A refused finalize under the double fault, then two drains after recovery
+// that both observed the 4200-byte blob. Drain B settles the 3000 residual,
+// deletes the blob and retires the queue row; the reaper then claims the
+// now-idle tombstone; drain A finally settles its stale observation. The
+// tombstone's cleanup must not re-issue the obligation at the acknowledged
+// floor, or drain A bills the same 3000 bytes a second time.
+func TestARetiredRefusalObligationIsNeverReissuedByItsTombstone(t *testing.T) {
+	ctx := context.Background()
+	h := newPairHarness(t)
+	id, node, sess := stageResidual(t, h, false)
+	node.heal()
+	if ok, err := h.store.ReserveUpload(ctx,
+		UploadEvent{ID: "ev-spend-quota", UserID: h.userID, Bytes: 1 << 30, UploadedAt: h.now},
+		h.now-dayWindow, 1<<40); err != nil || !ok {
+		t.Fatalf("setup: spend the daily quota ok=%v err=%v", ok, err)
+	}
+	refuseBillingWrites(t, h, true, true)
+	if code, _ := h.finalize(t, id); code != http.StatusTooManyRequests {
+		t.Fatalf("setup: finalize %d, want 429", code)
+	}
+	assertResidualEvidenceKept(t, h, node, sess.BlobKey, "refusal, faulted")
+	refuseBillingWrites(t, h, false, false)
+
+	// Drain A probes the blob and is then descheduled with its observation.
+	observed := min(nodeBlobSize(t, node.dir, sess.BlobKey), sess.MaxSize)
+	if observed != residualOnNode {
+		t.Fatalf("setup: drain A observed %d, want %d", observed, residualOnNode)
+	}
+	// Drain B runs to completion: bills, deletes, retires the row.
+	gcSweep(h)
+	if got := h.uploadMetered(t); got != residualOnNode {
+		t.Fatalf("setup: drain B metered %d, want %d", got, residualOnNode)
+	}
+	if q := queuedFor(t, h, sess.BlobKey); len(q) != 0 || nodeBlobPresent(t, node.dir, sess.BlobKey) {
+		t.Fatalf("setup: drain B did not delete and retire (queue %+v)", q)
+	}
+	// The tombstone is now idle and eligible: the reaper claims it.
+	reapIdle(h)
+	if h.sessionExists(t, id) {
+		t.Fatal("setup: the tombstone was not claimed")
+	}
+	if q := queuedFor(t, h, sess.BlobKey); len(q) > 1 || (len(q) == 1 && q[0].BillUserID != "") {
+		t.Errorf("OWNERSHIP: the tombstone's cleanup re-issued the settled obligation: %+v", q)
+	}
+	// Drain A resumes and settles what it observed.
+	charged, err := h.store.SettleBlobBilling(ctx, sess.BlobKey, sess.NodeID, observed, h.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if charged != 0 || h.uploadMetered(t) != residualOnNode {
+		t.Errorf("DOUBLE-CHARGE: the stale settle charged %d (metered %d), want 0 (%d)", charged, h.uploadMetered(t), residualOnNode)
+	}
+}

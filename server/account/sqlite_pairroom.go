@@ -465,13 +465,14 @@ func closePairRoomOn(ctx context.Context, tx *sql.Tx, id string, at, holdUntil i
 		// never billed, so its intent is deletion-only. Fresh and unknown (legacy)
 		// sessions keep the rule below: this void has always billed the residual
 		// of a session it cannot classify, and a legacy row keeps the policy it was
-		// created under.
+		// created under. (A handed-off row's residual is already the queue's; only
+		// a non-pair refusal writes that state, so a void never meets it.)
 		var prov residualProvenance
 		if err := tx.QueryRowContext(ctx,
 			`SELECT residual_provenance FROM upload_sessions WHERE id = ?`, r.ID).Scan(&prov); err != nil {
 			return PairRoomClosure{}, err
 		}
-		if r.Billable && prov != residualPersisted {
+		if r.Billable && (prov == residualUnknown || prov == residualFresh) {
 			// The delete intent carries the BILLING OBLIGATION too: whoever destroys
 			// this blob's bytes must first durably bill any size past `received`
 			// (clamped to max_size) to this user. Written HERE — the same transaction

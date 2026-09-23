@@ -1012,6 +1012,14 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`ALTER TABLE pending_node_deletes ADD COLUMN bill_kind INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE pending_node_deletes ADD COLUMN bill_max INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE pending_node_deletes ADD COLUMN billed_through INTEGER NOT NULL DEFAULT 0`,
+		// The owed-bills outbox's retry ORDER. 0 = never attempted, the state
+		// every existing row and every new INSERT (whose column list omits it)
+		// is in; a failed settle stamps the row with the next value of a
+		// counter, which moves it behind every row not yet attempted since. See
+		// SettleUnbilledMeter: a batch of rows that keep failing must not be
+		// selected ahead of newer bills on every pass.
+		`ALTER TABLE unbilled_meter ADD COLUMN retry_seq INTEGER NOT NULL DEFAULT 0`,
+		`CREATE INDEX IF NOT EXISTS idx_unbilled_meter_retry ON unbilled_meter(retry_seq, at)`,
 		// SHA-256 of the completion proof a receiver must present to end a
 		// pair-room object's life (see pairroom_complete.go). NULLable, and
 		// deliberately without a DEFAULT: NULL is a real state that outranks every
@@ -4515,8 +4523,10 @@ func handOffTerminalBlobOn(ctx context.Context, tx *sql.Tx, r UploadSessionRow, 
 //     deleted, because it answers the retry 409. true.
 //   - The row is in any other state: it still owns the blob. false.
 //
-// The later cleanup claim of the tombstone re-produces the same queue write,
-// and the upsert's higher floor keeps that from billing anything twice.
+// Handing the obligation over also marks the tombstone residualHandedOff in
+// the same transaction, so its later cleanup claim queues it deletion-only and
+// can never re-issue the obligation — not even after a drain has settled it,
+// deleted the blob and retired the queue row that carried the settled floor.
 func (s *SQLiteStore) PrepareRefusedUploadReclaim(ctx context.Context, sessionID, blobKey, nodeID string, at int64) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -4549,6 +4559,19 @@ func (s *SQLiteStore) PrepareRefusedUploadReclaim(ctx context.Context, sessionID
 	}
 	if err := handOffTerminalBlobOn(ctx, tx, r, prov, at); err != nil {
 		return false, err
+	}
+	// The row stays (it answers the retry 409), but its residual right is now
+	// the queue row's. Without this, once a drain has billed the residual,
+	// deleted the blob and retired the queue row, the tombstone's cleanup claim
+	// would re-derive the obligation at `received` — a floor below what was
+	// already billed — and any drain still holding its earlier observation of
+	// the blob's size would bill the same bytes a second time against it.
+	if residualOwed(r, prov) {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE upload_sessions SET residual_provenance = ? WHERE id = ? AND residual_provenance = ?`,
+			residualHandedOff, sessionID, residualFresh); err != nil {
+			return false, err
+		}
 	}
 	return true, tx.Commit()
 }
@@ -5928,11 +5951,19 @@ func (s *SQLiteStore) EnqueueUnbilledMeter(ctx context.Context, m UnbilledMeter)
 // row that keeps failing must not stand in front of every bill queued after it.
 // The batch carries on and the first error is returned with the count.
 //
+// Nor across batches: the batch is taken in retry order (retry_seq, then age),
+// and a row that fails is stamped to the back of that order. Rows that have
+// never been attempted come before every row that has failed, oldest first,
+// and the failures are retried round-robin behind them. However long a backlog
+// of rows that can never settle grows, a new bill is attempted as soon as every
+// row owed before it has been attempted once — never starved — and the failing
+// rows themselves are kept and retried in turn.
+//
 // Whose meter a row lands on is settleOneUnbilledMeter's rule: the account's
 // while the account exists, the anonymized archive once it does not.
 func (s *SQLiteStore) SettleUnbilledMeter(ctx context.Context, limit int) (int, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, user_id, kind, bytes, at FROM unbilled_meter ORDER BY at LIMIT ?`, limit)
+		`SELECT id, user_id, kind, bytes, at FROM unbilled_meter ORDER BY retry_seq, at LIMIT ?`, limit)
 	if err != nil {
 		return 0, err
 	}
@@ -5959,6 +5990,11 @@ func (s *SQLiteStore) SettleUnbilledMeter(ctx context.Context, limit int) (int, 
 			if firstErr == nil {
 				firstErr = err
 			}
+			// To the back of the retry order. Best effort: if even this write
+			// is refused, every row is equally stuck and order is moot.
+			_, _ = s.db.ExecContext(ctx,
+				`UPDATE unbilled_meter SET retry_seq = (SELECT COALESCE(MAX(retry_seq), 0) + 1 FROM unbilled_meter)
+				  WHERE id = ?`, m.ID)
 			continue
 		}
 		if done {
@@ -6837,7 +6873,7 @@ func enqueueBilledNodeDeleteOn(ctx context.Context, ex sqlExecer, blobKey, nodeI
 // can PROVE about whether a session's blob ever became a stored object. It
 // decides one thing — whether cleanup may bill the residual, the bytes a blob
 // holds past the `received` offset central recorded — and it only ever moves
-// towards "persisted" (0 -> 2, 1 -> 2), never back:
+// towards "persisted" (0 -> 2, 1 -> 2, 1 -> 3, 3 -> 2), never back to fresh:
 //
 //   - residualUnknown (0): every row that predates the column, and every row an
 //     older binary inserts (its column list omits the column, so the row gets
@@ -6852,6 +6888,8 @@ func enqueueBilledNodeDeleteOn(ctx context.Context, ex sqlExecer, blobKey, nodeI
 //     Bytes past a persisted object's size are the documented live-finalize
 //     residual (see CommitUploadProgress) and are never billed, on any path,
 //     the void included.
+//   - residualHandedOff (3): see the constant. A fresh row's residual right,
+//     already moved to the queue; deletion-only from then on.
 //
 // Nothing ever reads "no stored object references this key now" as proof that
 // none ever did: the object may have been deleted since. The value 2 is written
@@ -6866,6 +6904,15 @@ const (
 	residualUnknown   residualProvenance = 0
 	residualFresh     residualProvenance = 1
 	residualPersisted residualProvenance = 2
+	// residualHandedOff (3): a fresh session whose residual obligation a
+	// refused finalize has already handed to the queue, while the session
+	// itself stays behind as the 409 tombstone (PrepareRefusedUploadReclaim).
+	// The queue row owns that residual from then on — it is billed against
+	// that row and the row is retired once the blob is gone — so the tombstone
+	// must never hand it over a second time: its later cleanup is
+	// deletion-only. Written only by PrepareRefusedUploadReclaim, from 1, in the
+	// transaction that writes the obligation.
+	residualHandedOff residualProvenance = 3
 )
 
 // residualTriggers names the two provenance guards. The guard-loss check in

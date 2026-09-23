@@ -19,6 +19,7 @@ package account
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"testing"
 )
 
@@ -388,5 +389,50 @@ func TestAnOwedRowThatCannotSettleDoesNotBlockLiveBills(t *testing.T) {
 	_ = h.store.db.QueryRow(`SELECT COUNT(*) FROM unbilled_meter WHERE id = 'poison'`).Scan(&left)
 	if left != 1 {
 		t.Errorf("EVIDENCE: the unsettleable row was dropped (%d left)", left)
+	}
+}
+
+// More than two full batches of older rows that can never settle, then valid
+// bills: the valid bills are reached within the passes it takes to attempt
+// every older row once, and the failing rows are all kept.
+func TestFailingOwedRowsNeverStarveNewerBillsAcrossBatches(t *testing.T) {
+	ctx := context.Background()
+	h := newPairHarness(t)
+	const poison = 2*unbilledMeterBatch + 88
+	tx, err := h.store.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < poison; i++ {
+		if _, err := tx.Exec(`INSERT INTO unbilled_meter (id, user_id, kind, bytes, at, reason) VALUES (?,?,?,?,?,?)`,
+			fmt.Sprintf("poison-%04d", i), h.userID, 99, 5, h.now-100000+int64(i), "unknown kind"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if err := h.store.EnqueueUnbilledMeter(ctx, UnbilledMeter{UserID: h.userID, Kind: MeterUpload, Bytes: 20, At: h.now, Reason: "live"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	passes := (poison + 3 + unbilledMeterBatch - 1) / unbilledMeterBatch
+	for i := 0; i < passes; i++ {
+		gcSweep(h)
+	}
+	if got := h.uploadMetered(t); got != 60 {
+		t.Errorf("STARVED: after %d passes the valid bills metered %d, want 60", passes, got)
+	}
+	var left int
+	if err := h.store.db.QueryRow(`SELECT COUNT(*) FROM unbilled_meter WHERE id LIKE 'poison-%'`).Scan(&left); err != nil {
+		t.Fatal(err)
+	}
+	if left != poison {
+		t.Errorf("EVIDENCE: %d of %d unsettleable rows kept", left, poison)
+	}
+	gcSweep(h)
+	if got := h.uploadMetered(t); got != 60 {
+		t.Errorf("EXACTLY-ONCE: another pass moved the meter to %d", got)
 	}
 }
