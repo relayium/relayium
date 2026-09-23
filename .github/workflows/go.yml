@@ -297,6 +297,27 @@ jobs:
           while read -r _ _ name _; do
             [[ "$may_skip" == *" $name "* ]] || { echo "::error::$name skipped on Windows" >&2; exit 1; }
           done < <(grep '^--- SKIP: ' "$log" || true)
+      - name: go vet (Windows; the inbox send lock)
+        working-directory: server
+        run: go vet ./internal/inboxsend/sendlock
+      # The send lock's Windows half is LockFileEx, and these three tests hold
+      # it from real child processes, so only a Windows runner exercises it.
+      # The same load-bearing PASS grep as above; none of the three may SKIP.
+      - name: Windows runtime tests (inbox send lock)
+        working-directory: server
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/cli-windows-sendlock.log"
+          go test -count=1 -v -timeout 2m ./internal/inboxsend/sendlock | tee "$log"
+          for t in TestAnotherProcessHoldingTheLockExcludesThisOne TestAKilledHolderLeavesNoStaleLock \
+            TestTwoHandlesInOneProcessExcludeEachOther; do
+            grep -q "^--- PASS: $t " "$log" || { echo "::error::$t did not PASS on Windows" >&2; exit 1; }
+          done
+          if grep '^--- SKIP: ' "$log"; then
+            echo "::error::a send lock test skipped on Windows" >&2
+            exit 1
+          fi
 
   # Central runs concurrent goroutines against shared state by design — the GC
   # sweep, the metering worker, the node storage prober — and the failure mode
