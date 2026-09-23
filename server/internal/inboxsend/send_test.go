@@ -678,32 +678,6 @@ func TestFreshReadBeforeFirstWriteCatchesALateTurnOff(t *testing.T) {
 	}
 }
 
-// Only zero-length files: the upload would carry no bytes, the server keeps no
-// ciphertext object, and a receiver's fetch answers stored_object_unavailable
-// (observed against the real handlers while writing this). So it is refused
-// locally, before any request; a mix with one non-empty file is fine.
-func TestAllEmptyDeliveryIsRefusedLocally(t *testing.T) {
-	w := newWorld(t, 4<<20)
-	var requests atomic.Int64
-	w.env.Faults.SetObserve(func(string) { requests.Add(1) })
-	root := writeTree(t, map[string][]byte{"e/a": {}, "e/b/c": {}, "m/x": {}, "m/y": []byte("1")})
-	_, err := w.session().Send(context.Background(), SendRequest{To: w.target.id, Paths: []string{filepath.Join(root, "e")}})
-	if e := AsError(err); e == nil || e.Class != ClassLocal || e.Code != CodeUnsendableContent {
-		t.Fatalf("err = %v; want a local refusal", err)
-	}
-	if requests.Load() != 0 {
-		t.Fatal("an all-empty delivery reached the network")
-	}
-	res, err := w.session().Send(context.Background(), SendRequest{To: w.target.id, Paths: []string{filepath.Join(root, "m")}})
-	if err != nil {
-		t.Fatalf("mixed send: %v", err)
-	}
-	d := w.receive(res.TaskID)
-	if len(d.files["m/x"]) != 0 || string(d.files["m/y"]) != "1" {
-		t.Fatal("mixed delivery differs")
-	}
-}
-
 // A delivery to a device that later cleared its inbox is still listed (as
 // revoked), not silently dropped from `sent`.
 func TestSentStillShowsDeliveriesToADisabledDevice(t *testing.T) {

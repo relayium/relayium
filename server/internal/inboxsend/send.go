@@ -102,18 +102,48 @@ func ctxErr(err error) *Error {
 	return nil
 }
 
+// capZeroLengthStoredObject is the server capability (account.
+// CapZeroLengthStoredObject) that says the server itself materializes and
+// serves a stored object of zero bytes. An all-empty delivery is exactly such
+// an object: every empty file contributes no frame, so the ciphertext is
+// empty.
+//
+// It is a gate, not the guarantee. What keeps an accepted all-empty delivery
+// readable by EVERY server build — including one this server is rolled back
+// to between the capability read and finalize, which no read can rule out —
+// is the sender's own zero-byte append (ensureEmptyBlob), which creates the
+// blob on any build before finalize. The gate keeps new all-empty sends away
+// from servers that do not advertise support at all.
+const capZeroLengthStoredObject = "stored-object-zero-length-v2"
+
 // resolveSelf reads the device list and the row this bearer is.
 func (s *Session) resolveSelf(ctx context.Context) ([]inboxclient.Device, inboxclient.Device, error) {
-	devs, err := s.client.ListDevices(ctx)
+	devs, cur, _, err := s.resolveSelfWithCaps(ctx)
+	return devs, cur, err
+}
+
+// resolveSelfWithCaps is resolveSelf plus the server capabilities advertised
+// on the same read.
+func (s *Session) resolveSelfWithCaps(ctx context.Context) ([]inboxclient.Device, inboxclient.Device, []string, error) {
+	devs, caps, err := s.client.listDevicesWithCaps(ctx)
 	if err != nil {
-		return nil, inboxclient.Device{}, readErr(err)
+		return nil, inboxclient.Device{}, nil, readErr(err)
 	}
 	cur, ok := currentDevice(devs)
 	if !ok || !isInertID(cur.ID) {
-		return nil, inboxclient.Device{}, failed(CodeSignedOut,
+		return nil, inboxclient.Device{}, nil, failed(CodeSignedOut,
 			"this credential is not bound to a device — run `relayium login` again")
 	}
-	return devs, cur, nil
+	return devs, cur, caps, nil
+}
+
+func hasCap(caps []string, want string) bool {
+	for _, c := range caps {
+		if c == want {
+			return true
+		}
+	}
+	return false
 }
 
 // Send plans, encrypts, uploads and queues one delivery.
@@ -139,9 +169,14 @@ func (s *Session) Send(ctx context.Context, req SendRequest) (Result, error) {
 
 	// A FRESH read immediately before the first write, so a device that turned
 	// receiving off or rotated its key a moment ago costs nothing.
-	devs, cur, err := s.resolveSelf(ctx)
+	devs, cur, caps, err := s.resolveSelfWithCaps(ctx)
 	if err != nil {
 		return Result{}, err
+	}
+	// Judged on this same fresh read, so a server rolled back to a build that
+	// cannot serve an empty object is caught before the upload it would charge.
+	if plan.CiphertextBytes == 0 && !hasCap(caps, capZeroLengthStoredObject) {
+		return Result{}, local(CodeUnsendableContent, "every file named is empty; a delivery must contain at least one byte")
 	}
 	var target inboxclient.Device
 	found := false
@@ -473,6 +508,29 @@ func (s *Session) finalize(ctx context.Context, j *Journal, resumed bool) (strin
 	return "", 0, s.unknown(j, errors.New("finalize answers were all ambiguous"))
 }
 
+// serverUnsupported reports an unfinished all-empty send that this server
+// cannot currently complete, with the record kept.
+func (s *Session) serverUnsupported(j *Journal) *Error {
+	var state string
+	switch j.Phase {
+	case PhaseFinalized:
+		// A create may have been sent by an earlier process and committed with
+		// its answer lost, so whether the delivery is queued is NOT known here.
+		state = "Its upload was already completed and counted. Whether the delivery was queued is not known: " +
+			"an earlier attempt may already have queued it, so check `relayium inbox sent` before sending it again"
+	case PhaseFinalizing:
+		state = "Its upload was not completed by this command; an earlier attempt may already have completed it, " +
+			"and if so that upload was counted. Nothing was queued"
+	default:
+		state = "Its upload was not completed and nothing was queued"
+	}
+	e := newErr(ClassFailed, CodeServerUnsupported, fmt.Sprintf("this server does not currently support deliveries "+
+		"made only of empty files. %s. The record was kept: run `relayium inbox retry %s` once the server supports them again.",
+		state, j.ID), errors.New("server lacks "+capZeroLengthStoredObject))
+	e.LocalSendID = j.ID
+	return e
+}
+
 // finalizeOutcomeFailure is a definitive recovery answer that there is no
 // object to queue.
 func finalizeOutcomeFailure(outcome string, cause error) *Error {
@@ -785,7 +843,7 @@ func (s *Session) Retry(ctx context.Context, id string) (Result, error) {
 		return Result{}, failed(CodeJournalMismatch, "this send was started under a different login or server; "+
 			"log in as that account on that server to finish it")
 	}
-	_, cur, err := s.resolveSelf(ctx)
+	_, cur, caps, err := s.resolveSelfWithCaps(ctx)
 	if err != nil {
 		return Result{}, err
 	}
@@ -801,6 +859,26 @@ func (s *Session) Retry(ctx context.Context, id string) (Result, error) {
 	// sent (N8 records that phase before the create).
 	finalizeMayHaveBeenSent := j.Phase == PhaseFinalizing
 	createMayHaveBeenSent := j.Phase == PhaseFinalized
+	// The same gate as Send, on this command's own fresh read: the server this
+	// all-empty send began on may since have been rolled back to a build that
+	// cannot serve an empty object. Nothing is sent to it — no finalize, no
+	// create — and the record is kept to finish once the server supports it
+	// again. The message never claims nothing was charged: an earlier process
+	// may already have completed the upload.
+	if j.CiphertextBytes == 0 && j.Phase != PhasePlanned && !hasCap(caps, capZeroLengthStoredObject) {
+		// A finalized record's create may already have committed with its
+		// answer lost. That is resolved READ-ONLY here — the task list, never a
+		// create — so a delivery that is in fact queued is reported as such
+		// instead of prompting a second, charged send.
+		if j.Phase == PhaseFinalized {
+			if t, ok := s.lookup(ctx, j); ok {
+				s.drop(j)
+				res.TaskID, res.State, res.ErrorCode, res.SavedAt = t.ID, t.State, t.ErrorCode, t.SavedAt
+				return res, nil
+			}
+		}
+		return res, s.serverUnsupported(j)
+	}
 	switch j.Phase {
 	case PhasePlanned:
 		s.drop(j)
@@ -833,6 +911,31 @@ func (s *Session) Retry(ctx context.Context, id string) (Result, error) {
 		}
 		fallthrough
 	case PhaseFinalizing:
+		// An all-empty upload's blob is created by one zero-byte append before
+		// finalize (ensureEmptyBlob). A record left by an earlier process may not
+		// have sent it, so it is sent again here; it is idempotent. A session
+		// that is already gone is left to finalize to judge when an earlier
+		// finalize may have committed it.
+		if j.CiphertextBytes == 0 {
+			if err := ensureEmptyBlob(ctx, s.client, j.UploadID); err != nil {
+				switch {
+				case errors.Is(err, errUploadLost) && finalizeMayHaveBeenSent:
+				case ctxErr(err) != nil:
+					return res, s.interrupted(j, err)
+				case errors.Is(err, errUploadLost):
+					s.drop(j)
+					return res, uploadFailure(errUploadLost)
+				default:
+					e := readErr(err)
+					if errors.Is(err, errUploadDesync) {
+						e = newErr(ClassFailed, CodeProtocol, "the server reported bytes for an upload that has none; "+
+							"nothing was finalized and the record was kept", err)
+					}
+					e.LocalSendID = j.ID
+					return res, e
+				}
+			}
+		}
 		storedID, exp, err := s.finalize(ctx, j, finalizeMayHaveBeenSent)
 		if err != nil {
 			return res, err

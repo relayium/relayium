@@ -18,6 +18,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -54,14 +55,32 @@ type Env struct {
 // cmd/relayium uses 1 MiB; multi-chunk tests need more).
 func New(t testing.TB, maxFile int64) *Env {
 	t.Helper()
-	return NewOn(t, maxFile, ":memory:")
+	return newEnvAt(t, maxFile, ":memory:", t.TempDir())
 }
 
 // NewOn is New over the SQLite database at dsn — a file path for a test that
 // wants the production file-backed configuration (WAL, a separate read pool).
 func NewOn(t testing.TB, maxFile int64, dsn string) *Env {
 	t.Helper()
-	store, err := account.OpenSQLite(dsn)
+	return newEnvAt(t, maxFile, dsn, t.TempDir())
+}
+
+// NewAt is New on a SQLite file and blob directory the caller owns, so the
+// state a delivery leaves behind can be opened afterwards by another build of
+// the server (the W-N40 legacy-reader check).
+func NewAt(t testing.TB, maxFile int64, dbPath, blobDir string) *Env {
+	t.Helper()
+	return newEnvAt(t, maxFile, dbPath, blobDir)
+}
+
+func newEnv(t testing.TB, maxFile int64) *Env {
+	t.Helper()
+	return newEnvAt(t, maxFile, ":memory:", t.TempDir())
+}
+
+func newEnvAt(t testing.TB, maxFile int64, dbPath, blobDir string) *Env {
+	t.Helper()
+	store, err := account.OpenSQLite(dbPath)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -72,7 +91,7 @@ func NewOn(t testing.TB, maxFile int64, dsn string) *Env {
 		DefaultTTL: 3600, MaxTTL: 7200, DefaultRetention: 1,
 		DefaultMaxDownloads: 5, MaxMaxDownloads: 100,
 	})
-	disk, err := storage.NewDiskStore(t.TempDir())
+	disk, err := storage.NewDiskStore(blobDir)
 	if err != nil {
 		t.Fatalf("disk store: %v", err)
 	}
@@ -225,6 +244,7 @@ type Rule struct {
 
 // Faults is the middleware.
 type Faults struct {
+	legacy  atomic.Bool
 	mu      sync.Mutex
 	rules   []*Rule
 	hits    map[string]int
@@ -398,7 +418,47 @@ func hangUp(w http.ResponseWriter) {
 	}
 }
 
-func (f *Faults) wrap(h http.Handler) http.Handler {
+// Retire stops rule from firing again (it has fired its last time).
+func (f *Faults) Retire(rule *Rule) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	rule.fired = rule.Times
+}
+
+// SetLegacyServer emulates a server that predates W-N40 (or one rolled back
+// to such a build) on the sender's path: GET /api/devices answers without
+// serverCapabilities, exactly the response shape those builds produced.
+// Everything else is still the real handler.
+func (f *Faults) SetLegacyServer(on bool) { f.legacy.Store(on) }
+
+func (f *Faults) legacyDevices(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !f.legacy.Load() || r.Method != http.MethodGet || r.URL.Path != "/api/devices" {
+			h.ServeHTTP(w, r)
+			return
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		body := rec.Body.Bytes()
+		if rec.Code == http.StatusOK {
+			var m map[string]json.RawMessage
+			if err := json.Unmarshal(body, &m); err == nil {
+				delete(m, "serverCapabilities")
+				body, _ = json.Marshal(m)
+			}
+		}
+		for k, v := range rec.Header() {
+			if k != "Content-Length" {
+				w.Header()[k] = v
+			}
+		}
+		w.WriteHeader(rec.Code)
+		_, _ = w.Write(body)
+	})
+}
+
+func (f *Faults) wrap(inner http.Handler) http.Handler {
+	h := f.legacyDevices(inner)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get(bypassHeader) != "" {
 			r.Header.Del(bypassHeader)

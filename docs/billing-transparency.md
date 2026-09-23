@@ -338,7 +338,16 @@ The dimensions actually checked, each fail-closed at write time:
   is a new upload, debited and metered as one. A
   near-empty file still debits a 64 KiB floor
   (`minBillableBytes`, `account/files.go:35` — capping object *count*, not
-  just size). Uploads that land on your own storage node are never debited.
+  just size). An empty object — a batch made only of zero-byte files carries
+  no ciphertext at all — is still an object and debits the same single 64 KiB
+  floor, once, however often its finalize is retried; it adds 0 bytes to
+  metered upload and download traffic and to stored bytes. Its zero-byte
+  blob exists before the object does: the CLI sends one empty append before
+  finalize, and finalize writes the blob again if it is missing (a
+  single-shot empty upload writes one too). If finalize cannot write it, the
+  finalize is refused with no object and no debit. Reading it needs no blob
+  access: it is served as an empty body without reading storage.
+  Uploads that land on your own storage node are never debited.
   Exceeding it: `429` "daily quota exceeded". Inside the transaction that
   stores the file it is checked before the storage caps, so there it is the
   answer when both are exceeded. Two earlier refusals can answer first: a
@@ -446,7 +455,7 @@ except the file's own retention/download-count settings — they land on the
 user's own infrastructure, which the operator (not relayium.com) pays for.
 
 Users can see exactly what they've used against their own cap at
-`GET /api/me/usage` (`account/handlers.go:515`, `handleMeUsage`) — the same
+`GET /api/me/usage` (`account/handlers.go:772`, `handleMeUsage`) — the same
 numbers this document describes, not a hidden internal metric.
 
 ## The free tier, and what needs no account at all

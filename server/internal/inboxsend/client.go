@@ -270,13 +270,22 @@ func (c *Client) getJSON(ctx context.Context, op, path string, limit int64, out 
 
 // ListDevices is GET /api/devices.
 func (c *Client) ListDevices(ctx context.Context) ([]inboxclient.Device, error) {
+	devs, _, err := c.listDevicesWithCaps(ctx)
+	return devs, err
+}
+
+// listDevicesWithCaps is GET /api/devices plus the server capabilities the
+// same response advertises (absent on a server that predates them, which
+// decodes as none).
+func (c *Client) listDevicesWithCaps(ctx context.Context) ([]inboxclient.Device, []string, error) {
 	var out struct {
-		Devices []inboxclient.Device `json:"devices"`
+		Devices            []inboxclient.Device `json:"devices"`
+		ServerCapabilities []string             `json:"serverCapabilities"`
 	}
 	if err := c.getJSON(ctx, "list devices", "/api/devices", maxListBody, &out); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return out.Devices, nil
+	return out.Devices, out.ServerCapabilities, nil
 }
 
 // ListKeys is GET /api/devices/{id}/inbox/keys.

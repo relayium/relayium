@@ -49,6 +49,13 @@ func newWorld(t *testing.T, maxFile int64) *world {
 	return newWorldOn(t, sendtest.New(t, maxFile))
 }
 
+// newWorldOnNode is newWorld with every upload placed on a fleet storage node.
+func newWorldOnNode(t *testing.T, maxFile int64) (*world, *sendtest.Node) {
+	t.Helper()
+	env, node := sendtest.NewWithNode(t, maxFile)
+	return newWorldOn(t, env), node
+}
+
 // newFileWorld is newWorld on a file-backed SQLite database.
 func newFileWorld(t *testing.T, maxFile int64) *world {
 	t.Helper()

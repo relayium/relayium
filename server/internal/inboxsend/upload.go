@@ -87,6 +87,38 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 	}
 }
 
+// ensureEmptyBlob sends one zero-byte append at offset 0 to an upload that
+// has committed nothing, so its blob exists before finalize. Transport
+// failures and 5xx are retried within uploadRetryBudget; a server that already
+// holds bytes for it is a desync, a missing session is errUploadLost, and any
+// other answer is definitive.
+func ensureEmptyBlob(ctx context.Context, c *Client, uploadID string) error {
+	for failures := 0; ; {
+		got, err := c.Append(ctx, uploadID, 0, 0, nil)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		switch {
+		case err == nil && got == 0:
+			return nil
+		case err == nil, statusOf(err) == http.StatusConflict:
+			return errUploadDesync
+		case statusOf(err) == http.StatusNotFound:
+			return errUploadLost
+		case isTransport(err) || statusOf(err) >= 500:
+			failures++
+			if failures > uploadRetryBudget {
+				return err
+			}
+			if serr := sleepCtx(ctx, uploadBackoff(failures-1)); serr != nil {
+				return serr
+			}
+		default:
+			return err
+		}
+	}
+}
+
 // errUploadLost: the session is gone (reaped/expired) before finalize.
 var errUploadLost = errors.New("upload session is gone")
 
@@ -155,6 +187,23 @@ func streamUpload(ctx context.Context, c *Client, uploadID string, chunk, total 
 		}
 	}
 
+	if total == 0 {
+		// An all-empty delivery has no frame to send, so no append would ever
+		// create its blob. One zero-byte append creates it (every server build's
+		// append opens the key at offset 0), so the object this upload becomes
+		// is readable by every server build — including one that finalizes it,
+		// or reads it, without W-N40's own materialization (a rollback). The
+		// source is proven empty first: a frame here means the files changed.
+		if err := fill(); err != nil {
+			return err
+		}
+		if len(buf) != 0 {
+			return errSourceChanged
+		}
+		if err := ensureEmptyBlob(ctx, c, uploadID); err != nil {
+			return err
+		}
+	}
 	for {
 		if err := fill(); err != nil {
 			return err
