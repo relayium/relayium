@@ -553,6 +553,29 @@ func TestAllEmptySendCreatesItsBlobWithOneEmptyAppend(t *testing.T) {
 	}
 }
 
+// A05 x A03: `--resumable` on an all-empty delivery takes the ordinary path,
+// so its blob is still created by the one zero-byte append and no local copy
+// is left behind.
+func TestResumableAllEmptySendUsesTheEmptyAppendPath(t *testing.T) {
+	w := newWorld(t, 4<<20)
+	root := writeTree(t, map[string][]byte{"e/a": {}, "e/b": {}})
+	res, e := sendResumable(t, w, context.Background(), filepath.Join(root, "e"))
+	if e != nil {
+		t.Fatalf("send: %v", e)
+	}
+	ps := w.env.Faults.Patches()
+	if len(ps) != 1 || ps[0].Start != 0 || len(ps[0].Body) != 0 {
+		t.Fatalf("PATCHes = %+v; want exactly one empty append at 0", ps)
+	}
+	if res.TaskID == "" || len(w.tasks()) != 1 {
+		t.Fatalf("result %+v tasks %d; want one queued delivery", res, len(w.tasks()))
+	}
+	if q := w.env.QuotaBytes(w.uid); q != quotaFloor {
+		t.Fatalf("quota = %d; want one floor", q)
+	}
+	assertNoSendState(t, w)
+}
+
 // Codex r3 finding 2: a finalized all-empty record whose create COMMITTED with
 // its answer lost, retried after a rollback. The retry resolves it read-only:
 // when the task list is readable the queued delivery is reported (no create

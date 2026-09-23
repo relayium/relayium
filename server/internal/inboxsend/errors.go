@@ -21,7 +21,8 @@
 //	   journal cleanup) can seal anything: only a fresh send generates a key.
 //	N4 CIPHERTEXT IDENTITY ON REPLAY. A byte re-sent for an existing upload
 //	   session is a copy of ciphertext produced by the single sealing pass (the
-//	   in-memory unacknowledged buffer). Nothing is re-read and re-sealed.
+//	   in-memory unacknowledged buffer, or for `--resumable` the verified local
+//	   encrypted copy written by that pass). Nothing is re-read and re-sealed.
 //	N5 NO AUTOMATIC RE-UPLOAD. An ambiguous finalize or create never starts a
 //	   second upload. The outcome is reported as unknown and the local journal is
 //	   kept; only an explicit new `inbox send` uploads again. Once an attempt
@@ -129,6 +130,13 @@ const (
 	// CodeFinalizeRefused: the server confirmed, when asked again, that it did
 	// not complete the upload (a finalize-recovery "failed" answer).
 	CodeFinalizeRefused = "finalize_refused"
+	// CodeSpoolUnavailable: `--resumable` cannot keep a local encrypted copy
+	// here (disk space, size cap, an unsafe directory, the platform); nothing
+	// was sent.
+	CodeSpoolUnavailable = "spool_unavailable"
+	// CodeSpoolCorrupt: a resumable send's local encrypted copy is missing or
+	// does not match its record, so it was not uploaded from.
+	CodeSpoolCorrupt = "spool_corrupt"
 )
 
 // CodeUsage is a command line the CLI could not accept. This package never

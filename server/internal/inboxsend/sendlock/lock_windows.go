@@ -30,6 +30,12 @@ func Acquire(path string) (*Lock, error) {
 	if err != nil {
 		return nil, err
 	}
+	return AcquireFile(f)
+}
+
+// AcquireFile takes the exclusive lock on an already open file, which the
+// Lock then owns; on failure f is closed. It never waits.
+func AcquireFile(f *os.File) (*Lock, error) {
 	l := &Lock{f: f}
 	flags := uint32(windows.LOCKFILE_EXCLUSIVE_LOCK | windows.LOCKFILE_FAIL_IMMEDIATELY)
 	if err := windows.LockFileEx(windows.Handle(f.Fd()), flags, 0, 1, 0, &l.ov); err != nil {
