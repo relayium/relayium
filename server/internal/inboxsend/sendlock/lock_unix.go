@@ -20,6 +20,12 @@ func Acquire(path string) (*Lock, error) {
 	if err != nil {
 		return nil, err
 	}
+	return AcquireFile(f)
+}
+
+// AcquireFile takes the exclusive lock on an already open file, which the
+// Lock then owns; on failure f is closed. It never waits.
+func AcquireFile(f *os.File) (*Lock, error) {
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		f.Close()
 		if errors.Is(err, syscall.EWOULDBLOCK) {

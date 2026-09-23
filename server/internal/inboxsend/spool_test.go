@@ -851,3 +851,177 @@ func TestResumableFullyUploadedSendNeedsNoCopy(t *testing.T) {
 	}
 	assertNoSendState(t, w)
 }
+
+// snapshotTree maps every path under root to its mode and content.
+func snapshotTree(t *testing.T, root string) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		fi, ierr := os.Lstat(p)
+		if ierr != nil {
+			return nil
+		}
+		v := fi.Mode().String()
+		if fi.Mode().IsRegular() {
+			b, _ := os.ReadFile(p)
+			v += ":" + string(b)
+		}
+		out[p] = v
+		return nil
+	})
+	return out
+}
+
+// R15 (review finding 1): after an interruption the record directory is
+// swapped for a symbolic link to another directory holding the same files, or
+// made writable by others. Retry, discard, listing/expiry collection and a new
+// send are all refused before any request; nothing behind the link is read,
+// locked, chmod'ed or removed, and nothing is uploaded.
+func TestEveryEntryPathRefusesAnUnsafeRecordDirectory(t *testing.T) {
+	setup := func(t *testing.T) (*world, *Journal, string) {
+		fastBackoff(t)
+		w := newWorld(t, 64<<20)
+		root := writeTree(t, map[string][]byte{"big.bin": randomBytes(t, 9<<20)})
+		ctx, cancel := cancelAt(w, atPatch, 1)
+		defer cancel()
+		if _, e := sendResumable(t, w, ctx, filepath.Join(root, "big.bin")); e == nil {
+			t.Fatal("want interrupted")
+		}
+		return w, theRecord(t, w), filepath.Join(root, "big.bin")
+	}
+	for _, tc := range []struct {
+		name   string
+		unsafe func(t *testing.T, w *world) (watch string)
+		reason string
+	}{
+		{"record directory swapped for a symlink", func(t *testing.T, w *world) string {
+			live := filepath.Join(w.cfgDir, journalDirName)
+			elsewhere := filepath.Join(t.TempDir(), "elsewhere")
+			if err := os.Rename(live, elsewhere); err != nil {
+				t.Fatal(err)
+			}
+			// 0750: a followed "ensure" would chmod it to 0700.
+			if err := os.Chmod(elsewhere, 0o750); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(elsewhere, live); err != nil {
+				t.Fatal(err)
+			}
+			return elsewhere
+		}, "symbolic link"},
+		{"record directory writable by others", func(t *testing.T, w *world) string {
+			dir := filepath.Join(w.cfgDir, journalDirName)
+			if err := os.Chmod(dir, 0o777); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { os.Chmod(dir, 0o700) })
+			return dir
+		}, "writable by other users"},
+		{"configuration directory writable by others", func(t *testing.T, w *world) string {
+			if err := os.Chmod(w.cfgDir, 0o777); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { os.Chmod(w.cfgDir, 0o700) })
+			return filepath.Join(w.cfgDir, journalDirName)
+		}, "writable by other users"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w, j, src := setup(t)
+			watch := tc.unsafe(t, w)
+			before := snapshotTree(t, watch)
+			h := hitsOf(w)
+			reads := w.env.Faults.Hits("GET /api/devices")
+			refused := func(what string, err error) {
+				t.Helper()
+				e := AsError(err)
+				if e == nil || e.Code != CodeLocalState || !strings.Contains(e.Msg, tc.reason) {
+					t.Fatalf("%s = %v; want local_state naming %q", what, err, tc.reason)
+				}
+			}
+			_, err := w.session().Retry(context.Background(), j.ID)
+			refused("retry", err)
+			_, err = Discard(w.cfgDir, j.ID)
+			refused("discard", err)
+			_, err = w.session().Send(context.Background(), SendRequest{To: w.target.id, Paths: []string{src}})
+			if e := AsError(err); e == nil || e.Class != ClassLocal || !strings.Contains(e.Msg, tc.reason) {
+				t.Fatalf("send = %v; want a local refusal naming %q", err, tc.reason)
+			}
+			_, err = w.session().Send(context.Background(), SendRequest{To: w.target.id, Paths: []string{src}, Resumable: true})
+			if e := AsError(err); e == nil || e.Code != CodeSpoolUnavailable {
+				t.Fatalf("resumable send = %v", err)
+			}
+			for _, age := range []time.Duration{spoolMaxAge + time.Minute, staleJournalAge + time.Hour} {
+				s := w.session()
+				s.now = func() time.Time { return time.Now().Add(age) }
+				if got := s.LocalSends(); len(got) != 0 {
+					t.Fatalf("listed %v from an unsafe directory", got)
+				}
+			}
+			if !strings.Contains(w.notice.String(), "cannot read the local send records") {
+				t.Fatalf("the refusal was not reported: %s", w.notice.String())
+			}
+			if got := hitsOf(w); got != h || w.env.Faults.Hits("GET /api/devices") != reads {
+				t.Fatalf("requests were made: hits %+v -> %+v", h, got)
+			}
+			after := snapshotTree(t, watch)
+			if len(after) != len(before) {
+				t.Fatalf("files changed: %d -> %d", len(before), len(after))
+			}
+			for p, v := range before {
+				if after[p] != v {
+					t.Fatalf("%s was changed (mode or content)", p)
+				}
+			}
+		})
+	}
+}
+
+// R16 (review finding 2): the first record's save fails AFTER its rename (the
+// directory fsync). The record is visible, so the copy it names is kept, the
+// error says so, and a retry sends it exactly once.
+func TestAmbiguousFirstSaveKeepsTheCopyItNames(t *testing.T) {
+	fastBackoff(t)
+	w := newWorld(t, 4<<20)
+	old := syncRootDir
+	var failed atomic.Bool
+	syncRootDir = func(r *os.Root) error {
+		if !failed.Load() {
+			if ents, err := readDirIn(r); err == nil {
+				for _, e := range ents {
+					if strings.HasSuffix(e.Name(), ".json") {
+						failed.Store(true)
+						return errors.New("injected directory fsync failure")
+					}
+				}
+			}
+		}
+		return old(r)
+	}
+	t.Cleanup(func() { syncRootDir = old })
+	root := writeTree(t, map[string][]byte{"a.txt": []byte(payload)})
+	_, e := sendResumable(t, w, context.Background(), filepath.Join(root, "a.txt"))
+	if e == nil || e.Code != CodeJournalWrite || e.LocalSendID == "" || !strings.Contains(e.Msg, "injected") {
+		t.Fatalf("err = %v; want journal_write_failed with the record kept", e)
+	}
+	if h := hitsOf(w); h.init != 0 {
+		t.Fatalf("hits %+v; nothing may be sent after an ambiguous save", h)
+	}
+	j := theRecord(t, w)
+	if j.Phase != PhasePlanned {
+		t.Fatalf("phase = %s", j.Phase)
+	}
+	if _, err := os.Stat(newJournalStore(w.cfgDir).spoolPath(j.ID)); err != nil {
+		t.Fatalf("the copy the visible record names was removed: %v", err)
+	}
+	res, err := w.session().Retry(context.Background(), j.ID)
+	if err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if string(w.receive(res.TaskID).files["a.txt"]) != payload || len(w.tasks()) != 1 || hitsOf(w).finalize != 1 {
+		t.Fatal("not delivered exactly once")
+	}
+	assertNoSendState(t, w)
+}

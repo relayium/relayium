@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/relayium/relayium/internal/termtext"
@@ -60,11 +59,21 @@ func (s *Session) sendSpooled(ctx context.Context, j *Journal, plan *Plan, sl *s
 			termtext.Safe(err.Error()))
 	}
 	j.SpoolBytes, j.SpoolSHA256, j.HeaderBytes = size, sum, int64(4+len(encManifest))
-	// N6: the wrapped key is durable before any network write. Until this
-	// record exists the copy is evidence of nothing, so it goes with a failure.
-	if err := s.store.save(j); err != nil {
-		_ = s.store.removeSpool(j.ID)
-		return Result{}, failed(CodeLocalState, "cannot write the local send record: "+termtext.Safe(err.Error())+"; nothing was sent")
+	// N6: the wrapped key is durable before any network write. A record that
+	// never reached its name leaves the copy evidence of nothing, so the copy
+	// goes with the failure. One that did (the failure came after the rename,
+	// e.g. the directory fsync) is visible now and names the copy, so both
+	// stay: never a record pointing at a copy that was removed.
+	if renamed, err := s.store.saveReporting(j); err != nil {
+		if !renamed {
+			_ = s.store.removeSpool(j.ID)
+			return Result{}, failed(CodeLocalState, "cannot write the local send record: "+termtext.Safe(err.Error())+"; nothing was sent")
+		}
+		e := failed(CodeJournalWrite, fmt.Sprintf("cannot make the local send record durable (%s), so nothing was sent. "+
+			"The record and the local encrypted copy were kept: `relayium inbox retry %s` starts the upload from the copy, "+
+			"and `relayium inbox retry --discard %s` removes them.", termtext.Safe(err.Error()), j.ID, j.ID))
+		e.LocalSendID = j.ID
+		return Result{}, e
 	}
 	// From here on no source file is opened again: every byte uploaded, now or
 	// after a restart, comes from the copy.
@@ -204,8 +213,7 @@ func (s *Session) expireSpooled(j *Journal) bool {
 	if !j.Spooled() || s.now().Sub(time.Unix(j.CreatedAt, 0)) <= spoolMaxAge {
 		return false
 	}
-	if _, err := os.Lstat(s.store.spoolPath(j.ID)); errors.Is(err, os.ErrNotExist) &&
-		j.Phase != PhasePlanned && j.Phase != PhaseUploading {
+	if has, err := s.store.hasSpool(j.ID); err != nil || (!has && j.Phase != PhasePlanned && j.Phase != PhaseUploading) {
 		return false
 	}
 	lk, err := s.store.lock(j.ID)
@@ -257,7 +265,9 @@ func Discard(cfgDir, id string) (DiscardResult, error) {
 		return DiscardResult{}, local(CodeNoSuchSend, "not a local send id (32 lowercase hex characters, as printed by `inbox send`)")
 	}
 	store := newJournalStore(cfgDir)
-	if _, err := os.Lstat(store.path(id)); errors.Is(err, os.ErrNotExist) {
+	if has, err := store.exists(id); err != nil {
+		return DiscardResult{}, unsafeRecords(err)
+	} else if !has {
 		return DiscardResult{}, local(CodeNoSuchSend, "no unfinished local send has that id (a finished send leaves no record)")
 	}
 	lk, err := store.lock(id)

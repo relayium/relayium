@@ -11,4 +11,10 @@ type Lock struct{ f *os.File }
 // to exclude a second process or outlive a crash and block every later retry.
 func Acquire(string) (*Lock, error) { return nil, ErrUnsupported }
 
+// AcquireFile refuses likewise, closing f.
+func AcquireFile(f *os.File) (*Lock, error) {
+	_ = f.Close()
+	return nil, ErrUnsupported
+}
+
 func (l *Lock) unlock() {}

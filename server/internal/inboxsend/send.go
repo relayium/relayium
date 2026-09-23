@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/relayium/relayium/internal/cloud"
@@ -130,6 +129,17 @@ func (s *Session) Send(ctx context.Context, req SendRequest) (Result, error) {
 	}
 	for _, f := range plan.EmptyFolders {
 		s.notef("not sent (empty folder): %s", f)
+	}
+	// The record directory is proved safe before any network request.
+	if err := s.store.ensure(); err != nil {
+		if req.Resumable {
+			return Result{}, localf(CodeSpoolUnavailable, "--resumable cannot keep a local encrypted copy: %s. Nothing was sent",
+				termtext.Safe(err.Error()))
+		}
+		e := unsafeRecords(err)
+		e.Class = ClassLocal
+		e.Msg += " Nothing was sent."
+		return Result{}, e
 	}
 	if req.Resumable {
 		// Before any network request and before anything is encrypted: a copy
@@ -311,6 +321,13 @@ func (s *Session) finish(ctx context.Context, j *Journal, sl *sealer, res Result
 	s.drop(j)
 	res.TaskID, res.State, res.ErrorCode, res.Created, res.SavedAt = task.ID, task.State, task.ErrorCode, created, task.SavedAt
 	return res, nil
+}
+
+// unsafeRecords reports a send record directory that cannot be used safely
+// (see journalStore.openDir); nothing in it was touched.
+func unsafeRecords(err error) *Error {
+	return newErr(ClassFailed, CodeLocalState, "the local send records cannot be used safely: "+
+		termtext.Safe(err.Error())+". Nothing in them was changed.", err)
 }
 
 // checkpoint persists a phase change (N8). Its failure is never a warning: the
@@ -808,8 +825,12 @@ func (s *Session) Retry(ctx context.Context, id string) (Result, error) {
 		return Result{}, local(CodeNoSuchSend, "not a local send id (32 lowercase hex characters, as printed by `inbox send`)")
 	}
 	// Checked before locking, so asking about an id that has no record leaves
-	// nothing behind (the lock would create the directory and a lock file).
-	if _, err := os.Lstat(s.store.path(id)); errors.Is(err, os.ErrNotExist) {
+	// nothing behind (the lock would create the directory and a lock file). A
+	// record directory that is not safe is refused here, before anything is
+	// locked, read, changed or sent (journalStore.openDir).
+	if has, err := s.store.exists(id); err != nil {
+		return Result{}, unsafeRecords(err)
+	} else if !has {
 		return Result{}, local(CodeNoSuchSend, "no unfinished local send has that id (a finished send leaves no record)")
 	}
 	lk, err := s.store.lock(id)

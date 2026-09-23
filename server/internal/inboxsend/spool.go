@@ -63,7 +63,7 @@ const spoolMaxAge = 24 * time.Hour
 
 var (
 	spoolFileRe = regexp.MustCompile(`^([0-9a-f]{32})\.spool$`)
-	spoolTempRe = regexp.MustCompile(`^\.([0-9a-f]{32})\.spool\.tmp-[0-9]+$`)
+	spoolTempRe = regexp.MustCompile(`^\.([0-9a-f]{32})\.spool\.tmp-[0-9a-f]+$`)
 )
 
 var (
@@ -74,6 +74,7 @@ var (
 )
 
 func (s journalStore) spoolPath(id string) string { return filepath.Join(s.dir, id+spoolSuffix) }
+func spoolName(id string) string                  { return id + spoolSuffix }
 
 // projectedSpoolBytes is the exact spool size for plan: the sealed manifest is
 // its plaintext plus one GCM tag.
@@ -81,38 +82,14 @@ func projectedSpoolBytes(p *Plan) int64 {
 	return 4 + int64(len(p.manifest)) + gcmTag + p.CiphertextBytes
 }
 
-// ensurePrivate creates the journal directory if needed and proves that it —
-// and the configuration directory holding it — is a place a spool may be
-// written: plain directories (not symbolic links), owned by this user, that
-// nobody else can write into; the journal directory also closed to others.
+// ensurePrivate refuses --resumable where this platform cannot keep a copy,
+// and otherwise creates and proves the record directory like every other
+// operation does (journalStore.openDir).
 func (s journalStore) ensurePrivate() error {
 	if !spoolSupported {
 		return errors.New("resumable sends are not available on this platform")
 	}
-	if err := checkOwnedDir(filepath.Dir(s.dir), false); err != nil {
-		return fmt.Errorf("the configuration directory %v", err)
-	}
-	fi, err := os.Lstat(s.dir)
-	switch {
-	case errors.Is(err, os.ErrNotExist):
-		if err := os.Mkdir(s.dir, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
-			return err
-		}
-	case err != nil:
-		return err
-	case fi.Mode()&os.ModeSymlink != 0:
-		return errors.New("the send record directory is a symbolic link")
-	}
-	if err := checkOwnedDir(s.dir, false); err != nil {
-		return fmt.Errorf("the send record directory %v", err)
-	}
-	if err := os.Chmod(s.dir, 0o700); err != nil {
-		return err
-	}
-	if err := checkOwnedDir(s.dir, true); err != nil {
-		return fmt.Errorf("the send record directory %v", err)
-	}
-	return nil
+	return s.ensure()
 }
 
 // checkSpoolRoom refuses, before anything is encrypted, a spool larger than
@@ -139,16 +116,20 @@ func (s journalStore) checkSpoolRoom(need int64) *Error {
 // spool for id, durably, and returns its size and SHA-256. The caller holds
 // id's lock and id is fresh. On any failure nothing is left behind.
 func (s journalStore) writeSpool(id string, encManifest []byte, want int64, next func() ([]byte, error)) (int64, string, error) {
-	tmp, err := os.CreateTemp(s.dir, "."+id+spoolSuffix+".tmp-*")
+	r, err := s.openDir(true)
 	if err != nil {
 		return 0, "", err
 	}
-	tmpPath := tmp.Name()
+	defer r.Close()
+	tmp, tmpName, err := createTemp(r, "."+id+spoolSuffix+".tmp-")
+	if err != nil {
+		return 0, "", err
+	}
 	ok := false
 	defer func() {
 		if !ok {
 			tmp.Close()
-			os.Remove(tmpPath)
+			r.Remove(tmpName)
 		}
 	}()
 	h := sha256.New()
@@ -190,13 +171,13 @@ func (s journalStore) writeSpool(id string, encManifest []byte, want int64, next
 	if err := tmp.Close(); err != nil {
 		return 0, "", err
 	}
-	// The id is fresh and its lock is held, so nothing is at the final path.
-	if err := os.Rename(tmpPath, s.spoolPath(id)); err != nil {
+	// The id is fresh and its lock is held, so nothing is at the final name.
+	if err := r.Rename(tmpName, spoolName(id)); err != nil {
 		return 0, "", err
 	}
 	ok = true
-	if err := syncDir(s.dir); err != nil {
-		os.Remove(s.spoolPath(id))
+	if err := syncRootDir(r); err != nil {
+		r.Remove(spoolName(id))
 		return 0, "", err
 	}
 	return 4 + int64(len(encManifest)) + body, hex.EncodeToString(h.Sum(nil)), nil
@@ -211,15 +192,24 @@ type spoolFile struct {
 
 func (sp *spoolFile) close() { _ = sp.f.Close() }
 
-// openSpool opens the spool j names without following a symbolic link and
-// proves it is the one the record describes: a regular file of exactly the
-// recorded size whose SHA-256 matches, with a well-formed header. The same
-// descriptor is then the only source of every uploaded byte.
+// openSpool opens the spool j names through the verified record directory —
+// only a regular file, never a symbolic link — and proves it is the one the
+// record describes: exactly the recorded size, a matching SHA-256 and a
+// well-formed header. The same descriptor is then the only source of every
+// uploaded byte.
 func (s journalStore) openSpool(j *Journal) (*spoolFile, error) {
-	f, err := openNoFollow(s.spoolPath(j.ID))
-	if errors.Is(err, os.ErrNotExist) {
+	r, err := s.openDir(false)
+	if errors.Is(err, errNoDir) {
 		return nil, errSpoolMissing
 	}
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	if _, err := r.Lstat(spoolName(j.ID)); errors.Is(err, os.ErrNotExist) {
+		return nil, errSpoolMissing
+	}
+	f, err := openRegularIn(r, spoolName(j.ID), os.O_RDONLY)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errSpoolCorrupt, err)
 	}
@@ -242,26 +232,51 @@ func (s journalStore) openSpool(j *Journal) (*spoolFile, error) {
 	return &spoolFile{f: f, encManifest: hdr[4:], body: io.NewSectionReader(f, j.HeaderBytes, j.CiphertextBytes)}, nil
 }
 
-// removeSpool deletes id's spool and any temporary copy of it. The caller
-// holds id's lock.
+// hasSpool reports whether id's spool is present (in a safe directory).
+func (s journalStore) hasSpool(id string) (bool, error) {
+	r, err := s.openDir(false)
+	if errors.Is(err, errNoDir) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	defer r.Close()
+	_, err = r.Lstat(spoolName(id))
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// removeSpool deletes id's spool and any temporary copy of it, through the
+// verified record directory. The caller holds id's lock.
 func (s journalStore) removeSpool(id string) error {
 	if !ValidLocalSendID(id) {
 		return errNoJournal
 	}
+	r, err := s.openDir(false)
+	if errors.Is(err, errNoDir) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer r.Close()
 	var first error
-	if err := os.Remove(s.spoolPath(id)); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := r.Remove(spoolName(id)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		first = err
 	}
-	if ents, err := os.ReadDir(s.dir); err == nil {
+	if ents, err := readDirIn(r); err == nil {
 		for _, e := range ents {
 			if m := spoolTempRe.FindStringSubmatch(e.Name()); m != nil && m[1] == id {
-				if err := os.Remove(filepath.Join(s.dir, e.Name())); err != nil && first == nil && !errors.Is(err, os.ErrNotExist) {
+				if err := r.Remove(e.Name()); err != nil && first == nil && !errors.Is(err, os.ErrNotExist) {
 					first = err
 				}
 			}
 		}
 	}
-	if err := syncDir(s.dir); err != nil && first == nil {
+	if err := syncRootDir(r); err != nil && first == nil {
 		first = err
 	}
 	return first
@@ -271,9 +286,15 @@ func (s journalStore) removeSpool(id string) error {
 // owns: a send killed between writing its copy and recording it, or a
 // record removed by an earlier command that could not then remove its copy.
 // Each is removed only under its id's lock, re-checking that no record
-// appeared, so a send still writing its copy is never touched.
+// appeared, so a send still writing its copy is never touched. A directory
+// that is not safe is left alone entirely.
 func (s journalStore) collectOrphanSpools() (removed []string) {
-	ents, err := os.ReadDir(s.dir)
+	r, err := s.openDir(false)
+	if err != nil {
+		return nil
+	}
+	ents, err := readDirIn(r)
+	r.Close()
 	if err != nil {
 		return nil
 	}
@@ -289,18 +310,19 @@ func (s journalStore) collectOrphanSpools() (removed []string) {
 			continue
 		}
 		seen[id] = true
-		if _, err := os.Lstat(s.path(id)); !errors.Is(err, os.ErrNotExist) {
+		if has, err := s.exists(id); has || err != nil {
 			continue // a record owns it (or cannot be ruled out)
 		}
 		lk, err := s.lock(id)
 		if err != nil {
 			continue // a command is working on it right now
 		}
-		if _, err := os.Lstat(s.path(id)); errors.Is(err, os.ErrNotExist) {
-			if s.removeSpool(id) == nil {
-				_ = os.Remove(s.lockPath(id))
-				removed = append(removed, id)
+		if has, err := s.exists(id); !has && err == nil && s.removeSpool(id) == nil {
+			if r, err := s.openDir(false); err == nil {
+				_ = r.Remove(lockName(id))
+				r.Close()
 			}
+			removed = append(removed, id)
 		}
 		lk.release()
 	}
