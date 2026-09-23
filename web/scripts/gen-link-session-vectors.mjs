@@ -70,16 +70,11 @@ const FOLLOW_UP = {
   goReplayDelay: "A08e-D3: Go linksession re-offers a glare-yielded batch the instant the lane is "
     + "Idle; the Web responder waits MIXED_FILE_REPLAY_DELAY_MS (250 ms) before replaying. Decide in "
     + "Codex review whether the CLI should adopt the delay.",
-  kotlinRejectAbort: "A08e-D4: Android FileLaneSession answers a peer REJECT or BUSY received while "
-    + "waiting for consent with its own BATCH_ABORT; the Web sends nothing (REJECT before ACCEPT is "
-    + "itself the complete barrier). Benign at a Web/Go receiver (an abort with no inbound batch is "
-    + "a no-op) — Android task to align, or link-v1 to permit it explicitly.",
-  kotlinBusyRequeue: "A08e-D5: after a peer BUSY, Android :protocol retires the batch as a failure "
-    + "(requeue, if any, is the app adapter's); the Web and Go requeue it once and re-offer. Android "
-    + "task: confirm TransferController requeues exactly once.",
-  kotlinIntegrity: "A08e-D6: Android FileLaneSession treats a DONE digest mismatch as a LANE "
-    + "failure with no REJECT; the Web and Go send REJECT, drain to the sender's BATCH_ABORT and keep "
-    + "the lane reusable. Android task (file lane recovers from one corrupt batch).",
+  kotlinBusyRequeue: "A08e-D5 (resolved in the app layer): Android's :protocol FileLaneSession "
+    + "retires a BUSY-answered batch with no barrier and goes Idle; the one requeue and re-offer "
+    + "lives in the app module's TransferController (busyReplay / replayBusyBatch, covered by "
+    + "TransferControllerTest), which waits until the send and receive lanes are free, as the Web "
+    + "pump does. This :protocol consumer therefore stops after the first BUSY.",
   appleFirstHello: "A08-DESIGN §3.1/§15.1: link-v1 §1.3/§12.3 say Apple's first hello is on the "
     + "1.5 s tick; the pairing-room source (LinkCapabilityAnnouncer.rosterChanged) announces "
     + "immediately. Doc correction task; Swift is not a consumer of this fixture yet.",
@@ -244,7 +239,6 @@ const fileScenarios = [
     divergences: [
       { consumer: "go", step: 3, expect: { emit: ["ACK"], state: "InRecv" }, followUp: FOLLOW_UP.goFinalAck },
       { consumer: "go", step: 9, expect: { emit: ["ACK"], state: "InRecv" }, followUp: FOLLOW_UP.goFinalAck },
-      { consumer: "kotlin", step: 4, expect: { emit: [], state: "Ended" }, stopAfter: true, followUp: FOLLOW_UP.kotlinIntegrity },
     ],
   },
   {
@@ -255,9 +249,6 @@ const fileScenarios = [
     steps: [
       step("local:offer", ["MANIFEST"], "OutWait"),
       step("peer:REJECT", [], "Idle"),
-    ],
-    divergences: [
-      { consumer: "kotlin", step: 1, expect: { emit: ["BATCH_ABORT"], state: "Idle" }, followUp: FOLLOW_UP.kotlinRejectAbort },
     ],
   },
   {
@@ -271,7 +262,7 @@ const fileScenarios = [
       step("peer:BUSY", [], "Idle"),
     ],
     divergences: [
-      { consumer: "kotlin", step: 1, expect: { emit: ["BATCH_ABORT"], state: "Idle" }, stopAfter: true, followUp: FOLLOW_UP.kotlinBusyRequeue },
+      { consumer: "kotlin", step: 1, expect: { emit: [], state: "Idle" }, stopAfter: true, followUp: FOLLOW_UP.kotlinBusyRequeue },
     ],
   },
   {

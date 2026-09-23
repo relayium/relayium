@@ -725,16 +725,6 @@
             "state": "InRecv"
           },
           "followUp": "A08e-D2: Go linksession FileDurable emits an ACK when durable == batch total, below the 512 KiB interval; Web and Android ACK only on the interval. Benign (the sender clamps it) but a wire difference: decide in Codex review whether Go drops it or link-v1 §9.1 allows it."
-        },
-        {
-          "consumer": "kotlin",
-          "step": 4,
-          "expect": {
-            "emit": [],
-            "state": "Ended"
-          },
-          "stopAfter": true,
-          "followUp": "A08e-D6: Android FileLaneSession treats a DONE digest mismatch as a LANE failure with no REJECT; the Web and Go send REJECT, drain to the sender's BATCH_ABORT and keep the lane reusable. Android task (file lane recovers from one corrupt batch)."
         }
       ]
     },
@@ -763,19 +753,6 @@
             "emit": [],
             "state": "Idle"
           }
-        }
-      ],
-      "divergences": [
-        {
-          "consumer": "kotlin",
-          "step": 1,
-          "expect": {
-            "emit": [
-              "BATCH_ABORT"
-            ],
-            "state": "Idle"
-          },
-          "followUp": "A08e-D4: Android FileLaneSession answers a peer REJECT or BUSY received while waiting for consent with its own BATCH_ABORT; the Web sends nothing (REJECT before ACCEPT is itself the complete barrier). Benign at a Web/Go receiver (an abort with no inbound batch is a no-op) — Android task to align, or link-v1 to permit it explicitly."
         }
       ]
     },
@@ -820,13 +797,11 @@
           "consumer": "kotlin",
           "step": 1,
           "expect": {
-            "emit": [
-              "BATCH_ABORT"
-            ],
+            "emit": [],
             "state": "Idle"
           },
           "stopAfter": true,
-          "followUp": "A08e-D5: after a peer BUSY, Android :protocol retires the batch as a failure (requeue, if any, is the app adapter's); the Web and Go requeue it once and re-offer. Android task: confirm TransferController requeues exactly once."
+          "followUp": "A08e-D5 (resolved in the app layer): Android's :protocol FileLaneSession retires a BUSY-answered batch with no barrier and goes Idle; the one requeue and re-offer lives in the app module's TransferController (busyReplay / replayBusyBatch, covered by TransferControllerTest), which waits until the send and receive lanes are free, as the Web pump does. This :protocol consumer therefore stops after the first BUSY."
         }
       ]
     },

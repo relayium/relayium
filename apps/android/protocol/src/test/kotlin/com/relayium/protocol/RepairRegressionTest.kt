@@ -280,12 +280,14 @@ class RepairRegressionTest {
     }
 
     @Test
-    fun `a peer BUSY at the prompt retires behind the barrier and permits requeue`() {
+    fun `a peer BUSY at the prompt retires the batch and permits requeue`() {
         val (tx, _) = mirroredKeys()
         val session = FileLaneSession(tx, RealtimeFrame.CONSERVATIVE_MAX_FRAME_BYTES)
         session.startBatch(listOf(FileMeta("f", 0)))
         val actions = session.onFrame(RealtimeFrame.BUSY)
-        assertTrue(barrier(actions))
+        // Before consent BUSY is itself the complete barrier (A08e-D4): the
+        // Web and Go emit nothing, so neither does this side.
+        assertFalse(barrier(actions))
         assertEquals(FileLaneSession.SendState.IDLE, session.sendState)
         session.startBatch(listOf(FileMeta("again", 0)))
         assertEquals(FileLaneSession.SendState.WAITING_ACCEPT, session.sendState)
