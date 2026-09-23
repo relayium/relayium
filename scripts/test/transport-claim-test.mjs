@@ -84,21 +84,28 @@ function evaluate(w) {
   const out = [];
   const claim = (id, ok, why) => out.push({ id, ok, why });
 
-  // 1-3. The three CLI usage texts attribute the limit to the mode.
-  claim("help|send-mode-scoped", has(w.help, "This mode\nis direct-only") || has(w.help, "This mode is direct-only"),
-    "`relayium send --help` no longer says the limit belongs to this mode");
-  claim("help|receive-mode-scoped", has(w.help, "mode is direct-only: if no direct path can be found"),
-    "`relayium receive --help` no longer says the limit belongs to this mode");
-  claim("help|text-mode-scoped", has(w.help, 'this\nmode is direct-only like "send"/"receive"'),
-    "`relayium text --help` does not state the direct-only limit it has");
+  // 1-3. The three CLI usage texts attribute the direct-only limit to the
+  // older CLI pairing (the wire every released CLI speaks), not to the CLI.
+  // Since A10 (2026-09-23) send/receive/text use a link — relayed when TURN is
+  // issued — with a current relayium or an app, and keep the older pairing
+  // unchanged against an older CLI or a server without pairing hints; the
+  // limit belongs to that wire only.
+  claim("help|send-mode-scoped", has(w.help, "older CLI pairing is used unchanged: it is direct-only, so without a direct\npath (both ends behind strict NAT) the transfer fails"),
+    "`relayium send --help` no longer says the limit belongs to the older CLI pairing");
+  claim("help|receive-mode-scoped", has(w.help, "older CLI pairing is used unchanged, and it is direct-only: without a direct\npath the transfer fails"),
+    "`relayium receive --help` no longer says the limit belongs to the older CLI pairing");
+  claim("help|text-mode-scoped", has(w.help, "older CLI pairing is used unchanged, and it is direct-only: with no direct path\nbetween the two machines the session cannot open"),
+    "`relayium text --help` does not state the direct-only limit of the older pairing");
 
-  // 4. The help text names what DOES relay, so the reader can place the limit.
-  claim("help|names-the-relayed-path", has(w.help, "the web page relay a\ncross-network transfer by design"),
+  // 4. The help text names what DOES relay, so the reader can place the limit
+  // (and the relay allowance it spends; help_test.go ties this sentence to
+  // linkrtc.ChooseRTCConfig).
+  claim("help|names-the-relayed-path", has(w.help, "whenever the server issues a TURN relay for the\ncode, a link sends every byte through that relay"),
     "the CLI help no longer tells the reader which paths are relayed");
 
-  // 5. The source comment is a description of these modes, not of the product.
-  claim("crossnet|comment-mode-scoped", has(w.crossnet, "The pairing-code modes are direct-only"),
-    "crossnet.go describes the CLI rather than its pairing-code modes");
+  // 5. The source comment is a description of that wire, not of the product.
+  claim("crossnet|comment-mode-scoped", has(w.crossnet, "This wire is direct-only: it races a direct connection"),
+    "crossnet.go describes the CLI rather than its older pairing wire");
 
   // 6-8. The user-facing surfaces, in both maintained languages.
   claim("readme|mode-scoped", has(w.readme, "This mode is direct-only: with no direct path"),
@@ -137,11 +144,11 @@ function evaluate(w) {
 
 // One broken fact each. A claim that was never seen red proves nothing.
 const MUTATIONS = {
-  "help|send-mode-scoped": (w) => ({ ...w, help: w.help.replaceAll("This mode\nis direct-only", "The CLI is direct-only") }),
-  "help|receive-mode-scoped": (w) => ({ ...w, help: w.help.replace("mode is direct-only: if no direct path can be found", "the CLI never relays, so if no direct path is found") }),
-  "help|text-mode-scoped": (w) => ({ ...w, help: w.help.replace('this\nmode is direct-only like "send"/"receive"', "this is a direct session") }),
-  "help|names-the-relayed-path": (w) => ({ ...w, help: w.help.replace("the web page relay a\ncross-network transfer by design", "the web page behave differently") }),
-  "crossnet|comment-mode-scoped": (w) => ({ ...w, crossnet: w.crossnet.replace("The pairing-code modes are direct-only", "The CLI is direct-only") }),
+  "help|send-mode-scoped": (w) => ({ ...w, help: w.help.replace("older CLI pairing is used unchanged: it is direct-only, so without a direct\npath (both ends behind strict NAT) the transfer fails", "CLI is direct-only, so without a direct\npath (both ends behind strict NAT) the transfer fails") }),
+  "help|receive-mode-scoped": (w) => ({ ...w, help: w.help.replace("older CLI pairing is used unchanged, and it is direct-only: without a direct\npath the transfer fails", "CLI never relays: without a direct\npath the transfer fails") }),
+  "help|text-mode-scoped": (w) => ({ ...w, help: w.help.replace("older CLI pairing is used unchanged, and it is direct-only: with no direct path\nbetween the two machines the session cannot open", "session is direct: it cannot open") }),
+  "help|names-the-relayed-path": (w) => ({ ...w, help: w.help.replace("whenever the server issues a TURN relay for the\ncode, a link sends every byte through that relay", "a link behaves differently") }),
+  "crossnet|comment-mode-scoped": (w) => ({ ...w, crossnet: w.crossnet.replace("This wire is direct-only: it races a direct connection", "The CLI is direct-only: it races a direct connection") }),
   "readme|mode-scoped": (w) => ({ ...w, readme: w.readme.replace("This mode is direct-only: with no direct path", "There is no relay: with no direct path") }),
   "cli-page|en-mode-scoped": (w) => ({ ...w, en: w.en.replace("This mode is direct-only, so if both ends are behind strict NAT", "The CLI is direct-only, so if both ends are behind strict NAT") }),
   "cli-page|zh-mode-scoped": (w) => ({ ...w, zh: w.zh.replace("这个模式只走直连", "CLI 只走直连") }),

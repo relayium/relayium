@@ -42,6 +42,15 @@ func init() {
 	if os.Getenv("RELAYIUM_TEST_FORCE_OUT_TTY") == "1" {
 		stdoutIsTTY = func(io.Writer) bool { return true }
 	}
+	// A receiving process whose cleanup cannot remove names containing this.
+	if sub := os.Getenv("RELAYIUM_TEST_SINK_REMOVE_FAIL"); sub != "" {
+		sinkRemove = func(r *os.Root, name string) error {
+			if strings.Contains(name, sub) {
+				return errors.New("injected: removal failed")
+			}
+			return r.Remove(name)
+		}
+	}
 }
 
 // ---------------------------------------------------------------- process harness
@@ -1089,7 +1098,7 @@ func TestLinkSinkRefusesWithoutHardLinks(t *testing.T) {
 	}
 	sinkFill(t, k)
 	err = k.install()
-	if !errors.Is(err, errSinkUnsafeFS) || !strings.Contains(err.Error(), "nothing was overwritten") {
+	if !errors.Is(err, errSinkUnsafeFS) || !strings.Contains(err.Error(), "nothing was overwritten") || strings.Contains(err.Error(), "not kept") {
 		t.Fatalf("install = %v, want the truthful refusal", err)
 	}
 	if err := k.discard(); err != nil {
@@ -1513,5 +1522,118 @@ func TestProductMessageLimitBoundary(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// wantTruthfulCleanup: the receiver's transcript says the incomplete batch
+// could not be fully removed, and nowhere claims it was.
+func wantTruthfulCleanup(t *testing.T, r *pairProc) {
+	t.Helper()
+	e := r.err.String()
+	if !strings.Contains(e, "could NOT be fully removed") {
+		t.Errorf("the leftover is not reported\n%s", r)
+	}
+	for _, l := range strings.Split(e, "\n") {
+		if strings.Contains(l, "was kept") || strings.Contains(l, "were removed") || strings.Contains(l, "not kept") {
+			t.Errorf("a line claims a clean removal: %q\n%s", l, r)
+		}
+	}
+	if r.code != 1 {
+		t.Errorf("exit %d, want 1", r.code)
+	}
+}
+
+// Codex r4 #1: the sender cancels mid-batch (ctrl-C) while the receiver's
+// cleanup cannot remove the staged file. The receiver's whole transcript —
+// the session outcome as well as the cleanup line — must match the disk.
+func TestReceiverTranscriptTruthfulWhenCleanupFails(t *testing.T) {
+	hub := startLinkDevHub(t)
+	src := filepath.Join(t.TempDir(), "big.bin")
+	f, err := os.Create(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(512 << 20); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	dest := t.TempDir()
+	r := startCLI(t, "receive", []string{"RELAYIUM_TEST_SINK_REMOVE_FAIL=" + sinkStagePrefix}, strings.NewReader(""),
+		"receive", "--server", hub.url, ldCode, dest)
+	<-hub.joins
+	s := startCLI(t, "send", nil, strings.NewReader(""), "send", "--server", hub.url, src, ldCode)
+	pairWaitFor(t, 60*time.Second, "bytes on disk", func() bool {
+		var big bool
+		_ = filepath.WalkDir(dest, func(_ string, e os.DirEntry, err error) error {
+			if err == nil && !e.IsDir() {
+				if fi, err := e.Info(); err == nil && fi.Size() > 4<<20 {
+					big = true
+				}
+			}
+			return nil
+		})
+		return big
+	}, r, s)
+	if err := s.cmd.Process.Signal(syscall.SIGINT); err != nil {
+		t.Fatal(err)
+	}
+	s.wait(t, 30*time.Second, r)
+	r.wait(t, 30*time.Second, s)
+	wantTruthfulCleanup(t, r)
+	left := pairListTree(t, dest)
+	if len(left) == 0 {
+		t.Errorf("the injected failure left nothing: the test proves nothing")
+	}
+}
+
+// Codex r4 #2: setting up a batch fails partway (a later directory cannot be
+// created) and cleaning up the part already set up fails too. The receiver
+// must report the leftover, not "nothing … kept".
+func TestReceiverReportsPartialSetupCleanupFailure(t *testing.T) {
+	hub := startLinkDevHub(t)
+	src := t.TempDir()
+	pairWriteFile(t, filepath.Join(src, "tree", "a"), 100)
+	pairWriteFile(t, filepath.Join(src, "tree", "b", "c"), 100)
+	dest := t.TempDir()
+	pairWriteFile(t, filepath.Join(dest, "tree", "b"), 5) // a file where the batch needs a directory
+	r := startCLI(t, "receive", []string{"RELAYIUM_TEST_SINK_REMOVE_FAIL=" + sinkStagePrefix}, strings.NewReader(""),
+		"receive", "--server", hub.url, ldCode, dest)
+	<-hub.joins
+	s := startCLI(t, "send", nil, strings.NewReader(""), "send", "--server", hub.url, filepath.Join(src, "tree"), ldCode)
+	s.wait(t, 60*time.Second, r)
+	r.wait(t, 30*time.Second, s)
+	if !strings.Contains(r.err.String(), "not a directory") {
+		t.Fatalf("the setup did not fail the way this test needs\n%s", r)
+	}
+	wantTruthfulCleanup(t, r)
+	if s.code == 0 {
+		t.Errorf("sender: exit 0 for a batch that was not saved\n%s", s)
+	}
+	var staged bool
+	for _, g := range pairListTree(t, dest) {
+		staged = staged || strings.HasPrefix(filepath.Base(g), sinkStagePrefix)
+	}
+	if !staged {
+		t.Error("no staged leftover: the test proves nothing")
+	}
+	t.Logf("%s\n%s", r, s)
+}
+
+// Codex r4 #3: a failed no-replace install names its cause, blames missing
+// hard-link support only for the errors that mean it, and claims nothing
+// about what was kept (the cleanup reports that once it is known).
+func TestSinkInstallErrorIsTruthful(t *testing.T) {
+	generic := sinkInstallError("d/f", errors.New("injected: input/output error"))
+	if !errors.Is(generic, errSinkUnsafeFS) || !strings.Contains(generic.Error(), "input/output error") {
+		t.Errorf("generic: %v", generic)
+	}
+	for _, bad := range []string{"hard link", "not kept", "were removed", "was kept"} {
+		if strings.Contains(generic.Error(), bad) {
+			t.Errorf("generic failure claims %q: %v", bad, generic)
+		}
+	}
+	xdev := sinkInstallError("d/f", &os.LinkError{Op: "link", Old: "a", New: "b", Err: syscall.EXDEV})
+	if !strings.Contains(xdev.Error(), "hard links") || strings.Contains(xdev.Error(), "not kept") {
+		t.Errorf("EXDEV: %v", xdev)
 	}
 }

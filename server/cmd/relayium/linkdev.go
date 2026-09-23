@@ -530,13 +530,16 @@ const linkDevBusyRetries = 8
 // final names; a sync or install failure withdraws the batch (REJECT) instead,
 // and no COMPLETE can exist for it.
 type ldSink struct {
-	prompt    uint64
-	out       *linkSink // nil until the sink opened
-	wrote     []uint64  // bytes written per file
-	verified  []bool    // the session verified the file's chain (and it is synced)
-	finalized []bool    // installed under its final name
-	written   uint64    // bytes written, all files
-	reported  uint64    // the durable total last reported
+	prompt uint64
+	out    *linkSink // nil until the sink opened
+	// initCleanup is what cleaning up a setup that failed partway could not
+	// remove (nil: everything); reported when the batch is discarded.
+	initCleanup error
+	wrote       []uint64 // bytes written per file
+	verified    []bool   // the session verified the file's chain (and it is synced)
+	finalized   []bool   // installed under its final name
+	written     uint64   // bytes written, all files
+	reported    uint64   // the durable total last reported
 }
 
 // durable is written minus one held-back byte per written, unfinalized file.
@@ -2348,6 +2351,11 @@ func (d *linkDevDriver) openSink(prompt uint64, files []linkwire.FileMeta) error
 	d.sinks[prompt] = k
 	out, err := openLinkSink(d.dest, files)
 	if err != nil {
+		var oe *sinkOpenError
+		if errors.As(err, &oe) {
+			k.initCleanup = oe.cleanup
+			return oe.cause
+		}
 		return err
 	}
 	k.out = out
@@ -2487,10 +2495,12 @@ func (d *linkDevDriver) closeSink(prompt uint64) {
 		return
 	}
 	delete(d.sinks, prompt)
+	err := k.initCleanup
 	if k.out != nil {
-		if err := k.out.close(); err != nil {
-			d.fail("an incomplete batch could not be fully removed: " + err.Error())
-		}
+		err = errors.Join(err, k.out.close())
+	}
+	if err != nil {
+		d.fail("an incomplete batch could not be fully removed: " + err.Error())
 	}
 }
 
@@ -2511,9 +2521,9 @@ func (d *linkDevDriver) discardSink(prompt uint64) {
 	if k == nil {
 		return
 	}
-	var err error
+	err := k.initCleanup // a setup that failed partway was cleaned up then
 	if k.out != nil {
-		err = k.out.discard()
+		err = errors.Join(err, k.out.discard())
 	}
 	delete(d.sinks, prompt)
 	d.logf("discarded a partial batch")

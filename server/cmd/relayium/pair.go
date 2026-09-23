@@ -803,13 +803,13 @@ func (u *linkUI) report(d *linkDevDriver, lane, code string) {
 		case "peer-busy(batch-not-sent)":
 			u.line("not sent: the other side stayed busy with its own files")
 		case "partial-not-saved":
-			u.line("not saved: the transfer ended before every file arrived; nothing from it was kept")
+			u.line("not saved: the transfer ended before every file arrived")
 		case "sender-withdrew", "sender-cancelled":
-			u.line("not saved: the sender cancelled; nothing from it was kept")
+			u.line("not saved: the sender cancelled")
 		case "integrity":
-			u.line("not saved: a file failed its integrity check; nothing from that batch was kept")
+			u.line("not saved: a file failed its integrity check")
 		case "stalled":
-			u.line("not saved: the incoming transfer stalled; nothing from it was kept")
+			u.line("not saved: the incoming transfer stalled")
 		default:
 			u.line("file transfer: %s", termSafe(code))
 		}
@@ -1027,6 +1027,30 @@ var (
 	sinkRemove            = func(r *os.Root, name string) error { return r.Remove(name) }
 )
 
+// sinkOpenError is a batch that could not be set up. What the partial setup
+// left behind is cleaned up at once, and the outcome of THAT is kept apart
+// (cleanup; nil when everything was removed) so the run reports it for what
+// it is rather than as part of the cause.
+type sinkOpenError struct {
+	cause   error
+	cleanup error
+}
+
+func (e *sinkOpenError) Error() string {
+	if e.cleanup != nil {
+		return e.cause.Error() + "; cleanup: " + e.cleanup.Error()
+	}
+	return e.cause.Error()
+}
+
+func (e *sinkOpenError) Unwrap() error { return e.cause }
+
+// openFailed discards what a partial setup made and returns the error with
+// the cleanup outcome recorded separately.
+func (k *linkSink) openFailed(cause error) *sinkOpenError {
+	return &sinkOpenError{cause: cause, cleanup: k.discard()}
+}
+
 func openLinkSink(dest string, files []linkwire.FileMeta) (*linkSink, error) {
 	abs, err := filepath.Abs(dest)
 	if err != nil {
@@ -1045,29 +1069,32 @@ func openLinkSink(dest string, files []linkwire.FileMeta) (*linkSink, error) {
 	k := &linkSink{absDest: abs, dirs: []*sinkDir{{root: top, parent: -1}}, byPath: map[string]int{"": 0}}
 	var rnd [8]byte
 	if _, err := rand.Read(rnd[:]); err != nil {
-		return nil, errors.Join(err, k.discard())
+		return nil, k.openFailed(err)
 	}
 	tag := hex.EncodeToString(rnd[:])
 	for i, f := range files {
 		segs := sinkSegments(f, i)
 		di, err := k.openDir(segs[:len(segs)-1])
 		if err != nil {
-			return nil, errors.Join(err, k.discard())
+			return nil, k.openFailed(err)
 		}
 		tmp := fmt.Sprintf("%s%s-%d", sinkStagePrefix, tag, i)
 		fh, err := k.dirs[di].root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if err != nil {
-			return nil, errors.Join(err, k.discard())
+			return nil, k.openFailed(err)
 		}
 		st, err := fh.Stat()
 		if err != nil {
 			fh.Close()
 			// Created by us a moment ago (O_EXCL); its identity is unknown,
 			// so it is removed by name and a failure reported.
+			var left error
 			if rerr := sinkRemove(k.dirs[di].root, tmp); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
-				err = errors.Join(err, fmt.Errorf("%s could not be removed: %w", termSafe(path.Join(k.dirs[di].path, tmp)), rerr))
+				left = fmt.Errorf("%s could not be removed: %w", termSafe(path.Join(k.dirs[di].path, tmp)), rerr)
 			}
-			return nil, errors.Join(err, k.discard())
+			oe := k.openFailed(err)
+			oe.cleanup = errors.Join(left, oe.cleanup)
+			return nil, oe
 		}
 		k.fileDir = append(k.fileDir, di)
 		k.base = append(k.base, segs[len(segs)-1])
@@ -1194,12 +1221,24 @@ func (k *linkSink) install() error {
 	return nil
 }
 
-// errSinkUnsafeFS: the destination cannot install a file without the risk of
-// overwriting one (no hard links, so no atomic "create this name only if it
-// is free"). The batch is refused rather than installed by rename.
-var errSinkUnsafeFS = errors.New("this destination does not support safe installation (it has no hard links, " +
-	"which relayium needs to give a received file its name without any chance of overwriting another); " +
-	"nothing was overwritten, and the received files were not kept — choose a destination on another filesystem")
+// errSinkUnsafeFS: a received file could not be given its name by the one
+// install that can never overwrite (a hard link, which fails if the name is
+// taken). The batch is refused rather than installed by rename. It says
+// nothing about what was kept: the cleanup that follows reports that on its
+// own, once its result is known.
+var errSinkUnsafeFS = errors.New("the received files could not be installed safely; nothing was overwritten")
+
+// sinkInstallError explains a failed no-replace install, naming the cause,
+// and blames missing hard-link support only for the errors that mean it.
+func sinkInstallError(rel string, err error) error {
+	hint := ""
+	if errors.Is(err, syscall.EXDEV) || errors.Is(err, syscall.ENOTSUP) || errors.Is(err, syscall.EOPNOTSUPP) ||
+		errors.Is(err, syscall.ENOSYS) || errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EMLINK) {
+		hint = " — this destination does not appear to support the hard links relayium installs with; " +
+			"a destination on another filesystem may work"
+	}
+	return fmt.Errorf("%w: %s: %v%s", errSinkUnsafeFS, termSafe(rel), err, hint)
+}
 
 // place installs file i inside its held directory.
 func (k *linkSink) place(i int) error {
@@ -1226,7 +1265,7 @@ func (k *linkSink) place(i int) error {
 			// No atomic no-replace install here (link(2) is the one this
 			// uses). A rename onto a reserved name could overwrite a file
 			// swapped in under that name, so the batch is refused instead.
-			return fmt.Errorf("%w (%v)", errSinkUnsafeFS, err)
+			return sinkInstallError(path.Join(d.path, cand), err)
 		}
 		// Installed: recorded at once, with the staged file's identity (a
 		// hard link is that very file), before any check that can fail — so
