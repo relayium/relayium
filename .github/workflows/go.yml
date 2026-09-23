@@ -125,6 +125,37 @@ jobs:
       - name: go test
         working-directory: server
         run: go test ./...
+      # `relayium push host:path` over a REAL OpenSSH client and a private sshd
+      # on 127.0.0.1, both modes plus host-key refusal. The step above ran these
+      # three as SKIPs; RELAYIUM_E2E_SSH=1 turns every setup problem into a
+      # failure instead (see server/cmd/relayium/e2e_test.go for the fixture).
+      #
+      # The PASS grep is load-bearing: a renamed or deleted test makes `-run`
+      # match nothing, and `go test` still exits 0 having proved nothing.
+      - name: SSH push e2e (private loopback sshd; zero-dep, native, host-key refusal)
+        working-directory: server
+        shell: bash
+        env:
+          RELAYIUM_E2E_SSH: '1'
+        run: |
+          set -euo pipefail
+          ssh -V
+          if SSHD="$(command -v sshd)" || { SSHD=/usr/sbin/sshd; [ -x "$SSHD" ]; }; then
+            echo "sshd preinstalled: $SSHD"
+          else
+            echo "sshd not preinstalled; installing openssh-server"
+            sudo apt-get update -q
+            sudo apt-get install -y -q --no-install-recommends openssh-server
+            SSHD=/usr/sbin/sshd
+          fi
+          ls -l "$SSHD"
+          log="$RUNNER_TEMP/ssh-e2e.log"
+          RELAYIUM_E2E_SSHD="$SSHD" go test -count=1 -v -timeout 3m \
+            -run '^(TestE2EZeroDepPushOverSSH|TestE2ENativePushOverSSH|TestE2EPushOverSSHRefusesUnknownHostKey)$' \
+            ./cmd/relayium | tee "$log"
+          for t in TestE2EZeroDepPushOverSSH TestE2ENativePushOverSSH TestE2EPushOverSSHRefusesUnknownHostKey; do
+            grep -q "^--- PASS: $t " "$log" || { echo "::error::$t did not PASS" >&2; exit 1; }
+          done
       - name: govulncheck
         working-directory: server
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
