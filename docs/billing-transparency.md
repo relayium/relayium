@@ -175,7 +175,7 @@ against three separate limits in that handler: the storage cap
 (`s.overStorage`, `account/files.go:312`), the monthly traffic cap
 (`s.overTraffic`, `account/files.go:316`) and the rolling daily quota, whose
 debit is written by the stored file's own insert transaction
-(`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:5059`). Only the traffic one is shared with
+(`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:5137`). Only the traffic one is shared with
 relay: `currentMonthTraffic` (`account/plan_enforce.go:54-69`) sums
 `usage_monthly` — hosted upload/download — plus billable `usage_events` —
 relay. Storage is occupancy, not throughput, and is not something a relay
@@ -314,7 +314,7 @@ The dimensions actually checked, each fail-closed at write time:
 - **Daily upload quota** — a rolling 24-hour window (`account/plan_enforce.go:344`,
   `remainingDailyQuota`). The debit is checked and written in the **same
   database transaction that inserts the stored file**
-  (`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:5059`), so
+  (`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:5137`), so
   concurrent uploads can't race past it, and a file that is not stored — a
   refusal by a later cap, a closed pairing room, a database error, a server
   crash mid-upload — never leaves a debit behind; there is no separate
