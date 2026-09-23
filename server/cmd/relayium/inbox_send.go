@@ -101,9 +101,13 @@ flags:
 
 What happens when things go wrong:
   - A network drop while the command runs is resumed automatically.
-  - If the answer to "complete the upload" or "queue the delivery" is lost, the
-    outcome is unknown (exit 3). Nothing is uploaded again automatically; run
-    "relayium inbox retry <id>" later.
+  - If the answer to "complete the upload" is lost, the command asks the server
+    again. A server that can confirm the completed upload answers with it, and
+    the delivery is queued without uploading or counting anything again; a
+    server that cannot leaves the outcome unknown (exit 3).
+  - If the answer to "queue the delivery" is lost and repeating it does not
+    settle it, the outcome is unknown (exit 3). Nothing is uploaded again
+    automatically; run "relayium inbox retry <id>" later.
   - If the command is stopped after every byte was uploaded, "relayium inbox
     retry <id>" finishes it if the server can confirm the upload; otherwise the
     outcome stays unknown.

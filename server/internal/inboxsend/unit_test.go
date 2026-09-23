@@ -434,7 +434,7 @@ func TestClientBoundsBodiesAndNeverEchoesServerText(t *testing.T) {
 		t.Fatalf("an unknown server token must not be repeated: %v", err)
 	}
 	mode = "plain409"
-	_, _, err = c.Finalize(context.Background(), "up1")
+	_, _, _, err = c.Finalize(context.Background(), "up1")
 	var ae *APIError
 	if !asAPI(err, &ae) || ae.Status != 409 || !ae.Plain {
 		t.Fatalf("plain-text 409 not recognised: %v", err)
@@ -443,7 +443,7 @@ func TestClientBoundsBodiesAndNeverEchoesServerText(t *testing.T) {
 
 func TestTransportErrorsDoNotCarryTheURL(t *testing.T) {
 	c, _ := NewClient("http://127.0.0.1:1", "tok", nil)
-	_, _, err := c.Finalize(context.Background(), "SECRETUPLOADID")
+	_, _, _, err := c.Finalize(context.Background(), "SECRETUPLOADID")
 	if err == nil || strings.Contains(err.Error(), "SECRETUPLOADID") {
 		t.Fatalf("transport error leaks the request URL: %v", err)
 	}

@@ -63,6 +63,11 @@ type APIError struct {
 	Plain bool
 	// Received carries a {"received":N} body (PATCH 409), or -1.
 	Received int64
+	// Outcome is a finalize-recovery answer's `outcome` (see Finalize), when
+	// it is one of the closed set this client knows; "" otherwise.
+	Outcome string
+	// RetryAfter is the answer's Retry-After in seconds, or 0.
+	RetryAfter time.Duration
 }
 
 func (e *APIError) Error() string {
@@ -226,6 +231,7 @@ func asAPIError(op string, r *response) *APIError {
 	var out struct {
 		Error    *string `json:"error"`
 		Received *int64  `json:"received"`
+		Outcome  *string `json:"outcome"`
 	}
 	if json.Unmarshal(r.body, &out) == nil {
 		if out.Error != nil {
@@ -233,11 +239,17 @@ func asAPIError(op string, r *response) *APIError {
 			if serverTokens[*out.Error] {
 				e.Code = *out.Error
 			}
+			if out.Outcome != nil && finalizeOutcomes[*out.Outcome] {
+				e.Outcome = *out.Outcome
+			}
 		}
 		if out.Received != nil && *out.Received >= 0 {
 			e.Plain = false
 			e.Received = *out.Received
 		}
+	}
+	if secs, err := strconv.Atoi(r.header.Get("Retry-After")); err == nil && secs > 0 {
+		e.RetryAfter = time.Duration(secs) * time.Second
 	}
 	return e
 }
@@ -358,23 +370,48 @@ func (c *Client) UploadStatus(ctx context.Context, uploadID string) (int64, erro
 	return decodeReceived("upload status", r.body)
 }
 
-// Finalize is POST /api/uploads/{id}/finalize with no body.
-func (c *Client) Finalize(ctx context.Context, uploadID string) (storedFileID string, expiresAt int64, err error) {
-	r, err := c.roundTrip(ctx, "complete upload", http.MethodPost, "/api/uploads/"+url.PathEscape(uploadID)+"/finalize", nil, nil, maxSmallBody)
+// finalizeRecoveryBody is the finalize-recovery opt-in, sent on EVERY
+// finalize. A server with recovery answers a repeated finalize from the
+// session's durable record — 200 with the object this upload already produced,
+// or a JSON 409 whose `outcome` says why there is none. A server without it
+// ignores the field and answers exactly as it always did (a plain-text 409 for
+// a repeat), which this client keeps reading as "cannot confirm".
+var finalizeRecoveryBody = []byte(`{"recoverFinalized":true}`)
+
+// finalizeOutcomes is the closed set of recovery outcomes a JSON 409 may carry.
+var finalizeOutcomes = map[string]bool{
+	outcomeRunning: true, outcomeFailed: true, outcomeExpired: true, outcomeRemoved: true,
+}
+
+const (
+	outcomeRunning = "running" // the upload's finalize is still in flight
+	outcomeFailed  = "failed"  // the server refused the object; none exists
+	outcomeExpired = "expired" // the object was stored and has since expired
+	outcomeRemoved = "removed" // the object was stored and has since been removed
+)
+
+// Finalize is POST /api/uploads/{id}/finalize with the recovery opt-in.
+// recovered is true when the server answered a finalize it had ALREADY
+// completed with the object that completion stored (nothing was completed or
+// counted again).
+func (c *Client) Finalize(ctx context.Context, uploadID string) (storedFileID string, expiresAt int64, recovered bool, err error) {
+	hdr := http.Header{"Content-Type": {"application/json"}}
+	r, err := c.roundTrip(ctx, "complete upload", http.MethodPost, "/api/uploads/"+url.PathEscape(uploadID)+"/finalize", hdr, finalizeRecoveryBody, maxSmallBody)
 	if err != nil {
-		return "", 0, err
+		return "", 0, false, err
 	}
 	if r.status != http.StatusOK {
-		return "", 0, asAPIError("complete upload", r)
+		return "", 0, false, asAPIError("complete upload", r)
 	}
 	var out struct {
 		ID        string `json:"id"`
 		ExpiresAt int64  `json:"expiresAt"`
+		Recovered bool   `json:"recovered"`
 	}
 	if json.Unmarshal(r.body, &out) != nil || !isInertID(out.ID) || out.ExpiresAt <= 0 {
-		return "", 0, &TransportError{Op: "complete upload", err: errors.New("unusable response")}
+		return "", 0, false, &TransportError{Op: "complete upload", err: errors.New("unusable response")}
 	}
-	return out.ID, out.ExpiresAt, nil
+	return out.ID, out.ExpiresAt, out.Recovered, nil
 }
 
 // createBody is the exact seven-field create request. It is marshalled once per
