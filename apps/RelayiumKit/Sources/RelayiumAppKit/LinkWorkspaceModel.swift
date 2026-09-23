@@ -97,6 +97,33 @@ public enum LinkWorkspaceConnection: Equatable {
     }
 }
 
+/// **Whether an unrequested same-network link is put to the user first.**
+///
+/// Every composition states it; the model's own default is `.prompt`, so a
+/// composition that forgot is the safe one. Only a headless host with no user to
+/// ask — `LinkCounterpart`, and the acceptance hosts built on it — declares
+/// `.automatic`, and it does so by name.
+///
+/// A pairing-code room never prompts, whatever this says: the code IS the
+/// consent, typed or shown on purpose by both people.
+public enum LinkInboundConsent: Equatable, Sendable {
+    /// Hold the ask, publish `inboundAsk`, build nothing until Accept.
+    case prompt
+    /// Admit an unrequested link as soon as the surface is free.
+    case automatic
+}
+
+/// A device asking this one for a link it did not request.
+///
+/// Presentation only: `peerLabel` is the roster's peer-supplied name, never
+/// identity. `id` fences the answer, so an Accept pressed on a prompt that has
+/// since timed out, been withdrawn or been replaced does nothing.
+public struct LinkInboundAsk: Equatable, Identifiable, Sendable {
+    public let id: Int
+    public let peerId: String
+    public let peerLabel: String
+}
+
 /// Why the Workspace's link attempt is over.
 ///
 /// Every case is something the user can act on, and none of them is a guess:
@@ -356,6 +383,33 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         returnedDraft = nil
         return true
     }
+    /// **A device is asking for a link this side did not request (A23).**
+    ///
+    /// Non-nil only in the same-network room under `.prompt` consent. While it
+    /// is set NOTHING has happened: no admission claim, no transport, no
+    /// surface ownership, no navigation. `acceptInboundAsk` is the only way it
+    /// becomes a link; `declineInboundAsk`, the thirty-second deadline, the
+    /// peer leaving and the socket changing all end it with the peer told
+    /// `busy` (or nothing, when the peer is gone).
+    @Published public private(set) var inboundAsk: LinkInboundAsk?
+
+    /// Whether accepting the pending ask would destroy text on this page.
+    ///
+    /// A new attempt clears the draft, the handed-back message and the
+    /// transcript — the words belong to the peer they were written for — so a
+    /// prompt that can replace an ended page must say so, and Decline must be
+    /// the way to keep them. Live, not snapshotted: the user may type on that
+    /// page while the prompt is up.
+    public var inboundAskDiscardsLocalText: Bool {
+        inboundAsk != nil && holdsLocalText
+    }
+
+    /// See `LinkInboundConsent`. Read on the socket's delivery queue through a
+    /// lock-guarded mirror, so a change applies to the next ask routed.
+    public var inboundConsent: LinkInboundConsent = .prompt {
+        didSet { consent.setPrompts(inboundConsent == .prompt) }
+    }
+
     /// The conversation and the connection, as the attempt projects them.
     @Published public private(set) var textModel: LinkSessionPresentationModel?
     /// The transfer, as the attempt projects it. A separate object, because a
@@ -453,6 +507,18 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// main-actor re-check is what covers that.
     public func setAvailableForInboundLink(_ value: Bool) {
         gate.setAvailable(value)
+        // Something else took the surface while a prompt was up — a legacy
+        // session, or the other tab. Accept could now only be refused, so the
+        // asking peer is told `busy` rather than left to the deadline. One turn
+        // later, not now: a local Connect claims the surface in the same turn
+        // it calls `connect`, and `connect` to the ASKING peer is an accept,
+        // which a decline issued from inside the claim would pre-empt.
+        guard !value, let pending = inboundAsk else { return }
+        Task { @MainActor [weak self] in
+            guard let self, self.inboundAsk?.id == pending.id,
+                  !self.gate.isAvailable else { return }
+            self.declineInboundAsk()
+        }
     }
 
     /// What the advisory gate is answering right now.
@@ -506,6 +572,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     private let capabilities: PeerCapabilityRegistry
     private let admission: LinkAdmission
     private let gate = LinkAcceptanceGate()
+    private let consent = LinkConsentBox()
     private let socketBox = LinkSocketBox()
     /// The registry of the room that is currently routed.
     ///
@@ -790,11 +857,13 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         let gate = self.gate
         let socketBox = self.socketBox
         let active = self.activeCapabilities
+        let consent = self.consent
         active.registry = capabilities
         self.admission = LinkAdmission(
             selfId: { socketBox.selfId },
             supportsLink: { active.supportsLink($0) },
-            canAcceptLink: { gate.accepts($0) })
+            canAcceptLink: { gate.accepts($0) },
+            requiresConsent: { _ in consent.required })
 
         self.session = LinkRoomSession(admission: admission) { [weak self] peerId, role, signal in
             guard let self else {
@@ -817,13 +886,78 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// capability registry at construction and a code room's registry is its
     /// own. One router at a time is the same one-room rule everything else here
     /// obeys; `attach` is the only place one is made.
-    private var router: LinkRoomRouter?
+    private var router: LinkRoomRouter? {
+        // A prompt belongs to the router that raised it. A detached router's
+        // queue may never drain again, so its withdrawal cannot be waited for.
+        didSet { if router !== oldValue { inboundAsk = nil } }
+    }
 
     private func makeRouter(_ capabilities: PeerCapabilityRegistry) -> LinkRoomRouter {
         LinkRoomRouter(admission: admission,
                        capabilities: capabilities,
                        session: session,
-                       scheduler: scheduler)
+                       scheduler: scheduler,
+                       onAsk: { [weak self] source, event in
+                           self?.routerAskChanged(event, from: source)
+                       })
+    }
+
+    // MARK: - the inbound consent prompt (A23)
+
+    private func routerAskChanged(_ event: LinkRoomRouter.AskEvent, from source: LinkRoomRouter) {
+        guard source === router else { return }
+        switch event {
+        case let .raised(promptId, peerId):
+            // Never over a live attempt: the room would already have answered
+            // `busy`, and this is the main-actor half of that rule.
+            guard !connection.isActive else {
+                source.declineAsk(promptId: promptId)
+                return
+            }
+            inboundAsk = LinkInboundAsk(id: promptId, peerId: peerId,
+                                        peerLabel: peerLabelResolver?(peerId) ?? peerId)
+        case let .withdrawn(promptId):
+            if inboundAsk?.id == promptId { inboundAsk = nil }
+        }
+    }
+
+    /// **The user accepted the device that asked.**
+    ///
+    /// The order is the consent: the app's authoritative gate first — it claims
+    /// the surface and navigates to it, which is the move from arrival to
+    /// accept — then a new attempt, which discards whatever text the ended page
+    /// still held (the prompt said so), then the room's claim. A refusal at any
+    /// step answers the peer `busy`; nothing is built for it.
+    public func acceptInboundAsk() {
+        guard let pending = inboundAsk else { return }
+        inboundAsk = nil
+        guard let router else { return }
+        guard !connection.isActive else {
+            router.declineAsk(promptId: pending.id)
+            return
+        }
+        if let shouldAcceptLink, !shouldAcceptLink(pending.peerId) {
+            router.declineAsk(promptId: pending.id)
+            return
+        }
+        beginAttempt(peerLabel: pending.peerLabel)
+        guard router.acceptAsk(promptId: pending.id) else {
+            // The peer withdrew, or the room changed, in the instant between the
+            // prompt and the tap. The surface was already claimed, so the user
+            // is shown that the connection is gone rather than a blank page.
+            session.end()
+            finish(.closed)
+            return
+        }
+        connection = .establishing(sas: nil)
+    }
+
+    /// The user declined. The peer is told `busy`, and the same ask is not put
+    /// to the user again while its own window is open.
+    public func declineInboundAsk() {
+        guard let pending = inboundAsk else { return }
+        inboundAsk = nil
+        router?.declineAsk(promptId: pending.id)
     }
 
     // MARK: - the room's socket
@@ -889,6 +1023,9 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
                         awaitingRoomICE: Bool = false) {
         let registry = roomCapabilities ?? capabilities
         activeCapabilities.registry = registry
+        // Consent is a same-network rule. A pairing room supplies its own
+        // registry, and the code both people exchanged is its consent.
+        consent.setSameNetworkRoom(roomCapabilities == nil)
         router?.detach()
         router = makeRouter(registry)
         attached = signaling
@@ -2754,6 +2891,13 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
             finish(.roomLost)
             return false
         }
+        // A pending prompt is answered by this Connect: to the device that is
+        // asking it is Accept (`router.ensure` takes the held ask rather than
+        // asking back), and to any other device it is Decline.
+        if let pending = inboundAsk {
+            inboundAsk = nil
+            if pending.peerId != peerId { router?.declineAsk(promptId: pending.id) }
+        }
 
         beginAttempt(peerLabel: peerLabel)
         if !files.isEmpty { armBatch(files: files, sources: sources) }
@@ -3638,6 +3782,32 @@ final class LinkAcceptanceGate: @unchecked Sendable {
         lock.lock()
         reserved = peerId
         lock.unlock()
+    }
+}
+
+/// Whether the ROUTED room requires consent for an unrequested link, readable
+/// from the socket's delivery queue where `LinkAdmission` asks it.
+///
+/// Two facts, both owned on the main actor: which room is attached (only the
+/// same-network one prompts) and what the composition declared. Starts at
+/// "prompt, same-network room" — the fail-closed answer — so nothing is
+/// admitted unasked before a composition or `attach` has said otherwise.
+final class LinkConsentBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var prompts = true
+    private var sameNetworkRoom = true
+
+    var required: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return prompts && sameNetworkRoom
+    }
+
+    func setPrompts(_ value: Bool) {
+        lock.lock(); prompts = value; lock.unlock()
+    }
+
+    func setSameNetworkRoom(_ value: Bool) {
+        lock.lock(); sameNetworkRoom = value; lock.unlock()
     }
 }
 

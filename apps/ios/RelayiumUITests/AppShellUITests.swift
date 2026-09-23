@@ -461,44 +461,32 @@ final class AppShellUITests: XCTestCase {
         tapStagedFixture(named: stem)
     }
 
-    /// Runtime evidence that a chosen file is identified before a recipient or
-    /// a Send action exists at all.
+    /// **Connect first (A25): Nearby stages nothing before a device is chosen.**
     ///
-    /// `--relayium-ui-testing-pending-fixture` stages one deterministic file
-    /// inside the app's own Documents directory and does nothing else. The
-    /// picker, the security scope, the expansion and the rendering asserted
-    /// below are production code driven through the real system browser, which
-    /// reaches that directory because the app publishes it to Files.
-    func testPendingSendNamesTheFileAndItsSizeBeforeTransfer() {
+    /// iOS Nearby used to offer "Choose Files or Folders…" and a Files/Text
+    /// picker above an empty roster, and a batch chosen there was sent the
+    /// moment any link opened. Files for a link are now chosen inside the open
+    /// workspace, so with no device chosen there is no chooser, no picker and
+    /// no pending row — even when the launch has put a file where the picker
+    /// would find it. Choosing a file through the real system browser is still
+    /// driven, on the one surface that stages before sending:
+    /// `testASignedInStoredSendNamesTheFileItWouldUpload`.
+    func testNearbyStagesNothingBeforeADeviceIsChosen() {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
             + ["--relayium-ui-testing-pending-fixture"]
         app.launch()
 
         open(Shell.lanTransfer, in: app)
-        let chooser = app.buttons["Choose Files or Folders…"]
-        XCTAssertTrue(chooser.waitForExistence(timeout: 10),
-                      "Nearby has no file-selection surface")
-        scrollUntilHittable(chooser)
-        chooser.tap()
-
-        openBrowseInSystemPicker()
-        selectStagedFixture(named: "Relayium product brief")
-
-        let open = app.buttons["Open"]
-        XCTAssertTrue(open.waitForExistence(timeout: 10),
-                      "the system browser has no confirmation action")
-        open.tap()
-
-        let identity = app.descendants(matching: .any)["pendingFile.0"].firstMatch
-        XCTAssertTrue(identity.waitForExistence(timeout: 15),
-                      "the pending send did not expose its file identity")
-        XCTAssertTrue(identity.label.contains("Relayium product brief.txt"),
-                      "the pending send shortened or omitted the file name")
-        XCTAssertTrue(identity.label.contains("1.5 KB"),
-                      "the pending send omitted the formatted file size")
-        XCTAssertTrue(app.buttons["Clear"].exists,
-                      "the identified pending send cannot be cleared")
+        // The screen rendered: its verification setting is always there.
+        XCTAssertTrue(app.descendants(matching: .any)["verify-toggle"].firstMatch
+            .waitForExistence(timeout: 15), "Nearby did not render")
+        XCTAssertFalse(app.buttons["Choose Files or Folders…"].exists,
+                       "Nearby offers a pre-connect chooser with no device chosen")
+        XCTAssertFalse(app.segmentedControls.firstMatch.exists,
+                       "Nearby asks files-or-text before there is anybody to ask about")
+        XCTAssertFalse(app.descendants(matching: .any)["pendingFile.0"].firstMatch.exists,
+                       "a pending Nearby send exists before any device was chosen")
     }
 
     func testRegistrationProblemKeepsTheDraftCorrectable() {
@@ -1112,30 +1100,6 @@ final class AppShellUITests: XCTestCase {
         // that have nothing to do with signing in.
     }
 
-    /// Nearby's transfer type is two different tasks, not a label.
-    ///
-    /// Files stages a selection before any device is chosen; Text stages nothing
-    /// and must not leave the file surface behind, or the user would be looking
-    /// at a pending send that the mode they picked cannot perform.
-    func testNearbyTransferTypeChangesWhatIsStaged() {
-        open(Shell.lanTransfer, in: app)
-
-        let chooser = app.buttons["Choose Files or Folders…"]
-        XCTAssertTrue(chooser.waitForExistence(timeout: 15),
-                      "Nearby's file mode stages nothing")
-
-        let modes = app.segmentedControls.firstMatch
-        XCTAssertTrue(modes.waitForExistence(timeout: 10),
-                      "Nearby offers no transfer type choice")
-        modes.buttons["Text"].tap()
-        XCTAssertFalse(chooser.waitForExistence(timeout: 3),
-                       "choosing Text left the file staging surface behind")
-
-        modes.buttons["Files"].tap()
-        XCTAssertTrue(chooser.waitForExistence(timeout: 10),
-                      "returning to Files did not restore its staging surface")
-    }
-
     /// An upload that fails mid-transfer keeps the work and offers to carry on.
     ///
     /// The staged bytes are already on this device, so a server-side failure is
@@ -1152,9 +1116,8 @@ final class AppShellUITests: XCTestCase {
     /// test is the only one exposed to it, but that picker behavior is not what
     /// this test covers, so this test should not depend on the picker at all.
     /// The picker itself is not uncovered by dropping it here:
-    /// `testPendingSendNamesTheFileAndItsSizeBeforeTransfer` and
-    /// `testASignedInStoredSendNamesTheFileItWouldUpload` are ABOUT the picker,
-    /// still drive it for real, and are deliberately left alone.
+    /// `testASignedInStoredSendNamesTheFileItWouldUpload` is ABOUT the picker,
+    /// still drives it for real, and is deliberately left alone.
     /// `--relayium-ui-testing-preselect-fixture` calls the same
     /// `SendSelectionModel.chooseFiles` callback the real `fileImporter` calls,
     /// once the account is ready and the upload model is idle, so everything
@@ -1515,8 +1478,9 @@ final class AppShellUITests: XCTestCase {
         app.launch()
 
         // The stored link's Open, the Device Inbox's account route, Nearby's
-        // chooser and Account's registration path are the four that sit furthest
-        // down their own screens.
+        // verification setting and Account's registration path are the four
+        // that sit furthest down their own screens. (Nearby has no chooser
+        // before a device is chosen — connect first, A25.)
         waitForPresentedStoredReceive(app)
         let openLink = app.buttons["Open"]
         XCTAssertTrue(openLink.waitForExistence(timeout: 15),
@@ -1525,10 +1489,10 @@ final class AppShellUITests: XCTestCase {
         app.buttons["stored-receive-done"].tap()
 
         open(Shell.lanTransfer, in: app)
-        let chooser = app.buttons["Choose Files or Folders…"]
-        XCTAssertTrue(chooser.waitForExistence(timeout: 15),
-                      "Nearby lost its file chooser at the largest text size")
-        scrollUntilHittable(chooser, maxSwipes: 12)
+        let verify = app.descendants(matching: .any)["verify-toggle"].firstMatch
+        XCTAssertTrue(verify.waitForExistence(timeout: 15),
+                      "Nearby lost its verification setting at the largest text size")
+        scrollUntilHittable(verify, maxSwipes: 12)
 
         // The destination this batch added, and the one with the most content
         // above its action: the status card, the foreground-only notice, the

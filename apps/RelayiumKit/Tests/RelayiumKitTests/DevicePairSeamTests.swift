@@ -1054,7 +1054,7 @@ final class DevicePairSeamTests: XCTestCase {
     /// Exactly what the harness's launch passes beyond the language pin and the
     /// preference pin, and nothing else.
     private static let debugOnlyArguments = [
-        "--relayium-ui-testing-preselect-direct-fixture",
+        "--relayium-ui-testing-link-fixture",
         "--relayium-ui-testing-fresh-received-folder",
     ]
 

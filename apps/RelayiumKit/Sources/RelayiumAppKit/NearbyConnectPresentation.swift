@@ -19,21 +19,23 @@ import RelayiumKit
 ///
 /// So the picker is hidden for a link peer and one Connect action replaces the
 /// two verbs. Not removed for everyone: a legacy peer still has two
-/// non-interoperating generations behind it, and iOS still stages before
-/// connecting, so `Send` and `Start a message session` stay exactly as they are
-/// for that peer.
+/// non-interoperating generations behind it, and its one-shot protocol needs
+/// the manifest at connect, so `Send` and `Start a message session` stay exactly
+/// as they are for that peer.
 ///
-/// ## What did NOT change, deliberately
+/// ## Connect first (A25, 2026-09-23)
 ///
-/// **iOS still preselects before connecting.** macOS removed pre-connect staging
-/// entirely (DECISION-LOG, 2026-08-15) because a Mac can open a picker inside a
-/// live session with no consequence. On iOS the picker is a full-screen document
-/// browser that takes the app to `.inactive`, and the session survives that only
-/// because `ForegroundSessionCoordinator` is careful — which is a good reason to
-/// keep the connect-time picker trip optional rather than mandatory. A batch
-/// staged before Connect is ARMED on the link (`LinkWorkspaceModel.connect(files:
-/// sources:)`), held behind the verification boundary like every other batch, and
-/// released the moment the digits are answered. Nothing is sent early.
+/// **Nothing is staged before a link exists.** The 2026-08-15 carve-out that
+/// kept iOS pre-connect staging is superseded: with no device, or with a link
+/// peer chosen, there is no picker and no chooser, and Connect carries no files.
+/// Files are chosen inside the open workspace, exactly as Cross-network does and
+/// as macOS has since 2026-08-15. The staged batch it replaced was sent the
+/// moment the link opened — with verification off, the default, that was before
+/// anybody had compared anything — and it survived the link ending, so the next
+/// Connect carried it to whichever device came next.
+///
+/// A LEGACY peer in Files mode is the one exception, because its one-shot wire
+/// needs the manifest at connect. It is being retired with the legacy wire.
 ///
 /// **Nothing is preselected on the roster.** That is a different rule, it is
 /// about which DEVICE, and it is untouched: not even a room holding exactly one
@@ -54,10 +56,9 @@ public enum NearbyConnectPresentation {
     /// Which of the two the screen draws.
     ///
     /// `nil` means no device is chosen yet, and the answer is `legacyLanes`
-    /// rather than a third state: with nobody chosen the screen cannot know
-    /// which product this connection will be, and the picker is the surface iOS
-    /// already had. Hiding it pre-emptively would make the control appear when a
-    /// legacy device was tapped, which reads as the app changing its mind.
+    /// rather than a third state, because no action exists without a device.
+    /// It no longer decides whether the picker or the chooser is drawn — both
+    /// now need a chosen legacy peer (A25); see `showsModePicker`.
     ///
     /// Asked of the DEVICE rather than of the room, because that is where the
     /// answer is: `NearbyDevice.supportsLink` is the roster's record of this
@@ -68,28 +69,22 @@ public enum NearbyConnectPresentation {
         return .unifiedLink
     }
 
-    /// Whether the Files/Text picker is on screen at all.
+    /// Whether the Files/Text picker is on screen at all: only for a CHOSEN
+    /// legacy peer.
     ///
-    /// A named function rather than `== .legacyLanes` at the call site, so the
-    /// one thing this batch removes from the screen has a name a test can fail
-    /// against.
+    /// With nobody chosen the screen has no question to ask yet — the roster is
+    /// the first step — and a link peer has no halves to pick between.
     public static func showsModePicker(for device: NearbyDevice?) -> Bool {
-        sendChoice(for: device) == .legacyLanes
+        guard let device else { return false }
+        return sendChoice(for: device) == .legacyLanes
     }
 
-    /// Whether the file-staging section is offered.
-    ///
-    /// True for BOTH answers, and that is the deliberate part. For a legacy peer
-    /// it is gated on the picker sitting at `.files`, exactly as it shipped. For
-    /// a link peer there is no picker to sit anywhere, and staging is still
-    /// worth offering — it is what makes one tap on Connect also carry the
-    /// batch, instead of a connect followed by a picker trip that leaves the app
-    /// for the document browser.
+    /// Whether the file-staging section is offered: only for a chosen legacy
+    /// peer with the picker at `.files`, whose one-shot wire needs the manifest
+    /// at connect. See "Connect first" above.
     public static func showsStaging(for device: NearbyDevice?, mode: TransferMode) -> Bool {
-        switch sendChoice(for: device) {
-        case .unifiedLink: return true
-        case .legacyLanes: return mode == .files
-        }
+        guard let device, sendChoice(for: device) == .legacyLanes else { return false }
+        return mode == .files
     }
 
     /// The lane a legacy connection to this device will use.

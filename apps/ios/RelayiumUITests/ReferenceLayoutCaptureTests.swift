@@ -31,9 +31,12 @@ final class ReferenceLayoutCaptureTests: XCTestCase {
     /// on it, while one row's height clear of an edge measured 5.10:1 for a
     /// role that read 2.10:1 inside the band.
     private static let fadeMargin: CGFloat = 44
-    /// The Nearby task's own control, and the anchor the page scroller is
-    /// resolved by. English, like every geometry probe in this file.
-    private static let chooserLabel = "Choose Files or Folders…"
+    /// The full-width Nearby control the column is measured by, and the anchor
+    /// the page scroller is resolved by: the verification setting's toggle,
+    /// inside its own card. It used to be the pre-connect "Choose Files or
+    /// Folders…" chooser, which Nearby no longer draws before a device is
+    /// chosen (connect first, A25). An identifier, so no language applies.
+    private static let measuredControlID = "verify-toggle"
     /// The label the system audit named, in the language this proof launches in.
     private static let verificationLabel = "Compare verification codes with the other device"
 
@@ -140,9 +143,9 @@ final class ReferenceLayoutCaptureTests: XCTestCase {
         let title = Language.english.title(of: Shell.lanTransfer)
         openSurface(Shell.lanTransfer, titled: title)
 
-        let chooser = app.buttons[Self.chooserLabel].firstMatch
+        let chooser = app.descendants(matching: .any)[Self.measuredControlID].firstMatch
         XCTAssertTrue(chooser.waitForExistence(timeout: 20),
-                      "the Nearby task lost its chooser, so the column cannot be measured")
+                      "Nearby lost its verification setting, so the column cannot be measured")
         // This also settles the split view: a sidebar still overlaying the
         // detail column leaves the control unhittable, so the run fails here
         // rather than measuring a column something is sitting on top of.
@@ -167,7 +170,7 @@ final class ReferenceLayoutCaptureTests: XCTestCase {
             ? sidebars.firstMatch.frame : .zero
 
         let scrollers = app.scrollViews.containing(
-            NSPredicate(format: "label == %@", Self.chooserLabel))
+            NSPredicate(format: "identifier == %@", Self.measuredControlID))
         let scrollerCount = layout == .compact ? scrollers.count : 0
         let scroller = (layout == .compact && scrollerCount == 1)
             ? scrollers.firstMatch.frame : .zero
@@ -182,7 +185,7 @@ final class ReferenceLayoutCaptureTests: XCTestCase {
             layout=\(layout)
             window=\(window)
             sidebars=\(sidebarCount) sidebar=\(sidebar)
-            scrollers containing the chooser=\(scrollerCount) scroller=\(scroller)
+            scrollers containing the measured control=\(scrollerCount) scroller=\(scroller)
             derived viewport=\(container)
             control=\(control)
 
@@ -193,7 +196,7 @@ final class ReferenceLayoutCaptureTests: XCTestCase {
         add(hierarchy)
         attach(name: "reading-measure-\(layout)")
 
-        XCTAssertGreaterThan(control.width, 0, "the chooser reported no frame to measure")
+        XCTAssertGreaterThan(control.width, 0, "the measured control reported no frame")
         XCTAssertGreaterThan(container.width, 0,
                              "the viewport came out zero-width: \(container)")
         XCTAssertGreaterThan(container.height, 0,
@@ -207,7 +210,7 @@ final class ReferenceLayoutCaptureTests: XCTestCase {
             XCTAssertLessThan(sidebar.midX, window.midX,
                               "the sidebar is not the leading column: \(sidebar) in \(window)")
             XCTAssertGreaterThanOrEqual(control.minX, sidebar.maxX,
-                                        "the chooser is inside the sidebar column — "
+                                        "the measured control is inside the sidebar column — "
                                         + "control \(control), sidebar \(sidebar)")
             // A regular-width run is the only one that can observe the cap, so
             // it must actually be wide enough to. A narrow split-view column
@@ -230,7 +233,7 @@ final class ReferenceLayoutCaptureTests: XCTestCase {
                                  + "gutters never grew")
         case .compact:
             XCTAssertEqual(scrollerCount, 1,
-                           "expected exactly one scroller holding the chooser, "
+                           "expected exactly one scroller holding the measured control, "
                            + "found \(scrollerCount) — see the attached hierarchy")
             XCTAssertLessThanOrEqual(container.width, Self.readingMeasure,
                                      "a compact shell \(container.width)pt wide is past the "

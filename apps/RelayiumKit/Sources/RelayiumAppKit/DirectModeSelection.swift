@@ -62,21 +62,4 @@ public final class DirectModeSelection: ObservableObject {
         guard !Self.isLocked(file: file, text: text, sessionClaimed: sessionClaimed) else { return }
         self.mode = mode
     }
-
-    /// A session nobody chose a mode for.
-    ///
-    /// Unconditional, and that is not a hole in the lock — it is what the lock
-    /// is for. `select` protects the *user's* choice from moving under a session
-    /// they started. An unsolicited nearby offer is the opposite case: there is
-    /// no user choice to protect, the session's kind is a fact on the wire, and
-    /// the alternative is a file transfer arriving while the picker sits on Text
-    /// and rendering nothing at all — with the picker by then locked, because a
-    /// model is busy.
-    ///
-    /// Called synchronously as the offer is admitted, before the responder is
-    /// built. See `AppRouting.claimIncoming`, which is the only caller and keeps
-    /// this write beside the two that must happen with it.
-    public func adopt(forIncoming kind: NearbyReceiveKind) {
-        mode = (kind == .text) ? .text : .files
-    }
 }

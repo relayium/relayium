@@ -124,6 +124,12 @@ final class LinkRoomRouter: @unchecked Sendable {
         case resumeOffer(token: Int, from: String, signal: JSONValue)
         case leave(token: Int, from: String, to: String, auth: String)
         case peerDeparted(String)
+        /// A prompt for an unrequested link is now pending, or is no longer.
+        /// Queued in the same total order as every handoff, so a withdrawal can
+        /// never be overtaken by the raise it withdraws — nor a raise by the
+        /// handoff an accept produced.
+        case askRaised(promptId: Int, peerId: String)
+        case askWithdrawn(promptId: Int)
         /// End whatever the room session holds.
         ///
         /// Deliberately carries NO token. It is queued in the same critical
@@ -155,6 +161,46 @@ final class LinkRoomRouter: @unchecked Sendable {
     private let capabilities: PeerCapabilityRegistry
     private let session: LinkRoomSession
     private let scheduler: LinkRecoveryScheduler
+
+    // MARK: the inbound consent prompt (A23)
+
+    /// How long an unrequested link waits for the user's answer before this side
+    /// answers `busy` for them. Android's `LINK_REQUEST_TIMEOUT_MS` parity.
+    ///
+    /// Deliberately EQUAL to the asking side's own bounds — its request timeout
+    /// and its establishment watchdog are both thirty seconds — so an Accept in
+    /// roughly the last two seconds can fail cleanly on the far side instead of
+    /// connecting. Lowering it is a change for both platforms together.
+    static let inboundAskTimeout: TimeInterval = 30
+
+    /// What the room tells its owner about the prompt.
+    enum AskEvent: Equatable, Sendable {
+        case raised(promptId: Int, peerId: String)
+        case withdrawn(promptId: Int)
+    }
+
+    /// One unrequested link held behind a prompt. Nothing about it is claimed:
+    /// `LinkAdmission` is still idle, no transport exists and no surface is
+    /// owned. What IS held is the frame that asked and everything that chases
+    /// it, in order, in a buffer that becomes the establishment's own on accept.
+    private struct PendingAsk {
+        let promptId: Int
+        let epoch: Int
+        let peerId: String
+        let role: Role
+        let initialSignal: JSONValue
+        let buffer: LinkEstablishmentSignalBuffer
+    }
+
+    private var ask: PendingAsk?
+    private var nextPromptId = 0
+    /// Peers whose prompt the user declined, keyed to that prompt's id. Each
+    /// mark lasts only until that prompt's own deadline — the window in which
+    /// the peer's retries of the SAME ask can still arrive — and is dropped
+    /// early when the peer leaves or the socket changes. While it stands, the
+    /// peer is answered `busy` and no second prompt is raised.
+    private var declinedAsks: [String: Int] = [:]
+    private let onAsk: (@MainActor (LinkRoomRouter, AskEvent) -> Void)?
 
     private final class RequestState {
         let token: Int
@@ -225,11 +271,13 @@ final class LinkRoomRouter: @unchecked Sendable {
     init(admission: LinkAdmission,
          capabilities: PeerCapabilityRegistry,
          session: LinkRoomSession,
-         scheduler: LinkRecoveryScheduler = LinkDispatchRecoveryScheduler()) {
+         scheduler: LinkRecoveryScheduler = LinkDispatchRecoveryScheduler(),
+         onAsk: (@MainActor (LinkRoomRouter, AskEvent) -> Void)? = nil) {
         self.admission = admission
         self.capabilities = capabilities
         self.session = session
         self.scheduler = scheduler
+        self.onAsk = onAsk
     }
 
     // MARK: - the socket epoch
@@ -328,11 +376,21 @@ final class LinkRoomRouter: @unchecked Sendable {
         }
         timedOutRequestPeers.removeAll()
         departingPeerIds.removeAll()
+        // A prompt belongs to the socket that carried the ask: a peer id means
+        // nothing in the next room. Withdrawn in silence — the peer is either
+        // gone with the socket or unreachable on it.
+        let retiredAsk = ask
+        ask = nil
+        declinedAsks.removeAll()
         // Queued HERE, under the same acquisition that bumped the epoch, so no
         // later handoff can be ordered in front of it.
-        let wake = (held?.assembling == true) ? enqueueLocked(.endSession) : false
+        var wake = (held?.assembling == true) ? enqueueLocked(.endSession) : false
+        if let retiredAsk {
+            wake = enqueueLocked(.askWithdrawn(promptId: retiredAsk.promptId)) || wake
+        }
         lock.unlock()
 
+        retiredAsk?.buffer.retire()
         retired?.cancel()
         if let held { relinquish(held) }
         finish(retiredRequest, as: .cancelled)
@@ -346,6 +404,19 @@ final class LinkRoomRouter: @unchecked Sendable {
     /// request operation across every caller for that peer.
     func ensure(peerId: String) -> LinkRequestOperation {
         if let shared = requestOperation(for: peerId) { return shared }
+
+        // A prompt is pending. Connecting to the device that is asking IS the
+        // answer to it — asking it back would send a request to a peer that has
+        // already offered, or an offer to one that has already asked. Connecting
+        // to anybody else declines it first, so the asking peer is told `busy`
+        // now rather than left waiting on a prompt the user walked past.
+        if let pending = pendingAsk() {
+            if pending.peerId == peerId {
+                if acceptAsk(promptId: pending.promptId) { return immediateRequest(.establishing) }
+            } else {
+                _ = declineAsk(promptId: pending.promptId)
+            }
+        }
 
         // Owner callbacks inside `ensure` may read this router back.
         let intent = admission.ensure(peerId: peerId)
@@ -535,9 +606,22 @@ final class LinkRoomRouter: @unchecked Sendable {
             _ = admission.forgetRequestTimeout(peerId: peerId)
             timedOutRequestPeers.remove(peerId)
         }
+        // A prompt for a device that is no longer here asks about nobody.
+        var withdrawn: PendingAsk?
+        var wake = false
+        if let pending = ask, !peerIds.contains(pending.peerId) {
+            ask = nil
+            withdrawn = pending
+            wake = enqueueLocked(.askWithdrawn(promptId: pending.promptId))
+        }
+        for peerId in declinedAsks.keys where !peerIds.contains(peerId) {
+            declinedAsks[peerId] = nil
+        }
         lock.unlock()
 
+        withdrawn?.buffer.retire()
         finish(retired, as: .cancelled)
+        if wake { wakeDrain() }
     }
 
     /// A server `left(peer)` frame is physical departure authority. It ends an
@@ -547,6 +631,14 @@ final class LinkRoomRouter: @unchecked Sendable {
         lock.lock()
         if timedOutRequestPeers.remove(peerId) != nil {
             _ = admission.forgetRequestTimeout(peerId: peerId)
+        }
+        declinedAsks[peerId] = nil
+        var withdrawnAsk: PendingAsk?
+        var askWake = false
+        if let pending = ask, pending.peerId == peerId {
+            ask = nil
+            withdrawnAsk = pending
+            askWake = enqueueLocked(.askWithdrawn(promptId: pending.promptId))
         }
 
         var retiredRequest: RequestState?
@@ -576,9 +668,10 @@ final class LinkRoomRouter: @unchecked Sendable {
         }
         lock.unlock()
 
+        withdrawnAsk?.buffer.retire()
         finish(retiredRequest, as: .cancelled)
         if let departedEstablishment { relinquish(departedEstablishment) }
-        if wake { wakeDrain() }
+        if wake || askWake { wakeDrain() }
     }
 
     // MARK: - one inbound frame
@@ -625,6 +718,9 @@ final class LinkRoomRouter: @unchecked Sendable {
                               routedRequestToken: nil, mayReroute: false)
             }
 
+        case let .ask(role):
+            return raiseAsk(peerId: from, role: role, signal: signal, epoch: epoch)
+
         case .busy:
             answerBusy(to: from, epoch: epoch)
             return .consume
@@ -654,6 +750,9 @@ final class LinkRoomRouter: @unchecked Sendable {
             return forward(.leave(token: 0, from: from, to: to, auth: auth), epoch: epoch)
 
         case .ignore:
+            if let held = offerToPendingAsk(from: from, signal: signal, epoch: epoch) {
+                return held
+            }
             return offerToEstablishment(from: from, signal: signal, epoch: epoch)
         }
     }
@@ -757,6 +856,30 @@ final class LinkRoomRouter: @unchecked Sendable {
             return .disposition(.consume)
         }
 
+        let installed = installLocked(peerId: peerId, role: role,
+                                      initialSignal: initialSignal, epoch: epoch,
+                                      buffer: LinkEstablishmentSignalBuffer(peerId: peerId))
+        lock.unlock()
+
+        // Retired, never relinquished: the room now belongs to the claim above,
+        // and releasing it here would free a room that is taken.
+        installed.superseded?.buffer.retire()
+        finish(installed.completedRequest, as: .establishing)
+        if installed.wake { wakeDrain() }
+        return .disposition(.consume)
+    }
+
+    /// The claim is made; record the establishment and queue its handoff.
+    /// Called with `lock` held, straight after `admitEstablishment` succeeded,
+    /// by the two paths that may claim for an inbound frame: an immediate admit
+    /// and an accepted prompt. The caller retires `superseded`'s buffer, settles
+    /// `completedRequest` and wakes the drain once it has released the lock.
+    private func installLocked(peerId: String,
+                               role: Role,
+                               initialSignal: JSONValue?,
+                               epoch: Int,
+                               buffer: LinkEstablishmentSignalBuffer)
+    -> (wake: Bool, superseded: Establishment?, completedRequest: RequestState?) {
         let completedRequest: RequestState?
         if let request, request.peerId == peerId {
             self.request = nil
@@ -784,19 +907,188 @@ final class LinkRoomRouter: @unchecked Sendable {
         live = Establishment(token: token,
                              epoch: epoch,
                              peerId: peerId,
-                             buffer: LinkEstablishmentSignalBuffer(peerId: peerId),
+                             buffer: buffer,
                              assembling: false)
         var wake = superseded?.assembling == true ? enqueueLocked(.endSession) : false
         wake = enqueueLocked(.handoff(token: token, peerId: peerId,
                                       role: role, initialSignal: initialSignal)) || wake
+        return (wake, superseded, completedRequest)
+    }
+
+    // MARK: - the inbound consent prompt
+
+    /// Hold an unrequested link behind a prompt. Nothing is claimed.
+    private func raiseAsk(peerId: String,
+                          role: Role,
+                          signal: JSONValue,
+                          epoch: Int) -> SignalDisposition {
+        lock.lock()
+        guard self.epoch == epoch, signaling != nil else {
+            lock.unlock()
+            return .pass
+        }
+        // Declined inside this ask's window: the peer's retry of the same ask is
+        // refused without asking the user a second time.
+        if declinedAsks[peerId] != nil {
+            lock.unlock()
+            answerBusy(to: peerId, epoch: epoch)
+            return .consume
+        }
+        if let pending = ask {
+            lock.unlock()
+            // The same peer asking again — a retried request, a duplicate offer
+            // — is the prompt already on screen. Anybody else is refused, and
+            // the prompt stays: one question at a time.
+            if pending.peerId != peerId { answerBusy(to: peerId, epoch: epoch) }
+            return .consume
+        }
+        // `route` read the phase before this lock; the room may have been taken
+        // since. `LinkAdmission` is callback-free here, so reading it under this
+        // lock is the same rule `admitEstablishment` already relies on.
+        switch admission.phase {
+        case .idle, .failed:
+            break
+        default:
+            let ours = admission.boundPeerId == peerId
+            lock.unlock()
+            if !ours { answerBusy(to: peerId, epoch: epoch) }
+            return .consume
+        }
+        nextPromptId += 1
+        let promptId = nextPromptId
+        ask = PendingAsk(promptId: promptId, epoch: epoch, peerId: peerId, role: role,
+                         initialSignal: signal,
+                         buffer: LinkEstablishmentSignalBuffer(peerId: peerId))
+        let wake = enqueueLocked(.askRaised(promptId: promptId, peerId: peerId))
         lock.unlock()
 
-        // Retired, never relinquished: the room now belongs to the claim above,
-        // and releasing it here would free a room that is taken.
-        superseded?.buffer.retire()
-        finish(completedRequest, as: .establishing)
         if wake { wakeDrain() }
-        return .disposition(.consume)
+        // Never cancelled, and it does not need to be: the prompt id fences it.
+        // It either times the prompt out, lets a decline mark for this prompt
+        // lapse, or finds nothing of its own and does nothing.
+        _ = scheduler.schedule(after: Self.inboundAskTimeout) { [weak self] in
+            self?.askExpired(promptId: promptId, epoch: epoch)
+        }
+        return .consume
+    }
+
+    /// Frames that chase a pending ask. Answers nil when there is no prompt for
+    /// this peer, so the caller carries on to the establishment it may hold.
+    private func offerToPendingAsk(from: String,
+                                   signal: JSONValue,
+                                   epoch: Int) -> SignalDisposition? {
+        lock.lock()
+        guard self.epoch == epoch, let pending = ask, pending.peerId == from else {
+            lock.unlock()
+            return nil
+        }
+        let buffer = pending.buffer
+        let promptId = pending.promptId
+        lock.unlock()
+
+        // The SAME buffer object becomes the establishment's on accept, so a
+        // frame captured in the instant an accept runs is replayed by that
+        // establishment rather than lost.
+        switch buffer.accept(from: from, signal: signal) {
+        case .rejected:
+            return nil
+        case .captured, .ready:
+            return .consume
+        case .overflowed:
+            // A peer that sends more than one establishment could need, before
+            // anybody has said yes, is refused rather than truncated.
+            if let dropped = takeAsk(promptId: promptId) {
+                answerBusy(to: dropped.peerId, epoch: dropped.epoch)
+            }
+            return .consume
+        }
+    }
+
+    /// The prompt, if one is pending on the current socket.
+    func pendingAsk() -> (promptId: Int, peerId: String)? {
+        lock.lock(); defer { lock.unlock() }
+        guard let ask, ask.epoch == epoch else { return nil }
+        return (ask.promptId, ask.peerId)
+    }
+
+    /// The user said yes to exactly this prompt. Claims the room in this role
+    /// and hands over everything held, in order — the same claim an immediate
+    /// admission makes, in one critical section with the prompt it consumes.
+    ///
+    /// - Returns: false for a stale prompt id, a replaced socket, or a room that
+    ///   has since been taken; the peer is then told `busy` unless it is already
+    ///   the one this room is bound to.
+    @discardableResult
+    func acceptAsk(promptId: Int) -> Bool {
+        lock.lock()
+        guard let pending = ask, pending.promptId == promptId,
+              pending.epoch == epoch, signaling != nil else {
+            lock.unlock()
+            return false
+        }
+        ask = nil
+        var wake = enqueueLocked(.askWithdrawn(promptId: promptId))
+        guard admission.admitEstablishment(peerId: pending.peerId, role: pending.role) else {
+            let ours = admission.boundPeerId == pending.peerId
+            lock.unlock()
+            pending.buffer.retire()
+            if !ours { answerBusy(to: pending.peerId, epoch: pending.epoch) }
+            if wake { wakeDrain() }
+            return false
+        }
+        let installed = installLocked(peerId: pending.peerId, role: pending.role,
+                                      initialSignal: pending.initialSignal,
+                                      epoch: pending.epoch, buffer: pending.buffer)
+        wake = installed.wake || wake
+        lock.unlock()
+
+        installed.superseded?.buffer.retire()
+        finish(installed.completedRequest, as: .establishing)
+        if wake { wakeDrain() }
+        return true
+    }
+
+    /// The user said no to exactly this prompt: `busy`, and no second prompt
+    /// from this peer inside the same ask's window.
+    @discardableResult
+    func declineAsk(promptId: Int) -> Bool {
+        guard let declined = takeAsk(promptId: promptId, markDeclined: true) else { return false }
+        answerBusy(to: declined.peerId, epoch: declined.epoch)
+        return true
+    }
+
+    private func askExpired(promptId: Int, epoch: Int) {
+        if let expired = takeAsk(promptId: promptId, epoch: epoch) {
+            // Unanswered is not yes. Tell the peer now, rather than leave it to
+            // find out from its own deadline.
+            answerBusy(to: expired.peerId, epoch: expired.epoch)
+            return
+        }
+        lock.lock()
+        if self.epoch == epoch,
+           let peer = declinedAsks.first(where: { $0.value == promptId })?.key {
+            declinedAsks[peer] = nil
+        }
+        lock.unlock()
+    }
+
+    /// Remove exactly this prompt, queue its withdrawal, and retire its buffer.
+    private func takeAsk(promptId: Int, epoch expected: Int? = nil,
+                         markDeclined: Bool = false) -> PendingAsk? {
+        lock.lock()
+        guard let pending = ask, pending.promptId == promptId, pending.epoch == epoch,
+              expected == nil || expected == epoch else {
+            lock.unlock()
+            return nil
+        }
+        ask = nil
+        if markDeclined { declinedAsks[pending.peerId] = promptId }
+        let wake = enqueueLocked(.askWithdrawn(promptId: promptId))
+        lock.unlock()
+
+        pending.buffer.retire()
+        if wake { wakeDrain() }
+        return pending
     }
 
     // MARK: - the frames that chase a consumed offer
@@ -867,7 +1159,7 @@ final class LinkRoomRouter: @unchecked Sendable {
             stamped = .resumeOffer(token: held.token, from: from, signal: signal)
         case let .leave(_, from, to, auth):
             stamped = .leave(token: held.token, from: from, to: to, auth: auth)
-        case .handoff, .peerDeparted, .endSession:
+        case .handoff, .peerDeparted, .endSession, .askRaised, .askWithdrawn:
             lock.unlock()
             return .pass
         }
@@ -928,7 +1220,9 @@ final class LinkRoomRouter: @unchecked Sendable {
     private func waitsForGate(_ work: Work) -> Bool {
         switch work {
         case .handoff, .receive, .resumeOffer, .leave: return true
-        case .peerDeparted, .endSession: return false
+        // A prompt builds nothing: it only tells the owner a question exists,
+        // or no longer does.
+        case .peerDeparted, .endSession, .askRaised, .askWithdrawn: return false
         }
     }
 
@@ -991,6 +1285,12 @@ final class LinkRoomRouter: @unchecked Sendable {
 
             case .endSession:
                 session.end()
+
+            case let .askRaised(promptId, peerId):
+                onAsk?(self, .raised(promptId: promptId, peerId: peerId))
+
+            case let .askWithdrawn(promptId):
+                onAsk?(self, .withdrawn(promptId: promptId))
             }
         }
     }

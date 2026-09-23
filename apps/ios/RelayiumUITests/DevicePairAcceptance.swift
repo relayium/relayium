@@ -28,12 +28,13 @@ import XCTest
 /// shipped ones. Three Debug-only arguments remain, every one of them `#if
 /// DEBUG` in `UITestMode` and absent from Release along with its parser:
 ///
-///  1. `--relayium-ui-testing-preselect-direct-fixture` — hands the app-scoped
-///     `DirectSendSelection` the exact `.success([url])` the `fileImporter`
-///     callback would have produced, for a deterministic 1,536-byte file. It
-///     replaces the system document browser and nothing else: the security
-///     scope, the expansion, the limits, the pending row, the arming, the wire
-///     and the receiving writer are all production;
+///  1. `--relayium-ui-testing-link-fixture` — hands the OPEN Nearby link
+///     workspace the exact `.success([url])` its `fileImporter` callback would
+///     have produced, for a deterministic 1,536-byte file, once the link
+///     accepts work. It replaces the system document browser and nothing else:
+///     the workspace selection, the security scope, the expansion, the limits,
+///     the pending row, the wire and the receiving writer are all production
+///     (connect first, A25: nothing is staged before the link exists);
 ///  2. `--relayium-ui-testing-fresh-received-folder` — empties this app's own
 ///     `Received` folder before it resolves. iOS has no folder picker for a
 ///     download, so the destination is fixed and the product REFUSES a name
@@ -189,7 +190,7 @@ extension XCTestCase {
             // role so a run cannot inherit the previous one's answer and meet a
             // SAS gate it is not driving — or, worse, miss one it is.
             + ["-\(DevicePair.verifyPeersDefaultsKey)", verifying ? "YES" : "NO"]
-            + (stagingFixture ? [DevicePair.preselectDirectFixtureArgument] : [])
+            + (stagingFixture ? [DevicePair.linkFixtureArgument] : [])
             + (freshReceivedFolder ? [DevicePair.freshReceivedFolderArgument] : [])
         app.launch()
     }
@@ -672,10 +673,9 @@ enum DevicePair {
     /// resolved preference back.
     static let verifyToggleLabel = "Compare verification codes with the other device"
 
-    /// `UITestMode.preselectDirectFixtureArgument` and
+    /// `UITestMode.linkFixtureArgument` and
     /// `UITestMode.freshReceivedFolderArgument`. Both are `#if DEBUG`.
-    static let preselectDirectFixtureArgument =
-        "--relayium-ui-testing-preselect-direct-fixture"
+    static let linkFixtureArgument = "--relayium-ui-testing-link-fixture"
     static let freshReceivedFolderArgument =
         "--relayium-ui-testing-fresh-received-folder"
 
@@ -748,9 +748,6 @@ enum DevicePair {
     /// assertion that the peer's `link/1` announcement crossed the room and was
     /// believed: a legacy peer would render Send and "Start a message session".
     static let connectLabel = "Connect"
-    /// `link.connectCarriesStagedFiles`.
-    static let stagedTravelsNote =
-        "The files you chose will be sent on this connection once you have compared the code."
     /// `link.verifyTitle`, `link.verifyMatches`.
     static let verifyTitle = "Compare this code"
     static let verifyMatchesLabel = "They match"

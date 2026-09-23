@@ -153,6 +153,21 @@ struct RootView: View {
             .sheet(isPresented: isPresentingStoredReceive) {
                 storedReceive
             }
+            // **A nearby device is asking to connect (A23), and the user is on
+            // another tab.** App-wide because the ask has a deadline and
+            // arrives from outside the view tree; LAN Transfer draws the same
+            // question as a card at the top of its own screen instead. Nothing
+            // has connected, claimed a tab or navigated yet — Accept does all
+            // three through the app's one admission gate; Decline answers no.
+            .alert(Text(incomingAskTitle), isPresented: presentsIncomingAsk,
+                   presenting: link.inboundAsk) { _ in
+                Button(L10n.t(.nearbyIncomingAccept)) { link.acceptInboundAsk() }
+                Button(L10n.t(.nearbyIncomingDecline), role: .cancel) {
+                    link.declineInboundAsk()
+                }
+            } message: { _ in
+                Text(incomingAskMessage)
+            }
             // Launch restore. This is the ONE call site, which is what the
             // surface guard checks — not that it runs once. SwiftUI decides when
             // a view's task runs, and a rebuilt root or a re-created scene can
@@ -200,6 +215,27 @@ struct RootView: View {
                     navigation.select(.storedSend)
                 }
             }
+    }
+
+    // MARK: - a nearby device is asking (A23)
+
+    /// Up while an ask is pending and LAN Transfer is not the surface drawn.
+    /// The setter is inert on purpose: the prompt goes away when the MODEL
+    /// says the ask is answered, withdrawn or timed out — never merely because
+    /// the alert was dismissed.
+    private var presentsIncomingAsk: Binding<Bool> {
+        Binding(get: { link.inboundAsk != nil && shell.placement.background != .lanTransfer },
+                set: { _ in })
+    }
+
+    private var incomingAskTitle: String {
+        L10n.t(.nearbyIncomingTitle, [L10n.token(link.inboundAsk?.peerLabel ?? "")])
+    }
+
+    private var incomingAskMessage: String {
+        let detail = L10n.t(.nearbyIncomingDetail)
+        guard link.inboundAskDiscardsLocalText else { return detail }
+        return detail + "\n\n" + L10n.t(.nearbyIncomingDiscardsText)
     }
 
     // MARK: - the two shells, over one list of surfaces

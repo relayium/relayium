@@ -107,6 +107,11 @@ public final class LinkCounterpart {
         // the workspace instead.
         link.setAvailableForInboundLink(true)
         link.shouldAcceptLink = { _ in true }
+        // Declared, never inherited: the model's own default is to put an
+        // unrequested same-network link to the user first, and a headless host
+        // has no user to put it to. Every acceptance host is built on this one
+        // counterpart, so this is the one place a host admits unasked.
+        link.inboundConsent = .automatic
 
         link.$connection
             .sink { [weak self] connection in

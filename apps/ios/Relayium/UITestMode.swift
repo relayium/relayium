@@ -166,19 +166,20 @@ enum UITestMode {
     static let preselectFixtureArgument = "--relayium-ui-testing-preselect-fixture"
     static let preselectsPendingFixture = ProcessInfo.processInfo.arguments.contains(
         preselectFixtureArgument)
-    /// Hands the same fixture to the app-scoped direct-transfer selection used
-    /// by Nearby and pairing-code flows. Separate from the account-owned upload
-    /// seam above: those are different production models with different gates,
-    /// and one test argument must never inject into both.
+    /// Hands the same fixture to an OPEN Nearby link workspace, in place of the
+    /// system document browser (A25: a link carries no pre-connect batch, so
+    /// the old pre-connect direct-selection seam had nothing left to feed).
+    /// Separate from the account-owned upload seam above: those are different
+    /// production models with different gates, and one test argument must
+    /// never inject into both.
     // nonlocalized: a test-only launch argument, absent from Release
-    static let preselectDirectFixtureArgument =
-        "--relayium-ui-testing-preselect-direct-fixture"
-    static let preselectsDirectPendingFixture = ProcessInfo.processInfo.arguments.contains(
-        preselectDirectFixtureArgument)
+    static let linkFixtureArgument = "--relayium-ui-testing-link-fixture"
+    static let suppliesLinkFixture = ProcessInfo.processInfo.arguments.contains(
+        linkFixtureArgument)
     /// Any fixture argument stages. A preselecting launch must not depend on a
     /// second argument being passed beside it to have something to select.
     static let stagesPendingFixture = ProcessInfo.processInfo.arguments.contains(
-        pendingFixtureArgument) || preselectsPendingFixture || preselectsDirectPendingFixture
+        pendingFixtureArgument) || preselectsPendingFixture || suppliesLinkFixture
 
 
     /// Whether this launch already holds an account.
@@ -632,16 +633,27 @@ enum UITestMode {
         one.start()
     }
 
-    /// Injects through the exact callback used by Nearby's `fileImporter`.
-    /// Direct selection has no account or upload gate, so this is synchronous
-    /// and deliberately does not share `UITestPreselection` with cloud sends.
+    /// Whether this process has already handed its one link fixture over.
+    @MainActor private static var linkFixtureSupplied = false
+
+    /// **The importer result an open Nearby link workspace receives instead of
+    /// presenting the system document browser — once per process.**
+    ///
+    /// `NearbyLinkWorkspaceView` asks for it when its link starts accepting
+    /// work (open, and past any verification) and passes the answer to the
+    /// SAME `sendChosen` its `fileImporter` calls, so the workspace's own
+    /// selection, its security scope, staging and `link.send` are all
+    /// production code; only the browser presentation is replaced. Nil without
+    /// the argument, after the first hand-over, or when the fixture was not
+    /// written — and nil in Release by construction.
     @MainActor
-    static func preselectPendingFixture(into selection: DirectSendSelection) {
-        guard preselectsDirectPendingFixture else { return }
+    static func linkFixtureSelection() -> Result<[URL], Error>? {
+        guard suppliesLinkFixture, !linkFixtureSupplied else { return nil }
         stagePendingFixture()
         guard let url = pendingFixtureURL(),
-              FileManager.default.fileExists(atPath: url.path) else { return }
-        selection.chooseFiles(.success([url]))
+              FileManager.default.fileExists(atPath: url.path) else { return nil }
+        linkFixtureSupplied = true
+        return .success([url])
     }
 
     /// Whether this launch should start with an empty `Received` folder.
@@ -719,8 +731,10 @@ enum UITestMode {
     static func preselectPendingFixture(into send: SendSelectionModel,
                                         upload: CloudUploadModel,
                                         session: AccountSession) {}
+    /// Nil: a shipped workspace always presents the real document browser,
+    /// and no argument can put a file in front of a link nobody chose it for.
     @MainActor
-    static func preselectPendingFixture(into selection: DirectSendSelection) {}
+    static func linkFixtureSelection() -> Result<[URL], Error>? { nil }
 
     /// Likewise absent. A shipped launch has no argument that deletes anything
     /// a user has received, and this folds to an empty call.

@@ -1361,6 +1361,46 @@ final class NearbyReceiveListenerOnlyTests: XCTestCase {
                        "a refused offer changed what the user is told about listening")
     }
 
+    /// **iOS now composes this model too (A23, decision L1)**, and an iOS 0.3.x
+    /// peer or a legacy `LocalTransferPeer` offers on BOTH legacy generations.
+    /// Each is answered with a `busy` tagged for the generation that peer is
+    /// listening on — and nothing is published, reserved into a room, or built,
+    /// so nothing can be written to disk.
+    func testBothLegacyGenerationsAreRefusedAndNothingIsBuiltToWriteWith() async {
+        let channel = FakeWebSocketChannel()
+        let discovery = LanDiscoveryModel(connect: {
+            let client = SignalingClient(channel: channel, name: "iPhone")
+            channel.fireOpen()
+            return client
+        })
+        let room = InboundRoom()
+        let receive = AppEnvironment.makeListeningOnlyNearbyReceiveModel(
+            discovery: discovery, inboundRoom: room)
+        discovery.start()
+        await settle()
+        channel.fire(Envelope(type: SignalType.welcome, name: "ios-self"))
+        await settle()
+
+        channel.fire(Envelope(type: SignalType.signal, from: "old-ios",
+                              data: sdpSignal(kind: "offer", sdp: "v=0", commit: "Yw==",
+                                              generation: .file, caps: [])))
+        await settle()
+        XCTAssertNil(receive.activeKind, "a legacy file offer put a session on screen")
+        XCTAssertNil(room.signaling, "a legacy responder was being built on this room")
+
+        channel.fire(Envelope(type: SignalType.signal, from: "old-ios",
+                              data: sdpSignal(kind: "offer", sdp: "v=0", commit: "Yw==",
+                                              generation: .text, caps: [TEXT_CAPABILITY])))
+        await settle()
+
+        XCTAssertEqual(busyReplies(on: channel).map(\.generation), [.file, .text],
+                       "each legacy generation must hear a refusal it can read")
+        XCTAssertEqual(busyReplies(on: channel).map(\.to), ["old-ios", "old-ios"])
+        XCTAssertNil(receive.activeKind)
+        XCTAssertNil(room.signaling)
+        XCTAssertEqual(receive.state, .ready)
+    }
+
     /// A refusal must release the reservation, or one legacy offer would make
     /// this Mac deaf for the rest of the process — including to the `link/1`
     /// that arrives next in the same room.
