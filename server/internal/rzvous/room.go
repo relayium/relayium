@@ -104,7 +104,8 @@ type capturedSignal struct {
 // returned in Room.Captured when it came from the selected peer. The hub
 // debounces rosters (up to 200 ms), so a peer that already had a roster naming
 // us -- an older CLI sends its commit at once -- can speak before we know it
-// exists; Join discards that frame, JoinRoom keeps it.
+// exists. JoinRoom hands that frame to the caller in Room.Captured; Join
+// keeps it too and replays it through Session.RecvSignal.
 func JoinRoom(ctx context.Context, serverURL, code, name string, proto []string) (*Room, error) {
 	conn, err := dialRendezvous(ctx, serverURL, code)
 	if err != nil {
@@ -173,8 +174,10 @@ func JoinRoom(ctx context.Context, serverURL, code, name string, proto []string)
 		default:
 			continue
 		}
-		// Welcome and roster are separate frames; see Join for why a roster is
-		// not interpreted until Welcome has named this connection.
+		// Welcome and roster are separate frames. Do not interpret a roster
+		// until Welcome has identified this connection: under an unlucky write
+		// schedule an empty selfID would make our own roster entry look like the
+		// peer, causing signaling (including the handshake commit) to loop back.
 		if s.selfID == "" || len(roster) == 0 {
 			continue
 		}
