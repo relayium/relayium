@@ -1565,6 +1565,28 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "the iOS web hand-off bypasses its distribution policy")
     }
 
+    /// **Account readiness sweeps StoreKit's unfinished queue on iOS**, as it
+    /// does on macOS. A purchase left unfinished because the account changed
+    /// while its sheet was open is only submitted when its own account is ready
+    /// again, and the update observer, already running, will not see it again.
+    /// The hook is keyed on the ready account's id so A → B → A re-runs it, and
+    /// its body is the model's own readiness entry point, which
+    /// `AppleSubscriptionModelTests` drives through that same sequence.
+    func testTheIOSAppSweepsUnfinishedTransactionsOnEachReadyAccount() throws {
+        let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" }?.text)
+        XCTAssertTrue(app.contains("""
+                guard case let .ready(user, _) = session.state else { return nil }
+                return user.id
+        """), "the readiness id is no longer the ready account's id")
+        XCTAssertEqual(app.components(separatedBy: ".task(id: subscriptionAccountID) {").count - 1, 1,
+                       "account readiness is not observed exactly once at the scene root")
+        let hook = try XCTUnwrap(
+            app.components(separatedBy: ".task(id: subscriptionAccountID) {").dropFirst().first?
+                .components(separatedBy: "}").first)
+        XCTAssertTrue(hook.contains("appleSubscription?.reconcile(forReadyAccount: subscriptionAccountID)"),
+                      "the iOS readiness hook no longer sweeps unfinished transactions")
+    }
+
     /// The eight keys whose wording still names a platform, each grouped with
     /// the slice that will first render it.
     ///

@@ -717,6 +717,13 @@ struct RelayiumApp: App {
         }
     }
 
+    /// The ready Relayium account, for the App Store recovery sweep below.
+    /// `nil` while signed out or still restoring.
+    private var subscriptionAccountID: String? {
+        guard case let .ready(user, _) = session.state else { return nil }
+        return user.id
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView(download: download, upload: upload, send: send,
@@ -756,6 +763,15 @@ struct RelayiumApp: App {
                 .environmentObject(signOut)
                 .environment(\.appleSubscription, appleSubscription)
                 .task { appleSubscription?.startObservingUpdates() }
+                // Each time an account becomes ready — launch restore, sign-in,
+                // or switching back after another account — sweep StoreKit's
+                // unfinished queue under it. A purchase left unfinished because
+                // the account changed while its sheet was open is submitted
+                // here once its own account is back; the update observer above
+                // is already running and will not see it again.
+                .task(id: subscriptionAccountID) {
+                    await appleSubscription?.reconcile(forReadyAccount: subscriptionAccountID)
+                }
                 // The one lifecycle observer, on the scene root rather than on a
                 // tab. What it does with each phase is
                 // `NearbyResidencyCoordinator`'s decision — which includes when
