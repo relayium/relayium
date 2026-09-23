@@ -1696,3 +1696,97 @@ func TestLinkDevVerifiedTextSharesOneInput(t *testing.T) {
 		}
 	}
 }
+
+// ================================================================ A09b gate-2 round 3
+
+// ldUseTextInput makes r the `text` command's input for this test.
+func ldUseTextInput(t *testing.T, r io.Reader) {
+	t.Helper()
+	oldIn, oldTTY := textStdin, textStdinIsTTY
+	textStdin = func() io.Reader { return r }
+	textStdinIsTTY = func() bool { return false }
+	t.Cleanup(func() { textStdin, textStdinIsTTY = oldIn, oldTTY })
+}
+
+// ldFailingReader yields data, then err.
+type ldFailingReader struct {
+	data []byte
+	err  error
+}
+
+func (f *ldFailingReader) Read(p []byte) (int, error) {
+	if len(f.data) == 0 {
+		return 0, f.err
+	}
+	n := copy(p, f.data)
+	f.data = f.data[n:]
+	return n, nil
+}
+
+// ldInputLossCannotSucceed: input that could not be read ends the `text` run
+// as a failure, and nothing after the unreadable point is sent.
+func ldInputLossCannotSucceed(t *testing.T, in io.Reader, why string) {
+	t.Helper()
+	hub := startLinkDevHub(t)
+	ldUseTextInput(t, in)
+	ra, rb := ldPairUp(t, hub, "",
+		ldPeer{cmd: "text", via: hub.url, args: []string{ldCode}},
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--yes", "--script", ldScript(t, "wait-texts 1"), ldCode}})
+	if !strings.Contains(rb.stdout, "first line ok") {
+		t.Fatalf("the line before the failure never arrived; the test proves nothing\n%s", rb)
+	}
+	if ra.code == 0 || !strings.Contains(ra.stderr, "input could not be read") || !strings.Contains(ra.stderr, why) {
+		t.Errorf("lost input must fail the run (%s)\n%s", why, ra)
+	}
+	if strings.Contains(rb.stdout, "never sent") {
+		t.Errorf("input after the failure was sent\n%s", rb)
+	}
+}
+
+// Round 3 #1: a line over the 1 MiB input bound.
+func TestLinkDevOversizedInputLineFails(t *testing.T) {
+	ldInputLossCannotSucceed(t,
+		strings.NewReader("first line ok\n"+strings.Repeat("a", 1<<20+10)+"\nnever sent\n"),
+		"token too long")
+}
+
+// Round 3 #1: a read error on the input.
+func TestLinkDevInputReadErrorFails(t *testing.T) {
+	ldInputLossCannotSucceed(t,
+		&ldFailingReader{data: []byte("first line ok\n"), err: errors.New("injected read failure")},
+		"injected read failure")
+}
+
+// Round 3 #2: a run whose input read is blocked when its link ends returns
+// promptly, and leaves the input to whoever reads it next: nothing of this
+// run is still reading it.
+func TestLinkDevShutdownReleasesBlockedInput(t *testing.T) {
+	hub := startLinkDevHub(t)
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { pr.Close(); pw.Close() })
+	ldUseTextInput(t, pr)
+	start := time.Now()
+	ra, rb := ldPairUp(t, hub, "",
+		ldPeer{cmd: "text", via: hub.url, args: []string{ldCode}},
+		ldPeer{cmd: "pair", via: hub.url, args: []string{ldCode}})
+	if !strings.Contains(ra.stderr, "link admitted") || rb.code != 0 {
+		t.Fatalf("want a link the peer ended while our input was blocked\nA: %s\nB: %s", ra, rb)
+	}
+	if el := time.Since(start); el > 10*time.Second {
+		t.Errorf("the run took %v to return with its input blocked", el)
+	}
+	if _, err := pw.Write([]byte("later\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := pr.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, 16)
+	n, err := pr.Read(buf)
+	if err != nil || string(buf[:n]) != "later\n" {
+		t.Fatalf("the ended run still read the input: next reader got %q (%v)", buf[:n], err)
+	}
+}
