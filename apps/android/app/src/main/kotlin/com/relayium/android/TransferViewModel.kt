@@ -356,6 +356,10 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
      */
     val inboxAccountUnusable: StateFlow<Boolean> = _inboxAccountUnusable.asStateFlow()
 
+    /** The "compare verification codes" preference (A31 a). Read by the
+     *  controller once per link; see `settings/VerificationPreference`. */
+    val verification: com.relayium.android.settings.VerificationPreference
+
     /** The camera scanner, for the ViewModel's lifetime rather than the sheet's:
      *  a rotation must not re-ask for the camera. */
     val scanner: ScannerController
@@ -381,7 +385,8 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
         // anything else believes it sends.
         val model = android.os.Build.MODEL ?: "Android"
         signalingDeviceName = model
-        val (deps, safOps) = RealDeps.create(app, origin, model)
+        verification = com.relayium.android.settings.VerificationPreference.sharedPreferences(app)
+        val (deps, safOps) = RealDeps.create(app, origin, model, verifyPeers = verification::current)
         saf = safOps
         controller = TransferController(viewModelScope, model, deps)
 
@@ -1202,6 +1207,16 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
 
     fun cancelSend() = controller.cancelSend()
 
+    // ── peer verification (A31 a) ───────────────────────────────────────────
+
+    fun setVerifyPeers(on: Boolean) = verification.setEnabled(on)
+
+    /** The codes match: release what was held. [linkId] is the link the screen showed. */
+    fun confirmSas(linkId: Int) = controller.confirmSas(linkId)
+
+    /** The codes differ: end this link without sending anything. */
+    fun rejectSas(linkId: Int) = controller.rejectSas(linkId)
+
     // ── incoming files ──────────────────────────────────────────────────────
 
     /**
@@ -1713,6 +1728,12 @@ class TransferViewModel(app: Application) : AndroidViewModel(app) {
         )
         val items = ingress.staged.value?.items ?: return
         if (!authority.isCurrent(shareEpoch.current, accountBinding())) return
+        // The storage surface must have nothing to lose (A32 D1). Checked BEFORE
+        // the share is taken, so a refusal leaves it staged rather than handing
+        // it to a `select` that would refuse it. The owner is `Main.immediate`
+        // and this runs on the main thread, so the `select` below commits in
+        // this same turn: no upload can start in between.
+        if (!CloudUploadModel.acceptsSelection(cloudUpload.state.value)) return
         // Refused before the share is consumed, for the reason the session
         // dispatch gives: a path that cannot send must not empty the surface.
         for (item in items) {

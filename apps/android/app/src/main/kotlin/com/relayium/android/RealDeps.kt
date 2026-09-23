@@ -23,7 +23,12 @@ import java.io.File
  */
 object RealDeps {
 
-    fun create(context: Context, origin: String, deviceName: String): Pair<TransferController.Deps, ProviderOps.Saf> {
+    fun create(
+        context: Context,
+        origin: String,
+        deviceName: String,
+        verifyPeers: () -> Boolean,
+    ): Pair<TransferController.Deps, ProviderOps.Saf> {
         val app = context.applicationContext
         val http = SignalingClient.httpClient()
         val saf = ProviderOps.Saf(app)
@@ -35,6 +40,7 @@ object RealDeps {
             },
             store = ReceiveStore(File(app.cacheDir, "incoming")),
             providerOps = saf,
+            verifyPeers = verifyPeers,
         )
         return deps to saf
     }
