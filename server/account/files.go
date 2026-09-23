@@ -640,8 +640,9 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	// on the functional same-origin proxy path. Fleet hosts are under
 	// *.relayium.com and remain CSP-compatible without the opt-in.
 	byoDirectRequested := r.Header.Get("X-Relayium-Direct-Download") == "1"
-	// Never for an empty object: it has no blob on the node to be served from
-	// (see openStoredObject), so the redirect would hand the client a 404.
+	// Never for an empty object: it is served in place as the empty stream
+	// (see openStoredObject), and an object stored before W-N40 may have no
+	// blob on the node, so a redirect could hand the client a 404.
 	if directCapable && directNode.OwnerType == "user" && directNode.OwnerUserID == sf.UserID && byoDirectRequested && sf.Size > 0 {
 		s.redirectToNode(w, r, directNode, sf.BlobKey)
 		return
@@ -818,9 +819,13 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 // An object whose committed size is zero is the empty stream, and is served
 // as one without touching storage. That is not a shortcut around a missing
 // blob; it is what the object IS. Every all-empty batch is such an object — an
-// empty file contributes no AEAD frame, so the frame stream has no bytes — and
-// a resumable upload of it never sends a PATCH, so neither central's disk nor
-// a storage node ever creates the key. Before W-N40 the read went to storage
+// empty file contributes no AEAD frame, so the frame stream has no bytes.
+// Current invariant: the blob DOES exist — the CLI sends a zero-byte append
+// and finalize materializes it if missing — so older readers can serve it;
+// do not remove either step. Historically (before W-N40) a resumable upload
+// of it sent no PATCH, neither central's disk nor a node created the key,
+// and such rows still exist, which is why this branch never needs the blob.
+// Before W-N40 the read went to storage
 // anyway, got ErrNotFound, and answered 404 (a share) or, on the Device Inbox
 // route, deleted the row and failed the task stored_object_unavailable — after
 // the finalize had already stored the object, bound its task and debited its
