@@ -180,6 +180,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runRecv(args[1:], stdout, stderr)
 	case "__send":
 		return runSend(args[1:], stdout, stderr)
+	case "__link": // hidden developer entry (A08d); not in usage or help
+		return runLinkDev(args[1:], stdout, stderr)
 	case stdinpump.HelperArg:
 		// The stdin reader `push -` starts after the receiver accepted the
 		// stream. It uses this process's real fd 0/1/2, never stdout/stderr
