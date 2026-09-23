@@ -181,6 +181,18 @@ const VECTORS = [
     generator: "scripts/gen-device-inbox-manifest-vectors.mjs",
     fixture: "apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json",
   },
+  {
+    // The link-session STATE-MACHINE vectors (W-N18 A08e): abstract lane
+    // scenarios — consent order, glare, drain, expiry, END — rather than bytes.
+    // Generated end to end like the first three (every value is a literal in
+    // the generator; nothing is random or read), so single authorship is
+    // trivially true. What this gate proves is that the committed scenarios are
+    // what the generator says; `web/src/lib/link-session-vectors.test.ts`
+    // proves the shipped Web lanes behave as they say, and the Go and Android
+    // suites prove theirs do or record exactly where they do not.
+    generator: "scripts/gen-link-session-vectors.mjs",
+    fixture: "apps/RelayiumKit/Tests/Fixtures/link-session-vectors.json",
+  },
 ];
 
 const write = process.argv.includes("--write");

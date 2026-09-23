@@ -363,6 +363,25 @@ const FIXTURE_INPUTS = [
       { file: "web/src/lib/text-vectors.test.ts", workflow: WEB, what: "the text frame block" },
     ],
   },
+  {
+    // W-N18 A08e: the link-session STATE-MACHINE vectors. Both readers run
+    // their real lane machines against every scenario — the Web suite is the
+    // authority half, the Go suite the CLI's — so `go.yml` and `web.yml` each
+    // name the file one path at a time like the three above.
+    fixture: `${PACKAGE_FIXTURES_ROOT}/link-session-vectors.json`,
+    consumers: [
+      {
+        file: "server/internal/linksession/vectors_test.go",
+        workflow: GO,
+        what: "the Go link-session lane machines' cross-language state-machine suite",
+      },
+      {
+        file: "web/src/lib/link-session-vectors.test.ts",
+        workflow: WEB,
+        what: "the Web (authority) link-session state-machine suite",
+      },
+    ],
+  },
 ];
 
 /**
@@ -445,9 +464,14 @@ const OWNERSHIP = [
     + "library's vector suite (`server/internal/linkwire/vectors_test.go`), so `go.yml` names it "
     + "one path at a time. That library is imported by no command yet. No heavy Apple or pairing "
     + "lane starts"],
+  [`${PACKAGE_FIXTURES_ROOT}/link-session-vectors.json`, [GO, SWIFT_PACKAGE, WEB],
+    "the W-N18 A08e link-session state-machine vectors: read by the Web authority suite "
+    + "(`web/src/lib/link-session-vectors.test.ts`) and the Go link-session suite "
+    + "(`server/internal/linksession/vectors_test.go`), so `web.yml` and `go.yml` each name it one "
+    + "path at a time. No heavy Apple or pairing lane starts"],
   [`${PACKAGE_FIXTURES_ROOT}/store-wire-vectors.json`, [SWIFT_PACKAGE],
     "the fixture in that same directory that NO filtered workflow but the package's own reads. "
-    + "This row is what makes `web.yml`'s three named entries mean something: a directory glob "
+    + "This row is what makes `web.yml`'s four named entries mean something: a directory glob "
     + "there would start the full web suite for a file that suite never opens"],
   [`${PACKAGE_FIXTURES_ROOT}/account/me.json`, [SWIFT_PACKAGE],
     "a Swift-only fixture nested a directory deeper, so the exclusion is checked against "
@@ -918,7 +942,7 @@ const fixtureFiles = (() => {
  * The source of every test that reads one of those fixtures, keyed by path.
  *
  * This is what makes the fixture rules non-vacuous in the direction that
- * actually decays. Asserting only that `web.yml` lists three paths proves the
+ * actually decays. Asserting only that `web.yml` lists four paths proves the
  * YAML says so; it proves nothing about whether anything still opens them.
  *
  * A missing file is recorded as `null` rather than as an empty string: an empty
@@ -2664,7 +2688,7 @@ const MUTATIONS = [
     // files. It fixes the dropped fixture and starts the full web suite, the
     // accessibility scan and three headless-Chrome journeys on every Swift test
     // edit.
-    name: "web.yml replaces its three fixture paths with the whole Fixtures tree",
+    name: "web.yml replaces its four fixture paths with the whole Fixtures tree",
     mutate: (w) => withPaths(w, WEB, [
       "web/**",
       `${PACKAGE_FIXTURES_ROOT}/**`,
