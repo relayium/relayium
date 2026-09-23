@@ -139,9 +139,10 @@ ICE/TURN credentials for a pairing-code transfer. It:
    that report to the same accept-as-reported path an expired code has always
    taken. Nothing is lost.
 
-**Ingesting what was actually relayed** is a separate, one-way pipeline:
-coturn (the TURN server) reports each allocation's cumulative relayed bytes
-over Redis pub/sub; `internal/metering/metering.go` ingests those reports.
+**Ingesting what coturn relayed** is a separate, one-way pipeline that is
+**currently disabled** (details at the end of this paragraph). As designed,
+coturn (the TURN server) would report each allocation's cumulative relayed
+bytes over Redis pub/sub and `internal/metering/metering.go` would ingest them.
 `Worker.handle` (`internal/metering/metering.go:81`) parses the coturn
 username via `relayusage.TokenFromUsername` and `relayusage.SplitAttrib`
 (`internal/relayusage/parse.go:18` and `:21`) to recover the owner's user ID,
