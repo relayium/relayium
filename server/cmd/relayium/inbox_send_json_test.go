@@ -1,3 +1,10 @@
+//go:build !windows
+
+// Server-only on Windows: one test here uses newSendEnv from
+// inbox_send_e2e_test.go, which drives the account server (internal/storage —
+// syscall.Statfs), not released for Windows. See the cli-windows job in
+// .github/workflows/go.yml.
+
 package main
 
 import (
