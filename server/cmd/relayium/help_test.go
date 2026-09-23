@@ -105,15 +105,22 @@ func TestTopLevelHelpGroupsDirectCommands(t *testing.T) {
 
 // The Inbox is the thing people reach for by mistake when they want two servers
 // to talk. Help must say plainly that it only receives.
-func TestTopLevelHelpMarksInboxReceiveOnly(t *testing.T) {
+func TestTopLevelHelpDescribesBothInboxSides(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	Run([]string{"--help"}, &stdout, &stderr)
 	got := stdout.String()
-	if !strings.Contains(got, "RECEIVE SIDE ONLY") {
-		t.Errorf("top-level help does not mark inbox receive-only:\n%s", got)
+	// This binary has an inbox sender, so the top-level entry must not say
+	// otherwise.
+	for _, stale := range []string{"RECEIVE SIDE ONLY", "no CLI sender"} {
+		if strings.Contains(got, stale) {
+			t.Errorf("top-level help still claims the CLI cannot send (%q):\n%s", stale, got)
+		}
 	}
-	if !strings.Contains(got, "no CLI sender") {
-		t.Errorf("top-level help does not say the sending side is Web/app:\n%s", got)
+	for _, want := range []string{"send files to one of your devices", "devices, send, sent, cancel, retry",
+		"receive", "enable --dir, run, status, pause", "serve + push/sync", "relayium inbox --help"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("top-level help does not mention %q:\n%s", want, got)
+		}
 	}
 }
 

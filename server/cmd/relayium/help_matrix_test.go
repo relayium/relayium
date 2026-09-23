@@ -50,6 +50,11 @@ var inboxSubcommands = []struct {
 	{"pause", "relayium inbox pause"},
 	{"resume", "relayium inbox resume"},
 	{"service", "relayium inbox service"},
+	{"devices", "relayium inbox devices"},
+	{"send", "relayium inbox send"},
+	{"sent", "relayium inbox sent"},
+	{"cancel", "relayium inbox cancel"},
+	{"retry", "relayium inbox retry"},
 }
 
 // helpForms returns the argv spellings that must all answer identically for a
@@ -342,13 +347,18 @@ func TestHelpStatesAccountAndOnlineConstraints(t *testing.T) {
 	}
 
 	inboxWant := map[string][]string{
-		"run":     {"Requires \"relayium login\"", "RECEIVE SIDE ONLY"},
+		"run":     {"Requires \"relayium login\"", "receiving side", "relayium inbox send"},
 		"enable":  {"Requires \"relayium login\"", "network access"},
 		"disable": {"Requires network access"},
 		"status":  {"works offline", "needs \"relayium login\""},
 		"pause":   {"needs no network"},
 		"resume":  {"needs network access"},
 		"service": {"needs no\nnetwork, and needs no account"},
+		"devices": {"Requires \"relayium login\" and network access", "enrols nothing"},
+		"send":    {"Requires \"relayium login\" and network access", "does not need Device\nInbox receiving turned on"},
+		"sent":    {"Requires \"relayium login\" and network access"},
+		"cancel":  {"Requires \"relayium login\" and network access"},
+		"retry":   {"Requires \"relayium login\" and network access", "never encrypts and never\nuploads"},
 	}
 	for sub, needles := range inboxWant {
 		var stdout, stderr bytes.Buffer
@@ -444,7 +454,7 @@ func TestPushHelpClaimsNoAtomicBatch(t *testing.T) {
 
 // "up" is a hosted asynchronous stored-link mode. It is NOT "the one CLI mode
 // that is not direct": Device Inbox is server-stored and asynchronous too, and
-// the CLI is its receive side. Someone reading the old claim would conclude
+// the CLI now has both of its sides. Someone reading the old claim would conclude
 // inbox files move machine-to-machine, which is wrong about where their
 // ciphertext sits.
 func TestUpHelpDoesNotClaimToBeTheOnlyNonDirectMode(t *testing.T) {
@@ -469,7 +479,7 @@ func TestUpHelpDoesNotClaimToBeTheOnlyNonDirectMode(t *testing.T) {
 	for _, n := range []string{
 		"hosted, asynchronous stored-link mode",
 		"Device Inbox is hosted and asynchronous too",
-		"the CLI is only its receive side",
+		`("relayium inbox send" and "relayium inbox run")`,
 	} {
 		if !strings.Contains(flat, n) {
 			t.Errorf("up help omits %q:\n%s", n, got)
@@ -477,16 +487,16 @@ func TestUpHelpDoesNotClaimToBeTheOnlyNonDirectMode(t *testing.T) {
 	}
 }
 
-// Device Inbox sends come from the Web or a native app. `inbox run -h` has said
-// so; `send -h` used to name only the Web, which reads as "there is no app
-// path" to someone deciding how to reach a machine that is offline.
+// Device Inbox sends come from the CLI, the Web or a native app. `send -h` used
+// to name only the Web, which reads as "there is no app path" to someone
+// deciding how to reach a machine that is offline; it must name all three.
 func TestSendHelpNamesBothInboxSenders(t *testing.T) {
 	isolatedEnv(t)
 	var stdout, stderr bytes.Buffer
 	if rc := Run([]string{"send", "-h"}, &stdout, &stderr); rc != 0 {
 		t.Fatalf("send -h: rc = %d (%s)", rc, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "Device Inbox from the Web or a native app") {
+	if !strings.Contains(stdout.String(), `Device Inbox ("relayium inbox send", the Web or a native app)`) {
 		t.Errorf("send help does not name both Device Inbox senders:\n%s", stdout.String())
 	}
 }

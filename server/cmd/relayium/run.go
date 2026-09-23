@@ -58,13 +58,13 @@ usage:
   relayium up <path...> [--burn] [--ttl D] [--max-downloads N]
                                              encrypt client-side and upload to the cloud
   relayium down <link-or-code> [destDir]    fetch and decrypt a cloud claim (no login needed)
-  relayium inbox <subcommand>               RECEIVE SIDE ONLY: accept files your account
-                                             sends to this device. There is no CLI sender for
-                                             it — you send TO an inbox from the Web or the app.
-                                             To move files between two servers, use serve +
-                                             push/sync above instead.
-                                             (enable --dir, run, status, pause, resume, disable,
-                                              service; see relayium inbox --help)
+  relayium inbox <subcommand>               Device Inbox: send files to one of your devices
+                                             (devices, send, sent, cancel, retry) or receive
+                                             them here (enable --dir, run, status, pause,
+                                             resume, disable, service). Hosted and
+                                             asynchronous; to move files directly between two
+                                             servers, use serve + push/sync above instead.
+                                             See relayium inbox --help.
   relayium update [--check] [--force]       upgrade to the latest release in place
   relayium version                          print the CLI version
 

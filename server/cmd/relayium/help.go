@@ -32,7 +32,7 @@ cross-network transfer by design, over ciphertext the relay cannot read.
 
 Both machines must be online at the same time; this is not a mailbox. For a
 recipient who is not there right now, use "relayium up" (a stored link) or the
-Device Inbox from the Web or a native app.
+Device Inbox ("relayium inbox send", the Web or a native app).
 
 positional arguments:
   <src...>   files or directories to send
@@ -200,7 +200,7 @@ online together. That is what makes it unlike the pairing-code modes
 ("send"/"receive"/"text") and the direct server modes ("push"/"pull"/"sync"
 with "serve"), which move bytes straight between two machines. It is not the
 only CLI mode that involves the server, though — the Device Inbox is hosted and
-asynchronous too; the CLI is only its receive side.
+asynchronous too ("relayium inbox send" and "relayium inbox run").
 
 Because a copy is stored, "up" requires "relayium login" and counts against the
 account's storage cap, traffic allowance, daily quota and retention window,
@@ -279,9 +279,10 @@ Requires "relayium login" and "relayium inbox enable --dir <folder>" first, and
 network access. One worker per state directory; a second exits rather than
 racing the first. SIGINT/SIGTERM stop it cleanly.
 
-RECEIVE SIDE ONLY. There is no CLI command that sends into an inbox — you send
-to one from the Web or a native app. To move files between two of your own
-servers, use "relayium serve" with "relayium push"/"relayium sync".
+This is the receiving side. To send into a device's inbox from the CLI, use
+"relayium inbox send" (the Web and the native apps send too). To move files
+between two of your own servers directly, use "relayium serve" with
+"relayium push"/"relayium sync".
 
 flags:
   --once           drain the queue once and exit instead of staying resident
@@ -428,6 +429,11 @@ var inboxCommandUsage = map[string]string{
 	"pause":   inboxPauseUsage,
 	"resume":  inboxResumeUsage,
 	"service": inboxServiceUsage,
+	"devices": inboxDevicesUsage,
+	"send":    inboxSendUsage,
+	"sent":    inboxSentUsage,
+	"cancel":  inboxCancelUsage,
+	"retry":   inboxRetryUsage,
 }
 
 // runHelp implements `relayium help [command [subcommand]]`.
