@@ -253,3 +253,82 @@ func TestFinalizeOutcomeParsingIsClosed(t *testing.T) {
 		}
 	}
 }
+
+// A "running" answer means some finalize of this upload claimed it and may
+// commit an object (and its debit) at any moment, so the outcome is uncertain
+// from then on. When the next answer is a 404 (that finalize committed and the
+// tombstone was purged since) or a refusal of the request itself (a revoked
+// login), the send must end unknown with the record kept — never "the upload
+// ended before it was completed", which invites a second, counted upload.
+func TestRunningThenDefinitiveLookingAnswerStaysUnknown(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		next func(w *world) *sendtest.Rule
+	}{
+		{"committed_then_purged_404", func(w *world) *sendtest.Rule {
+			return &sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.Before,
+				Fn: func(r *http.Request) {
+					// The concurrent finalize commits its object and the
+					// tombstone is then purged: the real handler answers 404.
+					ctx := context.Background()
+					sess, ok, err := w.env.Store.GetUploadSession(ctx, uploadIDOf(r), w.uid)
+					if err != nil || !ok {
+						t.Errorf("session: %v %v", ok, err)
+						return
+					}
+					now := time.Now().Unix()
+					if err := w.env.Store.CreateStoredFile(ctx, account.StoredFile{ID: "f-concurrent", UserID: w.uid,
+						BlobKey: sess.BlobKey, EncManifest: sess.EncManifest, Size: sess.Received, CreatedAt: now,
+						ExpiresAt: now + 3600, Purpose: account.StoredPurposeDeviceTask}); err != nil {
+						t.Errorf("object: %v", err)
+					}
+					if err := w.env.Store.DeleteUploadSession(ctx, sess.ID); err != nil {
+						t.Errorf("purge: %v", err)
+					}
+				}}
+		}},
+		{"auth_refusal_401", func(*world) *sendtest.Rule {
+			return &sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.Status, Code: http.StatusUnauthorized}
+		}},
+		{"auth_refusal_403", func(*world) *sendtest.Rule {
+			return &sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.Status, Code: http.StatusForbidden}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fastBackoff(t)
+			oldPoll := finalizeRunningPoll
+			finalizeRunningPoll = func(time.Duration) time.Duration { return 10 * time.Millisecond }
+			t.Cleanup(func() { finalizeRunningPoll = oldPoll })
+
+			w := newFileWorld(t, 4<<20)
+			root := writeTree(t, map[string][]byte{"a.txt": []byte("maybe committed")})
+			// First finalize: another finalize has claimed the upload → running.
+			w.env.Faults.Add(&sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.Before,
+				Fn: func(r *http.Request) {
+					if _, _, ok, err := w.env.Store.ClaimUploadDone(context.Background(), uploadIDOf(r), time.Now().Unix()); err != nil || !ok {
+						t.Errorf("claim: %v %v", ok, err)
+					}
+				}})
+			w.env.Faults.Add(tc.next(w))
+			quotaBefore := w.env.QuotaBytes(w.uid)
+			_, err := w.session().Send(context.Background(), SendRequest{To: w.target.id, Paths: []string{filepath.Join(root, "a.txt")}})
+			e := AsError(err)
+			if e == nil || e.Class != ClassUnknown || e.Code != CodeUnknownOutcome || e.LocalSendID == "" {
+				t.Fatalf("send = %v; want unknown with the record kept", err)
+			}
+			if strings.Contains(e.Msg, "ended before it was completed") {
+				t.Fatalf("message claims the upload never completed: %s", e.Msg)
+			}
+			if _, lerr := newJournalStore(w.cfgDir).load(e.LocalSendID); lerr != nil {
+				t.Fatalf("record not kept: %v", lerr)
+			}
+			if got := w.env.Faults.Hits(sendtest.KeyFinalize); got != 2 {
+				t.Fatalf("finalizes = %d, want the running one and the next", got)
+			}
+			if w.env.Faults.Hits(sendtest.KeyInit) != 1 || len(w.tasks()) != 0 || w.env.QuotaBytes(w.uid) != quotaBefore {
+				t.Fatalf("inits %d tasks %d quota %d->%d; nothing may be uploaded or counted again",
+					w.env.Faults.Hits(sendtest.KeyInit), len(w.tasks()), quotaBefore, w.env.QuotaBytes(w.uid))
+			}
+		})
+	}
+}

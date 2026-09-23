@@ -417,8 +417,14 @@ func (s *Session) finalize(ctx context.Context, j *Journal, resumed bool) (strin
 				s.drop(j)
 				return "", 0, finalizeOutcomeFailure(ae.Outcome, err)
 			}
-			// Running: the server's own finalize of this upload has not ended
-			// yet. Ask again, bounded; this is not a failed attempt.
+			// Running: a finalize of this upload — possibly not the one this
+			// request sent — has claimed it and not ended yet. It may commit an
+			// object (and its debit) at any moment, so from here on the outcome
+			// is uncertain exactly as after a lost answer: a later 404 (its
+			// tombstone purged) or refusal (a revoked login) says nothing about
+			// that finalize, and must end unknown with the record kept. Ask
+			// again, bounded; this is not a failed attempt.
+			sent = true
 			if runningSince.IsZero() {
 				runningSince = time.Now()
 			}

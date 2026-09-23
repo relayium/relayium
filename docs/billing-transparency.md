@@ -316,15 +316,21 @@ The dimensions actually checked, each fail-closed at write time:
   crash mid-upload — never leaves a debit behind; there is no separate
   reservation that a failed refund could strand. A stored file's debit is not
   returned when you delete the file: it leaves the window after 24 hours. If
-  the answer to completing a resumable upload is lost, a client that repeats
-  the completion with `{"recoverFinalized":true}` is told which stored file that
-  upload already produced (only while that file still exists), or why there is
-  none — it expired, was removed, was refused, or is still being completed —
-  so it need not upload again (`answerFinalizeRecovery`,
-  `account/uploads_resumable.go`). Asking is a pure read: no debit, no traffic,
-  no refund. Today only the CLI Device Inbox sender asks; an upload the web or
-  a native app repeats after a lost answer is a new upload, debited and
-  metered as one. A
+  the answer to completing a resumable share or Device Inbox upload is lost, a
+  client that repeats the completion with `{"recoverFinalized":true}` is told
+  which stored file that upload already produced (only while that file still
+  exists), or why there is none — it expired, was removed, was refused, or is
+  still being completed — so it need not upload again
+  (`answerFinalizeRecovery`, `account/uploads_resumable.go`). Asking is a pure
+  read: no debit, no traffic, no refund. It works only while the server still
+  keeps that upload's session record, which is removed about an hour after the
+  upload goes idle; after that, and for an upload completed by a server
+  version that predates this record, the answer cannot confirm the outcome
+  (it reads as not found or as still being completed), and the upload may or
+  may not have been stored and debited. Pairing-room uploads ignore the
+  request and keep their existing answers. Today only the CLI Device Inbox
+  sender asks; an upload the web or a native app repeats after a lost answer
+  is a new upload, debited and metered as one. A
   near-empty file still debits a 64 KiB floor
   (`minBillableBytes`, `account/files.go:33` — capping object *count*, not
   just size). Uploads that land on your own storage node are never debited.
