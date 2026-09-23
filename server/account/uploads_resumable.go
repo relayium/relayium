@@ -1105,6 +1105,56 @@ func (s *Service) settleAppendIntoAVoidedRoom(ctx context.Context, sess UploadSe
 	s.dropUploadBlob(ctx, sess.NodeID, sess.BlobKey)
 }
 
+// reclaimRefusedUpload deletes the blob of a non-pair finalize that was refused
+// after its terminal claim, settle-first. claimed is the committed size the
+// claim recorded (and billed).
+//
+//  1. Ownership (PrepareRefusedUploadReclaim, one transaction): a blob a stored
+//     object references is not the refusal's to touch; otherwise the key is
+//     queued with the same residual obligation a cleanup claim would give it
+//     (residualOwed), or deletion-only, while the session row stays as the 409
+//     tombstone.
+//  2. The blob is asked for its size, and any bytes past claimed are billed
+//     DURABLY against that obligation (metered, or journaled with the floor
+//     advanced).
+//  3. Only then is the blob deleted.
+//
+// Any step that cannot complete returns and leaves the blob to its durable
+// owner — the queue row GC drains settle-first, and the tombstone the orphan
+// pass claims. Detached and bounded like the voided-room settle: a client
+// hanging up must not take the accounting for its own bytes with it.
+func (s *Service) reclaimRefusedUpload(ctx context.Context, sess UploadSessionRow, claimed int64) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), voidedAppendSettleBudget)
+	defer cancel()
+	now := s.now().Unix()
+	owned, err := s.store.PrepareRefusedUploadReclaim(ctx, sess.ID, sess.BlobKey, sess.NodeID, now)
+	if err != nil {
+		log.Printf("upload finalize %s: queueing the refused upload's blob %s: %v; its tombstone keeps it",
+			sess.ID, sess.BlobKey, err)
+		return
+	}
+	if !owned {
+		return
+	}
+	bs, err := s.blobFor(ctx, sess.NodeID)
+	if err != nil {
+		return // queued above; GC resolves the node and drains it
+	}
+	size, ok := s.probeBlobSize(ctx, bs, sess)
+	if !ok {
+		return // queued above; GC re-probes before it deletes
+	}
+	if to := min(size, sess.MaxSize); sess.Billable && to > claimed {
+		if !s.settleBlobBillingDurably(ctx, sess.BlobKey, sess.NodeID, to, now,
+			"bytes blob "+sess.BlobKey+" held when its finalize was refused") {
+			log.Printf("upload finalize %s: keeping blob %s until the bill for its residual is durable",
+				sess.ID, sess.BlobKey)
+			return
+		}
+	}
+	s.dropBlob(bs, sess.BlobKey, sess.NodeID)
+}
+
 // committedBlobSize recovers how big the blob REALLY is after an append that
 // errored, so the bytes it accepted can be billed and resumed from. ok=false
 // means the blob could not be asked at all — the size is UNKNOWN, not
@@ -1273,8 +1323,8 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	// happens inside that transaction — leaves no debit, and fail has nothing
 	// to refund.
 	var charge *UploadQuotaCharge
-	// fail drops the partial blob (not for a pair-room upload — see below) and
-	// writes the given HTTP error. The session row STAYS — done-claimed, and now
+	// fail reclaims the partial blob (not for a pair-room upload — see below)
+	// and writes the given HTTP error. The session row STAYS — done-claimed, and now
 	// this upload's tombstone.
 	//
 	// It used to be deleted here, and deleting it is what made a refusal
@@ -1297,11 +1347,21 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	// them before that bill is durable. The blob's owner deletes it through a
 	// settle-first path — the void's own physical phase or GC's drainPending —
 	// or, when the room is still open, the orphan pass claims the tombstone
-	// into a deletion-only queue row. pair_room_id never changes, so no other
-	// session's blob can carry an obligation, and the drop stays for those.
+	// into a queue row (carrying the residual obligation when residualOwed says
+	// the upload owes one), which GC drains settle-first. pair_room_id never
+	// changes, so no other
+	// session's blob can carry an obligation from a void.
+	//
+	// A NON-pair session's blob can carry one too: bytes the node committed past
+	// the claimed size (an append that committed and then errored) are a
+	// residual this upload owes when it was created fresh (residualOwed). So its
+	// reclaim is settle-first as well — queued with the obligation in one
+	// transaction, probed, billed durably, and only then deleted; any failure
+	// leaves the blob to the queue row and the tombstone. See
+	// reclaimRefusedUpload.
 	fail := func(msg string, code int) {
 		if sess.PairRoomID == "" {
-			s.dropUploadBlob(r.Context(), sess.NodeID, sess.BlobKey)
+			s.reclaimRefusedUpload(r.Context(), sess, size)
 		}
 		http.Error(w, msg, code)
 	}

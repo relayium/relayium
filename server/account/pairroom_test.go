@@ -101,7 +101,13 @@ func (f *fakeCodes) RevokeFor(code, owner string, notAfter int64) bool {
 
 func newPairHarness(t *testing.T) *pairHarness {
 	t.Helper()
-	store := newTestStore(t)
+	return newPairHarnessOn(t, newTestStore(t))
+}
+
+// newPairHarnessOn is newPairHarness over a store the caller opened — a SQLite
+// file, for a test that closes and reopens the same database.
+func newPairHarnessOn(t *testing.T, store *SQLiteStore) *pairHarness {
+	t.Helper()
 	mail := &capturingMailer{}
 	svc := NewService(store, mail, Config{
 		BaseURL: "http://example.test",

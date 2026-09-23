@@ -44,6 +44,19 @@ type commitThenFailNode struct {
 	// central in the state where it genuinely cannot learn the blob's size while
 	// the bytes are demonstrably on the node's disk.
 	failProbe atomic.Bool
+	// failDelete makes the node refuse DELETEs, so a blob outlives the delete
+	// its owner attempted.
+	failDelete atomic.Bool
+	// ds is the node's disk, for tests that put bytes on it directly (a late
+	// append central never heard about).
+	ds *storage.DiskStore
+}
+
+// heal clears every failure mode.
+func (n *commitThenFailNode) heal() {
+	n.failAfterCommit.Store(false)
+	n.failProbe.Store(false)
+	n.failDelete.Store(false)
 }
 
 func newCommitThenFailNode(t *testing.T) *commitThenFailNode {
@@ -53,7 +66,7 @@ func newCommitThenFailNode(t *testing.T) *commitThenFailNode {
 	if err != nil {
 		t.Fatalf("node disk store: %v", err)
 	}
-	n := &commitThenFailNode{dir: dir}
+	n := &commitThenFailNode{dir: dir, ds: ds}
 	n.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := strings.TrimPrefix(r.URL.Path, "/blob/")
 		switch r.Method {
@@ -94,6 +107,10 @@ func newCommitThenFailNode(t *testing.T) *commitThenFailNode {
 			defer rc.Close()
 			_, _ = io.Copy(w, rc)
 		case http.MethodDelete:
+			if n.failDelete.Load() {
+				http.Error(w, "node refusing deletes", http.StatusServiceUnavailable)
+				return
+			}
 			_ = ds.Delete(r.Context(), key)
 			w.WriteHeader(http.StatusNoContent)
 		default:
@@ -424,8 +441,11 @@ func TestAnUnreachableBlobIsBilledExactlyOnceItsNodeReturns(t *testing.T) {
 		t.Fatal("a settled session was left behind")
 	}
 	// The reaper hands the settled blob to the pending-delete queue rather than
-	// deleting it itself: the bytes are still on the node, and a deletion-only
-	// queue row owns them (no billing obligation — the bill above is settled).
+	// deleting it itself: the bytes are still on the node, and the queue row owns
+	// them. It carries the claim's residual obligation (a fresh, billable upload
+	// that never became an object: residualOwed), but at a floor of every byte
+	// the recovery just billed — the node holds nothing past it, so settling it
+	// charges nothing more.
 	if got := nodeBlobSize(t, node.dir, sess.BlobKey); got != onNode {
 		t.Fatalf("the blob holds %d bytes before the drain, want the %d it was billed for", got, onNode)
 	}
@@ -435,9 +455,10 @@ func TestAnUnreachableBlobIsBilledExactlyOnceItsNodeReturns(t *testing.T) {
 			queued = append(queued, p)
 		}
 	}
-	if len(queued) != 1 || queued[0].NodeID != sess.NodeID || queued[0].BillUserID != "" {
-		t.Fatalf("after the reaper, the blob's queue ownership is %+v, want one deletion-only row for node %s",
-			queued, sess.NodeID)
+	if len(queued) != 1 || queued[0].NodeID != sess.NodeID || queued[0].BillUserID != h.userID ||
+		queued[0].BilledThrough != onNode || queued[0].BillMax != sess.MaxSize {
+		t.Fatalf("after the reaper, the blob's queue ownership is %+v, want one obligation for node %s at the settled floor %d",
+			queued, sess.NodeID, onNode)
 	}
 	// GC's drain is what deletes it, and retires the row on the confirmed delete.
 	cleanupDrain(h, h.store, h.now+7*86400)
