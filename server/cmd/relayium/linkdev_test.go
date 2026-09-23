@@ -1625,3 +1625,74 @@ func TestLinkDevFinalizationFailureNeverCompletes(t *testing.T) {
 		t.Errorf("the failed file was left behind (%v)", err)
 	}
 }
+
+// ================================================================ A09b gate-2 round 2
+
+// Round 2 #1: the sender's processing of COMPLETE is delayed AFTER its
+// transport accepted (and SCTP-acknowledged) it — the frame waits on the lane
+// reader, as it would behind a stalled loop — while the receiver, seeing the
+// acknowledgement, leaves over signalling at once. The sender must still
+// process COMPLETE before the leave: delivered-and-verified, never
+// delivery-unconfirmed.
+func TestLinkDevLeaveCannotOvertakeCompleteProcessing(t *testing.T) {
+	hub := startLinkDevHub(t)
+	var delayed atomic.Int32
+	ldHookInbound = func(d *linkDevDriver, lane linkrtc.Lane, frame []byte) {
+		if d.cmd != linksession.CmdSend || lane != linkrtc.LaneFile {
+			return
+		}
+		if c, ok := linkwire.FileLifecycle(frame); ok && c == linkwire.FileComplete {
+			delayed.Add(1)
+			time.Sleep(1500 * time.Millisecond)
+		}
+	}
+	t.Cleanup(func() { ldHookInbound = nil })
+	dest := t.TempDir()
+	ra, rb := ldPairUp(t, hub, "",
+		ldPeer{cmd: "send", via: hub.url, args: []string{ldSrc(t), ldCode}},
+		ldPeer{cmd: "receive", via: hub.url, args: []string{ldCode, dest}})
+	if delayed.Load() != 1 {
+		t.Fatalf("COMPLETE delayed %d time(s), want 1: the test proves nothing", delayed.Load())
+	}
+	// The peer's end reaches us first either as its leave or as the loss of
+	// the transport it closed after it; either must wait for COMPLETE.
+	if !strings.Contains(ra.stderr, "holding the peer's leave") && !strings.Contains(ra.stderr, "holding the transport loss") {
+		t.Errorf("the peer's end did not arrive while COMPLETE was pending; the race was not produced\n%s", ra)
+	}
+	if ra.code != 0 || !strings.Contains(ra.stderr, "report file delivered-and-verified") ||
+		strings.Contains(ra.stderr, "delivery-unconfirmed") {
+		t.Errorf("sender: want delivered-and-verified\n%s", ra)
+	}
+	if rb.code != 0 || !strings.Contains(rb.stderr, "saved(verified,durable)") {
+		t.Errorf("receiver: want a clean save\n%s", rb)
+	}
+}
+
+// Round 2 #2: `text --verify` answers the SAS question and types messages on
+// ONE input. The answer must be read as the answer and the message as a
+// message: nothing reads messages before admission is settled.
+func TestLinkDevVerifiedTextSharesOneInput(t *testing.T) {
+	hub := startLinkDevHub(t)
+	in := strings.NewReader("y\nhello after verification\n")
+	oldIn, oldTTY := textStdin, textStdinIsTTY
+	textStdin = func() io.Reader { return in } // one source, as os.Stdin is
+	textStdinIsTTY = func() bool { return true }
+	t.Cleanup(func() { textStdin, textStdinIsTTY = oldIn, oldTTY })
+	ra, rb := ldPairUp(t, hub, "",
+		ldPeer{cmd: "text", via: hub.url, args: []string{"--verify", ldCode}},
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--yes", "--script", ldScript(t, "wait-texts 1"), ldCode}})
+	if !strings.Contains(ra.stderr, "Do the verification codes match on both ends?") || !strings.Contains(ra.stderr, "link admitted") {
+		t.Errorf("text --verify: want the question asked and the link admitted on the answer\n%s", ra)
+	}
+	if ra.code != 0 || rb.code != 0 {
+		t.Errorf("want both ends to finish\nA: %s\nB: %s", ra, rb)
+	}
+	if !strings.Contains(rb.stdout, "hello after verification") {
+		t.Errorf("the message never arrived\n%s", rb)
+	}
+	for _, line := range strings.Split(rb.stdout, "\n") {
+		if strings.TrimSpace(line) == "y" {
+			t.Errorf("the SAS answer was sent as a message\n%s", rb)
+		}
+	}
+}

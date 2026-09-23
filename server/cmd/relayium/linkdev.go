@@ -667,8 +667,12 @@ type linkDevDriver struct {
 	writers [2]*ldLaneWriter
 	cut     *ldCutoff
 
-	stdinText    bool // `text` without --script: stdin lines, read only on a link outcome
+	stdinText    bool // `text` without --script: stdin lines, read only once admitted
 	stdinStarted bool
+
+	heldLeave []byte             // a peer leave kept back by holdLeave
+	heldLost  *linksession.Epoch // a transport loss kept back by holdLost
+	heldUntil time.Time
 
 	// deferred session calls, run after the current effects (never re-entered)
 	later []func() ([]linksession.Effect, error)
@@ -712,6 +716,38 @@ func (d *linkDevDriver) feedScript(cmds []ldCmd, eof bool) {
 	if eof {
 		d.q.push(ldItem{kind: ldScriptEOF})
 	}
+}
+
+// input is the source a person answers on: the text command's stdin for
+// `text`, otherwise the process's stdin.
+func (d *linkDevDriver) input() io.Reader {
+	if d.cmd == linksession.CmdText {
+		return textStdin()
+	}
+	return osStdin()
+}
+
+// ldConfirmSAS is confirmSAS reading exactly one line from in, a byte at a
+// time, so nothing after the answer is consumed: the messages that follow on
+// the same input stay for their reader.
+func ldConfirmSAS(w io.Writer, in io.Reader) bool {
+	fmt.Fprint(w, "Do the verification codes match on both ends? [y/N] ")
+	var line []byte
+	b := make([]byte, 1)
+	for tries := 0; len(line) < 64 && tries < 1024; tries++ {
+		n, err := in.Read(b)
+		if n == 1 {
+			if b[0] == '\n' {
+				break
+			}
+			line = append(line, b[0])
+		}
+		if err != nil {
+			break
+		}
+	}
+	ans := strings.TrimSpace(string(line))
+	return ans == "y" || ans == "yes" || ans == "Y"
 }
 
 // feedTextLines turns each line of r into one message (the `text` default).
@@ -768,7 +804,15 @@ func (d *linkDevDriver) run() (*linkDevResult, error) {
 		if d.decided() {
 			continue
 		}
-		if !pending && !readsDead {
+		if err := d.releaseLeave(false); err != nil {
+			return nil, err
+		}
+		if d.decided() {
+			continue
+		}
+		// While a leave is held no later signal is read: signals stay in
+		// order behind it.
+		if !pending && !readsDead && d.heldLeave == nil {
 			pending = true
 			go func() {
 				// RecvSignal returns signals only. In a pairing-code room the
@@ -799,6 +843,9 @@ func (d *linkDevDriver) run() (*linkDevResult, error) {
 				}
 				return nil, fmt.Errorf("rendezvous connection lost: %w", r.err)
 			}
+			if d.holdLeave(r.data) {
+				continue
+			}
 			if err := d.do(d.s.Signal(d.s.Epoch(), room.PeerID, r.data)); err != nil {
 				return nil, err
 			}
@@ -818,6 +865,89 @@ func (d *linkDevDriver) run() (*linkDevResult, error) {
 			d.warnCheck()
 		}
 	}
+}
+
+// linkDevLeaveHold bounds how long a peer's leave — or the loss of the
+// transport the peer closed after it — waits for the frames the peer sent
+// BEFORE it (see holdLeave).
+const linkDevLeaveHold = 3 * time.Second
+
+// holdLeave keeps back a peer's leave that arrives while our outbound batch is
+// waiting for its COMPLETE. The peer leaves only after our transport has
+// acknowledged every byte it sent (quitStep), so its COMPLETE is already in
+// this process — in a lane reader or in the queue — even when this loop
+// reads the leave first (a stalled loop wakes with both ready, and select
+// picks either). Applying the leave first would end the batch as
+// "delivery-unconfirmed" although the peer saved it, and a user told that
+// may send it again, metered. So the leave is applied only once the batch
+// left OutFinish, or after linkDevLeaveHold: whichever is first.
+func (d *linkDevDriver) holdLeave(raw []byte) bool {
+	if d.heldLeave != nil {
+		return false
+	}
+	sig, err := linkwire.ParseSignal(raw)
+	if err != nil {
+		return false
+	}
+	if _, ok := linkwire.LeaveAuth(sig); !ok {
+		return false
+	}
+	if fs, _ := d.laneStates(); fs != "OutFinish" {
+		return false
+	}
+	d.heldLeave = append([]byte(nil), raw...)
+	d.holdFrom()
+	d.logf("holding the peer's leave until our batch's COMPLETE (sent before it) is processed")
+	return true
+}
+
+// holdLost keeps back a transport loss on the same condition and the same
+// bound. A peer closes its transport right after its leave; frames the lane
+// readers already took off the transport are still delivered after the loss,
+// and COMPLETE may be one of them.
+func (d *linkDevDriver) holdLost(ep linksession.Epoch) bool {
+	if fs, _ := d.laneStates(); fs != "OutFinish" || d.heldLost != nil {
+		return false
+	}
+	d.heldLost = &ep
+	d.holdFrom()
+	d.logf("holding the transport loss until our batch's COMPLETE, already received, is processed")
+	return true
+}
+
+// holdFrom starts the bound on the first hold; a later hold never extends it.
+func (d *linkDevDriver) holdFrom() {
+	if d.heldUntil.IsZero() {
+		d.heldUntil = time.Now().Add(linkDevLeaveHold)
+	}
+}
+
+// releaseLeave applies a held leave once the batch is settled or the bound
+// passed.
+// In arrival order of kind: the leave (the peer's explicit end) before the
+// loss it caused.
+func (d *linkDevDriver) releaseLeave(force bool) error {
+	if d.heldLeave == nil && d.heldLost == nil {
+		return nil
+	}
+	fs, _ := d.laneStates()
+	if !force && fs == "OutFinish" && time.Now().Before(d.heldUntil) {
+		return nil
+	}
+	if fs == "OutFinish" {
+		d.logf("the peer's COMPLETE did not arrive within %v", linkDevLeaveHold)
+	}
+	raw, lost := d.heldLeave, d.heldLost
+	d.heldLeave, d.heldLost = nil, nil
+	if raw != nil {
+		if err := d.do(d.s.Signal(d.s.Epoch(), d.room.PeerID, raw)); err != nil {
+			return err
+		}
+	}
+	if lost != nil {
+		return d.do(d.s.TransportLost(*lost)) // stale, and dropped, if the leave already ended the link
+	}
+	return nil
 }
 
 // decided: the session ended, or discovery handed the room to the legacy wire.
@@ -849,6 +979,7 @@ func (d *linkDevDriver) nextWake() time.Time {
 	if d.draining {
 		return now.Add(20 * time.Millisecond) // SACKs raise no event: poll the drain
 	}
+
 	at := now.Add(time.Hour)
 	if t, ok := d.s.NextDeadline(); ok && t.Before(at) {
 		at = t
@@ -866,6 +997,9 @@ func (d *linkDevDriver) nextWake() time.Time {
 	}
 	if d.cur == nil && len(d.outQ) > 0 {
 		future(d.outQ[0].notBefore)
+	}
+	if d.heldLeave != nil || d.heldLost != nil {
+		future(d.heldUntil) // releaseLeave applies them once due
 	}
 	return at
 }
@@ -998,7 +1132,12 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 			if d.conn != nil {
 				ep := d.connEp
 				if err := d.conn.Attach(
-					func(b []byte) { d.q.push(ldItem{kind: ldFileFrame, ep: ep, frame: b}) },
+					func(b []byte) {
+						if ldHookInbound != nil {
+							ldHookInbound(d, linkrtc.LaneFile, b) // on the lane reader, after SCTP accepted b
+						}
+						d.q.push(ldItem{kind: ldFileFrame, ep: ep, frame: b})
+					},
 					func(b []byte) { d.q.push(ldItem{kind: ldTextFrame, ep: ep, frame: b}) },
 				); err != nil {
 					d.logf("lanes not attached: %v", err)
@@ -1090,6 +1229,9 @@ var (
 	ldHookLoopText func(d *linkDevDriver, stop <-chan struct{})
 	// ldHookFinalize runs before a received file is synced and closed.
 	ldHookFinalize func(d *linkDevDriver, name string) error
+	// ldHookInbound runs on the file lane's reader for each received frame,
+	// before it is queued for the loop.
+	ldHookInbound func(d *linkDevDriver, lane linkrtc.Lane, frame []byte)
 )
 
 // ldCutoff closes the transport from any goroutine, once: at the relay
@@ -1568,6 +1710,9 @@ func (d *linkDevDriver) event(ev linkrtc.Event, ep linksession.Epoch) error {
 	case linkrtc.EventReconnected:
 		return d.do(d.s.Reconnected(ep))
 	case linkrtc.EventTransportLost:
+		if d.holdLost(ep) {
+			return nil
+		}
 		return d.do(d.s.TransportLost(ep))
 	case linkrtc.EventPathChanged:
 		p := ev.Path
@@ -1588,24 +1733,30 @@ func (d *linkDevDriver) progress() error {
 	if ended, _ := d.s.Ended(); ended || d.res.legacy {
 		return nil
 	}
-	// --verify: ask once, off the loop (it reads stdin).
+	// --verify: ask once, off the loop. It reads the same input the messages
+	// come from, and message input starts only after admission, so exactly
+	// one reader owns that input at any time.
 	if d.s.Admission() == linksession.AdmPendingSAS && !d.verifyAsked {
 		d.verifyAsked = true
-		go func() { d.q.push(ldItem{kind: ldVerify, ok: confirmSAS(d.stderr)}) }()
+		in := d.input()
+		go func() { d.q.push(ldItem{kind: ldVerify, ok: ldConfirmSAS(d.stderr, in)}) }()
 	}
 	// The link's one /api/ice request starts as soon as discovery has bound a
 	// link (M1: never for a legacy pairing), so the responder's is in hand by
 	// the time the offer arrives.
 	if disc, _, _, _ := d.s.States(); disc == "Link" {
 		d.startICE()
-		if d.stdinText && !d.stdinStarted {
-			d.stdinStarted = true
-			go d.feedTextLines(textStdin())
-		}
 	}
 	d.warnCheck()
 	if !d.admitted || d.closed {
 		return nil
+	}
+	// Messages are read only now: discovery chose link/1 (a legacy outcome
+	// leaves stdin to pumpText) AND admission is settled (a --verify answer
+	// was read from the same input first).
+	if d.stdinText && !d.stdinStarted {
+		d.stdinStarted = true
+		go d.feedTextLines(d.input())
 	}
 	d.advanceScript()
 	if err := d.pumpFiles(); err != nil {
