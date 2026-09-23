@@ -2135,6 +2135,8 @@ class TransferController(
         // Read once, here. A toggle later in this link changes nothing on it.
         val verify = deps.verifyPeers()
         heldBatch = null
+        busyReplay = null
+        outgoingSources = null
         _state.value = _state.value.copy(
             phase = Phase.CONNECTED,
             wire = wire,
@@ -2441,13 +2443,15 @@ class TransferController(
                         savedBatchCount = _state.value.savedBatchCount + 1,
                     )
                 }
-                is FileLaneSession.Action.SendComplete -> _state.value =
-                    _state.value.copy(
+                is FileLaneSession.Action.SendComplete -> {
+                    outgoingSources = null
+                    _state.value = _state.value.copy(
                         sendProgress = null,
                         outgoing = emptyList(),
                         sentBatch = true,
                         sentBatchCount = _state.value.sentBatchCount + 1,
                     )
+                }
                 is FileLaneSession.Action.DiscardIncoming -> {
                     // The lane says the incoming batch is RETIRED — whatever
                     // phase it was in, INCLUDING a prompt still waiting for the
@@ -2493,6 +2497,26 @@ class TransferController(
             abortBarrierTimer?.cancel(false)
             abortBarrierTimer = null
         }
+        replayBusyBatch(mine, lane)
+    }
+
+    /**
+     * Re-offer a BUSY-answered batch, once, as soon as the lane can carry it:
+     * nothing outgoing on the lane and nothing incoming either. Every lane
+     * transition funnels through [apply], so checking at its end sees the
+     * moment the peer's own batch retires — completed, declined or aborted.
+     */
+    private fun replayBusyBatch(mine: Int, lane: FileLaneSession) {
+        val pending = busyReplay ?: return
+        if (epoch != mine || pending.link != epoch || fileLane !== lane) return
+        if (_state.value.fileLaneDown || verificationPending) return
+        val sendFree = lane.sendState == FileLaneSession.SendState.IDLE ||
+            lane.sendState == FileLaneSession.SendState.DONE
+        val receiveFree = lane.receiveState == FileLaneSession.ReceiveState.IDLE ||
+            lane.receiveState == FileLaneSession.ReceiveState.DONE
+        if (!sendFree || !receiveFree) return
+        busyReplay = null
+        startOutgoing(lane, pending.sources, replayed = true)
     }
 
     /** Storage effects are posted, generation-fenced at BOTH enqueue and
@@ -2636,11 +2660,22 @@ class TransferController(
                 // here; the pump's stream is surrendered like any other stop.
                 retirePump()
                 batchGen++
-                _state.value = _state.value.copy(
-                    errorKey = key ?: _state.value.errorKey,
-                    sendProgress = null,
-                    outgoing = emptyList(),
-                )
+                val sources = outgoingSources
+                outgoingSources = null
+                if (failure.reason == FileLaneSession.Failure.Reason.PEER_BUSY &&
+                    sources != null && !outgoingReplayed
+                ) {
+                    // Requeued, not failed: the card keeps the batch listed as
+                    // waiting, and [replayBusyBatch] re-offers it once.
+                    busyReplay = HeldBatch(sources, epoch)
+                    _state.value = _state.value.copy(sendProgress = null)
+                } else {
+                    _state.value = _state.value.copy(
+                        errorKey = key ?: _state.value.errorKey,
+                        sendProgress = null,
+                        outgoing = emptyList(),
+                    )
+                }
             }
             FileLaneSession.Failure.Scope.RECEIVE -> {
                 bumpReceiveGen()
@@ -2659,6 +2694,8 @@ class TransferController(
                 batchGen++
                 bumpReceiveGen()
                 discardStorage()
+                busyReplay = null
+                outgoingSources = null
                 _state.value = _state.value.copy(
                     errorKey = key,
                     fileLaneDown = true,
@@ -2814,14 +2851,23 @@ class TransferController(
         startOutgoing(lane, sources)
     }
 
-    private fun startOutgoing(lane: FileLaneSession, sources: List<OutgoingSource>) {
+    private fun startOutgoing(
+        lane: FileLaneSession,
+        sources: List<OutgoingSource>,
+        replayed: Boolean = false,
+    ) {
         val mine = epoch
         retirePump()
         batchGen++
         val myBatch = batchGen
+        outgoingSources = sources
+        outgoingReplayed = replayed
         _state.value = _state.value.copy(
             outgoing = sources.map { it.meta },
-            errorKey = null,
+            // A fresh user send clears the last error; an automatic BUSY replay
+            // must not hide one the user has not seen yet — e.g. the incoming
+            // batch it waited for having just failed verification.
+            errorKey = if (replayed) _state.value.errorKey else null,
             sentBatch = false,
         )
         apply(mine, lane.startBatch(sources.map { it.meta }))
@@ -2851,6 +2897,11 @@ class TransferController(
             _state.value = _state.value.copy(heldFiles = 0)
             return@post
         }
+        // A batch waiting for its BUSY replay is the batch the card shows; the
+        // user's cancel retires it without telling the peer anything — the
+        // peer already retired it when it answered BUSY.
+        busyReplay = null
+        outgoingSources = null
         val lane = fileLane ?: return@post
         retirePump()
         batchGen++
@@ -3340,6 +3391,25 @@ class TransferController(
     /** The one outgoing batch held behind [Verification.PENDING]. */
     private var heldBatch: HeldBatch? = null
 
+    /**
+     * The sources of the outgoing batch currently on the lane, and whether it
+     * is already its one BUSY replay. Kept so a peer BUSY can requeue it.
+     */
+    private var outgoingSources: List<OutgoingSource>? = null
+    private var outgoingReplayed = false
+
+    /**
+     * An outgoing batch the peer answered with BUSY, waiting for its ONE replay
+     * (A08e-D5). The Web and Go requeue a busy batch once and re-offer it when
+     * their lane is free (`requeueOrFail` → `pump`, which waits while a batch is
+     * arriving); a second BUSY is the user-visible failure. The peer answers
+     * BUSY in glare — the initiator keeps its own offer — so the batch it is
+     * busy with is usually the one this side is about to be prompted for:
+     * the replay therefore waits until this side's incoming batch has retired
+     * too, see [replayBusyBatch].
+     */
+    private var busyReplay: HeldBatch? = null
+
     private val verificationPending: Boolean
         get() = _state.value.verification == Verification.PENDING
 
@@ -3526,6 +3596,8 @@ class TransferController(
         textLane = null
         dropPendingText()
         heldBatch = null
+        busyReplay = null
+        outgoingSources = null
         wireProfile = null
         peerId = ""
         receivedBytes = 0

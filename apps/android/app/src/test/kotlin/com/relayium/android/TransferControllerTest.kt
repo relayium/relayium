@@ -1482,6 +1482,158 @@ class TransferControllerTest {
     }
 
     /**
+     * A08e-D6: a DONE whose digest does not verify retires the BATCH, not the
+     * file lane. REJECT goes to the peer (the Web sender otherwise waits in
+     * "finishing" until its completion stall), nothing of the batch stays in
+     * the user's folder — not even a file that verified before the bad one —
+     * the user sees the integrity error, and after the sender's barrier the
+     * same link saves the retry.
+     */
+    @Test
+    fun `a digest mismatch rejects and discards the batch and the link still saves the retry`() {
+        val rig = rig()
+        val remote = connect(rig)
+
+        val peer = promptIncoming(rig, remote, listOf(FileMeta("a.bin", 3), FileMeta("b.bin", 2)))
+        rig.controller.acceptIncoming(rig.controller.state.value.promptId, rig.ops.node(rig.treeDir))
+        awaitTrue("accepted") { !rig.controller.state.value.awaitingFolder }
+        val max = RealtimeFrame.CONSERVATIVE_MAX_FRAME_BYTES
+        for (frame in peer.chunkFrames(byteArrayOf(1, 2, 3), remote, max)) rig.transport.events.onFileFrame(frame)
+        rig.transport.events.onFileFrame(
+            peer.doneFrame(Crypto.chainAdvance(Crypto.chainStart(), byteArrayOf(1, 2, 3)), remote),
+        )
+        for (frame in peer.chunkFrames(byteArrayOf(4, 5), remote, max)) rig.transport.events.onFileFrame(frame)
+        // b.bin's DONE is in sequence, but its digest is for other bytes.
+        rig.transport.events.onFileFrame(
+            peer.doneFrame(Crypto.chainAdvance(Crypto.chainStart(), byteArrayOf(9, 9)), remote),
+        )
+
+        awaitTrue("a REJECT told the peer") { controlFrames(rig, RealtimeFrame.CTRL_REJECT) >= 1 }
+        awaitTrue("the user is told the batch failed verification") {
+            rig.controller.state.value.errorKey == "error_integrity"
+        }
+        val state = rig.controller.state.value
+        assertFalse("the file lane survives an integrity failure", state.fileLaneDown)
+        assertTrue(state.incoming.isEmpty())
+        assertEquals(0, controlFrames(rig, RealtimeFrame.CTRL_COMPLETE))
+        assertEquals(0, state.savedBatchCount)
+        awaitTrue("nothing of the mismatched batch is installed") {
+            rig.treeDir.listFiles().orEmpty().none { it.name.startsWith("a") || it.name.startsWith("b") }
+        }
+
+        // The sender stops on the REJECT and answers the ordered barrier.
+        peer.batchAborted()
+        rig.transport.events.onFileFrame(RealtimeFrame.BATCH_ABORT)
+
+        for (frame in peer.batchFrames(listOf(FileMeta("c.bin", 2)), remote, max)) {
+            rig.transport.events.onFileFrame(frame)
+        }
+        awaitTrue("the retry prompts on the same link") { rig.controller.state.value.awaitingFolder }
+        rig.controller.acceptIncoming(rig.controller.state.value.promptId, rig.ops.node(rig.treeDir))
+        awaitTrue("retry accepted") { !rig.controller.state.value.awaitingFolder }
+        for (frame in peer.chunkFrames(byteArrayOf(7, 8), remote, max)) rig.transport.events.onFileFrame(frame)
+        rig.transport.events.onFileFrame(
+            peer.doneFrame(Crypto.chainAdvance(Crypto.chainStart(), byteArrayOf(7, 8)), remote),
+        )
+        awaitTrue("the retry saved and verified") {
+            rig.controller.state.value.savedBatchCount == 1 &&
+                File(rig.treeDir, "c.bin").takeIf { it.exists() }?.readBytes()
+                    ?.contentEquals(byteArrayOf(7, 8)) == true
+        }
+        awaitTrue("and COMPLETE went back for the retry") {
+            controlFrames(rig, RealtimeFrame.CTRL_COMPLETE) >= 1
+        }
+        assertFalse(File(rig.treeDir, "a.bin").exists())
+        assertFalse(File(rig.treeDir, "b.bin").exists())
+    }
+
+    // ── A08e-D5: a peer BUSY requeues the batch once ────────────────────────
+
+    private fun manifests(rig: Rig): Int =
+        rig.transport.fileFrames.count { RealtimeFrame.kindOf(it) == RealtimeFrame.KIND_BATCH_ENC }
+
+    private fun oneByteSource(name: String) =
+        TransferController.OutgoingSource(FileMeta(name, 1)) { ByteArrayInputStream(byteArrayOf(1)) }
+
+    /**
+     * The Web and Go answer BUSY → requeue once → re-offer; a second BUSY is
+     * the failure the user sees. Android used to show "peer busy" and drop the
+     * batch on the FIRST BUSY.
+     */
+    @Test
+    fun `a peer BUSY re-offers the batch once and a second BUSY fails it truthfully`() {
+        val rig = rig()
+        connect(rig)
+        rig.controller.sendFiles(listOf(oneByteSource("x.bin")))
+        awaitTrue("first offer") { manifests(rig) == 1 }
+
+        rig.transport.events.onFileFrame(RealtimeFrame.BUSY)
+        awaitTrue("the batch is re-offered once") { manifests(rig) == 2 }
+        var state = rig.controller.state.value
+        assertNull("a requeue is not an error", state.errorKey)
+        assertEquals(listOf(FileMeta("x.bin", 1)), state.outgoing)
+        assertEquals("BUSY before consent needs no barrier", 0, controlFrames(rig, RealtimeFrame.CTRL_BATCH_ABORT))
+
+        rig.transport.events.onFileFrame(RealtimeFrame.BUSY)
+        awaitTrue("the second BUSY is the user-visible failure") {
+            rig.controller.state.value.errorKey == "error_peer_busy"
+        }
+        state = rig.controller.state.value
+        assertTrue(state.outgoing.isEmpty())
+        Thread.sleep(100)
+        assertEquals("exactly one replay", 2, manifests(rig))
+    }
+
+    /**
+     * Glare, the case BUSY actually comes from: the peer (initiator) keeps its
+     * own offer, so its manifest reaches this side and then its BUSY. The
+     * replay waits until that incoming batch retires — here the user declines
+     * it — exactly as the Web's pump waits while a batch is arriving.
+     */
+    @Test
+    fun `a BUSY in glare replays only after the incoming batch retires`() {
+        val rig = rig()
+        val remote = connect(rig)
+        rig.controller.sendFiles(listOf(oneByteSource("mine.bin")))
+        awaitTrue("offered") { manifests(rig) == 1 }
+        promptIncoming(rig, remote, listOf(FileMeta("theirs.bin", 1)))
+
+        rig.transport.events.onFileFrame(RealtimeFrame.BUSY)
+        Thread.sleep(150)
+        assertEquals("no replay while the peer's batch is still arriving", 1, manifests(rig))
+        assertNull(rig.controller.state.value.errorKey)
+        assertEquals(listOf(FileMeta("mine.bin", 1)), rig.controller.state.value.outgoing)
+
+        rig.controller.rejectIncoming()
+        awaitTrue("replayed once the incoming batch retired") { manifests(rig) == 2 }
+
+        // And it is a normal batch from here: ACCEPT, content, COMPLETE.
+        rig.transport.events.onFileFrame(RealtimeFrame.ACCEPT)
+        awaitTrue("content and DONE out") {
+            rig.transport.fileFrames.any { RealtimeFrame.kindOf(it) == RealtimeFrame.KIND_DONE_ENC }
+        }
+        Thread.sleep(50)
+        rig.transport.events.onFileFrame(RealtimeFrame.COMPLETE)
+        awaitTrue("sent") { rig.controller.state.value.sentBatchCount == 1 }
+    }
+
+    @Test
+    fun `cancelling a batch waiting for its BUSY replay retires it`() {
+        val rig = rig()
+        val remote = connect(rig)
+        rig.controller.sendFiles(listOf(oneByteSource("mine.bin")))
+        awaitTrue("offered") { manifests(rig) == 1 }
+        promptIncoming(rig, remote, listOf(FileMeta("theirs.bin", 1)))
+        rig.transport.events.onFileFrame(RealtimeFrame.BUSY)
+        rig.controller.cancelSend()
+        awaitTrue("the card is cleared") { rig.controller.state.value.outgoing.isEmpty() }
+        rig.controller.rejectIncoming()
+        Thread.sleep(150)
+        assertEquals("a cancelled replay never reaches the wire", 1, manifests(rig))
+        assertEquals(0, controlFrames(rig, RealtimeFrame.CTRL_BATCH_ABORT))
+    }
+
+    /**
      * R14: the picker fence is enforced at the EFFECT boundary — inside the
      * session executor, against the controller's own link identity — not by a
      * UI comparing tokens somewhere earlier. The scenario is the real one: a

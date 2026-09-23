@@ -453,19 +453,25 @@ class FileLaneSession(
                 emptyList()
             }
         }
-        // Every non-accept outcome of an outgoing batch ends with the ordered
-        // BATCH_ABORT barrier, matching the Web's sending loop. The barrier is
-        // what lets the receiver retire the batch uniformly — decline, stop and
-        // cancel all look the same on its side — and serialisation guarantees
-        // it enters the channel AFTER every frame whose nonce was consumed.
+        // A REJECT of an ACCEPTED batch is answered with the ordered
+        // BATCH_ABORT barrier, matching the Web's sending loop: serialisation
+        // guarantees it enters the channel AFTER every frame whose nonce was
+        // consumed, and it is what closes the receiver's drain.
+        //
+        // A REJECT (or BUSY) that arrives while still WAITING for consent needs
+        // no barrier: the sender has put nothing but the manifest on the wire,
+        // and the receiver already retired the batch when it answered. The Web
+        // and Go emit nothing there (link-session vectors `file.peer-declines`,
+        // A08e-D4), and neither does this machine.
         LinkProtocol.FileControl.REJECT -> {
             if (sendState != SendState.IDLE && sendState != SendState.DONE &&
                 sendState != SendState.FAILED
             ) {
+                val consented = sendState != SendState.WAITING_ACCEPT
                 sendState = SendState.IDLE
                 sender.batchAborted()
                 val fail = Action.Fail(Failure(Failure.Reason.PEER_REJECTED, Failure.Scope.SEND))
-                if (barrier) listOf(Action.Send(RealtimeFrame.BATCH_ABORT), fail) else listOf(fail)
+                if (barrier && consented) listOf(Action.Send(RealtimeFrame.BATCH_ABORT), fail) else listOf(fail)
             } else {
                 emptyList()
             }
@@ -474,10 +480,7 @@ class FileLaneSession(
             if (sendState == SendState.WAITING_ACCEPT) {
                 sendState = SendState.IDLE
                 sender.batchAborted()
-                listOf(
-                    Action.Send(RealtimeFrame.BATCH_ABORT),
-                    Action.Fail(Failure(Failure.Reason.PEER_BUSY, Failure.Scope.SEND)),
-                )
+                listOf(Action.Fail(Failure(Failure.Reason.PEER_BUSY, Failure.Scope.SEND)))
             } else {
                 emptyList()
             }
@@ -637,11 +640,33 @@ class FileLaneSession(
         }
         if (!ok) {
             val index = fileIndex
-            receiveState = ReceiveState.FAILED
+            if (!barrier) {
+                // The older wire has no barrier to drain towards: its sender
+                // neither stops on a REJECT once streaming nor answers one, so
+                // the lane is retired and the owner tears the connection down.
+                receiveState = ReceiveState.FAILED
+                return listOf(
+                    Action.FileCorrupt(index),
+                    Action.DiscardIncoming,
+                    Action.Fail(Failure(Failure.Reason.INTEGRITY, Failure.Scope.LANE)),
+                )
+            }
+            // `link/1`, as the Web (`beginDrain(…, "integrityFail")`) and Go
+            // (`FInRecv × PeerDoneMismatch → InDrain`) do it: the batch is over,
+            // the lane is not. REJECT goes out FIRST so the sender stops as
+            // early as it can and answers with its ordered BATCH_ABORT;
+            // everything staged for this batch — including files that already
+            // verified — is discarded, never installed; and the frames the
+            // sender sealed before it saw the REJECT are authenticated on their
+            // way to the bin. Failing the whole lane here instead left a
+            // conforming sender waiting for a COMPLETE that could never come.
+            receiveState = ReceiveState.DRAINING
+            drainedBytes = 0
             return listOf(
+                Action.Send(RealtimeFrame.REJECT),
                 Action.FileCorrupt(index),
                 Action.DiscardIncoming,
-                Action.Fail(Failure(Failure.Reason.INTEGRITY, Failure.Scope.LANE)),
+                Action.Fail(Failure(Failure.Reason.INTEGRITY, Failure.Scope.RECEIVE)),
             )
         }
         val out = ArrayList<Action>()
