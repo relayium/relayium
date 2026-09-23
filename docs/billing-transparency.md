@@ -166,11 +166,11 @@ your plan.
 
 **Hosted bytes count too, and against different dimensions.** Uploading to a
 "stored download link" writes ciphertext to central or node disk
-(`account/files.go:81`, `handleUploadFile`), and that one upload is checked
+(`account/files.go:179`, `handleUploadFile`), and that one upload is checked
 against three separate limits in that handler: the storage cap
-(`s.overStorage`, `account/files.go:218`), the monthly traffic cap
-(`s.overTraffic`, `account/files.go:222`) and the rolling daily quota
-(`ReserveUpload`, `account/files.go:304`). Only the traffic one is shared with
+(`s.overStorage`, `account/files.go:311`), the monthly traffic cap
+(`s.overTraffic`, `account/files.go:315`) and the rolling daily quota
+(`ReserveUpload`, `account/files.go:423`). Only the traffic one is shared with
 relay: `currentMonthTraffic` (`account/plan_enforce.go:53-68`) sums
 `usage_monthly` — hosted upload/download — plus billable `usage_events` —
 relay. Storage is occupancy, not throughput, and is not something a relay
@@ -310,7 +310,7 @@ The dimensions actually checked, each fail-closed at write time:
   `remainingDailyQuota`), reserved atomically per upload
   (`account/sqlite.go:5239`, `ReserveUpload`) so concurrent uploads can't
   race past it. A near-empty file still debits a 64 KiB floor
-  (`minBillableBytes`, `account/files.go:32` — capping object *count*, not
+  (`minBillableBytes`, `account/files.go:33` — capping object *count*, not
   just size). Exceeding it: `429` "daily quota exceeded".
 - **Monthly traffic cap** — relay bytes (billable rows in `usage_periods`)
   plus stored upload/download bytes (`usage_monthly`), summed by
@@ -318,7 +318,7 @@ The dimensions actually checked, each fail-closed at write time:
   `monthlyTrafficCap` (`account/plan_enforce.go:94`), which pro-rates a
   mid-month plan change into segments rather than granting a full month's
   cap on every upgrade. Exceeding it: `429` "monthly traffic limit reached"
-  on upload (`account/files.go:195`), and TURN credential issuance is
+  on upload (`account/files.go:315`), and TURN credential issuance is
   withheld for relay (`account/turn.go:142-155`).
 
   **The relay quota gate runs at ISSUANCE, and that is the whole of it.** It
