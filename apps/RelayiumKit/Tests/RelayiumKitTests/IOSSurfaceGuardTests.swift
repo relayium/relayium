@@ -6390,14 +6390,23 @@ extension IOSSurfaceGuardTests {
                       "the composer field has no editing buffer")
         XCTAssertTrue(view.contains("_composerText = State(initialValue: link.draft)"),
                       "a rebuilt workspace does not reopen on the model's draft")
-        XCTAssertTrue(view.contains("if link.draft != text { link.draft = text }"),
+        // Mirrored WITHOUT publishing. The app root observes this model, so a
+        // publishing write re-rendered the whole shell per keystroke, and on
+        // iOS 18 that scrambled typed text (CI runs 35877967996, 35888861444).
+        XCTAssertTrue(view.contains("link.mirrorComposerDraft(text)"),
                       "an edit is not mirrored into the model-owned draft")
+        XCTAssertFalse(view.contains("link.draft = "),
+                       "the composer writes the draft through its publishing setter")
         XCTAssertTrue(view.contains(".onChange(of: link.draftReplacement)"),
                       "the field never learns that the model cleared or restored the draft")
         XCTAssertFalse(view.contains(".onChange(of: link.draft)"),
                        "the field re-reads the published draft while it is being typed")
-        XCTAssertTrue(view.contains(".disabled(!link.canSubmitDraft)"),
+        // `canSubmitDraft`'s rule, asked of the field: the silent mirror cannot
+        // re-render a gate that reads the model's copy.
+        XCTAssertTrue(view.contains(".disabled(!canSubmitComposerText)"),
                       "Send is live while a first message is still waiting")
+        XCTAssertTrue(view.contains("link.canSendMessage && !composerIsFree"),
+                      "Send is gated on something other than canSubmitDraft's rule")
         XCTAssertFalse(view.contains("link.canCompose ||") || view.contains("!link.canCompose"),
                        "Send is gated on canCompose, which stays true while a message waits")
         XCTAssertTrue(view.contains("link.submitDraft()"),
