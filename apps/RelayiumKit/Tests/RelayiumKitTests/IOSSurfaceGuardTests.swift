@@ -1331,11 +1331,13 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let child = parts[1]
         XCTAssertTrue(child.contains("@ObservedObject var text: LinkSessionPresentationModel"),
                       "the child must observe LinkSessionPresentationModel itself")
-        XCTAssertTrue(child.contains("ForEach(text.textMessages)"),
-                      "the message loop must read the model the child observes")
+        // Newest first since A16 — the macOS rule — and still read from the
+        // model the child observes.
+        XCTAssertTrue(child.contains("ForEach(text.textMessagesNewestFirst)"),
+                      "the message loop must read the model the child observes, newest first")
         XCTAssertTrue(child.contains(".linkConversationEmpty"),
                       "the empty state must invalidate with the same observation")
-        XCTAssertFalse(parts[0].contains("ForEach(text.textMessages)"),
+        XCTAssertFalse(parts[0].contains("ForEach(text.textMessages"),
                        "the parent renders the transcript only through the observing child")
         XCTAssertTrue(parts[0].contains("LinkConversationTranscript(text: text)"),
                       "the workspace must render the transcript through the child")
@@ -1362,8 +1364,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let child = parts[1]
         XCTAssertTrue(child.contains("@ObservedObject var files: LinkFilePresentationModel"),
                       "the child must observe LinkFilePresentationModel itself")
-        XCTAssertTrue(child.contains("ForEach(files.batches)"),
-                      "the batch loop must read the model the child observes")
+        XCTAssertTrue(child.contains("ForEach(files.batchesNewestFirst)"),
+                      "the batch loop must read the model the child observes, newest first")
         XCTAssertTrue(child.contains("!files.batches.isEmpty || !link.armedFiles.isEmpty"),
                       "the card's visibility must be decided under the same observation")
         for control in ["LinkBatchCopy.text(for: batch.state)",
@@ -4044,15 +4046,19 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // text session already was on it: a message received on this device that
         // the user cannot get out of the app is a message they have to retype.
         // Same shape — one write, inside the button that says Copy.
+        // The link transcript joins it for A16: macOS's link rows have had Copy,
+        // and the two must not disagree about how a message leaves a session.
         XCTAssertEqual(holders, ["AccountSummaryView.swift", "DeviceConversationView.swift",
                                  "DirectTextSessionView.swift",
-                                 "DirectView.swift", "SendView.swift"],
+                                 "DirectView.swift", "NearbyLinkWorkspaceView.swift",
+                                 "SendView.swift"],
                        "the pasteboard is reachable from somewhere other than Copy")
         let expectedWrites = [
             "AccountSummaryView.swift": "UIPasteboard.general.string = link",
             "DeviceConversationView.swift": "UIPasteboard.general.string = message.text",
             "DirectTextSessionView.swift": "UIPasteboard.general.string = text",
             "DirectView.swift": "UIPasteboard.general.string = url.absoluteString",
+            "NearbyLinkWorkspaceView.swift": "UIPasteboard.general.string = message.body",
             "SendView.swift": "UIPasteboard.general.string = link",
         ]
         for (name, write) in expectedWrites {
@@ -4699,8 +4705,12 @@ final class IOSSurfaceGuardTests: XCTestCase {
     func testAWorkspaceExitCannotDiscardLocalTextWithoutConfirmation() throws {
         let source = try code(at: try iosRoot.appendingPathComponent("NearbyLinkWorkspaceView.swift"))
         XCTAssertTrue(source.contains("@State private var confirmingLocalTextDiscard = false"))
-        XCTAssertTrue(source.contains("link.holdsLocalText || !trimmedDraft.isEmpty"),
+        // Every holder is the model's now — the draft included — so the model's
+        // one predicate is the whole answer.
+        XCTAssertTrue(source.contains("link.holdsLocalText"),
                       "the exit does not ask about every holder of local text")
+        XCTAssertFalse(source.contains("@State private var draft"),
+                       "a view-local draft is a holder the model's predicate cannot see")
         let exit = try XCTUnwrap(source.components(
             separatedBy: "private var exit: some View {").dropFirst().first?
             .components(separatedBy: "private var hasTranscript").first)
@@ -6063,4 +6073,112 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "the manual account step is declared more than once")
     }
 
+}
+
+
+// MARK: - A15/A16/A22: the iOS composers
+
+extension IOSSurfaceGuardTests {
+
+    /// **Both iOS link compositions refuse a second message while the first
+    /// waits** — Nearby and Cross-network draw the same composer, so they obey
+    /// one rule — and the acceptance fixture answers the production rule.
+    ///
+    /// The shared default stays `replaceWaiting` for the headless hosts; the
+    /// iOS factories opt in, exactly as the macOS ones do.
+    func testBothIOSLinkCompositionsRefuseAWaitingMessage() throws {
+        let env = try code(at: try appKitRoot.appendingPathComponent("AppEnvironment.swift"))
+        // The iOS half of the `#if os(macOS) … #else … #endif` split: macOS has
+        // a general `makeLinkWorkspaceModel` of its own, so the name alone is
+        // not enough.
+        let iOSBranch = try XCTUnwrap(env.components(separatedBy: "\n    #if os(macOS)\n")
+            .dropFirst().first?.components(separatedBy: "\n    #else\n").dropFirst().first?
+            .components(separatedBy: "\n    #endif\n").first,
+            "the iOS half of AppEnvironment moved")
+        for factory in ["makeLinkWorkspaceModel(", "makeCrossNetworkLinkWorkspaceModel("] {
+            let parts = iOSBranch.components(separatedBy: "public static func " + factory)
+            XCTAssertEqual(parts.count, 2, "expected exactly one iOS \(factory)")
+            let body = try XCTUnwrap(parts.dropFirst().first?
+                .components(separatedBy: "public static func ").first,
+                "\(factory) is missing")
+            XCTAssertTrue(body.contains("pendingMessages: .refuseWhileWaiting"),
+                          "iOS \(factory) is on the replace-waiting rule, under which a second "
+                          + "message silently replaces the first")
+        }
+        let fixtures = try code(at: try iosRoot.appendingPathComponent("UITestMode.swift"))
+        XCTAssertEqual(fixtures.components(separatedBy: "pendingMessages: .refuseWhileWaiting").count - 1,
+                       1, "the iOS acceptance link model answers a different rule from production")
+    }
+
+    /// **The iOS link composer is model-owned and transactional.**
+    ///
+    /// The draft is `link.draft`, so a `TabView` teardown cannot take it and a
+    /// new attempt clears it; Send is gated on `canSubmitDraft`, which is false
+    /// while a message waits; and the press goes through `submitDraft`, which
+    /// clears only what the lane took. The old shape — view `@State`, a gate on
+    /// `canCompose`, `send` then an unconditional clear — is each named here,
+    /// because each alone re-opens a loss.
+    func testTheIOSLinkComposerIsModelOwnedAndTransactional() throws {
+        let view = try code(at: try iosRoot.appendingPathComponent("NearbyLinkWorkspaceView.swift"))
+        XCTAssertFalse(view.contains("@State private var draft"),
+                       "a view-local draft dies with the tab and rides into the next peer")
+        XCTAssertTrue(view.contains("text: $link.draft"),
+                      "the composer does not edit the model-owned draft")
+        XCTAssertTrue(view.contains(".disabled(!link.canSubmitDraft)"),
+                      "Send is live while a first message is still waiting")
+        XCTAssertFalse(view.contains("link.canCompose ||") || view.contains("!link.canCompose"),
+                       "Send is gated on canCompose, which stays true while a message waits")
+        XCTAssertTrue(view.contains("link.submitDraft()"),
+                      "the composer does not use the model's transactional send")
+        XCTAssertFalse(view.contains("link.send(message:"),
+                       "the composer calls send itself and can clear what was refused")
+        XCTAssertFalse(view.contains("takeReturnedDraft"),
+                       "a returned draft is consumed before knowing the field is free")
+        XCTAssertTrue(view.contains(".task(id: composerIsFree) { if composerIsFree { link.restoreReturnedDraft() } }"),
+                      "a returned draft that could not land is never retried")
+    }
+
+    /// **Every link message has its own accessible Copy with feedback.**
+    func testEveryIOSLinkMessageOffersAnAccessibleCopy() throws {
+        let view = try code(at: try iosRoot.appendingPathComponent("NearbyLinkWorkspaceView.swift"))
+        let child = try XCTUnwrap(view.components(separatedBy: "struct LinkConversationTranscript")
+            .dropFirst().first?.components(separatedBy: "struct LinkTransfersSection").first)
+        XCTAssertTrue(child.contains("UIPasteboard.general.string = message.body"),
+                      "Copy must write the row's own exact body")
+        XCTAssertTrue(child.contains("@State private var copiedMessageID: Int?"),
+                      "the acknowledgement must be keyed by id, never by body")
+        XCTAssertTrue(child.contains("L10n.t(copiedMessageID == message.id ? .commonCopied : .commonCopy)"),
+                      "Copy gives no feedback")
+        XCTAssertTrue(child.contains("TextMessagePresentation.copyActionLabel("),
+                      "Copy's accessible name must carry the sent/received context")
+        XCTAssertTrue(child.contains("!messages.contains(where: { $0.id == copiedMessageID })"),
+                      "an acknowledgement can outlive its row and land on another")
+    }
+
+    /// **The iOS Inbox message composer measures UTF-8 bytes and enforces the
+    /// Inbox bound before the press.** `InboxTextDraft` is macOS's type; the
+    /// bound it applies is `InboxManifest.maxTextBytes`; the field is never
+    /// truncated.
+    func testTheIOSInboxComposerMeasuresBytesAndBoundsBeforeSend() throws {
+        let view = try code(at: try iosRoot.appendingPathComponent("DeviceConversationView.swift"))
+        let controls = try XCTUnwrap(view.components(separatedBy: "private func messageControls(")
+            .dropFirst().first?.components(separatedBy: "private var fileControls").first)
+        XCTAssertTrue(controls.contains("let draftSize = InboxTextDraft(draft)"),
+                      "the composer does not measure the draft the way the protocol does")
+        XCTAssertTrue(controls.contains("InboxSendPresentation.size(of: draftSize)"),
+                      "no byte counter beside the field")
+        XCTAssertTrue(controls.contains("InboxSendPresentation.limit(of: draftSize)"),
+                      "no remaining / over-limit line")
+        XCTAssertTrue(controls.contains("!draftSize.isSendable"),
+                      "Send is live for a message the model would refuse as too long")
+        for truncation in ["prefix(", "dropLast(", "draft = String(", "maxTextBytes)"] {
+            XCTAssertFalse(controls.contains(truncation),
+                           "the composer shortens the user's text: \(truncation)")
+        }
+        XCTAssertFalse(controls.contains("TEXT_MAX_BYTES") || controls.contains("LINK_CONSERVATIVE"),
+                       "the Inbox composer is bounded by the realtime lane's limit")
+        // A refusal keeps the text: the clear stays conditional on acceptance.
+        XCTAssertTrue(view.contains("if deliveries.refusal == nil { draft = \"\" }"),
+                      "the composer clears text the model refused")
+    }
 }

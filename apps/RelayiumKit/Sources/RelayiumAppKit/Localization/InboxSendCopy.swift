@@ -364,6 +364,27 @@ public enum InboxSendPresentation {
                language: language)
     }
 
+    /// What is left under the bound, or by how much the draft is past it — in
+    /// exact bytes.
+    ///
+    /// The size line rounds to a tenth of a KB, so a draft exactly at the limit
+    /// and one a single byte past it both read "64.0 KB of 64.0 KB" while Send
+    /// is enabled for one and disabled for the other. This line is what makes
+    /// that difference visible: "1 B left" against "1 B over the limit". Never a
+    /// truncation — the composer keeps every character and says what to do.
+    public static func limit(of draft: InboxTextDraft,
+                             language: AppLanguage? = nil) -> String {
+        if draft.isTooLong {
+            return L10n.t(.sendMessageOverLimit,
+                          [L10n.bytes(Int64(draft.overflowBytes), language: language)],
+                          language: language)
+        }
+        return L10n.t(.sendMessageRemaining,
+                      [L10n.bytes(Int64(InboxManifest.maxTextBytes - draft.byteCount),
+                                  language: language)],
+                      language: language)
+    }
+
     /// Why this device's message composer cannot send, or nil when it can.
     ///
     /// Only the capability: the message bounds are the composer's own business

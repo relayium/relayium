@@ -144,13 +144,13 @@ public enum LinkWorkspaceEnding: Equatable {
 /// A configuration for the same reason `LinkPairingFallbackPolicy` is: two
 /// products read this model and only one of them was changed.
 ///
-/// The paused iOS composer gates Send on `canCompose`, ignores what `send`
-/// returns, and clears its own view-local draft either way. Making the model
-/// refuse globally therefore did not protect that composer — it broke it: the
-/// second message was declined by the model AND wiped by the view, which is a
-/// silent loss where there had been a visible replacement. So the shipped
-/// behaviour stays the default, and only the composition that also fixed its
-/// composer opts out of it.
+/// A composer that gates Send on `canCompose`, ignores what `send` returns and
+/// clears its own draft either way is broken by a global refusal: the second
+/// message is declined by the model AND wiped by the view. So the default stays
+/// `replaceWaiting` for the headless hosts that script sends, and every app
+/// composition whose composer reads `canSendMessage` and honours `send` opts in
+/// to `refuseWhileWaiting` — both macOS link models and, since the iOS composer
+/// moved onto `submitDraft`, both iOS ones (Nearby and Cross-network).
 public enum LinkPendingMessagePolicy: String, Equatable, Sendable {
     /// Replace the waiting message with the new one, and report acceptance.
     /// **The default, and what every existing caller gets.**
@@ -336,33 +336,18 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// composer that already holds something.
     @Published public private(set) var returnedDraft: String?
 
-    /// Take the handed-back draft, once. The composer owns it from here.
     /// **Put a returned message back, but only where it can actually land.**
     ///
-    /// The order is the whole of it. This used to consume `returnedDraft` and
-    /// THEN check whether the composer was free — so a user who had started
-    /// typing something new lost the returned text entirely: taken out of the
-    /// model, refused by the destination, and held by nobody.
+    /// The order is the whole of it. An earlier `takeReturnedDraft` consumed
+    /// `returnedDraft` and THEN let the composer decide whether it was free — so
+    /// a user who had started typing something new lost the returned text
+    /// entirely: taken out of the model, refused by the destination, and held by
+    /// nobody. Both Apple composers now own their draft on this model and call
+    /// this instead, and the unconditional variant is gone.
     ///
     /// Refusing is not losing. The text stays in `returnedDraft` and lands the
     /// next time the composer is free, which is what makes both this and a
     /// second send order-safe rather than racing each other.
-    /// **Consume the returned message unconditionally.**
-    ///
-    /// Kept, unchanged, for the paused iOS implementation: its
-    /// `NearbyLinkWorkspaceView` calls this and holds its own view-local draft,
-    /// and this contraction does not touch iOS source or iOS behaviour.
-    ///
-    /// macOS uses `restoreReturnedDraft()` instead, which checks the destination
-    /// BEFORE consuming. The difference matters only for a composer that already
-    /// holds something, and only macOS moved its draft onto this model — so this
-    /// stays the iOS answer and the ordering fix stays the macOS one, rather
-    /// than one of them being changed on the other's behalf.
-    public func takeReturnedDraft() -> String? {
-        defer { returnedDraft = nil }
-        return returnedDraft
-    }
-
     @discardableResult
     public func restoreReturnedDraft() -> Bool {
         guard let returned = returnedDraft else { return false }
@@ -2852,6 +2837,14 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         actionError = nil
         verification = .notRequired
         pendingMessage = nil
+        // **The composer's text belongs to the peer it was written for.** A new
+        // attempt is a new peer — the user connecting to someone else, or a
+        // device reaching this one unsolicited from an ended page — and the
+        // transcript above is already dropped for exactly that reason. A draft
+        // or a handed-back message left here would sit in the next peer's
+        // composer one tap from being sent to somebody it was never meant for.
+        draft = ""
+        returnedDraft = nil
         armedBatches = []
         textModel = nil
         fileModel = nil
@@ -3167,6 +3160,30 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     public var canSendMessage: Bool {
         guard acceptsWork else { return false }
         return pendingMessages == .replaceWaiting || pendingMessage == nil
+    }
+
+    /// **Send the model-owned `draft`, clearing it only if the lane took it.**
+    ///
+    /// The composer transaction in one place, so a surface cannot re-derive it
+    /// wrongly: trim, ask `send(message:)`, and empty the draft ONLY on
+    /// acceptance. A refusal — a message already waiting under
+    /// `.refuseWhileWaiting`, a link that is not open or not verified — leaves
+    /// every character where the user typed it. A second tap after an accepted
+    /// send finds an empty draft and does nothing, so a double tap cannot send
+    /// twice or replace the first.
+    @discardableResult
+    public func submitDraft() -> Bool {
+        let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { return false }
+        guard send(message: body) else { return false }
+        draft = ""
+        return true
+    }
+
+    /// Whether the composer's Send would do anything right now: the same answer
+    /// `submitDraft` gives, asked before the press.
+    public var canSubmitDraft: Bool {
+        canSendMessage && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func flushOrOpenConversation() {

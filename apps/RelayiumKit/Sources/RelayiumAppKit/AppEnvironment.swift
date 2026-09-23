@@ -921,7 +921,7 @@ public enum AppEnvironment {
             // This composition's composer reads `canSendMessage` and honours
             // what `send` returns, so it can refuse rather than replace — see
             // `LinkPendingMessagePolicy`. The shared default stays
-            // `replaceWaiting` for the paused iOS composer, which does neither.
+            // `replaceWaiting` for the headless hosts that script sends.
             pendingMessages: .refuseWhileWaiting)
         // **And the room's hello matches what this build can honour.** Rejecting
         // every legacy session while still announcing `text/1` is the dishonest
@@ -989,7 +989,7 @@ public enum AppEnvironment {
             // This composition's composer reads `canSendMessage` and honours
             // what `send` returns, so it can refuse rather than replace — see
             // `LinkPendingMessagePolicy`. The shared default stays
-            // `replaceWaiting` for the paused iOS composer, which does neither.
+            // `replaceWaiting` for the headless hosts that script sends.
             pendingMessages: .refuseWhileWaiting)
     }
 
@@ -1036,7 +1036,13 @@ public enum AppEnvironment {
             // flipping the preference applies to the next connection, not the
             // next launch.
             requiresVerification: { verification.requiresSASConfirmation },
-            iceClient: HTTPICEClient(baseURL: baseURL))
+            iceClient: HTTPICEClient(baseURL: baseURL),
+            // `NearbyLinkWorkspaceView` gates Send on `canSendMessage` and sends
+            // through `submitDraft`, which clears only what the lane took — so
+            // this composition refuses a second message while the first waits
+            // for the peer rather than silently replacing it. Same rule as the
+            // Cross-network model below: one composer, one policy.
+            pendingMessages: .refuseWhileWaiting)
         nearby.addRoomObserver(model)
         model.resolvePeerLabel { [weak nearby] peerId in
             nearby?.label(forPeerID: peerId) ?? peerId
@@ -1071,9 +1077,10 @@ public enum AppEnvironment {
     /// the receive destination on iOS is the residency-owned one, read and never
     /// re-resolved.
     ///
-    /// `pendingMessages` keeps the shared default. This link is drawn by the same
-    /// `NearbyLinkWorkspaceView` composer the same-network link uses, and that
-    /// composer does not read `canSendMessage`; one composer, one policy.
+    /// `pendingMessages` is `.refuseWhileWaiting`, as on the same-network model
+    /// above: this link is drawn by the same `NearbyLinkWorkspaceView` composer,
+    /// which reads `canSendMessage` and honours `submitDraft`; one composer, one
+    /// policy.
     @MainActor
     public static func makeCrossNetworkLinkWorkspaceModel(baseURL: URL = transferBaseURL,
                                                           verification: VerificationPreference,
@@ -1094,7 +1101,8 @@ public enum AppEnvironment {
             legacyFallback: .terminateUnsupported,
             // Rejecting every legacy session while still announcing `text/1`
             // would invite a conversation this room then meets with silence.
-            localHello: linkOnlyCapsHello(linkRoomActive:))
+            localHello: linkOnlyCapsHello(linkRoomActive:),
+            pendingMessages: .refuseWhileWaiting)
     }
 
     #endif

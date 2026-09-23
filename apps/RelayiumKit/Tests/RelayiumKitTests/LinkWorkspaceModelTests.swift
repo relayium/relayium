@@ -1637,3 +1637,174 @@ extension LinkWorkspaceModelTests {
         }
     }
 }
+
+
+// MARK: - A15/A16: the composer transaction both Apple composers now share
+
+extension LinkWorkspaceModelTests {
+
+    /// **A second message cannot silently replace the first while it waits.**
+    ///
+    /// Reproduced against the shipped iOS composition before this fix: default
+    /// `replaceWaiting`, Send gated on `canCompose`, the view clearing its own
+    /// draft after every `send` — "first" then "second", the peer refuses, and
+    /// the lane hands back "second" while "first" exists nowhere. Under the
+    /// composition iOS now builds (`refuseWhileWaiting` + `submitDraft`) both
+    /// texts survive: the first is held and handed back, the second never
+    /// leaves the field.
+    func testASecondSubmitWhileTheFirstWaitsKeepsBothTexts() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+
+        rig.model.draft = "first"
+        XCTAssertTrue(rig.model.canSubmitDraft)
+        XCTAssertTrue(rig.model.submitDraft(), "the first message was not taken")
+        XCTAssertEqual(rig.model.draft, "", "an accepted message stayed in the field")
+        await settle()
+        XCTAssertTrue(rig.model.isWaitingForConversation)
+
+        rig.model.draft = "second"
+        XCTAssertFalse(rig.model.canSubmitDraft,
+                       "Send is live for a press the model would refuse")
+        XCTAssertFalse(rig.model.submitDraft(), "a second message replaced the waiting one")
+        XCTAssertEqual(rig.model.draft, "second", "the refused message left the field")
+
+        rig.transports[0].onFrame?(.text, [RealtimeControl.reject.rawValue])
+        await settle()
+        XCTAssertEqual(rig.model.returnedDraft, "first",
+                       "the first message was lost or replaced")
+        XCTAssertEqual(rig.model.draft, "second")
+        // The field is busy, so the returned text waits rather than overwriting…
+        XCTAssertFalse(rig.model.restoreReturnedDraft())
+        XCTAssertTrue(rig.model.holdsLocalText)
+        // …and lands as soon as the user clears or sends what they typed.
+        rig.model.draft = ""
+        XCTAssertTrue(rig.model.restoreReturnedDraft())
+        XCTAssertEqual(rig.model.draft, "first")
+    }
+
+    /// **A double tap sends once.** The first press takes the message and
+    /// empties the field; the second finds nothing to send, so it can neither
+    /// send a duplicate nor reach the waiting message.
+    func testADoubleTapOnSendSubmitsOnce() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        rig.model.draft = "only once"
+
+        XCTAssertTrue(rig.model.submitDraft())
+        XCTAssertFalse(rig.model.submitDraft(), "the second tap of a double tap submitted")
+        XCTAssertNil(rig.model.actionError,
+                     "an empty second tap is not an error the user needs to read")
+        await settle()
+
+        // The peer refuses: exactly the one message comes back.
+        rig.transports[0].onFrame?(.text, [RealtimeControl.reject.rawValue])
+        await settle()
+        XCTAssertEqual(rig.model.returnedDraft, "only once")
+    }
+
+    /// **A refused send restores nothing because it removed nothing.** Before
+    /// the digits are compared the link accepts no work; the press is refused
+    /// with a reason, and the text — exact, untrimmed — stays in the field.
+    func testASubmitRefusedByTheLinkKeepsTheExactText() async {
+        let rig = rig(requiresVerification: true, pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        XCTAssertTrue(rig.model.isVerificationPending, "the setup is not behind the digits")
+
+        let typed = "  e\u{301} 你好 👩‍👩‍👧 \n"
+        rig.model.draft = typed
+        XCTAssertFalse(rig.model.canSubmitDraft)
+        XCTAssertFalse(rig.model.submitDraft())
+        XCTAssertEqual(Array(rig.model.draft.utf8), Array(typed.utf8),
+                       "a refused send changed the text in the field")
+        XCTAssertNotNil(rig.model.actionError, "the refusal said nothing")
+    }
+
+    /// Whitespace is not a message: nothing is sent and nothing is cleared.
+    func testAWhitespaceDraftIsNotSubmitted() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        rig.model.draft = " \n\t "
+        XCTAssertFalse(rig.model.canSubmitDraft)
+        XCTAssertFalse(rig.model.submitDraft())
+        XCTAssertEqual(rig.model.draft, " \n\t ")
+        XCTAssertFalse(rig.model.isWaitingForConversation)
+    }
+
+    /// **The draft survives the view that was typing it.** iOS's `TabView`
+    /// tears the workspace view down on a tab switch while the link lives on;
+    /// with the draft on the model a rebuilt view binds to the same text.
+    /// Modelled as what it is: the view goes away and the model does not.
+    func testADraftSurvivesATabSwitchWhileTheLinkStaysOpen() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        rig.model.draft = "half a thought"
+        // Tab away and back: nothing about that touches the model.
+        XCTAssertEqual(rig.model.draft, "half a thought")
+        XCTAssertTrue(rig.model.connection.isOpen)
+        XCTAssertTrue(rig.model.canSubmitDraft)
+    }
+
+    /// **Text written for one peer never reaches the next peer's composer.**
+    ///
+    /// Reproduced before this fix: `beginAttempt` cleared the transcript but not
+    /// `draft`, so a draft typed to "Studio Mac" sat in the composer of the next
+    /// device's link, one tap from being sent to it.
+    func testADraftDoesNotCrossIntoTheNextPeersSession() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        rig.model.draft = "meant for Studio Mac"
+        rig.model.leave()
+        await settle()
+
+        announceLink(rig, "yyy")
+        XCTAssertTrue(rig.model.connect(peerId: "yyy", peerLabel: "Someone Else"))
+        await settle()
+
+        XCTAssertEqual(rig.model.draft, "", "the previous peer's draft crossed sessions")
+        XCTAssertNil(rig.model.returnedDraft)
+    }
+
+    /// …nor does a message the previous peer never took, which `finish` hands
+    /// back and which a restore would otherwise put in the new peer's field.
+    func testAHandedBackMessageDoesNotCrossIntoTheNextPeersSession() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        _ = await openLink(rig)
+        rig.model.draft = "held for Studio Mac"
+        XCTAssertTrue(rig.model.submitDraft())
+        await settle()
+        rig.model.leave()
+        await settle()
+        XCTAssertEqual(rig.model.returnedDraft, "held for Studio Mac",
+                       "the setup did not reach the state at issue")
+
+        announceLink(rig, "yyy")
+        XCTAssertTrue(rig.model.connect(peerId: "yyy", peerLabel: "Someone Else"))
+        await settle()
+
+        XCTAssertNil(rig.model.returnedDraft,
+                     "a message for the previous peer is waiting to land in this one")
+        XCTAssertFalse(rig.model.restoreReturnedDraft())
+        XCTAssertEqual(rig.model.draft, "")
+    }
+
+    /// The same boundary on the peer's side: an UNSOLICITED link arriving on an
+    /// ended page is a new attempt too, and must not inherit the composer.
+    func testAnUnsolicitedLinkOnAnEndedPageDoesNotInheritTheDraft() async {
+        let rig = rig(pendingMessages: .refuseWhileWaiting)
+        let first = await openLink(rig)
+        rig.model.draft = "for the first peer"
+        first.hangUp()
+        await settle()
+        guard case .ended = rig.model.connection else {
+            return XCTFail("the first link did not end")
+        }
+        // Still held on the ended page, where Done asks before discarding it.
+        XCTAssertTrue(rig.model.holdsLocalText)
+
+        announceLink(rig, "yyy")
+        XCTAssertTrue(rig.model.connect(peerId: "yyy", peerLabel: "Someone Else"))
+        await settle()
+        XCTAssertEqual(rig.model.draft, "")
+    }
+}

@@ -226,8 +226,16 @@ struct DeviceConversationView: View {
         }
     }
 
+    /// **Measured in UTF-8 bytes, the way the manifest and the receiver
+    /// measure it.** `InboxTextDraft` is the macOS composer's own type: a count
+    /// of characters would call a screenful of emoji a quarter of the limit. The
+    /// bound is `InboxManifest.maxTextBytes` — the Inbox's, never the realtime
+    /// lane's — and it is enforced BEFORE the press: past it Send is disabled
+    /// and the line under the field says by how much, while every character
+    /// stays in the field. Nothing here truncates.
     @ViewBuilder
     private func messageControls(_ target: InboxSendCandidate) -> some View {
+        let draftSize = InboxTextDraft(draft)
         VStack(alignment: .leading, spacing: Metrics.tight) {
             Text(InboxSendPresentation.label(for: .message))
                 .font(.headline)
@@ -236,6 +244,25 @@ struct DeviceConversationView: View {
                 .lineLimit(3...8)
                 .accessibilityLabel(L10n.t(.sendMessageLabel))
                 .accessibilityIdentifier("inbox-message-field")
+            Text(InboxSendPresentation.size(of: draftSize))
+                .font(.footnote)
+                .monospacedDigit()
+                .foregroundStyle(Palette.supportingLabel)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("inbox-message-size")
+            if draftSize.isTooLong {
+                // The whole explanation of the disabled Send, so it cannot be a
+                // grey footnote.
+                InlineMessage(.warning, InboxSendPresentation.limit(of: draftSize))
+                    .accessibilityIdentifier("inbox-message-over-limit")
+            } else {
+                Text(InboxSendPresentation.limit(of: draftSize))
+                    .font(.footnote)
+                    .monospacedDigit()
+                    .foregroundStyle(Palette.supportingLabel)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("inbox-message-remaining")
+            }
             // The refusal above the control it explains, in reading order. A
             // device that does not announce `inbox.text.v1` gets the sentence
             // and no Send, rather than a Send the model would refuse.
@@ -248,7 +275,11 @@ struct DeviceConversationView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                // `isSendable` is the exact precondition `sendText` applies, so
+                // the button is never live for a press the model would refuse;
+                // whitespace alone stays unsendable as before.
+                .disabled(!draftSize.isSendable
+                          || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .accessibilityHidden(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .accessibilityIdentifier("inbox-send-message")
             }

@@ -997,6 +997,8 @@
 "send.messageLabel" = "Message to send";
 "send.messagePlaceholder" = "Type the message to send to this device";
 "send.messageSize" = "%1$@ of %2$@";
+"send.messageRemaining" = "%@ left";
+"send.messageOverLimit" = "%@ over the limit. Shorten the message or send it as a file.";
 "send.messageAction" = "Send Message";
 "send.caveatNeedsApproval" = "someone at that device has to accept it";
 "send.caveatDirectoryNotReady" = "its receive folder needs attention, so it may wait there";
