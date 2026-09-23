@@ -71,6 +71,8 @@ struct SendView: View {
                 // in words, right next to it.
                 sharedDrafts
                 availability
+                // A20: last on the page and collapsed — see `IOSHelpCard`.
+                IOSHelpCard(surface: .storedSend)
             }
             // The DESTINATION's name, not the action inside it. `upload.heading`
             // ("Send files") titles the card below and the progress line, and

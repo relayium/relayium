@@ -919,6 +919,68 @@
 "help.account.failure" = "Creating a pairing code and sending a link stop working once this period's allowance is spent. Same-network transfer, and connecting with a code somebody else created, are unaffected — neither is billed to you.";
 "help.account.recovery" = "Wait for the period to roll over, or change plan. Same-network transfer keeps working either way, because it moves no bytes through Relayium.";
 
+/* A20-A21 — iOS help on the five browseable destinations (A20), and the
+   Open / Share / Save to Files actions on received Device Inbox files (A21).
+   The iOS help is its own table rather than the macOS one with "this Mac"
+   swapped out: discovery, the save location and when the Device Inbox
+   receives are genuinely different on iOS. */
+
+"help.ios.lan.purpose" = "Send files, folders or messages to a device on the same local network. No account, and nothing is stored on a server.";
+"help.ios.lan.step1" = "Open Relayium on both devices, on the same Wi-Fi or local network, and allow Local Network access when iOS asks.";
+"help.ios.lan.step2" = "Choose the other device from the list — Relayium never picks one for you — then connect and send files or a message.";
+"help.ios.lan.step3" = "If advanced verification is on, check that both screens show the same code before anything is sent.";
+"help.ios.lan.boundary" = "Devices are found with Bonjour on this local network only; Relayium's servers are not asked who is nearby. The connection runs between the two devices, encrypted between them, and never through a Relayium relay — so it uses none of your plan. A shared network can include strangers, so check the name before you send.";
+"help.ios.lan.where" = "Files you receive are saved in the Relayium/Received folder in the Files app. From a device on the current version, each set of files waits for you to tap Accept; older versions deliver while receiving is on. Messages stay on the two devices and are gone when the connection ends.";
+"help.ios.lan.failure" = "The other device is not in the list. The usual causes: Local Network access is off for Relayium, one device is on a guest network or a VPN, the router keeps devices apart, or Relayium is not open on the other device. Relayium on iPhone and iPad receives only while it is open.";
+"help.ios.lan.recovery" = "Turn on Relayium in Settings › Privacy & Security › Local Network, turn off any VPN, join the same network and keep Relayium open on both devices. If they still cannot see each other, use a code on the Cross-network screen instead.";
+
+"help.ios.cross.purpose" = "Connect to a device anywhere with a six-digit code. The two devices do not have to share a network.";
+"help.ios.cross.step1" = "Create a code, then pass on the code or the link beside it.";
+"help.ios.cross.step2" = "On the other device, enter the code in Relayium or open the link.";
+"help.ios.cross.step3" = "Once connected, send files, folders and messages both ways on that one connection. With verification on, check that both screens show the same code first.";
+"help.ios.cross.boundary" = "Files are encrypted between the two devices and Relayium never has the key. Creating a code needs an account, because the connection may be carried by a Relayium relay and those bytes are billed to whoever created the code. Joining a code somebody else created needs no account.";
+"help.ios.cross.where" = "Files you accept are saved in the Relayium/Received folder in the Files app. Messages stay on the two devices and are discarded when the connection ends. Nothing sent this way is stored on Relayium's servers.";
+"help.ios.cross.failure" = "A code lasts only a few minutes, and the other device is told a mistyped or expired code is invalid. The connection also needs Relayium open on both devices: it cannot continue once the app leaves the screen.";
+"help.ios.cross.recovery" = "Create a new code and pass it on, and keep Relayium on screen on both devices until the transfer finishes. For something large, use Send instead — the other device can collect it later.";
+
+"help.ios.storedSend.purpose" = "Upload encrypted files once and share a link that keeps working whether or not this device is on.";
+"help.ios.storedSend.step1" = "Sign in, choose files, folders, photos or videos, and decide how long the link keeps working.";
+"help.ios.storedSend.step2" = "Relayium encrypts everything on this device before uploading it. Keep the app open until the upload finishes.";
+"help.ios.storedSend.step3" = "Share the link. The key that opens it travels inside the link and never reaches Relayium.";
+"help.ios.storedSend.boundary" = "Files are encrypted on this device before any of them are uploaded. The key lives in the part of the link after the #, which a browser never sends to a server, so Relayium stores something it cannot read. Anyone holding the whole link can open the files, so treat the link itself as the secret. Stored files count toward your plan's limits.";
+"help.ios.storedSend.where" = "The encrypted files stay on Relayium's servers until the link expires or you delete them on the Account screen, which breaks the link straight away. With Delete after first download on, the first download removes them too.";
+"help.ios.storedSend.failure" = "Leaving Relayium pauses an upload — it never continues in the background. And a link that was shortened, rewrapped by a chat app, or copied without the part after the # cannot be opened: what is missing is the key, not the file.";
+"help.ios.storedSend.recovery" = "Open Relayium and tap Resume upload: the files are kept on this device until then. Copy the link again from the Account screen and send it somewhere that keeps it intact. If it has expired, send the files again.";
+
+"help.ios.inbox.purpose" = "Your own signed-in devices send files and messages straight to this one, and you can send to them from here.";
+"help.ios.inbox.step1" = "Sign in to the same account here and on your other devices.";
+"help.ios.inbox.step2" = "Choose whether deliveries are saved automatically or wait for you to accept them.";
+"help.ios.inbox.step3" = "Open a device to see what you have exchanged, open or share what it sent, and send it files or a message.";
+"help.ios.inbox.boundary" = "Deliveries are encrypted for this device's own key, which never leaves it. Relayium holds an encrypted delivery until this device collects it, and cannot read what is inside or tell what the files are called.";
+"help.ios.inbox.where" = "Received files are saved in the Relayium/Received folder in the Files app, and messages stay in the conversation on this device. A delivery not yet collected waits on the server until this device picks it up or it expires.";
+"help.ios.inbox.failure" = "Nothing arrives while Relayium is closed or in the background, or while you are signed out. On iPhone and iPad it receives only while it is open, and it sends no notifications.";
+"help.ios.inbox.recovery" = "Open Relayium, signed in to the same account, and whatever was waiting arrives. If a delivery stopped, this screen says why and what to do next.";
+
+"help.ios.account.purpose" = "Your plan and what you have used this period, the devices signed in to your account, and the files you have stored.";
+"help.ios.account.step1" = "Create an account or sign in — sending a link, creating a pairing code and the Device Inbox need one.";
+"help.ios.account.step2" = "See which plan you are on and how much storage and traffic you have used this period.";
+"help.ios.account.step3" = "Review the devices signed in to your account and the files you have stored, and revoke or delete either.";
+"help.ios.account.boundary" = "Relayium holds your email address, which plan you are on, and how many bytes you have stored and moved. It never holds the keys to your files, so nothing on this screen — and nothing in Relayium's database — can open them.";
+"help.ios.account.where" = "Deleting a stored file removes it from Relayium's servers and breaks its link straight away. Revoking a device ends that device's session and nothing else; files it has already received stay on it.";
+"help.ios.account.failure" = "Once this period's allowance is used up, creating a pairing code and sending a link stop working. Same-network transfer, and joining a code somebody else created, are unaffected — neither is billed to you.";
+"help.ios.account.recovery" = "Wait for the period to reset, or change plan. Same-network transfer keeps working either way, because none of its bytes pass through Relayium.";
+
+"inbox.receivedOpen" = "Open";
+"inbox.receivedShare" = "Share";
+"inbox.receivedSave" = "Save to Files";
+"inbox.receivedOpenLabel" = "Open %@";
+"inbox.receivedShareLabel" = "Share %@";
+"inbox.receivedSaveLabel" = "Save %@ to Files";
+"inbox.receivedAllMissing" = "These files are no longer on this device. They may have been deleted or moved in the Files app. Ask the sender to send them again if you still need them.";
+"inbox.receivedSomeMissing" = "Some of these files are no longer on this device. Open, Share and Save to Files use the ones that are still here.";
+"inbox.receivedFolderNote" = "These files arrived inside a folder. Share and Save to Files hand over the files themselves; the folder stays in the Files app under %@.";
+"inbox.receivedUnavailable" = "These files cannot be opened right now. Check that they are still in the Files app under %@, then try again.";
+
 /* In-app subscription (Mac App Store build). The purchase surface the App Store
    build renders instead of the direct build's link to the website. Prices are
    never written here: the store's own localized price is substituted in. */
