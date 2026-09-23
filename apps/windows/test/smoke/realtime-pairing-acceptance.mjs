@@ -94,8 +94,14 @@ const CLOSE_BUDGET_MS = 4 * 1000;
 const BODY_BUDGET_BYTES = 64 * 1024 * 1024;
 const LOG_BUDGET_BYTES = 8 * 1024 * 1024;
 /** Bounded, and overridable downwards for a diagnostic run. Role coverage is
- *  never waived by it: fewer rounds can only make the role assertion FAIL. */
-const MAX_ROUNDS = Math.max(1, Math.min(8, Number(process.env.RT_ROUNDS ?? 8)));
+ *  never waived by it: fewer rounds can only make the role assertion FAIL.
+ *
+ *  Ten, the same cap as the two sibling role-coverage lanes
+ *  (`scripts/native-web-pairing-acceptance.sh`, `scripts/android-interop-acceptance.sh`):
+ *  at 8 this lane missed a role in 2^-7 of healthy runs (run 35808231491, all
+ *  eight rounds functionally green), at 10 in 2^-9. `role-coverage-cap-test.mjs`
+ *  holds the three lanes equal. */
+const MAX_ROUNDS = Math.max(1, Math.min(10, Number(process.env.RT_ROUNDS ?? 10)));
 
 /**
  * Adversarial controls. Each one must make a run FAIL that would otherwise pass,
@@ -1101,6 +1107,11 @@ async function main() {
           browserLinkRole: outcome.browser.role,
           windowsLinkRole: outcome.browser.role === "initiator" ? "responder" : "initiator",
           case: plan.case.key,
+          // The hub-assigned ids the role was computed from. A run that draws
+          // one side every round can then show from its log alone whether the
+          // ids were fresh coin flips or one identity persisting.
+          browserSelfId: outcome.browser.selfId,
+          browserPeerId: outcome.browser.peerId,
         });
       }
       if (outcome.peer?.linkOpen && outcome.browser?.reachedWorkspace) {
@@ -1353,7 +1364,8 @@ async function main() {
     // budget rather than being merely late. This assertion now carries the same
     // kind of evidence.
     const roleTable = findings.rounds.map((r) =>
-      `#${r.round} ${r.codeRole} browser=${r.browserLinkRole} case=${r.case}`);
+      `#${r.round} ${r.codeRole} browser=${r.browserLinkRole} case=${r.case}`
+      + ` self=${r.browserSelfId || "-"} peer=${r.browserPeerId || "-"}`);
     step("BOTH link-role assignments were observed, not one of them twice",
       findings.rolesSeen.has("initiator") && findings.rolesSeen.has("responder"),
       `saw ${[...findings.rolesSeen].join("+") || "none"} across `

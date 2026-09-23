@@ -193,7 +193,7 @@ jobs:
   # guard test asserts their absence.
   pairing:
     runs-on: macos-15
-    # Worst case is eight rounds, each preceded by a 65s wait for the server's
+    # Worst case is ten rounds, each preceded by a 65s wait for the server's
     # own per-IP WebSocket join budget (5/min, production behaviour that must not
     # be relaxed for a test), on top of the Swift, Go and Vite builds. The bound
     # is generous on purpose: a run that is merely slow must not read as the

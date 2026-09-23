@@ -273,6 +273,14 @@ jobs:
       - name: acceptance_build's scratch-path contract holds both ways
         run: bash scripts/test/local-acceptance-scratch-test.sh
 
+      # The three lanes that assert BOTH link roles were seen — Windows
+      # `realtime`, `native-web-pairing`, `android-interop` — each sit behind
+      # their own path filter, so none of them can see another's round cap. One
+      # was left at 8 when the other two went to 10 and failed on the coin flip
+      # alone. Pure Node over three source files; no dependencies.
+      - name: every role-coverage lane runs the same number of rounds
+        run: node scripts/test/role-coverage-cap-test.mjs
+
       # And the one that makes the four steps above impossible to forget again.
       # Every `scripts/test/*-test.{mjs,sh}` must be named by some workflow; the
       # four above had passed for months while being run by nothing.
