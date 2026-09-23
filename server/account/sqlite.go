@@ -1540,6 +1540,20 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
   created_at     INTEGER NOT NULL,
   gone_seen      INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, op_key))`,
+		// The account's upload fence (2026-09, A14). purgeTransientUserDataTx —
+		// the account-deletion step that removes every object, Idempotency-Key
+		// claim, session and CLI token — bumps it in the same transaction, and a
+		// single-shot upload's insert commits only if it still holds the value
+		// its request read while its credential was still valid (see
+		// StoredFile.UploadFence). An upload that was in flight across a
+		// deletion therefore cannot land afterwards — not while the account is
+		// pending deletion, and not after the deletion is cancelled either,
+		// because cancelling does not un-bump it.
+		//
+		// ADDITIVE and defaulted: an older binary's explicit column lists never
+		// name it. Rolled back, it simply has no fence (the behaviour before this
+		// column), and a database it touched is fenced again from the next bump.
+		`ALTER TABLE users ADD COLUMN upload_epoch INTEGER NOT NULL DEFAULT 0`,
 		// Time-bounded administrator membership grants (2026-08). The overlay is
 		// three columns on the users row and NOT a change to the projection — see
 		// admin_grant.go for why it is stored this way rather than written into
@@ -2928,6 +2942,11 @@ func purgeTransientUserDataTx(ctx context.Context, tx *sql.Tx, userID string) ([
 		{`DELETE FROM sessions WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM cli_tokens WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM cli_device_auth WHERE user_id=?`, []any{userID}},
+		// Fence every upload still in flight: its insert re-reads this in its own
+		// transaction and refuses a value it did not start with (UploadFence).
+		// In THIS transaction, with the credentials, objects and key claims, so
+		// no request can hold a valid credential and a pre-deletion value at once.
+		{`UPDATE users SET upload_epoch = upload_epoch + 1 WHERE id=?`, []any{userID}},
 		// Before devices. REDUNDANT with target_device_id's ON DELETE CASCADE
 		// today, and kept anyway: it is scoped by user_id, so it does not depend
 		// on every task having a live device row, and it survives a future schema
@@ -5228,10 +5247,11 @@ const storedFileSelectCols = storedFileCols + `, download_count`
 // An insert that carries a session precondition (f.UploadSessionID, a resumable
 // finalize) takes the transactional door too, so an own-node finalize — which
 // skips the caps — is refused under the same rule as a capped one. So does one
-// carrying an Idempotency-Key claim (f.Operation, an own-node single-shot
-// upload): the claim is only ever written in the object's own transaction.
+// carrying an Idempotency-Key claim (f.Operation) or an account fence
+// (f.UploadFence) — an own-node single-shot upload: both are only ever checked
+// or written in the object's own transaction.
 func (s *SQLiteStore) CreateStoredFile(ctx context.Context, f StoredFile) error {
-	if f.PairRoomID == "" && f.UploadSessionID == "" && f.Operation == nil {
+	if f.PairRoomID == "" && f.UploadSessionID == "" && f.Operation == nil && f.UploadFence == nil {
 		return insertStoredFileOn(ctx, s.db, f)
 	}
 	_, err := s.CreateStoredFileWithinStorageCaps(ctx, f, f.CreatedAt, 0, 0)
@@ -5372,6 +5392,22 @@ func (s *SQLiteStore) CreateStoredFileWithinStorageCaps(ctx context.Context, f S
 		return StoredFileWrite{}, err
 	}
 	defer tx.Rollback() // no-op after a successful Commit
+	if fence := f.UploadFence; fence != nil {
+		// The account fence comes before everything, the key claim included: an
+		// upload that was in flight when its account was deleted must not take
+		// a claim the deletion just freed, write a debit, or store ciphertext.
+		var deletedAt, epoch int64
+		err := tx.QueryRowContext(ctx, `SELECT deleted_at, upload_epoch FROM users WHERE id = ?`, f.UserID).Scan(&deletedAt, &epoch)
+		if err == sql.ErrNoRows {
+			return StoredFileWrite{}, ErrUploadAccountFenced
+		}
+		if err != nil {
+			return StoredFileWrite{}, err
+		}
+		if deletedAt != 0 || epoch != fence.Epoch {
+			return StoredFileWrite{}, ErrUploadAccountFenced
+		}
+	}
 	if op := f.Operation; op != nil {
 		// The Idempotency-Key claim is FIRST, ahead of the daily-quota charge:
 		// a request whose key another request already committed is a replay of
@@ -5451,6 +5487,17 @@ func (s *SQLiteStore) CreateStoredFileWithinStorageCaps(ctx context.Context, f S
 		return StoredFileWrite{}, err
 	}
 	return StoredFileWrite{ExpiresAt: f.ExpiresAt}, tx.Commit()
+}
+
+// UploadEpoch reads the account's upload fence value (users.upload_epoch), or
+// ErrNotFound for no such user.
+func (s *SQLiteStore) UploadEpoch(ctx context.Context, userID string) (int64, error) {
+	var epoch int64
+	err := s.db.QueryRowContext(ctx, `SELECT upload_epoch FROM users WHERE id = ?`, userID).Scan(&epoch)
+	if err == sql.ErrNoRows {
+		return 0, ErrNotFound
+	}
+	return epoch, err
 }
 
 // GetUploadOperation reads one committed single-shot upload operation. It is

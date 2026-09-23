@@ -774,7 +774,28 @@ type StoredFile struct {
 	// together with its debit. nil — every other writer — inserts exactly as
 	// before.
 	Operation *UploadOperation
+	// UploadFence is NOT a column and is never read back. It is the
+	// single-shot upload's account-deletion fence, and only handleUploadFile
+	// sets it: the insert's own transaction re-reads the owner's users row
+	// FIRST and refuses with ErrUploadAccountFenced (nothing written) if the
+	// account is gone, pending deletion, or its upload_epoch is no longer
+	// Epoch — which account deletion bumps in the same transaction that
+	// removes the account's objects, key claims and credentials. nil — every
+	// other writer — inserts exactly as before.
+	UploadFence *UploadFence
 }
+
+// UploadFence is the users.upload_epoch value an upload request read while
+// its credential was still valid (see handleUploadFile).
+type UploadFence struct {
+	Epoch int64
+}
+
+// ErrUploadAccountFenced is returned by a stored-file insert carrying
+// StoredFile.UploadFence when the owner's account was deleted (or is being
+// deleted, or was deleted and reactivated) after the request was authorized.
+// Nothing was written.
+var ErrUploadAccountFenced = errors.New("account: upload fenced by account deletion")
 
 // UploadOperation is one committed single-shot upload made under an
 // Idempotency-Key: (UserID, Key) is its identity, FileID the object it
@@ -2115,6 +2136,9 @@ type Store interface {
 	// with nothing written. CreateStoredFile routes such an insert through this
 	// transaction too.
 	CreateStoredFileWithinStorageCaps(ctx context.Context, f StoredFile, now, userCap, globalCap int64) (StoredFileWrite, error)
+	// UploadEpoch reads the account's upload fence value (ErrNotFound for no
+	// such user). See StoredFile.UploadFence.
+	UploadEpoch(ctx context.Context, userID string) (int64, error)
 	// GetUploadOperation reads the committed single-shot upload operation
 	// (userID, key), or ErrNotFound. It never writes.
 	GetUploadOperation(ctx context.Context, userID, key string) (UploadOperation, error)
