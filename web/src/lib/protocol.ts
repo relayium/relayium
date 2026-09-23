@@ -23,8 +23,11 @@ export type Envelope = {
   peer?: string; // server-only: a physical signaling peer actually disconnected
   data?: unknown;
   // Outbound-only LAN presence (see lan-device-id.ts). Both are sent on join in
-  // the code-less LAN room only, and the server never echoes either back: the
-  // roster stays {id, name}, so no client learns another's installation id.
+  // the code-less LAN room only, and the server never echoes either back: no
+  // roster entry carries an installation id, so no client learns another's.
+  // (A roster entry may also carry the server-validated `proto` link-pairing
+  // hint, relayium-signaling-v1 "Protocol hint"; this client neither sends nor
+  // reads it.)
   deviceId?: string;
   active?: boolean;
 };

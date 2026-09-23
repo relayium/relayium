@@ -29,6 +29,9 @@ type peer struct {
 	// client, a native client, or a rejected id — each of those stays a device
 	// of its own, exactly as before.
 	deviceID string
+	// proto is the validated join hint (ProtoHint.Canonical), nil when absent.
+	// It rides on this peer's own roster entry and nowhere else.
+	proto ProtoHint
 	// joinSeq/activeSeq come from one hub-wide counter, so "joined later" and
 	// "focused later" are directly comparable. activeSeq is 0 for a connection
 	// that has never said it is the current page.
@@ -135,10 +138,20 @@ func (h *Hub) JoinDeviceLimitedObserved(room, id, name string, c Conn, max int, 
 // replacement rather than the pair that actually met.
 //
 // Order is Go map order and therefore arbitrary; callers must treat it as a set.
-func (h *Hub) JoinDeviceLimitedObservedMembers(room, id, name string, c Conn, max int, clientIP, deviceID string, active bool) (admitted bool, peers int, members []string) {
+//
+// proto is the joiner's protocol hint tokens (relayium-signaling-v1 "Protocol
+// hint"), usually none. Variadic so every existing caller is unchanged. The
+// tokens are untrusted and are re-validated here (ProtoHint.Canonical) whatever
+// the caller did, exactly as deviceID is. A valid hint is echoed on this
+// connection's welcome — the signal that this server supports hints — and
+// carried on this peer's roster entry. An absent or rejected hint leaves the
+// welcome and the entry byte-identical to a server without hints. It plays no
+// part in admission, capacity or device grouping.
+func (h *Hub) JoinDeviceLimitedObservedMembers(room, id, name string, c Conn, max int, clientIP, deviceID string, active bool, proto ...string) (admitted bool, peers int, members []string) {
 	if !ValidDeviceID(deviceID) {
 		deviceID = ""
 	}
+	hint := ProtoHint(proto).Canonical()
 	h.mu.Lock()
 	if h.rooms[room] == nil {
 		if len(h.rooms) >= maxRooms {
@@ -152,7 +165,7 @@ func (h *Hub) JoinDeviceLimitedObservedMembers(room, id, name string, c Conn, ma
 		return false, 0, nil
 	}
 	h.seq++
-	p := &peer{id: id, name: name, conn: c, deviceID: deviceID, joinSeq: h.seq}
+	p := &peer{id: id, name: name, conn: c, deviceID: deviceID, proto: hint, joinSeq: h.seq}
 	if active && deviceID != "" {
 		p.activeSeq = h.seq
 	}
@@ -164,7 +177,7 @@ func (h *Hub) JoinDeviceLimitedObservedMembers(room, id, name string, c Conn, ma
 	}
 	h.mu.Unlock()
 
-	c.Send(Envelope{Type: TypeWelcome, Name: id, IP: clientIP})
+	c.Send(Envelope{Type: TypeWelcome, Name: id, IP: clientIP, Proto: hint})
 	h.scheduleRoster(room)
 	return true, peers, members
 }
@@ -329,10 +342,10 @@ func (h *Hub) broadcastRoster(room string) {
 	// selection bound to a row's position is how the wrong device gets picked).
 	all := make([]rosterEntry, 0, len(reps)+len(loners))
 	for device, rep := range reps {
-		all = append(all, rosterEntry{device: device, peer: Peer{ID: rep.id, Name: rep.name}})
+		all = append(all, rosterEntry{device: device, peer: Peer{ID: rep.id, Name: rep.name, Proto: rep.proto}})
 	}
 	for _, p := range loners {
-		all = append(all, rosterEntry{peer: Peer{ID: p.id, Name: p.name}})
+		all = append(all, rosterEntry{peer: Peer{ID: p.id, Name: p.name, Proto: p.proto}})
 	}
 	sort.Slice(all, func(i, j int) bool {
 		if all[i].peer.Name != all[j].peer.Name {

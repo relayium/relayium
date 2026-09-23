@@ -2003,5 +2003,26 @@
         }
       ]
     }
+  },
+  "roster": {
+    "protoHint": {
+      "welcomeFrame": "{\"type\":\"welcome\",\"name\":\"p1\",\"ip\":\"203.0.113.7\",\"proto\":[\"link/1\"]}",
+      "peersFrame": "{\"type\":\"peers\",\"peers\":[{\"id\":\"p1\",\"name\":\"Build box\",\"proto\":[\"link/1\"]},{\"id\":\"p2\",\"name\":\"Phone\"}]}",
+      "selfId": "p1",
+      "ip": "203.0.113.7",
+      "peers": [
+        {
+          "id": "p1",
+          "name": "Build box",
+          "proto": [
+            "link/1"
+          ]
+        },
+        {
+          "id": "p2",
+          "name": "Phone"
+        }
+      ]
+    }
   }
 }

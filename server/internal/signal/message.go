@@ -38,8 +38,9 @@ const (
 //
 // DeviceID/Active are client→server only and appear on join; a later
 // TypeActivate frame carries no payload. They are never echoed to any peer:
-// the roster stays {id,name},
-// so one client can neither read nor confirm another's installation id.
+// no roster entry ever carries an installation id, so one client can neither
+// read nor confirm another's. (A roster entry is {id,name}, plus the
+// server-validated Proto hint below when that peer sent one; see ProtoHint.)
 type Envelope struct {
 	Type  string          `json:"type"`
 	From  string          `json:"from,omitempty"`  // server-stamped sender peer id
@@ -56,6 +57,11 @@ type Envelope struct {
 	// Active marks a join whose page is the current/focused one, so the very
 	// first roster already routes to the right tab.
 	Active bool `json:"active,omitempty"`
+	// Proto is the link-pairing roster hint (relayium-signaling-v1 "Protocol
+	// hint"). Client→server on join; server→client on welcome, as the echo that
+	// tells the joiner this server understands hints. Pairing-code rooms only.
+	// Decoding never fails on it: anything but a valid hint decodes as absent.
+	Proto ProtoHint `json:"proto,omitempty"`
 }
 
 // deviceIDLen is the exact length of a valid installation id: 16 bytes of a
@@ -83,6 +89,101 @@ func ValidDeviceID(s string) bool {
 type Peer struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	// Proto is the peer's validated join hint, if it sent one. `omitempty`, so
+	// a peer that sent none keeps the exact {id,name} bytes older clients read.
+	Proto ProtoHint `json:"proto,omitempty"`
+}
+
+// ProtoLink1 is the only protocol hint token the server currently knows. On a
+// roster entry it means "this peer accepts a link hello as its first inbound
+// frame and will announce link/1 itself". It is a hint, never a security input:
+// every key is still derived from the peers' own commit-reveal.
+const ProtoLink1 = "link/1"
+
+// maxProtoTokens bounds the join hint array. A longer array is not truncated
+// into something usable; it is treated as absent.
+const maxProtoTokens = 4
+
+// knownProtoTokens is the closed, canonically ordered set of tokens the server
+// will carry. The server never echoes a string it does not know, so the hint
+// cannot become a covert channel between peers.
+var knownProtoTokens = [...]string{ProtoLink1}
+
+// ProtoHint is a validated protocol hint: nil (absent) or a non-empty,
+// duplicate-free list of known tokens in canonical order.
+//
+// Its decoder is deliberately total. Every malformed input — not an array, more
+// than maxProtoTokens elements, a non-string element, an unknown or differently
+// spelled token, an empty array, null — decodes to nil WITHOUT an error, the
+// same fail-to-absent rule ValidDeviceID applies to deviceId. Returning an
+// error instead would fail the whole envelope, turning a bad optional field
+// into a dropped join that older servers (which ignore unknown fields) admit.
+type ProtoHint []string
+
+// UnmarshalJSON implements the total decoder described on ProtoHint.
+func (p *ProtoHint) UnmarshalJSON(b []byte) error {
+	*p = ParseProtoHint(b)
+	return nil
+}
+
+// ParseProtoHint validates one JSON value as a join hint. See ProtoHint.
+func ParseProtoHint(raw []byte) ProtoHint {
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil || len(items) > maxProtoTokens {
+		return nil
+	}
+	tokens := make([]string, 0, len(items))
+	for _, item := range items {
+		// A non-string element fails to decode into a string; `null` decodes
+		// to "", which is not a token. Either way the hint is absent.
+		var s string
+		if err := json.Unmarshal(item, &s); err != nil {
+			return nil
+		}
+		tokens = append(tokens, s)
+	}
+	return ProtoHint(tokens).Canonical()
+}
+
+// Canonical returns the hint the server may carry for p: nil unless p is a
+// non-empty list of at most maxProtoTokens known tokens (byte-equal), in which
+// case the known tokens it names, once each, in canonical order. The hub
+// applies it to every hint it is handed, so a Go caller constructing a
+// ProtoHint by hand cannot bypass the rule the wire decoder enforces.
+func (p ProtoHint) Canonical() ProtoHint {
+	if len(p) == 0 || len(p) > maxProtoTokens {
+		return nil
+	}
+	var seen [len(knownProtoTokens)]bool
+	for _, t := range p {
+		known := false
+		for i, k := range knownProtoTokens {
+			if t == k {
+				seen[i], known = true, true
+				break
+			}
+		}
+		if !known {
+			return nil
+		}
+	}
+	out := make(ProtoHint, 0, len(knownProtoTokens))
+	for i, k := range knownProtoTokens {
+		if seen[i] {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// Has reports whether the hint names token.
+func (p ProtoHint) Has(token string) bool {
+	for _, t := range p {
+		if t == token {
+			return true
+		}
+	}
+	return false
 }
 
 func DecodeEnvelope(b []byte) (Envelope, error) {

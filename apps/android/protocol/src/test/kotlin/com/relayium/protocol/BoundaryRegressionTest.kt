@@ -478,6 +478,41 @@ class BoundaryRegressionTest {
         assertEquals(TextLaneSession.State.IDLE, other.state)
     }
 
+    // ── The server's roster protocol hint is tolerated, not assumed ─────────
+    //
+    // `roster.protoHint` in realtime-wire-vectors.json is shared with the Go
+    // server (which must encode these exact bytes), the Web and Apple suites
+    // (relayium-signaling-v1 "Protocol hint"). Android does not read the hint;
+    // what is pinned is that a welcome echoing `proto` and a roster mixing a
+    // hinted and an unhinted entry decode to exactly the values the same frames
+    // without the hint would, and that this client's join never carries one.
+
+    @Test
+    fun `a hinted welcome and roster decode to the unhinted values`() {
+        val row = (Fixtures.wire["roster"] as Json.Obj)["protoHint"] as Json.Obj
+        fun str(key: String) = (row[key] as Json.Str).value
+        val welcomeFrame = str("welcomeFrame")
+        val peersFrame = str("peersFrame")
+        assertTrue("the row must actually carry the hint", welcomeFrame.contains("\"proto\":[\"link/1\"]"))
+        assertEquals("exactly one roster entry is hinted", 1, peersFrame.split("\"proto\":").size - 1)
+        val expected = (row["peers"] as Json.Arr).items.map {
+            val e = it as Json.Obj
+            Envelope.Peer((e["id"] as Json.Str).value, (e["name"] as Json.Str).value)
+        }
+        assertTrue("the row must also hold an unhinted entry", expected.size > 1)
+
+        val welcome = Envelope.fromJson(welcomeFrame)
+        assertEquals("welcome", welcome?.type)
+        assertEquals(str("selfId"), welcome?.name)
+        assertEquals(str("ip"), welcome?.ip)
+        assertEquals(expected, Envelope.fromJson(peersFrame)?.peers)
+
+        assertFalse(
+            "this client never announces the hint",
+            Envelope.join("Phone").toJson().entries.containsKey("proto"),
+        )
+    }
+
     private fun assertArrayEqualsMessage(expected: ByteArray, actual: ByteArray) {
         assertTrue(
             "expected ${Bytes.hex(expected)} but was ${Bytes.hex(actual)}",
