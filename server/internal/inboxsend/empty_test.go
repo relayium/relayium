@@ -516,3 +516,138 @@ func TestRetryOfAnAllEmptySendIsGatedOnTheCapability(t *testing.T) {
 		})
 	}
 }
+
+// The sender creates an all-empty upload's blob itself: one zero-byte PATCH at
+// offset 0 before finalize, so the object is readable by every server build,
+// including one that finalizes or reads it without W-N40's own handling.
+func TestAllEmptySendCreatesItsBlobWithOneEmptyAppend(t *testing.T) {
+	for _, placement := range []string{"central disk", "storage node"} {
+		t.Run(placement, func(t *testing.T) {
+			var w *world
+			var node *sendtest.Node
+			if placement == "storage node" {
+				w, node = newWorldOnNode(t, 4<<20)
+			} else {
+				w = newWorld(t, 4<<20)
+			}
+			root := writeTree(t, map[string][]byte{"e/a": {}, "e/b": {}})
+			if _, err := w.session().Send(context.Background(), SendRequest{To: w.target.id, Paths: []string{filepath.Join(root, "e")}}); err != nil {
+				t.Fatal(err)
+			}
+			ps := w.env.Faults.Patches()
+			if len(ps) != 1 || ps[0].Start != 0 || len(ps[0].Body) != 0 {
+				t.Fatalf("PATCHes = %+v; want exactly one empty append at 0", ps)
+			}
+			if node != nil && node.Dir == "" {
+				t.Fatal("no node")
+			}
+		})
+	}
+}
+
+// Codex r3 finding 2: a finalized all-empty record whose create COMMITTED with
+// its answer lost, retried after a rollback. The retry resolves it read-only:
+// when the task list is readable the queued delivery is reported (no create
+// sent, record dropped); when it is not, the refusal says the delivery's
+// state is unknown — never "not queued", which would invite a second paid send.
+func TestRetryAfterRollbackReportsACommittedCreateTruthfully(t *testing.T) {
+	var listFault *sendtest.Rule
+	prepare := func(t *testing.T) (*world, *Session, string) {
+		t.Helper()
+		fastBackoff(t)
+		w := newWorld(t, 4<<20)
+		root := writeTree(t, map[string][]byte{"e/a": {}, "e/b": {}})
+		s := w.session()
+		w.env.Faults.Add(&sendtest.Rule{Method: http.MethodPost, PathSuffix: "/inbox/tasks", Action: sendtest.DropResponse})
+		w.env.Faults.Add(&sendtest.Rule{Method: http.MethodPost, PathSuffix: "/inbox/tasks", Action: sendtest.Status,
+			Code: http.StatusServiceUnavailable, Times: createAttempts})
+		listFault = w.env.Faults.Add(&sendtest.Rule{Method: http.MethodGet, PathSuffix: "/inbox/tasks", Action: sendtest.Status,
+			Code: http.StatusServiceUnavailable, Times: 1000})
+		_, err := s.Send(context.Background(), SendRequest{To: w.target.id, Paths: []string{filepath.Join(root, "e")}})
+		e := AsError(err)
+		if e == nil || e.LocalSendID == "" {
+			t.Fatalf("send = %v; want an unknown outcome with the record kept", err)
+		}
+		j, err := s.store.load(e.LocalSendID)
+		if err != nil || j.Phase != PhaseFinalized {
+			t.Fatalf("journal = %+v, %v; want finalized", j, err)
+		}
+		if n := len(w.tasks()); n != 1 {
+			t.Fatalf("the dropped create did not commit (%d tasks)", n)
+		}
+		w.env.Faults.SetLegacyServer(true)
+		return w, s, e.LocalSendID
+	}
+
+	t.Run("task list readable: the queued delivery is reported", func(t *testing.T) {
+		w, s, id := prepare(t)
+		creates := w.env.Faults.Hits(sendtest.KeyCreate)
+		w.env.Faults.Retire(listFault) // the task list answers again
+		res, err := s.Retry(context.Background(), id)
+		if err != nil || res.TaskID == "" {
+			t.Fatalf("retry = %+v, %v; want the already-queued delivery", res, err)
+		}
+		if w.env.Faults.Hits(sendtest.KeyCreate) != creates {
+			t.Fatal("the retry sent a create to a rolled-back server")
+		}
+		if _, err := s.store.load(id); err == nil {
+			t.Fatal("a resolved record was kept")
+		}
+		if q := w.env.QuotaBytes(w.uid); q != quotaFloor {
+			t.Fatalf("quota = %d; want one floor", q)
+		}
+	})
+
+	t.Run("task list unreadable: the outcome stays unknown", func(t *testing.T) {
+		_, s, id := prepare(t) // the list fault stays active
+		_, err := s.Retry(context.Background(), id)
+		e := AsError(err)
+		if e == nil || e.Code != CodeServerUnsupported || e.LocalSendID != id {
+			t.Fatalf("retry = %v; want server_unsupported with the record kept", err)
+		}
+		if strings.Contains(e.Msg, "not queued") || !strings.Contains(e.Msg, "is not known") ||
+			!strings.Contains(e.Msg, "inbox sent") {
+			t.Fatalf("message misstates the delivery: %s", e.Msg)
+		}
+		if _, err := s.store.load(id); err != nil {
+			t.Fatalf("record not kept: %v", err)
+		}
+	})
+}
+
+// A record left by a sender that never sent the empty append (an earlier CLI
+// build, or a process that died before it) gets it on retry, before finalize.
+func TestRetryOfAnAllEmptyRecordSendsTheEmptyAppendFirst(t *testing.T) {
+	fastBackoff(t)
+	w := newWorld(t, 4<<20)
+	root := writeTree(t, map[string][]byte{"e/a": {}})
+	s := w.session()
+	w.env.Faults.Add(&sendtest.Rule{Method: http.MethodPost, PathSuffix: "/finalize", Action: sendtest.Status,
+		Code: http.StatusServiceUnavailable, Times: finalizeAttempts})
+	_, err := s.Send(context.Background(), SendRequest{To: w.target.id, Paths: []string{filepath.Join(root, "e")}})
+	e := AsError(err)
+	if e == nil || e.LocalSendID == "" {
+		t.Fatalf("send = %v", err)
+	}
+	j, err := s.store.load(e.LocalSendID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Point the record at a fresh session that has had no append at all.
+	fresh, _, err := s.client.InitUpload(context.Background(), j.TTL, 0, []byte("sealed-manifest-stand-in"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	j.UploadID = fresh
+	if err := s.store.save(j); err != nil {
+		t.Fatal(err)
+	}
+	before := len(w.env.Faults.Patches())
+	if _, err := s.Retry(context.Background(), j.ID); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	ps := w.env.Faults.Patches()[before:]
+	if len(ps) != 1 || ps[0].UploadID != fresh || ps[0].Start != 0 || len(ps[0].Body) != 0 {
+		t.Fatalf("retry PATCHes = %+v; want one empty append to %s before finalize", ps, fresh)
+	}
+}

@@ -325,10 +325,11 @@ The dimensions actually checked, each fail-closed at write time:
   just size). An empty object — a batch made only of zero-byte files carries
   no ciphertext at all — is still an object and debits the same single 64 KiB
   floor, once, however often its finalize is retried; it adds 0 bytes to
-  metered upload and download traffic and to stored bytes. Its finalize
-  writes a zero-byte blob before the object exists (a single-shot empty
-  upload writes one too), and if that write fails the finalize is refused
-  with no object and no debit. Reading it needs no blob access: it is served
+  metered upload and download traffic and to stored bytes. Its zero-byte
+  blob exists before the object does: the CLI sends one empty append before
+  finalize, and finalize writes the blob again if it is missing (a
+  single-shot empty upload writes one too). If finalize cannot write it, the
+  finalize is refused with no object and no debit. Reading it needs no blob access: it is served
   as an empty body without reading storage.
   Uploads that land on your own storage node are never debited.
   Exceeding it: `429` "daily quota exceeded". Inside the transaction that

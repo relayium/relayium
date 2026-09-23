@@ -103,12 +103,17 @@ func ctxErr(err error) *Error {
 }
 
 // capZeroLengthStoredObject is the server capability (account.
-// CapZeroLengthStoredObject) that says a stored object of zero bytes is
-// readable. An all-empty delivery is exactly such an object: every empty file
-// contributes no frame, so the ciphertext is empty. A server without it
-// stores and debits the upload and then fails every receiver's fetch
-// stored_object_unavailable, so without it such a delivery is refused here,
-// before anything is uploaded.
+// CapZeroLengthStoredObject) that says the server itself materializes and
+// serves a stored object of zero bytes. An all-empty delivery is exactly such
+// an object: every empty file contributes no frame, so the ciphertext is
+// empty.
+//
+// It is a gate, not the guarantee. What keeps an accepted all-empty delivery
+// readable by EVERY server build — including one this server is rolled back
+// to between the capability read and finalize, which no read can rule out —
+// is the sender's own zero-byte append (ensureEmptyBlob), which creates the
+// blob on any build before finalize. The gate keeps new all-empty sends away
+// from servers that do not advertise support at all.
 const capZeroLengthStoredObject = "stored-object-zero-length-v2"
 
 // resolveSelf reads the device list and the row this bearer is.
@@ -452,7 +457,10 @@ func (s *Session) serverUnsupported(j *Journal) *Error {
 	var state string
 	switch j.Phase {
 	case PhaseFinalized:
-		state = "Its upload was already completed and counted, but it was not queued"
+		// A create may have been sent by an earlier process and committed with
+		// its answer lost, so whether the delivery is queued is NOT known here.
+		state = "Its upload was already completed and counted. Whether the delivery was queued is not known: " +
+			"an earlier attempt may already have queued it, so check `relayium inbox sent` before sending it again"
 	case PhaseFinalizing:
 		state = "Its upload was not completed by this command; an earlier attempt may already have completed it, " +
 			"and if so that upload was counted. Nothing was queued"
@@ -785,6 +793,17 @@ func (s *Session) Retry(ctx context.Context, id string) (Result, error) {
 	// again. The message never claims nothing was charged: an earlier process
 	// may already have completed the upload.
 	if j.CiphertextBytes == 0 && j.Phase != PhasePlanned && !hasCap(caps, capZeroLengthStoredObject) {
+		// A finalized record's create may already have committed with its
+		// answer lost. That is resolved READ-ONLY here — the task list, never a
+		// create — so a delivery that is in fact queued is reported as such
+		// instead of prompting a second, charged send.
+		if j.Phase == PhaseFinalized {
+			if t, ok := s.lookup(ctx, j); ok {
+				s.drop(j)
+				res.TaskID, res.State, res.ErrorCode, res.SavedAt = t.ID, t.State, t.ErrorCode, t.SavedAt
+				return res, nil
+			}
+		}
 		return res, s.serverUnsupported(j)
 	}
 	switch j.Phase {
@@ -819,6 +838,31 @@ func (s *Session) Retry(ctx context.Context, id string) (Result, error) {
 		}
 		fallthrough
 	case PhaseFinalizing:
+		// An all-empty upload's blob is created by one zero-byte append before
+		// finalize (ensureEmptyBlob). A record left by an earlier process may not
+		// have sent it, so it is sent again here; it is idempotent. A session
+		// that is already gone is left to finalize to judge when an earlier
+		// finalize may have committed it.
+		if j.CiphertextBytes == 0 {
+			if err := ensureEmptyBlob(ctx, s.client, j.UploadID); err != nil {
+				switch {
+				case errors.Is(err, errUploadLost) && finalizeMayHaveBeenSent:
+				case ctxErr(err) != nil:
+					return res, s.interrupted(j, err)
+				case errors.Is(err, errUploadLost):
+					s.drop(j)
+					return res, uploadFailure(errUploadLost)
+				default:
+					e := readErr(err)
+					if errors.Is(err, errUploadDesync) {
+						e = newErr(ClassFailed, CodeProtocol, "the server reported bytes for an upload that has none; "+
+							"nothing was finalized and the record was kept", err)
+					}
+					e.LocalSendID = j.ID
+					return res, e
+				}
+			}
+		}
 		storedID, exp, err := s.finalize(ctx, j, finalizeMayHaveBeenSent)
 		if err != nil {
 			return res, err

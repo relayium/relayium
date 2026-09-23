@@ -388,6 +388,13 @@ func hangUp(w http.ResponseWriter) {
 	}
 }
 
+// Retire stops rule from firing again (it has fired its last time).
+func (f *Faults) Retire(rule *Rule) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	rule.fired = rule.Times
+}
+
 // SetLegacyServer emulates a server that predates W-N40 (or one rolled back
 // to such a build) on the sender's path: GET /api/devices answers without
 // serverCapabilities, exactly the response shape those builds produced.
