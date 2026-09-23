@@ -115,6 +115,7 @@ jobs:
       android-interop: ${{ steps.select.outputs['android-interop'] }}
       windows: ${{ steps.select.outputs['windows'] }}
       swift-package: ${{ steps.select.outputs['swift-package'] }}
+      inbox-swift-interop: ${{ steps.select.outputs['inbox-swift-interop'] }}
       native-web-pairing: ${{ steps.select.outputs['native-web-pairing'] }}
       contracts: ${{ steps.select.outputs['contracts'] }}
       ops-contract: ${{ steps.select.outputs['ops-contract'] }}
@@ -267,6 +268,14 @@ jobs:
     if: needs.select.outputs['swift-package'] == 'true'
     uses: ./.github/workflows/swift-package.yml
 
+  # The Go side of the two Swift<->Go interop classes. swift-package runs them
+  # on every Swift-side change; this narrow macOS lane runs ONLY those two
+  # classes on a server/** change, which swift-package never watches.
+  inbox-swift-interop:
+    needs: select
+    if: needs.select.outputs['inbox-swift-interop'] == 'true'
+    uses: ./.github/workflows/inbox-swift-interop.yml
+
   native-web-pairing:
     needs: select
     if: needs.select.outputs['native-web-pairing'] == 'true'
@@ -336,6 +345,7 @@ jobs:
       - android-interop
       - windows
       - swift-package
+      - inbox-swift-interop
       - native-web-pairing
       - contracts
       - ops-contract
@@ -375,7 +385,7 @@ jobs:
           # space-delimited, though: every consumer below turns it into newline
           # records EXPLICITLY, so nothing here leans on unquoted expansion to
           # do the splitting for it.
-          CONDITIONAL_LANES='web go macos ios android android-interop windows swift-package native-web-pairing contracts ops-contract'
+          CONDITIONAL_LANES='web go macos ios android android-interop windows swift-package inbox-swift-interop native-web-pairing contracts ops-contract'
           UNCONDITIONAL_LANES='compat repo-hygiene'
           SELECT_JOB='select'
 

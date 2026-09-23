@@ -204,6 +204,39 @@ both structurally over the parsed workflows and as a text scan over every
 workflow file on disk, because a workflow the policy does not parse can run
 `swift test` just as well as one it does.
 
+### The Swift<->Go interop classes: forced on both sides
+
+Two package test classes have a Go half: `InboxSealedBoxInteropTests` and
+`InboxCLISenderLiveInteropTests`. The live one builds the real `relayium` CLI,
+starts a real central (`server/internal/inboxlive`, build tag `swiftinterop`)
+and drives the real native `InboxReceiveEngine`. Both **skip** unless
+`RELAYIUM_SWIFT_INTEROP=1`, and a skipped XCTest case exits 0. Until 2026-09-23
+no workflow set it and `go` was not on the hosted macOS `PATH`, so the
+sealed-box proof skipped on every hosted run.
+
+Ownership is split by side, one owner per side:
+
+| Change | Runs the two classes |
+| ------ | -------------------- |
+| `apps/RelayiumKit/**`, `apps/mac/**`, `apps/ios/**` | `swift-package.yml` (whole suite, interop forced) |
+| `server/**`, `scripts/ci/assert-swift-named-execution.mjs`, the lane file | `inbox-swift-interop.yml` (exactly the two classes, forced) |
+
+`swift-package.yml` therefore installs exactly **one** toolchain: `actions/setup-go`
+at a pinned SHA reading `server/go.mod`. `swift-ci-boundary-test.mjs` section 1c′
+requires that toolchain, the forcing env and the named-execution proof together.
+It still bans every other installer, including an unpinned `setup-go`.
+`inbox-swift-interop.yml` watches all of `server/**`, because the live class
+builds the whole CLI and a real account service. A hand-kept list of inbox paths
+was rejected at design review. The lane never watches `apps/**`, and its
+`swift test` is filtered to exactly the two classes (section 1h). A change that
+touches both sides runs the classes twice, which is accepted as rare. Both lanes
+end with `scripts/ci/assert-swift-named-execution.mjs`, which fails unless every
+one of the nine named cases reported `passed` exactly once. Section 1i keeps
+that list equal to the `func test…` names on disk. `ci-event-policy-test.mjs`
+section 6r also requires every path-filtered reusable workflow on disk to be
+registered with the gate and the selector. Before that rule, an unregistered
+lane was caught only if it happened to run `swift test`.
+
 ### The ordered negation, and why order is load-bearing
 
 `macos.yml`, `ios.yml` and `native-web-pairing.yml` each keep
@@ -1342,6 +1375,8 @@ written.
   sole owner of an unfiltered `swift test`
 * `scripts/test/swift-ci-boundary-test.mjs` — who owns `apps/RelayiumKit/`, in code
 * `.github/workflows/contracts.yml` — the Device Inbox admission contract's lane
+* `.github/workflows/inbox-swift-interop.yml` — the Go side of the Swift<->Go
+  interop classes; `scripts/ci/assert-swift-named-execution.mjs` — their proof
 * `.github/workflows/ops-deploy-contract.yml` — the product↔ops deploy
   contract's lane
 * `scripts/test/contract-ci-policy-test.mjs` — who owns each document in

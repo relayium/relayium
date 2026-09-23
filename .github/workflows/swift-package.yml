@@ -176,12 +176,40 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       # Recorded in the log so a future failure can be compared against the
       # toolchain that produced the last green run.
+      # The package suite contains cross-implementation classes whose other
+      # half is Go (the sealed-box interop and the live CLI-sender acceptance).
+      # Forcing them HERE is what makes a Swift-side change re-prove interop;
+      # this is the one toolchain this file installs, and only because of that.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
       - name: Toolchain versions
         run: |
           xcodebuild -version
           swift --version
+          go version
       # The whole package suite, with no `--filter`. This is the repository's
-      # only unfiltered `swift test`; see the header.
+      # only unfiltered `swift test`; see the header. RELAYIUM_SWIFT_INTEROP=1
+      # makes every Go-interop case a FAILURE rather than a skip when its
+      # prerequisites are missing.
       - name: swift test
         working-directory: apps/RelayiumKit
-        run: swift test
+        shell: bash
+        env:
+          RELAYIUM_SWIFT_INTEROP: '1'
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee "$RUNNER_TEMP/swift-test.log"
+      - name: Named-execution proof
+        run: |
+          node scripts/ci/assert-swift-named-execution.mjs "$RUNNER_TEMP/swift-test.log" \
+            InboxCLISenderLiveInteropTests/testLiveCLISendIsCommittedByTheNativeEngineAndTheCLIReadsSaved \
+            InboxCLISenderLiveInteropTests/testCorruptedFinalFrameTagCommitsNothingAndTheCLIDoesNotReadSaved \
+            InboxCLISenderLiveInteropTests/testAHelperThatExitsBeforeReadyFailsBoundedAndIsCleanedUp \
+            InboxCLISenderLiveInteropTests/testAHelperStuckBeforeReadyIsKilledReapedAndCleanedUp \
+            InboxCLISenderLiveInteropTests/testAHungCentralRequestIsTornDownByTheDeadline \
+            InboxSealedBoxInteropTests/testTheGoSenderSealsAKeyThisReceiverOpensAndEveryNearMissFails \
+            InboxSealedBoxInteropTests/testTheGoPhaseFailsOnAKeyCentralWouldRefuse \
+            InboxSealedBoxInteropTests/testTheSwiftSenderSealsAKeyTheGoReceiverOpens \
+            InboxSealedBoxInteropTests/testTheGoOpenPhaseFailsOnATamperedBoxAndOnTheWrongTarget
