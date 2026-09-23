@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/relayium/relayium/internal/sshx"
+	"github.com/relayium/relayium/internal/stdinpump"
 	"github.com/relayium/relayium/internal/termtext"
 	"github.com/relayium/relayium/internal/xfer"
 )
@@ -37,6 +38,8 @@ server to server, direct (no relay, no Relayium account):
 
 usage:
   relayium push <src...> [user@]host:dest    push files to a server you can ssh into
+  relayium push - [user@]host:file           stream stdin into one new file there
+                                             (needs relayium on that server)
   relayium sync <src...> <dest> [--delete] [--watch]   incremental one-way folder mirror
   relayium pull [user@]host:src <dest>       pull files from such a server
                                              (<dest> "-": one file to stdout)
@@ -177,6 +180,11 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runRecv(args[1:], stdout, stderr)
 	case "__send":
 		return runSend(args[1:], stdout, stderr)
+	case stdinpump.HelperArg:
+		// The stdin reader `push -` starts after the receiver accepted the
+		// stream. It uses this process's real fd 0/1/2, never stdout/stderr
+		// as passed here, and touches no file or network.
+		return stdinpump.RunHelper(args[1:])
 	case "-h", "-help", "--help":
 		fmt.Fprint(stdout, usage)
 		return 0
@@ -202,6 +210,7 @@ const pushUsage = `relayium push — copy files to another machine
 usage:
   relayium push <src...> relayium://host[:port]   direct to a listening peer (no SSH, no account)
   relayium push <src...> [user@]host:dest         over SSH to a server you can log into
+  relayium push - [user@]host:file                stdin into one new file, over SSH
 
 A relayium:// destination is the direct server-to-server path: the receiver runs
 "relayium serve --dir D", this pushes straight into that directory over a pinned
@@ -239,9 +248,31 @@ installed on the far end. The two are not equivalent:
   therefore not proof that every file landed. Install relayium on the remote
   when you need per-file verification and the up-front collision check.
 
+Reading stdin ("-"): "relayium push - [user@]host:file" sends standard input,
+of any length, as ONE new file. It is streamed: neither side holds the whole
+input in memory, and nothing is spooled except the receiver's private staging
+file beside the destination.
+  - host:file is the exact file to create. It must not exist yet (nothing is
+    ever overwritten), and the directory that holds it must already exist.
+  - It needs relayium on the remote at this version or newer. There is no
+    zero-dependency (tar) form for stdin. An older remote relayium refuses
+    before anything is read from stdin; run "relayium update" there.
+  - Nothing reads stdin until the remote has accepted the file, so every
+    refusal (a destination that exists, a missing directory, ssh failing, an
+    older remote) leaves stdin unread.
+  - The remote stages the bytes privately and installs the file only after
+    their size and SHA-256 match what was sent; an interrupted transfer leaves
+    nothing under the name. Success prints one summary line to stderr;
+    nothing is written to stdout.
+  - stdin must not be a terminal. A producer that fails early looks like a
+    short input: in a pipeline use "set -o pipefail" and check the exit status.
+  - A local file literally named "-" is pushed as "./-".
+  - Only SSH destinations: a relayium:// listener does not take stdin yet.
+
 positional arguments:
-  <src...>   files or directories to push
+  <src...>   files or directories to push, or "-" alone for stdin
   <dest>     relayium://host[:port], or [user@]host:dest for the SSH path
+             ([user@]host:file, the exact new file, with "-")
 
 flags:
   -i <file>        ssh identity file (SSH destinations)
@@ -344,6 +375,17 @@ func runPush(args []string, stdout, stderr io.Writer) int {
 	}
 	destArg := rest[len(rest)-1]
 	srcArgs := rest[:len(rest)-1]
+	// A lone "-" is stdin, and then it is the only source. This is decided
+	// before any manifest, probe or dial: a local file named "-" is "./-".
+	for _, s := range srcArgs {
+		if s == "-" {
+			if len(srcArgs) != 1 {
+				fmt.Fprintln(stderr, "push: \"-\" (stdin) must be the only source: relayium push - [user@]host:file")
+				return 2
+			}
+			return pushStdin(destArg, f, stderr)
+		}
+	}
 	// A relayium:// target is a daemon-direct push (server-to-server, no SSH);
 	// everything else keeps the SSH path below unchanged.
 	if strings.HasPrefix(destArg, daemonScheme) {
@@ -568,10 +610,21 @@ func pullToStdout(src xfer.Endpoint, opts sshx.Opts, stdout, stderr io.Writer) i
 func runRecv(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("__recv", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	var noResume bool
+	var noResume, streamFile bool
 	fs.BoolVar(&noResume, "no-resume", false, "disable resuming partial files")
+	// --stream-file is `push -`'s receiver: one new file of unknown length at
+	// exactly this path. Every release before it exits 2 on the unknown flag
+	// without reading anything, which is how `push -` recognizes an old remote.
+	fs.BoolVar(&streamFile, "stream-file", false, "receive one streamed file at exactly <path>")
 	if err := parseArgs(fs, args); err != nil {
 		return 2
+	}
+	if streamFile {
+		if fs.NArg() != 1 || noResume {
+			fmt.Fprintln(stderr, "__recv --stream-file needs exactly -- <path>")
+			return 2
+		}
+		return runRecvStream(fs.Arg(0), stderr)
 	}
 	if fs.NArg() != 1 {
 		fmt.Fprintln(stderr, "__recv needs <destDir>")

@@ -142,7 +142,11 @@ jobs:
         run: go test ./...
       # `relayium push host:path` over a REAL OpenSSH client and a private sshd
       # on 127.0.0.1, both modes, native into a missing destination, plus
-      # host-key refusal. The step above ran these four as SKIPs;
+      # host-key refusal; `pull host:file -`; and `push - host:file` (stdin,
+      # R-C14 phase 2b: e2e_stdin_test.go — real OpenSSH, real receiver unless a
+      # test names a stand-in — plus TestE2EPushStdinStandIn, which uses an ssh
+      # stand-in and is also the Windows lane's end-to-end). The step above ran
+      # the real-sshd tests as SKIPs;
       # RELAYIUM_E2E_SSH=1 turns every setup problem into a failure instead
       # (see server/cmd/relayium/e2e_test.go for the fixture).
       #
@@ -166,10 +170,27 @@ jobs:
           fi
           ls -l "$SSHD"
           log="$RUNNER_TEMP/ssh-e2e.log"
-          RELAYIUM_E2E_SSHD="$SSHD" go test -count=1 -v -timeout 3m \
-            -run '^(TestE2EZeroDepPushOverSSH|TestE2ENativePushOverSSH|TestE2ENativePushCreatesMissingDestinationOverSSH|TestE2EPushOverSSHRefusesUnknownHostKey|TestE2EPullToStdoutOverSSH|TestE2EPullToStdoutRefusesNonFilesOverSSH|TestE2EPullToStdoutBrokenPipeOverSSH|TestE2EPullToStdoutRefusesUnknownHostKey|TestE2EPullToStdoutRejectsRemoteNoiseOverSSH|TestE2EPullToStdoutRefusesARealTerminal|TestE2EPullToStdoutSilentRemoteOverSSH)$' \
+          RELAYIUM_E2E_SSHD="$SSHD" go test -count=1 -v -timeout 8m \
+            -run '^(TestE2EZeroDepPushOverSSH|TestE2ENativePushOverSSH|TestE2ENativePushCreatesMissingDestinationOverSSH|TestE2EPushOverSSHRefusesUnknownHostKey|TestE2EPullToStdoutOverSSH|TestE2EPullToStdoutRefusesNonFilesOverSSH|TestE2EPullToStdoutBrokenPipeOverSSH|TestE2EPullToStdoutRefusesUnknownHostKey|TestE2EPullToStdoutRejectsRemoteNoiseOverSSH|TestE2EPullToStdoutRefusesARealTerminal|TestE2EPullToStdoutSilentRemoteOverSSH|TestE2EPushStdinOverSSH|TestE2EPushStdinEchoesEndChallengeOverSSH|TestE2EPushStdinUnknownLengthOverSSH|TestE2EPushStdinRefusalsLeaveStdinUnreadOverSSH|TestE2EPushStdinRefusesUnknownHostKeyOverSSH|TestE2EPushStdinRefusesARealTerminal|TestE2EPushStdinDestinationPlantedMidStreamOverSSH|TestE2EPushStdinParentSwappedMidStreamOverSSH|TestE2EPushStdinRemoteWriteFailureOverSSH|TestE2EPushStdinKilledPumpOverSSH|TestE2EPushStdinRemoteHelperTerminatedOverSSH|TestE2EPushStdinBlockedTransportInterruptOverSSH|TestE2EPushStdinSilentPeerInterruptOverSSH|TestE2EPushStdinSignalsOverSSH|TestE2EPushStdinPrematureResultOverSSH|TestE2EPushStdinLostReceiptOverSSH|TestE2EPushStdinStandIn)$' \
             ./cmd/relayium | tee "$log"
-          for t in TestE2EZeroDepPushOverSSH TestE2ENativePushOverSSH TestE2ENativePushCreatesMissingDestinationOverSSH TestE2EPushOverSSHRefusesUnknownHostKey TestE2EPullToStdoutOverSSH TestE2EPullToStdoutRefusesNonFilesOverSSH TestE2EPullToStdoutBrokenPipeOverSSH TestE2EPullToStdoutRefusesUnknownHostKey TestE2EPullToStdoutRejectsRemoteNoiseOverSSH TestE2EPullToStdoutRefusesARealTerminal TestE2EPullToStdoutSilentRemoteOverSSH; do
+          for t in TestE2EZeroDepPushOverSSH TestE2ENativePushOverSSH TestE2ENativePushCreatesMissingDestinationOverSSH TestE2EPushOverSSHRefusesUnknownHostKey TestE2EPullToStdoutOverSSH TestE2EPullToStdoutRefusesNonFilesOverSSH TestE2EPullToStdoutBrokenPipeOverSSH TestE2EPullToStdoutRefusesUnknownHostKey TestE2EPullToStdoutRejectsRemoteNoiseOverSSH TestE2EPullToStdoutRefusesARealTerminal TestE2EPullToStdoutSilentRemoteOverSSH \
+            TestE2EPushStdinOverSSH \
+            TestE2EPushStdinEchoesEndChallengeOverSSH \
+            TestE2EPushStdinUnknownLengthOverSSH \
+            TestE2EPushStdinRefusalsLeaveStdinUnreadOverSSH \
+            TestE2EPushStdinRefusesUnknownHostKeyOverSSH \
+            TestE2EPushStdinRefusesARealTerminal \
+            TestE2EPushStdinDestinationPlantedMidStreamOverSSH \
+            TestE2EPushStdinParentSwappedMidStreamOverSSH \
+            TestE2EPushStdinRemoteWriteFailureOverSSH \
+            TestE2EPushStdinKilledPumpOverSSH \
+            TestE2EPushStdinRemoteHelperTerminatedOverSSH \
+            TestE2EPushStdinBlockedTransportInterruptOverSSH \
+            TestE2EPushStdinSilentPeerInterruptOverSSH \
+            TestE2EPushStdinSignalsOverSSH \
+            TestE2EPushStdinPrematureResultOverSSH \
+            TestE2EPushStdinLostReceiptOverSSH \
+            TestE2EPushStdinStandIn; do
             grep -q "^--- PASS: $t " "$log" || { echo "::error::$t did not PASS" >&2; exit 1; }
           done
       - name: govulncheck
@@ -232,17 +253,23 @@ jobs:
   # junctions. Compiling for Windows proves none of that; these are runtime
   # tests, and each one must appear as PASS below.
   #
-  # Phase 2b extends this job to `./cmd/relayium`. When it does, a Windows-red
-  # compile of that package's TESTS means a new server-only test file (one
-  # that imports `account`/`internal/storage`, which use syscall.Statfs) needs
+  # Phase 2b extended this job to `./cmd/relayium` (the `push -` CLI, the
+  # real `__pump-stdin` dispatch, the `__recv --stream-file` receiver as a
+  # process, and an ssh STAND-IN end-to-end: real CLI, pump, sshx.Session
+  # Abort/reap and receiver on NTFS; NOT OpenSSH — no Windows OpenSSH is
+  # exercised). A Windows-red compile of that package's TESTS means a new
+  # server-only test file (one that imports `account`/`internal/storage`,
+  # which use syscall.Statfs, or a helper from such a file) needs
   # `//go:build !windows` with a reason — never a Windows `storage`
-  # implementation (the relay node is not released for Windows).
+  # implementation (the relay node is not released for Windows). Tagged so
+  # far: cloud_e2e_test.go, inbox_e2e_test.go, inbox_send_e2e_test.go,
+  # inbox_send_json_test.go; e2e_stdin_test.go is Unix-only (real sshd).
   #
   # No -race: the race toolchain is not established on this runner; the same
   # tests run under -race on ubuntu in `race-rest`.
   cli-windows:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -251,9 +278,9 @@ jobs:
           cache-dependency-path: server/go.sum
       - name: Toolchain version
         run: go version
-      - name: go vet (Windows; the stream library's packages)
+      - name: go vet (Windows; the stream library's packages and the CLI)
         working-directory: server
-        run: go vet ./internal/xfer ./internal/sshx ./internal/stdinpump
+        run: go vet ./internal/xfer ./internal/sshx ./internal/stdinpump ./cmd/relayium
       # The PASS grep is load-bearing, as in `test`: a renamed or deleted test
       # makes `-run` match nothing and `go test` still exits 0. Three tests
       # may SKIP here, each for a reason stated in the test itself: POSIX
@@ -297,6 +324,35 @@ jobs:
           while read -r _ _ name _; do
             [[ "$may_skip" == *" $name "* ]] || { echo "::error::$name skipped on Windows" >&2; exit 1; }
           done < <(grep '^--- SKIP: ' "$log" || true)
+      # `push -` in the CLI package. One test may SKIP, for the reason stated
+      # in it: SIGTERM cannot be sent to one process on Windows. Any other SKIP
+      # fails the job.
+      - name: Windows runtime tests (push - CLI, pump dispatch, stream receiver, ssh stand-in)
+        working-directory: server
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/cli-windows-push-stdin.log"
+          go test -count=1 -v -timeout 10m \
+            -run '^(TestPushStdin|TestRecvStreamFile|TestStandinPosixWords|TestE2EPushStdinStandIn)' \
+            ./cmd/relayium | tee "$log"
+          may_skip=" TestRecvStreamFileHelperSignalRemovesStaging "
+          for t in TestPushStdinShapeRefusalsTouchNothing TestPushStdinRefusesATerminal \
+            TestPushStdinRefusesZeroDependencyRemote TestPushStdinProbeFailureReadsNothing \
+            TestPushStdinOldRemoteIsNamedAndReadsNothing TestPushStdinReceiverRefusalAbortsAndReadsNothing \
+            TestPushStdinRealHelperDispatchRoundTrip TestPushStdinSignalExitCodes TestRecvStreamFileArgv \
+            TestRecvStreamFileHelperInstalls TestRecvStreamFileHelperRefusesBeforeAccept \
+            TestRecvStreamFileHelperIdleWatchdog TestRecvStreamFileHelperSignalRemovesStaging \
+            TestRecvStreamFileHelperLostReceiptIsReportedOnStderr TestStandinPosixWordsUndoShellQuote \
+            TestE2EPushStdinStandIn; do
+            if grep -q "^--- PASS: $t " "$log"; then continue; fi
+            if [[ "$may_skip" == *" $t "* ]] && grep -q "^--- SKIP: $t " "$log"; then continue; fi
+            echo "::error::$t did not PASS on Windows" >&2
+            exit 1
+          done
+          while read -r _ _ name _; do
+            [[ "$may_skip" == *" $name "* ]] || { echo "::error::$name skipped on Windows" >&2; exit 1; }
+          done < <(grep -E '^ *--- SKIP: ' "$log" || true)
       - name: go vet (Windows; the inbox send lock)
         working-directory: server
         run: go vet ./internal/inboxsend/sendlock
