@@ -1930,6 +1930,12 @@ type Store interface {
 	// transaction. Any outcome other than ResetApplied changed nothing and left
 	// the token unspent. The returned string is the token's user id.
 	ResetPasswordWithToken(ctx context.Context, tokenHash string, now int64, passwordHash string) (ResetOutcome, string, error)
+	// VerifyEmailWithToken spends a verify token, drops an unconfirmed
+	// registration password when dropPassword is set, marks the email verified
+	// and inserts sess in ONE transaction. Any outcome other than VerifyApplied,
+	// and any error, changed nothing and left the token unspent. The returned
+	// string is the token's user id.
+	VerifyEmailWithToken(ctx context.Context, tokenHash string, now int64, dropPassword bool, sess Session) (VerifyOutcome, string, error)
 	// ChangePasswordAndRevokeSessions replaces the password, links the "password"
 	// identity when linkSubject is non-empty, and revokes every session except
 	// exceptSessionID (the raw token) in ONE transaction.
