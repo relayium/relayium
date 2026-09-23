@@ -254,3 +254,32 @@ func TestSyncWithTrailingFlagsStillParses(t *testing.T) {
 		t.Fatalf("printed help instead of the argument error: %s", stdout.String())
 	}
 }
+
+// A10: `pair` is a public command — in the top-level usage, with its own help
+// — and the developer entry `__link` stays out of every help surface.
+func TestUsageListsPairAndHidesTheDeveloperCommand(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if rc := Run([]string{"--help"}, &stdout, &stderr); rc != 0 {
+		t.Fatalf("--help: rc = %d", rc)
+	}
+	top := stdout.String()
+	if !strings.Contains(top, "relayium pair [code]") {
+		t.Errorf("top-level usage does not list pair:\n%s", top)
+	}
+	if strings.Contains(top, "__link") {
+		t.Errorf("top-level usage mentions the hidden __link")
+	}
+	stdout.Reset()
+	if rc := Run([]string{"pair", "-h"}, &stdout, &stderr); rc != 0 {
+		t.Fatalf("pair -h: rc = %d", rc)
+	}
+	for _, n := range []string{"/send <path>", "/accept", "/decline", "/quit", "Ctrl-C", "exit status",
+		"stdout carries only the other side's messages", "path:", "never overwritten"} {
+		if !strings.Contains(stdout.String(), n) {
+			t.Errorf("pair -h does not explain %q", n)
+		}
+	}
+	if _, ok := commandUsage["__link"]; ok {
+		t.Error("__link must not be a documented command")
+	}
+}

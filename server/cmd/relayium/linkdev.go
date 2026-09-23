@@ -50,7 +50,6 @@ import (
 	"net"
 	"os"
 	"path"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -58,12 +57,10 @@ import (
 
 	"github.com/pion/webrtc/v4"
 
-	"github.com/relayium/relayium/internal/connect"
 	"github.com/relayium/relayium/internal/linkrtc"
 	"github.com/relayium/relayium/internal/linksession"
 	"github.com/relayium/relayium/internal/linkwire"
 	"github.com/relayium/relayium/internal/rzvous"
-	"github.com/relayium/relayium/internal/secure"
 	"github.com/relayium/relayium/internal/signal"
 	"github.com/relayium/relayium/internal/xfer"
 )
@@ -110,6 +107,9 @@ type linkDevResult struct {
 	first  json.RawMessage
 	// ended is the session's end code when discovery failed.
 	ended string
+	// link: discovery bound link/1 and run returned because stopAtLink was
+	// set; call run again to drive the link.
+	link bool
 }
 
 // linkDevOpts are the dev-only flags, taken out before the shared cross flags.
@@ -368,66 +368,18 @@ func linkDevEndMessage(code string) string {
 	}
 }
 
-// linkDevLegacyConn is crossnetConn after its Join: the same handshake, the
-// same refusals, the same SAS line and the same direct pinned-TLS race, on
-// the room discovery already joined. crossnetConn itself joins its own room,
-// so it cannot take over one; its steps are repeated here verbatim.
+// linkDevLegacyConn is today's legacy pairing on the room discovery already
+// joined: the same handshake, refusals, SAS line and direct pinned-TLS race
+// as `send`/`receive`/`text` (crossnetLegacy, shared so the two cannot drift).
 func linkDevLegacyConn(ctx context.Context, res *linkDevResult, f crossFlags, mode string, stderr io.Writer) (*tls.Conn, error) {
 	sess := res.room.Session
 	defer sess.Close()
-	id, err := secure.NewIdentity()
-	if err != nil {
-		return nil, err
-	}
-	ln, err := net.Listen("tcp", ":0")
-	if err != nil {
-		return nil, err
-	}
-	defer ln.Close()
-	port := ln.Addr().(*net.TCPAddr).Port
-
-	var hs *rzvous.Handshake
 	if res.first != nil {
 		fmt.Fprintln(stderr, "link-dev: legacy handshake, continuing from the peer's commit")
-		hs, err = rzvous.DoHandshakeFromPeerCommit(ctx, sess, id, connect.LocalCandidates(port, f.advertise), mode, res.first)
 	} else {
 		fmt.Fprintln(stderr, "link-dev: legacy handshake, sending our commit first")
-		hs, err = rzvous.DoHandshake(ctx, sess, id, connect.LocalCandidates(port, f.advertise), mode)
 	}
-	if err != nil {
-		if errors.Is(err, rzvous.ErrPeerNotCLI) {
-			return nil, errPeerNotCLI(mode)
-		}
-		return nil, err
-	}
-	if !rzvous.ModeCompatible(mode, hs.PeerMode) {
-		return nil, fmt.Errorf("the other side is running %s, not %s — both ends need the same command, on a recent enough relayium",
-			modeCommand(hs.PeerMode), modeCommand(mode))
-	}
-	fmt.Fprintf(stderr, "verification code (SAS): %s — not the pairing code; compare it on both ends to rule out a substituted endpoint\n", hs.SAS)
-	if f.verify {
-		if !confirmSAS(stderr) {
-			return nil, fmt.Errorf("SAS not confirmed; aborting")
-		}
-	}
-	dctx, cancel := context.WithTimeout(ctx, 4*time.Second)
-	raw, err := connect.RaceDirect(dctx, ln, connect.FilterPeerCandidates(hs.PeerCandidates), 3*time.Second, hs.IsServer)
-	cancel()
-	if err != nil {
-		return nil, fmt.Errorf("no direct connection to the peer (both ends behind strict NAT?): %w", err)
-	}
-	var tconn *tls.Conn
-	if hs.IsServer {
-		tconn, err = secure.Server(raw, id, hs.PeerFingerprint)
-	} else {
-		tconn, err = secure.Client(raw, id, hs.PeerFingerprint)
-	}
-	if err != nil {
-		raw.Close()
-		return nil, err
-	}
-	fmt.Fprintln(stderr, "path: direct")
-	return tconn, nil
+	return crossnetLegacy(ctx, sess, res.first, f, stderr, mode)
 }
 
 // ================================================================ script
@@ -502,6 +454,9 @@ const (
 	ldVerify
 	ldICEReady
 	ldWriteFailed
+	ldAnswer    // A10: the person answered the current file prompt (ok)
+	ldInterrupt // A10: ctrl-C — an authenticated leave, now
+	ldCeiling   // A10: the whole-session ceiling of `text` passed — a normal end
 )
 
 type ldItem struct {
@@ -551,6 +506,14 @@ type ldOut struct {
 	notBefore time.Time
 }
 
+// shown is file i's manifest path, as the peer will see it.
+func (o *ldOut) shown(i int) string {
+	if o.files[i].HasPath {
+		return o.files[i].Path
+	}
+	return o.files[i].Name
+}
+
 // linkDevBusyRetries bounds how often a batch the peer kept answering BUSY is
 // offered again. Each retry is a new local offer, made only once our lane is
 // idle, after a short, growing pause that lets the peer's own queue drain.
@@ -566,9 +529,8 @@ const linkDevBusyRetries = 8
 // (REJECT) instead, and no COMPLETE can exist for it.
 type ldSink struct {
 	prompt    uint64
-	files     []*os.File
-	names     []string
-	wrote     []uint64 // bytes written per file
+	out       *linkSink // nil until the sink opened
+	wrote     []uint64  // bytes written per file
 	finalized []bool
 	written   uint64 // bytes written, all files
 	reported  uint64 // the durable total last reported
@@ -676,6 +638,32 @@ type linkDevDriver struct {
 
 	// deferred session calls, run after the current effects (never re-entered)
 	later []func() ([]linksession.Effect, error)
+
+	// ---- A10: the product front end and the resumable loop
+
+	// ui is the product front end (`pair`, and `send`/`receive`/`text` when
+	// discovery chose link/1). nil is the __link developer output, unchanged.
+	ui *linkUI
+	// in is where a person answers and types; nil is the default (input()).
+	in io.Reader
+	// stopAtLink makes run return as soon as discovery has bound link/1, so
+	// the caller can install its plan (and its ctrl-C handler) and call run
+	// again to drive the link.
+	stopAtLink bool
+	started    bool
+	reads      chan ldRead
+	pending    bool
+	readsDead  bool
+	// interrupted: ctrl-C ended the session (an authenticated leave).
+	interrupted bool
+	// stayAfterEOF: the end of input does not end the session; the peer's
+	// leave does (`pair` with a non-terminal stdin).
+	stayAfterEOF bool
+	// Product `text` over link: our end of input is an empty message, and we
+	// leave once the peer has sent its own (textQuitStep).
+	textDone bool
+	saidDone bool
+	peerDone bool
 }
 
 func newLinkDevDriver(ctx context.Context, cmd linksession.Cmd, room *rzvous.Room, f crossFlags, dev linkDevOpts,
@@ -702,13 +690,40 @@ func newLinkDevDriver(ctx context.Context, cmd linksession.Cmd, room *rzvous.Roo
 	return d, nil
 }
 
+// logf is developer chatter: the __link harness prints it; the product
+// commands do not (set RELAYIUM_LINK_DEBUG=1 to see it there too).
 func (d *linkDevDriver) logf(format string, a ...any) {
+	if d.ui != nil && !linkDebug {
+		return
+	}
 	fmt.Fprintf(d.stderr, "link-dev: "+format+"\n", a...)
+}
+
+// notice is a line a person needs in either mode: the __link harness keeps
+// its developer prefix, the product commands print it plainly.
+func (d *linkDevDriver) notice(format string, a ...any) {
+	if d.ui == nil {
+		d.logf(format, a...)
+		return
+	}
+	d.ui.line(format, a...)
 }
 
 func (d *linkDevDriver) fail(what string) {
 	d.failures = append(d.failures, what)
+	if d.ui != nil {
+		d.ui.problem(what)
+		return
+	}
 	d.logf("FAILED: %s", what)
+}
+
+// record notes a failure the front end already reported in its own words.
+func (d *linkDevDriver) record(what string) {
+	d.failures = append(d.failures, what)
+	if d.ui == nil {
+		d.logf("FAILED: %s", what)
+	}
 }
 
 func (d *linkDevDriver) feedScript(cmds []ldCmd, eof bool) {
@@ -721,6 +736,9 @@ func (d *linkDevDriver) feedScript(cmds []ldCmd, eof bool) {
 // input is the source a person answers on: the text command's stdin for
 // `text`, otherwise the process's stdin.
 func (d *linkDevDriver) input() io.Reader {
+	if d.in != nil {
+		return d.in
+	}
 	if d.cmd == linksession.CmdText {
 		return textStdin()
 	}
@@ -772,31 +790,44 @@ func (d *linkDevDriver) feedTextLines(r io.Reader) {
 // none is.
 func (d *linkDevDriver) run() (*linkDevResult, error) {
 	room := d.room
-	for _, c := range room.Captured {
-		if err := d.do(d.s.Signal(d.s.Epoch(), room.PeerID, c)); err != nil {
+	if !d.started {
+		d.started = true
+		d.reads = make(chan ldRead, 1)
+		for _, c := range room.Captured {
+			if err := d.do(d.s.Signal(d.s.Epoch(), room.PeerID, c)); err != nil {
+				return nil, err
+			}
+			if d.decided() {
+				return d.res, nil
+			}
+		}
+		if err := d.do(d.s.Room(d.s.Epoch(), linksession.RoomView{
+			SelfID: room.SelfID, PeerID: room.PeerID, ServerHints: room.ServerHints, PeerHinted: room.PeerHint,
+		})); err != nil {
 			return nil, err
 		}
-		if d.decided() {
-			return d.res, nil
-		}
-	}
-	if err := d.do(d.s.Room(d.s.Epoch(), linksession.RoomView{
-		SelfID: room.SelfID, PeerID: room.PeerID, ServerHints: room.ServerHints, PeerHinted: room.PeerHint,
-	})); err != nil {
-		return nil, err
 	}
 
-	reads := make(chan ldRead, 1)
-	pending, readsDead := false, false
+	reads := d.reads
 	timer := time.NewTimer(time.Hour)
 	defer timer.Stop()
 	for {
 		if d.decided() {
-			if d.res.legacy && pending {
+			if d.res.legacy && d.pending {
 				// Unreachable by P1; refuse rather than race the handshake's reads.
 				return nil, errors.New("link-dev: legacy hand-off with a read in flight")
 			}
 			return d.res, nil
+		}
+		if d.stopAtLink {
+			if disc, _, _, _ := d.s.States(); disc == "Link" {
+				// Discovery bound link/1: hand back to the caller, which installs
+				// its plan and calls run again. A read may be in flight; it is
+				// kept in d.reads for the next call.
+				d.stopAtLink = false
+				d.res.link = true
+				return d.res, nil
+			}
 		}
 		if err := d.progress(); err != nil {
 			return nil, err
@@ -812,8 +843,8 @@ func (d *linkDevDriver) run() (*linkDevResult, error) {
 		}
 		// While a leave is held no later signal is read: signals stay in
 		// order behind it.
-		if !pending && !readsDead && d.heldLeave == nil {
-			pending = true
+		if !d.pending && !d.readsDead && d.heldLeave == nil {
+			d.pending = true
 			go func() {
 				// RecvSignal returns signals only. In a pairing-code room the
 				// hub admits two members, so every signal is the bound peer's.
@@ -832,13 +863,13 @@ func (d *linkDevDriver) run() (*linkDevResult, error) {
 		case <-d.ctx.Done():
 			return nil, d.ctx.Err()
 		case r := <-reads:
-			pending = false
+			d.pending = false
 			if r.err != nil {
 				if d.linkOpen() {
 					// The link lives on its own transport; only signalling
 					// is gone (the peer's leave can no longer arrive).
 					d.logf("rendezvous connection closed: %v", r.err)
-					readsDead = true
+					d.readsDead = true
 					continue
 				}
 				return nil, fmt.Errorf("rendezvous connection lost: %w", r.err)
@@ -989,8 +1020,8 @@ func (d *linkDevDriver) nextWake() time.Time {
 			at = t
 		}
 	}
-	if len(d.texts) > 0 {
-		future(d.nextTextAt)
+	if len(d.texts) > 0 || (d.textDone && d.quitting && !d.saidDone) {
+		future(d.nextTextAt) // the end-of-input marker is paced like a message
 	}
 	if b, ok := d.latch.Bound(); ok && d.armed && !d.warned {
 		future(b.WarnAt)
@@ -1010,7 +1041,7 @@ func (d *linkDevDriver) warnCheck() {
 		return
 	}
 	d.warned = true
-	d.logf("the relay credential for this link ends at %s; the link will end then (pair again to continue)",
+	d.notice("the relay credential for this link ends at %s; the link will end then (pair again to continue)",
 		b.DeadlineAt.Format(time.RFC3339))
 }
 
@@ -1147,10 +1178,16 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 
 		// ---- admission
 		case linksession.EffSASReady:
-			fmt.Fprintf(d.stderr, "verification code (SAS): %s — not the pairing code; compare it on both ends to rule out a substituted endpoint\n", d.s.SAS())
+			if d.ui != nil {
+				d.ui.connected(d)
+			}
+			fmt.Fprintf(d.stderr, "%s%s — not the pairing code; compare it on both ends to rule out a substituted endpoint\n", sasLinePrefix, d.s.SAS())
 		case linksession.EffAdmitted:
 			d.admitted = true
 			d.logf("link admitted")
+			if d.ui != nil {
+				d.ui.admitted(d)
+			}
 
 		// ---- lanes
 		case linksession.EffSendFile:
@@ -1159,6 +1196,10 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 			d.write(linkrtc.LaneText, e.Bytes)
 		case linksession.EffPromptFiles:
 			prompt, n := e.Prompt, len(e.Files)
+			if d.ui != nil {
+				d.ui.promptFiles(d, prompt, e.Files)
+				continue
+			}
 			if d.dev.yes {
 				d.logf("incoming batch of %d file(s): accepting (--yes)", n)
 				d.defer_(func() ([]linksession.Effect, error) { return d.s.AcceptFiles(prompt) })
@@ -1194,8 +1235,20 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 			if ldHookLoopText != nil {
 				ldHookLoopText(d, d.cut.done)
 			}
+			if e.Text == "" && d.ui != nil && d.ui.peerHint {
+				// Another relayium CLI's `text` end-of-input marker (see
+				// textQuitStep): it carries nothing and is never shown.
+				if d.textDone {
+					d.peerDone = true
+				}
+				continue
+			}
 			d.textsIn++
 			d.recvBytes += uint64(len(e.Text))
+			if d.ui != nil {
+				d.ui.text(e.Text)
+				continue
+			}
 			fmt.Fprintln(d.stdout, termSafe(e.Text))
 		case linksession.EffReport:
 			d.report(e.Lane, e.Code)
@@ -1205,6 +1258,9 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 		case linksession.EffSessionEnded:
 			d.res.ended = e.Code
 		case linksession.EffPromptWithdrawn:
+			if d.ui != nil {
+				d.ui.withdrawn(e.Prompt)
+			}
 		}
 	}
 	return nil
@@ -1348,6 +1404,9 @@ func (d *linkDevDriver) runWriter(w *ldLaneWriter, conn *linkrtc.Conn, ep linkse
 // report interprets the session's user-visible outcomes for this harness.
 func (d *linkDevDriver) report(lane, code string) {
 	d.logf("report %s %s", lane, code)
+	if d.ui != nil {
+		d.ui.report(d, lane, code)
+	}
 	switch lane {
 	case "file":
 		switch code {
@@ -1365,16 +1424,16 @@ func (d *linkDevDriver) report(lane, code string) {
 				d.logf("the peer was busy; offering the batch again (%d/%d)", o.busy, linkDevBusyRetries)
 				return
 			}
-			d.fail("outbound batch: " + code)
+			d.record("outbound batch: " + code)
 			d.finishCur()
 		case "declined", "no-answer", "stopped-by-receiver", "cancelled-partial-not-delivered",
 			"cancelled-after-all-sent(receiver-may-have-saved)", "send-stalled", "receiver-failed-to-save",
 			"batch-not-delivered", "partial-not-delivered", "delivery-unconfirmed",
 			"no-completion", "complete-before-done":
-			d.fail("outbound batch: " + code)
+			d.record("outbound batch: " + code)
 			d.finishCur()
 		default:
-			d.fail("file lane: " + code)
+			d.record("file lane: " + code)
 		}
 	case "text":
 		if code == "declined" && d.probe {
@@ -1384,7 +1443,7 @@ func (d *linkDevDriver) report(lane, code string) {
 		if strings.HasPrefix(code, "conversation-ended") {
 			return // the link closing ends the conversation: not a text failure by itself
 		}
-		d.fail("text lane: " + code)
+		d.record("text lane: " + code)
 		if code == "declined" && len(d.texts) > 0 {
 			d.fail(fmt.Sprintf("%d message(s) not sent: the peer declined the conversation", len(d.texts)))
 			d.texts = nil
@@ -1393,10 +1452,10 @@ func (d *linkDevDriver) report(lane, code string) {
 		switch code {
 		case "peer-ended-session", "idle-closed":
 		case "relay-credential-ended":
-			d.logf("the relay credential for this link ended; nothing more can be sent over it — pair again to continue")
+			d.notice("the relay credential for this link ended; nothing more can be sent over it — pair again to continue")
 		default:
 			if b, ok := d.latch.Bound(); ok && d.armed && !time.Now().Before(b.DeadlineAt) {
-				d.logf("the relay credential for this link ended before the link could be established — pair again")
+				d.notice("the relay credential for this link ended before the link could be established — pair again")
 			}
 		}
 	}
@@ -1553,9 +1612,9 @@ func (d *linkDevDriver) startICE() {
 var linkDevICEFetcher = linkrtc.ICEFetcher{}
 
 // relayStatusMessage is the one truthful line for a link without a relay
-// (M3). Developer wording: A10 owns the product copy.
+// (M3), printed once per link by __link and by the product commands alike.
 func relayStatusMessage(s linkrtc.RelayStatus) string {
-	const tail = "; trying a direct connection (no relay)"
+	const tail = "; trying a direct connection only (no relay) — across strict NATs that may fail"
 	switch s {
 	case linkrtc.RelayQuota:
 		return "relay unavailable: the pairing code owner's monthly relay allowance is used up" + tail
@@ -1611,7 +1670,14 @@ func iceSignal(c webrtc.ICECandidateInit) ([]byte, error) {
 // closeTransport closes the transport after a short linger (see
 // linkDevCloseLinger). Idempotent.
 func (d *linkDevDriver) closeTransport() {
-	if d.conn == nil || d.closed {
+	if d.closed {
+		// Already closing: a second call (shutdown right after the session's
+		// own close) must not cut the linger short, or the transport dies in
+		// the same instant as the leave and the peer reads a lost connection
+		// instead of our authenticated end (A10 finding).
+		return
+	}
+	if d.conn == nil {
 		d.closed = true
 		d.cut.fire("closed")
 		return
@@ -1663,6 +1729,23 @@ func (d *linkDevDriver) item(it ldItem) error {
 	case ldWriteFailed:
 		d.logf("%v", it.err)
 		return d.do(d.s.TransportLost(it.ep))
+	case ldAnswer:
+		if d.ui != nil {
+			return d.ui.answer(d, it.ok)
+		}
+	case ldCeiling:
+		if d.ui != nil {
+			d.ui.ceiling(d)
+		}
+		return d.do(d.s.Close())
+	case ldInterrupt:
+		if !d.interrupted {
+			d.interrupted = true
+			if d.ui != nil {
+				d.ui.interrupting(d)
+			}
+			return d.do(d.s.Close())
+		}
 	}
 	return nil
 }
@@ -1695,7 +1778,7 @@ func (d *linkDevDriver) event(ev linkrtc.Event, ep linksession.Epoch) error {
 		if ev.Budget.MaxFrameBytes < linksession.DefaultMaxFrameBytes {
 			// The session seals frames up to its configured ceiling; a peer
 			// that accepts less cannot carry this build's pieces.
-			d.logf("the peer accepts messages of at most %d bytes; this build needs %d", ev.Budget.MaxFrameBytes, linksession.DefaultMaxFrameBytes)
+			d.notice("the peer accepts messages of at most %d bytes; this build needs %d", ev.Budget.MaxFrameBytes, linksession.DefaultMaxFrameBytes)
 			return d.do(d.s.TransportLost(ep))
 		}
 		return d.do(d.s.LanesOpen(ep))
@@ -1718,7 +1801,11 @@ func (d *linkDevDriver) event(ev linkrtc.Event, ep linksession.Epoch) error {
 		p := ev.Path
 		if p.Path != d.lastPath {
 			d.lastPath = p.Path
-			fmt.Fprintf(d.stderr, "path: %s (selected pair local=%s remote=%s %s)\n", p.Path, p.LocalType, p.RemoteType, p.Protocol)
+			if d.ui != nil {
+				d.ui.path(p)
+			} else {
+				fmt.Fprintf(d.stderr, "path: %s (selected pair local=%s remote=%s %s)\n", p.Path, p.LocalType, p.RemoteType, p.Protocol)
+			}
 		}
 		if p.Path == linkrtc.PathRelay {
 			d.armDeadline() // a relayed pair is bounded by the credential, whatever the policy
@@ -1757,6 +1844,13 @@ func (d *linkDevDriver) progress() error {
 	if d.stdinText && !d.stdinStarted {
 		d.stdinStarted = true
 		go d.feedTextLines(d.input())
+	}
+	if d.ui != nil {
+		if d.ui.readsInput && !d.stdinStarted {
+			d.stdinStarted = true
+			go d.ui.feed(d, d.input())
+		}
+		d.ui.poll(d)
 	}
 	d.advanceScript()
 	if err := d.pumpFiles(); err != nil {
@@ -1804,6 +1898,22 @@ func (d *linkDevDriver) advanceScript() {
 		case "hold":
 			d.holding = true
 			return
+		case "quit":
+			// `pair` /quit: what was queued before it still goes; then leave,
+			// even with a non-terminal stdin, and read nothing after it.
+			d.stayAfterEOF = false
+			d.scriptEOF = true
+			d.script = nil
+			return
+		case "help", "note":
+			if d.ui != nil {
+				d.ui.scriptOp(d, c)
+			}
+		case "wait-batch":
+			// `receive`: one inbound batch has concluded, saved or not.
+			if d.ui == nil || d.ui.recvDone < c.n {
+				return
+			}
 		}
 		d.script = d.script[1:]
 	}
@@ -1832,6 +1942,8 @@ func (d *linkDevDriver) pumpFiles() error {
 		if fileState, _ = d.laneStates(); fileState != "OutWait" && fileState != "OutSend" && d.cur != nil {
 			d.fail("batch could not be offered (lane " + fileState + ")")
 			d.finishCur()
+		} else if d.ui != nil && d.cur != nil && d.cur.busy == 0 {
+			d.ui.offered(d, d.cur)
 		}
 	}
 	if fileState == "Ended" && d.cur != nil {
@@ -1861,6 +1973,9 @@ func (d *linkDevDriver) pumpFiles() error {
 			if o.fh != nil {
 				_ = o.fh.Close()
 				o.fh = nil
+			}
+			if d.ui != nil {
+				d.ui.sendFileDone(o.shown(o.idx), f.Size)
 			}
 			o.idx++
 			o.off = 0
@@ -1902,6 +2017,9 @@ func (d *linkDevDriver) pumpFiles() error {
 		}
 		o.off += n
 		d.sentBytes += n
+		if d.ui != nil && o.off < f.Size {
+			d.ui.sendProgress(o.shown(o.idx), o.off, f.Size)
+		}
 	}
 	return nil
 }
@@ -1975,8 +2093,17 @@ func (d *linkDevDriver) quitStep() error {
 	if !d.outboundIdle() {
 		return nil
 	}
+	if d.stayAfterEOF {
+		return nil // `pair` without a terminal: the peer's leave ends the session
+	}
 	d.quitting = true
 	_, ts := d.laneStates()
+	if d.textDone {
+		if wait, err := d.textQuitStep(ts); wait || err != nil {
+			return err
+		}
+		ts = "" // said and heard: go on to the acknowledgement wait
+	}
 	switch ts {
 	case "WaitAccept":
 		if d.probe {
@@ -2008,6 +2135,65 @@ func (d *linkDevDriver) quitStep() error {
 	return d.do(d.s.Close())
 }
 
+// textQuitStep is product `text`'s end of input over link. There is no
+// half-close on a link, and an END would make the peer discard (drain) any
+// message it is sending at that moment. So "I have nothing more to say" is an
+// EMPTY message, sent in order on the text lane after our last one: the peer
+// reads every message we sent before it, and nothing it sends is lost. We
+// leave once the peer has said the same (or leave at once if it already has:
+// our leave is then our "done"). Today's piped `text` likewise reads the
+// peer's replies until the peer hangs up.
+//
+// Only another relayium CLI understands the marker (its roster entry carries
+// the link/1 hint, which no app sends today). With an app we say nothing and
+// wait for it to leave, the session ceiling, or ctrl-C. It reports whether to
+// keep waiting.
+func (d *linkDevDriver) textQuitStep(ts string) (bool, error) {
+	if d.peerDone {
+		return false, nil
+	}
+	if d.ui == nil || !d.ui.peerHint {
+		if !d.saidDone {
+			d.saidDone = true
+			d.notice("done sending; waiting for the other side to finish (Ctrl-C leaves now)")
+		}
+		return true, nil
+	}
+	if d.saidDone {
+		return true, nil
+	}
+	switch ts {
+	case "Open":
+		d.textAsked = false
+		if time.Now().Before(d.nextTextAt) {
+			return true, nil
+		}
+		buffered := d.writers[linkrtc.LaneText].queued()
+		if n, err := d.conn.Unacknowledged(linkrtc.LaneText); err == nil {
+			buffered += int(n)
+		}
+		effs, err := d.s.SendText(nil, buffered)
+		if errors.Is(err, linksession.ErrTextBackpressure) {
+			d.nextTextAt = time.Now().Add(linkDevTextGap)
+			return true, d.do(effs, nil)
+		}
+		if err == nil {
+			d.saidDone = true
+		}
+		return true, d.do(effs, err)
+	case "Idle":
+		if !d.textAsked {
+			d.textAsked = true
+			return true, d.do(d.s.RequestText())
+		}
+		return true, nil
+	case "Failed":
+		return false, nil // nothing more can be said; leave
+	}
+	d.textAsked = false
+	return true, nil // WaitAccept, Incoming, EndWait: the lane will move
+}
+
 // lanesAcknowledged: nothing waits in a lane writer and the peer's SCTP stack
 // acknowledged every byte written on either lane.
 func (d *linkDevDriver) lanesAcknowledged() bool {
@@ -2033,87 +2219,51 @@ func (d *linkDevDriver) lanesAcknowledged() bool {
 
 // ---------------------------------------------------------------- inbound files
 
-// openSink creates every file of an accepted batch, no-clobber, under dest,
-// BEFORE the ACCEPT that follows this effect. Peer names are display values:
-// each segment is cleaned, "..", "." and empty segments are dropped, and a
-// taken name gets a " (n)" suffix. A10 owns the real receive sink.
+// openSink creates every file of an accepted batch BEFORE the ACCEPT that
+// follows this effect, through the receive sink (linkSink, pair.go): only new
+// files, root-relative under dest, never through a symbolic link, each one
+// recorded as ours when it is created.
 func (d *linkDevDriver) openSink(prompt uint64, files []linkwire.FileMeta) error {
-	k := &ldSink{prompt: prompt}
+	k := &ldSink{prompt: prompt, wrote: make([]uint64, len(files)), finalized: make([]bool, len(files))}
 	d.sinks[prompt] = k
+	out, err := openLinkSink(d.dest, files)
+	if err != nil {
+		return err
+	}
+	k.out = out
+	d.logf("receiving %d file(s) into %s", len(files), d.dest)
+	if d.ui != nil {
+		d.ui.receiving(d, out)
+	}
 	for i, f := range files {
-		rel := f.Name
-		if f.HasPath && f.Path != "" {
-			rel = f.Path
-		}
-		var segs []string
-		for _, s := range strings.Split(strings.ReplaceAll(rel, "\\", "/"), "/") {
-			if s = strings.TrimSpace(s); s != "" && s != "." && s != ".." && !strings.ContainsRune(s, 0) {
-				segs = append(segs, s)
-			}
-		}
-		if len(segs) == 0 {
-			segs = []string{fmt.Sprintf("file-%d", i)}
-		}
-		dir := filepath.Join(append([]string{d.dest}, segs[:len(segs)-1]...)...)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
-		base := segs[len(segs)-1]
-		ext := filepath.Ext(base)
-		stem := strings.TrimSuffix(base, ext)
-		var fh *os.File
-		var name string
-		for n := 0; n < 1000; n++ {
-			cand := base
-			if n > 0 {
-				cand = fmt.Sprintf("%s (%d)%s", stem, n, ext)
-			}
-			name = filepath.Join(dir, cand)
-			h, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-			if err == nil {
-				fh = h
-				break
-			}
-			if !errors.Is(err, os.ErrExist) {
-				return err
-			}
-		}
-		if fh == nil {
-			return fmt.Errorf("no free name for %q", base)
-		}
-		k.files = append(k.files, fh)
-		k.names = append(k.names, name)
-		k.wrote = append(k.wrote, 0)
-		k.finalized = append(k.finalized, false)
 		if f.Size == 0 {
 			// An empty file is complete now; finalize it here, checked.
-			if err := d.finalize(fh, name); err != nil {
-				k.files[len(k.files)-1] = nil
+			if err := d.finalizeFile0(k, i); err != nil {
 				return err
 			}
-			k.files[len(k.files)-1] = nil
-			k.finalized[len(k.finalized)-1] = true
 		}
 	}
-	d.logf("receiving %d file(s) into %s", len(files), d.dest)
 	return nil
 }
 
 func (d *linkDevDriver) writeChunk(prompt uint64, idx int, b []byte) {
 	k := d.sinks[prompt]
-	if k == nil || idx >= len(k.files) || k.files[idx] == nil {
+	if k == nil || k.out == nil || idx >= len(k.out.files) || k.out.files[idx] == nil {
 		d.fail("chunk for a file that is not open")
 		d.defer_(d.s.CancelIncoming)
 		return
 	}
-	if _, err := k.files[idx].Write(b); err != nil {
-		d.fail("write: " + err.Error())
+	if _, err := k.out.files[idx].Write(b); err != nil {
+		d.fail("write " + k.out.show(idx) + ": " + err.Error())
 		d.defer_(d.s.CancelIncoming)
 		return
 	}
 	k.written += uint64(len(b))
 	k.wrote[idx] += uint64(len(b))
 	d.recvBytes += uint64(len(b))
+	if d.ui != nil && k.wrote[idx] < k.out.sizes[idx] {
+		d.ui.recvProgress(k.out.rels[idx], k.wrote[idx], k.out.sizes[idx])
+	}
 	d.reportDurable(k)
 }
 
@@ -2133,23 +2283,31 @@ func (d *linkDevDriver) reportDurable(k *ldSink) {
 // (REJECT, discard): the peer is told it was not saved, never that it was.
 func (d *linkDevDriver) finalizeFile(prompt uint64, idx int) {
 	k := d.sinks[prompt]
-	if k == nil || idx >= len(k.files) || k.finalized[idx] {
+	if k == nil || k.out == nil || idx >= len(k.out.files) || k.finalized[idx] {
 		return
 	}
-	fh := k.files[idx]
-	k.files[idx] = nil
+	if err := d.finalizeFile0(k, idx); err != nil {
+		d.fail("save " + k.out.show(idx) + ": " + err.Error())
+		d.defer_(d.s.CancelIncoming)
+		return
+	}
+	d.reportDurable(k)
+}
+
+func (d *linkDevDriver) finalizeFile0(k *ldSink, idx int) error {
+	fh := k.out.files[idx]
+	k.out.files[idx] = nil
 	if fh == nil {
-		d.fail("finalize: file is not open")
-		d.defer_(d.s.CancelIncoming)
-		return
+		return errors.New("the file is not open")
 	}
-	if err := d.finalize(fh, k.names[idx]); err != nil {
-		d.fail("save " + k.names[idx] + ": " + err.Error())
-		d.defer_(d.s.CancelIncoming)
-		return
+	if err := d.finalize(fh, k.out.path(idx)); err != nil {
+		return err
 	}
 	k.finalized[idx] = true
-	d.reportDurable(k)
+	if d.ui != nil {
+		d.ui.recvFileDone(k.out.rels[idx], k.out.sizes[idx])
+	}
+	return nil
 }
 
 // finalize syncs and closes one received file; any error is a failed save.
@@ -2167,33 +2325,37 @@ func (d *linkDevDriver) finalize(fh *os.File, name string) error {
 	return fh.Close()
 }
 
+// closeSink releases a batch's handles and keeps its files (saved, or not
+// yet discarded).
 func (d *linkDevDriver) closeSink(prompt uint64) {
-	if k := d.sinks[prompt]; k != nil {
-		for i, fh := range k.files {
-			if fh != nil {
-				_ = fh.Close()
-				k.files[i] = nil
-			}
-		}
+	if k := d.sinks[prompt]; k != nil && k.out != nil {
+		k.out.close()
 	}
 }
 
+// discardSink deletes exactly what this batch created: its files, then its
+// directories if they are empty. Never a pre-existing file.
 func (d *linkDevDriver) discardSink(prompt uint64) {
 	k := d.sinks[prompt]
 	if k == nil {
 		return
 	}
-	d.closeSink(prompt)
-	for _, n := range k.names {
-		_ = os.Remove(n) // exactly what this batch created
+	if k.out != nil {
+		k.out.discard()
 	}
 	delete(d.sinks, prompt)
 	d.logf("discarded a partial batch")
+	if d.ui != nil {
+		d.ui.discarded(d)
+	}
 }
 
 // ---------------------------------------------------------------- outcome
 
 func (d *linkDevDriver) exitCode(stderr io.Writer) int {
+	if d.ui != nil {
+		return d.ui.exitCode(d)
+	}
 	fmt.Fprintf(stderr, "link-dev: moved sent=%d received=%d (payload bytes) batches sent=%d received=%d texts received=%d\n",
 		d.sentBytes, d.recvBytes, d.sentOK, d.recvOK, d.textsIn)
 	complete := d.scriptEOF && len(d.script) == 0 && d.outboundIdle() && !d.holding

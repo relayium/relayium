@@ -18,21 +18,82 @@ import (
 // at the bottom of this file are what make every one of them reachable through
 // all three forms.
 
+const pairUsage = `relayium pair — a live, two-way session with another device
+
+usage:
+  relayium pair [code] [--dest DIR] [--accept] [--verify]
+
+Leave the code out to mint one, which requires "relayium login"; the other side
+then runs "relayium pair <code>", or types the code into the Relayium app or the
+web page. Joining with a code someone gave you needs no account. Both devices
+must be online at the same time; this is not a mailbox.
+
+Once linked, the session is end-to-end encrypted: files, folders and messages
+go both ways, as often as you like, until either side leaves. The verification
+code (SAS) is printed on both ends; compare it to rule out a substituted
+endpoint (--verify makes that a required step). The "path:" line says what the
+bytes actually take: "direct" or "lan" (peer to peer), or "relay" — a TURN
+relay, used when no direct path exists, which carries only ciphertext it cannot
+read; relayed traffic counts toward the code owner's relay allowance.
+
+In the session, each line you type is sent as a message, except:
+  /send <path>...   send files or folders (quote names with spaces)
+  /accept           save the files the other side offered (into --dest)
+  /decline          refuse them; nothing is written
+  /quit             leave once what you queued has gone
+  //text            send a message that starts with "/"
+  Ctrl-C            leave now: anything still in flight is not delivered
+                    and not saved (and is reported that way)
+
+Received files are only ever created new under --dest: an existing file is
+never overwritten (a new file gets a " (n)" name), nothing is written through a
+symbolic link or outside the directory, and a batch that does not complete is
+removed.
+
+Scripts: stdout carries only the other side's messages (one per line); status,
+prompts, the SAS and errors go to stderr. When stdin is not a terminal, its end
+does not end the session — "/quit", or the other side leaving, does — and
+incoming files are declined unless --accept is given.
+
+exit status: 0 the session ended normally and everything sent was delivered and
+everything accepted was saved; 1 something did not complete or the link could
+not be set up; 2 usage; 130 interrupted (Ctrl-C).
+
+positional arguments:
+  [code]   an existing 6-digit pairing code. Leave it out to mint one.
+
+flags:
+  --dest DIR         directory accepted files are saved into (default ".")
+  --accept           accept every incoming batch without asking
+  --verify           stop and compare the verification code (SAS) before
+                     anything is accepted or sent (needs a terminal)
+  --server URL       Relayium server (self-hosting)
+  --advertise H:P    offer this address as a direct candidate (advanced; it
+                     must really be reachable from the peer)
+`
+
 const sendUsage = `relayium send — send files to a peer over a pairing code
 
 usage:
   relayium send <src...> [code]
 
-Cross-network and direct: a short rendezvous handshake on Relayium's server
-introduces the two ends, then the files travel straight between them. This mode
-is direct-only, so if no direct path can be found (both ends behind strict NAT)
-the transfer fails rather than falling back to a relay. That is this mode's
-limit, not a promise about Relayium: the apps and the web page relay a
-cross-network transfer by design, over ciphertext the relay cannot read.
-
 Both machines must be online at the same time; this is not a mailbox. For a
 recipient who is not there right now, use "relayium up" (a stored link) or the
 Device Inbox ("relayium inbox send", the Web or a native app).
+
+A short rendezvous on Relayium's server introduces the two ends. With a current
+relayium on the other end ("relayium receive" or "relayium pair"), or a
+Relayium app or the web page, they set up an end-to-end encrypted link: direct
+when a path exists, otherwise through a TURN relay that carries only
+ciphertext it cannot read (relayed traffic counts toward the code owner's relay
+allowance). The "path:" line says which one was used. Against an older relayium
+CLI, or on a server that predates pairing hints, the older CLI pairing is used
+unchanged: it is direct-only, so without a direct path (both ends behind strict
+NAT) the transfer fails rather than falling back to a relay.
+
+The command ends once the receiver has verified and saved the files (exit 0),
+or when they were declined or not delivered (exit 1). Ctrl-C leaves the
+session: the files are then reported as not delivered (exit 130).
 
 positional arguments:
   <src...>   files or directories to send
@@ -53,11 +114,24 @@ const receiveUsage = `relayium receive — receive files sent to a pairing code
 usage:
   relayium receive <code> [destdir]
 
-The other side runs "relayium send" and reads out the 6-digit code. No Relayium
+The other side runs "relayium send" (or "relayium pair", or a Relayium app or
+the web page) and reads out the 6-digit code. No Relayium
 account is needed to receive: the code is the introduction. Both machines must
-be online at the same time, and the bytes travel directly between them. This
-mode is direct-only: if no direct path can be found the transfer fails rather
-than falling back to a relay.
+be online at the same time.
+
+With a current relayium or an app on the other end the files travel over an
+end-to-end encrypted link: direct when a path exists, otherwise through a TURN
+relay that carries only ciphertext it cannot read. The "path:" line says which.
+Against an older relayium CLI, or on a server that predates pairing hints, the
+older CLI pairing is used unchanged, and it is direct-only: without a direct
+path the transfer fails rather than falling back to a relay.
+
+Exactly one batch is accepted into destdir; the command then ends (exit 0 once
+every file is verified and on disk, 1 otherwise). Over a link, files are only
+created new: nothing existing is overwritten (a new file gets a " (n)" name),
+nothing is written through a symbolic link or outside destdir, and a batch that
+does not complete — Ctrl-C included (exit 130) — is removed, never reported
+saved.
 
 positional arguments:
   <code>      the 6-digit pairing code the sender printed
@@ -75,11 +149,15 @@ const textUsage = `relayium text — ephemeral encrypted messages with a peer
 usage:
   relayium text [code]
 
-Both ends run this command. The session is end-to-end encrypted over a direct
-pinned-TLS connection of its own; Relayium keeps no message body and no
-server-side history. Both machines must be online at the same time, and this
-mode is direct-only like "send"/"receive": with no direct path between the two
-machines the session cannot open, rather than falling back to a relay.
+Both ends run this command (or one end runs "relayium pair", or uses a Relayium
+app or the web page). The session is end-to-end encrypted; Relayium keeps no
+message body and no server-side history. Both machines must be
+online at the same time. With a current relayium or an app on the other end it
+runs over a link — direct when possible, otherwise through a TURN relay that
+carries only ciphertext it cannot read. Against an older relayium CLI, or on a server that
+predates pairing hints, the older CLI pairing is used unchanged, and it is
+direct-only: with no direct path between the two machines the session cannot
+open, rather than falling back to a relay.
 
 positional arguments:
   [code]   an existing 6-digit pairing code. Leave it out to mint one, which
@@ -87,7 +165,11 @@ positional arguments:
 
 One line per message when typing interactively. Pipe stdin to send exact
 multiline content: pbpaste | relayium text 483920. At most 65,536 UTF-8 bytes
-per message — anything larger is a file, so use "relayium send".
+per message — anything larger is a file, so use "relayium send". The other
+side's messages go to stdout (exact bytes when stdout is not a terminal); on a
+terminal each of their lines is shown as "peer> …" with control characters made
+visible. The session ends when both ends have finished, when either leaves, or
+after 10 minutes.
 
 flags:
   --verify           stop and compare the verification code (SAS) before the
@@ -403,6 +485,7 @@ var commandUsage = map[string]string{
 	"push":      pushUsage,
 	"pull":      pullUsage,
 	"sync":      syncUsage,
+	"pair":      pairUsage,
 	"send":      sendUsage,
 	"receive":   receiveUsage,
 	"text":      textUsage,
