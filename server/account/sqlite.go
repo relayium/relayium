@@ -7052,6 +7052,10 @@ func migrateUploadResidualProvenance(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 	}
+	// The two blob_key indexes are new on an upgraded database and are built
+	// inside this transaction before the listener binds; say so, like every
+	// other index build, so a slow first open on a large table is explained.
+	log.Printf("sqlite: ensuring index (may take a while on a large table, and runs before the listener binds): %s", "idx_upload_sessions_blob, idx_stored_files_blob")
 	for _, q := range []string{
 		`CREATE INDEX IF NOT EXISTS idx_upload_sessions_blob ON upload_sessions(blob_key)`,
 		`CREATE INDEX IF NOT EXISTS idx_stored_files_blob ON stored_files(blob_key)`,
