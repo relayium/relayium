@@ -222,6 +222,82 @@ jobs:
             exit 1
           fi
 
+  # The Windows runtime lane of the `push -` stdin library (R-C14 phase 2a):
+  # the exact-owned stdin helper (`internal/stdinpump`), and the stream
+  # sender/receiver (`internal/xfer` stream_*.go), executed on a real Windows
+  # host. Its mechanisms differ there in ways only running them can prove:
+  # the parent-death pipe is an inherited handle named in argv, closing a
+  # pipe cancels a pending ReadFile, TerminateProcess replaces signals, and
+  # the no-clobber install is NTFS FileLinkInformation against files and
+  # junctions. Compiling for Windows proves none of that; these are runtime
+  # tests, and each one must appear as PASS below.
+  #
+  # Phase 2b extends this job to `./cmd/relayium`. When it does, a Windows-red
+  # compile of that package's TESTS means a new server-only test file (one
+  # that imports `account`/`internal/storage`, which use syscall.Statfs) needs
+  # `//go:build !windows` with a reason — never a Windows `storage`
+  # implementation (the relay node is not released for Windows).
+  #
+  # No -race: the race toolchain is not established on this runner; the same
+  # tests run under -race on ubuntu in `race-rest`.
+  cli-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Toolchain version
+        run: go version
+      - name: go vet (Windows; the stream library's packages)
+        working-directory: server
+        run: go vet ./internal/xfer ./internal/sshx ./internal/stdinpump
+      # The PASS grep is load-bearing, as in `test`: a renamed or deleted test
+      # makes `-run` match nothing and `go test` still exits 0. Three tests
+      # may SKIP here, each for a reason stated in the test itself: POSIX
+      # umask/modes do not exist, os.Interrupt cannot be sent to one process,
+      # and Windows may refuse to rename a directory another handle holds
+      # (which makes that swap impossible). Any other SKIP fails the job.
+      - name: Windows runtime tests (stdin pump, stream protocol)
+        working-directory: server
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/cli-windows.log"
+          go test -count=1 -v -timeout 10m \
+            -run '^(TestStream|TestPump|TestHelper|TestExitWatchdog)' \
+            ./internal/stdinpump ./internal/xfer | tee "$log"
+          may_skip=" TestPumpHelperIgnoresInterrupt TestStreamRecvModesUnderUmask TestStreamRecvParentSwap "
+          for t in TestPumpStopJoinsBlockedStdinWindows TestPumpHelperExitsOnParentDeathWindows TestStreamRecvRootWindows \
+            TestPumpStopReleasesBlockedRead TestPumpEndMarkerIsEOF TestPumpKilledHelperIsNotEOF TestPumpStdinReadErrorIsStdinError \
+            TestPumpHelperIgnoresInterrupt TestPumpSharedOffsetBeforeAndAfterStart TestPumpNotStartedLeavesPipeUnread \
+            TestPumpStopBoundsStuckHelperAfterEnd TestPumpHelperExitsOnParentDeath TestHelperFraming TestPumpReadDecoding \
+            TestStreamGoldenV1HelloUnchanged TestStreamGoldenFrames TestStreamRecvRefusesBeforeAccept \
+            TestStreamRecvIncompleteInstallsNothing TestStreamRecvNoClobberRace TestStreamRecvModesUnderUmask \
+            TestStreamRecvParentSwap TestStreamRecvWriteFailure TestStreamRecvBoundedErrorWrite TestStreamRecvIdle \
+            TestStreamRecvRejectsMalformedChallenge TestStreamRecvResultEchoesAfterInstall \
+            TestStreamRecvAbandonedGuardNeverInstalls TestStreamRecvWatchdogExitsWithFullStdoutAndStderr \
+            TestStreamRecvWatchdogIdleRemovesStaging TestExitWatchdogPeerBounds TestStreamRoundTrip \
+            TestStreamNoSourceBeforeAccept TestStreamJoinsBlockedSource TestStreamSourceVanishedNeverEnds \
+            TestStreamAbortReleasesBlockedWrite TestStreamAbortReleasesBlockedTLSWrite TestStreamPrematureResultRejected \
+            TestStreamCancelBeforeAcceptWithBlockedWrite TestStreamValidFastReceipt TestStreamWordingByPhase \
+            TestStreamHeldEndAfterValidReceiptIsBounded TestStreamDelayedPrematureReceiptRejected \
+            TestStreamChallengeFreshAndOnlyInEnd TestStreamWrongEchoOrWrongBytes TestStreamKeepaliveHoldsIdleReceiver \
+            TestStreamProgress TestStreamRealPumpRoundTrip TestStreamRealPumpRefusalLeavesStdinUnread \
+            TestStreamRealPumpKilledMidStream TestStreamJudgedStageIsNotOvertakenByEnd TestStreamNoSourceAfterWriteFailure \
+            TestStreamRecvWatchdogReportsWhatWasStaged TestStreamRecvWatchdogHelperKeepsInstalledFile \
+            TestStreamRecvGuardKeepsInstalledDestination; do
+            if grep -q "^--- PASS: $t " "$log"; then continue; fi
+            if [[ "$may_skip" == *" $t "* ]] && grep -q "^--- SKIP: $t " "$log"; then continue; fi
+            echo "::error::$t did not PASS on Windows" >&2
+            exit 1
+          done
+          while read -r _ _ name _; do
+            [[ "$may_skip" == *" $name "* ]] || { echo "::error::$name skipped on Windows" >&2; exit 1; }
+          done < <(grep '^--- SKIP: ' "$log" || true)
+
   # Central runs concurrent goroutines against shared state by design — the GC
   # sweep, the metering worker, the node storage prober — and the failure mode
   # of a data race there is a corrupted ledger or a wedged deploy, found in
