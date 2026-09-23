@@ -351,13 +351,16 @@ func (g *GC) deleteBlob(ctx context.Context, nodeID, blobKey string) error {
 //
 // A row may also carry a BILLING OBLIGATION (PendingNodeDelete.BillUserID): the
 // blob is the last evidence of bytes that may never have been billed — a void
-// whose meter AND journal writes both failed, or a late append that landed
-// after everything else was gone. For those rows the bytes are asked about and
-// the answer made durable BEFORE the delete, because the delete destroys the
-// only copy of the number; a settle that cannot complete keeps the blob AND the
-// row for the next sweep. The settle is idempotent (a monotonic floor advanced
-// atomically with each billing write), so re-asking every sweep costs a probe
-// and can never double-charge.
+// whose meter AND journal writes both failed, a late append that landed after
+// everything else was gone, or the residual of an upload that never became an
+// object (the orphan cleanup claim, the set-based purge, a refused finalize;
+// see residualOwed). SettleBlobBilling forgives an obligation whose account is
+// gone or pending deletion instead of billing it. For those rows the bytes are
+// asked about and the answer made durable BEFORE the delete, because the delete
+// destroys the only copy of the number; a settle that cannot complete keeps the
+// blob AND the row for the next sweep. The settle is idempotent (a monotonic
+// floor advanced atomically with each billing write), so re-asking every sweep
+// costs a probe and can never double-charge.
 func (g *GC) drainPending(ctx context.Context) {
 	pend, err := g.Store.ListPendingNodeDeletes(ctx)
 	if err != nil {

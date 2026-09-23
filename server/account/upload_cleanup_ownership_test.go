@@ -362,8 +362,20 @@ func TestALateFinalizeIsRefusedOnceCleanupOwnsItsBlob(t *testing.T) {
 			if n := deletes.n.Load(); n != 0 {
 				t.Fatalf("the reaper sent %d DELETE(s); the drain is the only destroyer", n)
 			}
-			if q := queuedFor(t, h, key); len(q) != 1 || q[0].BillUserID != "" {
-				t.Fatalf("after the claim the queue holds %+v, want one deletion-only row", q)
+			// The claim hands the blob to the queue in its own transaction. A
+			// hosted upload created under the residual rule (residualOwed) is
+			// handed over WITH its obligation — bill the sender for whatever the
+			// blob holds past the recorded 700 bytes, capped at max_size, before
+			// deleting it — and an own-node one deletion-only. Here the blob holds
+			// exactly the 700 acknowledged bytes, so the obligation settles to
+			// nothing and the meter below is unchanged.
+			q := queuedFor(t, h, key)
+			if byo {
+				if len(q) != 1 || q[0].BillUserID != "" {
+					t.Fatalf("after the claim the queue holds %+v, want one deletion-only row (own-node uploads are never metered)", q)
+				}
+			} else if len(q) != 1 || q[0].BillUserID != h.userID || q[0].BilledThrough != size || q[0].BillMax <= size {
+				t.Fatalf("after the claim the queue holds %+v, want one obligation for %s at floor %d capped at max_size", q, h.userID, size)
 			}
 			st.persist.open()
 			code := awaitCode(t, codeCh, "finalize")
@@ -489,8 +501,13 @@ func TestALateFinalizeInAPairRoomKeepsTheRoomAnswerAndDeletesNothing(t *testing.
 		if !nodeBlobPresent(t, node.dir, sess.BlobKey) {
 			t.Fatal("the blob went before the drain")
 		}
-		if q := queuedFor(t, h, sess.BlobKey); len(q) != 1 || q[0].BillUserID != "" {
-			t.Fatalf("queue = %+v, want one deletion-only row", q)
+		// The orphan pass handed the blob over with its residual obligation
+		// (a fresh, billable upload that never became an object: residualOwed),
+		// at the 1100 bytes already billed. The blob holds exactly those, so the
+		// drain settles nothing more.
+		if q := queuedFor(t, h, sess.BlobKey); len(q) != 1 || q[0].BillUserID != h.userID ||
+			q[0].BilledThrough != int64(len(blob)) || q[0].BillMax != sess.MaxSize {
+			t.Fatalf("queue = %+v, want one obligation for %s at floor %d capped at %d", q, h.userID, len(blob), sess.MaxSize)
 		}
 		if n := storedFilesFor(t, h, sess.BlobKey); n != 0 {
 			t.Fatalf("%d stored file(s) point at a claimed blob", n)
@@ -936,8 +953,11 @@ func TestAStaleOrphanSnapshotLeavesTheVoidsBillingEvidence(t *testing.T) {
 	settleThenHeal(t, h, flaky, deletes, node, sess.BlobKey, known, onNode)
 }
 
-// R10. Claim first, void second: the void no longer sees the session, so no
-// obligation can attach to the deletion-only row the claim created.
+// R10. Claim first, void second: the void no longer sees the session, so it
+// attaches nothing to the row the claim created. That row is the claim's own
+// residual obligation (a fresh, billable upload that never became an object:
+// residualOwed) at the 3000 bytes already billed, and it stays exactly that —
+// no second producer, no void hold, nothing billed twice.
 func TestAVoidAfterTheCleanupClaimAttachesNoObligation(t *testing.T) {
 	h := newPairHarness(t)
 	ctx := context.Background()
@@ -961,15 +981,18 @@ func TestAVoidAfterTheCleanupClaimAttachesNoObligation(t *testing.T) {
 	}
 	h.svc.SweepPairRooms(ctx, h.now) // the room's deadline has long passed
 	q := queuedFor(t, h, sess.BlobKey)
-	if len(q) != 1 || q[0].BillUserID != "" {
-		t.Fatalf("after the claim and the void the queue holds %+v, want one deletion-only row", q)
+	// NotBefore == 0 is the void's absence: a void writes its intent with the
+	// room's blob hold.
+	if len(q) != 1 || q[0].BillUserID != h.userID || q[0].BilledThrough != int64(len(blob)) ||
+		q[0].BillMax != sess.MaxSize || q[0].NotBefore != 0 {
+		t.Fatalf("after the claim and the void the queue holds %+v, want only the claim's obligation (floor %d, no hold)", q, len(blob))
 	}
 	cleanupDrain(h, h.store, h.now)
 	if nodeBlobPresent(t, node.dir, sess.BlobKey) {
 		t.Fatal("the blob survived the drain")
 	}
 	if q := queuedFor(t, h, sess.BlobKey); len(q) != 0 {
-		t.Fatalf("a deletion-only row outlived its confirmed delete: %+v", q)
+		t.Fatalf("the claim's row outlived its confirmed delete: %+v", q)
 	}
 	if got := h.uploadMetered(t); got != metered {
 		t.Fatalf("metered %d, want the unchanged %d", got, metered)

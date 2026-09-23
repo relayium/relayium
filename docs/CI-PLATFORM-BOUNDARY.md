@@ -171,6 +171,7 @@ change.**
 | `Tests/Fixtures/device-inbox-manifest-v3-vectors.json` | `swift-package.yml`, `go.yml`, `web.yml` |
 | `Tests/Fixtures/crypto-vectors.json` | `swift-package.yml`, `go.yml`, `web.yml` |
 | `Tests/Fixtures/realtime-wire-vectors.json` | `swift-package.yml`, `go.yml`, `web.yml` |
+| `Tests/Fixtures/link-session-vectors.json` | `swift-package.yml`, `go.yml`, `web.yml` |
 | `Tests/Fixtures/store-wire-vectors.json`, `Tests/Fixtures/account/**` | `swift-package.yml` |
 
 `compat.yml` and `repo-hygiene.yml` are unfiltered and run on **every** row
@@ -316,6 +317,8 @@ not macOS lanes. Those workflows name the individual files:
 | `crypto-vectors.json` | `web/src/lib/caps-vectors.test.ts`, `web/src/lib/text-vectors.test.ts` | `web.yml` |
 | `realtime-wire-vectors.json` | `server/internal/linkwire/vectors_test.go` | `go.yml` |
 | `realtime-wire-vectors.json` | the same two Web suites | `web.yml` |
+| `link-session-vectors.json` | `server/internal/linksession/vectors_test.go` | `go.yml` |
+| `link-session-vectors.json` | `web/src/lib/link-session-vectors.test.ts` (the authority half) | `web.yml` |
 
 The Go reader of `realtime-wire-vectors.json` is the link-wire codec library
 (W-N18 Phase 2a2). No command imports it yet — the CLI still speaks its own

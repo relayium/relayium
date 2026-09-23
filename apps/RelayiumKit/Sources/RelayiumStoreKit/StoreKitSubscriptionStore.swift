@@ -252,7 +252,28 @@ public actor StoreKitSubscriptionStore: SubscriptionStore {
     }
 
     public func synchronize() async throws {
-        try await AppStore.sync()
+        try await Self.normalizedSynchronization {
+            try await AppStore.sync()
+        }
+    }
+
+    /// The App Store sync call reports a dismissed App Store sign-in sheet as
+    /// `StoreKitError.userCancelled`. That one typed signal becomes the seam's
+    /// own ``SubscriptionStoreError/synchronizationCancelled``, so the model can
+    /// return the screen to where it was instead of reporting an unexpected
+    /// failure. Every other thrown error, StoreKit's or anybody's, propagates
+    /// unchanged and is still reported as a failure.
+    ///
+    /// Nothing here touches a transaction: a sync that was cancelled read none,
+    /// and this translation neither reads, records nor finishes one.
+    static func normalizedSynchronization(
+        _ operation: () async throws -> Void
+    ) async throws {
+        do {
+            try await operation()
+        } catch StoreKitError.userCancelled {
+            throw SubscriptionStoreError.synchronizationCancelled
+        }
     }
 
     // MARK: - finishing

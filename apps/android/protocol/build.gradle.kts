@@ -49,6 +49,9 @@ tasks.withType<Test>().configureEach {
         sharedFixtures.file("realtime-wire-vectors.json"),
         sharedFixtures.file("store-wire-vectors.json"),
         sharedFixtures.file("device-inbox-manifest-v3-vectors.json"),
+        // W-N18 A08e: LinkSessionVectorTest reads it; without this line a
+        // fixture-only edit leaves :protocol:test UP-TO-DATE and green.
+        sharedFixtures.file("link-session-vectors.json"),
     )
         .withPropertyName("relayiumSharedFixtures")
         .withPathSensitivity(PathSensitivity.RELATIVE)

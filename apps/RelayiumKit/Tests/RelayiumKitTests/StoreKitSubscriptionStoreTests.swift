@@ -48,6 +48,78 @@ final class StoreKitSubscriptionStoreTests: XCTestCase {
     }
 }
 
+// MARK: - a declined App Store sign-in (W-C5)
+
+extension StoreKitSubscriptionStoreTests {
+
+    /// `AppStore.sync()` reports a dismissed sign-in sheet as Apple's typed
+    /// cancellation; the adapter hands it up in the seam's own vocabulary.
+    func testAStoreKitCancelledSyncBecomesTheSeamsCancellation() async {
+        do {
+            try await StoreKitSubscriptionStore.normalizedSynchronization {
+                throw StoreKitError.userCancelled
+            }
+            XCTFail("a cancelled sync completed")
+        } catch SubscriptionStoreError.synchronizationCancelled {
+            // Expected.
+        } catch {
+            XCTFail("a cancelled sync reached the app as \(type(of: error))")
+        }
+    }
+
+    func testOtherStoreKitSyncErrorsStillPropagate() async {
+        for thrown in [StoreKitError.unknown, StoreKitError.notEntitled,
+                       StoreKitError.networkError(URLError(.notConnectedToInternet))] {
+            do {
+                try await StoreKitSubscriptionStore.normalizedSynchronization { throw thrown }
+                XCTFail("a failed sync completed")
+            } catch SubscriptionStoreError.synchronizationCancelled {
+                XCTFail("\(thrown) was widened into a cancellation")
+            } catch is StoreKitError {
+                // Expected: still Apple's error, still a failure.
+            } catch {
+                XCTFail("the StoreKit error changed type: \(type(of: error))")
+            }
+        }
+    }
+
+    func testNonStoreKitSyncErrorsStillPropagate() async {
+        for thrown in [SentinelError.failure as Error, CancellationError()] {
+            do {
+                try await StoreKitSubscriptionStore.normalizedSynchronization { throw thrown }
+                XCTFail("a failed sync completed")
+            } catch SubscriptionStoreError.synchronizationCancelled {
+                XCTFail("\(type(of: thrown)) was widened into a cancellation")
+            } catch {
+                XCTAssertEqual(String(describing: type(of: error)),
+                               String(describing: type(of: thrown)))
+            }
+        }
+    }
+
+    func testASuccessfulSyncIsUntouched() async throws {
+        var ran = 0
+        try await StoreKitSubscriptionStore.normalizedSynchronization { ran += 1 }
+        XCTAssertEqual(ran, 1)
+    }
+
+    /// The helper is only worth anything if the production `synchronize()`
+    /// actually goes through it. Read the adapter back and check that the one
+    /// `AppStore.sync()` call sits inside it.
+    func testTheProductionSyncGoesThroughTheNormalization() throws {
+        let code = try RepoRoot.text("apps/RelayiumKit/Sources/RelayiumStoreKit/StoreKitSubscriptionStore.swift")
+        XCTAssertEqual(code.components(separatedBy: "AppStore.sync()").count - 1, 1,
+                       "AppStore.sync() is called from more than one place")
+        let body = try XCTUnwrap(
+            code.components(separatedBy: "public func synchronize() async throws {").dropFirst().first?
+                .components(separatedBy: "\n    }\n").first,
+            "the adapter has no synchronize()")
+        XCTAssertTrue(body.contains("Self.normalizedSynchronization"),
+                      "the production sync bypasses the cancellation normalization")
+        XCTAssertTrue(body.contains("AppStore.sync()"))
+    }
+}
+
 // MARK: - resolve, then authorize, then charge
 
 /// **What the ordering helper actually did, in the order it did it.**

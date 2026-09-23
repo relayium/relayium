@@ -62,12 +62,14 @@ on:
       #   web/src/lib/caps-vectors.test.ts    realtime-wire + crypto
       #   web/src/lib/text-vectors.test.ts    realtime-wire + crypto
       #   web/src/lib/inbox-manifest.test.ts  device-inbox-manifest-v3
+      #   web/src/lib/link-session-vectors.test.ts  link-session (W-N18 A08e;
+      #     the Web AUTHORITY half of the state-machine vectors)
       #
       # A fixture regenerated without this suite running leaves those tests
       # passing against bytes nobody re-checked on this side, and the divergence
       # surfaces later against an innocent commit that touched `web/**`.
       #
-      # THREE PATHS, not the `Tests/Fixtures/` tree and not
+      # FOUR PATHS, not the `Tests/Fixtures/` tree and not
       # `apps/RelayiumKit/**`. `store-wire-vectors.json` sits in that same
       # directory and is deliberately absent: no test in this suite reads it —
       # its only Web-side consumer is `web/scripts/check-wire-vectors.mjs`,
@@ -78,6 +80,7 @@ on:
       - 'apps/RelayiumKit/Tests/Fixtures/crypto-vectors.json'
       - 'apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json'
       - 'apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json'
+      - 'apps/RelayiumKit/Tests/Fixtures/link-session-vectors.json'
       - '.github/workflows/web.yml'
   # Called by `.github/workflows/merge-gate.yml`, and by nothing else.
   #

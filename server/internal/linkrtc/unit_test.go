@@ -68,7 +68,9 @@ func TestClassify(t *testing.T) {
 		{"host public", webrtc.NewICECandidatePair(cand(host, "8.8.8.8"), cand(host, "10.0.0.2")), PathDirect},
 		{"host mdns", webrtc.NewICECandidatePair(cand(host, "abc.local"), cand(host, "10.0.0.2")), PathDirect},
 		{"srflx", webrtc.NewICECandidatePair(cand(srflx, "198.51.100.1"), cand(host, "10.0.0.2")), PathDirect},
-		{"prflx", webrtc.NewICECandidatePair(cand(prflx, "10.0.0.1"), cand(prflx, "10.0.0.2")), PathDirect},
+		{"prflx private", webrtc.NewICECandidatePair(cand(prflx, "10.0.0.1"), cand(prflx, "10.0.0.2")), PathLAN},
+		{"host-prflx loopback", webrtc.NewICECandidatePair(cand(host, "127.0.0.1"), cand(prflx, "127.0.0.1")), PathLAN},
+		{"prflx public", webrtc.NewICECandidatePair(cand(host, "10.0.0.1"), cand(prflx, "203.0.113.9")), PathDirect},
 	}
 	for _, c := range cases {
 		if got := Classify(c.pair); got.Path != c.want {

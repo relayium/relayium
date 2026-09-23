@@ -26,17 +26,20 @@ const meterJournalBudget = 5 * time.Second
 // transaction as the state change it belongs to — an append's offset
 // (CommitUploadProgress), a finalize's claim (ClaimUploadDone), a room's close
 // (ClosePairRoom) — so the bill and the fact it describes cannot come apart.
-// Two paths cannot do that, and they are the two most dangerous ones:
+// Three paths cannot do that, and they are the most dangerous ones:
 //
 //   - settleReclaimedUpload bills what a partial blob turned out to hold, which
 //     it learned by asking the node, and then deletes the blob;
 //   - settleAppendIntoAVoidedRoom bills what its own append committed into a
-//     room that was voided underneath it, and then deletes the blob.
+//     room that was voided underneath it, and then deletes the blob;
+//   - reclaimRefusedUpload bills what a refused finalize's blob turned out to
+//     hold past the claimed size, and then deletes the blob.
 //
-// In both, the session row is already gone (the void deleted it, in the same
-// transaction that billed everything then known and queued the delete intent
-// that carries the OBLIGATION — see PendingNodeDelete.BillUserID), so the blob
-// is the number's last evidence. Three rungs, each durable, each atomic:
+// In each, the blob's billing is already owned by a queued delete intent that
+// carries the OBLIGATION (see PendingNodeDelete.BillUserID) — written by the
+// void in the transaction that deleted the session row, or by the refusal's
+// PrepareRefusedUploadReclaim — so the blob is the number's last evidence.
+// Three rungs, each durable, each atomic:
 //
 //  1. SettleBlobBilling — meter increment + floor advance, one transaction.
 //  2. JournalBlobBilling — owed-bills outbox row + floor advance, one

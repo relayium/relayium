@@ -68,17 +68,34 @@ struct NearbyLinkWorkspaceView: View {
     /// this view's lifetime, which `TabView` decides.
     @ObservedObject var selection: DirectSendSelection
 
-    // No `@State` draft. The text being composed is `link.draft`, owned by the
-    // model that owns the link: `TabView` tears this view down when the user
-    // switches tabs while the link lives on, and a view-local draft died with
-    // it. The model also clears it when a new attempt begins, so text written
-    // for one peer can never be sitting in the next peer's composer.
+    // The text being composed is `link.draft`, owned by the model that owns
+    // the link: `TabView` tears this view down when the user switches tabs
+    // while the link lives on, and a view-local draft died with it. The model
+    // also clears it when a new attempt begins, so text written for one peer
+    // can never be sitting in the next peer's composer.
+    //
+    // `composerText` is only the FIELD's editing buffer, never a second holder:
+    // seeded from `link.draft`, every edit mirrored into it at once WITHOUT
+    // publishing (`mirrorComposerDraft`), and re-seeded whenever the model
+    // replaces the draft (`draftReplacement`). Neither a `$link.draft` binding
+    // nor a publishing mirror: the app root observes this model, so either one
+    // re-rendered the whole shell on every keystroke, and on iOS 18 that
+    // scrambled what was typed — see `LinkWorkspaceModel.mirrorComposerDraft`.
+    // Everything this view derives from the draft reads `composerText`.
+    @State private var composerText: String
     @State private var isChoosingFiles = false
     @State private var actionError: String?
     /// The one question this view asks before tearing anything down. Leave and
     /// Done both destroy text that exists nowhere else — the transcript is never
     /// stored — so neither may do it on a single tap.
     @State private var confirmingLocalTextDiscard = false
+
+    init(link: LinkWorkspaceModel, selection: DirectSendSelection) {
+        self.link = link
+        self.selection = selection
+        // A view rebuilt by a tab switch opens on the draft the model kept.
+        _composerText = State(initialValue: link.draft)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.section) {
@@ -133,6 +150,14 @@ struct NearbyLinkWorkspaceView: View {
         // macOS's `TransferLinkPane` follows.
         .task(id: link.returnedDraft) { link.restoreReturnedDraft() }
         .task(id: composerIsFree) { if composerIsFree { link.restoreReturnedDraft() } }
+        // The field's buffer and the model's draft, kept one: every edit goes
+        // to the model, and only the model's own replacements come back.
+        .onChange(of: composerText) { text in
+            link.mirrorComposerDraft(text)
+        }
+        .onChange(of: link.draftReplacement) { _ in
+            if composerText != link.draft { composerText = link.draft }
+        }
     }
 
     // MARK: - who
@@ -251,7 +276,9 @@ struct NearbyLinkWorkspaceView: View {
 
     /// The same composer shape as `DirectTextSessionView`, deliberately.
     ///
-    /// **Send is gated on `canSubmitDraft`, not `canCompose`.** The latter only
+    /// **Send is gated on `canSubmitDraft`'s rule — `canSendMessage` and a
+    /// non-blank field — asked of the field's own text, not on `canCompose`.**
+    /// The latter only
     /// answers "is this link open and verified" and stays true while a first
     /// message is still waiting for the peer to accept, so the button stayed
     /// live for a press that used to replace that first message. The press goes
@@ -265,7 +292,7 @@ struct NearbyLinkWorkspaceView: View {
     /// that problem.
     private var composer: some View {
         VStack(alignment: .leading, spacing: Metrics.tight) {
-            TextField(L10n.t(.linkComposerPlaceholder), text: $link.draft, axis: .vertical)
+            TextField(L10n.t(.linkComposerPlaceholder), text: $composerText, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(2...6)
                 .accessibilityLabel(L10n.t(.linkComposerLabel))
@@ -275,7 +302,7 @@ struct NearbyLinkWorkspaceView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .disabled(!link.canSubmitDraft)
+            .disabled(!canSubmitComposerText)
             .accessibilityIdentifier("link-send-message")
         }
     }
@@ -395,7 +422,13 @@ struct NearbyLinkWorkspaceView: View {
     /// Keyed on emptiness rather than on the text, so ordinary typing does not
     /// re-ask for the returned draft on every keystroke.
     private var composerIsFree: Bool {
-        link.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// `LinkWorkspaceModel.canSubmitDraft`, asked of the field's own text: the
+    /// mirror does not publish, so the model's copy cannot re-render this.
+    private var canSubmitComposerText: Bool {
+        link.canSendMessage && !composerIsFree
     }
 
     /// **Transactional: the field is cleared only if the model took the
@@ -405,6 +438,8 @@ struct NearbyLinkWorkspaceView: View {
     /// tap finds an empty draft the second time.
     private func sendDraft() {
         actionError = nil
+        // What is on screen is what is sent, even if the mirror has not run.
+        link.mirrorComposerDraft(composerText)
         link.submitDraft()
     }
 
