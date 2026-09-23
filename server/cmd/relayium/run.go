@@ -118,9 +118,12 @@ var sshDial = func(e xfer.Endpoint, remoteCmd string, o sshx.Opts) (io.ReadWrite
 // caller prints next — an error included — starts on a clean line. `serve` and
 // the `__recv` helper do not: a daemon's log and the far end of someone else's
 // ssh session are not a terminal anyone is watching this transfer on.
+//
+// destDir is this user's own argument, so a missing one is created
+// (CreateDestDir), as zero-dependency push's `mkdir -p` does for its target.
 func peerReceive(rw io.ReadWriter, destDir string, noResume bool, stderr io.Writer) (xfer.Report, error) {
 	prog := newRecvProgress(stderr)
-	rep, err := xfer.Receive(rw, destDir, xfer.RecvOpts{NoResume: noResume, Progress: prog.report})
+	rep, err := xfer.Receive(rw, destDir, xfer.RecvOpts{NoResume: noResume, CreateDestDir: true, Progress: prog.report})
 	prog.finish()
 	return rep, err
 }
@@ -460,8 +463,9 @@ func runRecv(args []string, stdout, stderr io.Writer) int {
 	}
 	// AllowSync: `__recv` is the receiver half of the user's own push/sync,
 	// started by their own SSH session and running as them. `sync` over SSH is
-	// this path.
-	rep, err := xfer.Receive(helperStdio(), fs.Arg(0), xfer.RecvOpts{NoResume: noResume, AllowSync: true, AllowDelete: true})
+	// this path. CreateDestDir: the destination is that same user's `host:path`,
+	// created when missing just as zero-dependency push's `mkdir -p` does.
+	rep, err := xfer.Receive(helperStdio(), fs.Arg(0), xfer.RecvOpts{NoResume: noResume, AllowSync: true, AllowDelete: true, CreateDestDir: true})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

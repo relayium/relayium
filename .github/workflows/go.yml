@@ -126,13 +126,14 @@ jobs:
         working-directory: server
         run: go test ./...
       # `relayium push host:path` over a REAL OpenSSH client and a private sshd
-      # on 127.0.0.1, both modes plus host-key refusal. The step above ran these
-      # three as SKIPs; RELAYIUM_E2E_SSH=1 turns every setup problem into a
-      # failure instead (see server/cmd/relayium/e2e_test.go for the fixture).
+      # on 127.0.0.1, both modes, native into a missing destination, plus
+      # host-key refusal. The step above ran these four as SKIPs;
+      # RELAYIUM_E2E_SSH=1 turns every setup problem into a failure instead
+      # (see server/cmd/relayium/e2e_test.go for the fixture).
       #
       # The PASS grep is load-bearing: a renamed or deleted test makes `-run`
       # match nothing, and `go test` still exits 0 having proved nothing.
-      - name: SSH push e2e (private loopback sshd; zero-dep, native, host-key refusal)
+      - name: SSH push e2e (private loopback sshd; zero-dep, native, missing destination, host-key refusal)
         working-directory: server
         shell: bash
         env:
@@ -151,9 +152,9 @@ jobs:
           ls -l "$SSHD"
           log="$RUNNER_TEMP/ssh-e2e.log"
           RELAYIUM_E2E_SSHD="$SSHD" go test -count=1 -v -timeout 3m \
-            -run '^(TestE2EZeroDepPushOverSSH|TestE2ENativePushOverSSH|TestE2EPushOverSSHRefusesUnknownHostKey)$' \
+            -run '^(TestE2EZeroDepPushOverSSH|TestE2ENativePushOverSSH|TestE2ENativePushCreatesMissingDestinationOverSSH|TestE2EPushOverSSHRefusesUnknownHostKey)$' \
             ./cmd/relayium | tee "$log"
-          for t in TestE2EZeroDepPushOverSSH TestE2ENativePushOverSSH TestE2EPushOverSSHRefusesUnknownHostKey; do
+          for t in TestE2EZeroDepPushOverSSH TestE2ENativePushOverSSH TestE2ENativePushCreatesMissingDestinationOverSSH TestE2EPushOverSSHRefusesUnknownHostKey; do
             grep -q "^--- PASS: $t " "$log" || { echo "::error::$t did not PASS" >&2; exit 1; }
           done
       - name: govulncheck

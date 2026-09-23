@@ -531,10 +531,7 @@ func TestE2EZeroDepPushOverSSH(t *testing.T) {
 // only difference from the zero-dep test is the remote PATH, which is what
 // makes each test's mode assertion a control for the other's.
 //
-// Both push into an existing, empty directory. The native receiver does not
-// create a missing destination directory the way zero-dep's `mkdir -p` does,
-// and reports that as a failed integrity check; that is a separate product
-// defect, deliberately not encoded here as expected behaviour.
+// Both push into an existing, empty directory; a missing one is the next test.
 func TestE2ENativePushOverSSH(t *testing.T) {
 	requireSSHE2E(t)
 	bin := buildCLI(t)
@@ -551,6 +548,45 @@ func TestE2ENativePushOverSSH(t *testing.T) {
 		t.Fatalf("native push fell back to zero-dependency mode\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
 	assertOnlyFile(t, dst, "hello.bin", e2ePayload)
+	want := []string{"command -v relayium", "relayium __recv -- " + sshx.ShellQuote(dst)}
+	if got := readLines(t, f.remoteLog); !equalLines(got, want) {
+		t.Fatalf("remote commands = %q, want %q", got, want)
+	}
+	f.assertClientArgv(t, 2)
+	f.assertAccepted(t, true)
+}
+
+// Native push into a destination that does not exist yet, two levels deep:
+// `__recv` creates it, as zero-dep's `mkdir -p` does. Before W-N26 the
+// transfer calls on both sides returned no error, yet the report marked every
+// file failed and the CLI exited nonzero, so the exit code, the exact bytes
+// and the remote command are all asserted — not only that something arrived.
+func TestE2ENativePushCreatesMissingDestinationOverSSH(t *testing.T) {
+	requireSSHE2E(t)
+	bin := buildCLI(t)
+	f := newSSHFixture(t)
+	writeFile(t, f.remotePath, filepath.Dir(bin)+":/usr/bin:/bin\n", 0o600)
+	src := writePayload(t)
+	parent := t.TempDir()
+	dst := filepath.Join(parent, "new", "nested")
+
+	stdout, stderr, code := f.push(t, bin, src, "localhost:"+dst)
+	if code != 0 {
+		t.Fatalf("push exit %d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	}
+	if strings.Contains(stdout+stderr, "zero-dependency") {
+		t.Fatalf("native push fell back to zero-dependency mode\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if strings.Contains(stdout+stderr, "integrity") {
+		t.Fatalf("push reported an integrity failure\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if fi, err := os.Lstat(dst); err != nil || !fi.IsDir() {
+		t.Fatalf("destination %s is not a real directory: %v", dst, err)
+	}
+	assertOnlyFile(t, dst, "hello.bin", e2ePayload)
+	if entries, err := os.ReadDir(parent); err != nil || len(entries) != 1 || entries[0].Name() != "new" || !entries[0].IsDir() {
+		t.Fatalf("%s holds %v (err %v), want only the created directory new/", parent, entries, err)
+	}
 	want := []string{"command -v relayium", "relayium __recv -- " + sshx.ShellQuote(dst)}
 	if got := readLines(t, f.remoteLog); !equalLines(got, want) {
 		t.Fatalf("remote commands = %q, want %q", got, want)
