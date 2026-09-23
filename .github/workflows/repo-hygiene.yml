@@ -20,7 +20,7 @@ on:
   # `if:` may stand between a pull request and them.
   #
   # It REPLACES this file's own `pull_request:` trigger. Keeping both would run
-  # all fourteen jobs twice for every commit on a branch with an open pull
+  # every job twice for every commit on a branch with an open pull
   # request, once directly and once through the gate;
   # `scripts/test/ci-event-policy-test.mjs` asserts the direct trigger is gone.
   #
@@ -215,8 +215,24 @@ jobs:
       # there is nothing to install.
       - name: shared Swift package CI ownership boundary
         run: node scripts/test/swift-ci-boundary-test.mjs
+
+  # The repository's own non-Swift policy: document and home-page claims, the
+  # transport-path claim, the App Store packet validators, the acceptance
+  # scratch contract, role-coverage caps and the guard-coverage meta-test.
+  # These grew inside `swift-ci-boundary` because that job was the nearest
+  # unfiltered Node host; they have nothing to do with the Swift package, so
+  # they get their own job and that one keeps its name honest. Same host, same
+  # reasons: this workflow has no path filter, Linux, seconds, no dependencies.
+  repository-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
       # What `README.md`, `apps/README.md` and the macOS readiness manifest may
-      # claim — the other side of the boundary the step above draws.
+      # claim — the other side of the boundary `swift-ci-boundary` draws.
       #
       # These were XCTest cases, and `swift-package.yml` starts on
       # `apps/RelayiumKit/**` alone — deliberately, so that a README edit never
