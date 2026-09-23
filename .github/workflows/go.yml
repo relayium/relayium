@@ -167,9 +167,9 @@ jobs:
           ls -l "$SSHD"
           log="$RUNNER_TEMP/ssh-e2e.log"
           RELAYIUM_E2E_SSHD="$SSHD" go test -count=1 -v -timeout 3m \
-            -run '^(TestE2EZeroDepPushOverSSH|TestE2ENativePushOverSSH|TestE2ENativePushCreatesMissingDestinationOverSSH|TestE2EPushOverSSHRefusesUnknownHostKey)$' \
+            -run '^(TestE2EZeroDepPushOverSSH|TestE2ENativePushOverSSH|TestE2ENativePushCreatesMissingDestinationOverSSH|TestE2EPushOverSSHRefusesUnknownHostKey|TestE2EPullToStdoutOverSSH|TestE2EPullToStdoutRefusesNonFilesOverSSH|TestE2EPullToStdoutBrokenPipeOverSSH|TestE2EPullToStdoutRefusesUnknownHostKey|TestE2EPullToStdoutRejectsRemoteNoiseOverSSH|TestE2EPullToStdoutRefusesARealTerminal|TestE2EPullToStdoutSilentRemoteOverSSH)$' \
             ./cmd/relayium | tee "$log"
-          for t in TestE2EZeroDepPushOverSSH TestE2ENativePushOverSSH TestE2ENativePushCreatesMissingDestinationOverSSH TestE2EPushOverSSHRefusesUnknownHostKey; do
+          for t in TestE2EZeroDepPushOverSSH TestE2ENativePushOverSSH TestE2ENativePushCreatesMissingDestinationOverSSH TestE2EPushOverSSHRefusesUnknownHostKey TestE2EPullToStdoutOverSSH TestE2EPullToStdoutRefusesNonFilesOverSSH TestE2EPullToStdoutBrokenPipeOverSSH TestE2EPullToStdoutRefusesUnknownHostKey TestE2EPullToStdoutRejectsRemoteNoiseOverSSH TestE2EPullToStdoutRefusesARealTerminal TestE2EPullToStdoutSilentRemoteOverSSH; do
             grep -q "^--- PASS: $t " "$log" || { echo "::error::$t did not PASS" >&2; exit 1; }
           done
       - name: govulncheck

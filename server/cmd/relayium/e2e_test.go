@@ -43,6 +43,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -50,6 +51,7 @@ import (
 	"time"
 
 	"github.com/relayium/relayium/internal/sshx"
+	"github.com/relayium/relayium/internal/xfer"
 )
 
 const (
@@ -641,4 +643,513 @@ func TestE2EPushOverSSHRefusesUnknownHostKey(t *testing.T) {
 		t.Fatalf("remote commands after control = %q, want %q", got, want)
 	}
 	f.assertAccepted(t, true)
+}
+
+// ── `pull host:file -` over real ssh (R-C14 phase 1) ───────────────────────
+
+// remoteRelayium puts bin on the remote PATH under the name `relayium`, in a
+// directory of its own, so an old release can play the remote without its
+// neighbours (and without ever touching where that binary came from).
+func (f *sshFixture) remoteRelayium(t *testing.T, bin string) {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "remote-bin")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "relayium"), string(b), 0o700)
+	writeFile(t, f.remotePath, dir+":/usr/bin:/bin\n", 0o600)
+}
+
+// pullCmd is the argv for `pull` through the fixture, and the environment
+// that puts the ssh shim first.
+func (f *sshFixture) pullCmd(bin string, args ...string) ([]string, []string) {
+	env := append(os.Environ(), "PATH="+f.shimDir+":/usr/bin:/bin")
+	return append([]string{bin, "pull", "-i", f.clientKey, "-p", strconv.Itoa(f.port)}, args...), env
+}
+
+// pull runs `pull ... -` in an empty working directory, which must still be
+// empty afterwards: stdout mode has no local filesystem effect.
+func (f *sshFixture) pullStdout(t *testing.T, bin string, args ...string) (stdout, stderr string, code int) {
+	t.Helper()
+	argv, env := f.pullCmd(bin, args...)
+	cwd := t.TempDir()
+	stdout, stderr, code = runBounded(t, e2ePushTimeout, argv[0], argv[1:], cwd, env)
+	if entries, err := os.ReadDir(cwd); err != nil || len(entries) != 0 {
+		t.Fatalf("pull to stdout wrote into its working directory: %v (err %v)", entries, err)
+	}
+	return stdout, stderr, code
+}
+
+// assertNoProcessNaming fails if any process whose command line contains
+// marker (a path unique to this test) is still alive after a short bound. It
+// is how "no ssh client and no remote helper outlived the pull" is checked:
+// both carry the source path in their argv.
+func assertNoProcessNaming(t *testing.T, marker string) {
+	t.Helper()
+	deadline := time.Now().Add(e2eCleanupTimeout)
+	for {
+		out, err := exec.Command("ps", "-A", "-o", "pid=,command=").Output()
+		if err != nil {
+			t.Fatalf("ps: %v", err)
+		}
+		var left []string
+		for _, line := range strings.Split(string(out), "\n") {
+			if strings.Contains(line, marker) && !strings.Contains(line, "ps -A") {
+				left = append(left, strings.TrimSpace(line))
+			}
+		}
+		if len(left) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("processes naming %s still running %v after the pull ended:\n%s", marker, e2eCleanupTimeout, strings.Join(left, "\n"))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func e2eRandom(t *testing.T, n int) []byte {
+	t.Helper()
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = byte(i*7 + i/251)
+	}
+	copy(b, e2ePayload)
+	return b
+}
+
+func TestE2EPullToStdoutOverSSH(t *testing.T) {
+	requireSSHE2E(t)
+	bin := buildCLI(t)
+	f := newSSHFixture(t)
+	f.remoteRelayium(t, bin)
+	srcDir := t.TempDir()
+	body := e2eRandom(t, 5<<20+7)
+	src := filepath.Join(srcDir, "data.bin")
+	writeFile(t, src, string(body), 0o600)
+	empty := filepath.Join(srcDir, "empty.bin")
+	writeFile(t, empty, "", 0o600)
+
+	stdout, stderr, code := f.pullStdout(t, bin, "localhost:"+src, "-")
+	if code != 0 {
+		t.Fatalf("pull exit %d\nstderr:\n%s", code, stderr)
+	}
+	if stdout != string(body) {
+		t.Fatalf("stdout is %d bytes and differs from the %d-byte source", len(stdout), len(body))
+	}
+	if strings.Contains(stderr, "over-ssh") {
+		t.Fatalf("payload leaked onto stderr:\n%s", stderr)
+	}
+
+	stdout, stderr, code = f.pullStdout(t, bin, "localhost:"+empty, "-")
+	if code != 0 || stdout != "" {
+		t.Fatalf("empty file: exit %d, %d stdout bytes\nstderr:\n%s", code, len(stdout), stderr)
+	}
+	want := []string{"relayium __send " + sshx.ShellQuote(src), "relayium __send " + sshx.ShellQuote(empty)}
+	if got := readLines(t, f.remoteLog); !equalLines(got, want) {
+		t.Fatalf("remote commands = %q, want %q", got, want)
+	}
+	f.assertClientArgv(t, 2)
+	assertNoProcessNaming(t, srcDir)
+}
+
+// A directory — even one holding a single file — a symlink and a multi-file
+// directory are refused with nothing on stdout, in bounded time, and nothing
+// is left running.
+func TestE2EPullToStdoutRefusesNonFilesOverSSH(t *testing.T) {
+	requireSSHE2E(t)
+	bin := buildCLI(t)
+	f := newSSHFixture(t)
+	f.remoteRelayium(t, bin)
+	root := t.TempDir()
+	one := filepath.Join(root, "one")
+	many := filepath.Join(root, "many")
+	for _, d := range []string{one, many} {
+		if err := os.Mkdir(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeFile(t, filepath.Join(one, "big.bin"), string(e2eRandom(t, 16<<20)), 0o600)
+	writeFile(t, filepath.Join(many, "a"), "a", 0o600)
+	writeFile(t, filepath.Join(many, "b"), "b", 0o600)
+	link := filepath.Join(root, "link.bin")
+	if err := os.Symlink(filepath.Join(one, "big.bin"), link); err != nil {
+		t.Fatal(err)
+	}
+	for _, src := range []string{one, many, link} {
+		stdout, stderr, code := f.pullStdout(t, bin, "localhost:"+src, "-")
+		if code != 1 || stdout != "" {
+			t.Fatalf("%s: exit %d with %d stdout bytes\nstderr:\n%s", src, code, len(stdout), stderr)
+		}
+		if !strings.Contains(stderr, "exactly one regular file") {
+			t.Fatalf("%s: stderr does not explain the refusal:\n%s", src, stderr)
+		}
+	}
+	assertNoProcessNaming(t, root)
+}
+
+// A closed stdout pipe (`pull ... - | head -c 1`): the process must NOT die of
+// SIGPIPE (a signal death skips the abort, so it proves nothing about the ssh
+// child). It exits 1 after stopping the transfer, and neither the local ssh nor
+// the remote `__send` outlives it.
+func TestE2EPullToStdoutBrokenPipeOverSSH(t *testing.T) {
+	requireSSHE2E(t)
+	bin := buildCLI(t)
+	f := newSSHFixture(t)
+	f.remoteRelayium(t, bin)
+	srcDir := t.TempDir()
+	src := filepath.Join(srcDir, "big.bin")
+	writeFile(t, src, string(e2eRandom(t, 64<<20)), 0o600)
+
+	argv, env := f.pullCmd(bin, "localhost:"+src, "-")
+	quoted := make([]string, len(argv))
+	for i, a := range argv {
+		quoted[i] = sshx.ShellQuote(a)
+	}
+	// The pull's own exit status goes to stderr; head closes the pipe after
+	// one byte.
+	pipeline := "{ " + strings.Join(quoted, " ") + "; echo \"pull-rc=$?\" >&2; } | head -c 1 >/dev/null"
+	_, stderr, _ := runBounded(t, e2ePushTimeout, "/bin/sh", []string{"-c", pipeline}, t.TempDir(), env)
+	if !strings.Contains(stderr, "pull-rc=1\n") {
+		t.Fatalf("pull did not exit 1 after its stdout closed (141 = killed by SIGPIPE before any cleanup):\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "broken pipe") {
+		t.Fatalf("stderr does not name the closed output:\n%s", stderr)
+	}
+	assertNoProcessNaming(t, srcDir)
+}
+
+// The host key check is ssh's and happens before any remote command: a
+// mismatched key refuses with nothing on stdout and nothing run remotely.
+func TestE2EPullToStdoutRefusesUnknownHostKey(t *testing.T) {
+	requireSSHE2E(t)
+	bin := buildCLI(t)
+	f := newSSHFixture(t)
+	f.remoteRelayium(t, bin)
+	impostor := keygen(t, lookTool(t, "ssh-keygen"), filepath.Join(t.TempDir(), "impostor_ed25519"))
+	writeFile(t, f.knownHosts, e2eHostAlias+" "+impostor+"\n", 0o600)
+	src := writePayload(t)
+
+	stdout, stderr, code := f.pullStdout(t, bin, "localhost:"+src, "-")
+	if code != 1 || stdout != "" {
+		t.Fatalf("exit %d with %d stdout bytes\nstderr:\n%s", code, len(stdout), stderr)
+	}
+	if !strings.Contains(stderr, "Host key verification failed") {
+		t.Fatalf("stderr does not show ssh's host-key refusal:\n%s", stderr)
+	}
+	if got := readLines(t, f.remoteLog); len(got) != 0 {
+		t.Fatalf("remote ran %q despite the host-key refusal", got)
+	}
+	f.assertAccepted(t, false)
+}
+
+// Output from the remote side before the helper starts (a chatty rc file, a
+// banner printed by a wrapper) is not payload: it fails framing and nothing
+// reaches stdout.
+func TestE2EPullToStdoutRejectsRemoteNoiseOverSSH(t *testing.T) {
+	requireSSHE2E(t)
+	bin := buildCLI(t)
+	f := newSSHFixture(t)
+	dir := filepath.Join(t.TempDir(), "noisy-bin")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "relayium"), "#!/bin/sh\necho 'Welcome to the build host'\nexec "+sshx.ShellQuote(bin)+" \"$@\"\n", 0o700)
+	writeFile(t, f.remotePath, dir+":/usr/bin:/bin\n", 0o600)
+	src := writePayload(t)
+
+	stdout, stderr, code := f.pullStdout(t, bin, "localhost:"+src, "-")
+	if code != 1 || stdout != "" {
+		t.Fatalf("exit %d with stdout %q\nstderr:\n%s", code, stdout, stderr)
+	}
+	assertNoProcessNaming(t, filepath.Dir(src))
+}
+
+// A real terminal as stdout is refused before ssh is started. `script` gives
+// the CLI a pty, so this exercises the actual isatty call, not a stand-in.
+func TestE2EPullToStdoutRefusesARealTerminal(t *testing.T) {
+	requireSSHE2E(t)
+	bin := buildCLI(t)
+	f := newSSHFixture(t)
+	f.remoteRelayium(t, bin)
+	src := writePayload(t)
+	argv, env := f.pullCmd(bin, "localhost:"+src, "-")
+	scriptBin := lookTool(t, "script")
+	var args []string
+	switch runtime.GOOS {
+	case "darwin", "freebsd":
+		args = append([]string{"-q", "/dev/null"}, argv...)
+	default: // util-linux
+		quoted := make([]string, len(argv))
+		for i, a := range argv {
+			quoted[i] = sshx.ShellQuote(a)
+		}
+		args = []string{"-q", "-e", "-c", strings.Join(quoted, " "), "/dev/null"}
+	}
+	out, errOut, _ := runBounded(t, e2ePushTimeout, scriptBin, args, t.TempDir(), env)
+	all := out + errOut
+	if !strings.Contains(all, "refusing to write file bytes to a terminal") {
+		t.Fatalf("no terminal refusal under a pty:\n%q", all)
+	}
+	if strings.Contains(all, "over-ssh") {
+		t.Fatalf("payload reached the terminal:\n%q", all)
+	}
+	if calls := readLines(t, f.clientLog); len(calls) != 0 {
+		t.Fatalf("ssh was started despite the terminal: %q", calls)
+	}
+}
+
+// ── old remotes (opt-in: RELAYIUM_E2E_OLD_RELAYIUM=bin1:bin2...) ────────────
+//
+// Each named binary is a released relayium (or a private build of a release
+// tag) placed on the remote PATH. They are supplied from outside the
+// repository, so these tests skip without the variable even when
+// RELAYIUM_E2E_SSH=1; once named, a missing binary is a failure.
+
+func oldRelayiums(t *testing.T) []string {
+	t.Helper()
+	v := os.Getenv("RELAYIUM_E2E_OLD_RELAYIUM")
+	if v == "" {
+		t.Skip("set RELAYIUM_E2E_OLD_RELAYIUM to a colon-separated list of old relayium binaries")
+	}
+	bins := strings.Split(v, ":")
+	for _, b := range bins {
+		if st, err := os.Stat(b); err != nil || st.IsDir() || !filepath.IsAbs(b) {
+			t.Fatalf("RELAYIUM_E2E_OLD_RELAYIUM entry %q is not an absolute path to a binary (%v)", b, err)
+		}
+	}
+	return bins
+}
+
+func oldVersion(t *testing.T, bin string) string {
+	t.Helper()
+	out, _, _ := runBounded(t, e2eToolTimeout, bin, []string{"version"}, "", nil)
+	return strings.TrimSpace(out)
+}
+
+// Pull to stdout needs no wire change: an old `__send` of one file is read as
+// is. A directory against a sender that ignores the refusal (every release
+// before v0.24.0 streams the whole body anyway) is ended by the abort, in
+// bounded time, with nothing on stdout and nothing left running.
+func TestE2EPullToStdoutOldPeerOverSSH(t *testing.T) {
+	requireSSHE2E(t)
+	olds := oldRelayiums(t)
+	bin := buildCLI(t)
+	for _, old := range olds {
+		t.Run(oldVersion(t, old), func(t *testing.T) {
+			f := newSSHFixture(t)
+			f.remoteRelayium(t, old)
+			root := t.TempDir()
+			body := e2eRandom(t, 3<<20+1)
+			src := filepath.Join(root, "data.bin")
+			writeFile(t, src, string(body), 0o600)
+			dir := filepath.Join(root, "dir")
+			if err := os.Mkdir(dir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			writeFile(t, filepath.Join(dir, "big.bin"), string(e2eRandom(t, 64<<20)), 0o600)
+
+			stdout, stderr, code := f.pullStdout(t, bin, "localhost:"+src, "-")
+			if code != 0 || stdout != string(body) {
+				t.Fatalf("file: exit %d, %d stdout bytes (want %d)\nstderr:\n%s", code, len(stdout), len(body), stderr)
+			}
+			began := time.Now()
+			stdout, stderr, code = f.pullStdout(t, bin, "localhost:"+dir, "-")
+			if code != 1 || stdout != "" {
+				t.Fatalf("dir: exit %d with %d stdout bytes\nstderr:\n%s", code, len(stdout), stderr)
+			}
+			if el := time.Since(began); el > 20*time.Second {
+				t.Fatalf("dir refusal took %v", el)
+			}
+			assertNoProcessNaming(t, root)
+		})
+	}
+}
+
+// F1: an ordinary directory pull refused by THIS side (the file already exists
+// locally) against an old sender, which ignores the refusal and streams the
+// whole body. Before the abort, pull closed ssh's stdin and waited for a child
+// blocked writing a body nobody read, and hung. The local file must be left
+// exactly as it was, and nothing may stay running.
+func TestE2EPullCollisionOldPeerOverSSH(t *testing.T) {
+	requireSSHE2E(t)
+	olds := oldRelayiums(t)
+	bin := buildCLI(t)
+	for _, old := range olds {
+		t.Run(oldVersion(t, old), func(t *testing.T) {
+			f := newSSHFixture(t)
+			f.remoteRelayium(t, old)
+			root := t.TempDir()
+			src := filepath.Join(root, "big.bin")
+			writeFile(t, src, string(e2eRandom(t, 64<<20)), 0o600)
+			dst := t.TempDir()
+			writeFile(t, filepath.Join(dst, "big.bin"), "ORIGINAL", 0o600)
+
+			argv, env := f.pullCmd(bin, "localhost:"+src, dst)
+			began := time.Now()
+			stdout, stderr, code := runBounded(t, e2ePushTimeout, argv[0], argv[1:], "", env)
+			if code != 1 {
+				t.Fatalf("exit %d, want 1\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+			}
+			if el := time.Since(began); el > 20*time.Second {
+				t.Fatalf("refused pull took %v", el)
+			}
+			if !strings.Contains(stderr, "already exists") {
+				t.Fatalf("stderr does not explain the refusal:\n%s", stderr)
+			}
+			assertOnlyFile(t, dst, "big.bin", []byte("ORIGINAL"))
+			assertNoProcessNaming(t, root)
+		})
+	}
+}
+
+// e2eSilentPullBound is how long a pull against a silent remote may take:
+// sshx's abortGrace + termGrace (2s + 2s; ssh normally exits on the SIGTERM at
+// 2s) plus connection setup, doubled for a loaded runner. A pull that does not
+// escalate is cut off at e2eSilentPullDeadline, and both stay far below
+// e2eSilentHold, so the remote's own exit can never be what ends the pull.
+const (
+	e2eSilentPullBound    = 8 * time.Second
+	e2eSilentPullDeadline = 30 * time.Second
+	e2eSilentHold         = 120 * time.Second // backstop only; the test releases it
+)
+
+// pidAlive reports whether pid is still in the process table (a zombie
+// counts: an unreaped child is not "gone").
+func pidAlive(t *testing.T, pid int) bool {
+	t.Helper()
+	out, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "pid=").Output()
+	if err != nil {
+		if _, ok := err.(*exec.ExitError); ok {
+			return false
+		}
+		t.Fatalf("ps -p %d: %v", pid, err)
+	}
+	return strings.TrimSpace(string(out)) != ""
+}
+
+func readPID(t *testing.T, path string) int {
+	t.Helper()
+	lines := readLines(t, path)
+	if len(lines) != 1 {
+		t.Fatalf("%s holds %q, want exactly one pid", path, lines)
+	}
+	pid, err := strconv.Atoi(lines[0])
+	if err != nil || pid <= 0 {
+		t.Fatalf("%s holds %q, not a pid", path, lines[0])
+	}
+	return pid
+}
+
+// A remote that refuses to go away: it sends a stream pull must refuse, then
+// ignores stdin EOF, SIGPIPE, SIGHUP, SIGINT and SIGTERM and sends nothing
+// more. It is HELD alive by this test until an explicit release after the
+// assertions (a 120s backstop covers a test killed before its cleanup ran), so
+// only Abort's signal escalation can end the local ssh: closing ssh's pipes
+// does not, ssh waits for a remote that will not exit. The test proves, at the
+// moment pull returns and with the remote still demonstrably alive, that the
+// exact ssh child pull started is gone, and that this took about abortGrace +
+// termGrace, not the remote's lifetime.
+//
+// Killing the local ssh cannot make an arbitrary remote program exit (sshd
+// sends no signal to a pty-less command), which is why the stand-in is released
+// by the test rather than expected to die. The real `__send` is never silent
+// like this — it either writes, which fails once the channel is gone, or reads,
+// which sees EOF; its cleanup is proved by the broken-pipe and refusal tests.
+func TestE2EPullToStdoutSilentRemoteOverSSH(t *testing.T) {
+	requireSSHE2E(t)
+	bin := buildCLI(t)
+	f := newSSHFixture(t)
+	dir := filepath.Join(t.TempDir(), "silent-bin")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var frames bytes.Buffer
+	xfer.WriteJSON(&frames, xfer.MsgHello, xfer.Hello{Version: 1, Mode: "push"})
+	xfer.WriteJSON(&frames, xfer.MsgManifest, xfer.Manifest{Files: []xfer.FileEntry{{Path: "d/x", Size: 1}}})
+	framesFile := filepath.Join(dir, "frames")
+	writeFile(t, framesFile, frames.String(), 0o600)
+	remotePIDFile := filepath.Join(dir, "remote.pid")
+	release := filepath.Join(dir, "release")
+	// Signals are ignored before anything is sent, and the ignore is inherited
+	// by cat and sleep. The loop's children carry no test path in their argv.
+	writeFile(t, filepath.Join(dir, "relayium"), "#!/bin/sh\n"+
+		"trap '' HUP PIPE TERM INT\n"+
+		"echo $$ > "+sshx.ShellQuote(remotePIDFile)+"\n"+
+		"cat "+sshx.ShellQuote(framesFile)+"\n"+
+		"n=0\n"+
+		"while [ ! -e "+sshx.ShellQuote(release)+" ] && [ $n -lt "+strconv.Itoa(int(e2eSilentHold/(200*time.Millisecond)))+" ]; do sleep 0.2; n=$((n+1)); done\n", 0o700)
+	writeFile(t, f.remotePath, dir+":/usr/bin:/bin\n", 0o600)
+
+	// A shim in front of the fixture's: $$ before exec IS the ssh client's pid.
+	sshPIDFile := filepath.Join(dir, "ssh.pid")
+	pidShim := filepath.Join(t.TempDir(), "pid-shim")
+	if err := os.Mkdir(pidShim, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(pidShim, "ssh"), "#!/bin/sh\n"+
+		"echo $$ >> "+sshx.ShellQuote(sshPIDFile)+"\n"+
+		"exec "+sshx.ShellQuote(filepath.Join(f.shimDir, "ssh"))+" \"$@\"\n", 0o700)
+
+	// Registered after the fixture, so it runs BEFORE sshd is stopped and the
+	// fixture census runs. Only the exact owned stand-in is waited for; it is
+	// killed by pid only if it ignores its release (a failure in itself).
+	t.Cleanup(func() {
+		writeFile(t, release, "", 0o600)
+		if _, err := os.Stat(remotePIDFile); err != nil {
+			return // the stand-in never started
+		}
+		pid := readPID(t, remotePIDFile)
+		deadline := time.Now().Add(e2eCleanupTimeout)
+		for pidAlive(t, pid) {
+			if time.Now().After(deadline) {
+				t.Errorf("released remote stand-in pid %d still running after %v; killing it", pid, e2eCleanupTimeout)
+				if p, err := os.FindProcess(pid); err == nil {
+					p.Kill()
+				}
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	})
+
+	marker := filepath.Join(t.TempDir(), "never-sent")
+	argv, env := f.pullCmd(bin, "localhost:"+marker, "-")
+	env = append(env, "PATH="+pidShim+":"+f.shimDir+":/usr/bin:/bin")
+	cwd := t.TempDir()
+	began := time.Now()
+	// A pull that never escalates is killed at the deadline and fails there.
+	stdout, stderr, code := runBounded(t, e2eSilentPullDeadline, argv[0], argv[1:], cwd, env)
+	el := time.Since(began)
+
+	// Everything below is observed BEFORE the remote is released.
+	sshPID := readPID(t, sshPIDFile)
+	sshAlive := pidAlive(t, sshPID)
+	remotePID := readPID(t, remotePIDFile)
+	remoteAlive := pidAlive(t, remotePID)
+	t.Logf("pull returned after %v; ssh pid %d alive=%v; remote stand-in pid %d alive=%v",
+		el.Round(time.Millisecond), sshPID, sshAlive, remotePID, remoteAlive)
+
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "exactly one regular file") {
+		t.Fatalf("exit %d with %d stdout bytes\nstderr:\n%s", code, len(stdout), stderr)
+	}
+	if entries, err := os.ReadDir(cwd); err != nil || len(entries) != 0 {
+		t.Fatalf("pull to stdout wrote into its working directory: %v (err %v)", entries, err)
+	}
+	if !remoteAlive {
+		t.Fatalf("the held remote stand-in (pid %d) was gone when pull returned: the remote's exit, not Abort, may have ended ssh", remotePID)
+	}
+	if sshAlive {
+		t.Fatalf("pull returned but its ssh child (pid %d) is still in the process table", sshPID)
+	}
+	if el > e2eSilentPullBound {
+		t.Fatalf("pull took %v against a held silent remote (bound %v): Abort did not escalate in time", el, e2eSilentPullBound)
+	}
+	if got := readLines(t, f.clientLog); len(got) != 1 {
+		t.Fatalf("ssh invocations = %q, want exactly one", got)
+	}
 }

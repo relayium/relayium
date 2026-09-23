@@ -1,11 +1,14 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/relayium/relayium/internal/sshx"
 	"github.com/relayium/relayium/internal/termtext"
@@ -36,6 +39,7 @@ usage:
   relayium push <src...> [user@]host:dest    push files to a server you can ssh into
   relayium sync <src...> <dest> [--delete] [--watch]   incremental one-way folder mirror
   relayium pull [user@]host:src <dest>       pull files from such a server
+                                             (<dest> "-": one file to stdout)
   relayium send <src...> [code]              send to a peer over a pairing code (cross-network)
                                              (omit the code to mint one; requires login)
   relayium receive <code> [destdir]          receive such a transfer
@@ -256,6 +260,7 @@ const pullUsage = `relayium pull — copy files from a server you can ssh into
 
 usage:
   relayium pull [user@]host:src <dest>
+  relayium pull [user@]host:file -          write that one file to stdout
 
 Pull runs over your own SSH connection: the bytes travel through it and never
 touch Relayium's servers, and no Relayium account is involved. Host-key checking
@@ -265,16 +270,28 @@ It requires relayium to be INSTALLED ON THE REMOTE, because the remote acts as
 the sender. There is no tar fallback for pull; install relayium there, or fetch
 with scp/rsync. Each file is verified by SHA-256 and staged before it is
 installed locally, and a pull onto a path that already exists is refused before
-any bytes move.
+anything is written locally.
 
 Like push, this is not a transaction and does not resume: files are installed
 one at a time as they pass, so an interrupted pull leaves the files that already
 landed in place, and re-running the same pull is then refused because those
 files exist. Fetch the remainder explicitly, or mirror with "relayium sync".
 
+A lone "-" as <dest> writes exactly one remote regular file to stdout and
+nothing else: no local file or directory is created, and progress and errors
+go to stderr. A directory (even one holding a single file), a symlink, a
+special file or several files are refused with none of their bytes written
+to stdout. The one file's bytes are written as they arrive and cannot be taken
+back: if the stream is cut short or its final SHA-256 check fails, pull exits
+non-zero and says to discard the output, so check the exit status (in a
+pipeline, "set -o pipefail"). Pull into a directory instead to have each file
+verified before it is installed. stdout must not be a terminal. A local
+directory named "-" is written "./-".
+
 positional arguments:
   [user@]host:src   the remote file or directory to fetch
-  <dest>            local directory to write into
+  <dest>            local directory to write into, or "-" for stdout
+                    (exactly one regular file)
 
 flags:
   -i <file>        ssh identity file
@@ -430,6 +447,11 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 	}
 	destDir := rest[1]
 	opts := sshx.Opts{IdentityFile: f.identity, Port: f.port}
+	if destDir == "-" {
+		// A lone "-" is stdout. A local directory literally named "-" is
+		// spelled "./-" and takes the ordinary path below.
+		return pullToStdout(src, opts, stdout, stderr)
+	}
 	// Pull requires relayium on the remote (it acts as the sender).
 	sess, err := sshDial(src, "relayium __send "+sshx.ShellQuote(src.Path), opts)
 	if err != nil {
@@ -437,16 +459,110 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	rep, err := peerReceive(sess, destDir, f.noResume, stderr)
-	cerr := sess.Close()
 	if err != nil {
+		// This side stopped reading. A sender before v0.24.0 ignores a refusal
+		// (an existing destination, say) and keeps streaming the body, and
+		// Close would wait on it forever; abort instead.
+		abortTransport(sess)
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if cerr != nil {
+	if cerr := sess.Close(); cerr != nil {
 		fmt.Fprintln(stderr, cerr)
 		return 1
 	}
 	return reportExit(rep, stderr)
+}
+
+// pullStdoutIsTerminal is the real terminal test (an ioctl via x/term, never
+// the character-device heuristic that also matches /dev/null). A var so tests
+// can stand in for a terminal without one.
+var pullStdoutIsTerminal = func(w io.Writer) bool { return isTTY(w) }
+
+// stdoutSourceRefusal names why src cannot be a single file by its shape
+// alone, or returns "". Every spelling of a filesystem root ("/", "/.", "a/..",
+// "//") has one of these shapes, which matters because the remote builds its
+// manifest relative to the source's parent: a root holding a single top-level
+// file is the one directory that would otherwise look like one flat file.
+func stdoutSourceRefusal(p string) string {
+	last := p[strings.LastIndexByte(p, '/')+1:]
+	switch {
+	case p == "" || p == ".":
+		return "names the remote working directory"
+	case strings.HasSuffix(p, "/"):
+		return "ends with \"/\", so it names a directory"
+	case last == "." || last == "..":
+		return "ends with \"" + last + "\", so it names a directory"
+	}
+	return ""
+}
+
+// abortTransport ends a transport this side has given up on without waiting
+// for the peer: an ssh session is aborted and its child reaped in bounded
+// time (sshx.Session.Abort). Anything else is closed.
+func abortTransport(c io.Closer) {
+	if a, ok := c.(interface{ Abort() error }); ok {
+		_ = a.Abort()
+		return
+	}
+	_ = c.Close()
+}
+
+// pullToStdout is `pull host:file -`: exactly one remote regular file, its
+// bytes and nothing else on stdout, no local filesystem effect. It speaks the
+// unchanged v1 protocol to the same `relayium __send` as a directory pull.
+//
+// Bytes are written as they arrive. A stream that is cut short or fails its
+// final hash check exits 1 with a stderr line saying to discard the output;
+// what was written cannot be recalled.
+func pullToStdout(src xfer.Endpoint, opts sshx.Opts, stdout, stderr io.Writer) int {
+	if pullStdoutIsTerminal(stdout) {
+		fmt.Fprintln(stderr, "pull: refusing to write file bytes to a terminal; redirect stdout (> file) or pipe it (| cat)")
+		return 2
+	}
+	if why := stdoutSourceRefusal(src.Path); why != "" {
+		fmt.Fprintf(stderr, "pull: %q %s; \"pull host:file -\" writes exactly one file to stdout. Name the file, or pull into a local directory instead.\n", termtext.Safe(src.Path), why)
+		return 2
+	}
+	// A write to a closed stdout pipe (`pull ... - | head -c1`) would otherwise
+	// kill this process with SIGPIPE on the spot, before the ssh child could
+	// be stopped. While this is registered the write returns EPIPE instead,
+	// and the ordinary error path below aborts the session.
+	sigpipe := make(chan os.Signal, 1)
+	signal.Notify(sigpipe, syscall.SIGPIPE)
+	defer signal.Stop(sigpipe)
+
+	sess, err := sshDial(src, "relayium __send "+sshx.ShellQuote(src.Path), opts)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	prog := newRecvProgress(stderr)
+	_, err = xfer.ReceiveToWriter(sess, stdout, xfer.StdoutOpts{Progress: prog.report})
+	prog.finish()
+	if err != nil {
+		// Never Close here: a sender before v0.24.0 ignores a refusal and keeps
+		// streaming into a pipe nobody reads, and Close would wait on it forever.
+		abortTransport(sess)
+		var oe *xfer.OutputError
+		switch {
+		case errors.As(err, &oe):
+			fmt.Fprintf(stderr, "pull: %v; the transfer was stopped and the output is incomplete\n", err)
+		case err == io.EOF:
+			// Bare EOF comes only from a frame read before the body (every
+			// later failure is wrapped with a byte count), so nothing was
+			// written to stdout.
+			fmt.Fprintln(stderr, "pull: the remote closed the connection before any file data arrived; nothing was written to stdout (its own error, if any, is shown above)")
+		default:
+			fmt.Fprintf(stderr, "pull: %v\n", err)
+		}
+		return 1
+	}
+	if err := sess.Close(); err != nil {
+		fmt.Fprintf(stderr, "pull: the output is complete and verified, but ssh then reported: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 func runRecv(args []string, stdout, stderr io.Writer) int {
