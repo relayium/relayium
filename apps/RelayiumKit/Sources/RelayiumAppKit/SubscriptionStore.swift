@@ -69,6 +69,19 @@ public enum StorePurchaseAuthorizationRefused: Error, Equatable {
     case refused
 }
 
+/// Errors a ``SubscriptionStore`` reports in the seam's own vocabulary, so
+/// nothing above the adapter has to name a StoreKit type to recognise them.
+public enum SubscriptionStoreError: Error, Equatable, Sendable {
+    /// The user dismissed the App Store sign-in prompt that
+    /// ``SubscriptionStore/synchronize()`` raised.
+    ///
+    /// **Nothing happened, and nothing may be done about it.** No transaction was
+    /// read, so there is nothing to submit, finish or grant, and nothing to
+    /// revoke either: the user's existing entitlement is exactly what it was.
+    /// It is not a failure and must not be shown as one.
+    case synchronizationCancelled
+}
+
 /// The app's whole view of an in-app purchase store, with no `import StoreKit`
 /// anywhere in it.
 ///
@@ -148,7 +161,14 @@ public protocol SubscriptionStore: Sendable {
     func updates() -> AsyncStream<SignedStoreTransaction>
 
     /// Ask the store to reconcile with the App Store account. May prompt for
-    /// credentials, and throws when the user declines.
+    /// credentials.
+    ///
+    /// When the user declines that prompt, an implementation must throw
+    /// ``SubscriptionStoreError/synchronizationCancelled`` and nothing else, so
+    /// the model can tell a dismissed sign-in sheet from a store that failed.
+    /// Only the store's own typed cancellation may be translated into it: an
+    /// error that merely might be a cancellation stays what it is and is
+    /// reported as a failure.
     func synchronize() async throws
 
     /// Tell the store this transaction has been dealt with, so it stops being

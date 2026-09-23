@@ -1796,6 +1796,306 @@ final class AppleSubscriptionModelTests: XCTestCase {
         XCTAssertTrue(rig.store.finished.isEmpty)
     }
 
+    // MARK: - a declined App Store sign-in (W-C5)
+
+    /// The journal entries written since `mark`, so a test can state exactly
+    /// what the restore under test did and nothing the setup did.
+    private func entries(_ rig: Rig, since mark: Int) -> [String] {
+        Array(rig.journal.all.dropFirst(mark))
+    }
+
+    /// **Dismissing Apple's sign-in sheet is not a failure, and does nothing.**
+    ///
+    /// The store is asked to synchronize and nothing else: no entitlement read,
+    /// no submission, no finish, no refresh, no catalog read, no purchase
+    /// attempt. The screen goes back to what it showed.
+    ///
+    /// Negative control: before W-C5 the same cancellation was reported as
+    /// `.failed(.unexpected(type: "SubscriptionStoreError"))`.
+    func testADeclinedAppStoreSignInReturnsToIdleAndDoesNothingElse() async {
+        let rig = await makeReadyRig()
+        XCTAssertEqual(rig.model.state, .idle)
+        rig.store.setEntitlements([Fixture.delivery])
+        rig.store.setSynchronize(.failure(SubscriptionStoreError.synchronizationCancelled))
+        let mark = rig.journal.all.count
+
+        await rig.model.restore()
+
+        XCTAssertEqual(rig.model.state, .idle,
+                       "a dismissed App Store sign-in was reported as a failure")
+        XCTAssertEqual(entries(rig, since: mark), ["synchronize"],
+                       "a cancelled restore reached past the store's prompt")
+        XCTAssertTrue(rig.store.finished.isEmpty, "a cancelled restore finished a transaction")
+        XCTAssertTrue(rig.billing.submittedJWS.isEmpty, "a cancelled restore submitted something")
+        XCTAssertTrue(rig.store.appAccountTokens.isEmpty, "a cancelled restore opened a sheet")
+        XCTAssertEqual(rig.billing.dispatchAttempts, 0, "a cancelled restore armed a purchase")
+    }
+
+    /// A pause on new sales is a standing fact about the server, and a declined
+    /// sign-in does not change it.
+    func testADeclinedSignInKeepsThePausedSurface() async {
+        let rig = makeRig()
+        rig.billing.setCatalog(.success(Fixture.pausedCatalog()))
+        await rig.model.loadOffers()
+        XCTAssertEqual(rig.model.state, .purchasesPaused)
+        rig.store.setEntitlements([Fixture.delivery])
+        rig.store.setSynchronize(.failure(SubscriptionStoreError.synchronizationCancelled))
+        let mark = rig.journal.all.count
+
+        await rig.model.restore()
+
+        XCTAssertEqual(rig.model.state, .purchasesPaused)
+        XCTAssertEqual(entries(rig, since: mark), ["synchronize"])
+        XCTAssertTrue(rig.store.finished.isEmpty)
+    }
+
+    /// "Nothing on sale" is what the card reads to explain an empty list, so a
+    /// declined sign-in must leave it in place rather than blank the card.
+    func testADeclinedSignInKeepsTheUnavailableSurface() async {
+        let rig = makeRig()
+        rig.billing.setCatalog(.success(Fixture.serverCatalog([])))
+        await rig.model.loadOffers()
+        XCTAssertEqual(rig.model.state, .unavailable)
+        rig.store.setSynchronize(.failure(SubscriptionStoreError.synchronizationCancelled))
+        let mark = rig.journal.all.count
+
+        await rig.model.restore()
+
+        XCTAssertEqual(rig.model.state, .unavailable)
+        XCTAssertEqual(entries(rig, since: mark), ["synchronize"])
+    }
+
+    /// An Ask-to-Buy request is still pending after a declined sign-in, so the
+    /// notice that says so comes back.
+    func testADeclinedSignInKeepsAPendingAskToBuyNotice() async {
+        let rig = await makeReadyRig()
+        rig.store.setPurchase(.success(.pending))
+        await rig.model.purchase(productID: Fixture.catalog[0])
+        XCTAssertEqual(rig.model.state, .deferred)
+        rig.store.setSynchronize(.failure(SubscriptionStoreError.synchronizationCancelled))
+        let mark = rig.journal.all.count
+
+        await rig.model.restore()
+
+        XCTAssertEqual(rig.model.state, .deferred)
+        XCTAssertEqual(entries(rig, since: mark), ["synchronize"])
+        XCTAssertTrue(rig.store.finished.isEmpty)
+    }
+
+    /// An earlier operation's answer — a success, a failure, "nothing to
+    /// restore" — is not this restore's answer, so a declined sign-in does not
+    /// show it again as if it were.
+    func testADeclinedSignInDropsAnEarlierOperationsOutcome() async {
+        // .completed, from an accepted purchase.
+        do {
+            let rig = await makeReadyRig()
+            await rig.model.purchase(productID: Fixture.catalog[0])
+            XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
+            let finishedBefore = rig.store.finished
+            let refreshesBefore = rig.journal.count("refresh")
+            rig.store.setSynchronize(.failure(SubscriptionStoreError.synchronizationCancelled))
+            let mark = rig.journal.all.count
+
+            await rig.model.restore()
+
+            XCTAssertEqual(rig.model.state, .idle)
+            XCTAssertEqual(entries(rig, since: mark), ["synchronize"])
+            XCTAssertEqual(rig.store.finished, finishedBefore)
+            XCTAssertEqual(rig.journal.count("refresh"), refreshesBefore)
+        }
+        // .nothingToRestore, from an earlier restore.
+        do {
+            let rig = await makeReadyRig()
+            rig.store.setEntitlements([])
+            await rig.model.restore()
+            XCTAssertEqual(rig.model.state, .nothingToRestore)
+            rig.store.setSynchronize(.failure(SubscriptionStoreError.synchronizationCancelled))
+            let mark = rig.journal.all.count
+
+            await rig.model.restore()
+
+            XCTAssertEqual(rig.model.state, .idle)
+            XCTAssertEqual(entries(rig, since: mark), ["synchronize"])
+        }
+        // .failed, from an earlier restore whose store really failed.
+        do {
+            let rig = await makeReadyRig()
+            rig.store.setSynchronize(.failure(StoreFailure()))
+            await rig.model.restore()
+            XCTAssertEqual(rig.model.state, .failed(.unexpected(type: "StoreFailure")))
+            rig.store.setSynchronize(.failure(SubscriptionStoreError.synchronizationCancelled))
+            let mark = rig.journal.all.count
+
+            await rig.model.restore()
+
+            XCTAssertEqual(rig.model.state, .idle)
+            XCTAssertEqual(entries(rig, since: mark), ["synchronize"])
+        }
+    }
+
+    /// Only the seam's typed cancellation is a cancellation. A task
+    /// cancellation, or any other error that merely sounds like one, is still a
+    /// failure the user is told about.
+    func testOnlyTheTypedCancellationIsTreatedAsADeclinedSignIn() async {
+        let rig = await makeReadyRig()
+        rig.store.setSynchronize(.failure(CancellationError()))
+        rig.store.setEntitlements([Fixture.delivery])
+
+        await rig.model.restore()
+
+        XCTAssertEqual(rig.model.state, .failed(.unexpected(type: "CancellationError")))
+        XCTAssertTrue(rig.store.finished.isEmpty)
+        XCTAssertEqual(rig.journal.count("currentEntitlements"), 0)
+    }
+
+    /// **A sign-out while Apple's sheet is open wins.** The reload it caused
+    /// owns the screen; the cancel that lands afterwards must not paint the
+    /// pre-restore state back over "not signed in".
+    func testASignOutDuringADeclinedSignInIsNotOverwritten() async {
+        let rig = await makeReadyRig()
+        rig.store.setEntitlements([Fixture.delivery])
+        rig.store.setHoldSynchronize(true)
+        let restore = Task { await rig.model.restore() }
+        await waitFor(rig) { $0.journal.count("synchronize") == 1 }
+
+        rig.bearer.set(nil)
+        await rig.model.loadOffers()
+        XCTAssertEqual(rig.model.state, .failed(.billing(.notSignedIn)))
+
+        rig.store.setSynchronize(.failure(SubscriptionStoreError.synchronizationCancelled))
+        rig.store.setHoldSynchronize(false)
+        await restore.value
+
+        XCTAssertEqual(rig.model.state, .failed(.billing(.notSignedIn)),
+                       "a cancelled restore wrote over the sign-out that superseded it")
+        XCTAssertEqual(rig.journal.count("currentEntitlements"), 0)
+        XCTAssertTrue(rig.store.finished.isEmpty)
+        XCTAssertTrue(rig.billing.submittedJWS.isEmpty)
+    }
+
+    /// Run a restore that is expected to stop at its cancelled `synchronize()`,
+    /// while the purchase's submission is parked. A restore that wrongly went on
+    /// to submit would park behind that same hold; this fails it after a bounded
+    /// wait and then lets it drain, instead of hanging the suite.
+    private func restoreWithoutWaitingOnTheHeldSubmission(_ rig: Rig,
+                                                          file: StaticString = #filePath,
+                                                          line: UInt = #line) async {
+        let done = BearerBox(nil)
+        let restore = Task { await rig.model.restore(); done.set("done") }
+        await waitFor(rig, { _ in done.current != nil }, file: file, line: line)
+        if done.current == nil {
+            XCTFail("the cancelled restore went on to submit and parked behind the held "
+                    + "submission", file: file, line: line)
+            rig.billing.releaseSubmit()
+        }
+        await restore.value
+    }
+
+    /// **Adversarial: a declined sign-in racing a purchase that is being
+    /// submitted.** The restore supersedes the purchase's screen, and is then
+    /// cancelled. The purchase's transaction is real money and must still be
+    /// submitted, finished exactly once on acceptance, and refreshed for — the
+    /// cancel may neither finish it early nor drop it.
+    func testADeclinedSignInDoesNotFinishOrDropAPurchaseInFlight() async {
+        let rig = await makeReadyRig()
+        rig.billing.holdSubmit(after: 0)
+        let purchase = Task { await rig.model.purchase(productID: Fixture.catalog[0]) }
+        await waitFor(rig) { $0.billing.submittedJWS.count == 1 }
+        XCTAssertEqual(rig.model.state, .submitting)
+        XCTAssertTrue(rig.store.finished.isEmpty)
+
+        rig.store.setEntitlements([Fixture.delivery])
+        rig.store.setSynchronize(.failure(SubscriptionStoreError.synchronizationCancelled))
+        await restoreWithoutWaitingOnTheHeldSubmission(rig)
+        // The purchase's spinner belongs to an operation that will never write
+        // again, so it is not brought back.
+        XCTAssertEqual(rig.model.state, .idle)
+        XCTAssertTrue(rig.store.finished.isEmpty,
+                      "the cancelled restore finished a transaction still being submitted")
+        XCTAssertEqual(rig.journal.count("currentEntitlements"), 0)
+
+        rig.billing.releaseSubmit()
+        await purchase.value
+
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id],
+                       "the purchase's accepted transaction was dropped or finished twice")
+        XCTAssertEqual(rig.billing.submittedJWS, [Fixture.jws],
+                       "the purchase's transaction was submitted a second time")
+        XCTAssertEqual(rig.journal.count("refresh"), 1,
+                       "the accepted purchase lost its refresh to the cancelled restore")
+        XCTAssertEqual(rig.model.state, .idle,
+                       "the superseded purchase wrote over the newer operation's state")
+    }
+
+    /// The same race, where the server then refuses the purchase's
+    /// transaction: nothing is finished by anybody, so the App Store keeps
+    /// redelivering it.
+    func testADeclinedSignInLeavesARefusedPurchaseUnfinished() async {
+        let rig = await makeReadyRig()
+        rig.billing.setSubmissions([.failure(AppleBillingError.verifierUnavailable)])
+        rig.billing.holdSubmit(after: 0)
+        let purchase = Task { await rig.model.purchase(productID: Fixture.catalog[0]) }
+        await waitFor(rig) { $0.billing.submittedJWS.count == 1 }
+
+        rig.store.setEntitlements([Fixture.delivery])
+        rig.store.setSynchronize(.failure(SubscriptionStoreError.synchronizationCancelled))
+        await restoreWithoutWaitingOnTheHeldSubmission(rig)
+
+        rig.billing.releaseSubmit()
+        await purchase.value
+
+        XCTAssertTrue(rig.store.finished.isEmpty,
+                      "a refused transaction was finished around a cancelled restore")
+        XCTAssertEqual(rig.journal.count("finish"), 0)
+        XCTAssertEqual(rig.journal.count("refresh"), 0)
+        XCTAssertEqual(rig.model.state, .idle)
+    }
+
+    /// **Adversarial: a store delivery lands while Apple's sheet is open and
+    /// the user then dismisses it.** The update stream's own submit-then-finish
+    /// runs to completion exactly once; the cancel neither finishes it again
+    /// nor reads entitlements that would submit it a second time.
+    func testADeclinedSignInDoesNotTouchADeliveryArrivingMeanwhile() async {
+        let rig = await makeReadyRig()
+        rig.model.startObservingUpdates()
+        rig.store.setEntitlements([Fixture.delivery])
+        rig.store.setHoldSynchronize(true)
+        let restore = Task { await rig.model.restore() }
+        await waitFor(rig) { $0.journal.count("synchronize") == 1 }
+
+        rig.store.deliverUpdate(Fixture.delivery)
+        await waitFor(rig) { $0.journal.count("refresh") == 1 }
+
+        rig.store.setSynchronize(.failure(SubscriptionStoreError.synchronizationCancelled))
+        rig.store.setHoldSynchronize(false)
+        await restore.value
+        rig.model.stop()
+
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id],
+                       "the delivery was not finished exactly once")
+        XCTAssertEqual(rig.billing.submittedJWS, [Fixture.jws])
+        XCTAssertEqual(rig.journal.count("currentEntitlements"), 0)
+        XCTAssertEqual(rig.journal.count("refresh"), 1)
+        XCTAssertEqual(rig.model.state, .idle)
+    }
+
+    /// The whole mapping, case by case, so a new state cannot be added without
+    /// somebody deciding where a declined sign-in leaves it.
+    func testWhereADeclinedSignInLeavesEveryState() {
+        let kept: [AppleSubscriptionState] = [.idle, .purchasesPaused, .unavailable, .deferred]
+        for state in kept {
+            XCTAssertEqual(AppleSubscriptionModel.stateAfterCancelledRestore(from: state), state)
+        }
+        let dropped: [AppleSubscriptionState] = [
+            .failed(.billing(.network)), .completed(Fixture.entitlement), .nothingToRestore,
+            .loadingOffers, .purchasing(productID: Fixture.catalog[0]), .submitting, .restoring,
+        ]
+        for state in dropped {
+            XCTAssertEqual(AppleSubscriptionModel.stateAfterCancelledRestore(from: state), .idle,
+                           "\(state) survived a declined sign-in")
+        }
+    }
+
     // MARK: - overlapping operations
 
     /// A restore that lands after a purchase started must not paint over it.

@@ -1532,10 +1532,27 @@ public final class AppleSubscriptionModel: ObservableObject {
             state = .failed(.billing(.notSignedIn))
             return
         }
+        // Read before `.restoring` replaces it: a declined App Store prompt
+        // returns the surface to what it was showing, not to a spinner.
+        let prior = state
         let g = begin()
         state = .restoring
         do {
             try await store.synchronize()
+        } catch SubscriptionStoreError.synchronizationCancelled {
+            // **The user dismissed Apple's sign-in sheet. Nothing happened.**
+            // No transaction was read, so nothing is submitted, finished,
+            // refreshed or granted, and nothing is revoked: this returns before
+            // `currentEntitlements()` on purpose. A transaction that is in
+            // flight elsewhere — a purchase being submitted, a delivery on the
+            // update stream — is not this restore's to touch, and it does not.
+            //
+            // Supersession still wins: an operation that started meanwhile — a
+            // sign-out's reload above all — owns the screen, and a cancel must
+            // not paint the pre-restore state back over it.
+            guard !superseded(g) else { return }
+            state = Self.stateAfterCancelledRestore(from: prior)
+            return
         } catch {
             guard !superseded(g) else { return }
             state = .failed(Self.failure(for: error))
@@ -1800,6 +1817,34 @@ public final class AppleSubscriptionModel: ObservableObject {
     }
 
     private func superseded(_ g: Int) -> Bool { generation != g }
+
+    /// Where the surface goes when the user declines the App Store prompt a
+    /// restore raised: back to what it showed before, as far as that is still
+    /// true.
+    ///
+    /// - **Standing facts are kept.** `.idle`, `.purchasesPaused`,
+    ///   `.unavailable` and `.deferred` describe the catalog or a pending Ask to
+    ///   Buy, and a declined sign-in changes none of them. `.unavailable` in
+    ///   particular is what the card reads to say "nothing on sale"; dropping it
+    ///   would leave an empty card with no explanation.
+    /// - **Outcomes of an earlier operation are dropped.** `.failed`,
+    ///   `.completed` and `.nothingToRestore` answered the previous action; this
+    ///   one produced no answer, and re-showing an old one would read as its
+    ///   result.
+    /// - **Progress belongs to an operation this restore superseded.** That
+    ///   operation will never write again, so showing its spinner again would
+    ///   leave it spinning forever.
+    static func stateAfterCancelledRestore(
+        from prior: AppleSubscriptionState
+    ) -> AppleSubscriptionState {
+        switch prior {
+        case .idle, .purchasesPaused, .unavailable, .deferred:
+            return prior
+        case .failed, .completed, .nothingToRestore,
+             .loadingOffers, .purchasing, .submitting, .restoring:
+            return .idle
+        }
+    }
 
     /// Map a thrown value onto the typed failure, keeping the server's own
     /// vocabulary intact and reducing everything else to a type name.
