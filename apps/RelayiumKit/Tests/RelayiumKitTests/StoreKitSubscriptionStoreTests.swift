@@ -107,12 +107,7 @@ extension StoreKitSubscriptionStoreTests {
     /// actually goes through it. Read the adapter back and check that the one
     /// `AppStore.sync()` call sits inside it.
     func testTheProductionSyncGoesThroughTheNormalization() throws {
-        let adapter = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // RelayiumKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // RelayiumKit
-            .appendingPathComponent("Sources/RelayiumStoreKit/StoreKitSubscriptionStore.swift")
-        let code = try String(contentsOf: adapter, encoding: .utf8)
+        let code = try RepoRoot.text("apps/RelayiumKit/Sources/RelayiumStoreKit/StoreKitSubscriptionStore.swift")
         XCTAssertEqual(code.components(separatedBy: "AppStore.sync()").count - 1, 1,
                        "AppStore.sync() is called from more than one place")
         let body = try XCTUnwrap(
