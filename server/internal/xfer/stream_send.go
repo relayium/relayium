@@ -39,6 +39,9 @@ type StreamSendOpts struct {
 	// Progress, when set, is called from the writer goroutine after each data
 	// frame was written, with the total bytes sent so far.
 	Progress func(sent int64)
+	// Keepalive is how long the input may be silent before a zero-length
+	// data frame is sent; 0 means the default (30 seconds).
+	Keepalive time.Duration
 }
 
 // StreamReport describes a stream as sent. Notes are non-fatal observations
@@ -76,6 +79,10 @@ var (
 	ErrStreamDifferentBytes = errors.New("the receiver confirmed different bytes")
 	// ErrStreamCancelled: the caller's context ended the transfer.
 	ErrStreamCancelled = errors.New("the transfer was cancelled")
+	// ErrStreamOldReceiver: the receiver answered the stream's Hello the way
+	// a v1 receiver does (a resume state): it predates `push -`. Always
+	// wrapped together with ErrStreamNotAccepted.
+	ErrStreamOldReceiver = errors.New("it answered as a receiver that predates `push -`")
 )
 
 // StreamStage is how far a failed stream got, which decides what can be said
@@ -416,7 +423,11 @@ func (s *streamSender) writer() {
 
 	h := sha256.New()
 	var sent int64
-	keepalive := time.NewTimer(streamKeepalive)
+	every := streamKeepalive
+	if s.o.Keepalive > 0 {
+		every = s.o.Keepalive
+	}
+	keepalive := time.NewTimer(every)
 	defer keepalive.Stop()
 	for {
 		select {
@@ -445,13 +456,13 @@ func (s *streamSender) writer() {
 				default:
 				}
 			}
-			keepalive.Reset(streamKeepalive)
+			keepalive.Reset(every)
 		case <-keepalive.C:
 			if err := writeAll(s.t, []byte{byte(MsgStreamData), 0, 0, 0, 0}); err != nil {
 				s.event(streamEvent{kind: evWriteErr, err: err})
 				return
 			}
-			keepalive.Reset(streamKeepalive)
+			keepalive.Reset(every)
 		case <-s.stop:
 			return
 		}
@@ -512,7 +523,7 @@ func (s *streamSender) reader() {
 		s.event(streamEvent{kind: evPeerError, err: decodeRemoteError(payload)})
 		return
 	case t == MsgResume:
-		s.event(streamEvent{kind: evPeerError, err: fmt.Errorf("%w: it answered as a receiver that predates `push -`", ErrStreamNotAccepted)})
+		s.event(streamEvent{kind: evPeerError, err: fmt.Errorf("%w: %w", ErrStreamNotAccepted, ErrStreamOldReceiver)})
 		return
 	case t != MsgStreamAccept:
 		s.event(streamEvent{kind: evPeerError, err: fmt.Errorf("%w: protocol error: expected message type %d, got %d", ErrStreamNotAccepted, MsgStreamAccept, t)})

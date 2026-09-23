@@ -20,15 +20,16 @@ import (
 	"golang.org/x/term"
 )
 
-// `relayium push - [user@]host:file`: standard input, of any length, into one
-// new file on a remote that runs relayium.
+// `relayium push - [user@]host:file` and `relayium push - relayium://host[:port]/path`:
+// standard input, of any length, into one new file on a remote that runs
+// relayium — over SSH, or straight to a `relayium serve` listener.
 //
-// The order below is the contract (see pushStdin):
+// The order below is the contract (see pushStdin and pushStdinDaemon):
 //
 //   - Every refusal this side can make by itself (a terminal as stdin, a
-//     destination shape that is not one file, a relayium:// target, no
-//     relayium on the remote, ssh failing to connect) happens before anything
-//     reads stdin.
+//     destination shape that is not one file, no relayium on the remote, ssh
+//     failing to connect, a listener that cannot be reached or whose pinned
+//     fingerprint changed) happens before anything reads stdin.
 //   - Nothing in this process ever reads fd 0. After the remote receiver has
 //     accepted the stream, xfer.SendStream starts an exact-owned helper
 //     process (`relayium __pump-stdin`, stdinpump) that inherits fd 0 and is
@@ -117,8 +118,7 @@ func pushStdin(destArg string, f sshFlags, stderr io.Writer) int {
 		return 2
 	}
 	if strings.HasPrefix(destArg, daemonScheme) {
-		fmt.Fprintln(stderr, "push: \"push -\" to a relayium:// listener is not supported yet; use an SSH destination, [user@]host:file. Nothing was read from stdin.")
-		return 2
+		return pushStdinDaemon(destArg, f.configDir, stderr)
 	}
 	dest, err := xfer.ParseEndpoint(destArg)
 	if err != nil {
@@ -146,36 +146,9 @@ func pushStdin(destArg string, f sshFlags, stderr io.Writer) int {
 		return 1
 	}
 
-	ctx, cancel := context.WithCancelCause(context.Background())
-	defer cancel(nil)
-	sigs := make(chan os.Signal, 4)
-	stopNotify := pushStdinNotify(sigs)
-	defer stopNotify()
-	var sigMu sync.Mutex
-	var caught os.Signal
-	sigDone := make(chan struct{})
-	defer close(sigDone)
-	go func() {
-		select {
-		case s := <-sigs:
-			sigMu.Lock()
-			caught = s
-			sigMu.Unlock()
-			cancel(fmt.Errorf("interrupted by %v", s))
-		case <-sigDone:
-		}
-	}()
-	caughtSignal := func() os.Signal {
-		// A signal to the whole process group reaches ssh too, which may end
-		// the transfer before this process's own delivery was handled.
-		select {
-		case <-ctx.Done():
-		case <-time.After(50 * time.Millisecond):
-		}
-		sigMu.Lock()
-		defer sigMu.Unlock()
-		return caught
-	}
+	sc := catchStdinSignals()
+	defer sc.stop()
+	ctx, caughtSignal := sc.ctx, sc.caught
 
 	sess, err := stdinSSHDial(dest, streamRecvCommand(dest.Path), opts)
 	if err != nil {
@@ -211,6 +184,53 @@ func pushStdin(destArg string, f sshFlags, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stderr, "  %s (%d bytes, sha256 %s)\n", termtext.Safe(name), rep.Bytes, rep.SHA256)
 	return 0
+}
+
+// stdinSignals turns INT/TERM/HUP into the cancellation of a `push -`.
+type stdinSignals struct {
+	ctx    context.Context
+	cancel context.CancelCauseFunc
+	stopFn func()
+	done   chan struct{}
+	mu     sync.Mutex
+	sig    os.Signal
+}
+
+func catchStdinSignals() *stdinSignals {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	sc := &stdinSignals{ctx: ctx, cancel: cancel, done: make(chan struct{})}
+	sigs := make(chan os.Signal, 4)
+	sc.stopFn = pushStdinNotify(sigs)
+	go func() {
+		select {
+		case s := <-sigs:
+			sc.mu.Lock()
+			sc.sig = s
+			sc.mu.Unlock()
+			cancel(fmt.Errorf("interrupted by %v", s))
+		case <-sc.done:
+		}
+	}()
+	return sc
+}
+
+// caught is the signal that cancelled the transfer, or nil. A signal to the
+// whole process group reaches ssh too, which may end the transfer before this
+// process's own delivery was handled, so it waits a moment for that.
+func (sc *stdinSignals) caught() os.Signal {
+	select {
+	case <-sc.ctx.Done():
+	case <-time.After(50 * time.Millisecond):
+	}
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	return sc.sig
+}
+
+func (sc *stdinSignals) stop() {
+	close(sc.done)
+	sc.stopFn()
+	sc.cancel(nil)
 }
 
 // remotePredatesStream: the receiver never accepted the stream, gave no
