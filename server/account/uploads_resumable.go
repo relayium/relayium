@@ -1267,10 +1267,12 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		log.Printf("upload finalize %s: billed %d committed bytes no append recorded", sess.ID, billedNow)
 	}
 
-	// reservedUploadID is the daily-quota event this finalize reserved (if any);
-	// fail refunds it so a file rejected by the later storage-cap gate doesn't
-	// leave the user charged daily quota for bytes that never landed.
-	var reservedUploadID string
+	// charge is this finalize's daily-quota debit (billable sessions only). It
+	// is not written here: the object's insert writes it in its own transaction
+	// (StoredFile.QuotaCharge), so every refusal below — including one that
+	// happens inside that transaction — leaves no debit, and fail has nothing
+	// to refund.
+	var charge *UploadQuotaCharge
 	// fail drops the partial blob (not for a pair-room upload — see below) and
 	// writes the given HTTP error. The session row STAYS — done-claimed, and now
 	// this upload's tombstone.
@@ -1301,7 +1303,6 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		if sess.PairRoomID == "" {
 			s.dropUploadBlob(r.Context(), sess.NodeID, sess.BlobKey)
 		}
-		s.refundUploadReservation(r.Context(), reservedUploadID)
 		http.Error(w, msg, code)
 	}
 
@@ -1374,26 +1375,18 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		if billed < minBillableBytes {
 			billed = minBillableBytes
 		}
-		// Authoritative gate: a quota read error fails CLOSED just like the
-		// ReserveUpload error below — drop the blob, kill the session, 500.
+		// Authoritative gate: a quota read error fails CLOSED — drop the blob,
+		// keep the tombstone, 500. The check itself, and the debit, happen in
+		// the object's insert below (StoredFile.QuotaCharge).
 		quota, err := s.dailyQuotaFor(r.Context(), u.ID)
 		if err != nil {
 			fail("server error", http.StatusInternalServerError)
 			return
 		}
-		evID := authx.NewID()
-		reserved, err := s.store.ReserveUpload(r.Context(),
-			UploadEvent{ID: evID, UserID: u.ID, Bytes: billed, UploadedAt: now},
-			now-dayWindow, quota)
-		if err != nil {
-			fail("server error", http.StatusInternalServerError)
-			return
+		charge = &UploadQuotaCharge{
+			Event: UploadEvent{ID: authx.NewID(), UserID: u.ID, Bytes: billed, UploadedAt: now},
+			Since: now - dayWindow, Quota: quota,
 		}
-		if !reserved {
-			fail("daily quota exceeded", http.StatusTooManyRequests)
-			return
-		}
-		reservedUploadID = evID // committed — a later failure must refund it
 	}
 
 	fid := authx.NewID()
@@ -1405,6 +1398,9 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		// The insert's precondition: this session must still own the blob. See
 		// StoredFile.UploadSessionID and ErrUploadSessionReclaimed.
 		UploadSessionID: sess.ID,
+		// The daily-quota debit, written by the same transaction as the row
+		// (nil for an own-node session).
+		QuotaCharge: charge,
 	}
 	// sf.ExpiresAt above is the SESSION's TTL, and for a pre-upload it is not the
 	// answer: the object inherits its ROOM's deadline, which is the same 300
@@ -1421,7 +1417,9 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	// and this one would already hold that value). The store decides it, from the
 	// room's row, inside the insert's own transaction — see StoredFileWrite.
 	//
-	// Atomic, fail-closed storage-cap enforcement + insert (see persistStoredFile).
+	// Atomic, fail-closed daily-quota + storage-cap enforcement + insert (see
+	// persistStoredFile). Whatever it refuses, and whatever error it returns, it
+	// has written neither the object nor its debit.
 	// For a pre-upload the insert also carries the room's open precondition, so
 	// this is the last and tightest place a room that ended mid-finalize is caught:
 	// a 200 from here can never describe ciphertext bound to a closed room.
@@ -1434,12 +1432,16 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	case errors.Is(perr, ErrUploadSessionReclaimed):
 		// A finalize held past the idle TTL, whose session the reaper claimed in
 		// the meantime: the blob is queued for deletion, so there is no object to
-		// report. The bill stays (the bytes moved); the reservation is refunded.
+		// report. The bill stays (the bytes moved); the daily-quota debit rolled
+		// back with the refused insert.
 		log.Printf("upload finalize %s: the session was reclaimed by cleanup before its object could be stored; refusing it", sess.ID)
 		fail("server error", http.StatusInternalServerError)
 		return
 	case perr != nil:
 		fail("server error", http.StatusInternalServerError)
+		return
+	case persisted.Reason == "quota":
+		fail("daily quota exceeded", http.StatusTooManyRequests)
 		return
 	case persisted.Reason == "global":
 		fail("server storage is full", http.StatusInsufficientStorage)

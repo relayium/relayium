@@ -748,6 +748,33 @@ type StoredFile struct {
 	// second sees the first: a claimed blob is never reported as a live object,
 	// and a live object's blob is never claimed.
 	UploadSessionID string
+	// QuotaCharge is NOT a column and is never read back. It is the object's
+	// daily-quota debit, and CreateStoredFileWithinStorageCaps writes it in the
+	// insert's own transaction: the rolling window is summed, a debit that
+	// would not fit refuses the insert with Reason "quota" (nothing written),
+	// and otherwise the event row is inserted before the object's. Object and
+	// debit therefore commit together or not at all — a crash, a database
+	// failure or any later refusal inside that transaction (a cap, a closed
+	// pair room, a reclaimed session) leaves neither, and there is no refund
+	// for anything to forget.
+	//
+	// nil means "no debit": an own-node upload, and every writer that is not an
+	// upload handler. Only the capped insert honours it; persistStoredFile
+	// refuses a charge on the uncapped door rather than drop it silently.
+	QuotaCharge *UploadQuotaCharge
+}
+
+// UploadQuotaCharge is a daily-quota debit carried into the object insert
+// (StoredFile.QuotaCharge). Event is the upload_events row to write — its
+// Bytes already floored to minBillableBytes by the caller, its UserID the
+// object's own — and the insert is refused when the owner's events since
+// Since plus Event.Bytes would exceed Quota (the same used+bytes > quota test,
+// and the same non-positive-quota-admits-nothing meaning, the rolling window
+// has always had).
+type UploadQuotaCharge struct {
+	Event UploadEvent
+	Since int64
+	Quota int64
 }
 
 // StoredFileWrite is what a stored-file insert ACTUALLY landed — the row's own
@@ -769,9 +796,11 @@ type StoredFile struct {
 // reconstructed. A post-write re-read would reopen the same gap one statement
 // further along.
 type StoredFileWrite struct {
-	// Reason is "" when the row was inserted, and names the cap that refused it
-	// otherwise: "storage" (the owner's plan) or "global" (the disk cap). A
-	// non-empty Reason means NOTHING was written.
+	// Reason is "" when the row was inserted, and names the gate that refused
+	// it otherwise: "quota" (the object's QuotaCharge would not fit the owner's
+	// rolling daily window — decided first, so it outranks both caps), "storage"
+	// (the owner's plan) or "global" (the disk cap). A non-empty Reason means
+	// NOTHING was written: no object and no debit.
 	Reason string
 	// ExpiresAt is the deadline the row carries. For a pair-room object it is the
 	// ROOM's, as its row stood inside this transaction — a sibling's move
@@ -2033,9 +2062,12 @@ type Store interface {
 	// CreateStoredFileWithinStorageCaps atomically enforces the owner (userCap)
 	// and global (globalCap) live-storage caps and inserts the row in one writer
 	// transaction, so concurrent uploads cannot collectively bust a cap. A
-	// non-positive cap disables that check. A StoredFileWrite with a non-empty
-	// Reason ("storage"|"global") names the cap hit and nothing was inserted; a
-	// real error is returned as err (caller fails closed).
+	// non-positive cap disables that check. When f.QuotaCharge is set, the same
+	// transaction first checks and writes that daily-quota debit, so the object
+	// and its debit commit or roll back together. A StoredFileWrite with a
+	// non-empty Reason ("quota"|"storage"|"global") names the gate hit and
+	// nothing — neither object nor debit — was written; a real error is
+	// returned as err (caller fails closed), and it too leaves neither.
 	//
 	// For a pair-room object the same transaction also carries the room's open
 	// precondition (ErrPairRoomClosed if it ended first) and is where the object's
@@ -2204,9 +2236,16 @@ type Store interface {
 	// usage since `since` plus e.Bytes stays within quota, in one transaction, so
 	// concurrent uploads cannot collectively exceed the quota. ok=false means the
 	// reservation was refused (over quota) and nothing was written.
+	//
+	// No upload handler calls it any more: a debit committed on its own, ahead
+	// of its object, is exactly what a crash or a failed refund stranded (A33).
+	// Upload debits travel as StoredFile.QuotaCharge instead. It stays as a
+	// standalone ledger writer for tests and fixtures that seed the window.
 	ReserveUpload(ctx context.Context, e UploadEvent, since, quota int64) (ok bool, err error)
-	// RefundUpload removes a reserved upload event (by id) when a later gate fails,
-	// so the daily quota isn't charged for a file that never landed.
+	// RefundUpload removes an upload event by id. Like ReserveUpload it has no
+	// upload-handler caller: with the debit inside the object's transaction a
+	// refused upload never holds one, and a committed object's debit is never
+	// refunded (it leaves only with the 24h prune).
 	RefundUpload(ctx context.Context, id string) error
 	PruneUploadEvents(ctx context.Context, before int64) error
 	// PruneDownloadReceipts deletes direct-download dedup rows older than `before`

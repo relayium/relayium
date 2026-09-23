@@ -38,13 +38,13 @@ All file/line references are relative to `server/` in the
 - What relayium.com meters is **hosted bytes**, and they arrive by two
   different routes: encrypted data it *stores* for you, and bytes it *relays*
   for you through a TURN server. Both land in one figure —
-  `currentMonthTraffic` (`account/plan_enforce.go:71`) adds hosted upload and
+  `currentMonthTraffic` (`account/plan_enforce.go:72`) adds hosted upload and
   download (`usage_monthly`) to billable relay (`usage_events`) — so "monthly
   traffic" is not a relay meter with storage bolted on; it is the sum.
 - **Four separate limits, not one.** Monthly traffic (above) is how much moved.
   **Storage** is a different question — how much ciphertext you are keeping
   live *right now*, checked by `remainingStorage`
-  (`account/plan_enforce.go:310`) against `CurrentStorage`, so deleting a file
+  (`account/plan_enforce.go:311`) against `CurrentStorage`, so deleting a file
   frees storage and refunds no traffic. **Retention** is how long a stored file
   may live, and the **daily upload quota** is a rolling 24-hour window. This
   document describes each separately because the code does; see
@@ -109,7 +109,7 @@ ICE/TURN credentials for a pairing-code transfer. It:
 2. Refuses to mint a TURN credential if the owner's email isn't verified
    (`account/turn.go:132-140`, the "Sybil dampener" comment) or if the owner's
    monthly traffic allowance is already spent (`account/turn.go:142-155`,
-   calling `s.trafficAllowanceSpent` from `account/plan_enforce.go:184`, which
+   calling `s.trafficAllowanceSpent` from `account/plan_enforce.go:185`, which
    treats exactly zero remaining as spent). P2P direct still works in both
    cases; only relay is withheld.
 3. Embeds the owner's user ID and that transfer's **attribution tag** into the
@@ -168,10 +168,11 @@ your plan.
 "stored download link" writes ciphertext to central or node disk
 (`account/files.go:179`, `handleUploadFile`), and that one upload is checked
 against three separate limits in that handler: the storage cap
-(`s.overStorage`, `account/files.go:311`), the monthly traffic cap
-(`s.overTraffic`, `account/files.go:315`) and the rolling daily quota
-(`ReserveUpload`, `account/files.go:423`). Only the traffic one is shared with
-relay: `currentMonthTraffic` (`account/plan_enforce.go:53-68`) sums
+(`s.overStorage`, `account/files.go:312`), the monthly traffic cap
+(`s.overTraffic`, `account/files.go:316`) and the rolling daily quota, whose
+debit is written by the stored file's own insert transaction
+(`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:5059`). Only the traffic one is shared with
+relay: `currentMonthTraffic` (`account/plan_enforce.go:54-69`) sums
 `usage_monthly` — hosted upload/download — plus billable `usage_events` —
 relay. Storage is occupancy, not throughput, and is not something a relay
 transfer can consume at all.
@@ -183,7 +184,7 @@ same traffic dimension when the target device collects its task
 
 An own-node (BYO) upload skips the caps entirely:
 `persistStoredFile(ctx, f, enforceCaps=false)`
-(`account/plan_enforce.go:264`) writes straight to the store with no cap
+(`account/plan_enforce.go:265`) writes straight to the store with no cap
 check, because it lands on the user's own disk, never central's.
 
 ## What is recorded, table by table
@@ -197,7 +198,7 @@ migrations that follow it) — not a summary of intent, the actual columns.
 | `users` (`sqlite.go:50`) | id, email, display name, creation time, plan tier, Stripe customer/subscription IDs and status, subscription period end, plan-change bookkeeping. **No card data** — Stripe Checkout is a hosted redirect (`account/stripe.go:311`, `EnsureCustomer`/`CreateCheckoutSession`); Relayium's server never sees a card number. |
 | `devices` (`sqlite.go:92`) | id, owning user, a **name** (nickname), creation and last-seen time, device kind (browser/CLI). This is the persistent paired-device list (settings page), not the realtime signaling room — see below. |
 | `usage_events` (`sqlite.go:105`) | per-TURN-allocation relayed-byte totals: alloc ID, token, user ID, bytes, timestamp, later `node_id` and `billable` (`sqlite.go:448`). |
-| `usage_periods` (`sqlite.go:1742`) | the same relay data bucketed by calendar month (`YYYYMM`), which is what billing/cap queries actually read (`account/plan_enforce.go:63`, `UserRelayedSince`). |
+| `usage_periods` (`sqlite.go:1742`) | the same relay data bucketed by calendar month (`YYYYMM`), which is what billing/cap queries actually read (`account/plan_enforce.go:64`, `UserRelayedSince`). |
 | `usage_monthly` (`sqlite.go:163`) | per-user, per-month upload/download byte totals for **stored transfers** (not relay). |
 | `stored_files` (`sqlite.go:113`) | id, owner, an opaque `blob_key` (pointer to ciphertext on disk), an opaque `enc_manifest` blob (the encrypted filename/size manifest — server can't read it), plaintext **size in bytes**, burn-after-read flag, created/expires timestamps, download count. |
 | `upload_events` (`sqlite.go:126`) | rolling 24h ledger of upload sizes per user, for the daily-quota check. |
@@ -306,19 +307,27 @@ list, and it can change.)
 
 The dimensions actually checked, each fail-closed at write time:
 
-- **Daily upload quota** — a rolling 24-hour window (`account/plan_enforce.go:343`,
-  `remainingDailyQuota`), reserved atomically per upload
-  (`account/sqlite.go:5404`, `ReserveUpload`) so concurrent uploads can't
-  race past it. A near-empty file still debits a 64 KiB floor
+- **Daily upload quota** — a rolling 24-hour window (`account/plan_enforce.go:344`,
+  `remainingDailyQuota`). The debit is checked and written in the **same
+  database transaction that inserts the stored file**
+  (`CreateStoredFileWithinStorageCaps`, `account/sqlite.go:5059`), so
+  concurrent uploads can't race past it, and a file that is not stored — a
+  refusal by a later cap, a closed pairing room, a database error, a server
+  crash mid-upload — never leaves a debit behind; there is no separate
+  reservation that a failed refund could strand. A stored file's debit is not
+  returned when you delete the file: it leaves the window after 24 hours. A
+  near-empty file still debits a 64 KiB floor
   (`minBillableBytes`, `account/files.go:33` — capping object *count*, not
-  just size). Exceeding it: `429` "daily quota exceeded".
+  just size). Uploads that land on your own storage node are never debited.
+  Exceeding it: `429` "daily quota exceeded" — checked before the storage
+  caps, so it is the answer when both are exceeded.
 - **Monthly traffic cap** — relay bytes (billable rows in `usage_periods`)
   plus stored upload/download bytes (`usage_monthly`), summed by
-  `currentMonthTraffic` (`account/plan_enforce.go:68`) against
-  `monthlyTrafficCap` (`account/plan_enforce.go:94`), which pro-rates a
+  `currentMonthTraffic` (`account/plan_enforce.go:69`) against
+  `monthlyTrafficCap` (`account/plan_enforce.go:95`), which pro-rates a
   mid-month plan change into segments rather than granting a full month's
   cap on every upgrade. Exceeding it: `429` "monthly traffic limit reached"
-  on upload (`account/files.go:315`), and TURN credential issuance is
+  on upload (`account/files.go:316`), and TURN credential issuance is
   withheld for relay (`account/turn.go:142-155`).
 
   **The relay quota gate runs at ISSUANCE, and that is the whole of it.** It
@@ -350,19 +359,19 @@ The dimensions actually checked, each fail-closed at write time:
   job is to state the limits accurately — which it does above — not to describe
   how to sit inside them.
 - **Storage cap** (how much can be live at once, not how much has moved) —
-  `overStorage` (`account/plan_enforce.go:327`) against the plan's
+  `overStorage` (`account/plan_enforce.go:328`) against the plan's
   `StorageBytes`, enforced atomically at persist time in
   `CreateStoredFileWithinStorageCaps` so concurrent uploads can't collectively
-  bust it (`account/plan_enforce.go:390`, `persistStoredFile`).
+  bust it (`account/plan_enforce.go:396`, `persistStoredFile`).
   Exceeding it: `413` "storage limit reached."
 - **Global disk cap** — a deployment-wide ceiling across all users
-  (`SettingStorageDiskCap`, `account/plan_enforce.go:356`), independent
+  (`SettingStorageDiskCap`, `account/plan_enforce.go:357`), independent
   of any one plan. Exceeding it: `507` "server storage is full."
 - **Retention (TTL) and download-count limits** — every stored file gets an
   expiry and/or a max-download count resolved from the request plus admin
   defaults (`account/settings.go:132-167`, `resolveRetention`/`clampTTL`),
   further capped by the owner's plan retention ceiling if lower
-  (`account/plan_enforce.go:310`, `planRetentionCap`). A file is deleted —
+  (`account/plan_enforce.go:311`, `planRetentionCap`). A file is deleted —
   ciphertext and row both — once either limit is hit; see
   [Retention](#retention-how-long-anything-is-kept).
 
@@ -395,7 +404,7 @@ gates).
 
 **Metered is not the same as paid.** What the gate actually checks is a
 verified email and *remaining allowance*, not a subscription:
-`s.trafficAllowanceSpent` (`account/plan_enforce.go:164`) withholds the TURN
+`s.trafficAllowanceSpent` (`account/plan_enforce.go:165`) withholds the TURN
 credential only once the month's traffic is exhausted. Free is a plan with an
 allowance like any other, so a signed-in Free account relays cross-network
 transfers until that allowance runs out and pays nothing. Paying is what you

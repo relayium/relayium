@@ -5037,8 +5037,9 @@ func insertPairRoomObjectOn(ctx context.Context, tx *sql.Tx, f StoredFile) (Stor
 // CreateStoredFile pair leaves open (N concurrent uploads each reading the same
 // pre-commit total and all committing). A non-positive cap disables that check.
 //
-// Returns a StoredFileWrite whose Reason is "storage" (owner cap) or "global"
-// (disk cap) when a cap would be exceeded and nothing was written; a real store
+// Returns a StoredFileWrite whose Reason is "quota" (the daily-quota charge
+// below), "storage" (owner cap) or "global" (disk cap) when that gate would be
+// exceeded and nothing was written; a real store
 // error is returned as err so the caller fails CLOSED. "Live" bytes are
 // expires_at > now, matching CurrentStorage / GlobalStorageUsed; the row being
 // inserted is added explicitly since it is not yet visible to the pre-insert sums.
@@ -5046,12 +5047,44 @@ func insertPairRoomObjectOn(ctx context.Context, tx *sql.Tx, f StoredFile) (Stor
 // For a pair-room object the returned deadlines are the ROOM's, read from its row
 // in this same transaction — which is where they have to be decided, not where
 // they are merely confirmed (see StoredFileWrite).
+//
+// A non-nil f.QuotaCharge is the object's daily-quota debit, and it is decided
+// and written FIRST in this transaction (Reason "quota" when it would not fit).
+// First, because the daily quota answered before the caps when it was a
+// separate reservation, so an upload over both still hears 429; in this
+// transaction, because every later refusal here — a cap, a closed pair room, a
+// reclaimed session, an error, a crash before Commit — must take the debit with
+// it. The writer pool's single connection serializes the window sum against
+// every other upload's, exactly as the separate reservation did.
 func (s *SQLiteStore) CreateStoredFileWithinStorageCaps(ctx context.Context, f StoredFile, now, userCap, globalCap int64) (StoredFileWrite, error) {
+	if q := f.QuotaCharge; q != nil {
+		// A debit billed to anyone but the object's owner, or one that cannot be
+		// told apart from another, is a caller bug; refuse it before writing.
+		if q.Event.UserID != f.UserID || q.Event.ID == "" || q.Event.Bytes <= 0 {
+			return StoredFileWrite{}, errors.New("stored file quota charge: event must be the object owner's, with an id and positive bytes")
+		}
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return StoredFileWrite{}, err
 	}
 	defer tx.Rollback() // no-op after a successful Commit
+	if q := f.QuotaCharge; q != nil {
+		var used sql.NullInt64
+		if err := tx.QueryRowContext(ctx,
+			`SELECT SUM(bytes) FROM upload_events WHERE user_id = ? AND uploaded_at >= ?`,
+			q.Event.UserID, q.Since).Scan(&used); err != nil {
+			return StoredFileWrite{}, err
+		}
+		if used.Int64+q.Event.Bytes > q.Quota {
+			return StoredFileWrite{Reason: "quota"}, nil
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO upload_events (id, user_id, bytes, uploaded_at) VALUES (?, ?, ?, ?)`,
+			q.Event.ID, q.Event.UserID, q.Event.Bytes, q.Event.UploadedAt); err != nil {
+			return StoredFileWrite{}, err
+		}
+	}
 	if userCap > 0 {
 		var used sql.NullInt64
 		if err := tx.QueryRowContext(ctx,
@@ -5401,6 +5434,10 @@ func (s *SQLiteStore) UserUploadedSince(ctx context.Context, userID string, sinc
 // in one transaction. With MaxOpenConns(1) SQLite serializes writers, so two
 // concurrent reservations can never both read a stale (pre-insert) sum and both
 // pass the check — the loser sees the winner's committed row.
+//
+// Upload handlers no longer call it: their debit is StoredFile.QuotaCharge,
+// written by CreateStoredFileWithinStorageCaps in the object's own transaction
+// with this same sum-check-insert (A33).
 func (s *SQLiteStore) ReserveUpload(ctx context.Context, e UploadEvent, since, quota int64) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -5424,9 +5461,10 @@ func (s *SQLiteStore) ReserveUpload(ctx context.Context, e UploadEvent, since, q
 	return true, tx.Commit()
 }
 
-// RefundUpload removes a previously-reserved upload event by id — used when a
-// finalize reserves the daily quota but then fails the authoritative storage-cap
-// check, so the quota isn't charged for a file that never landed.
+// RefundUpload removes an upload event by id. No upload handler calls it: a
+// refused upload's debit rolls back with its object's insert, and a stored
+// object's debit is never refunded — it leaves the window only through
+// PruneUploadEvents.
 func (s *SQLiteStore) RefundUpload(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM upload_events WHERE id = ?`, id)
 	return err
