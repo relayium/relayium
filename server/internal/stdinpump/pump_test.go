@@ -281,7 +281,7 @@ func testKilledHelperIsNotEOF(t *testing.T) {
 }
 
 // U-P4: a read error on fd 0 (fd 0 is a directory) is a *StdinError, the
-// helper exits 1, and no byte is reported.
+// helper exits 1 by itself, and no byte is reported.
 func TestPumpStdinReadErrorIsStdinError(t *testing.T) { testStdinReadErrorIsStdinError(t) }
 
 func testStdinReadErrorIsStdinError(t *testing.T) {
@@ -294,6 +294,7 @@ func testStdinReadErrorIsStdinError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = p.Stop() })
 	got, err := readAllWith(p, 64)
 	var se *StdinError
 	if !errors.As(err, &se) || len(got) != 0 {
@@ -302,11 +303,17 @@ func testStdinReadErrorIsStdinError(t *testing.T) {
 	if !strings.HasPrefix(se.Error(), "reading stdin failed: ") {
 		t.Fatalf("StdinError text %q", se.Error())
 	}
-	if err := p.Stop(); err != nil {
-		t.Fatal(err)
+	// The helper writes the error frame before it exits, and Stop kills a
+	// helper that has not sent the end marker at once. Its own exit code is
+	// only observable if it is awaited before Stop.
+	if !waitFor(p.waited, 5*time.Second) {
+		t.Fatal("helper did not exit by itself within 5s of its error frame")
 	}
 	if code := p.cmd.ProcessState.ExitCode(); code != exitStdinError {
 		t.Fatalf("helper exit code %d, want %d", code, exitStdinError)
+	}
+	if err := p.Stop(); err != nil {
+		t.Fatal(err)
 	}
 }
 
