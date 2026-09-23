@@ -354,14 +354,14 @@ The dimensions actually checked, each fail-closed at write time:
   a different declared length, `422`. **Once the record has been removed, the
   same key is simply unknown: a retry then is a new upload, stored, debited
   and billed like any other.** Requests with one key that overlap in time:
-  only one creates a file and a debit. One that has not yet sent its body
-  when the other commits gets the same answer without sending it. One that
-  meets a limit (daily quota, storage, traffic, too many concurrent uploads,
-  size) after the other committed gets the committed answer instead of the
-  refusal. One whose body was already sent when the other committed is billed
-  for the traffic it moved, its copy is discarded, and it gets the same
-  answer. A limit refusal reaches the client only if no request with that key
-  had committed when the refusal was decided. A keyed upload that is
+  only one creates a file and a debit. A request whose key lookup, made
+  before its body is read, already finds the committed upload gets the same
+  answer without sending its body. A request that missed that lookup sends
+  its body: it is billed for the traffic it moved, its copy is discarded,
+  and it gets the committed answer. One that meets a limit (daily quota,
+  storage, traffic, too many concurrent uploads, size) looks the key up
+  again and gets the committed answer if that lookup succeeds and finds
+  one; otherwise the limit refusal stands. A keyed upload that is
   refused or fails leaves the key unused, so it can simply be retried.
   Without the header nothing changes: every request is a new upload.
   Resumable uploads (`/api/uploads`) do not use this header.
