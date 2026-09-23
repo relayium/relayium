@@ -74,7 +74,9 @@ flags:
                    firewall — pass --bind 127.0.0.1, or a private address, to
                    limit the listener itself.
   --port N         TCP port (default 9031).
-  --once           handle a single transfer, then exit.
+  --once           handle a single connection, then exit: 0 when its files
+                   (or its "push -" stream) were received, 1 otherwise —
+                   including a peer that was not authorized.
   --allow-delete   honor a sender's "sync --delete" mirror request. Without it,
                    nothing on this host is ever deleted. With it, deletion is
                    still confined to the top-level directories the sender's
@@ -84,6 +86,14 @@ flags:
                    Use the SAME value with "relayium authorize": a fingerprint
                    added there takes effect on the next connection, with
                    no restart of this listener.
+
+A sender's "push - relayium://host/path" streams its standard input into ONE
+new file at path, relative to --dir. It is installed only if nothing exists
+there yet (never replaced, whatever sync allows), only into a directory that
+already exists under --dir, and only after its size and SHA-256 verified; the
+bytes are staged privately beside it until then. A dropped or cancelled
+stream leaves nothing under the name. If serve itself is killed mid-stream,
+one hidden ".relayium-recv-*" staging directory can remain; remove it.
 
 In a terminal, serve asks you to approve each new pusher on its first push and
 remembers it. With no terminal (systemd, a pipe), an unknown pusher is rejected:
@@ -514,7 +524,19 @@ func (h *serveHandler) serve(conn net.Conn) (ok bool) {
 	// AllowSync: this listener was started deliberately as a mirror target for
 	// fingerprint-authorized peers, so replacing files under --dir is its job.
 	// `receive`/`pull` do not set it.
-	rep, err := xfer.Receive(&idleConn{Conn: tconn, idle: transferIdleTimeout}, h.dir, xfer.RecvOpts{NoResume: h.noResume, AllowSync: true, AllowDelete: h.allowDelete})
+	//
+	// A `push -` stream (Hello.Stream) is dispatched to the stream receiver,
+	// which gets the TLS connection itself: it sets a real read or write
+	// deadline around every operation (idle bound transferIdleTimeout), and
+	// never replaces anything, AllowSync or not. Its path is relative to
+	// --dir and resolved only through an os.Root on it.
+	got, err := xfer.ReceiveAny(&idleConn{Conn: tconn, idle: transferIdleTimeout}, tconn, h.dir,
+		xfer.RecvOpts{NoResume: h.noResume, AllowSync: true, AllowDelete: h.allowDelete},
+		xfer.StreamRecvOpts{Idle: transferIdleTimeout})
+	if got.Stream {
+		return h.reportStream(got, err, fp, remote)
+	}
+	rep := got.V1
 	if err != nil {
 		fmt.Fprintf(h.stderr, "receive from %s (%s): %s\n", fp, remote, termtext.Safe(err.Error()))
 		return false
@@ -532,6 +554,25 @@ func (h *serveHandler) serve(conn net.Conn) (ok bool) {
 		return false
 	}
 	fmt.Fprintf(h.stdout, "received %d file(s), %d bytes from %s\n", rep.Files, rep.Bytes, fp)
+	return true
+}
+
+// reportStream logs a `push -` stream's outcome. It succeeds when the file was
+// installed; a confirmation that could not be sent back is a warning, since
+// the file stands (the sender then reports that it could not confirm).
+func (h *serveHandler) reportStream(got xfer.AnyReport, err error, fp string, remote net.Addr) bool {
+	name := termtext.Safe(got.StreamPath)
+	if name == "" {
+		name = "(no path)"
+	}
+	if err != nil {
+		fmt.Fprintf(h.stderr, "stream receive of %s from %s (%s): %s\n", name, fp, remote, termtext.Safe(err.Error()))
+		return false
+	}
+	for _, n := range got.Streamed.Notes {
+		fmt.Fprintf(h.stderr, "warning: %s\n", termtext.Safe(n))
+	}
+	fmt.Fprintf(h.stdout, "received %s from stdin, %d bytes from %s\n", name, got.Streamed.Bytes, fp)
 	return true
 }
 

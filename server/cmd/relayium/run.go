@@ -211,6 +211,7 @@ usage:
   relayium push <src...> relayium://host[:port]   direct to a listening peer (no SSH, no account)
   relayium push <src...> [user@]host:dest         over SSH to a server you can log into
   relayium push - [user@]host:file                stdin into one new file, over SSH
+  relayium push - relayium://host[:port]/path     stdin into one new file under a listener's --dir
 
 A relayium:// destination is the direct server-to-server path: the receiver runs
 "relayium serve --dir D", this pushes straight into that directory over a pinned
@@ -248,8 +249,9 @@ installed on the far end. The two are not equivalent:
   therefore not proof that every file landed. Install relayium on the remote
   when you need per-file verification and the up-front collision check.
 
-Reading stdin ("-"): "relayium push - [user@]host:file" sends standard input,
-of any length, as ONE new file. It is streamed: neither side holds the whole
+Reading stdin ("-"): "relayium push - [user@]host:file" (or
+"relayium push - relayium://host[:port]/path") sends standard input, of any
+length, as ONE new file. It is streamed: neither side holds the whole
 input in memory, and nothing is spooled except the receiver's private staging
 file beside the destination.
   - host:file is the exact file to create. It must not exist yet (nothing is
@@ -267,12 +269,19 @@ file beside the destination.
   - stdin must not be a terminal. A producer that fails early looks like a
     short input: in a pipeline use "set -o pipefail" and check the exit status.
   - A local file literally named "-" is pushed as "./-".
-  - Only SSH destinations: a relayium:// listener does not take stdin yet.
+  - To a listener, "path" is the file to create relative to its --dir, taken
+    literally: plain "/"-separated names, no "..", ".", empty parts, "\" or
+    ":". Only "push -" takes a path; a listener's directories are never
+    created, and a symbolic link cannot lead the file outside --dir. The
+    usual listener trust applies (pinned fingerprint, this host authorized
+    there). A listener that has not authorized this host, or runs an older
+    relayium, closes the connection before anything is read from stdin.
 
 positional arguments:
   <src...>   files or directories to push, or "-" alone for stdin
   <dest>     relayium://host[:port], or [user@]host:dest for the SSH path
-             ([user@]host:file, the exact new file, with "-")
+             (with "-": [user@]host:file or relayium://host[:port]/path,
+             the exact new file)
 
 flags:
   -i <file>        ssh identity file (SSH destinations)

@@ -11,10 +11,12 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/relayium/relayium/internal/termtext"
 )
@@ -134,6 +136,19 @@ type streamReceiver struct {
 	tgt StreamTarget
 	o   StreamRecvOpts
 	g   *StageGuard
+	// under, when set, is the listener directory the manifest's relative
+	// path is resolved in (ReceiveAny); tgt is then filled from it. roots
+	// are the directories opened for that, closed by the caller after the
+	// guard's last cleanup.
+	under   string
+	relPath string
+	roots   []*os.Root
+}
+
+func (r *streamReceiver) closeRoots() {
+	for i := len(r.roots) - 1; i >= 0; i-- {
+		_ = r.roots[i].Close()
+	}
 }
 
 // refuse removes any staging, then sends code/msg to the sender within the
@@ -191,8 +206,6 @@ func (r *streamReceiver) drain() {
 }
 
 func (r *streamReceiver) run() (StreamRecvReport, error) {
-	leaf := termtext.Safe(r.tgt.Leaf)
-
 	t, payload, err := r.readControl()
 	if err != nil {
 		return StreamRecvReport{}, fmt.Errorf("reading the stream hello: %w", err)
@@ -201,11 +214,17 @@ func (r *streamReceiver) run() (StreamRecvReport, error) {
 	if t != MsgHello || json.Unmarshal(payload, &hello) != nil {
 		return StreamRecvReport{}, r.refuse(ErrCodeProtocol, "protocol error: expected a hello")
 	}
+	return r.afterHello(hello)
+}
+
+// afterHello is the receiver from the Hello's check on; ReceiveAny enters here
+// with the Hello it already read.
+func (r *streamReceiver) afterHello(hello Hello) (StreamRecvReport, error) {
 	if hello.Version != WireVersion || hello.Mode != "push" || !hello.Stream || hello.Sync || hello.Delete || hello.ResumeProof {
 		return StreamRecvReport{}, r.refuse(ErrCodeStreamNotAccepted,
 			"this receiver takes only a plain stream push (no sync, delete or resume)")
 	}
-	t, payload, err = r.readControl()
+	t, payload, err := r.readControl()
 	if err != nil {
 		return StreamRecvReport{}, fmt.Errorf("reading the stream manifest: %w", err)
 	}
@@ -213,13 +232,35 @@ func (r *streamReceiver) run() (StreamRecvReport, error) {
 	if t != MsgManifest || json.Unmarshal(payload, &m) != nil {
 		return StreamRecvReport{}, r.refuse(ErrCodeProtocol, "protocol error: expected a manifest")
 	}
+	if r.under != "" {
+		// Listener form: the sender names a path relative to the listener's
+		// directory. It is checked strictly (refused, never cleaned up) and
+		// then opened only through os.Root, so neither ".." nor a symbolic
+		// link can lead outside that directory.
+		if len(m.Files) != 1 {
+			return StreamRecvReport{}, r.refuse(ErrCodeProtocol, fmt.Sprintf("protocol error: a stream carries exactly one file, the manifest names %d", len(m.Files)))
+		}
+		f := m.Files[0]
+		if f.Size != -1 || f.Mode != 0 || f.ModTime != 0 {
+			return StreamRecvReport{}, r.refuse(ErrCodeProtocol, "protocol error: the stream manifest does not describe a stream")
+		}
+		if err := ValidateStreamPath(f.Path); err != nil {
+			return StreamRecvReport{}, r.refuse(ErrCodeInvalidDestination, err.Error())
+		}
+		tgt, msg := r.openUnder(f.Path)
+		if msg != "" {
+			return StreamRecvReport{}, r.refuse(ErrCodeInvalidDestination, msg)
+		}
+		r.tgt = tgt
+	}
+	leaf := termtext.Safe(r.tgt.Leaf)
 	if !validStreamLeaf(r.tgt.Leaf) || r.tgt.Parent == nil {
 		return StreamRecvReport{}, r.refuse(ErrCodeInvalidDestination, "the destination is not a plain file name")
 	}
 	if len(m.Files) != 1 {
 		return StreamRecvReport{}, r.refuse(ErrCodeProtocol, fmt.Sprintf("protocol error: a stream carries exactly one file, the manifest names %d", len(m.Files)))
 	}
-	if f := m.Files[0]; f.Size != -1 || f.Mode != 0 || f.ModTime != 0 || f.Path != r.tgt.Leaf {
+	if f := m.Files[0]; f.Size != -1 || f.Mode != 0 || f.ModTime != 0 || f.Path != r.expectedPath() {
 		return StreamRecvReport{}, r.refuse(ErrCodeProtocol, "protocol error: the stream manifest does not name "+leaf+" as a stream")
 	}
 
@@ -642,4 +683,152 @@ func (w *ExitWatchdogPeer) fire(reason string) {
 	case <-t.C:
 	}
 	w.Exit(1)
+}
+
+// expectedPath is the manifest path this receiver requires: the file name
+// for a fixed target, the relative path it resolved for a listener.
+func (r *streamReceiver) expectedPath() string {
+	if r.under != "" {
+		return r.relPath
+	}
+	return r.tgt.Leaf
+}
+
+// Limits of a relative stream path (ValidateStreamPath).
+const (
+	maxStreamPathComponents = 64
+	maxStreamPathComponent  = 255
+)
+
+// ValidateStreamPath checks the relative path of a `push -` to a relayium://
+// listener: the exact file to create, relative to the listener's directory.
+// It refuses rather than cleans up: nothing is ever made of a path that is
+// not already in its plain form. The sender checks it before dialing and the
+// listener again before touching its filesystem.
+//
+// A valid path is UTF-8, at most 4096 bytes, not absolute, and 1 to 64
+// components separated by "/", each non-empty, at most 255 bytes, neither "."
+// nor "..", without NUL, control characters, "\\" or ":" (refused on every
+// platform, so a path means the same thing everywhere), and not starting with
+// the receiver's staging prefix.
+func ValidateStreamPath(p string) error {
+	bad := func(why string) error {
+		return fmt.Errorf("the destination path %q %s; give the file's path relative to the listener's directory, like dir/file", termtext.Safe(p), why)
+	}
+	switch {
+	case p == "":
+		return errors.New("the destination path is empty; give the file's path relative to the listener's directory, like dir/file")
+	case !utf8.ValidString(p):
+		return bad("is not valid UTF-8")
+	case len(p) > maxManifestPathBytes:
+		return bad(fmt.Sprintf("is longer than %d bytes", maxManifestPathBytes))
+	case p[0] == '/':
+		return bad("is absolute")
+	}
+	comps := strings.Split(p, "/")
+	if len(comps) > maxStreamPathComponents {
+		return bad(fmt.Sprintf("has more than %d components", maxStreamPathComponents))
+	}
+	for _, c := range comps {
+		switch {
+		case c == "":
+			return bad("has an empty component (a doubled or trailing \"/\")")
+		case c == "." || c == "..":
+			return bad("has a \".\" or \"..\" component")
+		case len(c) > maxStreamPathComponent:
+			return bad(fmt.Sprintf("has a component longer than %d bytes", maxStreamPathComponent))
+		case strings.ContainsAny(c, "\\:"):
+			return bad("contains \"\\\" or \":\"")
+		case strings.HasPrefix(c, stagePrefix):
+			return bad("names a receiver staging directory")
+		}
+		for _, ch := range c {
+			if ch < 0x20 || ch == 0x7f {
+				return bad("contains a control character")
+			}
+		}
+	}
+	return nil
+}
+
+// openUnder opens the directory that is to hold rel through an os.Root on the
+// listener's directory, or says why it cannot, without naming anything but
+// the sender's own relative path.
+func (r *streamReceiver) openUnder(rel string) (StreamTarget, string) {
+	r.relPath = rel
+	dir, leaf := path.Split(rel)
+	dir = strings.TrimSuffix(dir, "/")
+	root, err := os.OpenRoot(r.under)
+	if err != nil {
+		return StreamTarget{}, "the listener's directory cannot be opened: " + rootErrText(err)
+	}
+	r.roots = append(r.roots, root)
+	if dir == "" {
+		return StreamTarget{Parent: root, Leaf: leaf}, ""
+	}
+	parent, err := root.OpenRoot(dir)
+	if err == nil {
+		r.roots = append(r.roots, parent)
+		return StreamTarget{Parent: parent, Leaf: leaf}, ""
+	}
+	d := termtext.Safe(dir)
+	// Checked by kind first: a file where the directory should be is ENOTDIR
+	// on Unix but may read as "path not found" on Windows.
+	if fi, serr := root.Stat(dir); serr == nil && !fi.IsDir() {
+		return StreamTarget{}, d + " is not a directory under the listener's directory"
+	}
+	switch {
+	case isPathEscape(err):
+		return StreamTarget{}, "the directory " + d + " leads outside the listener's directory"
+	case errors.Is(err, fs.ErrNotExist):
+		return StreamTarget{}, "the directory " + d + " does not exist under the listener's directory; push - does not create directories"
+	}
+	return StreamTarget{}, "cannot open the directory " + d + " under the listener's directory: " + rootErrText(err)
+}
+
+// isPathEscape: os.Root refused a path that leads outside it (a ".." or a
+// symbolic link out). os does not export that error, so its text is matched;
+// a miss only changes the wording of a refusal that happens anyway.
+func isPathEscape(err error) bool {
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		err = pe.Err
+	}
+	return err != nil && err.Error() == "path escapes from parent"
+}
+
+// AnyReport is what ReceiveAny received: a v1 batch, or, when Stream is set,
+// one streamed file at the relative path StreamPath.
+type AnyReport struct {
+	V1         Report
+	Stream     bool
+	StreamPath string
+	Streamed   StreamRecvReport
+}
+
+// ReceiveAny is the listener's receive (`relayium serve`): it reads the Hello
+// once and dispatches on it. A Hello announcing a stream (`push -` to a
+// relayium:// target) is received by the stream receiver through sp — a
+// connection with real deadlines — into the relative path its manifest names
+// under destDir; every other Hello continues as Receive does over rw, with
+// opts, unchanged. rw and sp are the same connection: rw may wrap it (the
+// listener's idle-deadline wrapper), sp must be the connection itself.
+//
+// A stream is never allowed to replace anything, whatever opts allows a v1
+// sync: it installs only where nothing exists.
+func ReceiveAny(rw io.ReadWriter, sp StreamPeer, destDir string, opts RecvOpts, so StreamRecvOpts) (AnyReport, error) {
+	hello, t, err := readHello(rw)
+	if err != nil {
+		return AnyReport{}, err
+	}
+	if t != MsgHello || !hello.Stream {
+		rep, err := receiveV1(rw, hello, destDir, opts)
+		return AnyReport{V1: rep}, err
+	}
+	so = so.withDefaults()
+	r := &streamReceiver{p: sp, o: so, g: so.Guard, under: destDir}
+	defer r.closeRoots() // after the guard's last cleanup, which uses them
+	defer r.g.cleanup()
+	rep, err := r.afterHello(hello)
+	return AnyReport{Stream: true, StreamPath: r.relPath, Streamed: rep}, err
 }

@@ -294,7 +294,7 @@ jobs:
           set -euo pipefail
           log="$RUNNER_TEMP/cli-windows.log"
           go test -count=1 -v -timeout 10m \
-            -run '^(TestStream|TestPump|TestHelper|TestExitWatchdog)' \
+            -run '^(TestStream|TestPump|TestHelper|TestExitWatchdog|TestReceiveAny|TestValidateStreamPath)' \
             ./internal/stdinpump ./internal/xfer | tee "$log"
           may_skip=" TestPumpHelperIgnoresInterrupt TestStreamRecvModesUnderUmask TestStreamRecvParentSwap "
           for t in TestPumpStopJoinsBlockedStdinWindows TestPumpHelperExitsOnParentDeathWindows TestStreamRecvRootWindows \
@@ -315,7 +315,10 @@ jobs:
             TestStreamProgress TestStreamRealPumpRoundTrip TestStreamRealPumpRefusalLeavesStdinUnread \
             TestStreamRealPumpKilledMidStream TestStreamJudgedStageIsNotOvertakenByEnd TestStreamNoSourceAfterWriteFailure \
             TestStreamRecvWatchdogReportsWhatWasStaged TestStreamRecvWatchdogHelperKeepsInstalledFile \
-            TestStreamRecvGuardKeepsInstalledDestination; do
+            TestStreamRecvGuardKeepsInstalledDestination \
+            TestValidateStreamPath TestReceiveAnyDispatchesV1Unchanged TestReceiveAnyStreamInstallsUnderRoot \
+            TestReceiveAnyStreamRefusesPathsBeforeAccept TestReceiveAnyStreamWriteFailedBoundedTCP \
+            TestReceiveAnyStreamIdleTCP; do
             if grep -q "^--- PASS: $t " "$log"; then continue; fi
             if [[ "$may_skip" == *" $t "* ]] && grep -q "^--- SKIP: $t " "$log"; then continue; fi
             echo "::error::$t did not PASS on Windows" >&2
@@ -324,19 +327,23 @@ jobs:
           while read -r _ _ name _; do
             [[ "$may_skip" == *" $name "* ]] || { echo "::error::$name skipped on Windows" >&2; exit 1; }
           done < <(grep '^--- SKIP: ' "$log" || true)
-      # `push -` in the CLI package. One test may SKIP, for the reason stated
-      # in it: SIGTERM cannot be sent to one process on Windows. Any other SKIP
-      # fails the job.
-      - name: Windows runtime tests (push - CLI, pump dispatch, stream receiver, ssh stand-in)
+      # `push -` in the CLI package, over the ssh stand-in and to a real
+      # loopback `serve` listener (in-process and as a real `serve --once`
+      # process). Two tests may SKIP, each for the reason stated in it:
+      # SIGTERM cannot be sent to one process on Windows, and the old-release
+      # listener test needs privately built old binaries
+      # (RELAYIUM_E2E_OLD_RELAYIUM), which this job does not build. Any other
+      # SKIP fails the job.
+      - name: Windows runtime tests (push - CLI, pump dispatch, stream receiver, ssh stand-in, serve listener)
         working-directory: server
         shell: bash
         run: |
           set -euo pipefail
           log="$RUNNER_TEMP/cli-windows-push-stdin.log"
           go test -count=1 -v -timeout 10m \
-            -run '^(TestPushStdin|TestRecvStreamFile|TestStandinPosixWords|TestE2EPushStdinStandIn)' \
+            -run '^(TestPushStdin|TestRecvStreamFile|TestStandinPosixWords|TestE2EPushStdinStandIn|TestE2EPushStdinDaemon|TestE2EServeOnceStream)' \
             ./cmd/relayium | tee "$log"
-          may_skip=" TestRecvStreamFileHelperSignalRemovesStaging "
+          may_skip=" TestRecvStreamFileHelperSignalRemovesStaging TestE2EPushStdinDaemonOldReleases "
           for t in TestPushStdinShapeRefusalsTouchNothing TestPushStdinRefusesATerminal \
             TestPushStdinRefusesZeroDependencyRemote TestPushStdinProbeFailureReadsNothing \
             TestPushStdinOldRemoteIsNamedAndReadsNothing TestPushStdinReceiverRefusalAbortsAndReadsNothing \
@@ -344,7 +351,12 @@ jobs:
             TestRecvStreamFileHelperInstalls TestRecvStreamFileHelperRefusesBeforeAccept \
             TestRecvStreamFileHelperIdleWatchdog TestRecvStreamFileHelperSignalRemovesStaging \
             TestRecvStreamFileHelperLostReceiptIsReportedOnStderr TestStandinPosixWordsUndoShellQuote \
-            TestE2EPushStdinStandIn; do
+            TestE2EPushStdinStandIn \
+            TestE2EPushStdinDaemonLoopback TestE2EPushStdinDaemonRefusals TestPushStdinDaemonPathRefusedBeforeDial \
+            TestPushStdinDaemonListenerRefusesBadPaths TestE2EPushStdinDaemonUnauthorized TestE2EPushStdinDaemonPinMismatch \
+            TestE2EPushStdinDaemonOldPeerFixtures TestE2EServeOnceStream TestE2EPushStdinDaemonStreamCut \
+            TestPushStdinDaemonCancelInProcess TestPushStdinDaemonKeepaliveHoldsIdleListener \
+            TestPushStdinDaemonExactlyOnceInstall TestPushStdinDaemonRefusalsNeverStartThePump; do
             if grep -q "^--- PASS: $t " "$log"; then continue; fi
             if [[ "$may_skip" == *" $t "* ]] && grep -q "^--- SKIP: $t " "$log"; then continue; fi
             echo "::error::$t did not PASS on Windows" >&2

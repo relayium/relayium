@@ -76,10 +76,25 @@ type RecvOpts struct {
 // resume state for any partial files already on disk, then writes each file,
 // verifying SHA-256.
 func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
-	var hello Hello
-	if _, err := ReadJSON(rw, &hello); err != nil {
+	hello, _, err := readHello(rw)
+	if err != nil {
 		return Report{}, err
 	}
+	return receiveV1(rw, hello, destDir, opts)
+}
+
+// readHello reads the first frame of a transfer as a Hello, returning its
+// frame type too (the v1 body has never checked it; the stream dispatch in
+// ReceiveAny does).
+func readHello(r io.Reader) (Hello, MsgType, error) {
+	var hello Hello
+	t, err := ReadJSON(r, &hello)
+	return hello, t, err
+}
+
+// receiveV1 is the body of Receive after its Hello was read: the v1 push and
+// sync protocol, exactly as Receive has always run it.
+func receiveV1(rw io.ReadWriter, hello Hello, destDir string, opts RecvOpts) (Report, error) {
 	if hello.Version != WireVersion {
 		return Report{}, fmt.Errorf("unsupported wire version %d", hello.Version)
 	}
