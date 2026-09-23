@@ -1216,9 +1216,7 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	// It occupies no open-session slot either — that cap counts done = 0.
 	fail := func(msg string, code int) {
 		s.dropUploadBlob(r.Context(), sess.NodeID, sess.BlobKey)
-		if reservedUploadID != "" {
-			_ = s.store.RefundUpload(r.Context(), reservedUploadID)
-		}
+		s.refundUploadReservation(r.Context(), reservedUploadID)
 		http.Error(w, msg, code)
 	}
 

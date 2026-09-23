@@ -319,9 +319,7 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	// (the authoritative storage-cap check) rejects the upload — otherwise the
 	// user is charged daily quota for a file that never landed.
 	refundReserved := func() {
-		if reservedUploadID != "" {
-			_ = s.store.RefundUpload(r.Context(), reservedUploadID)
-		}
+		s.refundUploadReservation(r.Context(), reservedUploadID)
 	}
 	id := authx.NewID()
 	// resolveRetention above turns request params + admin default policy into
@@ -365,6 +363,29 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		_ = s.store.RecordMeter(r.Context(), u.ID, MeterUpload, size, now)
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": id, "expiresAt": sf.ExpiresAt})
+}
+
+// uploadRefundBudget bounds refundUploadReservation's detached context.
+const uploadRefundBudget = 5 * time.Second
+
+// refundUploadReservation deletes the daily-quota event eventID after a gate
+// later than ReserveUpload refused the upload; "" (nothing reserved) is a
+// no-op. Both upload handlers used to refund on the request's context, so a
+// client that hung up after the reservation committed failed the persist AND
+// the refund: the event stayed, the user was charged daily quota for a file
+// that never landed, and the error was discarded. The refund therefore runs
+// on a detached context — values kept, cancellation dropped, bounded by
+// uploadRefundBudget — and a failure is logged, never reported as a refund.
+// A refund that fails leaves the event to expire with the 24h window.
+func (s *Service) refundUploadReservation(ctx context.Context, eventID string) {
+	if eventID == "" {
+		return
+	}
+	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), uploadRefundBudget)
+	defer cancel()
+	if err := s.store.RefundUpload(rctx, eventID); err != nil {
+		log.Printf("upload: refunding daily-quota reservation %s failed; it stays charged until it leaves the 24h window: %v", eventID, err)
+	}
 }
 
 // dropBlob reclaims an orphaned upload blob. It deletes best-effort, and on a
