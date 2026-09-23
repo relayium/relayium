@@ -60,6 +60,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pion/webrtc/v4"
@@ -484,10 +485,12 @@ const (
 	ldICEReady
 	ldWriteFailed
 	ldInputFailed
-	ldAnswer     // A10: the person answered the current file prompt (ok)
-	ldInterrupt  // A10: ctrl-C — an authenticated leave, now
-	ldCeiling    // A10: the whole-session ceiling of `text` passed — a normal end
-	ldRenewBroke // A11: a relay renewal failed after the path switched — end the link
+	ldAnswer           // A10: the person answered the current file prompt (ok)
+	ldInterrupt        // A10: ctrl-C — an authenticated leave, now
+	ldCeiling          // A10: the whole-session ceiling of `text` passed — a normal end
+	ldRenewBroke       // A11: a relay renewal failed after the path switched — end the link
+	ldRenewSettle      // A11: a renewal attempt ended — reconcile legacy recovery
+	ldRenewWriteFailed // A11: a renewal signalling write failed (err)
 )
 
 type ldItem struct {
@@ -498,6 +501,7 @@ type ldItem struct {
 	cmds  []ldCmd
 	ok    bool
 	err   error
+	rs    linksession.RenewState // ldRenewSettle
 }
 
 func (q *ldQueue) push(it ldItem) {
@@ -715,15 +719,24 @@ type linkDevDriver struct {
 	// boundAt is when the relay bound in force was installed: the renewal
 	// margin's fixed anchor (relay-renew-v1 §7.2), never "now".
 	boundAt time.Time
-	// lastUser is the last authenticated USER-lane activity (file bytes, ACK
-	// progress, user text) — never control frames or keepalives (§7.1).
-	lastUser time.Time
+	// lastUser (unix nanos) is the last authenticated USER-lane activity —
+	// received file bytes or user text the session accepted, ACK that really
+	// advanced our acknowledged bytes, or user data the transport accepted
+	// from us — never control frames, keepalives, stray or duplicate ACKs, or
+	// frames still queued (§7.1). Written by the loop and the lane writers.
+	lastUser atomic.Int64
 	// peerRenew: the peer's link offer/answer announced relay-renew/1.
 	peerRenew bool
 	// cutMu/cutTimer: the loop-independent cutoff at the relay deadline,
 	// resettable only by a proven renewal.
 	cutMu    sync.Mutex
 	cutTimer *time.Timer
+	// renewOut carries renewal signalling (envelopes and ice-renew) to the
+	// socket OFF the loop, in order, each write bounded.
+	renewOut *ldRenewWriter
+	// restartOwed: the session's legacy ICE restart was suppressed while an
+	// epoch was in flight (see EffICERestart and renewReconcile).
+	restartOwed bool
 }
 
 func newLinkDevDriver(ctx context.Context, cmd linksession.Cmd, room *rzvous.Room, f crossFlags, dev linkDevOpts,
@@ -1258,7 +1271,7 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 			if e.To != room.PeerID {
 				continue // only link establishment answers another peer (busy); a code room has one
 			}
-			if err := room.Session.SendSignal(d.ctx, e.Bytes); err != nil {
+			if err := d.sendSignal(e.Bytes); err != nil {
 				if ended, _ := d.s.Ended(); ended || d.linkOpen() {
 					// A best-effort leave, or a frame for a link that no
 					// longer needs signalling: the link decides, not this.
@@ -1338,7 +1351,12 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 			if d.renew != nil && (d.renew.InFlight() || d.renew.LockUnsigned()) {
 				// §4.1: the unauthenticated restart is suppressed while an
 				// epoch is in flight, and for good once the link renewed.
+				// Remembered: the session now waits in Restarting under its
+				// hard cap, and renewReconcile settles that wait — the
+				// migration's proof reopens it, and an attempt that ends
+				// WITHOUT restarting the transport sends this restart late.
 				d.logf("ICE restart suppressed: relay renewal owns this transport")
+				d.restartOwed = true
 				continue
 			}
 			if d.conn != nil {
@@ -1413,7 +1431,7 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 			}
 		case linksession.EffWriteChunk:
 			if len(e.Bytes) > 0 {
-				d.lastUser = time.Now() // received file bytes: user activity (§7.1)
+				d.noteUser() // received file bytes the session accepted (§7.1)
 			}
 			d.writeChunk(e.Prompt, e.Index, e.Bytes)
 		case linksession.EffFileVerified:
@@ -1439,7 +1457,7 @@ func (d *linkDevDriver) apply(effs []linksession.Effect) error {
 				continue
 			}
 			d.textsIn++
-			d.lastUser = time.Now() // received user text (§7.1)
+			d.noteUser() // received user text the session delivered (§7.1)
 			d.recvBytes += uint64(len(e.Text))
 			if d.ui != nil {
 				if err := d.ui.text(e.Text); err != nil && !d.outputFailed {
@@ -1473,10 +1491,6 @@ func (d *linkDevDriver) write(lane linkrtc.Lane, b []byte) {
 		return
 	}
 	d.outSeq++
-	if len(b) > 0 && ((lane == linkrtc.LaneFile && (b[0] == linkwire.KindChunk || b[0] == linkwire.KindChunkPart)) ||
-		(lane == linkrtc.LaneText && b[0] == linkwire.KindText)) {
-		d.lastUser = time.Now() // sent file bytes or user text (§7.1)
-	}
 	d.writers[lane].push(b)
 }
 
@@ -1496,6 +1510,12 @@ var (
 	// ldHookRenewFrame sees each inbound relay-renew control frame on the
 	// loop; true drops it (A11: a lost probe/ack).
 	ldHookRenewFrame func(d *linkDevDriver, frame []byte) bool
+	// ldHookProgress runs on the loop at every progress pass (A11 tests
+	// inject transport events and lane frames through it).
+	ldHookProgress func(d *linkDevDriver)
+	// ldHookRenewWrite runs on the renewal signalling writer before each
+	// write, under that write's bounded context (A11: a blocked socket).
+	ldHookRenewWrite func(ctx context.Context, d *linkDevDriver, w ldRenewWrite)
 )
 
 // ldCutoff closes the transport from any goroutine, once: at the relay
@@ -1597,6 +1617,9 @@ func (d *linkDevDriver) runWriter(w *ldLaneWriter, conn *linkrtc.Conn, ep linkse
 			ldHookLaneWrite(d, w.lane, frame, d.cut.done)
 		}
 		err := conn.Write(w.lane, frame)
+		if err == nil && ldUserData(w.lane, frame) {
+			d.noteUser() // user data the transport accepted from us (§7.1)
+		}
 		w.mu.Lock()
 		w.pending -= len(frame)
 		w.mu.Unlock()
@@ -1902,6 +1925,7 @@ func (d *linkDevDriver) shutdown() {
 	if d.renew != nil {
 		d.renew.Stop()
 	}
+	d.renewOut.stop()
 	d.cutMu.Lock()
 	if d.cutTimer != nil {
 		d.cutTimer.Stop()
@@ -1918,6 +1942,7 @@ func (d *linkDevDriver) shutdown() {
 	}
 	d.finishCur()
 	d.room.Session.Close()
+	d.renewOut.join() // after the socket closed: a blocked write has returned
 }
 
 // ---------------------------------------------------------------- queued inputs
@@ -1927,10 +1952,15 @@ func (d *linkDevDriver) item(it ldItem) error {
 	case ldEvent:
 		return d.event(it.ev, it.ep)
 	case ldFileFrame:
-		if len(it.frame) > 0 && it.frame[0] == linkwire.KindAck {
-			d.lastUser = time.Now() // ACK progress on our outbound bytes (§7.1)
+		// ACK progress counts only when the session ACCEPTED it as progress:
+		// a stray, duplicate, stale or out-of-range ACK leaves the
+		// acknowledged total where it was and is not user activity (§7.1).
+		acked := d.s.OutboundAcked()
+		err := d.do(d.s.FileFrame(it.ep, it.frame))
+		if d.s.OutboundAcked() > acked {
+			d.noteUser()
 		}
-		return d.do(d.s.FileFrame(it.ep, it.frame))
+		return err
 	case ldTextFrame:
 		// The text lane's FRONT demux (relay-renew-v1 §6.2): a 0x0d control
 		// frame is renewal's and never reaches the text session — not its
@@ -1966,6 +1996,10 @@ func (d *linkDevDriver) item(it ldItem) error {
 		}
 	case ldRenewBroke:
 		return d.do(d.s.Close())
+	case ldRenewWriteFailed:
+		d.logf("renewal signalling write failed: %v", it.err)
+	case ldRenewSettle:
+		return d.renewSettle(it.rs)
 	case ldCeiling:
 		if d.ui != nil {
 			d.ui.ceiling(d)
@@ -1990,7 +2024,7 @@ func (d *linkDevDriver) event(ev linkrtc.Event, ep linksession.Epoch) error {
 		if err != nil {
 			return err
 		}
-		if err := d.room.Session.SendSignal(d.ctx, b); err != nil {
+		if err := d.sendSignal(b); err != nil {
 			return err
 		}
 	case linkrtc.EventLocalCandidate:
@@ -2001,7 +2035,7 @@ func (d *linkDevDriver) event(ev linkrtc.Event, ep linksession.Epoch) error {
 		if err != nil {
 			return err
 		}
-		if err := d.room.Session.SendSignal(d.ctx, b); err != nil && !d.linkOpen() {
+		if err := d.sendSignal(b); err != nil && !d.linkOpen() {
 			return err
 		}
 	case linkrtc.EventProgress:
@@ -2062,6 +2096,9 @@ func (d *linkDevDriver) event(ev linkrtc.Event, ep linksession.Epoch) error {
 // ---------------------------------------------------------------- progress: script, files, texts, quit
 
 func (d *linkDevDriver) progress() error {
+	if ldHookProgress != nil {
+		ldHookProgress(d)
+	}
 	if ended, _ := d.s.Ended(); ended || d.res.legacy {
 		return nil
 	}
@@ -2751,15 +2788,22 @@ func (d *linkDevDriver) startRenewal() {
 		return
 	}
 	d.renewer = linkrtc.NewRenewer(d.conn)
+	d.renewOut = newLDRenewWriter(d)
 	r, err := d.s.NewRenewal(linksession.RenewDeps{
 		Now:        time.Now,
-		SendSignal: func(env []byte) error { return d.room.Session.SendSignal(d.ctx, env) },
+		SendSignal: func(env []byte) error { return d.renewOut.push(ldRenewWrite{env: env}) },
 		// The server's renewal authority is THIS socket (frozen at pairing):
 		// the request carries no code and names nobody.
-		RequestRound:      func(round, rid uint32) error { return d.room.Session.SendRenew(d.ctx, round, rid) },
+		RequestRound: func(round, rid uint32) error {
+			return d.renewOut.push(ldRenewWrite{renew: true, round: round, rid: rid})
+		},
 		PeerSupportsRenew: func() bool { return d.peerRenew || d.s.PeerAnnouncedRenew() },
-		UserActive: func() bool {
-			return !d.lastUser.IsZero() && time.Since(d.lastUser) < linksession.RenewActivityWindow
+		UserActive:        d.userActive,
+		// A legacy (link §8) restart in flight or owed: the transport is not
+		// renewal's to migrate until that settles.
+		Busy: func() bool {
+			_, link, _, _ := d.s.States()
+			return link == "Restarting"
 		},
 		Bound: func() (linksession.RenewBound, bool) {
 			b, ok := d.latch.Bound()
@@ -2797,14 +2841,208 @@ func (d *linkDevDriver) startRenewal() {
 		Broke: d.renewBroke,
 		OnState: func(s linksession.RenewState) {
 			d.logf("relay renewal: %s", s)
+			// Settled on the loop, never re-entering the session from inside
+			// the engine.
+			d.q.push(ldItem{kind: ldRenewSettle, rs: s})
 		},
 	}, &ldRenewTransport{d: d})
 	if err != nil {
 		d.logf("relay renewal unavailable: %v", err)
 		d.renewer = nil
+		d.renewOut.stop()
+		d.renewOut = nil
 		return
 	}
 	d.renew = r
+}
+
+// renewSettle reconciles the session's legacy recovery with renewal once an
+// attempt has ended (A11, Codex gate-2 item 2). A disconnect while an epoch
+// was in flight put the session (initiator) in Restarting under its hard cap,
+// and its restart offer was suppressed. Then:
+//
+//   - the migration committed: the new path carried a signed round trip, so
+//     the transport is proven up — the session is told it reconnected, and the
+//     restart it asked for is no longer owed;
+//   - the attempt ended WITHOUT restarting the transport: the suppressed
+//     legacy restart is sent now, unless this PeerConnection may no longer
+//     carry unsigned SDP (§4.1), in which case the session's own hard cap ends
+//     the link truthfully as restart-failed;
+//   - it broke after restarting: renewBroke ends the link.
+func (d *linkDevDriver) renewSettle(st linksession.RenewState) error {
+	if d.renew == nil || d.renew.InFlight() {
+		return nil
+	}
+	_, link, _, _ := d.s.States()
+	switch st {
+	case linksession.RenewRenewed:
+		d.restartOwed = false
+		if link == "Restarting" {
+			d.logf("relay renewal proved the transport: leaving the legacy restart")
+			return d.do(d.s.Reconnected(d.connEp))
+		}
+	case linksession.RenewBroken:
+		d.restartOwed = false
+	default:
+		if d.restartOwed && link == "Restarting" && d.conn != nil && !d.renew.LockUnsigned() {
+			d.restartOwed = false
+			d.logf("relay renewal ended without migrating: sending the suppressed ICE restart")
+			if err := d.conn.RestartICE(); err != nil {
+				d.logf("ICE restart not sent: %v", err)
+			}
+		}
+	}
+	return nil
+}
+
+// linkRenewActivityWindow is RenewActivityWindow; only tests shorten it.
+var linkRenewActivityWindow = linksession.RenewActivityWindow
+
+func (d *linkDevDriver) noteUser() { d.lastUser.Store(time.Now().UnixNano()) }
+
+// userActive: authenticated user-lane activity inside the window (§7.1).
+func (d *linkDevDriver) userActive() bool {
+	at := d.lastUser.Load()
+	return at != 0 && time.Since(time.Unix(0, at)) < linkRenewActivityWindow
+}
+
+// ldUserData reports a frame that carries user data: an encrypted file
+// piece, or protected user text. Lifecycle, consent, ACK and renewal control
+// frames are not.
+func ldUserData(lane linkrtc.Lane, b []byte) bool {
+	if len(b) == 0 {
+		return false
+	}
+	if lane == linkrtc.LaneFile {
+		return b[0] == linkwire.KindChunk || b[0] == linkwire.KindChunkPart
+	}
+	return b[0] == linkwire.KindText
+}
+
+// linkSignalWriteTimeout bounds every signalling write (A11, Codex gate-2
+// item 3): a backpressured socket costs a write, never the loop or its timers.
+const linkSignalWriteTimeout = 10 * time.Second
+
+// sendSignal is one bounded write on the rendezvous socket.
+func (d *linkDevDriver) sendSignal(b []byte) error {
+	ctx, cancel := context.WithTimeout(d.ctx, linkSignalWriteTimeout)
+	defer cancel()
+	return d.room.Session.SendSignal(ctx, b)
+}
+
+// ldRenewWrite is one queued renewal write: an envelope, or an ice-renew.
+type ldRenewWrite struct {
+	env        []byte
+	renew      bool
+	round, rid uint32
+}
+
+// ldRenewWriterMax bounds the queue. A signal past it is dropped, which the
+// protocol already treats as loss (the epoch's own timers end it).
+const ldRenewWriterMax = 64
+
+var errLDRenewQueue = errors.New("link-dev: renewal signalling queue full or stopped")
+
+// ldRenewWriter carries renewal signalling to the socket off the loop, in
+// order, each write bounded by linkSignalWriteTimeout. The engine's timers,
+// its local failure and the link's teardown never wait for a socket.
+type ldRenewWriter struct {
+	d    *linkDevDriver
+	mu   sync.Mutex
+	q    []ldRenewWrite
+	wake chan struct{}
+	quit chan struct{}
+	done chan struct{}
+	once sync.Once
+}
+
+func newLDRenewWriter(d *linkDevDriver) *ldRenewWriter {
+	w := &ldRenewWriter{d: d, wake: make(chan struct{}, 1), quit: make(chan struct{}), done: make(chan struct{})}
+	go w.run()
+	return w
+}
+
+func (w *ldRenewWriter) push(x ldRenewWrite) error {
+	if w == nil {
+		return errLDRenewQueue
+	}
+	w.mu.Lock()
+	select {
+	case <-w.quit:
+		w.mu.Unlock()
+		return errLDRenewQueue
+	default:
+	}
+	if len(w.q) >= ldRenewWriterMax {
+		w.mu.Unlock()
+		return errLDRenewQueue
+	}
+	w.q = append(w.q, x)
+	w.mu.Unlock()
+	select {
+	case w.wake <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
+func (w *ldRenewWriter) stop() {
+	if w != nil {
+		w.once.Do(func() { close(w.quit) })
+	}
+}
+
+// join waits (bounded) for the writer to exit; the socket was closed first,
+// so a write in progress returns promptly.
+func (w *ldRenewWriter) join() {
+	if w == nil {
+		return
+	}
+	select {
+	case <-w.done:
+	case <-time.After(linkSignalWriteTimeout):
+	}
+}
+
+func (w *ldRenewWriter) run() {
+	defer close(w.done)
+	d := w.d
+	for {
+		w.mu.Lock()
+		if len(w.q) == 0 {
+			w.mu.Unlock()
+			select {
+			case <-w.wake:
+				continue
+			case <-w.quit:
+				return
+			case <-d.ctx.Done():
+				return
+			}
+		}
+		x := w.q[0]
+		w.q = w.q[1:]
+		w.mu.Unlock()
+		ctx, cancel := context.WithTimeout(d.ctx, linkSignalWriteTimeout)
+		if ldHookRenewWrite != nil {
+			ldHookRenewWrite(ctx, d, x)
+		}
+		var err error
+		if ctx.Err() != nil {
+			err = ctx.Err()
+		} else if x.renew {
+			err = d.room.Session.SendRenew(ctx, x.round, x.rid)
+		} else {
+			err = d.room.Session.SendSignal(ctx, x.env)
+		}
+		cancel()
+		if err != nil {
+			// Silence to the engine: a lost envelope or request is what its
+			// timers already bound. Reported through the loop (which owns the
+			// output), never written from here.
+			d.q.push(ldItem{kind: ldRenewWriteFailed, err: err})
+		}
+	}
 }
 
 // renewCommit is the ONE place a relayed link's deadline moves later, and it
@@ -2841,7 +3079,15 @@ func (d *linkDevDriver) renewBroke(reason string) {
 	d.notice("the relay renewal did not complete after the relay path was switched (%s); the link has ended — pair again to continue", reason)
 	d.record("link: relay-renewal-failed")
 	d.q.push(ldItem{kind: ldRenewBroke})
+	// Independent of every write: whatever the loop's authenticated leave or
+	// the renewal abort is waiting on, the transport (and its TURN
+	// allocation) closes shortly after — the leave's linger plus a margin.
+	time.AfterFunc(linkDevCloseLinger+linkRenewBrokeCut, func() { d.cut.fire("relay renewal failed") })
 }
+
+// linkRenewBrokeCut is how long a broken renewal's link waits for its own
+// leave before the transport is closed regardless.
+const linkRenewBrokeCut = 3 * time.Second
 
 // ldRenewTransport is the engine's view of this link's transport.
 type ldRenewTransport struct{ d *linkDevDriver }

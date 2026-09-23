@@ -752,6 +752,10 @@ type RenewDeps struct {
 	// Broke: an attempt ended without commit after the transport restarted.
 	// The caller ends the link truthfully. The deadline is untouched.
 	Broke func(reason string)
+	// Busy, optional: the transport is in a legacy (link §8) recovery that
+	// renewal must not race — no attempt starts, a peer's prepare is refused
+	// as unavailable.
+	Busy func() bool
 	// OnState, optional.
 	OnState func(RenewState)
 	// Random, optional (tests).
@@ -918,6 +922,12 @@ func (s *Session) NewRenewal(deps RenewDeps, tr RenewTransport) (*Renewal, error
 		renewalUfrags: map[string]bool{}, requests: map[uint32]*renewRequest{},
 	}, nil
 }
+
+// OutboundAcked is the acknowledged byte count of the outbound batch: it
+// moves only when the session accepts an ACK as real progress (never on a
+// stray, duplicate, stale or out-of-range one). Renewal's user-activity gate
+// reads its movement (relay-renew-v1 §7.1).
+func (s *Session) OutboundAcked() uint64 { return s.fout.acked }
 
 // PeerAnnouncedRenew reports whether the peer's last hello named relay-renew/1.
 func (s *Session) PeerAnnouncedRenew() bool {
@@ -1187,9 +1197,9 @@ func (r *Renewal) endAttempt(a *renewAttempt, reason string, next RenewState) {
 	}
 	r.attempt = nil
 	a.timers = map[string]time.Time{}
-	if reason != "" {
-		r.emit(RenewSignal{Type: "abort", Epoch: a.epoch, Reason: reason})
-	}
+	// Local failure and teardown FIRST, independent of telling the peer: the
+	// abort below is handed to the caller's signalling, which may be slow or
+	// stuck, and nothing here may wait for it.
 	if a.restarted && !r.broken {
 		// Pion retired the previous path when this attempt restarted ICE.
 		// Nothing can fall back to it; the link must end, truthfully, with
@@ -1201,9 +1211,12 @@ func (r *Renewal) endAttempt(a *renewAttempt, reason string, next RenewState) {
 			why = "peer"
 		}
 		r.deps.Broke(why)
-		return
+	} else if !r.broken {
+		r.publish(next)
 	}
-	r.publish(next)
+	if reason != "" {
+		r.emit(RenewSignal{Type: "abort", Epoch: a.epoch, Reason: reason})
+	}
 }
 
 func (r *Renewal) finish(a *renewAttempt, announce string, st RenewState, backoff bool) {
@@ -1247,6 +1260,9 @@ func (r *Renewal) due() bool {
 		return false
 	}
 	if !r.deps.PeerSupportsRenew() {
+		return false
+	}
+	if r.deps.Busy != nil && r.deps.Busy() {
 		return false
 	}
 	if r.approachSpent[r.attemptKey(false)] >= RenewMaxPregrantAttempts {
@@ -1642,10 +1658,16 @@ func (r *Renewal) onPrepare(epoch uint32) {
 		r.emit(RenewSignal{Type: "abort", Epoch: epoch, Reason: renewAbortDenied})
 		return
 	}
+	if a := r.attempt; a != nil && epoch <= a.epoch {
+		return // the attempt in flight (or an older one): not a new start
+	}
+	// A legacy recovery owns the transport: no NEW attempt starts. The one
+	// already in flight is not refused here — it is what will settle it.
+	if r.deps.Busy != nil && r.deps.Busy() {
+		r.emit(RenewSignal{Type: "abort", Epoch: epoch, Reason: renewAbortUnavailable})
+		return
+	}
 	if a := r.attempt; a != nil {
-		if epoch <= a.epoch {
-			return
-		}
 		r.finish(a, "", RenewRenewing, false) // superseded: charged, no backoff
 		if r.broken {
 			return

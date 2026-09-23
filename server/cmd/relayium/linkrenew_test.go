@@ -24,6 +24,9 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/relayium/relayium/internal/linkrtc"
+	"github.com/relayium/relayium/internal/linksession"
+	"github.com/relayium/relayium/internal/linkwire"
 	"github.com/relayium/relayium/internal/signal"
 )
 
@@ -465,4 +468,219 @@ func TestLinkRenewLostProofEndsLinkTruthfully(t *testing.T) {
 		t.Errorf("%d allocations, want the original two and the renewed two", n)
 	}
 	lt.waitAllocations(t, 0, 10*time.Second)
+}
+
+// ---------------------------------------------------------------- Codex gate-2 delta
+
+// Renewal consent is USER progress only (relay-renew-v1 §7.1). With the
+// activity window shortened to 12 s and the renewal window opening at about
+// +27 s, none of these links has qualifying activity when it matters, so none
+// may ask the server for anything:
+//
+//   - idle: nothing is ever sent;
+//   - bogus-acks: one small batch at the start (real activity, long stale by
+//     the window), then a stream of injected duplicate, out-of-range and stray
+//     ACKs — none of which the session accepts as progress;
+//   - blocked-write: a message is queued but its write never reaches the
+//     transport.
+func TestLinkRenewNeedsUserProgress(t *testing.T) {
+	linkRenewActivityWindow = 12 * time.Second
+	t.Cleanup(func() { linkRenewActivityWindow = linksession.RenewActivityWindow })
+	for _, mode := range []string{"idle", "bogus-acks", "blocked-write"} {
+		t.Run(mode, func(t *testing.T) {
+			lt := startLinkDevTURN(t)
+			hub := startLinkDevRenewHub(t, lt, 100*time.Second, ldGrantFor(lt, 300*time.Second))
+			// No end of script before +75 s: a link that was (wrongly)
+			// renewed finishes it and fails below by name instead of hanging.
+			scriptA, scriptB := []string{"sleep 75s"}, []string{"sleep 75s"}
+			var injected atomic.Int32
+			switch mode {
+			case "bogus-acks":
+				src := ldTree(t, "tiny", map[string]int{"t.bin": 200_000})
+				scriptA = []string{"send " + src, "sleep 75s"}
+				var mu sync.Mutex
+				lastAck := map[*linkDevDriver][]byte{}
+				ldHookInbound = func(d *linkDevDriver, lane linkrtc.Lane, b []byte) {
+					if lane == linkrtc.LaneFile && len(b) > 0 && b[0] == linkwire.KindAck {
+						mu.Lock()
+						lastAck[d] = append([]byte(nil), b...)
+						mu.Unlock()
+					}
+				}
+				next := map[*linkDevDriver]time.Time{}
+				start := time.Now()
+				ldHookProgress = func(d *linkDevDriver) {
+					mu.Lock()
+					if time.Since(start) < 14*time.Second || time.Now().Before(next[d]) || d.conn == nil {
+						mu.Unlock()
+						return
+					}
+					next[d] = time.Now().Add(2 * time.Second)
+					dup := lastAck[d]
+					mu.Unlock()
+					bogus, _ := linkwire.AckFrame(1 << 40)
+					stray, _ := linkwire.AckFrame(4096)
+					for _, f := range [][]byte{dup, bogus, stray} {
+						if f != nil {
+							d.q.push(ldItem{kind: ldFileFrame, ep: d.connEp, frame: f})
+							injected.Add(1)
+						}
+					}
+				}
+				t.Cleanup(func() { ldHookInbound, ldHookProgress = nil, nil })
+			case "blocked-write":
+				// Messages keep being queued up to the renewal window; none is
+				// ever written.
+				scriptA = []string{"text w1", "sleep 6s", "text w2", "sleep 6s", "text w3", "sleep 6s", "text w4", "sleep 6s", "text w5", "sleep 50s"}
+				ldHookLaneWrite = func(d *linkDevDriver, lane linkrtc.Lane, b []byte, stop <-chan struct{}) {
+					if lane == linkrtc.LaneText && len(b) > 0 && b[0] == linkwire.KindText {
+						injected.Add(1)
+						<-stop
+					}
+				}
+				t.Cleanup(func() { ldHookLaneWrite = nil })
+			}
+			ra, rb := ldPairUpWithin(t, hub.ldHub,
+				ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", ldScript(t, scriptA...), ldCode}},
+				ldPeer{cmd: "pair", via: hub.url, args: []string{"--yes", "--dest", t.TempDir(), "--script", ldScript(t, scriptB...), ldCode}},
+				2*time.Minute)
+			if mode != "idle" && injected.Load() == 0 {
+				t.Fatal("nothing was injected or blocked: the test proves nothing")
+			}
+			if n := hub.requests.Load(); n != 0 {
+				t.Errorf("%d ice-renew request(s) without qualifying user activity", n)
+			}
+			for _, r := range []ldResult{ra, rb} {
+				if !strings.Contains(r.stderr, "report link relay-credential-ended") || strings.Contains(r.stderr, "relay renewed") {
+					t.Errorf("want the original deadline and no renewal\n%s", r)
+				}
+			}
+		})
+	}
+}
+
+// A disconnect while an epoch is being prepared puts the initiator's session
+// in its legacy Restarting state, under the setup hard cap, with the restart
+// itself suppressed (renewal owns the transport). The migration then proves
+// the new path, and that proof must return the session to Open: the link
+// survives well past the legacy hard cap.
+func TestLinkRenewDisconnectDuringPreparationSurvivesHardCap(t *testing.T) {
+	lt := startLinkDevTURN(t)
+	hub := startLinkDevRenewHub(t, lt, 100*time.Second, ldGrantFor(lt, 300*time.Second))
+	var injected atomic.Int32
+	ldHookProgress = func(d *linkDevDriver) {
+		if d.conn == nil || d.conn.Role() != linkrtc.Initiator || d.renew == nil {
+			return
+		}
+		if d.renew.InFlight() && !d.renew.Restarted() && injected.CompareAndSwap(0, 1) {
+			d.q.push(ldItem{kind: ldEvent, ev: linkrtc.Event{Kind: linkrtc.EventDisconnected}, ep: d.connEp})
+		}
+	}
+	t.Cleanup(func() { ldHookProgress = nil })
+	script := func(m1, m2 string) string {
+		return ldScript(t, "text "+m1, "wait-texts 1", "wait-renewed 1", "sleep 100s", "text "+m2, "wait-texts 2")
+	}
+	start := time.Now()
+	ra, rb := ldPairUpWithin(t, hub.ldHub,
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", script("a1", "a2"), ldCode}},
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", script("b1", "b2"), ldCode}},
+		4*time.Minute)
+	if injected.Load() != 1 {
+		t.Fatal("the disconnect was never injected")
+	}
+	for _, r := range []ldResult{ra, rb} {
+		if r.code != 0 || strings.Contains(r.stderr, "restart-failed") || !strings.Contains(r.stderr, "relay renewed") {
+			t.Errorf("want a renewed link that outlives the legacy hard cap\n%s", r)
+		}
+	}
+	if !strings.Contains(ra.stderr+rb.stderr, "relay renewal proved the transport: leaving the legacy restart") {
+		t.Error("the initiator's session was never returned from Restarting")
+	}
+	if !strings.Contains(ra.stdout, "b2") || !strings.Contains(rb.stdout, "a2") {
+		t.Error("the messages after the hard cap were not delivered")
+	}
+	if el := time.Since(start); el < 120*time.Second {
+		t.Errorf("ended after %s: before the legacy hard cap could have fired", el)
+	}
+}
+
+// A blocked signalling socket costs renewal writes, never the loop: the
+// initiator's renewal envelopes and ice-renew requests never get through
+// (each bounded write times out), its own timers still run, and both ends
+// reach the ORIGINAL deadline on time, truthfully. Nothing is issued.
+func TestLinkRenewBlockedSignallingBeforeRestart(t *testing.T) {
+	lt := startLinkDevTURN(t)
+	hub := startLinkDevRenewHub(t, lt, 100*time.Second, ldGrantFor(lt, 300*time.Second))
+	var blocked atomic.Int32
+	ldHookRenewWrite = func(ctx context.Context, d *linkDevDriver, w ldRenewWrite) {
+		if d.conn != nil && d.conn.Role() == linkrtc.Initiator {
+			blocked.Add(1)
+			<-ctx.Done()
+		}
+	}
+	t.Cleanup(func() { ldHookRenewWrite = nil })
+	start := time.Now()
+	ra, rb := ldPairUpWithin(t, hub.ldHub,
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", ldScript(t, "text a", "wait-texts 1", "hold"), ldCode}},
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", ldScript(t, "text b", "wait-texts 1", "hold"), ldCode}},
+		2*time.Minute)
+	ended := time.Since(start)
+	if blocked.Load() == 0 {
+		t.Fatal("no renewal write was blocked: the test proves nothing")
+	}
+	for _, r := range []ldResult{ra, rb} {
+		if !strings.Contains(r.stderr, "report link relay-credential-ended") || strings.Contains(r.stderr, "relay renewed") {
+			t.Errorf("want the truthful original-deadline end\n%s", r)
+		}
+	}
+	if ended > 55*time.Second {
+		t.Errorf("ended after %s; the original deadline is +40 s (a blocked loop?)", ended)
+	}
+	if hub.issued.Load() != 0 {
+		t.Errorf("issued %d", hub.issued.Load())
+	}
+}
+
+// After the restart, the initiator's offer and every later renewal envelope
+// (its abort included) are stuck on the socket. The responder times the epoch
+// out and aborts; the initiator — whose old path is gone — fails LOCALLY and
+// ends the link at once, without waiting for its own abort to be delivered.
+func TestLinkRenewBlockedSignallingAfterRestart(t *testing.T) {
+	lt := startLinkDevTURN(t)
+	hub := startLinkDevRenewHub(t, lt, 200*time.Second, ldGrantFor(lt, 300*time.Second))
+	var blocked atomic.Int32
+	ldHookRenewWrite = func(ctx context.Context, d *linkDevDriver, w ldRenewWrite) {
+		if d.conn == nil || d.conn.Role() != linkrtc.Initiator || w.renew {
+			return
+		}
+		if sig, _, ok := linksession.ParseRenewEnvelope(w.env); ok && (sig.Type == "sdp" || sig.Type == "ice" || sig.Type == "abort") {
+			blocked.Add(1)
+			<-ctx.Done()
+		}
+	}
+	t.Cleanup(func() { ldHookRenewWrite = nil })
+	start := time.Now()
+	ra, rb := ldPairUpWithin(t, hub.ldHub,
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", ldScript(t, "text a", "wait-texts 1", "hold"), ldCode}},
+		ldPeer{cmd: "pair", via: hub.url, args: []string{"--script", ldScript(t, "text b", "wait-texts 1", "hold"), ldCode}},
+		4*time.Minute)
+	ended := time.Since(start)
+	if blocked.Load() == 0 {
+		t.Fatal("no post-restart write was blocked: the test proves nothing")
+	}
+	ini := ra
+	if ldRole(rb) == "initiator" {
+		ini = rb
+	}
+	if !strings.Contains(ini.stderr, "the relay renewal did not complete after the relay path was switched") || ini.code == 0 {
+		t.Errorf("the initiator did not fail locally and truthfully\n%s", ini)
+	}
+	for _, r := range []ldResult{ra, rb} {
+		if strings.Contains(r.stderr, "relay renewed") || strings.Contains(r.stderr, "report link relay-credential-ended") {
+			t.Errorf("want the link ended by the failed renewal, not renewed nor run to the deadline\n%s", r)
+		}
+	}
+	if ended > 135*time.Second {
+		t.Errorf("ended after %s; the original deadline is +140 s", ended)
+	}
 }

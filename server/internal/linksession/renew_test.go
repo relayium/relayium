@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/relayium/relayium/internal/linkwire"
 	"github.com/relayium/relayium/internal/signal"
 )
 
@@ -117,16 +118,20 @@ type rtHarness struct {
 	requests [2]int
 	sentRnd  [2][]uint32
 
-	bound      [2]RenewBound
-	hasBound   [2]bool
-	commits    [2][]uint32
-	commitAt   [2][]time.Time
-	broke      [2][]string
-	supports   [2]bool
-	active     [2]bool
-	lastIssue  int64
-	seenIssued int32
-	asked      bool
+	bound    [2]RenewBound
+	hasBound [2]bool
+	commits  [2][]uint32
+	commitAt [2][]time.Time
+	broke    [2][]string
+	supports [2]bool
+	active   [2]bool
+	busy     [2]bool
+	// abortQueuedAtBroke: whether side i's abort envelope was already handed
+	// to signalling when Broke ran (it must not be: local failure first).
+	abortQueuedAtBroke [2]bool
+	lastIssue          int64
+	seenIssued         int32
+	asked              bool
 
 	dropSignals [2]func(RenewSignal) bool // drop matching signals TO side i
 	dropFrames  [2]func([]byte) bool
@@ -244,6 +249,7 @@ func newRTSeeded(t *testing.T, seedA, seedB byte) *rtHarness {
 			},
 			PeerSupportsRenew: func() bool { return h.supports[i] },
 			UserActive:        func() bool { return h.active[i] },
+			Busy:              func() bool { return h.busy[i] },
 			Bound:             func() (RenewBound, bool) { return h.bound[i], h.hasBound[i] },
 			RenewedConfig: func(body []byte) (any, time.Time, bool) {
 				d, ok := rtDeadline(body)
@@ -254,7 +260,14 @@ func newRTSeeded(t *testing.T, seedA, seedB byte) *rtHarness {
 				h.commitAt[i] = append(h.commitAt[i], h.l.clk.Now())
 				h.bound[i] = RenewBound{DeadlineAt: deadlineAt, AnchoredAt: h.l.clk.Now()}
 			},
-			Broke: func(reason string) { h.broke[i] = append(h.broke[i], reason) },
+			Broke: func(reason string) {
+				h.broke[i] = append(h.broke[i], reason)
+				for _, it := range h.q {
+					if sig, _, ok := ParseRenewEnvelope(it.raw); ok && it.to == 1-i && sig.Type == "abort" {
+						h.abortQueuedAtBroke[i] = true
+					}
+				}
+			},
 		}
 		e, err := s.NewRenewal(deps, h.tr[i])
 		if err != nil {
@@ -1028,5 +1041,84 @@ func TestRenewRepairFencesLateRoundReply(t *testing.T) {
 					e.attempt == a, e.roundDenied, a.round, cfgSets, h.tr[1].cfgSets, h.commits[1])
 			}
 		})
+	}
+}
+
+// A legacy (link §8) restart owns the transport: no attempt starts, and a
+// peer's prepare is refused as unavailable. Once it settles, renewal proceeds.
+func TestRenewWaitsForLegacyRestart(t *testing.T) {
+	h := newRT(t)
+	h.busy[0] = true
+	h.toWindow()
+	h.run(90 * time.Second)
+	if h.requests[0] != 0 || h.issued.Load() != 0 || h.tr[0].restarts+h.tr[1].restarts != 0 {
+		t.Fatalf("renewal raced a legacy restart: requests %v issued %d", h.requests, h.issued.Load())
+	}
+	if h.sigCount(1, "abort") == 0 {
+		t.Fatal("a busy side did not refuse the peer's prepare")
+	}
+	h.busy[0] = false
+	h.run(3 * time.Minute)
+	if len(h.commits[0]) != 1 || len(h.commits[1]) != 1 {
+		t.Fatalf("no renewal after the legacy restart settled: %v %v", h.commits[0], h.commits[1])
+	}
+}
+
+// Local failure is independent of telling the peer: Broke runs before the
+// abort envelope is even handed to signalling (which may block).
+func TestRenewBrokeBeforeAbortIsSent(t *testing.T) {
+	h := newRT(t)
+	h.tr[1].blockNewPath = true
+	h.toWindow()
+	h.run(3 * time.Minute)
+	for i := range 2 {
+		if len(h.broke[i]) != 1 {
+			t.Fatalf("side %d broke %v", i, h.broke[i])
+		}
+		if h.abortQueuedAtBroke[i] {
+			t.Errorf("side %d handed its abort to signalling before failing locally", i)
+		}
+	}
+}
+
+// OutboundAcked, renewal's user-activity signal for ACK progress, moves only
+// when the session accepts an ACK as progress: a stray ACK with no batch, a
+// duplicate, a stale one and one past what was sent all leave it unchanged.
+func TestOutboundAckedMovesOnlyOnRealProgress(t *testing.T) {
+	l := openLoop(t, CmdPair, CmdPair)
+	a, b := l.a, l.b
+	ack := func(v uint64) {
+		f, err := linkwire.AckFrame(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		l.absorb(a, nil, nil)
+		effs, err := a.s.FileFrame(a.s.Epoch(), f)
+		l.absorb(a, effs, err)
+		l.pump()
+	}
+	ack(4096) // stray: no outbound batch
+	if a.s.OutboundAcked() != 0 {
+		t.Fatalf("a stray ACK moved acked to %d", a.s.OutboundAcked())
+	}
+	p := [][]byte{payload(3*linkwire.ChunkSize+17, 7)}
+	l.sendBatch(a, p...)
+	accept(t, l, b)
+	b.holdDurable = true // b writes but reports nothing durable: no ACK yet
+	l.pushData(a, p...)
+	if a.s.OutboundAcked() != 0 {
+		t.Fatalf("acked %d before any real ACK", a.s.OutboundAcked())
+	}
+	emitted := a.s.fout.emitted
+	ack(emitted / 2) // real progress
+	got := a.s.OutboundAcked()
+	if got != emitted/2 {
+		t.Fatalf("a real ACK did not advance: %d, want %d", got, emitted/2)
+	}
+	for _, v := range []uint64{got, got - 1, emitted + 1, emitted + 1<<30} {
+		ack(v)
+		if a.s.OutboundAcked() != got {
+			t.Fatalf("ACK %d (duplicate/stale/out-of-range) moved acked %d -> %d", v, got, a.s.OutboundAcked())
+		}
 	}
 }
