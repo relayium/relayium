@@ -630,9 +630,11 @@ const MUTATIONS = [
     ]),
     path: "apps/RelayiumKit/Tests/Fixtures/crypto-vectors.json",
     // With the negation first the positive re-includes the excluded subtree,
-    // so macOS starts on a test-only edit again. `web` is expected: it names
-    // that fixture one file at a time on purpose.
-    expectSelected: ["macos", "swift-package", "web"],
+    // so macOS starts on a test-only edit again. `go` and `web` are expected:
+    // each names that fixture one file at a time on purpose, because
+    // `server/internal/linkcrypto/vectors_test.go` and the Web vector suites
+    // read it from disk.
+    expectSelected: ["go", "macos", "swift-package", "web"],
   },
 ];
 

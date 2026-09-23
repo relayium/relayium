@@ -169,7 +169,7 @@ change.**
 | `Sources/**`, `Package.swift`, `Package.resolved` | `swift-package.yml`, `macos.yml`, `ios.yml`, `native-web-pairing.yml` |
 | `Tests/RelayiumKitTests/**` (any test, guards included) | `swift-package.yml` |
 | `Tests/Fixtures/device-inbox-manifest-v3-vectors.json` | `swift-package.yml`, `go.yml`, `web.yml` |
-| `Tests/Fixtures/crypto-vectors.json` | `swift-package.yml`, `web.yml` |
+| `Tests/Fixtures/crypto-vectors.json` | `swift-package.yml`, `go.yml`, `web.yml` |
 | `Tests/Fixtures/realtime-wire-vectors.json` | `swift-package.yml`, `web.yml` |
 | `Tests/Fixtures/store-wire-vectors.json`, `Tests/Fixtures/account/**` | `swift-package.yml` |
 
@@ -279,8 +279,13 @@ not macOS lanes. Those workflows name the individual files:
 | ------- | ------- | -------- |
 | `device-inbox-manifest-v3-vectors.json` | `server/internal/inboxmanifest/vectors_test.go` | `go.yml` |
 | `device-inbox-manifest-v3-vectors.json` | `web/src/lib/inbox-manifest.test.ts` | `web.yml` |
+| `crypto-vectors.json` | `server/internal/linkcrypto/vectors_test.go` | `go.yml` |
 | `crypto-vectors.json` | `web/src/lib/caps-vectors.test.ts`, `web/src/lib/text-vectors.test.ts` | `web.yml` |
 | `realtime-wire-vectors.json` | the same two Web suites | `web.yml` |
+
+`realtime-wire-vectors.json` has **no** Go reader: no Go code speaks the
+realtime wire yet, so `go.yml` names the crypto fixture beside it and not this
+one. The entries are per-consumer, not a block copied between workflows.
 
 Each of those tests opens the file from disk and asserts its own implementation
 still agrees with the frozen bytes, so the fixture is an input to that suite
@@ -1222,8 +1227,8 @@ is happy with all of it:
   which reports as no check rather than as a red one;
 * the unfiltered `swift test` deleted, filtered, or duplicated back into
   `macos.yml`;
-* one of the four named fixture entries dropped from `go.yml` or `web.yml`, or
-  the four replaced by the directory they live in;
+* one of the five named fixture entries dropped from `go.yml` or `web.yml`, or
+  the five replaced by the directory they live in;
 * a new `macos-15` job landing in a governed *or budget-only* workflow that
   `RUNNER_BUDGETS` covers nowhere;
 * `macos.yml` regaining a `workflow_dispatch`, a `publish` job, a job-level

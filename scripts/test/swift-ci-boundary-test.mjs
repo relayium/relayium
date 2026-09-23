@@ -266,6 +266,11 @@ const FIXTURE_INPUTS = [
   {
     fixture: `${PACKAGE_FIXTURES_ROOT}/crypto-vectors.json`,
     consumers: [
+      {
+        file: "server/internal/linkcrypto/vectors_test.go",
+        workflow: GO,
+        what: "the Go link-crypto library's frozen-vector suite",
+      },
       { file: "web/src/lib/caps-vectors.test.ts", workflow: WEB, what: "the capability vectors" },
       { file: "web/src/lib/text-vectors.test.ts", workflow: WEB, what: "the text-transfer keys" },
     ],
@@ -350,11 +355,14 @@ const OWNERSHIP = [
   [`${PACKAGE_FIXTURES_ROOT}/device-inbox-manifest-v3-vectors.json`, [GO, SWIFT_PACKAGE, WEB],
     "the one fixture with THREE implementations reading it. All three halves of the manifest "
     + "contract re-run on the bytes they agree about, and no heavy Apple or pairing lane starts"],
-  [`${PACKAGE_FIXTURES_ROOT}/crypto-vectors.json`, [SWIFT_PACKAGE, WEB],
-    "read by two Web suites and by the Swift one. NOT by any Go test, which is why `go.yml` does "
-    + "not name it — the fixture paths are per-consumer, not a block copied between workflows"],
+  [`${PACKAGE_FIXTURES_ROOT}/crypto-vectors.json`, [GO, SWIFT_PACKAGE, WEB],
+    "read by two Web suites, by the Swift one, and since W-N18 Phase 2a1 by the Go link-crypto "
+    + "library's vector suite (`server/internal/linkcrypto/vectors_test.go`), so `go.yml` names it "
+    + "one path at a time. No heavy Apple or pairing lane starts"],
   [`${PACKAGE_FIXTURES_ROOT}/realtime-wire-vectors.json`, [SWIFT_PACKAGE, WEB],
-    "the same two Web suites and the Swift one"],
+    "the same two Web suites and the Swift one. NOT by any Go test — no Go code speaks the realtime "
+    + "wire yet — which is why `go.yml` names the crypto fixture beside it and not this one: the "
+    + "fixture paths are per-consumer, not a block copied between workflows"],
   [`${PACKAGE_FIXTURES_ROOT}/store-wire-vectors.json`, [SWIFT_PACKAGE],
     "the fixture in that same directory that NO filtered workflow but the package's own reads. "
     + "This row is what makes `web.yml`'s three named entries mean something: a directory glob "
@@ -2103,6 +2111,24 @@ const MUTATIONS = [
       w, GO, `${PACKAGE_FIXTURES_ROOT}/device-inbox-manifest-v3-vectors.json`,
     ),
     expect: /go\.yml's path filter does not list "apps\/RelayiumKit\/Tests\/Fixtures\/device-inbox-manifest-v3-vectors\.json" verbatim/,
+  },
+  {
+    // The Go half of the crypto contract, dropped. `linkcrypto/vectors_test.go`
+    // still reads the file, so a change to the shared key-derivation vectors
+    // would land with the Go library never judged against them.
+    name: "go.yml drops the crypto fixture its link-crypto suite reads",
+    mutate: (w) => withoutPath(w, GO, `${PACKAGE_FIXTURES_ROOT}/crypto-vectors.json`),
+    expect: /go\.yml's path filter does not list "apps\/RelayiumKit\/Tests\/Fixtures\/crypto-vectors\.json" verbatim/,
+  },
+  {
+    // The consumer the Go entry is justified by disappears. The filter would
+    // then charge the eight-shard race lane for a fixture no Go test opens.
+    name: "the Go crypto-vector consumer is deleted while go.yml still names its fixture",
+    mutate: (w) => {
+      w.fixtureConsumers.set("server/internal/linkcrypto/vectors_test.go", null);
+      return w;
+    },
+    expect: /the fixture consumer "server\/internal\/linkcrypto\/vectors_test\.go" could not be read/,
   },
   {
     name: "web.yml drops one of the three fixtures its suite reads",
