@@ -732,8 +732,29 @@ public final class AppleSubscriptionModel: ObservableObject {
             // none is invented — but the transaction is signed and that money is
             // real, so it is still submitted below rather than dropped.
             if let armed { await report(.success, for: armed, token: token) }
-            guard !superseded(g) else { return }
-            state = .submitting
+            // **A signed transaction is settled even when this purchase no
+            // longer owns the screen.** Supersession governs state writes and
+            // nothing else here: a restore, a catalog reload or a declined App
+            // Store sign-in that started while the sheet was open must not
+            // leave a paid transaction unsubmitted until some later sweep
+            // happens to find it.
+            //
+            // **What does stop it is the account.** The purchase was attributed
+            // to the account whose authority it started under; if that is no
+            // longer the session — signed out, or switched to somebody else —
+            // it is not submitted under whoever holds the session now. It stays
+            // unfinished in StoreKit, which redelivers it through the update
+            // stream and the account-scoped unfinished sweep once that account
+            // is back. No suspension separates this check from `settle`'s own
+            // read of the bearer, so the account checked is the account used.
+            guard Self.sameAuthority(token: token, ownerAccountID: ownerAccountID,
+                                     currentBearer: currentBearer(),
+                                     currentAccountID: currentAccountID()) else {
+                guard !superseded(g) else { return }
+                state = .failed(.billing(.notSignedIn))
+                return
+            }
+            if !superseded(g) { state = .submitting }
             switch await settle(delivery) {
             case .accepted(let result):
                 // NOT guarded on supersession, and this is the one place in this
@@ -1535,6 +1556,11 @@ public final class AppleSubscriptionModel: ObservableObject {
         // Read before `.restoring` replaces it: a declined App Store prompt
         // returns the surface to what it was showing, not to a spinner.
         let prior = state
+        // The authority this restore runs under, so a superseded restore can
+        // tell a same-account supersession (keep settling) from an account
+        // change (stop). Read with no suspension after the guard above.
+        let restoreToken = currentBearer()
+        let restoreAccountID = currentAccountID()
         let g = begin()
         state = .restoring
         do {
@@ -1561,8 +1587,18 @@ public final class AppleSubscriptionModel: ObservableObject {
         guard !superseded(g) else { return }
 
         let deliveries = await store.currentEntitlements()
-        guard !superseded(g) else { return }
+        // Once entitlements have been read, supersession alone no longer stops
+        // the restore: what it read is settled below, as the loop's own note
+        // argues, and only the screen writes are guarded. What does stop it is
+        // an account change, checked before every submission in the loop.
+        func restoreAuthorityHolds() -> Bool {
+            guard let restoreToken else { return false }
+            return Self.sameAuthority(token: restoreToken, ownerAccountID: restoreAccountID,
+                                      currentBearer: currentBearer(),
+                                      currentAccountID: currentAccountID())
+        }
         guard !deliveries.isEmpty else {
+            guard !superseded(g) else { return }
             state = .nothingToRestore
             return
         }
@@ -1572,13 +1608,23 @@ public final class AppleSubscriptionModel: ObservableObject {
         // Deliberately NOT interrupted by supersession. Two reasons, and the
         // second is the load-bearing one:
         //
-        //  * every submission re-reads the bearer inside `settle`, so if what
-        //    superseded this restore was a sign-out, the remaining deliveries
-        //    refuse on their own and finish nothing;
+        //  * every submission first re-checks the restore's own account (see
+        //    below), so if what superseded this restore was a sign-out or an
+        //    account switch, the remaining deliveries are not submitted and
+        //    nothing is finished;
         //  * stopping half way would leave entitlements this restore had
         //    already read from the store unsubmitted, for no gain — the only
         //    thing supersession is entitled to take away is the screen.
         for delivery in deliveries {
+            // Re-checked before every submission, with no suspension before
+            // `settle` reads the bearer: a restore started by one account never
+            // submits under another. A sign-out stops it the same way `settle`
+            // itself would have refused, and what is left stays unfinished for
+            // that account's own recovery.
+            guard restoreAuthorityHolds() else {
+                firstFailure = firstFailure ?? .billing(.notSignedIn)
+                break
+            }
             switch await settle(delivery) {
             case .accepted(let result): accepted = result
             case .refused(let failure): firstFailure = firstFailure ?? failure
@@ -1817,6 +1863,19 @@ public final class AppleSubscriptionModel: ObservableObject {
     }
 
     private func superseded(_ g: Int) -> Bool { generation != g }
+
+    /// Whether the session is still the account an operation started under.
+    ///
+    /// The account id is the identity when one was captured: a bearer that was
+    /// merely re-issued for the same account is still that account. A legacy
+    /// host that supplies no account id is judged by its bearer alone. Signed
+    /// out is never the same authority.
+    static func sameAuthority(token: String, ownerAccountID: String?,
+                              currentBearer: String?, currentAccountID: String?) -> Bool {
+        guard let currentBearer else { return false }
+        if let ownerAccountID { return currentAccountID == ownerAccountID }
+        return currentBearer == token
+    }
 
     /// Where the surface goes when the user declines the App Store prompt a
     /// restore raised: back to what it showed before, as far as that is still

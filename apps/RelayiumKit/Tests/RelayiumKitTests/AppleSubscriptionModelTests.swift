@@ -42,6 +42,7 @@ private final class FakeStore: SubscriptionStore, @unchecked Sendable {
     private var _onPurchase: (@Sendable () -> Void)?
     private var _holdPurchase = false
     private var _holdSynchronize = false
+    private var _holdEntitlements = false
     /// The store's own pre-authorization step: what the real adapter's
     /// `Product.products` lookup answers. A failure here provably charged
     /// nobody, and must reach the model with no dispatch behind it.
@@ -103,6 +104,10 @@ private final class FakeStore: SubscriptionStore, @unchecked Sendable {
     /// Park `synchronize()` until released, so an operation can be caught
     /// genuinely in flight rather than assumed to be.
     func setHoldSynchronize(_ value: Bool) { sync { _holdSynchronize = value } }
+    /// Park `currentEntitlements()` after it is recorded, so a restore can be
+    /// superseded after it has asked the store what it owns and before it has
+    /// submitted any of it.
+    func setHoldEntitlements(_ value: Bool) { sync { _holdEntitlements = value } }
 
     // observation
     var finished: [StoreTransactionID] { sync { _finished } }
@@ -182,6 +187,7 @@ private final class FakeStore: SubscriptionStore, @unchecked Sendable {
 
     func currentEntitlements() async -> [SignedStoreTransaction] {
         journal.record("currentEntitlements")
+        while sync({ _holdEntitlements }) { await Task.yield() }
         return sync { _entitlements }
     }
 
@@ -359,6 +365,9 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
     /// Park every dispatch until released, so a test can catch an arm genuinely
     /// in flight rather than assume it is.
     private var _holdDispatch = false
+    /// Park every outcome report after it is recorded, so a purchase can be
+    /// superseded while its `.success` report is in flight.
+    private var _holdOutcome = false
     /// Dispatches ENTERED, counted before the hold — so a test can wait for the
     /// arm to be really in flight instead of racing it.
     private var _dispatchAttempts = 0
@@ -396,6 +405,7 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
     func holdSubmit(after calls: Int) { sync { _holdSubmitAfter = calls } }
     func releaseSubmit() { sync { _holdSubmitAfter = nil } }
     func setHoldDispatch(_ value: Bool) { sync { _holdDispatch = value } }
+    func setHoldOutcome(_ value: Bool) { sync { _holdOutcome = value } }
     func setOnDispatch(_ body: (@Sendable () -> Void)?) { sync { _onDispatch = body } }
     var dispatchAttempts: Int { sync { _dispatchAttempts } }
 
@@ -459,6 +469,7 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
                                                armRequestID: continuation.armRequestID,
                                                secret: continuation.continuationSecret,
                                                outcome: outcome)) }
+        while sync({ _holdOutcome }) { await Task.yield() }
         if let failure: Error = sync({
             guard let first = _outcomeFailures.first else { return nil }
             if _outcomeFailures.count > 1 { _outcomeFailures.removeFirst() }
@@ -2077,6 +2088,237 @@ final class AppleSubscriptionModelTests: XCTestCase {
         XCTAssertEqual(rig.journal.count("currentEntitlements"), 0)
         XCTAssertEqual(rig.journal.count("refresh"), 1)
         XCTAssertEqual(rig.model.state, .idle)
+    }
+
+    // MARK: - a delivered transaction outlives its screen (W-C5 review, finding 1)
+
+    /// **Same account: a purchase superseded before it delivered still settles.**
+    ///
+    /// The sheet is open (the store is parked before answering `.delivered`),
+    /// the user starts a restore and dismisses its App Store sign-in, and only
+    /// then does Apple deliver. The transaction is paid for: it must be
+    /// submitted and, on acceptance, finished and refreshed now — not left for
+    /// a later unfinished-transaction sweep. The screen stays with the newer
+    /// operation.
+    ///
+    /// Negative control: with the supersession guard back in front of `settle`
+    /// nothing is submitted at all.
+    func testAPurchaseSupersededBeforeDeliveryStillSettlesForTheSameAccount() async {
+        let rig = await makeReadyRig()
+        rig.store.setHoldPurchase(true)
+        let purchase = Task { await rig.model.purchase(productID: Fixture.catalog[0]) }
+        await waitFor(rig) { $0.journal.count("purchase") == 1 }
+
+        rig.store.setSynchronize(.failure(SubscriptionStoreError.synchronizationCancelled))
+        await rig.model.restore()
+        XCTAssertEqual(rig.model.state, .idle)
+
+        rig.store.setHoldPurchase(false)
+        await purchase.value
+
+        XCTAssertEqual(rig.billing.submittedJWS, [Fixture.jws],
+                       "a delivered, paid transaction was dropped because its screen moved on")
+        XCTAssertEqual(rig.billing.submittedBearers, ["rlm_app_T"])
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
+        XCTAssertEqual(rig.journal.count("refresh"), 1)
+        XCTAssertEqual(rig.journal.count("currentEntitlements"), 0)
+        XCTAssertEqual(rig.model.state, .idle,
+                       "the superseded purchase wrote over the newer operation's state")
+    }
+
+    /// The same, superseded while the purchase's `.success` outcome report is
+    /// in flight — the continuation protocol's own await before settlement.
+    func testAPurchaseSupersededDuringItsOutcomeReportStillSettles() async {
+        let capabilityStore = InMemoryApplePurchaseCapabilityStore()
+        let rig = await makeReadyContinuationRig(store: capabilityStore)
+        rig.billing.setHoldOutcome(true)
+        let purchase = Task { await rig.model.purchase(productID: Fixture.catalog[0]) }
+        await waitFor(rig) { $0.journal.count("outcome") == 1 }
+        XCTAssertEqual(rig.billing.reports.map(\.outcome), [.success])
+
+        rig.store.setSynchronize(.failure(SubscriptionStoreError.synchronizationCancelled))
+        await rig.model.restore()
+        XCTAssertEqual(rig.model.state, .idle)
+
+        rig.billing.setHoldOutcome(false)
+        await purchase.value
+
+        XCTAssertEqual(rig.billing.submittedJWS, [Fixture.jws],
+                       "a delivered transaction was dropped behind its own outcome report")
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
+        XCTAssertEqual(rig.journal.count("refresh"), 1)
+        XCTAssertEqual(rig.model.state, .idle)
+    }
+
+    /// **Signed out while the sheet was open.** The sign-out's reload owns the
+    /// screen, and there is no account to submit under: nothing is submitted,
+    /// nothing is finished, and the transaction stays with StoreKit.
+    func testAPurchaseDeliveredAfterASignOutIsNotSubmitted() async {
+        let rig = await makeReadyRig()
+        rig.store.setHoldPurchase(true)
+        let purchase = Task { await rig.model.purchase(productID: Fixture.catalog[0]) }
+        await waitFor(rig) { $0.journal.count("purchase") == 1 }
+
+        rig.store.setSynchronize(.failure(SubscriptionStoreError.synchronizationCancelled))
+        await rig.model.restore()
+        rig.bearer.set(nil)
+        await rig.model.loadOffers()
+        XCTAssertEqual(rig.model.state, .failed(.billing(.notSignedIn)))
+
+        rig.store.setHoldPurchase(false)
+        await purchase.value
+
+        XCTAssertTrue(rig.billing.submittedJWS.isEmpty)
+        XCTAssertTrue(rig.store.finished.isEmpty)
+        XCTAssertEqual(rig.model.state, .failed(.billing(.notSignedIn)))
+    }
+
+    /// **Switched to another account while the sheet was open.** The purchase
+    /// was attributed to account A; it is never submitted under B's session.
+    /// It stays unfinished, and A's own unfinished sweep submits and finishes
+    /// it once A is back — which is the recovery this leaves it to.
+    ///
+    /// Negative control: a fix that merely dropped the supersession guard would
+    /// submit it under B's bearer here.
+    func testAPurchaseDeliveredAfterAnAccountSwitchIsNotSubmittedUnderTheNewAccount() async {
+        let rig = await makeReadyRig()
+        rig.store.setHoldPurchase(true)
+        let purchase = Task { await rig.model.purchase(productID: Fixture.catalog[0]) }
+        await waitFor(rig) { $0.journal.count("purchase") == 1 }
+
+        rig.store.setSynchronize(.failure(SubscriptionStoreError.synchronizationCancelled))
+        await rig.model.restore()
+        rig.bearer.set("rlm_app_B")
+        rig.account.set("acct-B")
+
+        rig.store.setHoldPurchase(false)
+        await purchase.value
+
+        XCTAssertTrue(rig.billing.submittedJWS.isEmpty,
+                      "account A's purchase was submitted under account B's session")
+        XCTAssertFalse(rig.billing.submittedBearers.contains("rlm_app_B"))
+        XCTAssertTrue(rig.store.finished.isEmpty)
+        XCTAssertEqual(rig.model.state, .idle)
+
+        // A comes back; StoreKit still holds the transaction as unfinished.
+        rig.bearer.set("rlm_app_T")
+        rig.account.set("acct-A")
+        rig.store.setUnfinished([Fixture.delivery])
+        await rig.model.reconcileUnfinishedTransactions()
+
+        XCTAssertEqual(rig.billing.submittedBearers, ["rlm_app_T"])
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
+    }
+
+    /// The account check does not depend on supersession: an account switch
+    /// while the sheet is open, with nothing else started, still submits
+    /// nothing under the new account and says why.
+    func testAnAccountSwitchWhileTheSheetIsOpenSubmitsNothingUnderTheNewAccount() async {
+        let rig = await makeReadyRig()
+        let bearer = rig.bearer, account = rig.account
+        rig.store.setOnPurchase { bearer.set("rlm_app_B"); account.set("acct-B") }
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertTrue(rig.billing.submittedJWS.isEmpty)
+        XCTAssertTrue(rig.store.finished.isEmpty)
+        XCTAssertEqual(rig.model.state, .failed(.billing(.notSignedIn)))
+    }
+
+    /// A bearer re-issued for the SAME account is still that account: the
+    /// purchase settles under the session's current credential.
+    func testASameAccountBearerRotationWhileTheSheetIsOpenStillSettles() async {
+        let rig = await makeReadyRig()
+        let bearer = rig.bearer
+        rig.store.setOnPurchase { bearer.set("rlm_app_T2") }
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.billing.submittedBearers, ["rlm_app_T2"])
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
+        XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
+    }
+
+    /// **A restore superseded after it read the store's entitlements still
+    /// settles them** for the same account, without taking the screen back.
+    func testARestoreSupersededAfterReadingEntitlementsStillSettlesThem() async {
+        let rig = await makeReadyRig()
+        rig.store.setEntitlements([Fixture.delivery])
+        rig.store.setHoldEntitlements(true)
+        let restore = Task { await rig.model.restore() }
+        await waitFor(rig) { $0.journal.count("currentEntitlements") == 1 }
+
+        await rig.model.loadOffers()
+        XCTAssertEqual(rig.model.state, .idle)
+
+        rig.store.setHoldEntitlements(false)
+        await restore.value
+
+        XCTAssertEqual(rig.billing.submittedJWS, [Fixture.jws])
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
+        XCTAssertEqual(rig.journal.count("refresh"), 1)
+        XCTAssertEqual(rig.model.state, .idle)
+    }
+
+    /// And stops, submitting nothing, when what superseded it was a switch to
+    /// another account.
+    func testARestoreSupersededByAnAccountSwitchSubmitsNothing() async {
+        let rig = await makeReadyRig()
+        rig.store.setEntitlements([Fixture.delivery])
+        rig.store.setHoldEntitlements(true)
+        let restore = Task { await rig.model.restore() }
+        await waitFor(rig) { $0.journal.count("currentEntitlements") == 1 }
+
+        rig.bearer.set("rlm_app_B")
+        rig.account.set("acct-B")
+        await rig.model.loadOffers()
+
+        rig.store.setHoldEntitlements(false)
+        await restore.value
+
+        XCTAssertTrue(rig.billing.submittedJWS.isEmpty,
+                      "account A's restore submitted under account B's session")
+        XCTAssertTrue(rig.store.finished.isEmpty)
+    }
+
+    /// An account switch in the middle of a multi-entitlement restore stops it
+    /// before the next submission, instead of submitting the rest under B.
+    func testAnAccountSwitchMidRestoreStopsBeforeTheNextSubmission() async {
+        let rig = await makeReadyRig()
+        let second = SignedStoreTransaction(id: StoreTransactionID(rawValue: 7_002), jws: "j2")
+        rig.store.setEntitlements([Fixture.delivery, second])
+        rig.billing.holdSubmit(after: 0)
+        let restore = Task { await rig.model.restore() }
+        await waitFor(rig) { $0.billing.submittedJWS.count == 1 }
+
+        rig.bearer.set("rlm_app_B")
+        rig.account.set("acct-B")
+        rig.billing.releaseSubmit()
+        await restore.value
+
+        XCTAssertEqual(rig.billing.submittedBearers, ["rlm_app_T"],
+                       "the rest of A's restore was submitted under B")
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id],
+                       "the first, accepted delivery was not finished")
+        XCTAssertEqual(rig.journal.count("refresh"), 1)
+    }
+
+    func testSameAuthorityIsTheAccountWhenOneWasCaptured() {
+        typealias M = AppleSubscriptionModel
+        XCTAssertTrue(M.sameAuthority(token: "a", ownerAccountID: "acct-A",
+                                      currentBearer: "a2", currentAccountID: "acct-A"))
+        XCTAssertFalse(M.sameAuthority(token: "a", ownerAccountID: "acct-A",
+                                       currentBearer: "a", currentAccountID: "acct-B"))
+        XCTAssertFalse(M.sameAuthority(token: "a", ownerAccountID: "acct-A",
+                                       currentBearer: nil, currentAccountID: "acct-A"))
+        XCTAssertFalse(M.sameAuthority(token: "a", ownerAccountID: "acct-A",
+                                       currentBearer: "a", currentAccountID: nil))
+        XCTAssertTrue(M.sameAuthority(token: "a", ownerAccountID: nil,
+                                      currentBearer: "a", currentAccountID: nil))
+        XCTAssertFalse(M.sameAuthority(token: "a", ownerAccountID: nil,
+                                       currentBearer: "b", currentAccountID: nil))
+        XCTAssertFalse(M.sameAuthority(token: "a", ownerAccountID: nil,
+                                       currentBearer: nil, currentAccountID: nil))
     }
 
     /// The whole mapping, case by case, so a new state cannot be added without
