@@ -478,7 +478,11 @@ final class IOSSupportingTextGuardTests: XCTestCase {
         // the lanes they described, the wall-clock expiry line became the live
         // countdown, and the create card gained the one sentence that says what
         // happens after connecting.
-        XCTAssertEqual(supporting, 118,
+        //
+        // The Inbox message composer's exact-bytes line (left / over the
+        // limit) adds two: the rounded size line and the bytes-left line under
+        // the field.
+        XCTAssertEqual(supporting, 120,
                        "the supporting role should reach every one of the sentences the "
                        + "audit counted across both targets, plus the two disclosure tints")
         // The over-limit byte counter, the not-sent label, and the three
