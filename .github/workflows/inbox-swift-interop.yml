@@ -1,0 +1,119 @@
+name: inbox-swift-interop
+# The Go side of the repository's two Swift<->Go interop classes:
+# `InboxCLISenderLiveInteropTests` (the real `relayium inbox send` through a real
+# central to the real native `InboxReceiveEngine`, W-C1 Stage 1-S) and
+# `InboxSealedBoxInteropTests` (the Go sender's sealed box opened by the native
+# receiver, and back).
+#
+# ## Why this workflow exists
+#
+# Both classes live in the Swift package, so `swift-package.yml` runs them —
+# FORCED, with a Go toolchain — on every Swift-side change. But a Go-side change
+# (the sender, central's inbox and upload handlers, account auth, storage, the
+# CLI's command dispatch) never starts that suite, and until this lane existed
+# such a change could break the native receiver with nothing noticing until an
+# innocent package commit went red later.
+#
+# So this lane watches ALL of `server/**`. Not a hand-kept list of inbox paths:
+# the live class builds the whole `relayium` binary (`cmd/relayium/run.go`
+# dispatches the inbox commands) and the helper stands up a real account
+# service, SQLite store, DiskStore and CLI credentials, so every one of those is
+# an input. A narrower filter was rejected at design review precisely because it
+# waited for an innocent-commit failure to discover a known input.
+#
+# The cost is bounded the other way: it never watches `apps/**` —
+# `swift-package.yml` owns that side, and watching it here would start two
+# macOS runners for one Swift edit — and its `swift test` is FILTERED to exactly
+# the two interop classes, never the package suite. The repository's sole
+# unfiltered `swift test` remains `swift-package.yml`'s;
+# `scripts/test/swift-ci-boundary-test.mjs` asserts both halves, the exact two
+# selectors, the forcing env, the pinned toolchain and the named-execution proof
+# below.
+#
+# ## Why a named-execution proof
+#
+# Both classes SKIP unless `RELAYIUM_SWIFT_INTEROP=1`, and a skipped XCTest case
+# exits 0. The proof step fails unless every named case reported `passed`
+# exactly once and the two classes ran nothing else — so a lost env var, a
+# missing toolchain or a renamed case turns this lane red instead of green over
+# nothing.
+on:
+  push:
+    # Only `main`, and this trigger is LOAD-BEARING. Branch work is gated by
+    # `merge-gate.yml`, which CALLS this file; this event is the only thing
+    # that verifies `main` itself, because the gate runs on `pull_request`
+    # only. No lane may lose it — `relayium-ops`' `deploy/promote.sh` reads
+    # check runs on the `main` commit, and a lane that stopped reporting there
+    # would wedge production promotion rather than fail visibly here.
+    branches:
+      - main
+    # The Go half of both interop classes, the proof script, and this file.
+    # `scripts/ci/select-lanes.mjs` reads this list off disk; it is the merge
+    # gate's only statement of what this lane watches.
+    paths:
+      - 'server/**'
+      - 'scripts/ci/assert-swift-named-execution.mjs'
+      - '.github/workflows/inbox-swift-interop.yml'
+  # Called by `.github/workflows/merge-gate.yml`, and by nothing else. No
+  # `inputs:` and no `secrets:`: nothing here reads either.
+  workflow_call:
+
+permissions:
+  contents: read
+
+# A literal prefix, as in every reusable callee: inside a called workflow
+# `${{ github.workflow }}` is the CALLER's name, and the lanes would cancel each
+# other. `scripts/test/ci-event-policy-test.mjs` asserts the literal.
+concurrency:
+  group: inbox-swift-interop-lane-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # No job-level `if:`, no `continue-on-error:` and no retry: a lane that may
+  # skip itself reports nothing rather than red, and one re-rolled until it
+  # passes reports the run that agreed rather than the code.
+  swift-live-interop:
+    runs-on: macos-15
+    # Finite and chosen: a package build (~2 min hosted), two small Go builds per
+    # live case and nine cases measured at ~40 s locally. 30 turns a `swift
+    # test` that never exits red instead of holding a PAID macOS runner for
+    # GitHub's 6-hour default.
+    timeout-minutes: 30
+    steps:
+      # Third-party actions are pinned to a full commit SHA (with the
+      # human-readable version in a trailing comment).
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # The Go half of both classes. `go` is not on the hosted macOS PATH, which
+      # is why the sealed-box interop skipped on every hosted run before this.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+          go version
+      # ALWAYS filtered, to exactly these two classes, and FORCED: with
+      # RELAYIUM_SWIFT_INTEROP=1 a missing prerequisite is a failure, never a
+      # skip. `pipefail` so `tee` cannot turn a red `swift test` green.
+      - name: swift test
+        working-directory: apps/RelayiumKit
+        shell: bash
+        env:
+          RELAYIUM_SWIFT_INTEROP: '1'
+        run: |
+          set -o pipefail
+          swift test --filter 'RelayiumKitTests.InboxCLISenderLiveInteropTests' --filter 'RelayiumKitTests.InboxSealedBoxInteropTests' 2>&1 | tee "$RUNNER_TEMP/swift-interop.log"
+      - name: Named-execution proof
+        run: |
+          node scripts/ci/assert-swift-named-execution.mjs "$RUNNER_TEMP/swift-interop.log" \
+            InboxCLISenderLiveInteropTests/testLiveCLISendIsCommittedByTheNativeEngineAndTheCLIReadsSaved \
+            InboxCLISenderLiveInteropTests/testCorruptedFinalFrameTagCommitsNothingAndTheCLIDoesNotReadSaved \
+            InboxCLISenderLiveInteropTests/testAHelperThatExitsBeforeReadyFailsBoundedAndIsCleanedUp \
+            InboxCLISenderLiveInteropTests/testAHelperStuckBeforeReadyIsKilledReapedAndCleanedUp \
+            InboxCLISenderLiveInteropTests/testAHungCentralRequestIsTornDownByTheDeadline \
+            InboxSealedBoxInteropTests/testTheGoSenderSealsAKeyThisReceiverOpensAndEveryNearMissFails \
+            InboxSealedBoxInteropTests/testTheGoPhaseFailsOnAKeyCentralWouldRefuse \
+            InboxSealedBoxInteropTests/testTheSwiftSenderSealsAKeyTheGoReceiverOpens \
+            InboxSealedBoxInteropTests/testTheGoOpenPhaseFailsOnATamperedBoxAndOnTheWrongTarget

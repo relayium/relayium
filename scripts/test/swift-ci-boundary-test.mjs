@@ -79,10 +79,15 @@
 // mis-read workflow is the one thing that could make every rule below pass
 // vacuously.
 
-import { readFileSync, readdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+
+import { checkNamedExecution } from "../ci/assert-swift-named-execution.mjs";
+import { LANES as SELECTOR_LANES } from "../ci/select-lanes.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const workflowsDir = resolve(repoRoot, ".github/workflows");
@@ -161,6 +166,74 @@ const CONTRACTS_SWIFT_FILTER = `${SWIFT_TEST_TARGET}.DeviceInboxAdmissionContrac
 const OPS_DEPLOY_CONTRACT = "ops-deploy-contract.yml";
 
 /**
+ * The Swift<->Go interop classes, and the two lanes allowed to run them.
+ *
+ * Two package test classes have a Go half: `InboxSealedBoxInteropTests` (the Go
+ * sender's sealed box against the native receiver) and
+ * `InboxCLISenderLiveInteropTests` (the real `relayium` CLI through a real
+ * central to the real native receive engine). Both SKIP unless
+ * `RELAYIUM_SWIFT_INTEROP=1`, and a skipped XCTest case exits 0 — which is how
+ * the sealed-box proof went unexecuted on every hosted run while its doc called
+ * `1` "the dedicated gate": no workflow set it, and `go` is not on the hosted
+ * macOS PATH.
+ *
+ * So ownership is split by side, one owner per side:
+ *
+ *   * the Swift side is `swift-package.yml`, whose unfiltered suite now runs
+ *     both classes FORCED. That is the ONLY reason it may install a toolchain,
+ *     and only this one: exactly one `actions/setup-go` at the pinned SHA,
+ *     reading `server/go.mod`. Section 1c′ requires the toolchain, the forcing
+ *     env and the named-execution proof together — any one without the others
+ *     is either dead weight on a PAID runner or a guaranteed skip;
+ *   * the Go side is `inbox-swift-interop.yml`, a narrow lane that watches
+ *     `server/**` (the live class builds the whole CLI and stands up the real
+ *     account service, so a hand-kept "inbox paths" list was rejected at design
+ *     review for waiting on an innocent-commit failure), never `apps/**`, and
+ *     runs exactly the two classes — section 1h.
+ *
+ * `INTEROP_NAMED_CASES` is the proof both lanes run. Section 1i keeps it equal
+ * to the `func test…` names in the two Swift files, so a renamed or added case
+ * fails here instead of silently dropping out of the proof.
+ */
+const INTEROP = "inbox-swift-interop.yml";
+const INTEROP_JOB = "swift-live-interop";
+const INTEROP_GATE_JOB = "inbox-swift-interop";
+const INTEROP_ENV = "RELAYIUM_SWIFT_INTEROP";
+const INTEROP_CLASSES = ["InboxCLISenderLiveInteropTests", "InboxSealedBoxInteropTests"];
+const INTEROP_FILTERS = INTEROP_CLASSES.map((c) => `${SWIFT_TEST_TARGET}.${c}`);
+const INTEROP_PATHS = [
+  "server/**",
+  "scripts/ci/assert-swift-named-execution.mjs",
+  `.github/workflows/${INTEROP}`,
+];
+const NAMED_CHECKER = "scripts/ci/assert-swift-named-execution.mjs";
+const SETUP_GO = "actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e";
+const GO_VERSION_FILE = "server/go.mod";
+const INTEROP_NAMED_CASES = [
+  "InboxCLISenderLiveInteropTests/testLiveCLISendIsCommittedByTheNativeEngineAndTheCLIReadsSaved",
+  "InboxCLISenderLiveInteropTests/testCorruptedFinalFrameTagCommitsNothingAndTheCLIDoesNotReadSaved",
+  "InboxCLISenderLiveInteropTests/testAHelperThatExitsBeforeReadyFailsBoundedAndIsCleanedUp",
+  "InboxCLISenderLiveInteropTests/testAHelperStuckBeforeReadyIsKilledReapedAndCleanedUp",
+  "InboxCLISenderLiveInteropTests/testAHungCentralRequestIsTornDownByTheDeadline",
+  "InboxSealedBoxInteropTests/testTheGoSenderSealsAKeyThisReceiverOpensAndEveryNearMissFails",
+  "InboxSealedBoxInteropTests/testTheGoPhaseFailsOnAKeyCentralWouldRefuse",
+  "InboxSealedBoxInteropTests/testTheSwiftSenderSealsAKeyTheGoReceiverOpens",
+  "InboxSealedBoxInteropTests/testTheGoOpenPhaseFailsOnATamperedBoxAndOnTheWrongTarget",
+];
+/** Where each lane tees its `swift test` output for the proof to read. */
+const INTEROP_LOGS = new Map([[SWIFT_PACKAGE, "swift-test.log"], [INTEROP, "swift-interop.log"]]);
+/**
+ * Toolchain installers a Swift lane may not carry: brew, npm, and every
+ * `actions/setup-*` action EXCEPT setup-go at exactly the pinned SHA. A setup-go
+ * at a tag or another SHA matches too — the one permitted toolchain is a
+ * specific, reviewed commit, not "some Go".
+ */
+const TOOLCHAIN_BAN = new RegExp(
+  String.raw`\bbrew\s+install\b|\bnpm\s+(ci|install)\b|\bgo\s+install\b|`
+  + String.raw`actions/setup-(?!go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e\b)[\w-]+|setup-node|setup-python`,
+);
+
+/**
  * The aggregate merge gate, and the caller job id `swift-package.yml` is called
  * under.
  *
@@ -219,6 +292,9 @@ const PARSED = [
   // but are read as DATA, and `compat.yml` already gates them unfiltered for
   // every platform — so the package is not, and may not become, a trigger here.
   "windows.yml",
+  // The Go side of the Swift<->Go interop classes. Filtered to `server/**` and
+  // its own two files; it may never name `apps/**` (section 1h).
+  INTEROP,
 ];
 
 /**
@@ -880,8 +956,22 @@ function world() {
     filtered: [...filteredOnDisk],
     fixtures: new Set(fixtureFiles),
     fixtureConsumers: new Map(fixtureConsumerTexts),
+    selectorLanes: SELECTOR_LANES.map((lane) => ({ ...lane })),
+    interopSources: new Map(interopSourceTexts),
   };
 }
+
+/**
+ * The two interop test classes' source, keyed by class name; `null` when the
+ * file is missing (a different repair from a renamed case).
+ */
+const interopSourceTexts = new Map(INTEROP_CLASSES.map((cls) => {
+  try {
+    return [cls, readFileSync(resolve(repoRoot, PACKAGE_TEST_DIR, `${cls}.swift`), "utf8")];
+  } catch {
+    return [cls, null];
+  }
+}));
 
 /** The `push` path filter of a workflow, or null when it has none. */
 const wPaths = (w, file) => {
@@ -1089,8 +1179,10 @@ function laneFailures(w) {
     for (const [pattern, what] of [
       [/secrets\./, "reads a repository secret"],
       [/upload-artifact|download-artifact/, "uploads or downloads a build artifact"],
-      [/\bbrew\s+install\b|\bnpm\s+(ci|install)\b|setup-node|setup-go/,
-        "installs a toolchain or dependency tree"],
+      // Every toolchain installer EXCEPT the one pinned setup-go section 1c′
+      // requires for the forced Go interop classes. An unpinned setup-go, a
+      // second language's setup action, brew or npm all still land here.
+      [TOOLCHAIN_BAN, "installs a toolchain or dependency tree"],
       [/codesign|notarytool|productsign|xcrun\s+altool|softwareupdate/,
         "signs, notarizes or mutates the runner's system state"],
       [/\bretry\b|\bretries\b/i, "retries"],
@@ -1201,7 +1293,7 @@ function laneFailures(w) {
     .filter(([, text]) => /\bswift\s+test\b/.test(text))
     .map(([file]) => file)
     .sort();
-  const wantHosts = [CONTRACTS, SWIFT_PACKAGE].sort();
+  const wantHosts = [CONTRACTS, INTEROP, SWIFT_PACKAGE].sort();
   need(
     deepEqual(hosts, wantHosts),
     `\`swift test\` appears in [${hosts.join(", ")}]; want exactly `
@@ -1211,7 +1303,9 @@ function laneFailures(w) {
     + `nobody costed. ${IOS} is NOT expected any more: its hand-kept \`--filter\` selectors over `
     + `\`apps/ios\` guards were retired when ${SWIFT_PACKAGE} began watching \`apps/ios/**\` and `
     + `\`apps/mac/**\` and running the whole suite on them. ${CONTRACTS} is `
-    + `expected: it runs the Swift half of the root contract tree, always filtered — see 1f.`,
+    + `expected: it runs the Swift half of the root contract tree, always filtered — see 1f. `
+    + `${INTEROP} is expected: it runs the two Swift<->Go interop classes on a server change, `
+    + `always filtered to exactly those two — see 1h.`,
   );
 
   // 1f. The contract lane's `swift test` is FILTERED, and to exactly one class.
@@ -1267,6 +1361,283 @@ function laneFailures(w) {
     + `class as part of its unfiltered suite.`,
   );
 
+  return out;
+}
+
+// ── 1c′, 1h, 1i. the forced Swift<->Go interop classes ──────────────────────
+
+/**
+ * The named-execution proof a step runs: the log it reads and the cases it
+ * names, or null when the step is not the proof. Line continuations are folded
+ * first, so the case list may span lines exactly as the workflows write it.
+ */
+function namedProofOf(step) {
+  const run = String(step?.run ?? "").replace(/\\\n/g, " ");
+  const m = new RegExp(String.raw`node\s+${NAMED_CHECKER.replace(/[.]/g, "\\.")}\s+(\S+)((?:\s+\S+)*)`).exec(run);
+  if (!m) return null;
+  return { log: m[1].replace(/^"|"$/g, ""), cases: m[2].trim().split(/\s+/).filter(Boolean) };
+}
+
+/**
+ * What a job that runs the interop classes FORCED must contain, in order:
+ * exactly one setup-go at the pinned SHA reading server/go.mod, BEFORE the
+ * `swift test` step; that step with RELAYIUM_SWIFT_INTEROP=1, bash, pipefail and
+ * a tee to the lane's log; and AFTER it, the named-execution proof over that
+ * same log with exactly INTEROP_NAMED_CASES.
+ *
+ * All three are required together, and that is the point. A toolchain nobody
+ * forces is dead weight on a PAID runner; forcing without a toolchain is a
+ * guaranteed red; forcing and a toolchain without the proof reads green over a
+ * skipped case the moment the env var is lost. `tee` without `pipefail` reports
+ * tee's exit status, so a failing `swift test` would go green.
+ */
+function forcedInteropFailures(w, file, jobName) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+  const job = w.docs.get(file)?.jobs?.[jobName];
+  if (!job) {
+    out.push(`${file} declares no job ${jobName}, so the forced Swift<->Go interop classes run `
+      + `nowhere on this side — the exact hole that left the sealed-box proof unexecuted on every `
+      + `hosted run.`);
+    return out;
+  }
+  const where = `${file}/${jobName}`;
+  const steps = job.steps ?? [];
+  const setupGo = steps
+    .map((step, index) => ({ step, index }))
+    .filter(({ step }) => /actions\/setup-go@/.test(String(step?.uses ?? "")));
+  need(
+    setupGo.length === 1,
+    `${where} has ${setupGo.length} actions/setup-go step(s); want exactly one, at ${SETUP_GO}. `
+    + `Zero is a forced interop run with no Go toolchain on the hosted macOS PATH — a guaranteed `
+    + `red; two is a toolchain nobody reviewed.`,
+  );
+  const swiftIndex = steps.findIndex((step) => /\bswift\s+test\b/.test(String(step?.run ?? "")));
+  const swiftStep = steps[swiftIndex];
+  for (const { step, index } of setupGo) {
+    need(
+      step.uses === SETUP_GO,
+      `${where} uses ${JSON.stringify(step.uses)}; want exactly ${SETUP_GO} (v7.0.0). The one `
+      + `toolchain a Swift lane may install is a specific, reviewed commit.`,
+    );
+    need(
+      step.with?.["go-version-file"] === GO_VERSION_FILE,
+      `${where}'s setup-go reads go-version-file ${JSON.stringify(step.with?.["go-version-file"])}; `
+      + `want ${JSON.stringify(GO_VERSION_FILE)}, so the Go half is built with the version the `
+      + `server module declares rather than whatever the action defaults to.`,
+    );
+    need(
+      swiftIndex < 0 || index < swiftIndex,
+      `${where}'s setup-go comes AFTER its \`swift test\` step, so the forced interop cases run `
+      + `before any Go toolchain exists.`,
+    );
+  }
+  need(
+    swiftStep !== undefined,
+    `${where} runs no \`swift test\`, so nothing executes the interop classes on this side.`,
+  );
+  if (swiftStep === undefined) return out;
+  const log = INTEROP_LOGS.get(file);
+  const run = String(swiftStep.run ?? "");
+  need(
+    swiftStep.env?.[INTEROP_ENV] === "1",
+    `${where}'s \`swift test\` step sets ${INTEROP_ENV}=${JSON.stringify(swiftStep.env?.[INTEROP_ENV])}; `
+    + `want "1". Anything else and both interop classes SKIP, and a skipped XCTest case exits 0 — `
+    + `the sealed-box proof went unexecuted on every hosted run exactly this way.`,
+  );
+  need(
+    swiftStep.shell === "bash" && /set -o pipefail/.test(run),
+    `${where}'s \`swift test\` step is not \`shell: bash\` with \`set -o pipefail\`. It pipes `
+    + `into \`tee\`, and without pipefail the step reports tee's exit status: a red suite goes green.`,
+  );
+  need(
+    run.includes(`| tee "$RUNNER_TEMP/${log}"`),
+    `${where}'s \`swift test\` does not tee to "$RUNNER_TEMP/${log}", so the named-execution proof `
+    + `has no log of THIS run to read.`,
+  );
+  const proofs = steps
+    .map((step, index) => ({ step, index, proof: namedProofOf(step) }))
+    .filter(({ proof }) => proof !== null);
+  need(
+    proofs.length === 1,
+    `${where} runs the named-execution proof (${NAMED_CHECKER}) ${proofs.length} time(s); want `
+    + `exactly once, after its \`swift test\`. Without it a lost ${INTEROP_ENV}, a missing Go `
+    + `toolchain or a renamed case leaves this job green over interop cases that never ran.`,
+  );
+  for (const { step, index, proof } of proofs) {
+    need(
+      index > swiftIndex,
+      `${where}'s named-execution proof runs before its \`swift test\`, so it reads no log of `
+      + `this run.`,
+    );
+    need(
+      proof.log === `$RUNNER_TEMP/${log}`,
+      `${where}'s named-execution proof reads ${JSON.stringify(proof.log)}; want `
+      + `"$RUNNER_TEMP/${log}", the log its own \`swift test\` wrote.`,
+    );
+    need(
+      deepEqual(proof.cases, INTEROP_NAMED_CASES),
+      `${where}'s named-execution proof names ${JSON.stringify(proof.cases)}; want exactly `
+      + `INTEROP_NAMED_CASES ${JSON.stringify(INTEROP_NAMED_CASES)}. A case dropped from the list is `
+      + `a case that may skip unseen.`,
+    );
+    need(
+      step.if === undefined && step["continue-on-error"] === undefined,
+      `${where}'s named-execution proof can be skipped or ignored (if:/continue-on-error), which `
+      + `turns the proof back into advice.`,
+    );
+  }
+  return out;
+}
+
+function interopFailures(w) {
+  const out = [];
+  const need = (ok, message) => { if (!ok) out.push(message); };
+
+  // 1c′. The package lane runs both interop classes FORCED.
+  if (w.docs.get(SWIFT_PACKAGE)) out.push(...forcedInteropFailures(w, SWIFT_PACKAGE, SWIFT_PACKAGE_JOB));
+
+  // 1h. The Go-side lane: narrow, forced, proved, registered.
+  const doc = w.docs.get(INTEROP);
+  need(
+    doc !== undefined,
+    `${INTEROP} is missing or did not parse. It is the only lane that runs the Swift<->Go interop `
+    + `classes on a server change; without it a Go-side change can break the native receiver and `
+    + `nothing notices until an innocent package commit goes red.`,
+  );
+  if (doc) {
+    const jobNames = Object.keys(doc.jobs ?? {});
+    need(
+      deepEqual(jobNames, [INTEROP_JOB]),
+      `${INTEROP} declares jobs [${jobNames.join(", ")}]; want exactly ["${INTEROP_JOB}"]. One `
+      + `PAID macOS runner, budgeted once in ci-event-policy-test's RUNNER_BUDGETS.`,
+    );
+    const steps = swiftTestSteps(w).filter((entry) => entry.file === INTEROP);
+    need(
+      steps.length === 1,
+      `${INTEROP} runs ${steps.length} \`swift test\` step(s); want exactly one.`,
+    );
+    for (const entry of steps) {
+      need(
+        entry.jobName === INTEROP_JOB,
+        `${INTEROP}'s \`swift test\` runs in job ${entry.jobName}; want ${INTEROP_JOB}.`,
+      );
+      need(
+        deepEqual(entry.filters, INTEROP_FILTERS),
+        `${INTEROP}'s \`swift test\` selects ${JSON.stringify(entry.filters)}; want exactly `
+        + `${JSON.stringify(INTEROP_FILTERS)}. Zero filters is a second package suite on a PAID `
+        + `runner for every server commit; a third selector is that suite arriving one argument `
+        + `at a time.`,
+      );
+      need(
+        entry.step["working-directory"] === SWIFT_PACKAGE_DIR,
+        `${INTEROP}'s \`swift test\` declares working-directory `
+        + `${JSON.stringify(entry.step["working-directory"])}, want ${JSON.stringify(SWIFT_PACKAGE_DIR)}.`,
+      );
+    }
+    out.push(...forcedInteropFailures(w, INTEROP, INTEROP_JOB));
+
+    const text = w.texts.get(INTEROP) ?? "";
+    for (const [pattern, what] of [
+      [/secrets\./, "reads a repository secret"],
+      [/upload-artifact|download-artifact/, "uploads or downloads a build artifact"],
+      [TOOLCHAIN_BAN, "installs a toolchain or dependency tree"],
+      [/codesign|notarytool|productsign|xcrun\s+altool|softwareupdate/,
+        "signs, notarizes or mutates the runner's system state"],
+      [/\bretry\b|\bretries\b/i, "retries"],
+    ]) {
+      need(
+        !pattern.test(text),
+        `${INTEROP} ${what} (matched ${pattern}). It runs two filtered test classes on a checkout `
+        + `with one pinned Go toolchain; anything more is a release path or dead weight on a PAID `
+        + `macOS runner charged on every server commit.`,
+      );
+    }
+    for (const [name, job] of Object.entries(doc.jobs ?? {})) {
+      need(
+        job.if === undefined && job["continue-on-error"] === undefined,
+        `${INTEROP}/${name}: a job-level if:/continue-on-error lets the interop lane skip or be `
+        + `ignored, and a skipped check reports nothing rather than red.`,
+      );
+      for (const step of job.steps ?? []) {
+        need(
+          step.if === undefined && step["continue-on-error"] === undefined,
+          `${INTEROP}/${name}: a step sets if:/continue-on-error, so the lane can report green `
+          + `over interop cases that failed or never ran.`,
+        );
+      }
+      const timeout = Number(job["timeout-minutes"]);
+      need(
+        Number.isFinite(timeout) && timeout > 0,
+        `${INTEROP}/${name}: timeout-minutes is ${JSON.stringify(job["timeout-minutes"])}; a PAID `
+        + `macOS runner with no bound inherits GitHub's six-hour default.`,
+      );
+      const swallows = realRunLines(job).find((line) => /\|\|\s*(true|:|echo|exit 0)/.test(line));
+      need(
+        swallows === undefined,
+        `${INTEROP}/${name}: a command swallows its own exit status (${JSON.stringify(swallows ?? "")}).`,
+      );
+    }
+
+    const paths = wPaths(w, INTEROP);
+    need(
+      paths !== null && deepEqual(paths, INTEROP_PATHS),
+      `${INTEROP}'s path filter is ${JSON.stringify(paths)}; want exactly `
+      + `${JSON.stringify(INTEROP_PATHS)}. The whole server tree, because the live class builds the `
+      + `whole CLI and a real account service (a narrower list was rejected for waiting on an `
+      + `innocent-commit failure); the proof script it runs; and this file.`,
+    );
+    const appPaths = (paths ?? []).filter((p) => /^!?apps\//.test(String(p)));
+    need(
+      appPaths.length === 0,
+      `${INTEROP}'s path filter names ${JSON.stringify(appPaths)}. ${SWIFT_PACKAGE} owns the Swift `
+      + `side and already runs both classes forced; watching apps/ here starts TWO macOS runners `
+      + `for one Swift edit.`,
+    );
+    const on = doc.on && typeof doc.on === "object" ? doc.on : {};
+    need(
+      Object.prototype.hasOwnProperty.call(on, "workflow_call")
+        && !Object.prototype.hasOwnProperty.call(on, "pull_request"),
+      `${INTEROP} must declare \`workflow_call:\` and no \`pull_request:\` (its \`on:\` is `
+      + `${JSON.stringify(Object.keys(on))}). The gate calls it; a direct trigger runs it twice.`,
+    );
+  }
+  const gate = w.docs.get(AGGREGATE);
+  if (gate) {
+    const callers = Object.entries(gate.jobs ?? {})
+      .filter(([, job]) => job?.uses === `./.github/workflows/${INTEROP}`)
+      .map(([name]) => name);
+    need(
+      deepEqual(callers, [INTEROP_GATE_JOB]),
+      `${AGGREGATE} calls ${INTEROP} from [${callers.join(", ")}]; want exactly `
+      + `["${INTEROP_GATE_JOB}"]. Uncalled, the lane runs only on \`push: main\` — after the merge `
+      + `it was meant to gate.`,
+    );
+  }
+  const registered = w.selectorLanes.filter((lane) => lane.workflow === INTEROP);
+  need(
+    registered.length === 1 && registered[0].id === INTEROP_GATE_JOB,
+    `scripts/ci/select-lanes.mjs registers ${JSON.stringify(registered)} for ${INTEROP}; want `
+    + `exactly one lane with id "${INTEROP_GATE_JOB}". Unregistered, the gate never selects it.`,
+  );
+
+  // 1i. INTEROP_NAMED_CASES is the two classes' `func test…` names, exactly.
+  const declared = [];
+  for (const cls of INTEROP_CLASSES) {
+    const source = w.interopSources.get(cls);
+    need(
+      typeof source === "string",
+      `${PACKAGE_TEST_DIR}/${cls}.swift is missing, but both interop lanes name its cases.`,
+    );
+    for (const m of String(source ?? "").matchAll(/\bfunc\s+(test\w+)\s*\(/g)) declared.push(`${cls}/${m[1]}`);
+  }
+  need(
+    deepEqual(declared.slice().sort(), INTEROP_NAMED_CASES.slice().sort()),
+    `the interop classes declare ${JSON.stringify(declared.slice().sort())}, but INTEROP_NAMED_CASES `
+    + `is ${JSON.stringify(INTEROP_NAMED_CASES.slice().sort())}. A renamed case would drop out of the `
+    + `proof and could skip unseen; a new one would run unproved. Update the constant and both `
+    + `workflows' proof steps together.`,
+  );
   return out;
 }
 
@@ -1629,7 +2000,9 @@ function selfHostFailures(w) {
   return out;
 }
 
-const CHECKS = [laneFailures, negationFailures, ownershipFailures, fixtureFailures, selfHostFailures];
+const CHECKS = [
+  laneFailures, interopFailures, negationFailures, ownershipFailures, fixtureFailures, selfHostFailures,
+];
 
 for (const rule of CHECKS) {
   for (const message of rule(world())) failures.push(message);
@@ -2068,7 +2441,134 @@ const MUTATIONS = [
       w.texts.set(AUTO_RELEASE, `${w.texts.get(AUTO_RELEASE)}\n        run: swift test\n`);
       return w;
     },
-    expect: /`swift test` appears in \[auto-release\.yml, contracts\.yml, swift-package\.yml\]/,
+    expect: /`swift test` appears in \[auto-release\.yml, contracts\.yml, inbox-swift-interop\.yml, swift-package\.yml\]/,
+  },
+
+  // ── the forced Swift<->Go interop classes (1c′, 1h, 1i) ───────────────────
+  {
+    // Forcing with no toolchain: a guaranteed red on the hosted macOS PATH.
+    name: "swift-package.yml drops its setup-go while still forcing the interop classes",
+    mutate: (w) => withNamedJob(w, SWIFT_PACKAGE, SWIFT_PACKAGE_JOB, (job) => {
+      job.steps = job.steps.filter((step) => !/setup-go/.test(String(step?.uses ?? "")));
+    }),
+    expect: /swift-package\.yml\/swift-test has 0 actions\/setup-go step\(s\)/,
+  },
+  {
+    // The one permitted toolchain is a reviewed commit, not "some Go".
+    name: "swift-package.yml's setup-go moves to a floating tag",
+    mutate: (w) => {
+      withNamedJob(w, SWIFT_PACKAGE, SWIFT_PACKAGE_JOB, (job) => {
+        for (const step of job.steps) {
+          if (/setup-go/.test(String(step?.uses ?? ""))) step.uses = "actions/setup-go@v5";
+        }
+      });
+      w.texts.set(SWIFT_PACKAGE, w.texts.get(SWIFT_PACKAGE).replace(SETUP_GO, "actions/setup-go@v5"));
+      return w;
+    },
+    expect: /swift-package\.yml installs a toolchain or dependency tree/,
+  },
+  {
+    // A second language's toolchain arriving under cover of the Go exception.
+    name: "swift-package.yml installs a Python toolchain beside the permitted Go one",
+    mutate: (w) => {
+      w.texts.set(SWIFT_PACKAGE,
+        `${w.texts.get(SWIFT_PACKAGE)}\n      - uses: actions/setup-python@0000000000000000000000000000000000000000\n`);
+      return w;
+    },
+    expect: /swift-package\.yml installs a toolchain or dependency tree/,
+  },
+  {
+    // The env var lost: both classes skip, the suite exits 0.
+    name: "swift-package.yml stops forcing the interop classes",
+    mutate: (w) => withCommandJob(w, SWIFT_PACKAGE, "swift test", (job, step) => {
+      delete step.env;
+    }),
+    expect: /swift-package\.yml\/swift-test's `swift test` step sets RELAYIUM_SWIFT_INTEROP=undefined/,
+  },
+  {
+    // tee's status reported instead of swift test's.
+    name: "swift-package.yml pipes its suite into tee without pipefail",
+    mutate: (w) => withCommandJob(w, SWIFT_PACKAGE, "swift test", (job, step) => {
+      step.run = step.run.replace("set -o pipefail\n", "");
+    }),
+    expect: /swift-package\.yml\/swift-test's `swift test` step is not `shell: bash` with `set -o pipefail`/,
+  },
+  {
+    // The proof deleted: green over whatever skipped.
+    name: "swift-package.yml drops the named-execution proof",
+    mutate: (w) => withNamedJob(w, SWIFT_PACKAGE, SWIFT_PACKAGE_JOB, (job) => {
+      job.steps = job.steps.filter((step) => !String(step?.run ?? "").includes(NAMED_CHECKER));
+    }),
+    expect: /swift-package\.yml\/swift-test runs the named-execution proof .* 0 time\(s\)/,
+  },
+  {
+    // One case quietly dropped from the proof: it may now skip unseen.
+    name: "the interop lane's proof stops naming one case",
+    mutate: (w) => withCommandJob(w, INTEROP, NAMED_CHECKER, (job, step) => {
+      step.run = step.run.replace(/ \\\n\s*InboxSealedBoxInteropTests\/testTheGoPhaseFailsOnAKeyCentralWouldRefuse/, "");
+    }),
+    expect: /inbox-swift-interop\.yml\/swift-live-interop's named-execution proof names .*; want exactly INTEROP_NAMED_CASES/,
+  },
+  {
+    // The proof reading some other log than this run's.
+    name: "the interop lane's proof reads a log its swift test did not write",
+    mutate: (w) => withCommandJob(w, INTEROP, NAMED_CHECKER, (job, step) => {
+      step.run = step.run.replace("swift-interop.log", "stale.log");
+    }),
+    expect: /named-execution proof reads "\$RUNNER_TEMP\/stale\.log"/,
+  },
+  {
+    // The narrow lane grows a third class: a second package suite, one
+    // argument at a time.
+    name: "the interop lane's swift test gains a third class",
+    mutate: (w) => withCommandJob(w, INTEROP, "swift test", (job, step) => {
+      step.run = step.run.replace("2>&1", "--filter 'RelayiumKitTests.AeadTests' 2>&1");
+    }),
+    expect: /inbox-swift-interop\.yml's `swift test` selects .*AeadTests/,
+  },
+  {
+    // Watching the Swift side too: two macOS runners for one Swift edit.
+    name: "the interop lane starts watching the Swift package",
+    mutate: (w) => withPaths(w, INTEROP, [...INTEROP_PATHS, PACKAGE_SOURCE_GLOB]),
+    expect: /inbox-swift-interop\.yml's path filter names \["apps\/RelayiumKit\/\*\*"\]/,
+  },
+  {
+    // Narrowed back to a hand-kept list of inbox paths.
+    name: "the interop lane narrows server/** to the inbox packages",
+    mutate: (w) => withPaths(w, INTEROP, ["server/internal/inboxsend/**", ...INTEROP_PATHS.slice(1)]),
+    expect: /inbox-swift-interop\.yml's path filter is .*; want exactly/,
+  },
+  {
+    name: "the interop lane's job becomes skippable",
+    mutate: (w) => withNamedJob(w, INTEROP, INTEROP_JOB, (job) => { job.if = "false"; }),
+    expect: /inbox-swift-interop\.yml\/swift-live-interop: a job-level if:\/continue-on-error/,
+  },
+  {
+    name: "merge-gate stops calling the interop lane",
+    mutate: (w) => {
+      delete w.docs.get(AGGREGATE).jobs[INTEROP_GATE_JOB];
+      return w;
+    },
+    expect: /merge-gate\.yml calls inbox-swift-interop\.yml from \[\]; want exactly \["inbox-swift-interop"\]/,
+  },
+  {
+    name: "the selector forgets the interop lane",
+    mutate: (w) => {
+      w.selectorLanes = w.selectorLanes.filter((lane) => lane.workflow !== INTEROP);
+      return w;
+    },
+    expect: /scripts\/ci\/select-lanes\.mjs registers \[\] for inbox-swift-interop\.yml/,
+  },
+  {
+    // A case renamed in source while the proof keeps the old name.
+    name: "an interop test case is renamed in its Swift source",
+    mutate: (w) => {
+      const cls = "InboxCLISenderLiveInteropTests";
+      w.interopSources.set(cls, w.interopSources.get(cls)
+        .replace("func testAHungCentralRequestIsTornDownByTheDeadline(", "func testAHungRequestIsBounded("));
+      return w;
+    },
+    expect: /the interop classes declare .*testAHungRequestIsBounded.*but INTEROP_NAMED_CASES/,
   },
 
   // ── the contract lane's third `swift test` (1f, 1g) ───────────────────────
@@ -2314,6 +2814,84 @@ for (const { name, mutate, expect, refute } of MUTATIONS) {
   }
 }
 
+// ── 7. the named-execution proof's own mutation cases, actually executed ────
+//
+// The proof step is what turns a skipped interop case red, so it must itself be
+// shown to fail — in process for each reason, and as the real script for its
+// exit codes, because the workflows run the script, not the function. Each case
+// below is one of the 9 real names skipped, failed, missing, duplicated, or an
+// unnamed case run in a named class.
+
+const logLine = (name, result) => {
+  const [cls, method] = name.split("/");
+  return `Test Case '-[${SWIFT_TEST_TARGET}.${cls} ${method}]' ${result} (0.100 seconds).`;
+};
+const allPassed = INTEROP_NAMED_CASES.map((name) => logLine(name, "passed"));
+const CHECKER_CASES = [
+  { name: "all nine passed", log: allPassed, want: null },
+  {
+    name: "one case skipped (the RELAYIUM_SWIFT_INTEROP-lost shape)",
+    log: allPassed.map((line, i) => (i === 6 ? logLine(INTEROP_NAMED_CASES[6], "skipped") : line)),
+    want: /testTheGoPhaseFailsOnAKeyCentralWouldRefuse: want exactly one "passed", got \["skipped"\]/,
+  },
+  {
+    name: "one case failed",
+    log: allPassed.map((line, i) => (i === 1 ? logLine(INTEROP_NAMED_CASES[1], "failed") : line)),
+    want: /testCorruptedFinalFrameTagCommitsNothingAndTheCLIDoesNotReadSaved: want exactly one "passed", got \["failed"\]/,
+  },
+  {
+    name: "one case missing from the log",
+    log: allPassed.filter((_, i) => i !== 4),
+    want: /testAHungCentralRequestIsTornDownByTheDeadline: want exactly one "passed", got \[\]/,
+  },
+  {
+    name: "one case reported twice",
+    log: [...allPassed, allPassed[0]],
+    want: /testLiveCLISendIsCommittedByTheNativeEngineAndTheCLIReadsSaved: want exactly one "passed", got \["passed","passed"\]/,
+  },
+  {
+    name: "a named class runs a case nobody named",
+    log: [...allPassed, logLine("InboxSealedBoxInteropTests/testSomethingNew", "passed")],
+    want: /InboxSealedBoxInteropTests\/testSomethingNew: executed \(passed\) but not named/,
+  },
+];
+for (const { name, log, want } of CHECKER_CASES) {
+  const got = checkNamedExecution(log.join("\n"), INTEROP_NAMED_CASES);
+  check(
+    want === null ? got.length === 0 : got.some((message) => want.test(message)),
+    `${NAMED_CHECKER} on "${name}" reported ${JSON.stringify(got)}; want `
+    + `${want === null ? "no problem" : want}. The proof that turns a skipped interop case red must `
+    + `itself fail for each reason, or both lanes are green over nothing.`,
+  );
+}
+{
+  // The real script, for its exit codes: 0 on the full pass, 1 on a skip and on
+  // a missing case, 2 on no arguments.
+  const dir = mkdtempSync(resolve(tmpdir(), "relayium-named-proof-"));
+  try {
+    const run = (lines, args) => {
+      const file = resolve(dir, `log-${Math.random().toString(36).slice(2)}.txt`);
+      writeFileSync(file, lines.join("\n"));
+      return spawnSync(process.execPath, [resolve(repoRoot, NAMED_CHECKER), ...(args ?? [file, ...INTEROP_NAMED_CASES])],
+        { encoding: "utf8" }).status;
+    };
+    for (const [label, status, want] of [
+      ["the full pass", run(allPassed), 0],
+      ["one case skipped", run(CHECKER_CASES[1].log), 1],
+      ["one case missing", run(CHECKER_CASES[3].log), 1],
+      ["no arguments", run(allPassed, []), 2],
+    ]) {
+      check(
+        status === want,
+        `${NAMED_CHECKER} exited ${status} for ${label}; want ${want}. The workflows run the script, `
+        + `so its exit status — not the function above — is what turns the lane red.`,
+      );
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 // ── report ──────────────────────────────────────────────────────────────────
 
 if (failures.length > 0) {
@@ -2333,5 +2911,7 @@ console.log(
   + `policy's own host reachable from a pull request only through ${AGGREGATE}, whose `
   + `unfiltered \`pull_request\` trigger, one caller job each and unconditional `
   + `${SELF_HOST_GATE_JOB} call are read from disk rather than assumed; `
-  + `${MUTATIONS.length} mutations prove each of those can fail)`,
+  + `${MUTATIONS.length} mutations prove each of those can fail; `
+  + `${INTEROP_NAMED_CASES.length} forced Swift<->Go interop cases proved by name in ${SWIFT_PACKAGE} `
+  + `and ${INTEROP}, whose proof script fails for ${CHECKER_CASES.length - 1} named reasons)`,
 );
