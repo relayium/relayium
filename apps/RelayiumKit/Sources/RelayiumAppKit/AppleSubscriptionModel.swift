@@ -307,12 +307,18 @@ public final class AppleSubscriptionModel: ObservableObject {
     private let appInstanceID: String?
 
     private var updateTask: Task<Void, Never>?
-    /// Serializes launch/sign-in recovery sweeps. SwiftUI restores the Relayium
+    /// The one recovery sweep in flight, if any. SwiftUI restores the Relayium
     /// session and starts StoreKit observation in independent tasks, so both may
-    /// request the same durable queue as an account becomes ready. One sweep is
-    /// sufficient; a transaction refused by the server remains unfinished and
-    /// is eligible for the next explicit sweep or StoreKit update.
-    private var unfinishedSweepInProgress = false
+    /// request the same durable queue as an account becomes ready; requests
+    /// that arrive while a sweep runs collapse into ONE more pass, run after it.
+    /// A transaction refused by the server remains unfinished and is eligible
+    /// for the next sweep or StoreKit update.
+    private var unfinishedSweep: Task<Void, Never>?
+    /// Set when a sweep was requested while one was already running. The
+    /// running sweep then makes one more pass, under whatever account is
+    /// signed in by then — which is what lets account A's transaction be
+    /// submitted when A becomes ready while B's sweep is still in flight.
+    private var unfinishedSweepRequested = false
     private var generation = 0
     /// Exactly one foreground purchase operation may own StoreKit at a time.
     /// Operation generations protect UI writes; they are not a mutex and must
@@ -1690,16 +1696,57 @@ public final class AppleSubscriptionModel: ObservableObject {
     /// The launch observer may run before keychain session restoration. Its
     /// signed-out sweep correctly submits nothing, but StoreKit does not promise
     /// another live update merely because Relayium later acquired a bearer. The
-    /// app therefore calls this again on each ready account identity. Concurrent
-    /// launch and sign-in calls collapse into one sweep.
+    /// app therefore calls this again on each ready account identity, through
+    /// ``reconcile(forReadyAccount:)``.
+    ///
+    /// **A request is never dropped because a sweep is already running.** The
+    /// ready account may have changed since that sweep began — A signs out, B
+    /// signs in and starts a sweep, A signs back in — and the transaction that
+    /// belongs to A is refused under B's session, so collapsing A's request
+    /// into B's sweep would leave it unsubmitted until something unrelated
+    /// happened. Instead the running sweep makes one more pass after it ends.
+    ///
+    /// The sweep runs in its own task rather than the caller's, so a caller
+    /// being cancelled — SwiftUI cancels a `.task(id:)` the moment its id
+    /// changes — cannot abandon a pass another caller is waiting on.
     public func reconcileUnfinishedTransactions() async {
-        guard currentBearer() != nil, !unfinishedSweepInProgress else { return }
-        unfinishedSweepInProgress = true
-        defer { unfinishedSweepInProgress = false }
-        for delivery in await store.unfinishedTransactions() {
-            if Task.isCancelled { return }
-            await handle(update: delivery)
+        guard currentBearer() != nil else { return }
+        if let running = unfinishedSweep {
+            unfinishedSweepRequested = true
+            await running.value
+            return
         }
+        let sweep = Task { [weak self] in
+            guard let self else { return }
+            await self.drainUnfinishedSweeps()
+        }
+        unfinishedSweep = sweep
+        await sweep.value
+    }
+
+    /// Account readiness, as the app observes it: called with the ready
+    /// account's id each time it changes, and with `nil` when there is none.
+    ///
+    /// The one hook both scene roots hang on their account identity, so that
+    /// "A becomes ready again after B" is a call the tests can make exactly as
+    /// the app does.
+    public func reconcile(forReadyAccount accountID: String?) async {
+        guard accountID != nil else { return }
+        await reconcileUnfinishedTransactions()
+    }
+
+    private func drainUnfinishedSweeps() async {
+        // No suspension between the loop's last check and this reset, so a
+        // request can never land between them unseen.
+        defer { unfinishedSweep = nil }
+        repeat {
+            unfinishedSweepRequested = false
+            if currentBearer() != nil {
+                for delivery in await store.unfinishedTransactions() {
+                    await handle(update: delivery)
+                }
+            }
+        } while unfinishedSweepRequested
     }
 
     /// Stop draining, and let go of the stream.

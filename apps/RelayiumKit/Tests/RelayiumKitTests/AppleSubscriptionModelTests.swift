@@ -2303,6 +2303,87 @@ final class AppleSubscriptionModelTests: XCTestCase {
         XCTAssertEqual(rig.journal.count("refresh"), 1)
     }
 
+    /// **A → B → A, through the readiness hook the scene roots use.**
+    ///
+    /// A's purchase is delivered after the switch to B, so it is left
+    /// unfinished (above). B becoming ready sweeps the unfinished queue under
+    /// B's session; the server answers `token_mismatch` because the purchase is
+    /// attributed to A, so nothing is finished. A becoming ready again sweeps it
+    /// under A, and it is submitted and finished — with no restart, and with the
+    /// update observer already running, exactly as on iOS.
+    func testAnAccountSwitchedPurchaseSettlesWhenItsAccountIsReadyAgain() async {
+        let rig = await makeReadyRig()
+        rig.model.startObservingUpdates()
+        await waitFor(rig) { $0.journal.count("unfinished") == 1 }
+        await rig.model.reconcile(forReadyAccount: "acct-A")
+
+        rig.store.setHoldPurchase(true)
+        let purchase = Task { await rig.model.purchase(productID: Fixture.catalog[0]) }
+        await waitFor(rig) { $0.journal.count("purchase") == 1 }
+        rig.bearer.set("rlm_app_B")
+        rig.account.set("acct-B")
+        rig.store.setHoldPurchase(false)
+        await purchase.value
+        XCTAssertTrue(rig.billing.submittedJWS.isEmpty)
+        // StoreKit keeps it in its unfinished queue.
+        rig.store.setUnfinished([Fixture.delivery])
+        rig.billing.setSubmissions([.failure(AppleBillingError.tokenMismatch),
+                                    .success(Fixture.entitlement)])
+
+        await rig.model.reconcile(forReadyAccount: "acct-B")
+        XCTAssertEqual(rig.billing.submittedBearers, ["rlm_app_B"])
+        XCTAssertTrue(rig.store.finished.isEmpty, "B's sweep finished A's refused purchase")
+
+        rig.bearer.set(nil)
+        rig.account.set(nil)
+        await rig.model.reconcile(forReadyAccount: nil)
+        XCTAssertEqual(rig.billing.submittedBearers, ["rlm_app_B"], "a signed-out sweep ran")
+
+        rig.bearer.set("rlm_app_T")
+        rig.account.set("acct-A")
+        await rig.model.reconcile(forReadyAccount: "acct-A")
+
+        XCTAssertEqual(rig.billing.submittedBearers, ["rlm_app_B", "rlm_app_T"])
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id],
+                       "A's purchase was not settled when A became ready again")
+        XCTAssertEqual(rig.journal.count("refresh"), 1)
+        rig.model.stop()
+    }
+
+    /// **A's readiness arrives while B's sweep is still in flight**, and the
+    /// caller that started B's sweep is cancelled — which is what SwiftUI does
+    /// to a `.task(id:)` when the id changes. A's request must not collapse
+    /// into B's sweep and vanish: one more pass runs, under A.
+    ///
+    /// Negative control: the former "already sweeping, return" guard leaves
+    /// A's purchase unsubmitted here.
+    func testAReadinessRequestDuringAnotherAccountsSweepIsNotDropped() async {
+        let rig = await makeReadyRig()
+        rig.bearer.set("rlm_app_B")
+        rig.account.set("acct-B")
+        rig.store.setUnfinished([Fixture.delivery])
+        rig.billing.setSubmissions([.failure(AppleBillingError.tokenMismatch),
+                                    .success(Fixture.entitlement)])
+        rig.billing.holdSubmit(after: 0)
+
+        let sweepB = Task { await rig.model.reconcile(forReadyAccount: "acct-B") }
+        await waitFor(rig) { $0.billing.submittedJWS.count == 1 }
+
+        rig.bearer.set("rlm_app_T")
+        rig.account.set("acct-A")
+        let sweepA = Task { await rig.model.reconcile(forReadyAccount: "acct-A") }
+        await Task.yield()
+        sweepB.cancel()
+        rig.billing.releaseSubmit()
+        await sweepB.value
+        await sweepA.value
+
+        XCTAssertEqual(rig.billing.submittedBearers, ["rlm_app_B", "rlm_app_T"],
+                       "A's readiness collapsed into B's sweep and was dropped")
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
+        XCTAssertEqual(rig.journal.count("refresh"), 1)
+    }
+
     func testSameAuthorityIsTheAccountWhenOneWasCaptured() {
         typealias M = AppleSubscriptionModel
         XCTAssertTrue(M.sameAuthority(token: "a", ownerAccountID: "acct-A",
