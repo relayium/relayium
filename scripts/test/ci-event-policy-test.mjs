@@ -6726,7 +6726,7 @@ const MUTATIONS = [
       delete jobs[COMPAT_JOB];
       return world;
     },
-    expect: /compat\.yml declares no job named `wire-vectors`; it declares \[android-protocol, vectors\]/,
+    expect: /compat\.yml declares no job named `wire-vectors`; it declares \[android-protocol, cli-interop-guards, vectors\]/,
   },
   // ── the fuzz campaign (7) ────────────────────────────────────────────────
   //

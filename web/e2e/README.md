@@ -99,6 +99,15 @@ Device Inbox 入口），所以 `mixed-link` 才单开一个作业——它另�
 现在它自己起（`go-server.mjs`，和 `test:device-inbox` 共用的那套生命周期），所以它
 不再依赖"有人记得起服务器"。
 
+## 不在 web.yml 里的浏览器道次：CLI 对端（A12）
+
+`cli-web-pairing.mjs` 是 `relayium pair` CLI ↔ 真浏览器的浏览器一半，由
+`scripts/interop/cli-web-acceptance.sh` 驱动，托管在 `native-web-pairing.yml` 的
+`cli-web` 作业（Linux），**不在** `web.yml` 里，所以上面那张七行的表不变。它自己不做
+判定：观察写进 `--out`，由 `scripts/interop/cli-web-oracle.py` 对着磁盘上的树和
+按种子推出的摘要来判。唯一的桩仍然是另存为（按路径记账的保存台账），它只记录产品
+写下的字节，从不产生字节。跑的仍然只是 Chromium（见下）。
+
 ## 这套 harness 覆盖不到的两件事
 
 写在最前面，因为"没有断言"和"断言过了"看起来太像：

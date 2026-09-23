@@ -280,3 +280,24 @@ jobs:
           set -euo pipefail
           ./gradlew --no-daemon -Prelayium.android=false :protocol:test | tee "$RUNNER_TEMP/protocol-compat.log"
           grep -q 'relayium: :app is excluded' "$RUNNER_TEMP/protocol-compat.log"
+
+  # A12: the CLI pairing interop matrix's JUDGES and WIRING, on every change.
+  #
+  # The matrix itself runs where its inputs are (go.yml `test`/`cli-windows`,
+  # native-web-pairing.yml `cli-web`/`pairing`, android-interop.yml), each
+  # behind a path filter. What must never sit behind one is the proof that
+  # those lanes can still fail: every oracle is shown a synthetic good round
+  # and each single fault (a missing, extra or wrong-bytes file, a skipped or
+  # renamed named test, one link role only, different SAS, a wrong exit), and
+  # the workflow wiring is checked and mutated away. Node and Python only; no
+  # dependency install.
+  cli-interop-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - name: CLI interop matrix judges and wiring
+        run: node scripts/test/cli-interop-matrix-test.mjs

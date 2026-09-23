@@ -259,4 +259,28 @@ export const PATH_MATRIX = [
     + "exercises it on a real log; swift-package.yml's four-entry filter deliberately does not "
     + "grow for it, and the script's own pass/skip/fail/missing cases run on every push in "
     + "repo-hygiene through scripts/test/swift-ci-boundary-test.mjs"],
+  // ── A12: the CLI pairing interop matrix ──────────────────────────────────
+  ["scripts/interop/cli-process.mjs", ["android-interop.yml", "native-web-pairing.yml"],
+    "the CLI process driver shared by the Android, browser and macOS CLI cells: both lanes that "
+    + "host one of those cells, and not go.yml, whose named Go cells never load it"],
+  ["scripts/interop/cli-go-matrix.sh", ["go.yml"],
+    "the named Go CLI matrix and its judge: exactly the lane whose `test` and `cli-windows` jobs "
+    + "run it. Its forged-log cases run unfiltered in compat.yml, which this matrix excludes"],
+  ["scripts/interop/build-old-cli.sh", ["go.yml"],
+    "builds the released CLI the old-version pairs talk to; only go.yml runs those pairs"],
+  ["scripts/interop/cli-web-acceptance.sh", ["native-web-pairing.yml"],
+    "the CLI ↔ browser cell, hosted by native-web-pairing.yml's `cli-web` job and by nothing "
+    + "else — not web.yml, whose filter it is not an input of"],
+  ["scripts/interop/cli-mac-peer.mjs", ["native-web-pairing.yml"],
+    "the CLI half of the CLI ↔ macOS cell, which runs in `pairing` next to the browser one"],
+  ["scripts/interop/cli-android-acceptance.sh", ["android-interop.yml"],
+    "the CLI ↔ Android emulator cell: the one lane with an emulator. Named one file at a time, "
+    + "so an Android-only script never starts the macOS pairing runner"],
+  ["web/e2e/cli-web-pairing.mjs",
+    ["android-interop.yml", "native-web-pairing.yml", "web.yml", "windows.yml"],
+    "the browser driver of the CLI ↔ Web cell is under web/**, so it starts every lane that "
+    + "watches that tree — the same set as any other web/e2e file, and among them the one that runs it"],
+  ["scripts/test/cli-interop-matrix-test.mjs", [],
+    "the judges' forged-round cases and the wiring checks run in compat.yml, which has no path "
+    + "filter, so no filtered lane may start for them"],
 ];

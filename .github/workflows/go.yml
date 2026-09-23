@@ -61,6 +61,10 @@ on:
       # these two lines a change to the discovery script or to the campaign
       # lands having run no Go test at all.
       - 'scripts/list-go-fuzz-targets.sh'
+      # A12: the CLI side of the pairing interop matrix, run by exact name in
+      # `test` and `cli-windows` below, and the old-CLI builder it needs.
+      - 'scripts/interop/cli-go-matrix.sh'
+      - 'scripts/interop/build-old-cli.sh'
       - '.github/workflows/go-fuzz-nightly.yml'
       - '.github/workflows/go.yml'
   # Called by `.github/workflows/merge-gate.yml`, and by nothing else.
@@ -119,7 +123,10 @@ jobs:
   # wait behind a race detector run to be reported.
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 15 before A12 added the named CLI pairing matrix (real CLI processes,
+    # old-CLI build included), measured locally at a few minutes; the bound
+    # stays finite and roughly twice the expected wall clock.
+    timeout-minutes: 30
     steps:
       # Third-party actions are pinned to a full commit SHA (with the
       # human-readable version in a trailing comment) so a compromised or
@@ -145,6 +152,23 @@ jobs:
       - name: go test
         working-directory: server
         run: go test ./...
+      # A12: the CLI pairing matrix, by exact name, with the old-version pairs
+      # NOT skipping. This checkout is one commit deep, so `ldOldCLI` cannot
+      # find 723481c78 and the step above ran every old-version pair as a SKIP;
+      # the builder fetches that commit (read from `ldOldCommit`, never a second
+      # literal), builds its CLI and refuses a binary that knows `__link`.
+      # `cli-go-matrix.sh` then requires a PASS line per named test, no SKIP
+      # (one named, reasoned subtest excepted), no FAIL, and both link roles in
+      # the CLI processes' own output. See docs/CI-PLATFORM-BOUNDARY.md.
+      - name: Build the released CLI (723481c78) the old-version pairs talk to
+        shell: bash
+        run: |
+          set -euo pipefail
+          old="$(scripts/interop/build-old-cli.sh "$RUNNER_TEMP/relayium-old")"
+          echo "RELAYIUM_OLD_CLI=$old" >> "$GITHUB_ENV"
+      - name: CLI pairing interop matrix (named; old-version pairs included; no SKIP)
+        shell: bash
+        run: bash scripts/interop/cli-go-matrix.sh run linux "$RUNNER_TEMP/cli-matrix-linux.log"
       # `relayium push host:path` over a REAL OpenSSH client and a private sshd
       # on 127.0.0.1, both modes, native into a missing destination, plus
       # host-key refusal; `pull host:file -`; and `push - host:file` (stdin,
@@ -274,7 +298,8 @@ jobs:
   # tests run under -race on ubuntu in `race-rest`.
   cli-windows:
     runs-on: windows-latest
-    timeout-minutes: 30
+    # 30 before A12 appended the CLI pairing matrix and the old-CLI build.
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -391,6 +416,23 @@ jobs:
             echo "::error::a send lock test skipped on Windows" >&2
             exit 1
           fi
+      # A12: the CLI pairing interop matrix on a real Windows host, by exact
+      # name — CLI↔CLI over link/1 (files, folders, texts, decline, rejected
+      # SAS), send/receive/text/pair over link, the CLI against a Go-authored
+      # app peer, and the old-version pairs against the released 723481c78 CLI
+      # built for Windows here. `cli-go-matrix.sh` drops only the ctrl-C cell
+      # (SIGINT cannot be sent to one process on Windows) and fails on any
+      # other missing PASS, any SKIP but its one reasoned subtest, or a log
+      # without both link roles.
+      - name: Build the released CLI (723481c78) for the old-version pairs (Windows)
+        shell: bash
+        run: |
+          set -euo pipefail
+          old="$(scripts/interop/build-old-cli.sh "$(cygpath -u "$RUNNER_TEMP")/relayium-old")"
+          echo "RELAYIUM_OLD_CLI=$old" >> "$GITHUB_ENV"
+      - name: Windows CLI pairing interop matrix (named; old-version pairs included; no SKIP)
+        shell: bash
+        run: bash scripts/interop/cli-go-matrix.sh run windows "$RUNNER_TEMP/cli-matrix-windows.log"
 
   # Central runs concurrent goroutines against shared state by design — the GC
   # sweep, the metering worker, the node storage prober — and the failure mode

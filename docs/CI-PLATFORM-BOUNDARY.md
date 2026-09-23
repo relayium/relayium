@@ -1063,6 +1063,47 @@ neither may come back: they would silently adopt a future Android or Windows
 root, or a future Android or Windows script, into a macOS runner the day
 somebody created it.
 
+### The CLI pairing interop matrix (A12)
+
+`relayium pair` — and `send`/`receive`/`text` routed through link discovery —
+is a fifth independent `link/1` implementation (Pion + `linksession`, in Go).
+Its cross-client cells live in the lanes that already own the other end, so no
+new workflow and no new required context exists for it:
+
+| Cell | Where it runs | Entry point | Evidence level |
+|---|---|---|---|
+| CLI ↔ CLI (both link roles; files, folders, texts, decline, rejected SAS, ctrl-C), `send`/`receive`/`text`/`pair` over link, CLI ↔ Go-authored app peer | `go.yml` `test` (Linux) | `scripts/interop/cli-go-matrix.sh run linux` | loopback (real CLI processes, real hub); the app peer is a MODEL |
+| CLI ↔ released 723481c78 CLI (legacy wire, fast refusal of `pair`) | `go.yml` `test` | the same script, after `scripts/interop/build-old-cli.sh` | loopback |
+| the same named cells on Windows (ctrl-C excepted) | `go.yml` `cli-windows` | `cli-go-matrix.sh run windows` | loopback, real Windows host |
+| CLI ↔ Web (Chromium), both code roles × both link roles, decline and cancel each way | `native-web-pairing.yml` `cli-web` (Linux) | `scripts/interop/cli-web-acceptance.sh` | loopback |
+| CLI ↔ macOS app link workspace, both code roles × both link roles | `native-web-pairing.yml` `pairing` (macOS) | `scripts/interop/cli-mac-acceptance.sh` | loopback, production models headless (not the signed app) |
+| CLI ↔ Android app on an emulator, both link roles, receive-cancel | `android-interop.yml` | `scripts/interop/cli-android-acceptance.sh` | emulator loopback |
+
+The Go cells used to SKIP on every hosted run: a one-commit checkout does not
+contain 723481c78, so `ldOldCLI` skipped each old-version pair. The builder
+fetches that commit (read from `ldOldCommit`, never a second literal), builds
+its CLI from `git archive`, and refuses a binary that knows `__link`; the
+matrix script then requires a `--- PASS:` line per named test, no `--- SKIP:`
+other than the one reasoned subtest it names, no `--- FAIL:`, and both
+`linked with another relayium CLI (…, initiator|responder)` lines in the CLI
+processes' own output.
+
+Each path filter names the interop files its cell reads, one file at a time,
+for the reason given for `native-web-pairing.yml` above: a bare
+`scripts/interop/**` would start a macOS runner for an Android-only script.
+
+The judges are only worth their green if they can say no, and that proof must
+not sit behind any of those filters. `scripts/test/cli-interop-matrix-test.mjs`
+runs in the unfiltered `compat.yml` (`cli-interop-guards`): every oracle and the
+Go-matrix judge is shown a synthetic good round and then each single fault — a
+missing, extra (declined or cancelled) or wrong-bytes file, a skipped or
+renamed named test, one link role only, different SAS digits, a wrong exit —
+and the workflow wiring above is checked and mutated away.
+
+Not covered by any hosted lane, and not claimed: Firefox/WebKit (the e2e
+harness speaks CDP to Chrome only), an iOS simulator cell, a physical device,
+NAT or TURN relay paths, and real WAN — those are release-time (C01/C07).
+
 ## Adding a platform: Android, Windows, anything next
 
 A platform root and the workflow that owns it are created **in the same commit**.
