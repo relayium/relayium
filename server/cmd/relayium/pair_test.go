@@ -879,28 +879,16 @@ func TestLinkSinkNoClobberOwnedAndRootRelative(t *testing.T) {
 	if err := os.Symlink(filepath.Join(outside, "dangling"), filepath.Join(dest, "leaf.txt")); err != nil {
 		t.Fatal(err)
 	}
-	meta := func(p string) linkwire.FileMeta {
-		return linkwire.FileMeta{Name: filepath.Base(p), Path: p, HasPath: true, Size: 1}
-	}
-	fill := func(k *linkSink) {
-		for i, fh := range k.files {
-			if _, err := fh.Write([]byte{byte('a' + i)}); err != nil {
-				t.Fatal(err)
-			}
-			fh.Close()
-			k.files[i] = nil
-		}
-	}
-
-	// Staged, nothing at a final name yet; then installed without clobbering
-	// the existing file or the link at the leaf.
-	k, err := openLinkSink(dest, []linkwire.FileMeta{meta("keep.txt"), meta("leaf.txt"), meta("new/dir/f.txt"), meta("../../escape.txt")})
+	k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("keep.txt"), sinkMeta("leaf.txt"), sinkMeta("new/dir/f.txt"), sinkMeta("../../escape.txt")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	fill(k)
-	if _, err := os.Lstat(filepath.Join(dest, "new")); !errors.Is(err, os.ErrNotExist) {
-		t.Error("a final path exists before install")
+	sinkFill(t, k)
+	// Before install nothing sits at a final name: only hidden staged names.
+	for _, g := range pairListTree(t, dest) {
+		if g == "new/dir/f.txt" || g == "escape.txt" || strings.Contains(g, " (1)") {
+			t.Errorf("a final name exists before install: %s", g)
+		}
 	}
 	if err := k.install(); err != nil {
 		t.Fatal(err)
@@ -909,14 +897,12 @@ func TestLinkSinkNoClobberOwnedAndRootRelative(t *testing.T) {
 	if strings.Join(k.rels, "|") != strings.Join(want, "|") {
 		t.Errorf("rels = %q, want %q", k.rels, want)
 	}
-	for _, g := range pairListTree(t, dest) {
-		if strings.HasPrefix(g, sinkStagePrefix) {
-			t.Errorf("staging left behind after install: %s", g)
-		}
+	sinkNoStaging(t, dest)
+	if b, _ := os.ReadFile(filepath.Join(dest, "new", "dir", "f.txt")); string(b) != "c" {
+		t.Errorf("installed content %q", b)
 	}
-	// An installed batch taken back (a later failure) removes exactly its own.
-	k.uninstall()
-	k.close()
+	// A batch taken back after install removes exactly its own.
+	k.discard()
 	if b, _ := os.ReadFile(filepath.Join(dest, "keep.txt")); len(b) != 3 {
 		t.Error("the pre-existing file was touched")
 	}
@@ -925,31 +911,19 @@ func TestLinkSinkNoClobberOwnedAndRootRelative(t *testing.T) {
 	}
 	for _, gone := range []string{"keep (1).txt", "leaf (1).txt", "new", "escape.txt"} {
 		if _, err := os.Lstat(filepath.Join(dest, gone)); !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("uninstall left %s (%v)", gone, err)
+			t.Errorf("discard left %s (%v)", gone, err)
 		}
 	}
 
-	// A symbolic link on the way is refused at install, inside the root or out
-	// of it, and the refused batch leaves nothing — not even its staging.
+	// A symbolic link on the way is refused, inside the root or out of it,
+	// and the refused batch leaves nothing.
 	for _, p := range []string{"out/x.txt", "inroot/x.txt"} {
-		k, err := openLinkSink(dest, []linkwire.FileMeta{meta("ok.txt"), meta(p)})
-		if err != nil {
-			t.Fatal(err)
-		}
-		fill(k)
-		if err := k.install(); err == nil {
-			t.Errorf("%s: installed through a symbolic link", p)
-		}
-		k.discard()
-		if _, err := os.Stat(filepath.Join(dest, "ok.txt")); !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("%s: a refused batch left ok.txt behind", p)
+		if k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("ok.txt"), sinkMeta(p)}); err == nil {
+			k.discard()
+			t.Errorf("%s: opened through a symbolic link", p)
 		}
 	}
-	for _, g := range pairListTree(t, dest) {
-		if strings.HasPrefix(g, sinkStagePrefix) {
-			t.Errorf("a discarded batch left its staging: %s", g)
-		}
-	}
+	sinkNoStaging(t, dest)
 	if got := pairListTree(t, outside); len(got) != 0 {
 		t.Errorf("something was written outside: %v", got)
 	}
@@ -958,19 +932,45 @@ func TestLinkSinkNoClobberOwnedAndRootRelative(t *testing.T) {
 	}
 }
 
-// Codex gate-2 #2, deterministic: while a batch is being received, another
-// process renames the batch's directory away and puts a symbolic link to an
-// unrelated directory — which holds a file of the same name — in its place.
-// Neither the install nor the cleanup may touch that unrelated file.
+func sinkMeta(p string) linkwire.FileMeta {
+	return linkwire.FileMeta{Name: filepath.Base(p), Path: p, HasPath: true, Size: 1}
+}
+
+// sinkFill writes one byte ('a', 'b', …) into each staged file and closes it.
+func sinkFill(t *testing.T, k *linkSink) {
+	t.Helper()
+	for i, fh := range k.files {
+		if _, err := fh.Write([]byte{byte('a' + i)}); err != nil {
+			t.Fatal(err)
+		}
+		fh.Close()
+		k.files[i] = nil
+	}
+}
+
+func sinkNoStaging(t *testing.T, dest string) {
+	t.Helper()
+	for _, g := range pairListTree(t, dest) {
+		if strings.HasPrefix(filepath.Base(g), sinkStagePrefix) {
+			t.Errorf("a staged file was left behind: %s", g)
+		}
+	}
+}
+
+// Codex gate-2 #2 and re-review #1, deterministic: another process renames
+// the batch's directory away and puts a symbolic link to an unrelated
+// directory — holding a file of the same name — in its place, at the exact
+// moment between the sink's check and its filesystem operation (a hook).
+// Every operation goes through a held directory handle, so none of them can
+// reach the unrelated file.
 func TestLinkSinkDirectoryReplacementCannotRedirectCleanup(t *testing.T) {
-	meta := linkwire.FileMeta{Name: "f", Path: "batch/f", HasPath: true, Size: 1}
-	setup := func(t *testing.T) (dest string) {
-		dest = t.TempDir()
+	setup := func(t *testing.T) string {
+		dest := t.TempDir()
 		pairWriteFile(t, filepath.Join(dest, "existing", "f"), 7) // the unrelated file
 		return dest
 	}
 	swap := func(t *testing.T, dest string) {
-		if err := os.Rename(filepath.Join(dest, "batch"), filepath.Join(dest, "batch-moved")); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := os.Rename(filepath.Join(dest, "batch"), filepath.Join(dest, "batch-moved")); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.Symlink("existing", filepath.Join(dest, "batch")); err != nil {
@@ -978,56 +978,177 @@ func TestLinkSinkDirectoryReplacementCannotRedirectCleanup(t *testing.T) {
 		}
 	}
 	unrelatedIntact := func(t *testing.T, dest string) {
+		t.Helper()
 		if b, err := os.ReadFile(filepath.Join(dest, "existing", "f")); err != nil || len(b) != 7 {
 			t.Errorf("the unrelated file was changed or removed (%d bytes, %v)", len(b), err)
 		}
+		if got := pairListTree(t, filepath.Join(dest, "existing")); strings.Join(got, "|") != "f" {
+			t.Errorf("something was created in the unrelated directory: %v", got)
+		}
 	}
-	t.Run("before-install-then-cancel", func(t *testing.T) {
+	once := func(f func()) func() {
+		var done bool
+		return func() {
+			if !done {
+				done = true
+				f()
+			}
+		}
+	}
+	meta := []linkwire.FileMeta{sinkMeta("batch/f")}
+	t.Run("between-check-and-remove-after-install", func(t *testing.T) {
 		dest := setup(t)
-		k, err := openLinkSink(dest, []linkwire.FileMeta{meta})
+		k, err := openLinkSink(dest, meta)
 		if err != nil {
 			t.Fatal(err)
 		}
-		k.files[0].Write([]byte("x"))
-		swap(t, dest)
-		k.discard() // the batch was cancelled
-		unrelatedIntact(t, dest)
-	})
-	t.Run("during-install", func(t *testing.T) {
-		dest := setup(t)
-		k, err := openLinkSink(dest, []linkwire.FileMeta{meta})
-		if err != nil {
-			t.Fatal(err)
-		}
-		k.files[0].Write([]byte("x"))
-		k.files[0].Close()
-		k.files[0] = nil
-		sinkHookBeforeInstall = func(*linkSink) { swap(t, dest) }
-		t.Cleanup(func() { sinkHookBeforeInstall = nil })
-		if err := k.install(); err == nil {
-			t.Error("installed through the swapped-in link")
-		}
-		k.discard()
-		unrelatedIntact(t, dest)
-	})
-	t.Run("after-install-then-cancel", func(t *testing.T) {
-		dest := setup(t)
-		k, err := openLinkSink(dest, []linkwire.FileMeta{meta})
-		if err != nil {
-			t.Fatal(err)
-		}
-		k.files[0].Write([]byte("x"))
-		k.files[0].Close()
-		k.files[0] = nil
+		sinkFill(t, k)
 		if err := k.install(); err != nil {
 			t.Fatal(err)
 		}
-		swap(t, dest) // batch/ now points at existing/, whose f is not ours
-		k.uninstall() // a failure after install takes the batch back
+		fire := once(func() { swap(t, dest) })
+		sinkHookBeforeRemove = func(_ *linkSink, dir, name string) {
+			if dir == "batch" && name == "f" {
+				fire()
+			}
+		}
+		t.Cleanup(func() { sinkHookBeforeRemove = nil })
+		k.discard() // a failure after install takes the batch back
+		unrelatedIntact(t, dest)
+		if _, err := os.Lstat(filepath.Join(dest, "batch-moved", "f")); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("our own file, in the directory that was moved, was not removed (%v)", err)
+		}
+	})
+	t.Run("between-check-and-remove-of-a-staged-file", func(t *testing.T) {
+		dest := setup(t)
+		k, err := openLinkSink(dest, meta)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fire := once(func() { swap(t, dest) })
+		sinkHookBeforeRemove = func(_ *linkSink, dir, name string) {
+			if dir == "batch" {
+				fire()
+			}
+		}
+		t.Cleanup(func() { sinkHookBeforeRemove = nil })
+		k.discard() // cancelled mid-transfer
+		unrelatedIntact(t, dest)
+		sinkNoStaging(t, dest)
+	})
+	t.Run("between-check-and-link", func(t *testing.T) {
+		dest := setup(t)
+		k, err := openLinkSink(dest, meta)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sinkFill(t, k)
+		fire := once(func() { swap(t, dest) })
+		sinkHookBeforeLink = func(*linkSink, int) { fire() }
+		oldRename := sinkRename
+		renames := 0
+		sinkRename = func(r *os.Root, a, b string) error { renames++; return oldRename(r, a, b) }
+		t.Cleanup(func() { sinkHookBeforeLink, sinkRename = nil, oldRename })
+		if err := k.install(); err != nil {
+			t.Fatal(err)
+		}
+		if renames != 0 {
+			t.Errorf("the hard link failed and the fallback ran (%d renames): this case tests the link itself", renames)
+		}
 		k.close()
 		unrelatedIntact(t, dest)
-		if b, err := os.ReadFile(filepath.Join(dest, "batch-moved", "f")); err != nil || string(b) != "x" {
-			t.Logf("our file stays where it was moved (%q, %v): not removable by path any more, and not deleted by guess", b, err)
+		// The file went where its directory went, through the held handle.
+		if b, err := os.ReadFile(filepath.Join(dest, "batch-moved", "f")); err != nil || string(b) != "a" {
+			t.Errorf("our file is not in our (moved) directory: %q, %v", b, err)
+		}
+	})
+	t.Run("between-check-and-open-of-a-directory", func(t *testing.T) {
+		dest := setup(t)
+		fire := once(func() { swap(t, dest) })
+		sinkHookBeforeOpenDir = func(_ *linkSink, p string) {
+			if p == "batch" {
+				fire()
+			}
+		}
+		t.Cleanup(func() { sinkHookBeforeOpenDir = nil })
+		if k, err := openLinkSink(dest, meta); err == nil {
+			k.discard()
+			t.Error("opened a directory that was swapped for a link")
+		}
+		unrelatedIntact(t, dest)
+	})
+}
+
+// Where hard links are unsupported, the final name is reserved by creating it
+// new, recorded at once, and the staged file renamed onto it: a collision
+// gives " (1)", and a failure takes back exactly the reservation — never a
+// file under a name it did not create.
+func TestLinkSinkNoHardLinkFallback(t *testing.T) {
+	oldLink, oldRename := sinkLink, sinkRename
+	t.Cleanup(func() { sinkLink, sinkRename = oldLink, oldRename })
+	sinkLink = func(*os.Root, string, string) error { return errors.New("injected: hard links unsupported") }
+	t.Run("collision", func(t *testing.T) {
+		dest := t.TempDir()
+		pairWriteFile(t, filepath.Join(dest, "f.txt"), 3)
+		k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("f.txt")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sinkFill(t, k)
+		if err := k.install(); err != nil {
+			t.Fatal(err)
+		}
+		k.close()
+		if k.rels[0] != "f (1).txt" {
+			t.Errorf("installed as %q", k.rels[0])
+		}
+		if b, _ := os.ReadFile(filepath.Join(dest, "f (1).txt")); string(b) != "a" {
+			t.Errorf("content %q", b)
+		}
+		if b, _ := os.ReadFile(filepath.Join(dest, "f.txt")); len(b) != 3 {
+			t.Error("the existing file was touched")
+		}
+		sinkNoStaging(t, dest)
+	})
+	t.Run("rename-fails", func(t *testing.T) {
+		sinkRename = func(*os.Root, string, string) error { return errors.New("injected: rename failed") }
+		t.Cleanup(func() { sinkRename = oldRename })
+		dest := t.TempDir()
+		pairWriteFile(t, filepath.Join(dest, "f.txt"), 3)
+		k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("f.txt"), sinkMeta("g.txt")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sinkFill(t, k)
+		if err := k.install(); err == nil {
+			t.Fatal("a failed rename was reported installed")
+		}
+		k.discard()
+		if got := pairListTree(t, dest); strings.Join(got, "|") != "f.txt" {
+			t.Errorf("a failed install left %v (want only the pre-existing f.txt)", got)
+		}
+	})
+	t.Run("second-file-fails-after-first-installed", func(t *testing.T) {
+		n := 0
+		sinkRename = func(r *os.Root, a, b string) error {
+			if n++; n == 2 {
+				return errors.New("injected: rename failed")
+			}
+			return r.Rename(a, b)
+		}
+		t.Cleanup(func() { sinkRename = oldRename })
+		dest := t.TempDir()
+		k, err := openLinkSink(dest, []linkwire.FileMeta{sinkMeta("d/one"), sinkMeta("d/two")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sinkFill(t, k)
+		if err := k.install(); err == nil {
+			t.Fatal("a failed rename was reported installed")
+		}
+		k.discard()
+		if got := pairListTree(t, dest); len(got) != 0 {
+			t.Errorf("a failed install left %v", got)
 		}
 	})
 }
